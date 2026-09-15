@@ -505,6 +505,7 @@ describe("CierreDiaModule", () => {
     verCierrePasadoMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       cierre: CIERRE_PASADO,
       grupos: {

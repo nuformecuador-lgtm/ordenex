@@ -408,6 +408,7 @@ describe("CierresAdminPage — Feature 172 [P3]/R6: quién recibe la oferta de p
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       cierre: CIERRE,
       // Sin incidentes: aprobar no pasa por el sub-modal de la 158 (R36).

@@ -752,6 +752,7 @@ model Orden {
   historialEstados           OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
   cierreDetalles             CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
   cierresSinGestion          CierreSinGestion[] // feature 264/R1: cierres en cuyo corte esta orden fue barrida a `sin_gestionar`
+  cierresRechazoTienda       CierreRechazoTienda[] // ficha 425/R2: cierres que pusieron un rechazo de tienda de esta orden delante de quien los aprueba
   rutaParadas                RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
   mensajeroMetas             OrdenMensajeroMeta[]               @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
   chatConversaciones         ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
@@ -1175,6 +1176,10 @@ model GestionOrden {
   // UNO A UNO (`rechazo_tienda_cobro_gestion_uq`): un rechazo, un cobro, en cualquier estado.
   // Opcional porque la inmensa mayoria de gestiones no son un rechazo de escritorio.
   cobroRechazoTienda         RechazoTiendaCobro?
+  // Ficha 425 (R2/R3): el vinculo de REVISION con el UNICO cierre que puso este rechazo de tienda
+  // delante de quien aprueba. 1-a-1 por `@@unique([gestionId])`. NO es `cierre`: esta gestion sigue
+  // con `cierre_id` NULL y no factura (ni pago al mensajero, ni ingreso de bodega, ni wallet).
+  vinculoRechazoTienda       CierreRechazoTienda?
   // Ficha 371: rastro append-only de las correcciones de `fecha_reprogramacion` de ESTA gestion.
   // La FK es RESTRICT: el rastro sobrevive a cualquier intento de borrar la gestion corregida.
   fechaReprogramacionCambios GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioGestion")
@@ -1371,6 +1376,7 @@ model CierreDia {
   gestiones          GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
   detalle            CierreDetail[] // feature 69/R1: snapshot congelado por orden de este cierre
   sinGestion         CierreSinGestion[] // feature 264/R1: las ordenes que el corte barrio a `sin_gestionar` al crear este cierre
+  rechazosTienda     CierreRechazoTienda[] // ficha 425/R1-R2: los rechazos de TIENDA que este cierre puso delante de quien lo aprueba. Vinculo de REVISION, no de dinero: esas gestiones conservan `cierre_id` NULL
   liquidacionPagos   LiquidacionPago[] // feature 172/R21/R22: pagos al mensajero registrados CONTRA este cierre
 
   @@index([mensajeroId])
@@ -2424,6 +2430,59 @@ model CierreSinGestion {
   @@unique([cierreId, ordenId]) // el grano, y el indice de la ruta caliente (se filtra por cierre_id)
   @@index([ordenId]) // trazar en que cierres se barrio una orden
   @@map("cierre_sin_gestion")
+}
+
+// FICHA 425 (design §4.1, R1-R4/R21) — EL VINCULO DE REVISION entre un cierre del dia y cada
+// RECHAZO DE TIENDA (`origen_tipo = rechazo_tienda`, 240) que ese cierre pone delante de quien lo
+// aprueba.
+//
+// POR QUE EXISTE. La 139 hace que la unica salida de `rechazada` sea aprobar un cierre del mensajero,
+// y la 337 saco del cierre las gestiones de escritorio. Un mensajero cuyas unicas gestiones sueltas
+// eran rechazos de tienda no llegaba a tener cierre y su orden se quedaba sin salida para siempre
+// (NA-947, NA-981 y NA-1103, medido el 2026-09-14).
+//
+// POR QUE NO ES `gestion_orden.cierre_id`. Esa columna es la llave de los cinco caminos de dinero
+// (tres feeds de wallet, el congelado de pago/ingreso y la confirmacion fisica). Darsela al rechazo
+// cobraria DOS VECES a la tienda el flete de devolucion que ya cobra la via propia de la 337, y
+// exigiria escanear paquetes que no vienen con el mensajero (design §7.1). Aqui la gestion SE VE en
+// el cierre y su aprobacion destraba la orden, pero sigue con `cierre_id` NULL.
+//
+// NI UNA COLUMNA DE DINERO (R21), como `cierre_sin_gestion`: que esta lista no pueda mover un total
+// es ESTRUCTURAL. Si algun dia aparece aqui un `Decimal`, es un bug de diseño.
+//
+// `@@unique([gestionId])` y NO el par (cierre, gestion): una gestion pertenece a UN cierre en toda
+// su vida (R3), y eso lo impone Postgres, no un `if`.
+model CierreRechazoTienda {
+  id        String @id @default(uuid())
+  cierreId  String @map("cierre_id")
+  gestionId String @map("gestion_id")
+  ordenId   String @map("orden_id")
+
+  // --- descriptivos CONGELADOS al incorporar. Copia, no identidad (69/T18). ---
+  numGuia      Int?   @map("num_guia") // SIN @unique: es copia
+  numRemision  String @map("num_remision")
+  destinatario String
+  producto     String
+  tiendaNombre String @map("tienda_nombre")
+  zonaNombre   String @map("zona_nombre")
+
+  // R15 — la EDAD: `gestion_orden.created_at` de la gestion, o sea cuando la tienda rechazo. Es lo
+  // que evita que un documento con tres semanas de rechazos parezca un error (D3).
+  rechazadoAt DateTime @map("rechazado_at")
+  // El motivo que la tienda escribio (obligatorio en `rechazarDesdeDevuelta`, 240/R12).
+  motivo      String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  // SIN updated_at / deleted_at: fila INMUTABLE, como `cierre_sin_gestion`.
+
+  cierre  CierreDia    @relation(fields: [cierreId], references: [id])
+  gestion GestionOrden @relation(fields: [gestionId], references: [id])
+  orden   Orden        @relation(fields: [ordenId], references: [id])
+
+  @@unique([gestionId]) // R3: una gestion pertenece a UN cierre y a ninguno mas
+  @@index([cierreId]) // ruta caliente: el detalle filtra por cierre
+  @@index([ordenId]) // trazar en que cierre se reviso una orden
+  @@map("cierre_rechazo_tienda")
 }
 
 // Feature 81 (design §2): una API key emitida por un maestro. La key en claro NUNCA

@@ -191,7 +191,11 @@ async function resolverPorCierre(filas: readonly FilaTarifa[]): Promise<Resuelto
     cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
     gestionOrden: {
       updateMany: vi.fn(async () => ({ count: 1 })),
-      findMany: vi.fn(async () => [snapshotRow()]),
+      // FICHA 425: la tx lee `gestion_orden` DOS veces —los rechazos de tienda a incorporar
+      // (`cierreId: null`) y el snapshot (`cierreId: <id>`)—; el doble responde por el `where`.
+      findMany: vi.fn(async (args: { where: { cierreId?: string | null } }) =>
+        typeof args.where.cierreId === "string" ? [snapshotRow()] : [],
+      ),
     },
     cierreDetail: { createMany: vi.fn(async () => ({ count: 1 })) },
     tarifa: { findMany: tarifaFindMany },

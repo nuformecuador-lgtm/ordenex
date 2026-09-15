@@ -391,6 +391,7 @@ describe("R26 — el detalle de un cierre tambien trae su pendiente", () => {
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: row({ cierreId: "c1", estado }),
         gestiones: [],
       })),
@@ -574,6 +575,7 @@ describe("293/R24/R27 — un cierre SALDADO con premio vuelve a estar pendiente"
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: row({ cierreId: "c1" }),
         gestiones: [],
       })),

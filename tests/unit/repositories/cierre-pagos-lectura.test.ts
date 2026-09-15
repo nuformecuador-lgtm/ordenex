@@ -254,6 +254,8 @@ describe("R21 — camino 2 (admin): `CierresAdminRepository.findCierreByIdEnAlca
       // Feature 264 (B4): la tercera consulta del detalle. Vacia: este cierre no barrio nada, y
       // esta suite mide el DESGLOSE de pagos, no la lista.
       cierreSinGestion: { findMany: vi.fn().mockResolvedValue([]) },
+      // FICHA 425 (B11): la cuarta consulta del detalle. Vacia: esta suite mide el desglose de pagos.
+      cierreRechazoTienda: { findMany: vi.fn().mockResolvedValue([]) },
       $transaction: vi.fn(),
     };
   }

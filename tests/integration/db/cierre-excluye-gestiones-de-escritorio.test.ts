@@ -51,6 +51,15 @@ import {
  * SIN BASE ALCANZABLE se SALTA (`describe.skip`), NO pasa en verde: un `return` silencioso dentro
  * del caso se leeria como `passed` sin haber comprobado nada, y este repo ya se comio ese verde.
  * CON base pero SIN catalogo, falla RUIDOSAMENTE.
+ *
+ * FICHA 425 (2026-09-14) — LA 337 NO SE REVOCA: SE SEPARA PERTENENCIA DE FACTURACION. Todo lo que este
+ * archivo afirma sobre el `cierre_id` sigue en pie palabra por palabra: un rechazo de tienda NO recibe
+ * `cierre_id` y NO factura. Lo que la 425 anade es que ese rechazo SE VEA en el cierre —en
+ * `cierre_rechazo_tienda`, una tabla sin columnas de importe— para que quien aprueba separe el paquete
+ * y la aprobacion saque la orden de `rechazada`. Por eso aqui se AÑADEN aserciones (el rechazo esta en
+ * el vinculo de ESE cierre; la reprogramacion no esta en ninguna de las dos tablas) y el caso «Andy
+ * Cortes» se parte en dos: sin rechazo de tienda sigue sin cierre (D2), y con rechazo de tienda ahora SI
+ * lo recibe (425/R5), que era exactamente lo que dejaba la orden sin salida.
  */
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
@@ -270,11 +279,15 @@ describeSiHayBase("💰 337 — el cierre NO recoge las gestiones de escritorio 
   // EL CASO ANDY CORTES — un cierre ENTERO sin una sola gestion de su mensajero.
   // ==========================================================================================
 
-  it("un mensajero cuyas UNICAS gestiones sueltas son de escritorio NO recibe cierre (`null`)", async () => {
+  it("un mensajero cuyas UNICAS gestiones sueltas son REPROGRAMACIONES de escritorio NO recibe cierre (`null`)", async () => {
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const mensajeroId = await crearMensajero(tx);
-      const rechazo = await sembrarGestion(tx, mensajeroId, RECHAZO_ESCRITORIO, "rechazada");
+      // FICHA 425: las DOS de escritorio son ahora REPROGRAMACIONES. Hasta la 425 este caso sembraba un
+      // rechazo y una reprogramacion y afirmaba `null`; la 425/R5 REVOCA a proposito esa mitad para el
+      // RECHAZO —era lo que dejaba su orden sin salida— y su caso vive justo debajo. Para la
+      // REPROGRAMACION (D2) sigue siendo el contrato, y por eso las aserciones no cambian ni una coma.
+      const rechazo = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada");
       const repro = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada");
 
       const cierreId = await repoDe(tx).crearCierre({
@@ -295,6 +308,88 @@ describeSiHayBase("💰 337 — el cierre NO recoge las gestiones de escritorio 
     // Y no queda el cierre vacio a su nombre — el caso exacto que el humano reporto.
     expect(medido.cierres).toBe(0);
     // Las gestiones no se pierden ni se marcan: siguen sueltas, enteras, esperando su via de cobro.
+    expect(medido.cierresDeLasGestiones).toEqual([null, null]);
+  });
+
+  // ==========================================================================================
+  // FICHA 425 — PERTENENCIA SIN FACTURACION: el rechazo se VE en el cierre, la reprogramacion no.
+  // ==========================================================================================
+
+  it("425/B8: el rechazo queda en `cierre_rechazo_tienda` de ESE cierre; la reprogramacion, en ninguna de las dos tablas", async () => {
+    const medido = await enTransaccionRevertida(prisma, async (tx) => {
+      await serializarEscriturasReales(tx);
+      const mensajeroId = await crearMensajero(tx);
+      const ids = await sembrarEscenario(tx, mensajeroId);
+
+      const cierreId = await repoDe(tx).crearCierre({
+        ...INPUT_CIERRE_VACIO,
+        mensajeroId,
+        destinoZonaId: fks.zonaId,
+      });
+
+      const vinculos = await tx.cierreRechazoTienda.findMany({
+        where: { gestionId: { in: Object.values(ids) } },
+        select: { gestionId: true, cierreId: true },
+      });
+      const filas = await tx.gestionOrden.findMany({
+        where: { id: { in: [ids.rechazoTienda, ids.reproTienda] } },
+        select: { id: true, cierreId: true },
+      });
+      return {
+        ids,
+        cierreId,
+        vinculos,
+        cierreIdDe: Object.fromEntries(filas.map((f) => [f.id, f.cierreId])) as Record<
+          string,
+          string | null
+        >,
+      };
+    });
+
+    const { ids, cierreId, vinculos, cierreIdDe } = medido;
+    expect(cierreId).not.toBeNull();
+    // El UNICO vinculo de las cuatro gestiones es el del rechazo, y apunta a ESTE cierre.
+    expect(vinculos).toEqual([{ gestionId: ids.rechazoTienda, cierreId }]);
+    // La reprogramacion no esta en `cierre_rechazo_tienda` (arriba) ni tiene `cierre_id` (aqui).
+    expect(cierreIdDe[ids.reproTienda]).toBeNull();
+    // Y el rechazo, pese a estar vinculado, sigue sin `cierre_id`: no factura.
+    expect(cierreIdDe[ids.rechazoTienda]).toBeNull();
+  });
+
+  it("425/R5: si entre sus gestiones sueltas de escritorio hay un RECHAZO de tienda, SI recibe cierre, sin `cierre_id` para ninguna", async () => {
+    const medido = await enTransaccionRevertida(prisma, async (tx) => {
+      await serializarEscriturasReales(tx);
+      const mensajeroId = await crearMensajero(tx);
+      const rechazo = await sembrarGestion(tx, mensajeroId, RECHAZO_ESCRITORIO, "rechazada");
+      const repro = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada");
+
+      const cierreId = await repoDe(tx).crearCierre({
+        ...INPUT_CIERRE_VACIO,
+        mensajeroId,
+        destinoZonaId: fks.zonaId,
+      });
+      const cierres = await tx.cierreDia.count({ where: { mensajeroId } });
+      const vinculados = await tx.cierreRechazoTienda.findMany({
+        where: { cierreId: cierreId ?? "sin-cierre" },
+        select: { gestionId: true },
+      });
+      const sueltas = await tx.gestionOrden.findMany({
+        where: { id: { in: [rechazo, repro] } },
+        select: { cierreId: true },
+      });
+      return {
+        rechazo,
+        cierreId,
+        cierres,
+        vinculados: vinculados.map((v) => v.gestionId),
+        cierresDeLasGestiones: sueltas.map((g) => g.cierreId),
+      };
+    });
+
+    expect(medido.cierreId).not.toBeNull();
+    expect(medido.cierres).toBe(1);
+    expect(medido.vinculados).toEqual([medido.rechazo]);
+    // Ninguna de las dos factura: el cierre existe para separar el paquete, no para cobrar.
     expect(medido.cierresDeLasGestiones).toEqual([null, null]);
   });
 

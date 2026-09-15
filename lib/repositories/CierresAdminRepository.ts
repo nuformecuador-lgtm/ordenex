@@ -31,6 +31,7 @@ import type { ICajaCodFeedService } from "@/lib/interfaces/services/ICajaCodFeed
 import { CajaCodFeedService } from "@/lib/services/CajaCodFeedService";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type {
+  CierreRechazoDeTienda,
   IngresoOrdenexDTO,
   TarifaSnapshotDTO,
 } from "@/lib/interfaces/services/ICierreDiaService";
@@ -103,6 +104,12 @@ import {
   SIN_GESTION_SELECT,
   toSinGestionRow,
 } from "@/lib/utils/cierre-sin-gestion";
+// FICHA 425 (B11): la MISMA proyeccion y el MISMO orden que usa el detalle propio del mensajero.
+import {
+  ORDEN_RECHAZOS_DE_TIENDA,
+  RECHAZO_DE_TIENDA_SELECT,
+  toRechazoDeTienda,
+} from "@/lib/utils/cierre-rechazo-tienda";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 // Estados de ORIGEN que la resolucion NORMAL (aprobar/rechazar) puede transicionar (R12).
@@ -167,6 +174,10 @@ type CierresAdminPrismaClient = Pick<
   // (T5.1, R35)— para ACOTAR A ESTE CIERRE la liberacion de `sin_gestionar` al aprobar. Sigue
   // siendo lectura: la fila del vinculo no se toca ni se borra al aprobar.
   | "cierreSinGestion"
+  // FICHA 425 (B11): SOLO LECTURA del vinculo de revision cierre <-> rechazo de tienda, para pintar
+  // el detalle. La escritura vive en la tx de `CierreDiaRepository.crearCierre`, y la aprobacion NO
+  // la toca: la salida de `rechazada` la hace el bloque 139, por `mensajero_asignado_id`.
+  | "cierreRechazoTienda"
   | "zona"
   | "usuario"
   | "$transaction"
@@ -1249,6 +1260,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     gestiones: CierreGestionPendienteRow[];
     sinGestion: CierreSinGestionRow[];
     sinGestionRegistrado: boolean;
+    rechazosDeTienda: CierreRechazoDeTienda[];
   } | null> {
     const cierre = await this.prisma.cierreDia.findFirst({
       where: { id: cierreId, ...alcanceWhere(alcance) }, // R13: guardia de alcance en el WHERE
@@ -1264,7 +1276,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     // admin veia los valores de HOY, no los del cierre que esta revisando.
     // R19 sale de aqui gratis: una orden con `deleted_at` sigue mostrandose, y ahora por
     // diseño y no por el accidente de que `WITH_DETALLE` no filtraba `deletedAt`.
-    const [gestiones, detalle, sinGestion] = await Promise.all([
+    const [gestiones, detalle, sinGestion, rechazosDeTienda] = await Promise.all([
       this.prisma.gestionOrden.findMany({
         where: { cierreId }, // R6: gestiones vinculadas a ESTE cierre
         orderBy: { createdAt: "desc" },
@@ -1293,6 +1305,15 @@ export class CierresAdminRepository implements ICierresAdminRepository {
         orderBy: ORDEN_SIN_GESTION, // R12: determinista, con los `null` de guia en sitio estable
         select: SIN_GESTION_SELECT, // sin `createdAt`: no se pinta (design §2.1)
       }),
+      // FICHA 425 (B11, R14/R15) — LOS RECHAZOS DE TIENDA QUE ESTE CIERRE PUSO DELANTE DE QUIEN LO
+      // APRUEBA. Cuarta consulta del MISMO `Promise.all`. El acotamiento por cierre va en el `where`,
+      // no en memoria; el ALCANCE no se repite por la misma razon que en la de arriba. Lo congelado,
+      // tal cual: ni un `JOIN` con la orden viva ni un campo de dinero.
+      this.prisma.cierreRechazoTienda.findMany({
+        where: { cierreId },
+        orderBy: ORDEN_RECHAZOS_DE_TIENDA, // del mas viejo al mas reciente, orden total
+        select: RECHAZO_DE_TIENDA_SELECT,
+      }),
     ]);
     const byOrden = new Map(detalle.map((d) => [d.ordenId, d]));
     return {
@@ -1302,6 +1323,8 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       sinGestion: sinGestion.map(toSinGestionRow),
       // R27/R28: viaja SIEMPRE junto a la lista. `[]` con `false` no es «no hubo ninguna».
       sinGestionRegistrado: cierre.sinGestionRegistrado,
+      // FICHA 425 (R14): `[]`, nunca `null` — ningun cierre anterior a la ficha pudo llevarse uno.
+      rechazosDeTienda: rechazosDeTienda.map(toRechazoDeTienda),
       // Grano: N gestiones de una orden comparten su UNICA fila congelada.
       // Sin fallback (R14/decision (a)): si falta la fila, es un error DURO, no un silencio
       // que muestre datos vivos disfrazados de congelados.

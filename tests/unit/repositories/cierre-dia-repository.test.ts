@@ -99,6 +99,10 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     // Feature 264 (B3/B9): el vinculo cierre <-> orden barrida. Se escribe DENTRO de la tx del
     // corte y se lee en el detalle propio.
     cierreSinGestion: { createMany: vi.fn(), findMany: vi.fn(async () => []) },
+    // FICHA 425 (B4/B11): el vinculo de REVISION cierre <-> rechazo de tienda. Se escribe DENTRO de la
+    // tx de `crearCierre` y se lee en el detalle propio. Vacio por defecto: el cierre normal no
+    // incorporo ningun rechazo de tienda.
+    cierreRechazoTienda: { createMany: vi.fn(), findMany: vi.fn(async () => []) },
     tarifa: { findMany: vi.fn(), findFirst: vi.fn() },
     $transaction: vi.fn(),
     ...overrides,
@@ -1632,7 +1636,13 @@ function buildSnapshotTx(
     cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
     gestionOrden: {
       updateMany: vi.fn(async () => ({ count: rows.length || 1 })),
-      findMany: vi.fn(async () => rows),
+      // FICHA 425: `crearCierre` hace ahora DOS lecturas de `gestion_orden` dentro de la tx — la de
+      // los rechazos de tienda a incorporar (`cierreId: null`) y la del snapshot (`cierreId: <id>`).
+      // El doble responde por el `where` y no por el orden de llamada: las filas del snapshot son
+      // gestiones YA vinculadas, y ninguna de ellas es un rechazo de tienda suelto.
+      findMany: vi.fn(async (args: { where: { cierreId?: string | null } }) =>
+        typeof args.where.cierreId === "string" ? rows : [],
+      ),
     },
     cierreDetail: { createMany: vi.fn(async () => ({ count: rows.length })) },
     ...overrides,
@@ -1685,7 +1695,9 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
 
     await repo.crearCierre(INPUT_CIERRE);
 
-    const arg = (tx.gestionOrden.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { where: unknown };
+    // FICHA 425: el snapshot es la ULTIMA lectura de `gestion_orden` de la tx; la primera es la de los
+    // rechazos de tienda a incorporar, que tiene su propio caso literal (425/B3).
+    const arg = (tx.gestionOrden.findMany as ReturnType<typeof vi.fn>).mock.lastCall?.[0] as unknown as { where: unknown };
     expect(arg.where).toEqual({ cierreId: "c1" });
   });
 
@@ -2924,5 +2936,316 @@ describe("264/B9 — findCierrePropioConGestiones trae las ordenes sin gestionar
     const where = (prisma.cierreDia.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0]
       .where as unknown;
     expect(where).toEqual({ id: "c-ajeno", mensajeroId: "m1" });
+  });
+});
+
+// ==============================================================================================
+// FICHA 425 (B3/B4) — `crearCierre` INCORPORA LOS RECHAZOS DE TIENDA COMO MATERIAL DE REVISION.
+//
+// Lo que se afirma aqui es CABLEADO y CONTRATO: el `where` literal de la lectura, que la escritura va
+// DENTRO de la tx, que la guarda cuenta lo que el `createMany` inserto DE VERDAD y que el `updateMany`
+// que factura no se toco. Que ese `where` seleccione las filas correctas es un hecho del motor y se
+// mide contra Postgres en `tests/integration/db/cierre-rechazo-tienda-sql-real.test.ts`.
+// ==============================================================================================
+
+describe("425/B3-B4 — crearCierre incorpora los rechazos de tienda sin darles `cierre_id`", () => {
+  const RECHAZADO_EL = new Date("2026-09-10T16:45:00.000Z");
+
+  /** La fila TAL COMO LA PROYECTA el pre-SELECT de rechazos del repositorio. */
+  function rechazoProyectado(id: string, overrides: Record<string, unknown> = {}) {
+    return {
+      id,
+      ordenId: `o-${id}`,
+      createdAt: RECHAZADO_EL,
+      motivo: "La tienda no recibe la devolucion" as string | null,
+      orden: {
+        numGuia: 58980454 as number | null,
+        numRemision: "NA-981",
+        destinatario: "Dest NA-981",
+        producto: "Caja",
+        tienda: { nombre: "Nuform" },
+        zona: { nombre: "Central" },
+      },
+      ...overrides,
+    };
+  }
+
+  function montar(
+    opts: {
+      vinculadas?: number;
+      rechazos?: ReturnType<typeof rechazoProyectado>[];
+      insertados?: number;
+    } = {},
+  ) {
+    const rechazos = opts.rechazos ?? [];
+    const tx = {
+      cierreDia: { create: vi.fn(async () => ({ id: "c425" })) },
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: opts.vinculadas ?? 0 })),
+        // Responde por el `where`: `cierreId: null` es la lectura de rechazos SUELTOS; un id es la del
+        // snapshot (gestiones ya vinculadas, que aqui no afirman nada).
+        findMany: vi.fn(async (args: { where: { cierreId?: string | null } }) =>
+          args.where.cierreId === null ? rechazos : [],
+        ),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
+      cierreRechazoTienda: {
+        createMany: vi.fn(async (args: { data: unknown[] }) => ({
+          count: opts.insertados ?? args.data.length,
+        })),
+      },
+    };
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+    return { tx, prisma, repo };
+  }
+
+  const INPUT = {
+    mensajeroId: "m-arnel",
+    destinoTipo: "bodega_satelite" as const,
+    destinoZonaId: "z1",
+    totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+    pagoByGestionId: {},
+    totalPagoMensajero: "0.00",
+    ingresoByGestionId: {},
+    totalIngresoBodegaRechazos: "0.00",
+  };
+
+  it("B3: la lectura de rechazos lleva el `where` LITERAL de las seis condiciones (contrato)", async () => {
+    const { tx, repo } = montar({ rechazos: [rechazoProyectado("g-r1")] });
+
+    await repo.crearCierre(INPUT);
+
+    // La PRIMERA lectura de `gestion_orden` de la tx es la de los rechazos; la del snapshot va despues.
+    const arg = tx.gestionOrden.findMany.mock.calls[0][0] as { where: unknown };
+    expect(arg.where).toEqual({
+      mensajeroId: "m-arnel",
+      cierreId: null,
+      anuladaAt: null,
+      resultado: "rechazada",
+      historialEstados: { some: { origenTipo: "rechazo_tienda" } },
+      vinculoRechazoTienda: { is: null },
+    });
+  });
+
+  it("B4: el `updateMany` que FACTURA sigue con el `where` de la 337, intacto, y solo escribe `cierre_id`", async () => {
+    const { tx, repo } = montar({ vinculadas: 2, rechazos: [rechazoProyectado("g-r1")] });
+
+    await repo.crearCierre(INPUT);
+
+    const vincula = tx.gestionOrden.updateMany.mock.calls[0] as unknown as [
+      { where: unknown; data: unknown },
+    ];
+    expect(vincula[0].where).toEqual({
+      mensajeroId: "m-arnel",
+      cierreId: null,
+      anuladaAt: null,
+      ...SIN_ORIGENES_DE_ESCRITORIO,
+    });
+    expect(vincula[0].data).toEqual({ cierreId: "c425" });
+  });
+
+  it("R2/R15: escribe el vinculo DENTRO de la tx, con los descriptivos congelados y la fecha del rechazo", async () => {
+    const { tx, prisma, repo } = montar({
+      rechazos: [
+        rechazoProyectado("g-r1"),
+        rechazoProyectado("g-r2", {
+          ordenId: "o-2",
+          motivo: null,
+          orden: {
+            numGuia: null,
+            numRemision: "NA-1103",
+            destinatario: "Dest NA-1103",
+            producto: "Sobre",
+            tienda: { nombre: "Nuform" },
+            zona: { nombre: "Heredia" },
+          },
+        }),
+      ],
+    });
+
+    await repo.crearCierre(INPUT);
+
+    expect(tx.cierreRechazoTienda.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.cierreRechazoTienda.createMany.mock.calls[0][0]).toEqual({
+      data: [
+        {
+          cierreId: "c425",
+          gestionId: "g-r1",
+          ordenId: "o-g-r1",
+          numGuia: 58980454,
+          numRemision: "NA-981",
+          destinatario: "Dest NA-981",
+          producto: "Caja",
+          tiendaNombre: "Nuform",
+          zonaNombre: "Central",
+          rechazadoAt: RECHAZADO_EL,
+          motivo: "La tienda no recibe la devolucion",
+        },
+        {
+          cierreId: "c425",
+          gestionId: "g-r2",
+          ordenId: "o-2",
+          numGuia: null,
+          numRemision: "NA-1103",
+          destinatario: "Dest NA-1103",
+          producto: "Sobre",
+          tiendaNombre: "Nuform",
+          zonaNombre: "Heredia",
+          rechazadoAt: RECHAZADO_EL,
+          motivo: null,
+        },
+      ],
+      skipDuplicates: true,
+    });
+    // Y NADA por el cliente de FUERA de la transaccion: el vinculo cae con el rollback del cierre.
+    expect(
+      (prisma.cierreRechazoTienda as { createMany: ReturnType<typeof vi.fn> }).createMany,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("R21: la fila del vinculo no lleva ni un campo de dinero", async () => {
+    const { tx, repo } = montar({ rechazos: [rechazoProyectado("g-r1")] });
+
+    await repo.crearCierre(INPUT);
+
+    const arg = tx.cierreRechazoTienda.createMany.mock.calls[0][0] as { data: object[] };
+    const claves = Object.keys(arg.data[0]).join(" ").toLowerCase();
+    for (const palabra of ["monto", "pago", "cobro", "ingreso", "tarifa", "comision", "total", "flete"]) {
+      expect(claves).not.toContain(palabra);
+    }
+  });
+
+  it("R5: con 0 gestiones propias y 0 barridas, un rechazo incorporado BASTA para crear el cierre", async () => {
+    const { repo } = montar({ vinculadas: 0, rechazos: [rechazoProyectado("g-r1")] });
+
+    expect(await repo.crearCierre(INPUT)).toBe("c425");
+  });
+
+  it("R5 (contrapunto): sin gestiones, sin barridas y sin rechazos sigue devolviendo `null`", async () => {
+    const { tx, repo } = montar({ vinculadas: 0, rechazos: [] });
+
+    expect(await repo.crearCierre(INPUT)).toBeNull();
+    expect(tx.cierreRechazoTienda.createMany).not.toHaveBeenCalled();
+  });
+
+  it("R3/R4: si el `createMany` no inserta nada (otra tx ya se la llevo), la guarda NO lo cuenta y devuelve `null`", async () => {
+    const { tx, repo } = montar({
+      vinculadas: 0,
+      rechazos: [rechazoProyectado("g-r1")],
+      insertados: 0,
+    });
+
+    expect(await repo.crearCierre(INPUT)).toBeNull();
+    // Se INTENTO escribir: el `null` sale de la guarda, no de no haber llegado nunca al `createMany`.
+    expect(tx.cierreRechazoTienda.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("R19: un cierre con gestiones propias y SIN rechazos no toca la tabla de vinculo", async () => {
+    const { tx, repo } = montar({ vinculadas: 3, rechazos: [] });
+
+    expect(await repo.crearCierre(INPUT)).toBe("c425");
+    expect(tx.cierreRechazoTienda.createMany).not.toHaveBeenCalled();
+  });
+});
+
+// ==============================================================================================
+// FICHA 425 (B11) — EL DETALLE PROPIO DEL MENSAJERO TRAE LOS RECHAZOS DE TIENDA DEL CIERRE.
+// ==============================================================================================
+
+describe("425/B11 — findCierrePropioConGestiones trae los rechazos de tienda del cierre", () => {
+  const CABECERA = {
+    id: "c1",
+    estado: "vencido" as const,
+    destinoTipo: "bodega_satelite" as const,
+    destinoZonaId: "z1",
+    totalEfectivo: new Prisma.Decimal("0"),
+    totalSimpe: new Prisma.Decimal("0"),
+    totalTransferencia: new Prisma.Decimal("0"),
+    totalGeneral: new Prisma.Decimal("0"),
+    totalPagoMensajero: new Prisma.Decimal("0"),
+    totalIngresoBodegaRechazos: new Prisma.Decimal("0"),
+    solicitadoAt: new Date("2026-09-11T06:00:00.000Z"),
+    resueltoAt: null,
+    motivoRechazo: null,
+    sinGestionRegistrado: true,
+  };
+
+  const FILA_CRUDA = {
+    gestionId: "g-r1",
+    ordenId: "o-r1",
+    numGuia: 58980454,
+    numRemision: "NA-981",
+    destinatario: "Dest NA-981",
+    producto: "Caja",
+    tiendaNombre: "Nuform",
+    zonaNombre: "Central",
+    rechazadoAt: new Date("2026-09-10T16:45:00.000Z"),
+    motivo: "La tienda no recibe la devolucion",
+  };
+
+  function prismaCon(cierre: Record<string, unknown> | null, filas: Record<string, unknown>[] = []) {
+    const prisma = buildPrisma();
+    (prisma.cierreDia.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(cierre);
+    (prisma.gestionOrden.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (
+      prisma.cierreRechazoTienda as { findMany: ReturnType<typeof vi.fn> }
+    ).findMany.mockResolvedValue(filas);
+    return prisma;
+  }
+
+  it("R14: consulta por `cierre_id` en el WHERE, del mas viejo al mas reciente y con desempate total", async () => {
+    const prisma = prismaCon(CABECERA, [FILA_CRUDA]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.findCierrePropioConGestiones("c1", "m1");
+
+    const arg = (prisma.cierreRechazoTienda as { findMany: ReturnType<typeof vi.fn> }).findMany.mock
+      .calls[0][0] as { where: unknown; orderBy: unknown };
+    expect(arg.where).toEqual({ cierreId: "c1" });
+    expect(arg.orderBy).toEqual([{ rechazadoAt: "asc" }, { gestionId: "asc" }]);
+  });
+
+  it("R15: devuelve los diez campos, con la fecha del rechazo en ISO y NINGUN importe", async () => {
+    const prisma = prismaCon(CABECERA, [FILA_CRUDA]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.findCierrePropioConGestiones("c1", "m1");
+
+    expect(r?.rechazosDeTienda).toEqual([
+      {
+        gestionId: "g-r1",
+        ordenId: "o-r1",
+        numGuia: 58980454,
+        numRemision: "NA-981",
+        destinatario: "Dest NA-981",
+        producto: "Caja",
+        tiendaNombre: "Nuform",
+        zonaNombre: "Central",
+        rechazadoAt: "2026-09-10T16:45:00.000Z",
+        motivo: "La tienda no recibe la devolucion",
+      },
+    ]);
+  });
+
+  it("sin rechazos devuelve `[]`, nunca `null`", async () => {
+    const prisma = prismaCon(CABECERA, []);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.findCierrePropioConGestiones("c1", "m1");
+
+    expect(r?.rechazosDeTienda).toEqual([]);
+  });
+
+  it("un cierre AJENO corta en `null` antes de consultar la lista", async () => {
+    const prisma = prismaCon(null, [FILA_CRUDA]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    expect(await repo.findCierrePropioConGestiones("c-ajeno", "m1")).toBeNull();
+    expect(
+      (prisma.cierreRechazoTienda as { findMany: ReturnType<typeof vi.fn> }).findMany,
+    ).not.toHaveBeenCalled();
   });
 });

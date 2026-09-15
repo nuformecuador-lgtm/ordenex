@@ -89,7 +89,7 @@ function fakeRepo(traza: Traza, overrides: Partial<Repo> = {}): Repo {
     findColaCompleta: vi.fn(async () => []),
     findCierreByIdEnAlcance: vi.fn(async () => {
       traza.push("findCierreByIdEnAlcance");
-      return { cierre: resumenRow(), gestiones: [], sinGestion: [], sinGestionRegistrado: true };
+      return { cierre: resumenRow(), gestiones: [], sinGestion: [], sinGestionRegistrado: true, rechazosDeTienda: [] };
     }),
     resolverCierre: vi.fn(async () => {
       traza.push("resolverCierre");
@@ -310,6 +310,7 @@ describe("412/R1 — un rechazo confirmado avisa al mensajero, lo deje bloqueado
         gestiones: [],
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
       })),
     });
     const { service, notificarRechazo } = newService({ repo, traza });
@@ -637,6 +638,7 @@ describe("412 — el aviso no se emite si no puede identificar el hecho (FALLO C
         gestiones: [],
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
       })),
     });
     const { service, notificar, notificarRechazo } = newService({ repo, traza });

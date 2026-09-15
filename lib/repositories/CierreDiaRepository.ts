@@ -12,7 +12,10 @@ import type {
   ITarifaVigenteRepository,
   TarifaVigenteResuelta,
 } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
-import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
+import type {
+  CierrePasadoDTO,
+  CierreRechazoDeTienda,
+} from "@/lib/interfaces/services/ICierreDiaService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 // Feature 274 (design §4.2, R21/R22): la clave del Map del resolver batch la define el modulo
 // puro de la cascada, no este repositorio. Indexar aqui con una clave propia seria la segunda
@@ -30,6 +33,12 @@ import {
   SIN_GESTION_SELECT,
   toSinGestionRow,
 } from "@/lib/utils/cierre-sin-gestion";
+// FICHA 425 (B11): idem para los rechazos de tienda que el cierre pone delante de quien lo aprueba.
+import {
+  ORDEN_RECHAZOS_DE_TIENDA,
+  RECHAZO_DE_TIENDA_SELECT,
+  toRechazoDeTienda,
+} from "@/lib/utils/cierre-rechazo-tienda";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
 // Feature 246 (T3.4, R8): las vias que reasignan SIN ofrecer la eleccion de dia estampan el dia de
 // Costa Rica EN CURSO, en la convencion `@db.Date` de `fecha_reparto`.
@@ -105,6 +114,9 @@ type CierrePrismaClient = Pick<
   // Feature 264 (B3/B9): el VINCULO cierre <-> orden barrida. Se ESCRIBE en la tx del corte
   // (`crearCierre`) y se LEE en el detalle propio del mensajero (`findCierrePropioConGestiones`).
   | "cierreSinGestion"
+  // FICHA 425 (B4/B11): el VINCULO DE REVISION cierre <-> rechazo de tienda. Se ESCRIBE en la tx de
+  // `crearCierre` y se LEE en el detalle propio del mensajero (`findCierrePropioConGestiones`).
+  | "cierreRechazoTienda"
   | "tarifa"
   // Feature 237 (T5.5, D3): + `ordenHistorialEstado` para LEER —solo leer— de que familia nacio
   // una gestion candidata a deshacerse. Este repositorio no escribe historial: eso pasa siempre
@@ -417,6 +429,68 @@ function gestionesDelCierreWhere(mensajeroId: string): Prisma.GestionOrdenWhereI
 }
 
 /**
+ * FICHA 425 (design §5.1-a, R1/R3/R17) — LOS RECHAZOS DE TIENDA QUE ESTE CIERRE TIENE QUE PONER
+ * DELANTE DE QUIEN LO APRUEBA. Ponerlos delante, NO cobrarlos.
+ *
+ * ES EL HERMANO de `gestionesDelCierreWhere`, y NO lo sustituye ni lo relaja. Aquel decide quien
+ * recibe `cierre_id` —o sea, quien FACTURA— y sigue dejando fuera las dos familias de escritorio
+ * (337). Este decide que rechazos se VINCULAN al cierre en `cierre_rechazo_tienda`, una tabla sin
+ * columnas de importe. Sacar `rechazo_tienda` de `ORIGENES_GESTION_FUERA_DEL_CIERRE` era el arreglo
+ * de una linea, y cobraria DOS VECES a la tienda el flete de devolucion (design §7.1).
+ *
+ * LAS SEIS CONDICIONES, con dueno:
+ *   1. `mensajeroId`: el rechazo esta ATRIBUIDO a este mensajero (240/R9), aunque no sea su trabajo.
+ *   2. `cierreId: null`: nunca una gestion que ya pertenece a un cierre FACTURABLE.
+ *   3. `anuladaAt: null` (67/R16): una gestion deshecha no se revisa ni se cobra.
+ *   4. `resultado: "rechazada"` — PRIMER CERROJO de D2.
+ *   5. `historialEstados: { some: { origenTipo: "rechazo_tienda" } }` — SEGUNDO CERROJO de D2.
+ *   6. `vinculoRechazoTienda: { is: null }` (R3): ningun cierre anterior se la llevo ya.
+ *
+ * LOS DOS CERROJOS SON DELIBERADOS. D2 deja las `reprogramacion_tienda` FUERA de todo cierre, y una
+ * reprogramacion falla los dos a la vez —su resultado es `reprogramada` y su familia es otra—, asi
+ * que para que se cuele hay que romper DOS cosas. Se miden contra Postgres y con contraprueba de
+ * mutacion de cada uno: `tests/integration/db/cierre-rechazo-tienda-sql-real.test.ts`.
+ *
+ * `some` POR LA FAMILIA EXACTA, y no una exclusion: una lista negra dejaria entrar cualquier
+ * `rechazada` suelta de otra familia sintetica (`escalado_devuelta_sla`, `rechazo_tope_intentos`),
+ * que ya van por `gestionesDelCierreWhere` y FACTURAN. Ponerlas tambien aqui las pondria dos veces
+ * delante de quien aprueba.
+ */
+function rechazosDeTiendaDelCierreWhere(mensajeroId: string): Prisma.GestionOrdenWhereInput {
+  return {
+    mensajeroId,
+    cierreId: null,
+    anuladaAt: null,
+    resultado: "rechazada",
+    historialEstados: { some: { origenTipo: "rechazo_tienda" } },
+    vinculoRechazoTienda: { is: null },
+  };
+}
+
+/**
+ * FICHA 425 (B4) — el pre-`SELECT` de los rechazos a incorporar: la identidad de la gestion y los
+ * descriptivos que el vinculo CONGELA. Una sola consulta, DENTRO de la tx de `crearCierre`, igual que
+ * el pre-`SELECT` del corte de la 264 y por la misma razon: los descriptivos se congelan a partir de
+ * lo que esta consulta ve. NI UN CAMPO DE DINERO: la gestion los tiene, y no se piden.
+ */
+const RECHAZO_A_INCORPORAR_SELECT = {
+  id: true,
+  ordenId: true,
+  createdAt: true, // R15: cuando la tienda rechazo
+  motivo: true,
+  orden: {
+    select: {
+      numGuia: true,
+      numRemision: true,
+      destinatario: true,
+      producto: true,
+      tienda: { select: { nombre: true } },
+      zona: { select: { nombre: true } },
+    },
+  },
+} as const;
+
+/**
  * Feature 184 — Tanda C (R16/R5) — el ORDEN del mismo listado, compartido por el conjunto y la
  * pagina. No es simetria: la pagina N que la tabla pinta tiene que ser el segmento N del conjunto
  * del que sale el archivo, y eso solo se sostiene si las dos consultas ordenan igual.
@@ -647,6 +721,10 @@ export class CierreDiaRepository implements ICierreDiaRepository {
    * R13/R14 + feature 41/C1 (R8/R9/R23): INSERT cierre_dia (estado `solicitado` por
    * defecto o `vencido` para el corte) + vincular gestiones pendientes + snapshot pago,
    * atomico. Devuelve null (rollback) si el UPDATE guardado vincula 0 gestiones.
+   *
+   * FICHA 425: ademas incorpora, en la MISMA tx y como material de REVISION (sin `cierre_id`), los
+   * rechazos de tienda sueltos del mensajero. Cuentan para la guarda «algo paso», asi que ya no
+   * devuelve null a quien solo tiene rechazos de tienda por revisar.
    */
   async crearCierre(input: CrearCierreInput): Promise<string | null> {
     const {
@@ -862,12 +940,64 @@ export class CierreDiaRepository implements ICierreDiaRepository {
           where: gestionesDelCierreWhere(mensajeroId),
           data: { cierreId: cierre.id },
         });
+
+        // FICHA 425 (design §5.1-b, R1/R2/R4/R5) — LOS RECHAZOS DE TIENDA, COMO MATERIAL DE REVISION.
+        //
+        // DESPUES del `updateMany` de arriba, que NO SE TOCA: sigue vinculando solo lo que factura, y
+        // un rechazo de tienda sale de el con `cierre_id` NULL, igual que desde la 337. Y ANTES de la
+        // guarda «algo paso», porque lo que aqui se incorpore cuenta para ella: es lo que destraba al
+        // mensajero cuyas UNICAS gestiones sueltas son rechazos (el caso Arnel, R5).
+        //
+        // MONEY-NEUTRAL POR CONSTRUCCION, no por disciplina: `cierre_rechazo_tienda` no tiene ni una
+        // columna de importe, y la gestion no recibe `cierre_id`, que es por lo que preguntan los
+        // cinco caminos de dinero (los tres feeds de wallet, el congelado de pago/ingreso de aqui
+        // abajo y la confirmacion fisica). Nada de esto se toca (R6-R10).
+        //
+        // `count` del `createMany` y NO `length` del pre-SELECT: con `skipDuplicates`, una fila que
+        // otra transaccion concurrente ya vinculo (la descarta el `UNIQUE(gestion_id)`) NO cuenta
+        // como incorporada. Si contara, esta tx conservaria un cierre vacio creyendo que se llevo algo.
+        const rechazosSueltos = await tx.gestionOrden.findMany({
+          where: rechazosDeTiendaDelCierreWhere(mensajeroId),
+          orderBy: { createdAt: "asc" },
+          select: RECHAZO_A_INCORPORAR_SELECT,
+        });
+        let rechazosIncorporados = 0;
+        if (rechazosSueltos.length > 0) {
+          const incorporados = await tx.cierreRechazoTienda.createMany({
+            data: rechazosSueltos.map((g) => ({
+              cierreId: cierre.id,
+              gestionId: g.id,
+              ordenId: g.ordenId,
+              numGuia: g.orden.numGuia,
+              numRemision: g.orden.numRemision,
+              destinatario: g.orden.destinatario,
+              producto: g.orden.producto,
+              tiendaNombre: g.orden.tienda.nombre,
+              zonaNombre: g.orden.zona.nombre,
+              rechazadoAt: g.createdAt, // R15: la EDAD del rechazo, no la de este cierre
+              motivo: g.motivo,
+            })),
+            // R4: el `UNIQUE(gestion_id)` es la red. Una segunda corrida o una carrera no duplican.
+            skipDuplicates: true,
+          });
+          rechazosIncorporados = incorporados.count;
+        }
+
         // Feature 41/C1 + feature 109 (R8/R9/R23): guarda "algo paso". El cierre se conserva si
         // vinculo >=1 gestion O (corte diario) transiciono >=1 orden a `sin_gestionar`. Si AMBOS
         // son 0 -> rollback -> null (carrera / no-op real). La 37 (solicitar, sin corteSinGestionar)
         // exige >=1 gestion como antes (sinGestionarTransicionadas queda 0). El `vencido`
         // money-neutral (0 gestiones + >=1 sin_gestionar) YA NO se descarta (R8).
-        if (vinculadas.count === 0 && sinGestionarTransicionadas === 0) {
+        //
+        // FICHA 425 (R5): + `rechazosIncorporados`. Es ADITIVO: todo cierre que ayer se creaba se
+        // sigue creando igual, y el unico que cambia de desenlace es el que antes devolvia `null`
+        // teniendo rechazos de tienda por revisar. Un mensajero SOLO con `reprogramacion_tienda`
+        // sigue sin cierre (D2): no hay paquete que separar.
+        if (
+          vinculadas.count === 0 &&
+          sinGestionarTransicionadas === 0 &&
+          rechazosIncorporados === 0
+        ) {
           throw new SinGestionesVinculadas();
         }
         // Feature 39/R12/R14: puebla pago_mensajero por gestion AGRUPADO por valor de pago
@@ -1019,6 +1149,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     gestiones: CierreGestionPendienteRow[];
     sinGestion: CierreSinGestionRow[];
     sinGestionRegistrado: boolean;
+    rechazosDeTienda: CierreRechazoDeTienda[];
   } | null> {
     const cierre = await this.prisma.cierreDia.findFirst({
       where: { id: cierreId, mensajeroId }, // scope propio en el WHERE
@@ -1026,7 +1157,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     });
     if (cierre === null) return null;
 
-    const [rows, sinGestion] = await Promise.all([
+    const [rows, sinGestion, rechazosDeTienda] = await Promise.all([
       this.prisma.gestionOrden.findMany({
         // `anuladaAt: null` por coherencia con el resto del módulo: una gestión anulada no
         // llega a vincularse a un cierre, pero el filtro deja la intención escrita.
@@ -1055,6 +1186,15 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         orderBy: ORDEN_SIN_GESTION,
         select: SIN_GESTION_SELECT,
       }),
+      // FICHA 425 (B11, R14) — LOS RECHAZOS DE TIENDA QUE ESTE CIERRE INCORPORO, para la MISMA
+      // pantalla. Consulta GEMELA a la del admin (mismo `select` y mismo `orderBy`, importados del
+      // mismo sitio). Sin guardia nueva: cuelga de `cierreId`, que el `findFirst` de arriba ya acoto
+      // por `mensajeroId`. Ni un campo de dinero cruza por aqui.
+      this.prisma.cierreRechazoTienda.findMany({
+        where: { cierreId },
+        orderBy: ORDEN_RECHAZOS_DE_TIENDA,
+        select: RECHAZO_DE_TIENDA_SELECT,
+      }),
     ]);
     const deLaTienda = await this.marcarDesdeAyudaTienda(rows);
     return {
@@ -1062,6 +1202,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       gestiones: rows.map((r) => toPendienteRow(r, deLaTienda.has(r.id))),
       sinGestion: sinGestion.map(toSinGestionRow),
       sinGestionRegistrado: cierre.sinGestionRegistrado, // R27/R28
+      rechazosDeTienda: rechazosDeTienda.map(toRechazoDeTienda), // FICHA 425: lista vacia, nunca null
     };
   }
 

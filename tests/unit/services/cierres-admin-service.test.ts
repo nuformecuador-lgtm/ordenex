@@ -395,6 +395,7 @@ describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow({ totalPagoMensajero: "1500.00" }),
         gestiones: [
           gestionRow({
@@ -451,6 +452,7 @@ describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow({ totalPagoMensajero: "1500.00" }),
         // Una reprogramación no aporta a ningún concepto.
         gestiones: [gestionRow({ gestionId: "a", resultado: "reprogramada" })],
@@ -528,6 +530,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow(cierre),
         gestiones: gestiones.map((g) => gestionRow(g)),
       })),
@@ -805,6 +808,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow(),
         gestiones: [
           gestionRow({ gestionId: "a", resultado: "entregada", montoRecibido: "30.00", metodoPago: "SINPE" }),
@@ -837,6 +841,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow(),
         gestiones: [
           gestionRow({
@@ -864,7 +869,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
       totales: { efectivo: "1.00", simpe: "2.00", transferencia: "3.00", general: "6.00" },
     });
     const repo = fakeRepo({
-      findCierreByIdEnAlcance: vi.fn(async () => ({ sinGestion: [], sinGestionRegistrado: true, cierre, gestiones: [] })),
+      findCierreByIdEnAlcance: vi.fn(async () => ({ sinGestion: [], sinGestionRegistrado: true, rechazosDeTienda: [], cierre, gestiones: [] })),
     });
     const { service } = newService({ repo });
     const r = await service.verCierreDetalle("c1", MAESTRO);
@@ -877,6 +882,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow({ totalPagoMensajero: "5.00" }),
         gestiones: [
           gestionRow({ gestionId: "a", resultado: "entregada", pagoMensajero: "5.00" }),
@@ -899,6 +905,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow({ totalIngresoBodegaRechazos: "3.00" }),
         gestiones: [
           gestionRow({ gestionId: "a", resultado: "entregada", ingresoBodegaRechazo: "0.00" }),
@@ -939,7 +946,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
 
   it("R16: ver detalle NO muta (nunca invoca resolverCierre)", async () => {
     const repo = fakeRepo({
-      findCierreByIdEnAlcance: vi.fn(async () => ({ sinGestion: [], sinGestionRegistrado: true, cierre: resumenRow(), gestiones: [gestionRow()] })),
+      findCierreByIdEnAlcance: vi.fn(async () => ({ sinGestion: [], sinGestionRegistrado: true, rechazosDeTienda: [], cierre: resumenRow(), gestiones: [gestionRow()] })),
     });
     const { service } = newService({ repo });
     await service.verCierreDetalle("c1", MAESTRO);
@@ -957,6 +964,7 @@ describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow({ totalIngresoBodegaRechazos: "5.00" }),
         gestiones: [
           gestionRow({
@@ -1016,6 +1024,7 @@ describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow({
           totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
           totalPagoMensajero: "5.00",
@@ -1754,6 +1763,7 @@ describe("Feature 158 · verCierreDetalle — el incidente es un grupo PROPIO (R
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow(),
         gestiones: [
           gestionRow({ gestionId: "g1", resultado: "entregada" }),
@@ -1786,6 +1796,7 @@ describe("Feature 158 · verCierreDetalle — el incidente es un grupo PROPIO (R
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow({ totalPagoMensajero: "0.00" }),
         gestiones: [
           gestionRow({
@@ -1835,6 +1846,7 @@ describe("Feature 158 · verCierreDetalle — la causa y el monto llegan al DTO 
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow({ estado: "aprobado" }),
         gestiones: [
           gestionRow({
@@ -1868,6 +1880,7 @@ describe("Feature 158 · verCierreDetalle — la causa y el monto llegan al DTO 
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow(), // `solicitado`
         gestiones: [
           gestionRow({
@@ -1897,6 +1910,7 @@ describe("Feature 158 · verCierreDetalle — la causa y el monto llegan al DTO 
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow(),
         gestiones: [
           gestionRow({ gestionId: "g1", resultado: "entregada" }),
@@ -1929,6 +1943,7 @@ describe("CierresAdminService.verCierreDetalle — el storage no puede bloquear 
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow(),
         gestiones: [
           gestionRow({
@@ -2005,6 +2020,7 @@ describe("264/B5 — verCierreDetalle emite las ordenes sin gestionar", () => {
         gestiones: [],
         sinGestion,
         sinGestionRegistrado,
+        rechazosDeTienda: [],
       })),
     });
   }
@@ -2061,6 +2077,7 @@ describe("264/B5 — verCierreDetalle emite las ordenes sin gestionar", () => {
         gestiones: [gestion],
         sinGestion: [sinGestionDTO(), sinGestionDTO({ ordenId: "b" }), sinGestionDTO({ ordenId: "c" })],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
       })),
     });
     const sinLista = fakeRepo({
@@ -2069,6 +2086,7 @@ describe("264/B5 — verCierreDetalle emite las ordenes sin gestionar", () => {
         gestiones: [gestion],
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
       })),
     });
 
@@ -2245,6 +2263,7 @@ describe("396 — `verCierreDetalle` emite el desglose por tienda", () => {
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: RESUMEN_DOS_TIENDAS(),
         gestiones: GESTIONES_DOS_TIENDAS(),
       })),
@@ -2345,6 +2364,7 @@ describe("396 — `verCierreDetalle` emite el desglose por tienda", () => {
       findCierreByIdEnAlcance: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: resumenRow({
           totales: {
             efectivo: "0.00",
@@ -2406,5 +2426,123 @@ describe("396 — `verCierreDetalle` emite el desglose por tienda", () => {
     expect(r).toEqual({ status: "forbidden" });
     expect(Object.keys(r)).toEqual(["status"]); // ni `partesPorTienda`, ni nada más
     expect(repo.findCierreByIdEnAlcance).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * FICHA 425 (B11) — EL DETALLE DEL ADMIN EMITE LOS RECHAZOS DE TIENDA DEL CIERRE.
+ *
+ * Passthrough: la lista la congela y la ordena el repositorio (medido contra Postgres). Aqui se
+ * afirma que llega, que `[]` viaja como `[]`, que fuera de alcance no se emite, y —R16— que no se
+ * cuela en ningun grupo ni mueve ningun importe del DTO.
+ */
+describe("425/B11 — verCierreDetalle emite `rechazosDeTienda`", () => {
+  function rechazoDTO(overrides: Record<string, unknown> = {}) {
+    return {
+      gestionId: "g-981",
+      ordenId: "o-981",
+      numGuia: 58980454 as number | null,
+      numRemision: "NA-981",
+      destinatario: "Dest 981",
+      producto: "Caja",
+      tiendaNombre: "Nuform",
+      zonaNombre: "Central",
+      rechazadoAt: "2026-09-10T15:30:00.000Z",
+      motivo: "No la recibe" as string | null,
+      ...overrides,
+    };
+  }
+
+  function repoConRechazos(
+    rechazosDeTienda: ReturnType<typeof rechazoDTO>[],
+    gestiones: ReturnType<typeof gestionRow>[] = [],
+  ) {
+    return fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow(),
+        gestiones,
+        sinGestion: [],
+        sinGestionRegistrado: true,
+        rechazosDeTienda,
+      })),
+    });
+  }
+
+  it("R14/R15: un cierre con 3 rechazos los emite los 3, campo por campo", async () => {
+    const repo = repoConRechazos([
+      rechazoDTO({ gestionId: "g-947", ordenId: "o-947", numGuia: 19301246, numRemision: "NA-947" }),
+      rechazoDTO(),
+      rechazoDTO({
+        gestionId: "g-1103",
+        ordenId: "o-1103",
+        numGuia: null,
+        numRemision: "NA-1103",
+        motivo: null,
+      }),
+    ]);
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.rechazosDeTienda.map((x) => x.numRemision)).toEqual(["NA-947", "NA-981", "NA-1103"]);
+    // Igualdad EXACTA de una fila: lo que SOBRA importa tanto como lo que falta (un importe colado).
+    expect(r.rechazosDeTienda[2]).toEqual({
+      gestionId: "g-1103",
+      ordenId: "o-1103",
+      numGuia: null,
+      numRemision: "NA-1103",
+      destinatario: "Dest 981",
+      producto: "Caja",
+      tiendaNombre: "Nuform",
+      zonaNombre: "Central",
+      rechazadoAt: "2026-09-10T15:30:00.000Z",
+      motivo: null,
+    });
+  });
+
+  it("un cierre sin ninguno emite `[]`", async () => {
+    const { service } = newService({ repo: repoConRechazos([]) });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.rechazosDeTienda).toEqual([]);
+  });
+
+  it("un cierre fuera de alcance no emite el campo", async () => {
+    const repo = fakeRepo({ findCierreByIdEnAlcance: vi.fn(async () => null) });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c-ajeno", MAESTRO);
+
+    expect(r).toEqual({ status: "no_encontrada" });
+    expect(Object.keys(r)).toEqual(["status"]);
+  });
+
+  it("R16: la lista NO se cuela en ningun grupo ni mueve un solo importe del DTO", async () => {
+    const gestion = gestionRow({ gestionId: "g1", resultado: "entregada", montoRecibido: "30.00" });
+    const a = await newService({
+      repo: repoConRechazos(
+        [rechazoDTO(), rechazoDTO({ gestionId: "g-2" }), rechazoDTO({ gestionId: "g-3" })],
+        [gestion],
+      ),
+    }).service.verCierreDetalle("c1", MAESTRO);
+    const b = await newService({ repo: repoConRechazos([], [gestion]) }).service.verCierreDetalle(
+      "c1",
+      MAESTRO,
+    );
+    if (a.status !== "ok" || b.status !== "ok") throw new Error("los dos deben ser ok");
+
+    expect(a.grupos).toEqual(b.grupos);
+    expect(a.totalesIngreso).toEqual(b.totalesIngreso);
+    expect(a.desgloseIngresoBodegaRechazos).toEqual(b.desgloseIngresoBodegaRechazos);
+    expect(a.ganancia).toBe(b.ganancia);
+    expect(a.pagoTienda).toBe(b.pagoTienda);
+    expect(a.partesPorTienda).toEqual(b.partesPorTienda);
+    expect(a.cierre.totales).toEqual(b.cierre.totales);
+    // Contrapunto: la lista SI llego.
+    expect(a.rechazosDeTienda).toHaveLength(3);
+    expect(b.rechazosDeTienda).toHaveLength(0);
   });
 });

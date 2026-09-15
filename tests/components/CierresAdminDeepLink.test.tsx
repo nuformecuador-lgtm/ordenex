@@ -161,6 +161,7 @@ function detalleOk(cierreId: string, mensajeroNombre = "Zoe del Histórico") {
     // no la seccion; los casos de la seccion viven en su propio archivo.
     ordenesSinGestion: [],
     sinGestionRegistrado: true,
+    rechazosDeTienda: [],
   };
 }
 
