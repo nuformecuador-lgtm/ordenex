@@ -244,3 +244,47 @@ El diseño las retira del código y de `.env.example` en este mismo PR (R17). Bo
 Vercel es un paso manual que no puede hacer el implementer: queda en `tasks.md` como paso posterior
 al despliegue verde. Se necesita que el humano confirme que lo hará él, o que acepta que se queden
 ahí sin que nadie las lea.
+
+---
+
+## Decisiones del leader sobre las preguntas abiertas (2026-09-15)
+
+### Q1 — El SINPE inicial NO se escribe como literal en `migration.sql`
+
+**El repositorio es PÚBLICO** (`gh repo view` → `PUBLIC`). Escribir el número y el nombre del titular
+como literales en la migración los publica en internet de forma permanente: quitarlos después no sirve,
+git conserva la historia. Son un móvil real de Costa Rica y el nombre de una persona o de la empresa.
+
+**En su lugar, la siembra va en tres pasos:**
+
+1. La migración crea las dos columnas **NULLABLES**, sin `CHECK`.
+2. Un script de un solo uso (`scripts/seed-sinpe-inicial.ts`) lee
+   `NEXT_PUBLIC_SINPE_NUMERO` / `NEXT_PUBLIC_SINPE_NOMBRE` **del entorno** y rellena las 8 zonas.
+   Corre en el entorno del despliegue, donde esas variables existen.
+3. Una segunda migración añade `NOT NULL` y los `CHECK`, una vez lleno.
+
+**Lo que NO se pierde:** la garantía de «ningún hueco» sigue en pie, porque la aplicación no lee esas
+columnas hasta que la funcionalidad se despliega, y para entonces ya están llenas. Lo que se gana es
+que ningún dato real de cobro entra al repositorio.
+
+**Coste aceptado:** `NOT NULL` no rige desde el primer minuto, sino desde el paso 3. La ventana es el
+propio despliegue.
+
+### Q2 — `admin` edita cualquier bodega
+
+Se acepta la propuesta del `design.md`. Acotar `admin` solo a la central devolvería la dependencia de
+una sola persona, que es parte de lo que esta ficha viene a quitar.
+
+### Q3 — Etiqueta y ruta
+
+Decidido en el canvas de `/design`:
+
+- **`adminSatelite`**: ruta `/mi-bodega`, etiqueta **«Mi bodega»**, y **al FINAL de su barra lateral** —
+  si va primera cambia en silencio su aterrizaje post-login (`SIDEBAR_ITEMS`, primer ítem visible), y
+  marcarla `destinoInicial: false` rompería el `toEqual` literal de `destino-post-login.test.ts`.
+- **Oficina**: dentro de Configuración, como **«SINPE por bodega»**, con las 8 bodegas en tabla.
+
+### Q4 — Retirar las variables de Vercel
+
+Es del humano y **no bloquea**: se hace DESPUÉS de verificar el despliegue, no antes. Hasta entonces
+las variables pueden seguir ahí sin efecto, porque el código ya no las lee.
