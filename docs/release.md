@@ -571,3 +571,44 @@ y creó 4 `vencido` normales (Fabiola Flores, Carlos Eduardo, Joyce 1 Mesen y Ja
   satélite), un mensajero sin vehículo que aparece habilitado y la concordancia «Se movieron 1 orden».
 - **Del humano**: los 25 rechazos sin `ingreso_bodega_rechazo`, y el correo de las 4 funcionalidades
   nuevas, pendiente de aprobación del cliente.
+
+## Release del 2026-09-15 (2.ª) — la 428, recorrida
+
+`prod` = **`efd06fb4`** (PR #798, merge commit con **2 padres** —`1ab83dd5` + `7c4b77ee`—, no squash).
+Despliegue `dpl_3oHKLtGvYMPKHvap4TPRhpkTnsPD` **READY**, target `production`, alias `ordenex.co` y
+`www.ordenex.co` con `aliasError: null`.
+
+**Una sola ficha, y el diff es 100 % de presentación**: ninguna migración, ningún cambio de esquema,
+de servicios ni de consultas. Por eso esta recorrida es corta — no hay filas que contar.
+
+| Ficha | PR | Qué |
+| --- | --- | --- |
+| **428** | #797 | los dos conmutadores de orden de `/ordenes`, solo con icono y tooltip |
+
+### Verificado
+
+- **Gate completo sobre `dev`** (`7c4b77ee`, el SHA que se mergea): `INIT_EXIT=0` escrito DENTRO del
+  log, **1975/1975 archivos**, **28.858 tests**, **cero archivos saltados** —`integration/db`
+  ejecutado—. Log en `progress/gate_dev_428.log`.
+- **Revisión OK sin bloqueantes**: 8 mutaciones aplicadas, 8 muertas (`progress/review_428.md`).
+- **Comprobación visual hecha por el humano** sobre la rama antes de mergear. Es la que cuenta aquí:
+  la suite corre en jsdom, sin CSS, y ningún test sabe si «Filtros» vuelve a la primera línea.
+- `ordenex.co`, `/login` y `/sw.js` en **200** después de desplegar.
+
+### Lo que NO se pudo medir, dicho en voz alta
+
+**Los errores de runtime.** `get_runtime_errors` dio *timeout* dos veces seguidas (ventanas de 1 h y
+24 h). No es «cero errores»: es que no se midió. Queda para la próxima sesión, o para cuando la
+consulta responda.
+
+### Decisión del humano que NO se reproponer
+
+Los dos conmutadores pasan a solo icono con sus dos costes aceptados: en móvil no hay hover y los
+iconos quedan mudos, y las MISMAS dos flechas significan «Más recientes/Más antiguas» con fecha y
+«Más altas/Más bajas» con remisión. Se ofrecieron dos variantes más conservadoras y las descartó.
+
+### Deuda anotada, fuera de esta release
+
+El naranja `brand-outline` de «Descargar» y del botón de columnas compite con el naranja de
+selección (22 tablas), y `ColumnasPopover` y «Filtros» usan el mismo icono `SlidersHorizontal` a
+40 px uno del otro (12 pantallas).

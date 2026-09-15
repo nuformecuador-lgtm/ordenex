@@ -1,24 +1,43 @@
 # Estado — sesión del 2026-09-10 / 12 / 14 / 15
 
-## ABIERTO — ficha 428, PR #797 sin mergear
+## Desplegado en producción — release del 2026-09-15 (2.ª), la 428
 
-`feat/428-orden-solo-icono` (`2a8837b3`) sobre `dev` = `31cbd6d4`. Los dos conmutadores de ORDEN de
-`/ordenes` pasan a solo icono + tooltip: ocupaban ~800 px de los ~1480 de la fila y empujaban
-«Filtros» a una tercera línea. Opt-in (`SegmentedToggle.soloIcono`, default `false`); solo lo pasa
-`OrdenesListado`, los otros 8 consumidores no cambian.
+`prod` = **`efd06fb4`** (PR #798, merge commit con 2 padres, no squash) ·
+`dpl_3oHKLtGvYMPKHvap4TPRhpkTnsPD` **READY** · alias `ordenex.co` con `aliasError: null`.
+Recorrida completa en `docs/release.md` («Release del 2026-09-15 (2.ª)»). La 428 queda `done`;
+`in_progress` = 0.
 
-**FALTA LA COMPROBACIÓN VISUAL, y es lo único que importa aquí:** la suite corre en jsdom, sin CSS,
-así que nadie ha visto si se ve bien ni si «Filtros» vuelve a la primera línea. No hay login local
-usable (los e2e llevan credenciales de relleno y el seed de QA rota hashes). **No mergear sin abrir
-la pantalla.**
+Los dos conmutadores de ORDEN de `/ordenes` pasan a solo icono + tooltip: ocupaban ~800 px de los
+~1480 de la fila y empujaban «Filtros» a una tercera línea. Opt-in (`SegmentedToggle.soloIcono`,
+default `false`); solo lo pasa `OrdenesListado`, los otros 8 consumidores no cambian.
 
-Los dos costes los aceptó el humano con los números delante — en móvil no hay hover, y las mismas
-dos flechas significan «Más recientes/Más antiguas» con fecha y «Más altas/Más bajas» con remisión.
-Se le ofrecieron dos variantes más conservadoras y las descartó: **no reproponer**.
+Gate completo sobre `7c4b77ee`: 1975/1975 archivos, 28.858 tests, **cero saltados**. Revisión OK,
+8 mutaciones y 8 muertas. El humano verificó la pantalla antes de mergear.
 
-Anotado y FUERA de esta ficha: el naranja `brand-outline` de «Descargar» y del botón de columnas
+### Lo que quedó SIN MEDIR en esta release
+
+**Los errores de runtime.** `get_runtime_errors` dio timeout dos veces (1 h y 24 h). No es «cero
+errores»: es que no se midió. `ordenex.co`, `/login` y `/sw.js` sí respondieron 200.
+
+### Dos cosas que muerden más adelante
+
+- **La red contra poner `soloIcono` en global es UNA sola** (`segmented-toggle-solo-icono.test.tsx`).
+  Con el default en `true`, los tests de las otras pantallas siguen VERDES: localizan por nombre
+  accesible y ese se preserva.
+- Los dos costes de la 428 los aceptó el humano con los números delante —sin hover en móvil; la
+  misma flecha con dos significados—. Se le ofrecieron dos variantes más conservadoras y las
+  descartó: **no reproponer**.
+
+Anotado y FUERA de la ficha: el naranja `brand-outline` de «Descargar» y del botón de columnas
 compite con el naranja de selección (22 tablas), y `ColumnasPopover` y «Filtros» usan el mismo
 icono `SlidersHorizontal` a 40 px uno del otro (12 pantallas).
+
+### Worktrees: 1,2 GB huérfanos
+
+`.claude/worktrees/agent-a0e69447ad05ef4a8` ocupa **1,2 GB y NO está en `git worktree list`**: es
+una huérfana ya desregistrada, el fallo conocido de `worktree remove` con rutas largas. Quedan
+además 16 worktrees registrados (ramas de la 366 a la 422), sin purgar por no borrar trabajo ajeno
+a ciegas.
 
 ---
 
