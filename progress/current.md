@@ -1,5 +1,52 @@
 # Estado — sesión del 2026-09-10 / 12 / 14 / 15
 
+## EN CURSO — SF-001, las cuatro funcionalidades nuevas
+
+**Las cuatro aprobadas, ninguna prioritaria sobre otra.** Diseño de cada una revisado contra el código
+y escrito en `progress/design_sf001_p{1,2,3,4}_*.md`. **Ninguna implementada todavía.**
+
+**CONDICIÓN DEL HUMANO, aplica a las cuatro:** nada sale a producción hasta estar seguros de que no
+hace daño a lo que ya funciona. Tres de las cuatro tocan cosas vivas — el control del efectivo, el
+número al que los clientes transfieren, y la regla que impide entregar antes de tiempo.
+
+### Orden de trabajo acordado: tres vías en paralelo
+
+| Vía | Trabajo | Migración | Paralelizable |
+| --- | --- | --- | --- |
+| **A** | punto **2** (SINPE) → luego punto **1** (cierres) | sí, las dos | con B y C |
+| **B** | punto **3** (contacto anticipado) | no | con A y C |
+| **C** | punto **4** — los 33 documentos de ayuda | no toca código | con todo |
+
+**Por qué 1 y 2 van en serie y no en paralelo, y NO es lo que dice el documento.** El documento afirma
+que «tocan las mismas áreas del sistema»: es falso, no comparten un archivo — comparten la palabra
+(en cierres «SINPE» es un medio de pago, `total_simpe`; en plantillas es el número). El choque real es
+otro: **las dos necesitan migración**, y en este repo dos worktrees con migraciones distintas contra la
+misma base local se rompen el gate el uno al otro.
+
+### Reglas de esta tanda
+
+- **Toda superficie NUEVA pasa por `/design`** antes de implementarse (pedido del humano). Son tres:
+  `/wallet/satelites`, la pantalla de configuración del SINPE, y el módulo de documentación + chat.
+- **Primero los documentos, después el asistente** (punto 4). Los escribe Claude verificando contra el
+  código —documentación inventada es peor que ninguna—, y cada `.md` cita de dónde sale lo que afirma.
+- Se empieza por el **mundo del mensajero**: 18 de los 37 usuarios, solo 4 superficies.
+
+### Autorizaciones del punto 4
+
+- **Costos de operación: AUTORIZADOS** por el humano el 2026-09-15.
+- **PENDIENTES**: (a) que imágenes y audios con datos de clientes salgan a un proveedor externo de IA;
+  (b) qué modelo (el documento recomienda Sonnet 5).
+- Cuando toque, hay que montar cuenta con crédito + clave de API como variable de entorno en Vercel,
+  **separada por entorno** — ver la nota de las variables mal repartidas.
+
+### Sigue sin leerse el PDF firmado
+
+No hay visor de PDF en la máquina y la conversión por Word no terminó. El contenido se leyó del `.docx`
+del 14 (`R:\job\singularis\admin\`), que es el borrador con las casillas vacías. El humano confirmó de
+viva voz que se aprobaron las cuatro.
+
+---
+
 ## Desplegado en producción — release del 2026-09-15 (2.ª), la 428
 
 `prod` = **`efd06fb4`** (PR #798, merge commit con 2 padres, no squash) ·
