@@ -9,6 +9,12 @@ import { quitarComentarios } from "../../fixtures/sin-comentarios";
  * Feature 264 (Q1/R30) — GUARDIA: **toda** superficie que renderice el comprobante detallado de
  * un cierre pasa la lista de órdenes sin gestionar Y su marca de registro.
  *
+ * FICHA 425 (R14, `tasks.md` F3) — y AHORA TAMBIÉN la lista de rechazos de tienda. Es el mismo
+ * defecto con otro nombre: `rechazosDeTienda` es opcional en el tipo por los mismos dobles, así
+ * que una pantalla que se la deje compila, y quien aprueba ese cierre no se entera de que hay
+ * paquetes que separar, que es justo lo que D1 dice que el cierre tiene que contar. Se AÑADE a la
+ * lista: ninguna de las dos props de la 264 deja de exigirse.
+ *
  * ── POR QUÉ HACE FALTA UNA GUARDIA Y NO BASTA EL TYPECHECK
  * `ordenesSinGestion` y `sinGestionRegistrado` son **opcionales** en
  * `CierreFacturaDetalleProps`, y lo son por una razón buena: una docena de dobles de test montan
@@ -36,8 +42,12 @@ const APP = path.join(RAIZ, "app");
 /** El componente vigilado, por su nombre de etiqueta JSX. */
 const COMPONENTE = "CierreFacturaDetalle";
 
-/** Las dos props que ninguna superficie puede omitir (R30). */
-const PROPS_OBLIGATORIAS = ["ordenesSinGestion", "sinGestionRegistrado"] as const;
+/** Las props que ninguna superficie puede omitir: las dos de la 264 (R30) y la de la 425 (R14). */
+const PROPS_OBLIGATORIAS = [
+  "ordenesSinGestion",
+  "sinGestionRegistrado",
+  "rechazosDeTienda",
+] as const;
 
 /** Todos los `.tsx` de `app/**`, recursivo. */
 function tsxDeApp(dir: string = APP): string[] {
@@ -92,7 +102,7 @@ function usosEnApp(): Uso[] {
 
 const USOS = usosEnApp();
 
-describe("feature 264 — el detalle del cierre pinta la sección en TODAS sus superficies (R30)", () => {
+describe("features 264 y 425 — el detalle del cierre pinta sus secciones en TODAS sus superficies (264/R30, 425/R14)", () => {
   /**
    * Autocomprobación. Sin esto, una ruta mal resuelta o un `readdirSync` sobre una carpeta vacía
    * darían CERO usos y todos los casos de abajo pasarían en verde sin haber mirado nada — que es
@@ -119,7 +129,7 @@ describe("feature 264 — el detalle del cierre pinta la sección en TODAS sus s
   });
 
   it.each(USOS.map((u) => [u.archivo, u] as const))(
-    "%s pasa las DOS props de la sección de órdenes sin gestionar",
+    "%s pasa TODAS las props de las secciones sin dinero (órdenes sin gestionar y rechazos de tienda)",
     (archivo, uso) => {
       // La etiqueta se cortó de verdad: si el extractor devolviera una cadena mínima, un
       // `toContain` sobre ella podría fallar por el motivo equivocado (o pasar por casualidad).
@@ -131,16 +141,16 @@ describe("feature 264 — el detalle del cierre pinta la sección en TODAS sus s
       for (const prop of PROPS_OBLIGATORIAS) {
         expect(
           uso.etiqueta,
-          `${archivo} monta el comprobante detallado SIN pasarle \`${prop}\`. Las dos props son ` +
+          `${archivo} monta el comprobante detallado SIN pasarle \`${prop}\`. Estas props son ` +
             "opcionales en el tipo por los dobles de test, así que el typecheck no caza este " +
             "olvido: la hoja pintaría la sección en una pantalla y la callaría en la otra, que " +
-            "es el arreglo a medias que se corrigió en la 263 (R30).",
+            "es el arreglo a medias que se corrigió en la 263 (264/R30, 425/R14).",
         ).toContain(`${prop}=`);
       }
     },
   );
 
-  it("ninguna superficie inventa el valor: las dos props salen del detalle del servidor", () => {
+  it("ninguna superficie inventa el valor: todas las props salen del detalle del servidor", () => {
     for (const uso of USOS) {
       for (const prop of PROPS_OBLIGATORIAS) {
         const valor = uso.etiqueta.match(

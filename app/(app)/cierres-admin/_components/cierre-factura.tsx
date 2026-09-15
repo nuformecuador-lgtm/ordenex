@@ -32,11 +32,19 @@ import type {
   CierreDetalleGestion,
   CierreGrupos,
   CierreOrdenSinGestion,
+  CierreRechazoDeTienda,
   CierreResultado,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { OrderStatusValue } from "@/lib/types/order-status";
+// FICHA 425 — la fecha del rechazo se pinta en el CALENDARIO DE COSTA RICA. `rechazadoAt` es un
+// instante UTC, y cortarlo con `slice(0, 10)` daría el día siguiente para todo rechazo hecho
+// después de las 18:00. Aquí la fecha ES el dato: explica por qué un paquete lleva semanas (D3).
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+// FICHA 425 — los nombres de los dos estados a los que sale la orden al aprobar se leen del MISMO
+// mapa que pinta el chip de estado de la orden: lo que la hoja anuncia es lo que el admin verá.
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 
 import {
   money,
@@ -1118,6 +1126,18 @@ export interface CierreFacturaDetalleProps {
    * justo por donde se cuela un arreglo a medias, y el typecheck no caza un prop ausente.
    */
   sinGestionRegistrado?: boolean;
+  /**
+   * FICHA 425 (R14/R15/R16) — los RECHAZOS DE TIENDA que este cierre pone delante de quien lo
+   * aprueba, en el orden en que los manda el servidor (del más viejo al más reciente). No son
+   * gestiones del mensajero: no entran en ningún total, ni en las pestañas, ni en el pie, ni en
+   * la confirmación física (R10), que se alimenta de `grupos` y no de esta lista.
+   *
+   * OPCIONAL por la misma razón que las dos de la 264 (los dobles de test que ya montaban la
+   * hoja), y con el mismo precio: el typecheck no caza una superficie que se la deje. Por eso la
+   * vigila `tests/unit/guards/cierre-detalle-superficies.guardia.test.ts`. Lista vacía = la
+   * sección no se pinta.
+   */
+  rechazosDeTienda?: CierreRechazoDeTienda[];
 }
 
 /**
@@ -1675,6 +1695,246 @@ function FilaGestion({
   );
 }
 
+// --- FICHA 425: rótulos de la sección de rechazos de tienda (i18n-ready) ---
+/** R16 — el rótulo que aprobó el humano el 2026-09-14 (`design.md §5.4`, Q3), literal. */
+const RECHAZOS_TITULO = "Rechazados por la tienda";
+/** Nombre accesible de la lista, para que su recuento no dependa de una clase. */
+const RECHAZOS_LISTA_LABEL = "Lista de órdenes rechazadas por la tienda";
+/**
+ * Los DOS CONTEOS de la forma aprobada, cada uno con lo que HACE: las gestiones del mensajero
+ * «paga» —entran en su liquidación— y los rechazos de la tienda «revisar» —se separan y no se
+ * cobran—. Uno al lado del otro es lo que deja leer de un vistazo que la segunda lista no es
+ * trabajo del mensajero ni dinero (`design.md §5.4`: «el corazón de lo aprobado»).
+ */
+const RECHAZOS_GESTIONES_LABEL = "Gestiones del mensajero";
+const RECHAZOS_GESTIONES_EFECTO = "paga";
+const RECHAZOS_RECHAZOS_EFECTO = "revisar";
+/** R16 — la línea fija aprobada (Q3). Sin siglas. */
+const RECHAZOS_NOTA = "No son gestiones del mensajero y no suman a su pago.";
+/**
+ * D3 — un cierre SIN gestiones del mensajero (el caso de Arnel: sólo trae rechazos) nace con los
+ * seis totales en cero, y eso es CORRECTO. Sin esta línea la hoja entera se lee como un cierre
+ * roto: pestañas vacías y ceros por todas partes. No lleva símbolo de moneda: la sección no pinta
+ * ni un importe, tampoco el cero.
+ */
+const RECHAZOS_SOLO_REVISION =
+  "Este cierre no trae gestiones del mensajero: es un documento de revisión, y por eso sus totales están en cero.";
+const RECHAZOS_FECHA_COL = "Fecha del rechazo";
+
+/**
+ * FICHA 425 (R10) — lo que tiene que hacer quien aprueba, con la concordancia resuelta. En la
+ * ficha anterior se escaparon un «orden(es)» y un «Se movieron 1 orden»: aquí el número, el
+ * sustantivo y el pronombre salen del MISMO `cuantas`, así que no pueden desacordar.
+ *
+ * «sin escanear» no es una recomendación: estos paquetes NO están en la confirmación física, que
+ * se alimenta de las gestiones del cierre y no de esta lista (`design.md §5.4`).
+ */
+function separarParaDevolucion(cuantas: number): string {
+  return cuantas === 1
+    ? "Separar 1 orden para devolución, sin escanearla."
+    : `Separar ${cuantas} órdenes para devolución, sin escanearlas.`;
+}
+
+/**
+ * FICHA 425 (R11) — qué pasa al aprobar, dicho como REGLA y no como destino de cada orden.
+ *
+ * El servidor manda cada orden según la zona DE LA ORDEN (`resolverDestinoCierre(o.zonaId, ...)`
+ * en la aprobación), no según el destino del cierre, que sale de la zona del MENSAJERO. La lista
+ * no trae si la zona de cada orden es central, así que anunciar un único destino a partir de
+ * `cierre.destinoTipo` sería una suposición que puede fallar justo con una orden traspasada. Por
+ * eso se dicen los dos destinos, con el de la central delante, que es el de la forma aprobada.
+ */
+function efectoAlAprobar(cuantas: number): string {
+  const central = ORDER_STATUS_LABELS.por_devolver_a_tienda;
+  const satelite = ORDER_STATUS_LABELS.por_devolver;
+  return cuantas === 1
+    ? `Al aprobar el cierre, la orden pasa sola a «${central}» (si es de zona satélite, a «${satelite}»).`
+    : `Al aprobar el cierre, las ${cuantas} pasan solas a «${central}» (las de zona satélite, a «${satelite}»).`;
+}
+
+/**
+ * FICHA 425 (R15) — la plantilla de la rejilla de la sección de rechazos de tienda.
+ *
+ * Cuatro tracks: guía, destinatario, tienda y FECHA DEL RECHAZO. Los tres primeros son, carácter a
+ * carácter, los de `SIN_GESTION_GRID_COLS`, y la guía comparte el piso `FILA_GUIA_CELDA` (no se
+ * recorta nunca). El cuarto es `auto` porque la fecha tiene ancho fijo (`YYYY-MM-DD`) y no puede
+ * ceder: una fecha cortada es una fecha falsa. Ni una columna de dinero: no se cobran (R21).
+ */
+const RECHAZOS_GRID_COLS =
+  "grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1fr)_auto]";
+
+/**
+ * FICHA 425 (R16) — uno de los dos conteos, con su efecto al lado.
+ *
+ * Reusa la caja del KPI de la cabecera (`bg-muted/40` con su borde): sus dos tintas sobre ese
+ * fondo ya están medidas en la guardia de contraste (P3 y P7), así que la sección no estrena
+ * ningún par. NO lleva `break-inside-avoid`: vive dentro del encabezado de la sección, que ya lo
+ * lleva entero. Y el número NO se anima, a diferencia del KPI: una impresión a media animación
+ * llevaría al papel un conteo de paquetes falso.
+ */
+function ConteoDeRevision({
+  label,
+  valor,
+  efecto,
+}: Readonly<{ label: string; valor: number; efecto: string }>) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className="flex flex-col gap-0.5 rounded-md border border-border/60 bg-muted/40 px-3 py-2"
+    >
+      <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <span className="flex flex-wrap items-baseline gap-2">
+        <span className="text-lg font-semibold text-foreground tabular-nums">
+          {valor}
+        </span>
+        <span className="text-xs text-muted-foreground">{efecto}</span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * FICHA 425 (R15) — un rechazo de tienda: lo necesario para ir a la estantería y SEPARAR el
+ * paquete. Guía, remisión, destinatario, producto, tienda y la fecha en que la tienda lo rechazó,
+ * más el motivo que escribió.
+ *
+ * De CONSULTA, como la fila de la 264: ni botón, ni desplegable, ni casilla (R10). Sin guía la
+ * celda queda VACÍA, que es lo que dice el contrato: «la fila omite la pieza, no pinta guion».
+ */
+function FilaRechazoDeTienda({ r }: Readonly<{ r: CierreRechazoDeTienda }>) {
+  const motivo = motivoGestionLegible(r.motivo, true);
+  return (
+    // `break-inside-avoid` (feature 223): mismo criterio que las filas de las otras dos listas. Se
+    // repite N veces —hasta 19 en un solo cierre, medido— y partida deja la guía en una página y
+    // la fecha en la siguiente.
+    <div
+      role="listitem"
+      className={cn(
+        "mb-2 grid break-inside-avoid items-start gap-2 rounded-[10px] border border-border px-2 py-2.5",
+        RECHAZOS_GRID_COLS,
+      )}
+    >
+      <span
+        className={cn("text-[13px] font-medium text-foreground", FILA_GUIA_CELDA)}
+      >
+        {r.numGuia}
+      </span>
+      {/* `min-w-0`: sin él `truncate` no llega a activarse nunca (lección literal de la 258). */}
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate text-[13px] text-foreground">
+          {r.destinatario}
+        </span>
+        <span className="truncate text-[11px] text-muted-foreground">
+          {r.numRemision} · {r.producto}
+        </span>
+        {motivo ? (
+          <span className="text-[11px] text-muted-foreground">
+            {FILA_MOTIVO_LABEL}: {motivo}
+          </span>
+        ) : null}
+      </span>
+      <span className="min-w-0 truncate text-[13px] text-muted-foreground">
+        {r.tiendaNombre}
+      </span>
+      <time
+        dateTime={r.rechazadoAt}
+        className="whitespace-nowrap text-right text-[13px] text-foreground tabular-nums"
+      >
+        {fechaCalendarioCR(new Date(r.rechazadoAt))}
+      </time>
+    </div>
+  );
+}
+
+/**
+ * FICHA 425 (R14–R16, R10) — LA SECCIÓN «RECHAZADOS POR LA TIENDA», en la forma que aprobó el
+ * humano el 2026-09-14 (`design.md §5.4`):
+ *
+ *   CIERRE DEL DIA - Arnel Guillen
+ *     Gestiones del mensajero......  17   (paga)
+ *     RECHAZADOS POR LA TIENDA.....   3   (revisar)
+ *       NA-947, NA-981, NA-1103  -> separar para devolucion
+ *     Al aprobar: las 3 pasan a «por devolver a tienda»
+ *
+ * ── DÓNDE VA, Y POR QUÉ ARRIBA. Justo debajo de la identidad del comprobante y ANTES de cualquier
+ * cifra, que es donde la forma aprobada pone los dos conteos. Es lo que hace que el cierre que SÓLO
+ * trae rechazos (seis totales en cero) se lea como un documento de revisión y no como un error: la
+ * explicación llega antes que los ceros. Sin rechazos no se pinta nada y la hoja queda exactamente
+ * como estaba (R19).
+ *
+ * ── POR QUÉ NO ES UNA SEXTA PESTAÑA NI PARTE DE `sin_gestionar`. Las pestañas son resultados de
+ * GESTIONES del cierre y cuentan para el pie, el KPI y la confirmación física; un rechazo de tienda
+ * no es nada de eso. La sección de la 264 son órdenes que el corte cerró sin gestión: otra cosa,
+ * con otra nota. Separadas, cada lista dice una sola verdad.
+ *
+ * ── SIN RECORTE, igual que la 264: un cierre puede traer 19 (medido). Una lista truncada en
+ * silencio se lee como completa, y aquí cada fila es un paquete que alguien tiene que ir a buscar.
+ */
+function SeccionRechazosDeTienda({
+  rechazos,
+  gestiones,
+}: Readonly<{ rechazos: readonly CierreRechazoDeTienda[]; gestiones: number }>) {
+  if (rechazos.length === 0) return null;
+  const cuantas = rechazos.length;
+
+  return (
+    <section aria-label={RECHAZOS_TITULO} className="flex flex-col">
+      {/* `break-inside-avoid` (feature 223): el encabezado lleva los dos conteos, la nota de que no
+          es dinero y qué pasa al aprobar. Partido, la primera página deja una lista de paquetes
+          sin decir qué son. La SECCIÓN entera no lo lleva: puede superar el alto de una página. */}
+      <div className="flex break-inside-avoid flex-col gap-2 border-b border-border pb-2">
+        <h4 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
+          {RECHAZOS_TITULO}
+        </h4>
+        <div className="grid grid-cols-2 gap-3">
+          <ConteoDeRevision
+            label={RECHAZOS_GESTIONES_LABEL}
+            valor={gestiones}
+            efecto={RECHAZOS_GESTIONES_EFECTO}
+          />
+          <ConteoDeRevision
+            label={RECHAZOS_TITULO}
+            valor={cuantas}
+            efecto={RECHAZOS_RECHAZOS_EFECTO}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">{RECHAZOS_NOTA}</p>
+        {gestiones === 0 ? (
+          <p className="text-xs text-muted-foreground">{RECHAZOS_SOLO_REVISION}</p>
+        ) : null}
+        <p className="text-xs font-medium text-foreground">
+          {separarParaDevolucion(cuantas)}
+        </p>
+        <p className="text-xs font-medium text-foreground">
+          {efectoAlAprobar(cuantas)}
+        </p>
+      </div>
+
+      {/* Misma plantilla que la fila, servida por la MISMA constante: son dos rejillas
+          independientes y es lo único que las mantiene alineadas. */}
+      <div
+        className={cn(
+          "grid gap-2 px-2 py-1 text-[11px] text-muted-foreground",
+          RECHAZOS_GRID_COLS,
+        )}
+      >
+        <span className={FILA_GUIA_CELDA}>{FILA_GUIA_COL}</span>
+        <span className="min-w-0 truncate">{FILA_DESTINATARIO_COL}</span>
+        <span className="min-w-0 truncate">{FILA_TIENDA_LABEL}</span>
+        <span className="whitespace-nowrap text-right">{RECHAZOS_FECHA_COL}</span>
+      </div>
+      <div role="list" aria-label={RECHAZOS_LISTA_LABEL}>
+        {rechazos.map((r) => (
+          <FilaRechazoDeTienda key={r.gestionId} r={r} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /**
  * Feature 264 (R18, R31, R32) — fila de una orden que el corte cerró SIN GESTIÓN.
  *
@@ -1833,6 +2093,9 @@ export function CierreFacturaDetalle({
   // cierre nacido después de la migración, y porque el estado que MIENTE es el otro: presentar
   // un cierre como «no lo sabemos» sin serlo escondería una lista que sí existe.
   sinGestionRegistrado = true,
+  // FICHA 425: `[]` = no hay rechazos de tienda y la sección no se pinta. Es el valor cierto para
+  // todo cierre anterior a la ficha: ninguno pudo llevarse un rechazo (`design.md §4.2`).
+  rechazosDeTienda = [],
 }: Readonly<CierreFacturaDetalleProps>) {
   // Vista del MENSAJERO: la misma hoja, sin la plata de la empresa (design §7.2).
   const esMensajero = audiencia === "mensajero";
@@ -1896,6 +2159,12 @@ export function CierreFacturaDetalle({
           </span>
         </div>
       </div>
+
+      {/* FICHA 425 (R14–R16) — los rechazos de tienda, ANTES de cualquier cifra: es donde la
+          forma aprobada pone los dos conteos, y es lo que hace que un cierre de sólo rechazos
+          —seis totales en cero— se lea como revisión y no como error. Sin rechazos no pinta
+          nada. */}
+      <SeccionRechazosDeTienda rechazos={rechazosDeTienda} gestiones={gestiones} />
 
       {/* Los dos totales de cabecera de la referencia. Ambos son plata de la EMPRESA (lo que
           se le paga a la tienda y lo que ingresa la bodega por rechazos): en la vista del

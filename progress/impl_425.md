@@ -408,3 +408,177 @@ TYPECHECK_EXIT=0
 1. **V1:** el gate completo. **V3:** el PR. **V4:** entregar `progress/aviso_425_desglose.md` antes de desplegar. **V5:** medir el «después» sobre el primer cierre de producción que incorpore rechazos.
 2. **El bloque F** (frontend). Los datos ya viajan: `rechazosDeTienda` en `VerCierrePasadoServiceResult` y en `CierreDetalleAdminServiceResult`, ordenados del más viejo al más reciente y con `rechazadoAt` en ISO.
 3. **Decidir si hace falta decir más** sobre que el mensajero no puede solicitar él mismo un cierre de solo rechazos: la vía es el corte nocturno (punto 2 de arriba). El aviso de despliegue ya lo contempla.
+
+---
+
+# 425 — Implementación del frontend (bloque F, de F1 a F4) · `frontend_dev`, 2026-09-14
+
+> Rama `feat/425-salida-rechazo-tienda`, sobre el backend `c185800e`. No se tocó `lib/`, `db/` ni `feature_list.json`.
+> Los símbolos se localizaron con el MCP `codebase-memory` (proyecto `R-job-singularis-projects-ordenex`) y cada uno se confirmó en su archivo real.
+> Todo lo que sigue lo escribió el frontend; lo de arriba (mediciones del leader y backend) no se tocó.
+
+## Veredicto
+
+La sección «Rechazados por la tienda» sale en las **tres** superficies con la forma aprobada: el detalle del admin, el comprobante del mensajero y la hoja imprimible, que es el mismo componente. La guardia de superficies exige ahora `rechazosDeTienda` y está en verde, y **se pone roja** si una pantalla quita la prop o le pasa un literal (medido: M1 y M2).
+
+## Lo que hay que saber antes de revisar
+
+1. **La sección va ARRIBA.** Justo debajo de la identidad del comprobante y antes de cualquier cifra.
+   - **Por qué ahí.** Es donde la forma aprobada pone los dos conteos, y así el cierre de Arnel, con los seis totales en cero, se lee como revisión: la explicación llega antes que los ceros.
+   - **Sin rechazos no se pinta nada** y la hoja queda exactamente como estaba.
+   - **La posición la fija un test** (orden en el DOM), y la mutación M7 lo mata.
+2. **La frase de efecto dice la REGLA, no el destino de cada orden.** Es un límite del dato:
+   - **Quién decide el destino.** El backend lo decide al aprobar, por la zona DE LA ORDEN (`resolverDestinoCierre(o.zonaId, …)` en `CierresAdminRepository`).
+   - **Por qué no sirve el cierre.** El `destinoTipo` del cierre sale de la zona del MENSAJERO, y `CierreRechazoDeTienda` no trae si la zona de cada orden es central.
+   - **Qué dice la hoja.** «Al aprobar el cierre, las 3 pasan solas a «Por devolver a tienda» (las de zona satélite, a «Por devolver»).». No adivina un destino único a partir del cierre, que fallaría justo con una orden traspasada.
+   - **Si se quiere el destino exacto por fila,** hace falta un campo en el DTO, y eso es backend. **No lo toqué.**
+3. **La fecha del rechazo va en el calendario de Costa Rica** (`fechaCalendarioCR`), no cortando el ISO.
+   - Un rechazo a las 20:30 del 10/09 se guarda como `2026-09-11T02:30Z`, y con `slice(0, 10)` la hoja diría el 11.
+   - Lo prueba un caso, y la mutación M4 lo mata.
+   - El instante exacto queda en `<time dateTime>`.
+4. **Los nombres de los estados** («Por devolver a tienda», «Por devolver») se leen de `ORDER_STATUS_LABELS`, el mismo mapa que pinta el chip de estado de la orden.
+5. **Singular y plural salen del mismo número,** así que no pueden desacordar:
+   - «Separar 1 orden para devolución, sin escanearla.» frente a «Separar 3 órdenes para devolución, sin escanearlas.»
+   - «la orden pasa sola» frente a «las 3 pasan solas».
+   - M3 («orden(es)») y M8 (plural con una sola) lo matan.
+6. **El cierre sin gestiones del mensajero** (el caso Arnel) añade una línea: «Este cierre no trae gestiones del mensajero: es un documento de revisión, y por eso sus totales están en cero.».
+   - No lleva símbolo de moneda: la sección no pinta ni un importe, tampoco el cero.
+   - Con gestiones, la línea no aparece.
+7. **No estrena ni un par de color ni una utilidad no cromática.**
+   - **Los conteos** reusan la caja del KPI (`bg-muted/40` con `border-border/60`). Sus dos tintas sobre ese fondo ya están medidas (P3 y P7).
+   - **La guardia de contraste** no cambió y está en verde.
+   - **Dónde viven los componentes.** Antes de `FilaSinGestion`, a propósito: la guardia de contraste recorta la sección de la 264 desde `function FilaSinGestion(` hasta `export function CierreFacturaDetalle(`, y meterlos ahí la pondría roja por un motivo ajeno.
+8. **La guardia de impresión se amplía, no se relaja.**
+   - **Piezas 8 y 9 de alta** en la lista cerrada de `break-inside-avoid`: la fila del rechazo y el encabezado de la sección.
+   - **La sección entera entra en el caso R20.** No puede llevarlo: trae hasta 19 filas.
+   - **Contraprueba:** quitar la pieza de la fila la pone roja (M9).
+9. **R10, en pantalla.** La sección no tiene casilla, botón, enlace ni desplegable. La confirmación física se alimenta de `grupos` y esta lista no pasa por ella: no hay excepción escrita que mantener.
+
+## Archivos
+
+| Archivo | Cambio |
+| --- | --- |
+| `app/(app)/cierres-admin/_components/cierre-factura.tsx` | Prop opcional `rechazosDeTienda` (por defecto `[]`); `SeccionRechazosDeTienda`, `ConteoDeRevision` y `FilaRechazoDeTienda`, con sus rótulos en constantes. Se monta tras la cabecera de la hoja |
+| `app/(app)/cierres-admin/_components/CierresAdminModule.tsx` | `DetalleAbierto.rechazosDeTienda`, copiado del resultado del servidor y pasado a `<CierreFacturaDetalle>` |
+| `app/(app)/cierre-dia/_components/CierreDiaModule.tsx` | Lo mismo en `DetalleCierrePasado` y en el comprobante del mensajero |
+| `tests/unit/guards/cierre-detalle-superficies.guardia.test.ts` | F3: `rechazosDeTienda` en `PROPS_OBLIGATORIAS`; títulos y mensajes pasan de «las dos props» a «todas las props». Ninguna aserción se quitó |
+| `tests/unit/guards/impresion-flujo.guardia.test.ts` | Piezas 8 y 9 de la lista cerrada y la sección nueva en el caso R20 |
+| `tests/components/CierreRechazosDeTienda.test.tsx` | F4, nuevo: 22 casos, con literales escritos a mano |
+
+## Mapa R → test (la parte de pantalla)
+
+| R | Test |
+| --- | --- |
+| R14 | `tests/unit/guards/cierre-detalle-superficies.guardia.test.ts` (las dos pantallas pasan la prop, sacada del servidor); `CierreRechazosDeTienda.test.tsx` › «el comprobante del mensajero pinta LA MISMA sección» (dos casos; uno compara el texto de la sección del admin con el del mensajero) |
+| R15 | `CierreRechazosDeTienda.test.tsx` › «cada fila trae lo necesario para separar el paquete»: guía, remisión, destinatario, producto, tienda, fecha en hora de Costa Rica y motivo; omisión sin guía ni motivo; orden del servidor; 19 filas sin recorte |
+| R16 | `CierreRechazosDeTienda.test.tsx` › «la forma aprobada» (sección aparte, los dos conteos «paga» y «revisar», la nota, separar y efecto), «no es dinero ni se toca» y «singular y plural» |
+| R10 (pantalla) | `CierreRechazosDeTienda.test.tsx` › «R10: ni casilla de confirmación, ni botón, ni enlace, ni desplegable» |
+| D3 (pantalla) | `CierreRechazosDeTienda.test.tsx` › «un cierre de SÓLO rechazos se lee como revisión»: conteo 0 «paga», la línea de revisión y la sección antes de las cifras |
+
+## Contraprueba de mutación
+
+- **Arnés:** `scratchpad/425/mutar.sh`. Cada mutación exige que el sha256 del archivo CAMBIE, corre los tests, restaura desde una copia y exige que el sha VUELVA al original.
+- **Control:** una corrida al final sin mutar.
+- **Árbol:** se compara el `git diff` completo antes y después.
+- **Cómo se corrió:** sin nada más en paralelo, con `pnpm exec vitest run --no-file-parallelism <archivo>`.
+
+| Mutación | Archivo corrido | Resultado |
+| --- | --- | --- |
+| **M1** — `CierresAdminModule` deja de pasar `rechazosDeTienda` | guardia de superficies | **ROJO**: 2 fallidos, 2 pasados |
+| **M2** — `CierreDiaModule` pasa `rechazosDeTienda={[]}` | guardia de superficies | **ROJO**: 1 fallido, 3 pasados («ninguna superficie inventa el valor») |
+| **M3** — «Separar N orden(es)…» para cualquier N | F4 | **ROJO**: 4 fallidos, 18 pasados |
+| **M4** — la fecha sale de `rechazadoAt.slice(0, 10)` | F4 | **ROJO**: 1 fallido, 21 pasados (el caso de Costa Rica) |
+| **M5** — el conteo «paga» suma los rechazos | F4 | **ROJO**: 2 fallidos, 20 pasados |
+| **M6** — la sección se pinta con la lista vacía | F4 | **ROJO**: 2 fallidos, 20 pasados |
+| **M7** — la sección se mueve al final de la hoja | F4 | **ROJO**: 1 fallido, 21 pasados (la sección antes de las cifras) |
+| **M8** — con UNA orden la frase de efecto sale en plural | F4 | **ROJO**: 1 fallido, 21 pasados |
+| **M9** — la fila del rechazo pierde `break-inside-avoid` | guardia de impresión | **ROJO**: 1 fallido, 57 pasados |
+| **Control** — F4 y las dos guardias sin mutar | los tres | **VERDE**: 84 de 84; 22 casos del F4 |
+
+```
+diff del arbol ANTES: cc2fdf29f636e948
+[m1_admin_sin_prop] CierresAdminModule.tsx sha c3b9087f1b0092f6 -> cc9007fb72a7ea4c | exit=1 | Tests  2 failed | 2 passed (4) | restaurado=SI
+[m2_mensajero_literal_vacio] CierreDiaModule.tsx sha cd588a26164437d2 -> 3f930ebea0ee7863 | exit=1 | Tests  1 failed | 3 passed (4) | restaurado=SI
+[m3_plural_orden_es] cierre-factura.tsx sha aa301fd49528f3fe -> 288020013b110d7b | exit=1 | Tests  4 failed | 18 passed (22) | restaurado=SI
+[m4_fecha_cortada_utc] cierre-factura.tsx sha aa301fd49528f3fe -> c254a07216d63ac4 | exit=1 | Tests  1 failed | 21 passed (22) | restaurado=SI
+[m5_rechazos_suman_a_paga] cierre-factura.tsx sha aa301fd49528f3fe -> b861950f3e88b05f | exit=1 | Tests  2 failed | 20 passed (22) | restaurado=SI
+[m6_seccion_vacia_se_pinta] cierre-factura.tsx sha aa301fd49528f3fe -> 791274936bcb0823 | exit=1 | Tests  2 failed | 20 passed (22) | restaurado=SI
+[m7_seccion_al_final_de_hoja] cierre-factura.tsx sha aa301fd49528f3fe -> 431be1f087edfc33 | exit=1 | Tests  1 failed | 21 passed (22) | restaurado=SI
+[m8_efecto_plural_con_una] cierre-factura.tsx sha aa301fd49528f3fe -> 9b2c865a2aa3b112 | exit=1 | Tests  1 failed | 21 passed (22) | restaurado=SI
+[m9_fila_sin_break_inside] cierre-factura.tsx sha aa301fd49528f3fe -> 268d21c415d1db1e | exit=1 | Tests  1 failed | 57 passed (58) | restaurado=SI
+== CONTROL sin mutar
+[control] exit=0 | Tests  84 passed (84)
+    casos del F4 en el control: 22
+diff del arbol DESPUES: cc2fdf29f636e948 (IDENTICO)
+```
+
+## Salida real de las comprobaciones
+
+### `pnpm typecheck`
+
+```
+TYPECHECK_EXIT=0   (0 líneas «error TS»)
+```
+
+### `pnpm lint`
+
+```
+✖ 199 problems (0 errors, 199 warnings)
+LINT_EXIT=0
+```
+
+Son los mismos 199 avisos que dejó el backend. El único que cae en un archivo tocado es `CierresAdminModule.tsx:72` (`'money' is defined but never used`), y es **previo**: mis líneas en ese archivo son la 42, las 377-382, las 672-674 y las 1269-1271.
+
+### Tests directos: el F4, las guardias que leen la hoja o los módulos, la 264 y los tests de los dos módulos
+
+```
+pnpm exec vitest run --no-file-parallelism \
+  tests/components/CierreRechazosDeTienda.test.tsx \
+  tests/unit/guards/cierre-detalle-superficies.guardia.test.ts tests/unit/guards/impresion-flujo.guardia.test.ts \
+  tests/unit/guards/factura-contraste.guardia.test.ts tests/unit/guards/cierre-bodega-vocabulario.guardia.test.ts \
+  tests/unit/guards/cascada-central-en-las-dos-pantallas.guardia.test.ts tests/unit/guards/pagos-captura.guardia.test.ts \
+  tests/unit/guards/tema-encendido.guardia.test.ts tests/components/CierreFacturaSinGestionar.test.tsx \
+  tests/components/CierresAdminModule.test.tsx tests/components/CierreDiaModule.test.tsx
+
+ Test Files  11 passed (11)
+      Tests  344 passed (344)
+VITEST_EXIT=0
+```
+
+### `pnpm exec vitest related --run --no-file-parallelism`, sobre los archivos tocados
+
+```
+pnpm exec vitest related --run --no-file-parallelism \
+  "app/(app)/cierres-admin/_components/cierre-factura.tsx" \
+  "app/(app)/cierres-admin/_components/CierresAdminModule.tsx" \
+  "app/(app)/cierre-dia/_components/CierreDiaModule.tsx" \
+  tests/components/CierreRechazosDeTienda.test.tsx \
+  tests/unit/guards/cierre-detalle-superficies.guardia.test.ts tests/unit/guards/impresion-flujo.guardia.test.ts
+
+ Test Files  37 passed (37)
+      Tests  720 passed (720)
+RELATED_EXIT=0
+```
+
+### `pnpm run test:guardias`
+
+`related` no selecciona las guardias: leen archivos, no los importan. Por eso las corrí aparte.
+
+```
+ Test Files  225 passed (225)
+      Tests  3297 passed (3297)
+GUARDIAS_EXIT=0
+```
+
+Son 3297 frente a los 3296 del backend: el caso nuevo es el R20 de la sección, en la guardia de impresión.
+
+### Lo que no corrí, a propósito
+
+- **La suite completa y `./init.sh`** los corre el leader. La rama toca `db/schema.prisma` y una migración, así que corresponde el gate completo (V1).
+- **La app en el navegador: no la abrí.** No levanté dev server, porque otra sesión puede tener el suyo y comparten `.next`. jsdom no compone estilos: que la sección **se vea** bien —las dos cajas de conteo en el ancho del modal del mensajero y la hoja impresa con 19 filas— no lo dice ningún test de aquí.
+
+## Pendiente para el leader
+
+1. **V1:** el gate completo.
+2. **Ver la pantalla antes de V4,** con un cierre que traiga rechazos: el de Arnel en cero y uno mixto. Revisar el ancho de las dos cajas en el móvil del mensajero y la impresión con Ctrl+P.
+3. **Decidir si la frase de efecto se queda como regla** (central y satélite) **o si se quiere el destino exacto de cada orden,** que exige un campo por fila en `CierreRechazoDeTienda` (backend). Ver el punto 2 de arriba.
