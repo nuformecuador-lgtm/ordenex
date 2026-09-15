@@ -1,0 +1,52 @@
+---
+titulo: Incidentes
+modulo: incidentes
+pantalla: /incidentes
+roles: [maestro, admin, adminSatelite]
+actualizado: 2026-09-15
+fuentes:
+  - app/(app)/incidentes/page.tsx
+  - app/(app)/incidentes/_components/
+---
+
+# Incidentes
+
+Acá se resuelven los **incidentes reportados sobre una orden**: un paquete dañado, perdido o
+cualquier cosa que haya salido mal y necesite una decisión con dinero de por medio.
+
+## Las dos colas
+
+**Pendientes de decisión.** Los que esperan que alguien resuelva. Esta es la cola de trabajo.
+
+**Histórico.** Los ya resueltos, para consulta.
+
+## Resolver un incidente
+
+Abrís el incidente y ves **todo el caso**: la causa, los datos de la orden, el destinatario, en qué
+estado quedó la orden y la evidencia que se adjuntó al reportarlo.
+
+Con eso decidís:
+
+**Aprobar e indemnizar.** Se reconoce el incidente y se compensa. Es la vía cuando la responsabilidad
+es nuestra.
+
+**Rechazar.** No procede. **El motivo de rechazo es obligatorio** — no te va a dejar rechazar sin
+escribirlo, porque esa explicación es lo que después justifica la decisión ante la tienda.
+
+## Cosas que te pueden pasar
+
+**«El incidente ya no está disponible».** Alguien más lo resolvió mientras lo tenías abierto. Recargá
+y miralo en el histórico para ver qué se decidió.
+
+**«Aún no hay incidentes resueltos».** El histórico está vacío. Normal si es una operación nueva.
+
+## Por qué no hay filtros acá
+
+Son dos colas cortas y se trabajan de arriba a abajo: lo pendiente se resuelve, no se busca. Si algún
+día la cola crece hasta necesitar filtros, será señal de que hay un problema de fondo que atender antes.
+
+## Lo que esta pantalla NO hace
+
+- **No se reportan incidentes acá.** Se reportan desde la orden, en **Órdenes**.
+- **No se revierte una decisión.** Una vez aprobado o rechazado, queda. Si hubo un error, se resuelve
+  fuera del sistema y se deja constancia.
