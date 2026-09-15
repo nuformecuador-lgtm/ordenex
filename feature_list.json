@@ -5081,7 +5081,7 @@
       "title": "una orden rechazada por la tienda se queda sin salida para siempre",
       "description": "Su gestion no entra en ningun cierre, y la unica salida de rechazada es aprobar un cierre.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "media",
       "branch": "feat/425-salida-rechazo-tienda",
