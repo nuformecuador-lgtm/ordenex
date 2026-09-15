@@ -36,16 +36,26 @@ precisamente para que se entienda por qué son viejos.
 
 Al aprobar el cierre, esas órdenes pasan solas a **«por devolver a tienda»**.
 
-## Dos cosas más
+## Lo que va a pasar la primera noche
 
-- **A Arnel le puede aparecer un cierre con todos los totales en ₡0,00.** Es correcto: sus únicas
-  gestiones pendientes son rechazos, así que es un documento de revisión, no de dinero.
-- ⚠️ **Arnel tiene un cierre del 11/09 sin aprobar.** En cuanto nazca su cierre nuevo —puede ser esa
-  misma noche con el corte, o cuando él pida el siguiente—, quedará con **dos cierres abiertos** y la
-  app le dirá que **no puede entregar, cobrar ni recibir trabajo nuevo** hasta que se apruebe uno.
-  **Medido el 2026-09-14: Arnel no trabaja desde el 10/09** (cero órdenes asignadas para hoy o mañana),
-  así que desplegar sin aprobarlo no tiene efecto hoy. **Hay que aprobar su cierre del 11/09 antes de
-  volver a asignarle trabajo.** Es el único de los seis en ese caso.
+El corte diario de las 00:00 crea un cierre `vencido` a todo mensajero que tenga algo pendiente. Con
+este cambio, **eso incluye a quien solo tiene rechazos**. Medido el 2026-09-14, afecta a **dos**
+mensajeros, y ninguno de los dos está trabajando:
 
-Entre sus 3 rechazos está la **NA-981**, la orden que originó todo esto: se destraba sola con el
-arreglo, sin tocarla a mano.
+| Mensajero | Qué le aparecerá | ¿Trabaja hoy? |
+| --- | --- | --- |
+| Andy Cortés | un cierre `vencido` con sus 7 rechazos y los seis totales en ₡0,00 | no: está incapacitado y hoy se traspasaron sus órdenes |
+| Arnel Guillen | un cierre `vencido` con sus 3 rechazos y los seis totales en ₡0,00 | no: sin actividad desde el 10/09 |
+
+- **Esos cierres son correctos.** Son documentos de revisión, no de dinero.
+- **Un administrador puede aprobarlos directamente**, sin que el mensajero haga nada. Al aprobar el
+  de Arnel, las tres órdenes atascadas (entre ellas la **NA-981**, que originó todo esto) pasan solas
+  a «por devolver a tienda».
+- **Los dos quedarán bloqueados para recibir trabajo** mientras esos cierres sigan abiertos; la app les
+  dirá que vayan a «Cierre del día». Como ninguno está trabajando, hoy no tiene efecto.
+  - **Andy:** al volver, basta con que envíe su cierre a aprobación o con que se lo aprueben.
+  - **Arnel:** tiene además un cierre del 11/09 sin aprobar. **Hay que aprobar ese antes de volver a
+    asignarle trabajo.**
+- **Los otros cuatro (Carlos Cambronero, Andrés Agüero, Johel y Kendall Hernández) no se ven afectados
+  de forma nueva.** Sus rechazos entran en el cierre que pidan hoy o, si no lo piden, en el `vencido`
+  que el corte ya les crea igual que cualquier otro día.
