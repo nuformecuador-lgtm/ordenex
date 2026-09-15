@@ -40,9 +40,12 @@ Al aprobar el cierre, esas órdenes pasan solas a **«por devolver a tienda»**.
 
 - **A Arnel le puede aparecer un cierre con todos los totales en ₡0,00.** Es correcto: sus únicas
   gestiones pendientes son rechazos, así que es un documento de revisión, no de dinero.
-- ⚠️ **Arnel tiene hoy un cierre del 11/09 sin aprobar.** Si su cierre nuevo se crea antes de aprobar
-  ese, quedará con **dos cierres abiertos** y el sistema **lo bloqueará para recibir asignaciones**.
-  **Conviene aprobar su cierre del 11/09 antes del despliegue.** Es el único de los seis en ese caso.
+- ⚠️ **Arnel tiene un cierre del 11/09 sin aprobar.** En cuanto nazca su cierre nuevo —puede ser esa
+  misma noche con el corte, o cuando él pida el siguiente—, quedará con **dos cierres abiertos** y la
+  app le dirá que **no puede entregar, cobrar ni recibir trabajo nuevo** hasta que se apruebe uno.
+  **Medido el 2026-09-14: Arnel no trabaja desde el 10/09** (cero órdenes asignadas para hoy o mañana),
+  así que desplegar sin aprobarlo no tiene efecto hoy. **Hay que aprobar su cierre del 11/09 antes de
+  volver a asignarle trabajo.** Es el único de los seis en ese caso.
 
 Entre sus 3 rechazos está la **NA-981**, la orden que originó todo esto: se destraba sola con el
 arreglo, sin tocarla a mano.

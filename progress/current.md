@@ -50,9 +50,10 @@ pondría rojo el gate ajeno. Arranca cuando la 427 esté mergeada.
 
 1. **Avisar a Nuform** del cambio de contrato de la 426: su cliente pasa de `200`+HTML a `401`+JSON.
    Y recordarles que usan el canal de **sesión** (caduca cada 24 h) teniendo una API key activa sin usar.
-2. **Si sale la 425:** entregar el aviso de desglose a quien aprueba cierres (borrador en el scratchpad
-   de la sesión, pendiente de commitear como `progress/aviso_425_desglose.md`) y **aprobar el cierre del
-   11/09 de Arnel antes de desplegar**.
+2. **Si sale la 425:** entregar el aviso de desglose a quien aprueba cierres
+   (`progress/aviso_425_desglose.md`, commiteado). **El humano no puede aprobar hoy el cierre del 11/09
+   de Arnel, y eso NO bloquea el despliegue:** medido, Arnel no trabaja desde el 10/09 (cero órdenes
+   para hoy o mañana). Lo que sí hace falta es **aprobarlo antes de volver a asignarle trabajo**.
 
 ### Lo que sigue abierto y es del humano
 
