@@ -105,9 +105,18 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       .map((e) => e.name)
       .filter((n) => !n.endsWith("_orden_traspaso_mensajero"))
       .sort();
-    // Solo puede haber una posterior: la de los enums de esta misma ficha.
+    // Solo pueden ir DETRAS las que se DECLARAN aqui, cada una con su ficha y su motivo: la de los
+    // enums de esta misma ficha y las de fichas que llegaron despues. Mismo patron que los censos
+    // de enum con su lista de POSTERIORES: la lista crece con cada ficha posterior y la igualdad
+    // EXACTA se queda. Una migracion que aparezca detras de esta sin declararse —por ejemplo, con
+    // un timestamp anterior a otra ya aplicada— sigue poniendo este caso rojo.
     const posteriores = anteriores.filter((n) => n > path.basename(dirTabla));
-    expect(posteriores).toEqual(["20260917120100_notificacion_evento_traspaso"]);
+    expect(posteriores).toEqual([
+      "20260917120100_notificacion_evento_traspaso", // ficha 427: los enums de sus dos avisos
+      // Ficha 425 (2026-09-14): la tabla del vinculo de revision `cierre_rechazo_tienda`. Nace
+      // despues de toda migracion aplicada y no toca `orden_traspaso_mensajero`.
+      "20260917120200_cierre_rechazo_tienda",
+    ]);
   });
 });
 
