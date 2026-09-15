@@ -23,6 +23,7 @@ import { AnaliticaOperativaVivaRepository } from "@/lib/repositories/AnaliticaOp
 import { completarPrimerIntentoEnCubos } from "@/lib/services/AnaliticaOperativaService";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { CuboRollup } from "@/lib/interfaces/repositories/IAnaliticaOperativaRollupRepository";
@@ -142,6 +143,7 @@ async function caminoIntradia(
     new OrdenRepository(prismaDelHistorial),
     new OrdenHistorialRepository(prismaDelHistorial),
     new OrdenDiaRepartoCambioRepository(prismaDelHistorial),
+    new OrdenTraspasoRepository(prismaDelHistorial),
   );
   const intentos = await historial.contarIntentosEnLote([
     ...new Set(crudos.entregasVigentes.map((e) => e.ordenId)),

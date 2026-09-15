@@ -228,6 +228,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
       // Feature 262 (B26): el servicio EXIGE la segunda fuente. Este sitio solo usa el conteo de
       // intentos, asi que un doble vacio basta y NO se conecta la tabla del rastro.
       { findCorreccionesByOrden: async () => [] },
+      { findTraspasosByOrden: async () => [] },
     );
     return { prisma, service };
   }

@@ -227,6 +227,15 @@ describeSiHayBase("271 / §3.2 — la base aplicada, y el DOWN ejercitado de ver
       // por DÍA ANUNCIADO. Migracion `20260914120000_notificacion_evento_reparto_manana`,
       // POSTERIOR a la de la 412 y tambien a las DOS de la 410.
       "reparto_manana",
+      // FICHA 427 (design §6.5): los DOS avisos del TRASPASO de ordenes entre mensajeros -«recibiste
+      // N ordenes de otro mensajero» al que las recibe, y «N ordenes tuyas pasaron a otro mensajero»
+      // al que las cede-. Los emite `TraspasoMensajeroService` FUERA de la transaccion del traspaso
+      // y best-effort: un aviso caido no puede revertir un traspaso legitimo. Son DOS eventos y no
+      // uno porque piden acciones OPUESTAS y porque sus perfiles de push tambien lo son (el que
+      // RECIBE si, el que CEDE no). Migracion `20260917120100_notificacion_evento_traspaso`,
+      // POSTERIOR a la de la 413 y tambien a las DOS de la 410.
+      "traspaso_ordenes_recibido",
+      "traspaso_ordenes_cedido",
     ]);
   });
 

@@ -40,6 +40,8 @@ import type {
 } from "@/lib/interfaces/services/IGuiaAsignacionService";
 import {
   MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+  // FICHA 427: el motivo de la regla de dedicacion de la 157, ahora COMPARTIDO con el traspaso.
+  MSG_MENSAJERO_CON_RECOLECCION,
   // Pedido humano 2026-08-26: el mensajero dado de baja no recibe trabajo.
   MSG_MENSAJERO_NO_ASIGNABLE,
   // Feature 21: el mensajero destino necesita un vehiculo asociado para recibir trabajo.
@@ -141,8 +143,10 @@ const ESTADOS_REPARTO_PENDIENTE = ["por_recoger", "en_reparto", "ayuda_tienda"];
 const ESTADOS_RECOLECCION_PENDIENTE = [ESTATUS_RECOLECTANDO];
 const MSG_MENSAJERO_CON_REPARTO =
   "el mensajero tiene ordenes de reparto pendientes: una recoleccion en tienda exige ir sin carga";
-const MSG_MENSAJERO_CON_RECOLECCION =
-  "el mensajero tiene una recoleccion en tienda pendiente: debe cerrarla antes de recibir reparto";
+// FICHA 427: `MSG_MENSAJERO_CON_RECOLECCION` YA NO SE DECLARA AQUI. Se movio a
+// `lib/services/mensajes-bloqueo.ts` porque desde esa ficha lo emiten DOS servicios —esta
+// asignacion y el traspaso en calle— y es la MISMA regla. Se importa arriba; el literal sigue
+// existiendo UNA sola vez en el arbol.
 
 // FEATURE 241 (2026-08-20) — AQUI VIVIA `MSG_BODEGA_SATELITE_BLOQUEADA`, el motivo del `conflict`
 // al rutear ordenes hacia una bodega satelite con algun mensajero en cierre. Se va con la guarda

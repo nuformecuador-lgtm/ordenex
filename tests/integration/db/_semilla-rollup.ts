@@ -5,6 +5,7 @@ import { AnaliticaRollupRepository } from "@/lib/repositories/AnaliticaRollupRep
 import { AnaliticaRollupService } from "@/lib/services/AnaliticaRollupService";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { IAnaliticaRollupService } from "@/lib/interfaces/services/IAnaliticaRollupService";
@@ -378,6 +379,7 @@ export function crearServicio(tx: TxDeTest): IAnaliticaRollupService {
       new OrdenRepository(prismaDelHistorial),
       new OrdenHistorialRepository(prismaDelHistorial),
       new OrdenDiaRepartoCambioRepository(prismaDelHistorial),
+      new OrdenTraspasoRepository(prismaDelHistorial),
     ),
     { now: () => new Date(), logger: { warn: () => {} } },
   );

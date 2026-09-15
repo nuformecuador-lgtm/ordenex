@@ -6,6 +6,8 @@ import {
   type GestionCausaDevolucion,
   type GestionCausaIncidente,
   type GestionResultado,
+  // FICHA 427 (R26): el rol del actor se CONGELA en la fila del rastro.
+  type RolValue,
 } from "@prisma/client";
 import type { CierreEstado } from "@/lib/types/cierre";
 // Feature 271 — LA REGLA del bloqueo por cierres vive en un modulo PURO, no aqui: un solo
@@ -111,12 +113,26 @@ import {
   type ApiOrdenCongeladoRow,
   type CancelarViaApiResult,
   type LoteContexto,
+  // FICHA 427 (T8): el traspaso entre mensajeros.
+  TraspasoMensajeroConflictoError,
+  type TraspasoMensajeroAplicado,
+  type TraspasoMensajeroItem,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { ensureCargaEnTx } from "@/lib/repositories/carga-lote";
 // Feature 262 (B4/B5): el CHOKE POINT del rastro de las correcciones del dia de reparto. Toda
 // escritura de `fecha_reparto` que no sea una asignacion ni una limpieza pasa por ahi, en su misma
 // transaccion y solo con las ordenes que efectivamente cambiaron.
 import { registrarCambioDiaReparto } from "@/lib/repositories/registrar-cambio-dia-reparto";
+// FICHA 427 (T6/T7): los DOS choke points del traspaso entre mensajeros. Reciben el `tx` como
+// primer parametro y su tipo NO admite abrir una transaccion propia: la atomicidad del rastro y
+// del chat con el movimiento de la orden es del TIPO, no de la disciplina (R23/R31).
+import { registrarTraspasoMensajero } from "@/lib/repositories/registrar-traspaso-mensajero";
+import { traspasarConversaciones } from "@/lib/repositories/traspasar-conversaciones";
+// FICHA 427 (R32): el encolado de reoptimizacion de la 92, REUSADO TAL CUAL. Es la primera vez
+// que lo llama un escritor que no es la gestion, y tiene que serlo: hasta hoy ningun camino
+// cambiaba el conjunto de paradas de un mensajero YA EN REPARTO.
+import { encolarOptimizacionDebounce } from "@/lib/services/jobs/optimizacion-ruta-encolado";
+import { loadRouteOptimizationConfig } from "@/lib/config/route-optimization";
 import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { costosListadoOrden } from "@/lib/utils/ingreso-ordenex";
 // ⏳ 2026-09-10 (feature 415, T3): la reconstruccion de la tarifa CONGELADA se importa de su fuente
@@ -774,6 +790,7 @@ type OrdenPrismaClient = Pick<
   | "$executeRaw" // feature 41/R23: anti-TOCTOU (NOT EXISTS cierre bloqueante en el lote)
   | "$queryRaw" // feature 91: lo exige `JobRepository` (encolado outbox de geocodificacion)
   | "historialAccion" // ficha 362/R9: el registro de la accion, en la MISMA tx que la mutacion
+  | "ordenTraspasoMensajero" // ficha 427/R25: el rastro del traspaso, en la MISMA tx que el movimiento
 >;
 
 /**
@@ -1753,6 +1770,13 @@ export class OrdenRepository implements IOrdenRepository {
   constructor(
     private readonly prisma: OrdenPrismaClient,
     private readonly jobRepo: IJobRepository = new JobRepository(prisma),
+    /**
+     * FICHA 427 (T8): reloj INYECTABLE. Lo necesita el `runAfter` del debounce de reoptimizacion
+     * (R32), que tiene que ser determinista en los tests — mismo patron y mismo motivo que el
+     * tercer parametro de `GestionOrdenRepository`. OPCIONAL y al final: ningun llamador existente
+     * cambia.
+     */
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   // BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivia `create`, el
@@ -4634,6 +4658,170 @@ export class OrdenRepository implements IOrdenRepository {
         fechaAnterior: anteriorPorOrden.get(m.id) as Date,
         fechaNueva: fecha,
       }));
+    });
+  }
+
+
+  // --- FICHA 427: traspasar a otro mensajero lo que ya lleva encima ---
+
+  /**
+   * FICHA 427 (T8, design §6) — LA TRANSACCION DEL TRASPASO: mueve un lote de ordenes de un
+   * mensajero a otro, con sus conversaciones y su rastro, TODO-O-NADA (R23/R31).
+   *
+   * ⚠️ ES EL PRIMER ESCRITOR DE `orden.mensajero_asignado_id` QUE PARTE DE `en_reparto`. Hasta esta
+   * ficha los unicos eran las dos asignaciones (que parten de bodega), la de recoleccion y la
+   * limpieza del deshacer. El caso que lo motiva esta medido: el 2026-09-14 un mensajero se enfermo
+   * a media jornada y sus 31 ordenes las tuvo que hacer otro; se resolvio escribiendo a mano contra
+   * produccion.
+   *
+   * ⚠️ SOBRE EL `SET` DE ABAJO Y LA GUARDIA DEL DIA. Toca `asignado_at` Y `fecha_reparto` en la
+   * MISMA sentencia, que es lo que exige `fecha-reparto-acompana-asignado-at.guardia.test.ts`
+   * (246/R10). El dia se reescribe CON SU MISMO VALOR y entra como PARAMETRO `YYYY-MM-DD` (o NULL),
+   * nunca como `NOW()::date`:
+   *   (a) poner «hoy» seria un SEGUNDO ESCRITOR SILENCIOSO del dia de reparto, saltandose el rastro
+   *       de `orden_dia_reparto_cambio` (262) sobre la poblacion exacta que esa ficha vino a
+   *       rescatar — una orden `en_reparto` puede tener el dia equivocado;
+   *   (b) la clausula (d4) de esa guardia prohibe aritmetica horaria dentro del `SET`, y el driver
+   *       serializaria un `Date` segun el `TimeZone` de la sesion.
+   *
+   * ⚠️ `prioridad` NO SE TOCA, y es una AUSENCIA DELIBERADA (R16). `asignarBodegaLote` la apaga
+   * porque reasignar DESDE BODEGA cierra un ciclo de reasignacion prioritaria (101/R5). Un traspaso
+   * en calle no cierra ningun ciclo: apagarla aqui perderia una marca que alguien puso a proposito.
+   *
+   * ⚠️ NI UNA FILA DE `orden_historial_estado` (R21), y tampoco es un olvido: un traspaso NO cambia
+   * el estado, y el choke point de estados VALIDA la transicion contra el inventario de la 140 —
+   * `en_reparto -> en_reparto` no existe y reventaria. El rastro vive en su tabla propia.
+   *
+   * El porque de cada decision va AQUI ARRIBA y no como comentario `--` dentro del SQL: un backtick
+   * dentro de un template literal lo TERMINA, y este repo ya tiene escrito lo que cuesta escribir
+   * prosa con formato dentro de una sentencia (ver `deshacerAsignacionLote`).
+   */
+  async traspasarMensajeroLote(input: {
+    loteId: string;
+    mensajeroOrigenId: string;
+    mensajeroDestinoId: string;
+    ordenes: readonly TraspasoMensajeroItem[];
+    actor: { usuarioId: string; rol: RolValue };
+    motivo: string;
+  }): Promise<TraspasoMensajeroAplicado> {
+    const { loteId, mensajeroOrigenId, mensajeroDestinoId, ordenes, actor, motivo } = input;
+    if (ordenes.length === 0) {
+      return { loteId, movidas: 0, conversaciones: 0 };
+    }
+    // Fallo CERRADO: un traspaso a uno mismo no es un traspaso. El service ya lo rechaza (R7) y el
+    // CHECK de la base lo hace inescribible; esto es la red por si alguien llama al repo directo.
+    if (mensajeroDestinoId === mensajeroOrigenId) {
+      throw new TraspasoMensajeroConflictoError(ordenes.map((o) => o.ordenId));
+    }
+
+    const ids = ordenes.map((o) => o.ordenId);
+    const esperadoPorOrden = new Map(ordenes.map((o) => [o.ordenId, o.estatusIdEsperado] as const));
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. FOTO + BLOQUEO (design §6.1). El `FOR UPDATE` es lo que impide que esta foto quede
+      //    rancia entre el SELECT y el UPDATE; el `ORDER BY "id"` da un orden de bloqueo
+      //    determinista entre dos lotes concurrentes que se solapen.
+      const previas = await tx.$queryRaw<
+        {
+          id: string;
+          mensajero_asignado_id: string | null;
+          estatus_id: string;
+          fecha_reparto: Date | null;
+          deleted_at: Date | null;
+        }[]
+      >`
+        SELECT "id", "mensajero_asignado_id", "estatus_id", "fecha_reparto", "deleted_at"
+        FROM "orden"
+        WHERE "id" IN (${Prisma.join(ids)})
+        ORDER BY "id"
+        FOR UPDATE`;
+      const previaPorOrden = new Map(previas.map((p) => [p.id, p] as const));
+
+      // 2. R24 — LA CARRERA, comprobada contra lo que el SERVICE valido y no contra lo que acabamos
+      //    de leer (que seria una guarda que siempre se cumple). Si entre la validacion y el
+      //    bloqueo alguien entrego la orden, pidio ayuda sobre ella, se la llevo el corte o la
+      //    borro, el lote ENTERO se revierte SIN EFECTOS.
+      const noMovidas: string[] = [];
+      for (const ordenId of ids) {
+        const previa = previaPorOrden.get(ordenId);
+        if (!previa || previa.deleted_at !== null) {
+          noMovidas.push(ordenId);
+          continue;
+        }
+        if (previa.estatus_id !== esperadoPorOrden.get(ordenId)) noMovidas.push(ordenId);
+      }
+      if (noMovidas.length > 0) throw new TraspasoMensajeroConflictoError(noMovidas);
+
+      // 3. EL `UPDATE` GUARDADO, UNO POR ORDEN (patron `deshacerAsignacionLote`): el dia de reparto
+      //    se CONSERVA POR ORDEN y no es un valor comun al lote, asi que no cabe un solo `IN`.
+      const perdedoras: string[] = [];
+      for (const ordenId of ids) {
+        const previa = previaPorOrden.get(ordenId) as {
+          estatus_id: string;
+          fecha_reparto: Date | null;
+        };
+        // El dia, tal cual estaba, como TEXTO. NULL se reescribe NULL: es el estado legado de las
+        // ordenes anteriores a la 246, y la rama (b) del ranking ya lo contempla.
+        const diaTexto =
+          previa.fecha_reparto === null ? null : fechaRepartoComoTexto(previa.fecha_reparto);
+        const filas = await tx.$queryRaw<{ id: string }[]>`
+          UPDATE "orden"
+          SET "mensajero_asignado_id" = ${mensajeroDestinoId},
+              "asignado_at" = NOW(),
+              "fecha_reparto" = ${diaTexto}::date,
+              "updated_at" = NOW()
+          WHERE "id" = ${ordenId}
+            AND "mensajero_asignado_id" = ${mensajeroOrigenId}
+            AND "estatus_id" = ${previa.estatus_id}
+            AND "deleted_at" IS NULL
+          RETURNING "id"`;
+        if (filas.length !== 1) perdedoras.push(ordenId);
+      }
+      // R23: una sola perdedora aborta el lote COMPLETO. El `throw` va ANTES del chat y del rastro,
+      // asi que un lote abortado no deja NI UNA conversacion movida NI UNA fila de rastro.
+      if (perdedoras.length > 0) throw new TraspasoMensajeroConflictoError(perdedoras);
+
+      // 4. LAS CONVERSACIONES (R18/R19), en la MISMA tx. Sin esto el hilo queda inalcanzable para
+      //    los dos mensajeros: es el defecto que el arreglo manual del 2026-09-14 pago.
+      const conversaciones = await traspasarConversaciones(tx, ids, mensajeroDestinoId);
+
+      // 5. EL RASTRO (R25/R27/R30/R31), en la MISMA tx y sobre EXACTAMENTE las que se movieron. El
+      //    rol del actor va CONGELADO (R26): se persiste el de AHORA, no se resuelve por join al
+      //    leer. Si esta escritura falla, la tx revierte y NINGUNA orden queda movida — que es la
+      //    mitad de R31 que un `registrar` fuera de la transaccion romperia en silencio.
+      await registrarTraspasoMensajero(
+        tx,
+        loteId,
+        ids.map((ordenId) => ({
+          ordenId,
+          mensajeroAnteriorId: mensajeroOrigenId,
+          mensajeroNuevoId: mensajeroDestinoId,
+          actorUsuarioId: actor.usuarioId,
+          actorRol: actor.rol,
+          motivo,
+        })),
+      );
+
+      // 6. R32 — LA RUTA DE LOS **DOS**, con el patron OUTBOX de la 92 (el job va DENTRO de esta
+      //    transaccion: si revierte, se va con ella). Las claves de debounce son POR MENSAJERO, asi
+      //    que los dos jobs no colisionan entre si; y dos traspasos dentro del mismo minuto colapsan
+      //    en uno, que es la semantica querida.
+      //
+      //    LOS DOS Y NO SOLO EL DESTINO: al origen le acaban de QUITAR paradas, y su ruta optimizada
+      //    se queda con huecos hasta que su job corra. Encolar solo uno es un fallo mudo — la ruta
+      //    del otro sigue pintando un recorrido que ya no existe.
+      const ahora = this.now();
+      const debounceS = loadRouteOptimizationConfig().RUTA_DEBOUNCE_S;
+      for (const mensajeroId of [mensajeroOrigenId, mensajeroDestinoId]) {
+        await encolarOptimizacionDebounce(this.jobRepo, tx as unknown as JobTxClient, mensajeroId, {
+          ahora,
+          debounceS,
+        });
+      }
+
+      // Lo que los AVISOS necesitan para emitirse FUERA de esta transaccion (design §6.5). Cifras,
+      // no listas: R36 pinta «31 ordenes y 31 conversaciones» sin devolver identificadores.
+      return { loteId, movidas: ids.length, conversaciones };
     });
   }
 

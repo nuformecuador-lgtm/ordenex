@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
@@ -363,6 +364,7 @@ function servicios(tx: Tx): { ordenes: OrdenService; satelite: RecepcionSatelite
     repo,
     new OrdenHistorialRepository(prisma),
     new OrdenDiaRepartoCambioRepository(prisma),
+    new OrdenTraspasoRepository(prisma),
   );
   return {
     ordenes: new OrdenService(repo, historial),

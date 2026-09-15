@@ -220,6 +220,15 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // por DÍA ANUNCIADO. Migracion `20260914120000_notificacion_evento_reparto_manana`,
       // POSTERIOR a la de la 412 y tambien a las DOS de la 410.
       "reparto_manana",
+      // FICHA 427 (design §6.5): los DOS avisos del TRASPASO de ordenes entre mensajeros -«recibiste
+      // N ordenes de otro mensajero» al que las recibe, y «N ordenes tuyas pasaron a otro mensajero»
+      // al que las cede-. Los emite `TraspasoMensajeroService` FUERA de la transaccion del traspaso
+      // y best-effort: un aviso caido no puede revertir un traspaso legitimo. Son DOS eventos y no
+      // uno porque piden acciones OPUESTAS y porque sus perfiles de push tambien lo son (el que
+      // RECIBE si, el que CEDE no). Migracion `20260917120100_notificacion_evento_traspaso`,
+      // POSTERIOR a la de la 413 y tambien a las DOS de la 410.
+      "traspaso_ordenes_recibido",
+      "traspaso_ordenes_cedido",
     ]);
   });
 
@@ -260,6 +269,11 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // FICHA 413 (design §7): la entidad de ese aviso es EL DIA ANUNCIADO (`'YYYY-MM-DD'`), no
       // ninguna orden: con una entidad fija, el aviso de la segunda noche no saldria NUNCA.
       "reparto_manana_dia",
+      // FICHA 427 (design §6.5): la entidad de los dos avisos del traspaso es EL ACTO
+      // (`orden_traspaso_mensajero.lote_id`), no la orden ni el mensajero: con el mensajero, la
+      // clave de dedupe -que NO mira el estado de lectura- admitiria UNA sola fila para siempre y
+      // el SEGUNDO traspaso del dia a la misma persona no avisaria NUNCA, en silencio.
+      "orden_traspaso_lote",
     ]);
   });
 
@@ -333,6 +347,15 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // por DÍA ANUNCIADO. Migracion `20260914120000_notificacion_evento_reparto_manana`,
       // POSTERIOR a la de la 412 y tambien a las DOS de la 410.
       "reparto_manana",
+      // FICHA 427 (design §6.5): los DOS avisos del TRASPASO de ordenes entre mensajeros -«recibiste
+      // N ordenes de otro mensajero» al que las recibe, y «N ordenes tuyas pasaron a otro mensajero»
+      // al que las cede-. Los emite `TraspasoMensajeroService` FUERA de la transaccion del traspaso
+      // y best-effort: un aviso caido no puede revertir un traspaso legitimo. Son DOS eventos y no
+      // uno porque piden acciones OPUESTAS y porque sus perfiles de push tambien lo son (el que
+      // RECIBE si, el que CEDE no). Migracion `20260917120100_notificacion_evento_traspaso`,
+      // POSTERIOR a la de la 413 y tambien a las DOS de la 410.
+      "traspaso_ordenes_recibido",
+      "traspaso_ordenes_cedido",
     ]);
   });
 
@@ -364,6 +387,11 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // FICHA 413 (design §7): la entidad de ese aviso es EL DIA ANUNCIADO (`'YYYY-MM-DD'`), no
       // ninguna orden: con una entidad fija, el aviso de la segunda noche no saldria NUNCA.
       "reparto_manana_dia",
+      // FICHA 427 (design §6.5): la entidad de los dos avisos del traspaso es EL ACTO
+      // (`orden_traspaso_mensajero.lote_id`), no la orden ni el mensajero: con el mensajero, la
+      // clave de dedupe -que NO mira el estado de lectura- admitiria UNA sola fila para siempre y
+      // el SEGUNDO traspaso del dia a la misma persona no avisaria NUNCA, en silencio.
+      "orden_traspaso_lote",
     ]);
   });
 

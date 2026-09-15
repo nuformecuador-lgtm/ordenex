@@ -30,6 +30,8 @@ describe("410/R2 — el catalogo cubre TODOS los eventos del enum, ni uno menos"
     expect(delEnum).toContain("geocodificacion_caida");
     expect(delEnum).toContain("cierre_dia_rechazado"); // ficha 412
     expect(delEnum).toContain("reparto_manana"); // ficha 413
+    expect(delEnum).toContain("traspaso_ordenes_recibido"); // ficha 427
+    expect(delEnum).toContain("traspaso_ordenes_cedido"); // ficha 427
 
     expect(delCatalogo).toEqual(delEnum);
   });
@@ -44,7 +46,7 @@ describe("410/R2 — el catalogo cubre TODOS los eventos del enum, ni uno menos"
     }
   });
 
-  it("⭑ son DIEZ elegibles y CINCO no, tal como los conto el diseno aprobado", () => {
+  it("⭑ son ONCE elegibles y SEIS no, tal como los conto el diseno aprobado", () => {
     const elegibles = Object.entries(PUSH_ELEGIBLE)
       .filter(([, e]) => e.push === "si")
       .map(([k]) => k)
@@ -66,6 +68,10 @@ describe("410/R2 — el catalogo cubre TODOS los eventos del enum, ni uno menos"
       // unico del catalogo que se apaga solo al pasar la medianoche. Y siempre AGREGADA: una sola
       // notificacion con la cifra dentro, jamas un push por orden.
       "reparto_manana",
+      // ⭑ FICHA 427 (R43): PLAZO (las ordenes son de hoy y ya estan en la calle) y CONSECUENCIA
+      // REAL Y PERSONAL (si no se entera, no sale a repartirlas y el paquete no llega). Su hermano
+      // `traspaso_ordenes_cedido` NO esta, y eso es la otra mitad de R43.
+      "traspaso_ordenes_recibido",
       "webhook_suscripcion_pausada",
     ]);
   });
@@ -81,9 +87,11 @@ describe("410/R3 — lo que NO se pushea, y por que", () => {
     "postulacion_mensajero_pendiente",
     "postulacion_recurso_pendiente",
     "gasto_fijo_cobro_pendiente",
+    // FICHA 427 (R43): al que CEDE sus ordenes no se le pide ninguna accion y no le vence nada.
+    "traspaso_ordenes_cedido",
   ];
 
-  it("⭑ ninguno de los cinco se pushea a NINGUN rol", () => {
+  it("⭑ ninguno de los seis se pushea a NINGUN rol", () => {
     for (const evento of NO_ELEGIBLES) {
       expect(eventoPuedeEmpujar(evento), `${evento} no deberia empujar`).toBe(false);
       for (const rol of TODOS_LOS_ROLES) {
@@ -161,6 +169,35 @@ describe("410/R4 — la clave es el PAR (evento, rol del LECTOR), no el evento",
   it("`dia_reparto_corregido` es del mensajero; nadie mas lo recibe siquiera", () => {
     expect(esElegiblePush("dia_reparto_corregido", "mensajero")).toBe(true);
     expect(esElegiblePush("dia_reparto_corregido", "admin")).toBe(false);
+  });
+
+  it("⭑⭑ 427/R43: el traspaso empuja al que RECIBE y NO al que CEDE — y es la misma decision", () => {
+    // LOS DOS AVISOS DEL MISMO ACTO, con perfiles OPUESTOS, y por eso son dos eventos y no uno
+    // (design §6.5): meter la diferencia solo en la descripcion la volveria invisible para el
+    // canal de push, que decide por EVENTO.
+    //
+    // DESTINO: tiene PLAZO (las ordenes son de hoy y ya estan en la calle) y CONSECUENCIA real y
+    // personal (si no se entera, no sale a repartirlas). El caso medido son 31 ordenes que le
+    // aparecen en el telefono sin que nadie se lo diga.
+    expect(esElegiblePush("traspaso_ordenes_recibido", "mensajero")).toBe(true);
+    expect(eventoPuedeEmpujar("traspaso_ordenes_recibido")).toBe(true);
+
+    // ORIGEN: NO. No le pide NINGUNA accion y no vence nada — deja de tener trabajo, no le aparece
+    // trabajo. Y el caso normal es alguien que no puede seguir (enfermo, averia). En la campana si
+    // lo recibe, para que su lista encogida tenga explicacion; lo que no se hace es sacarle el
+    // telefono del bolsillo.
+    //
+    // ⚠️ ESTE ASERTO EXISTE PARA PONERSE ROJO si alguien anade `push: "si"` creyendo que falta
+    // media linea. No falta.
+    expect(esElegiblePush("traspaso_ordenes_cedido", "mensajero")).toBe(false);
+    expect(eventoPuedeEmpujar("traspaso_ordenes_cedido")).toBe(false);
+  });
+
+  it("427: ningun otro rol recibe push del traspaso (no hay fila de rol de estos eventos)", () => {
+    for (const rol of ["maestro", "admin", "adminTienda", "adminSatelite", "apiKey"] as const) {
+      expect(esElegiblePush("traspaso_ordenes_recibido", rol), rol).toBe(false);
+      expect(esElegiblePush("traspaso_ordenes_cedido", rol), rol).toBe(false);
+    }
   });
 
   it("`webhook_suscripcion_pausada` es del maestro, que es quien opera Configuracion > API", () => {

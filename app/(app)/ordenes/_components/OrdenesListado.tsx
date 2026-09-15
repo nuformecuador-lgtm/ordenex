@@ -39,6 +39,12 @@ import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
 import { DeshacerAsignacionModal } from "./DeshacerAsignacionModal";
+// FICHA 427: traspasar a otro mensajero lo que uno ya lleva encima. El texto de la accion sale del
+// mismo modulo que el titulo del modal, por la misma razon que el de la 262.
+import {
+  TRASPASAR_MENSAJERO_ACCION,
+  TraspasarMensajeroModal,
+} from "./TraspasarMensajeroModal";
 import { EliminarOrdenModal } from "./EliminarOrdenModal";
 import { RecuperarOrdenModal } from "./RecuperarOrdenModal";
 import {
@@ -88,6 +94,7 @@ type ModalAbierto =
   | "recuperar-bodega"
   | "deshacer-asignacion"
   | "cambiar-dia-reparto" // feature 262
+  | "traspasar-mensajero" // ficha 427
   | "corregir-fecha-reprogramacion" // ficha 371
   | "eliminar" // feature «eliminar orden»
   | "recuperar-eliminada" // pedido humano 2026-08-27: la reversión del borrado
@@ -468,6 +475,19 @@ export function OrdenesListado({
     setModalAbierto("cambiar-dia-reparto");
   }
 
+  // FICHA 427 (T23, R34): «Traspasar a otro mensajero» sobre el lote seleccionado (`en_reparto` o
+  // `ayuda_tienda`, los dos estados en que el paquete va ENCIMA del mensajero). SIN filtro por
+  // zona, igual que «Deshacer asignación» y «Cambiar día de reparto»: maestro/admin
+  // (`esAccesoTotal`) traspasan órdenes de CUALQUIER zona y el service revalida el rol.
+  //
+  // El snapshot viaja ENTERO y NO se recorta al mensajero mayoritario: el origen se DERIVA de las
+  // órdenes (R8) y un lote con dos orígenes lo tiene que ver quien traspasa —el modal lo dice y no
+  // deja confirmar—, no arreglarlo esta función por su cuenta moviendo lo que nadie miró.
+  function abrirTraspasarMensajero(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("traspasar-mensajero");
+  }
+
   // FICHA 371: "Corregir fecha de reprogramación" sobre una orden que quedó esperando a la fecha
   // equivocada. SIN filtro por zona, igual que "Cambiar día de reparto": maestro/admin corrigen
   // órdenes de CUALQUIER zona y el service revalida el rol. El snapshot viaja ENTERO —no se
@@ -573,6 +593,22 @@ export function OrdenesListado({
     label: CAMBIAR_DIA_ACCION,
     variant: "outline",
     onRun: abrirCambiarDia,
+  };
+
+  /**
+   * FICHA 427 (T23, R34) — la acción de traspasar, declarada UNA vez y reusada por los DOS estados
+   * en que el paquete va encima del mensajero (`en_reparto` y `ayuda_tienda`). Se declara aquí y no
+   * dentro de cada `case` por lo mismo que su vecina: la `key` es la que agrupa la acción cuando la
+   * selección mezcla estados, así que dos `key` distintas pintarían dos botones iguales.
+   *
+   * PRIMARIA (sin `variant: "outline"`), al revés que «Cambiar día de reparto»: cuando alguien
+   * marca órdenes en reparto de un mensajero que no puede seguir, ésta es la decisión que trae a
+   * esta pantalla. Cambiar el día es un ajuste; traspasar es lo que desatasca el paquete.
+   */
+  const accionTraspasarMensajero: AccionLote = {
+    key: "traspasar-mensajero",
+    label: TRASPASAR_MENSAJERO_ACCION,
+    onRun: abrirTraspasarMensajero,
   };
 
   /**
@@ -697,9 +733,16 @@ export function OrdenesListado({
       // Los dos YA son opciones del filtro de estado para maestro/admin (`EXCLUDE_POR_ROL` sólo
       // les excluye `pendiente`), así que no hace falta abrir ninguna pantalla ni ningún filtro
       // nuevo para alcanzar la población atrapada.
+      //
+      // FICHA 427 (T23, R34): y son EXACTAMENTE los dos estados traspasables
+      // (`ESTADOS_TRASPASABLES`, R4). Ningún otro `case` ofrece el traspaso, y no es una
+      // coincidencia: en los demás o el paquete no está en la mano de nadie (`por_recoger` tiene su
+      // propia acción desde la 149), o moverlo afirmaría una custodia que nadie verificó
+      // (`devolviendo_a_tienda`), o sacaría la orden del cierre abierto de su mensajero
+      // (`sin_gestionar`).
       case "en_reparto":
       case "ayuda_tienda":
-        return [accionCambiarDia];
+        return [accionTraspasarMensajero, accionCambiarDia];
       // FICHA 371 — la orden ya no está en circulación: espera a la fecha de su reprogramación, y
       // esa fecha es lo ÚNICO que decide cuándo vuelve a la bodega. Si está equivocada, hasta hoy
       // no había forma de corregirla (este `case` no existía y el estado caía en el `default`).
@@ -1336,6 +1379,25 @@ export function OrdenesListado({
             fechasDiaReparto={fechasDiaReparto}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
+          />
+          {/* FICHA 427 (T23, R33/R36) — éxito ⇒ `revalidarTablas` y NO `handleSuccess`, y la
+              diferencia es el punto de esta pantalla: `handleSuccess` cerraría el modal, y con él
+              se irían las dos cifras del traspaso y el aviso de que la ruta del que recibe queda
+              pendiente de recalcularse. El listado se relee igualmente detrás —las órdenes pasan a
+              mostrar el mensajero nuevo—; el modal lo cierra la persona cuando ha leído el
+              desenlace. Mismo criterio que `CorregirFechaReprogramacionModal` (371).
+
+              Las tres listas de no-elegibles son LAS MISMAS que reciben los modales de asignación:
+              el conjunto que el servidor va a rechazar, sin re-derivarse aquí. */}
+          <TraspasarMensajeroModal
+            open={modalAbierto === "traspasar-mensajero"}
+            ordenes={ordenesSeleccionadas}
+            mensajeros={mensajeros ?? []}
+            mensajerosConRecoleccionIds={mensajerosConRecoleccionIds}
+            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+            mensajerosNoAsignablesIds={mensajerosNoAsignablesIds}
+            onOpenChange={cerrarModal}
+            onSuccess={revalidarTablas}
           />
           {/* FICHA 371 — éxito ⇒ `revalidarTablas` y NO `handleSuccess`, y la diferencia es el
               punto de esta pantalla: `handleSuccess` cerraría el modal, y con él se iría el

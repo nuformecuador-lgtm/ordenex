@@ -5241,3 +5241,39 @@ completa con su orden.
 Límites aceptados y escritos: el `admin` borra pero **no** puede ver ni recuperar lo borrado —se lo
 pide al maestro—, ni leer `/histórico/acciones`, así que genera filas que no puede auditar. El
 canal por API queda cerrado para él a propósito, fijado con un test.
+
+## 427 — Traspasar a otro mensajero lo que ya lleva encima (2026-09-14)
+
+Nace de un caso real del mismo día: **Andy Cortés se enfermó** con 31 órdenes en reparto y hubo que
+pasárselas a Carlos Eduardo **escribiendo a mano en producción**, porque la app no sabía hacerlo:
+deshacer asignación solo cubre `por_recoger` y `en_ruta_bodega_satelite`, nunca una orden ya recogida.
+
+**Lo que el arreglo manual enseñó y la ficha recoge:** mover la orden no basta —hay que mover también
+sus **conversaciones de chat**, o el que recibe no puede escribir a esos clientes—; lo ya gestionado no
+cambia de dueño; y la ruta del que recibe queda obsoleta y hay que decirlo en pantalla.
+
+**Decisiones del humano:** traspaso por lote seleccionado; entran `en_reparto` y `ayuda_tienda`; el
+efecto sobre el ranking del día **se acepta tal cual**; se avisa **a los dos** mensajeros; el
+`adminSatelite` queda para otra ficha.
+
+**La entidad del aviso es el `lote_id`**, no la orden ni el mensajero: si no, el segundo traspaso a la
+misma persona se descartaría como repetido y no avisaría nunca — el fallo que ya pagaron 262, 403, 409
+y 412.
+
+**La primera revisión salió RECHAZADA, y con razón aunque el código estaba bien.** De 13 mutaciones,
+3 sobrevivían: el `loteId` cambiado por el id de una orden (72/72 en verde), el autor de las gestiones
+del lote reescrito —movería pago y cierre del origen al destino— (23/23, porque el test sembraba la
+gestión en una orden que **no** entraba en el lote), y las conversaciones escritas **fuera** de la
+transacción (el `ROLLBACK TO SAVEPOINT` del arnés tapaba lo que en producción quedaría movido). Se
+cerraron las tres añadiendo la red que faltaba, y las tres mutaciones pasaron a rojo.
+
+**Otras cosas que aparecieron por el camino:** una mutación sobrevivía por un defecto **del propio
+arnés** (el mismo objeto hacía de transacción y de cliente); dos rojos se atribuyeron mal y cada agente
+**midió de quién eran** antes de tocar; y al medir con mutaciones apareció un mensaje equivocado que
+habría salido a producción («mezcla varios mensajeros» en un lote de un solo origen).
+
+El gate dio rojo dos veces por `ranking-snapshot-migration.test.ts` con `40P01`: **flake de
+concurrencia**, bloque distinto en cada corrida y 49/49 aislado. Los otros 9 rojos sí eran de la ficha
+y se cerraron **ampliando** los censos de enum, sin borrar una línea de aserción.
+
+**Probada en la app funcionando (T25):** cuatro traspasos reales de la misma orden con el destino repetido dejaron 4 filas de rastro, 4 avisos recibidos y 4 cedidos en 4 lotes distintos (el segundo aviso al mismo mensajero sale), y un rechazo del servidor llega al usuario como toast con el texto correcto.

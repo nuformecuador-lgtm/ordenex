@@ -12,6 +12,7 @@ import type {
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenNotaRepository } from "@/lib/repositories/OrdenNotaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
@@ -74,6 +75,7 @@ function buildService(): IGestionDesdeAyudaService {
       ordenRepo,
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
     // MISMO bucket privado y MISMOS limites que las evidencias de gestion (36/119) y de incidente
     // (158). Lo que distingue las fotos de esta via es el prefijo del path, no el bucket.

@@ -1396,3 +1396,149 @@ export async function emitirRepartoManana(
   ];
   return emitirFilas(repo, filas, tx);
 }
+
+// ---------------------------------------------------------------------------
+// FICHA 427 (T10, design §6.5) — LOS DOS AVISOS DEL TRASPASO. BEST-EFFORT, y FUERA de la
+// transaccion del traspaso.
+//
+// DECISION DEL HUMANO (2026-09-14, D3): se avisa, y A LOS DOS. Con sus palabras: el destino se
+// encuentra 31 ordenes nuevas en el telefono sin que nadie se lo diga.
+//
+// POR QUE DOS EVENTOS Y NO UNO (precedente 271): piden acciones OPUESTAS. Al destino le dicen «sal
+// a repartir esto»; al origen, «esto ya no es tuyo». El tipo de evento es lo que la campana usa para
+// agrupar y para deduplicar, asi que meter la diferencia solo en la descripcion la vuelve invisible
+// para todo lo que no sea leer la frase. Y el perfil de push es distinto: el del destino SI empuja,
+// el del origen NO (R43).
+//
+// UN AVISO AGREGADO POR ACTO, JAMAS UNO POR ORDEN (R38/R39). Aqui este spec se separa A PROPOSITO
+// del precedente de la 262 —que emite uno por correccion para poder nombrar QUE paquete— y sigue el
+// de la 413 (`reparto_manana`): con 31 ordenes, uno por orden son 31 campanadas y, con push, 31
+// interrupciones. Y la accion que el aviso pide NO es sobre un paquete concreto: es «mira tu lista,
+// que cambio entera». El numero va DENTRO del texto.
+//
+// ⚠️ LA ENTIDAD ES EL `lote_id` DEL TRASPASO, Y ES LA DECISION QUE EVITA UN SILENCIO TOTAL.
+// `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+// destinatario_usuario_id)` con `NULLS NOT DISTINCT`, NO mira el estado de lectura, y
+// `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `null`. Con el MENSAJERO —o con una
+// ORDEN— como entidad, la clave admitiria UNA sola fila por (evento, entidad, mensajero) PARA
+// SIEMPRE: el SEGUNDO traspaso del dia a la misma persona —que es el caso normal cuando alguien se
+// enferma y su carga se reparte en dos tandas— no avisaria NUNCA, sin error y sin log. Con el
+// `lote_id`: actos distintos => entidades distintas => DOS avisos (R42); el mismo acto emitido dos
+// veces => misma entidad => UNO solo, y lo decide el INDICE UNICO, no un `if` que una carrera pueda
+// burlar. Es el fallo que ya pagaron la 262, la 403, la 409 y la 412.
+// ---------------------------------------------------------------------------
+
+/**
+ * FICHA 427 (R38/R40) — el texto del aviso AL DESTINO.
+ *
+ * SINGULAR Y PLURAL EXPLICITOS, como `textoCobrosGastoFijoPendientes` y `textoCargaMasivaTerminada`:
+ * «Recibiste 1 ordenes» es el texto roto que ninguna suite ve y que un humano lee todos los dias.
+ *
+ * ⚠️ LO QUE NO LLEVA (R40), y ninguna de las tres ausencias es un olvido:
+ *   · NI EL MOTIVO escrito por quien traspaso — es texto libre de hasta 300 caracteres tecleado por
+ *     una persona y puede contener cualquier cosa, incluido un telefono o un nombre (argumento
+ *     literal de 262/A24). El motivo se lee en el historial de la orden, que SI autoriza por orden.
+ *   · NI NINGUN DATO DEL DESTINATARIO de las ordenes: ni nombre, ni direccion, ni telefono, ni monto.
+ *   · NI LA GUIA de ninguna orden: el aviso habla de la LISTA, no de un paquete.
+ *
+ * El NOMBRE DEL OTRO MENSAJERO si va, pero en el `anexo` y no aqui: es el dato con el que la persona
+ * entiende que paso, y tiene precedente (`emitirCierreDiaPorAprobar` pasa `mensajeroNombre`).
+ */
+export function textoTraspasoRecibido(cuantas: number): string {
+  return cuantas === 1
+    ? "Recibiste 1 orden de otro mensajero."
+    : `Recibiste ${cuantas} órdenes de otro mensajero.`;
+}
+
+/**
+ * FICHA 427 (R39/R40) — el texto del aviso AL ORIGEN. Mismas tres ausencias que el de arriba.
+ *
+ * DICE «pasaron a otro mensajero» Y NO «te las quitaron»: el traspaso lo decide la bodega y el caso
+ * normal es que el mensajero no pueda seguir. El tono lo fija el hecho, no una interpretacion.
+ */
+export function textoTraspasoCedido(cuantas: number): string {
+  return cuantas === 1
+    ? "1 orden tuya pasó a otro mensajero."
+    : `${cuantas} órdenes tuyas pasaron a otro mensajero.`;
+}
+
+/** Lo MINIMO que los dos avisos necesitan. Sin PII y sin el motivo (R40). */
+export interface TraspasoOrdenesContexto {
+  /**
+   * `orden_traspaso_mensajero.lote_id`: LA ENTIDAD del aviso, y el uuid del ACTO.
+   *
+   * ⚠️ NO ES EL `ordenId` NI EL `mensajeroId`, y es el hallazgo que decide este diseño (design
+   * §6.5, A9). Ver el bloque de arriba: con cualquiera de los dos, el segundo traspaso a la misma
+   * persona quedaria mudo PARA SIEMPRE.
+   */
+  loteId: string;
+  /** El destinatario del aviso, y el UNICO: el mensajero, como fila dirigida a USUARIO. */
+  mensajeroUsuarioId: string;
+  /** Cuantas ordenes se movieron en ESTE acto. Va dentro del texto, no en una columna aparte. */
+  cuantas: number;
+  /** Nombre del OTRO mensajero (el de origen aqui, el de destino alla). `null` si no resuelve. */
+  otroMensajeroNombre: string | null;
+}
+
+/**
+ * R38/R43 — UNA fila `box` dirigida al mensajero DESTINO, y a nadie mas.
+ *
+ * `tipo: "box"` y no `alert` ni `warning`: esto son PAQUETES QUE CAMBIAN DE MANO, no una alarma ni
+ * algo pendiente de aprobacion. `alert` teñiria de rojo una operacion legitima de coordinacion.
+ *
+ * SIN FILA DE ROL, y no por olvido: la administracion es quien EJECUTA el traspaso —ya lo sabe— y lo
+ * ve en `/ordenes`. Interrumpir a quien acaba de pulsar el boton es gastar el canal en lo que no lo
+ * necesita.
+ *
+ * UNA FILA CUALQUIERA QUE SEA EL NUMERO (R38): el array tiene UN elemento, no uno por orden. Con 31
+ * ordenes, `crear` se llama EXACTAMENTE UNA VEZ.
+ */
+export async function emitirTraspasoRecibido(
+  repo: INotificacionRepository,
+  ctx: TraspasoOrdenesContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    [
+      {
+        tipo: "box",
+        evento: "traspaso_ordenes_recibido",
+        descripcion: textoTraspasoRecibido(ctx.cuantas),
+        anexo: ctx.otroMensajeroNombre,
+        entidadTipo: "orden_traspaso_lote",
+        entidadId: ctx.loteId,
+        destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
+      },
+    ],
+    tx,
+  );
+}
+
+/**
+ * R39 — UNA fila `box` dirigida al mensajero de ORIGEN, y a nadie mas.
+ *
+ * Misma forma que su hermano y evento DISTINTO a proposito: es lo unico que permite que el catalogo
+ * de push le diga «no» a este y «si» al otro (R43), y que la campana los agrupe por separado.
+ */
+export async function emitirTraspasoCedido(
+  repo: INotificacionRepository,
+  ctx: TraspasoOrdenesContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    [
+      {
+        tipo: "box",
+        evento: "traspaso_ordenes_cedido",
+        descripcion: textoTraspasoCedido(ctx.cuantas),
+        anexo: ctx.otroMensajeroNombre,
+        entidadTipo: "orden_traspaso_lote",
+        entidadId: ctx.loteId,
+        destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
+      },
+    ],
+    tx,
+  );
+}

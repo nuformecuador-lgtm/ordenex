@@ -4,6 +4,7 @@ import type {
   OrdenHistorialCorreccionDiaDTO,
   OrdenHistorialEntradaDTO,
   OrdenHistorialTransicionDTO,
+  OrdenHistorialTraspasoDTO,
 } from "@/lib/types/orden-historial";
 
 /**
@@ -22,6 +23,10 @@ import type {
  *
  * Hay precedente en el repo: nueve archivos de `tests/` usan `@ts-expect-error` con este mismo
  * proposito.
+ *
+ * ⭑ FICHA 427 (T20/T21) — LA TERCERA CLASE ENTRO, y este archivo la cubre con el mismo criterio:
+ * un TRASPASO tampoco tiene estado de origen ni de destino (R21), no es asignable a ninguna de sus
+ * dos hermanas, y el `switch` de `etiquetaDe` deja de compilar si alguien le quita su rama.
  */
 
 // --------------------------------------------------------------------------------------------
@@ -55,6 +60,37 @@ function _laCorreccionNoEsUnaTransicion(correccion: OrdenHistorialCorreccionDiaD
   return comoTransicion;
 }
 
+function _elTraspasoNoTieneEstados(traspaso: OrdenHistorialTraspasoDTO) {
+  // FICHA 427/R21: un traspaso NO cambia el estado de la orden. La entrada no tiene estado de
+  // destino ni de origen, y tampoco `origenTipo`: ni nullable, NO EXISTEN.
+  // @ts-expect-error un traspaso no tiene estado de destino
+  const destino = traspaso.estatusDestinoValue;
+  // @ts-expect-error `origenTipo` es el censo de familias que ESCRIBEN `orden.estatus_id`
+  const familia = traspaso.origenTipo;
+  return { destino, familia };
+}
+
+function _elTraspasoNoEsUnaCorreccion(traspaso: OrdenHistorialTraspasoDTO) {
+  // @ts-expect-error las tres clases NO son asignables entre si: la union es real, no cosmetica
+  const comoCorreccion: OrdenHistorialCorreccionDiaDTO = traspaso;
+  return comoCorreccion;
+}
+
+function _elRolDelTraspasoNoEsTextoLibre(): OrdenHistorialTraspasoDTO {
+  return {
+    clase: "traspaso_mensajero",
+    mensajeroAnteriorNombre: "Andy Cortes",
+    mensajeroNuevoNombre: "Carlos Eduardo",
+    actorNombre: "Coordinadora Ana",
+    // R26: el rol congelado es un valor del enum de Postgres, no una cadena cualquiera. Un texto
+    // libre aqui dejaria la linea de tiempo pintando lo que nadie valido.
+    // @ts-expect-error `actorRol` es `RolValue`, no `string`
+    actorRol: "coordinadora",
+    motivo: "Andy se reporto enfermo a media jornada",
+    createdAt: new Date("2026-09-14T14:00:00.000Z"),
+  };
+}
+
 function _lasFechasNoSonDate(): OrdenHistorialCorreccionDiaDTO {
   return {
     clase: "correccion_dia",
@@ -73,6 +109,9 @@ function _lasFechasNoSonDate(): OrdenHistorialCorreccionDiaDTO {
 void _leerSinEstrechar;
 void _correccionSinEstadoDestino;
 void _laCorreccionNoEsUnaTransicion;
+void _elTraspasoNoTieneEstados;
+void _elTraspasoNoEsUnaCorreccion;
+void _elRolDelTraspasoNoEsTextoLibre;
 void _lasFechasNoSonDate;
 
 // --------------------------------------------------------------------------------------------
@@ -91,6 +130,9 @@ function etiquetaDe(entrada: OrdenHistorialEntradaDTO): string {
       // Estrechada, las dos fechas y el motivo tambien. Y `actorNombre` es `string`, no
       // `string | null`: aqui nunca escribe un cron.
       return `${entrada.fechaAnteriorISO}->${entrada.fechaNuevaISO} por ${entrada.actorNombre}`;
+    case "traspaso_mensajero":
+      // FICHA 427: estrechada, los dos nombres, el actor y su rol CONGELADO se leen sin ceremonia.
+      return `${entrada.mensajeroAnteriorNombre}->${entrada.mensajeroNuevoNombre} por ${entrada.actorNombre} (${entrada.actorRol})`;
     default: {
       // EXHAUSTIVIDAD DEMOSTRADA: una tercera clase sin rama rompe el build en esta linea.
       const _exhaustivo: never = entrada;
@@ -100,7 +142,7 @@ function etiquetaDe(entrada: OrdenHistorialEntradaDTO): string {
 }
 
 describe("262/R42 — la union discriminada del historial", () => {
-  it("el `switch` por `clase` estrecha a cada una de las dos formas", () => {
+  it("el `switch` por `clase` estrecha a cada una de las TRES formas", () => {
     const transicion: OrdenHistorialEntradaDTO = {
       clase: "transicion",
       estatusOrigenValue: "por_recoger",
@@ -119,14 +161,31 @@ describe("262/R42 — la union discriminada del historial", () => {
       createdAt: new Date("2026-08-22T09:14:00.000Z"),
     };
 
+    const traspaso: OrdenHistorialEntradaDTO = {
+      clase: "traspaso_mensajero",
+      mensajeroAnteriorNombre: "Andy Cortes",
+      mensajeroNuevoNombre: "Carlos Eduardo",
+      actorNombre: "Coordinadora Ana",
+      actorRol: "admin",
+      motivo: "Andy se reporto enfermo a media jornada",
+      createdAt: new Date("2026-09-14T14:00:00.000Z"),
+    };
+
     expect(etiquetaDe(transicion)).toBe("por_recoger->en_reparto");
     expect(etiquetaDe(correccion)).toBe("2026-08-22->2026-08-21 por Ana Perez");
+    expect(etiquetaDe(traspaso)).toBe(
+      "Andy Cortes->Carlos Eduardo por Coordinadora Ana (admin)",
+    );
   });
 
   it("el discriminante es EXPLICITO: las dos clases se distinguen por `clase` y no por la presencia de un campo", () => {
     // design §14.1, punto 2: con `"fechaNuevaISO" in entrada` una tercera clase futura caeria
     // en el `else` en silencio. Con `clase`, TypeScript obliga a decidir.
-    const clases: OrdenHistorialEntradaDTO["clase"][] = ["transicion", "correccion_dia"];
-    expect(clases).toEqual(["transicion", "correccion_dia"]);
+    const clases: OrdenHistorialEntradaDTO["clase"][] = [
+      "transicion",
+      "correccion_dia",
+      "traspaso_mensajero",
+    ];
+    expect(clases).toEqual(["transicion", "correccion_dia", "traspaso_mensajero"]);
   });
 });

@@ -1,0 +1,31 @@
+-- DOWN (ficha 427, T2) -- revierte EXACTAMENTE `migration.sql`.
+--
+-- `DROP TABLE` arrastra la PK (`orden_traspaso_mensajero_pkey`), los CINCO indices
+-- (`..._orden_id_created_at_idx`, `..._mensajero_anterior_id_created_at_idx`,
+-- `..._mensajero_nuevo_id_created_at_idx`, `..._actor_usuario_id_idx`, `..._lote_id_idx`), las
+-- CUATRO FK (`..._orden_id_fkey`, `..._mensajero_anterior_id_fkey`, `..._mensajero_nuevo_id_fkey`,
+-- `..._actor_usuario_id_fkey`), el CHECK (`orden_traspaso_mensajero_distinto_check`) y la RLS.
+--
+-- NO HAY `DROP TYPE` QUE HACER: esta migracion NO crea ningun enum. `rol_value` es PREEXISTENTE
+-- (feature 1) y esta tabla solo lo USA; dropearlo aqui se llevaria por delante `usuario.rol`. Los
+-- valores de enum que esta ficha anade viven en OTRA migracion, posterior y separada
+-- (`20260917120100_notificacion_evento_traspaso`), que tiene su propio down de recreacion. Si se
+-- revierten las dos, el orden es el INVERSO al de aplicacion: primero la de los enums, despues
+-- esta.
+--
+-- NO SE TOCA NINGUN `down.sql` ANTERIOR, y aqui no hace falta ni preguntarselo: la pregunta
+-- obligatoria de este repo -«¿los downs previos de ese enum recrean-con-lista o solo dropean?»-
+-- solo aplica cuando se ANADE un valor a un enum, y esta migracion no anade ninguno.
+--
+-- DESTRUCTIVO Y SIN VUELTA, y se dice en voz alta: se lleva el rastro escrito, es decir QUIEN
+-- traspaso que orden, desde que mensajero, hacia cual y por que. Es la evidencia de una operacion
+-- que cambia quien tiene el paquete en la mano, quien lo cobra y en que ranking cuenta. Es correcto
+-- para un down -devuelve la base al estado de SU momento- y por eso queda escrito aqui.
+--
+-- Y LO QUE **NO** HACE, dicho para que nadie lo lea de mas: las ordenes **NO vuelven a su mensajero
+-- anterior**. Este down NO deshace traspasos, solo borra su REGISTRO.
+-- `orden.mensajero_asignado_id`, `orden.asignado_at` y `chat_conversacion.mensajero_id` se quedan
+-- como los dejo el traspaso. Revertir el movimiento es OTRO traspaso, hecho por una persona.
+--
+-- Las tablas `orden`, `usuario` y `chat_conversacion` NO se tocan: esta migracion nunca las altero.
+DROP TABLE IF EXISTS "orden_traspaso_mensajero";

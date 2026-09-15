@@ -1,0 +1,68 @@
+-- FICHA 427 (T4, design §4.3) -- los DOS avisos del traspaso de ordenes entre mensajeros (D3).
+--
+-- QUE ANADE, y son TRES valores en DOS enums distintos:
+--
+--   `notificacion_evento`       += 'traspaso_ordenes_recibido'
+--   `notificacion_evento`       += 'traspaso_ordenes_cedido'
+--   `notificacion_entidad_tipo` += 'orden_traspaso_lote'
+--
+-- POR QUE HACE FALTA. Decision del humano del 2026-09-14 (D3), con sus palabras: el mensajero
+-- DESTINO se encuentra 31 ordenes nuevas en el telefono sin que nadie se lo diga. Se avisa a los
+-- DOS -- al que las recibe y al que las cede.
+--
+-- POR QUE DOS EVENTOS Y NO UNO (precedente 271): piden acciones OPUESTAS. Al destino le dicen «sal
+-- a repartir esto»; al origen, «esto ya no es tuyo». El tipo de evento es lo que la campana usa
+-- para agrupar y para deduplicar, asi que meter la diferencia solo en la descripcion la vuelve
+-- invisible para todo lo que no sea leer la frase. Y el perfil de push es distinto: el del destino
+-- SI empuja (tiene plazo y consecuencia personal), el del origen NO -- no le pide ninguna accion.
+--
+-- POR QUE VA SOLA Y CON TIMESTAMP PROPIO. Postgres NO permite USAR un valor de enum recien anadido
+-- en la misma transaccion que lo anadio (`55P04`) y Prisma Migrate corre cada `migration.sql`
+-- dentro de una. Aqui SOLO se anaden los valores; su primer uso ocurre en runtime
+-- (`emitirTraspasoRecibido` / `emitirTraspasoCedido`), en transacciones posteriores. Mismo
+-- precedente que la 413, la 412, la 409, la 401, la 403, la 333, la 271, la 262 y la 253.
+--
+-- EL TIMESTAMP (20260917120100) SE ESCRIBE A MANO y es POSTERIOR a toda migracion ya aplicada --
+-- incluida la tabla de esta misma ficha (20260917120000), la de push de la 410 (20260912120000) y
+-- la de la 413 (20260914120000). Esto ultimo IMPORTA: es lo que obliga a este `down.sql` a retipar
+-- tambien `push_envio_dia.evento`.
+-- JAMAS RENUMERAR UNA CARPETA YA APLICADA: deja una fila fantasma que `migrate status` no ve. Si el
+-- timestamp chocara, se crea una carpeta con uno NUEVO.
+--
+-- POR QUE TAMBIEN EL SEGUNDO ENUM, Y POR QUE LA ENTIDAD ES EL `lote_id`. ES LA DECISION QUE EVITA
+-- UN SILENCIO TOTAL, y este repo ya la pago CUATRO veces (262, 403, 409 y 412).
+--
+-- `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+-- destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`
+-- (`20260727120000_notificacion/migration.sql`), el indice NO MIRA EL ESTADO DE LECTURA, y
+-- `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `null`.
+--
+-- Con el MENSAJERO como entidad -o con una ORDEN- la clave admitiria UNA sola fila por (evento,
+-- entidad, mensajero) PARA SIEMPRE, y el SEGUNDO traspaso del dia a la misma persona -que es el
+-- caso normal cuando alguien se enferma y su carga se reparte en dos tandas- no avisaria JAMAS, sin
+-- error, sin log y sin nada. Por eso:
+--
+--   `orden_traspaso_lote` -> entidad_id = '<orden_traspaso_mensajero.lote_id>'   (uuid POR ACTO)
+--
+-- CONSECUENCIAS, y son ESTRUCTURALES, no de disciplina:
+--   - dos actos distintos => dos `lote_id` => dos entidades => DOS avisos (R42);
+--   - el mismo acto emitido dos veces => misma entidad => UN solo aviso, y lo decide el INDICE
+--     UNICO, no un `if` previo que una carrera pueda burlar.
+--
+-- Y NO LLEVA PREFIJO DE MENSAJERO, al contrario que los dos avisos de la 409. Hay que leerlo ENTERO
+-- antes de copiarlo: alli el destinatario es un ROL CON ALCANCE (`{rol: adminTienda, tiendaId}`) y
+-- el alcance NO entra en la clave unica, asi que sin el prefijo solo habria avisado la PRIMERA
+-- tienda de la corrida. Aqui el destinatario es un USUARIO y `destinatario_usuario_id` **ES** una
+-- columna de esa clave: los dos avisos del mismo acto -al origen y al destino- son dos usuarios
+-- distintos, luego dos filas. La regla no es «prefija siempre», es «comprueba si el alcance esta en
+-- la clave».
+--
+-- Y NO es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el indice
+-- unico es PARCIAL, asi que saldria un aviso por cada emision.
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, NO CREA NINGUN INDICE y no toca RLS
+-- (`notificacion` conserva la de la 146). SIN BACKFILL: ninguna notificacion existente cambia de
+-- evento ni de entidad.
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'traspaso_ordenes_recibido';
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'traspaso_ordenes_cedido';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'orden_traspaso_lote';

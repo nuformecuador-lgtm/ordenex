@@ -1,6 +1,7 @@
 import type {
   GestionResultado,
   OrdenHistorialOrigenTipo as PrismaOrdenHistorialOrigenTipo,
+  RolValue,
 } from "@prisma/client";
 
 // Feature 49 (design §1.2, R23) — fuente unica de verdad de los tipos de ORIGEN de una
@@ -473,10 +474,55 @@ export interface OrdenHistorialCorreccionDiaDTO {
 }
 
 /**
- * UNA entrada de la linea de tiempo: o una transicion de estado, o una correccion del dia de
- * reparto. UNION DISCRIMINADA por `clase`, y el discriminante es EXPLICITO y no derivado por
- * presencia de campo: con `clase` el `switch` es exhaustivo y TypeScript lo demuestra; con
- * `"fechaNuevaISO" in entrada` una tercera clase futura caeria en el `else` en silencio.
+ * FICHA 427 (T20, design §9, R29) — un TRASPASO de la orden ENTRE MENSAJEROS
+ * (`orden_traspaso_mensajero`). TAMPOCO TIENE ESTADO DE ORIGEN NI DE DESTINO, por la misma razon
+ * que la correccion del dia: un traspaso NO cambia el estado de la orden (R21) y el choke point de
+ * estados ni siquiera aceptaria un `en_reparto -> en_reparto` — esa arista no existe en el
+ * inventario de la 140.
+ *
+ * LOS TRES NOMBRES VIAJAN YA RESUELTOS (el de quien la llevaba, el de quien la recibe y el de quien
+ * la traspaso), como `actorNombre` en sus dos hermanas: la linea de tiempo se lee, no se cruza. Los
+ * tres son NOT NULL porque las tres columnas lo son y sus FK son `RESTRICT`, asi que la relacion
+ * SIEMPRE resuelve.
+ *
+ * ⚠️ `actorRol` ES EL CONGELADO DE LA FILA, NUNCA EL VIVO (R26). Esta es la mitad de R26 que se ve:
+ * el rol de una persona cambia —la 362 registra ese mismo evento— y resolverlo por join al pintar
+ * RE-ETIQUETARIA la historia («lo hizo un admin» pasaria a «lo hizo un maestro» el dia que a esa
+ * persona la asciendan). Por eso la columna existe y por eso este DTO la transporta tal cual.
+ *
+ * `motivo` es NOT NULL, igual que en la correccion del dia: aqui nunca escribe un cron y el motivo
+ * es obligatorio entre 10 y 300 caracteres (R28).
+ *
+ * NO TIENE `origenTipo`, por lo mismo que `OrdenHistorialCorreccionDiaDTO`: ese enum es el censo
+ * cerrado de las familias que ESCRIBEN `orden.estatus_id`, y el traspaso no escribe ninguno.
+ */
+export interface OrdenHistorialTraspasoDTO {
+  clase: "traspaso_mensajero";
+  /** Nombre del mensajero que LLEVABA la orden. */
+  mensajeroAnteriorNombre: string;
+  /** Nombre del mensajero que la RECIBE. */
+  mensajeroNuevoNombre: string;
+  /** Nombre de quien ejecuto el traspaso (persona, nunca un cron). */
+  actorNombre: string;
+  /** R26 — el rol CONGELADO en el instante del traspaso, no el vivo de hoy. */
+  actorRol: RolValue;
+  motivo: string;
+  createdAt: Date;
+}
+
+/**
+ * UNA entrada de la linea de tiempo: una transicion de estado, una correccion del dia de reparto o
+ * un traspaso entre mensajeros. UNION DISCRIMINADA por `clase`, y el discriminante es EXPLICITO y
+ * no derivado por presencia de campo: con `clase` el `switch` es exhaustivo y TypeScript lo
+ * demuestra; con `"fechaNuevaISO" in entrada` una tercera clase futura caeria en el `else` en
+ * silencio.
+ *
+ * ⭑ FICHA 427 (2026-09-14): LA TERCERA CLASE LLEGO, y el mecanismo funciono exactamente como la 262
+ * lo dejo escrito. Añadir `OrdenHistorialTraspasoDTO` aqui rompio a la vez `RANGO_POR_CLASE`
+ * (`OrdenHistorialService`) y el `switch` de `HistorialOrdenTimeline.tsx`, cuyo `default` es un
+ * `const _exhaustivo: never`. Ese doble rojo ES la funcionalidad: obligo a decidir donde cae en el
+ * empate de instante y como se pinta, en vez de colarse al final por casualidad o de pintar una
+ * fila vacia sin que nada se enterase.
  *
  * EL NOMBRE SE CONSERVA a proposito (design §14.1, punto 1): `ObtenerHistorialServiceResult` lo
  * nombra y `tests/unit/guards/rastreo-frontera.guardia.test.ts` lo tiene en su lista de simbolos
@@ -485,4 +531,5 @@ export interface OrdenHistorialCorreccionDiaDTO {
  */
 export type OrdenHistorialEntradaDTO =
   | OrdenHistorialTransicionDTO
-  | OrdenHistorialCorreccionDiaDTO;
+  | OrdenHistorialCorreccionDiaDTO
+  | OrdenHistorialTraspasoDTO;

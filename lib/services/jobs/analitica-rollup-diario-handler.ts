@@ -16,6 +16,7 @@ import { AnaliticaRollupRepository } from "@/lib/repositories/AnaliticaRollupRep
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { fechaObjetivo } from "@/lib/analytics/rollup-dia";
@@ -140,6 +141,7 @@ export function buildAnaliticaRollupService(now: () => Date): IAnaliticaRollupSe
       new OrdenRepository(prisma),
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
     { now },
   );

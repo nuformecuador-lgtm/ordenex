@@ -1,3 +1,4 @@
+import { ROL_LABELS } from "@/lib/auth/rol-label";
 import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
 import {
   ETIQUETA_CORRECCION_DIA,
@@ -12,6 +13,12 @@ import { estatusLabel } from "./estatus-label";
 // su etiqueta legible via `estatusLabel` (R30, NUNCA UUIDs); el actor cae a "Sistema"
 // cuando la transicion la origino el cron/job (R21/R29) y el motivo solo aparece si existe
 // (R22). Sin logica de fetch/estado: es un componente tonto reutilizable por el drawer.
+//
+// FICHA 427 (T20, design §9, R26/R29) — Y UNA TERCERA CLASE: el TRASPASO de la orden ENTRE
+// MENSAJEROS. Llego exactamente por donde la 262 dijo que llegaria, y el `const _exhaustivo: never`
+// del `default` hizo su trabajo: aterrizar el tipo nuevo SIN esta rama no compilaba. La entrada
+// nombra al mensajero de origen, al de destino y a quien lo ejecuto, con su ROL CONGELADO (R26) —
+// nunca el rol vivo de esa persona.
 //
 // FEATURE 262 (design §14.4) — LA LINEA DE TIEMPO TIENE DOS CLASES DE ENTRADA. Ademas de las
 // transiciones de estado, pinta las CORRECCIONES DEL DIA DE REPARTO, que NO TIENEN ESTADO DE
@@ -60,6 +67,21 @@ const FECHA_HORA = new Intl.DateTimeFormat("es-CR", {
 
 /** Actor del sistema (cron/job) cuando `actorNombre` es null (R21/R29). */
 const ACTOR_SISTEMA = "Sistema";
+
+/**
+ * FICHA 427 (T20, R29) — los dos textos de la entrada de TRASPASO, en constantes de modulo y no
+ * incrustados en el JSX (mismo criterio que `ACTOR_SISTEMA` y que `ETIQUETA_CORRECCION_DIA`): la
+ * capa de presentacion queda lista para i18n y el texto se cambia en un solo sitio.
+ *
+ * LENGUAJE CLARO Y SIN SIGLAS, y sin nombrar ningun estado: un traspaso NO cambia el estado de la
+ * orden (R21), asi que la entrada no puede leerse como si lo hiciera.
+ */
+const ETIQUETA_TRASPASO = "Traspaso a otro mensajero";
+
+/** R29: «de quien a quien», con los dos nombres que el servidor ya resolvio. */
+function textoTraspasoMensajero(anterior: string, nuevo: string): string {
+  return `De ${anterior} a ${nuevo}`;
+}
 
 function formatFechaHora(fecha: Date): string {
   const ms = fecha.getTime();
@@ -171,6 +193,48 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
                 </p>
                 {sello}
                 <p className="text-xs text-muted-foreground">Por {entrada.actorNombre}</p>
+                <p className="text-sm">Motivo: {entrada.motivo}</p>
+              </li>
+            );
+          }
+          case "traspaso_mensajero": {
+            // FICHA 427 (T20, R29) — LA TERCERA CLASE. Igual que la correccion del dia: en esta
+            // rama NO se llama a `estatusLabel` ni se pinta la flecha de estados, porque un
+            // traspaso NO cambia el estado de la orden (R21) y presentarlo como una transicion
+            // seria mentir sobre la maquina de estados.
+            //
+            // Se distingue por TEXTO —la primera linea dice QUE es— y, encima de eso, por la misma
+            // marca de FORMA que ya usa la correccion (anillo hueco + filo discontinuo), sin
+            // introducir ningun tono de color nuevo. Este repo tiene guardia de contraste y una
+            // leccion escrita sobre medir color en el navegador.
+            //
+            // ⚠️ EL ROL QUE SE PINTA ES EL CONGELADO DE LA FILA (R26), el que el DTO trae. No se
+            // resuelve el rol vivo de esa persona en ningun punto de esta cadena: el dia que a
+            // quien traspaso lo asciendan, esta entrada tiene que seguir diciendo lo de entonces.
+            const rolLabel = ROL_LABELS[entrada.actorRol] ?? entrada.actorRol;
+
+            return (
+              <li
+                key={key}
+                className="relative flex flex-col gap-1 border-l-2 border-dashed border-border pl-4"
+              >
+                {/* El hueco del anillo va en `bg-popover` por lo MEDIDO en la 262: la superficie
+                    donde vive esta lista es el `SheetContent` del drawer, que es `bg-popover`. */}
+                <span
+                  aria-hidden="true"
+                  className="absolute top-1.5 -left-[6px] size-2.5 rounded-full border-2 border-primary bg-popover"
+                />
+                <p className="text-sm font-medium">{ETIQUETA_TRASPASO}</p>
+                <p className="text-sm">
+                  {textoTraspasoMensajero(
+                    entrada.mensajeroAnteriorNombre,
+                    entrada.mensajeroNuevoNombre,
+                  )}
+                </p>
+                {sello}
+                <p className="text-xs text-muted-foreground">
+                  Por {entrada.actorNombre} ({rolLabel})
+                </p>
                 <p className="text-sm">Motivo: {entrada.motivo}</p>
               </li>
             );

@@ -150,6 +150,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     deshacerAsignacionLote: vi.fn(async () => 0),
     // Feature 262: writer de la correccion del dia de reparto, exigido por IOrdenRepository.
     corregirDiaRepartoLote: vi.fn(async () => []),
+    // FICHA 427 (T8): la transaccion del traspaso entre mensajeros. Ningun servicio de este
+    // archivo la invoca; el doble existe para satisfacer el contrato completo del repo.
+    traspasarMensajeroLote: vi.fn(async () => ({ loteId: "lote-1", movidas: 0, conversaciones: 0 })),
     // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).
     findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
     // Feature 271: el contador N/V y el detalle del bloqueo son parte del puerto.
