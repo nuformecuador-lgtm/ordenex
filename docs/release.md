@@ -51,7 +51,7 @@
       siembra (`scripts/migrate-deploy.ts`, lineas `[siembra] ...` del log del deploy), asi que
       normalmente basta con leerlas. Si el log no esta a mano, la consulta es directa:
       `SELECT tipo, estado, run_after FROM jobs WHERE tipo IN ('liberar_reprogramadas','analitica_rollup_diario') AND estado <> 'failed';`
-      **Se espera una fila por tipo.** Cero es el fallo del 2026-08-28: un recurrente se re-agenda
+      **Se espera una fila por tipo** (dos de `analitica_rollup_diario` si se despliega entre las 00:00 y las 00:30 CR, y es correcto: ver la release del 2026-09-15). Cero es el fallo del 2026-08-28: un recurrente se re-agenda
       solo *despues* de correr, asi que sin la primera fila no hay ninguna, y no falla nada. Costo
       40 ordenes atrapadas en `reprogramada` y un rollup diario que no se escribio nunca, con el
       build en verde dos dias y la unica senal siendo un operador que no podia trabajar.
@@ -480,3 +480,94 @@ Lo verificado, con su evidencia:
 - **El desbordamiento horizontal de la tabla** de API keys es preexistente: las 7 columnas de datos
   suman 838 px de mínimo y a 1024 px hay 718. Lo que esta release arregla es **qué queda fuera**:
   ahora la cola de datos, no los controles.
+
+---
+
+## Release del 2026-09-15 — la 423, la 424, la 425, la 426 y la 427, recorrida
+
+**`prod` = `1ab83dd5`** · merge commit con 2 padres (sin squash) · PR #796 · despliegue
+`dpl_8MuD5fsVkFAVSRJ7mvQCh6ufWQJP`, creado a las 06:14:07Z y **READY** · migraciones aplicadas a las
+06:14:23Z.
+
+Lleva **cinco fichas**, 50 commits y 4 migraciones:
+
+| Ficha | Qué cambia |
+| --- | --- |
+| **423** | ordenar las tablas de órdenes por número de remisión (orden natural, columna generada `clave_remision`) |
+| **424** | el admin vuelve a poder eliminar órdenes, con rastro en el historial |
+| **425** | los rechazos que registra la tienda llegan al cierre del mensajero, sin tocar el dinero |
+| **426** | una ruta `/api/*` con la sesión vencida responde `401` JSON, no la página de login |
+| **427** | traspasar a otro mensajero las órdenes que alguien ya lleva encima |
+
+### §1 recorrido, con su evidencia
+
+- **Gate completo sobre `9bf519c7`** (= `origin/dev`), con la base libre: `INIT_EXIT=0` leído dentro
+  del log, **1.974/1.974** archivos y **28.836** tests, 0 rojos.
+- **`dev` no se movió** entre el gate y la release: seguía en `9bf519c7` al abrir el PR, comprobado
+  después del corte de medianoche. `dev` es ancestro de `prod`: llegó todo el trabajo, no solo el PR.
+- **Re-medido lo que caduca**: el desglose de la 425 seguía en 46 rechazos (Carlos Cambronero 19,
+  Andrés Agüero 7, Andy Cortés 7, Kendall Hernández 6, Johel Hernández 4, Arnel Guillen 3).
+- **Avisos enviados por el humano antes de mergear**: a Nuform (el contrato de la 426) y a quien
+  aprueba cierres (la 425), con la corrección de que un `vencido` se destraba antes de aprobarse.
+
+### Por qué salió DESPUÉS del corte de medianoche
+
+Carlos Cambronero y Kendall Hernández pidieron su cierre del día **antes** del despliegue. Con la 425
+activa en el corte de las 00:00 CR, cada uno habría recibido un `vencido` con solo sus rechazos: dos
+cierres abiertos y **sin poder recibir trabajo por la mañana**. Decisión del humano: esperar al corte.
+El corte corrió a las **06:00:11Z sobre el despliegue anterior** (`dpl_BHHLortez6Fawogco5ZwawHMUtpy`)
+y creó 4 `vencido` normales (Fabiola Flores, Carlos Eduardo, Joyce 1 Mesen y Jaffet Viquez). El
+último cierre de la base nació a las 06:00:16Z: **ninguno se ha creado todavía con la 425 activa**.
+
+### §3 recorrido tras desplegar — todo verificado
+
+- **El código nuevo sirve producción**: la primera respuesta `401` del chunk llegó a las 06:15:37Z.
+- **Errores de runtime: cero en el despliegue nuevo.** El único grupo de la ventana es el
+  `DeprecationWarning` de `pg` que existe desde el 2026-07-27, visto por última vez a las 06:00:11Z en
+  el cron del corte y sobre el despliegue anterior.
+- **Peticiones del despliegue nuevo** (06:14→06:22): el cron `procesar-jobs` en `200` cada minuto; los
+  únicos no-`200` son las sondas de esta verificación (2 × `401` del chunk, 1 × `307` de `/ordenes`).
+  Ningún `5xx`.
+- **426:** `POST https://ordenex.co/api/ordenes/carga-masiva/chunk` sin cookie → `401` con
+  `Content-Type: application/json` y `{"status":"error","code":"UNAUTHORIZED",...}` (antes, `307` al
+  login). `/ordenes` sigue en `307`; `/login`, `/manifest.json` y `/sw.js` en `200`.
+- **Las cuatro migraciones**, con foto antes y después:
+
+  | | Antes | Después |
+  |---|---|---|
+  | Última migración | `20260915120000_usuario_preferencia` | `20260917120200_cierre_rechazo_tienda` (4 nuevas, 0 revertidas) |
+  | Valores en `notificacion_evento` | 15 | **17** |
+  | Valores en `notificacion_entidad_tipo` | 13 | **14** |
+  | `orden_traspaso_mensajero` | no existe | **existe, 0 filas, RLS activo** |
+  | `cierre_rechazo_tienda` | no existe | **existe, 0 filas, RLS activo** |
+  | Órdenes vivas | 2.163 | **2.163** |
+  | Órdenes sin `clave_remision` | — | **0** |
+
+  El índice `orden_prioridad_clave_remision_idx` existe. **Ninguna orden tocada por la migración:** 0
+  órdenes con `updated_at` en la ventana de las 06:14. Las últimas escrituras son 11 órdenes a las
+  06:00 (la hora del corte y de `liberar_reprogramadas`) y 11 a las 05:41, todas antes del despliegue.
+- **Jobs recurrentes: `liberar_reprogramadas` con 1 fila pendiente (16/09 a las 06:00Z) y
+  `analitica_rollup_diario` con 2, y es correcto.** El despliegue cayó entre las 00:00 y las 00:30 CR,
+  así que la siembra del build plantó a las 06:14:23Z `analitica_rollup_diario:2026-09-15` (corre el
+  16/09) **antes** de que el rollup de las 06:30Z encadenara esa misma clave. `JobRepository.enqueue`
+  inserta con `ON CONFLICT ("dedupe_key") WHERE "dedupe_key" IS NOT NULL DO NOTHING`, y en toda la
+  historia de la tabla no hay ni un `run_after` repetido de estos dos tipos. **Verificado a las 06:31:58Z:** el rollup de las 06:30Z terminó en `done` a las 06:30:05Z, al primer intento y sin error, y para el 16/09 sigue habiendo **una sola fila**, la sembrada: el encadenado chocó con la clave y no duplicó ni falló. Desde el despliegue, 0 jobs fallidos, y `get_runtime_errors` sigue en cero hasta las 06:32Z.
+  **Para la próxima:** un despliegue entre las 00:00 y las 00:30 CR ve dos rollups pendientes y no es
+  un fallo; «una fila por tipo» vale fuera de esa media hora.
+
+### Lo que NO se cierra aquí, y por qué
+
+- **V5 de la 425, mañana**: sobre el primer cierre que traiga rechazos, comprobar que
+  `total_pago_mensajero` = Σ del pago de las gestiones con `cierre_id` y que ningún rechazo tiene
+  `cierre_id`. Si antes se aprueba el cierre del 11/09 de Arnel Guillen, sus tres órdenes saldrán por
+  ese —el bloque 139 libera las `rechazada` por `mensajeroAsignadoId`— y V5 no demostraría la salida
+  por la 425.
+- **La primera noche con la 425** (corte del 16/09 a las 00:00 CR): Andy Cortés (7 rechazos) y Arnel
+  Guillen (3), que no están trabajando, recibirán un `vencido` con sus rechazos. Se saca con «Destrabar
+  cierre vencido» y después «Aprobar»; para desbloquear a Arnel basta resolver ese cierre nuevo.
+- **Seguimientos, ninguno bloquea**: la carrera entre el R9 de la 412 y el N/V de la 271 (rojos falsos
+  en el gate, ficha aparte); tres casos que faltan en el test del `WHERE` de la 425 (hoy los protege el
+  literal del predicado); y de la 427, la lista de destinos solo de zona central (no sirve a una
+  satélite), un mensajero sin vehículo que aparece habilitado y la concordancia «Se movieron 1 orden».
+- **Del humano**: los 25 rechazos sin `ingreso_bodega_rechazo`, y el correo de las 4 funcionalidades
+  nuevas, pendiente de aprobación del cliente.

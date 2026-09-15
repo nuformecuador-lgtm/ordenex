@@ -1,43 +1,53 @@
-# Estado — sesión del 2026-09-10 / 12 / 14
+# Estado — sesión del 2026-09-10 / 12 / 14 / 15
 
-## EN CURSO — sesión del 2026-09-14
+## ABIERTO — ficha 428, PR #797 sin mergear
 
-### Ya en `dev`
+`feat/428-orden-solo-icono` (`2a8837b3`) sobre `dev` = `31cbd6d4`. Los dos conmutadores de ORDEN de
+`/ordenes` pasan a solo icono + tooltip: ocupaban ~800 px de los ~1480 de la fila y empujaban
+«Filtros» a una tercera línea. Opt-in (`SegmentedToggle.soloIcono`, default `false`); solo lo pasa
+`OrdenesListado`, los otros 8 consumidores no cambian.
+
+**FALTA LA COMPROBACIÓN VISUAL, y es lo único que importa aquí:** la suite corre en jsdom, sin CSS,
+así que nadie ha visto si se ve bien ni si «Filtros» vuelve a la primera línea. No hay login local
+usable (los e2e llevan credenciales de relleno y el seed de QA rota hashes). **No mergear sin abrir
+la pantalla.**
+
+Los dos costes los aceptó el humano con los números delante — en móvil no hay hover, y las mismas
+dos flechas significan «Más recientes/Más antiguas» con fecha y «Más altas/Más bajas» con remisión.
+Se le ofrecieron dos variantes más conservadoras y las descartó: **no reproponer**.
+
+Anotado y FUERA de esta ficha: el naranja `brand-outline` de «Descargar» y del botón de columnas
+compite con el naranja de selección (22 tablas), y `ColumnasPopover` y «Filtros» usan el mismo
+icono `SlidersHorizontal` a 40 px uno del otro (12 pantallas).
+
+---
+
+## Desplegado en producción y VERIFICADO — release del 2026-09-15
+
+**`prod` = `1ab83dd5`** (PR #796, merge commit con 2 padres) · despliegue
+`dpl_8MuD5fsVkFAVSRJ7mvQCh6ufWQJP` READY · recorrido completo, con su evidencia, en `docs/release.md`
+(«Release del 2026-09-15»). Las cinco fichas quedan `done`.
 
 | Ficha | PR | Qué |
 | --- | --- | --- |
 | **423** | #791 | ordenar las tablas de órdenes por número de remisión (orden natural, columna generada) |
 | **426** | #792 | una ruta de api con la sesión vencida responde 401 JSON, no HTML |
-| **424** | #793 | el admin vuelve a poder eliminar órdenes (revierte la decisión del 2026-08-27, con rastro) |
+| **424** | #793 | el admin vuelve a poder eliminar órdenes, con rastro en el historial |
+| **427** | #794 | traspasar a otro mensajero las órdenes que alguien ya lleva encima |
+| **425** | #795 | los rechazos de la tienda llegan al cierre del mensajero, sin cobrarse |
 
-### 427 — traspasar a otro mensajero lo que ya lleva encima
+Salió **después del corte de medianoche** por decisión del humano: Carlos Cambronero y Kendall Hernández
+habían pedido su cierre antes, y con la 425 activa en el corte habrían amanecido sin poder recibir trabajo.
 
-Implementada (backend + pantalla). **La primera revisión salió RECHAZADA** (`progress/review_427.md`):
-dos bloqueantes, y los dos eran **redes de test que faltaban**, no código roto — con el `loteId` del
-aviso cambiado por el id de una orden (el segundo traspaso a la misma persona no avisaría nunca) y con
-el autor de las gestiones del lote reescrito (movería pago y cierre), la suite seguía en verde.
-Arreglados en `a5e23a1f` (solo `tests/`) y el menor de textos en `526f7dbb`.
-**En curso:** gate completo (`progress/gate_427_c.log`) y una revisión acotada en un worktree aislado,
-a la vez. Falta T25: un traspaso real en la app, que exige **reiniciar el dev server** (su cliente
-Prisma es anterior a las dos migraciones de la ficha).
+### Lo que toca mañana (no esta noche)
 
-### 425 — la salida del rechazo de tienda
+- **V5 de la 425** sobre el primer cierre que traiga rechazos: `total_pago_mensajero` = Σ del pago de las
+  gestiones con `cierre_id`, y ningún rechazo con `cierre_id`. No vale si antes se aprueba el cierre del
+  11/09 de Arnel: sus tres órdenes saldrían por ese.
+- **Primera noche con la 425** (corte del 16/09): Andy Cortés y Arnel Guillen recibirán un `vencido` con
+  sus rechazos. Se saca con «Destrabar cierre vencido» y después «Aprobar».
 
-Spec aprobado con las tres decisiones del humano (`progress/decisiones_425.md`). **Sin implementar.**
-Mediciones del bloque M hechas contra producción (solo lectura), pendientes de copiar a
-`progress/impl_425.md` al abrir la rama:
-- **M6:** la tienda ya pagó el flete de devolución de **24** de esos rechazos (**₡65.088**): meterlos
-  al cierre como gestión cobraría dos veces. De los 46 rechazos, **22 no tienen cobro** (anteriores al
-  mecanismo): es la decisión que el humano dejó para después.
-- **M7:** desglose sin cambios (46 en 6 mensajeros). **Arnel Guillen es el único con un cierre
-  abierto** (solicitado 2026-09-11): si su cierre nuevo nace antes de aprobar ese, queda en N=2 y la
-  regla 271 lo **bloquea para recibir asignaciones**.
-- **M1/M2 antes:** los seis últimos cierres aprobados cumplen `total_pago_mensajero = Σ pago_mensajero`.
-
-**No se puede implementar en paralelo con la 427:** su migración entraría en la base local compartida y
-pondría rojo el gate ajeno. Arranca cuando la 427 esté mergeada.
-
-### Hecho A MANO contra producción hoy (y nada más)
+### Hecho A MANO contra producción el 2026-09-14 (y nada más)
 
 - **29 remisiones de Sicommer** renombradas de `REMISIÓN DE VENTA #NN` a `SC-0NN` (su número de
   siempre). Causa: la fila `REM … FECHA …` no cabe en la etiqueta de 100 × 100 con más de 20
@@ -46,28 +56,28 @@ pondría rojo el gate ajeno. Arranca cuando la 427 esté mergeada.
   Las 37 entregadas y las 24 `devolviendo_a_tienda` de Andy **no se tocaron**. Es el caso que originó
   la 427.
 
-### Puertas humanas antes de la release a `prod`
-
-1. **Avisar a Nuform** del cambio de contrato de la 426: su cliente pasa de `200`+HTML a `401`+JSON.
-   Y recordarles que usan el canal de **sesión** (caduca cada 24 h) teniendo una API key activa sin usar.
-2. **Si sale la 425:** entregar el aviso de desglose a quien aprueba cierres
-   (`progress/aviso_425_desglose.md`, commiteado). **El humano no puede aprobar hoy el cierre del 11/09
-   de Arnel, y eso NO bloquea el despliegue:** medido, Arnel no trabaja desde el 10/09 (cero órdenes
-   para hoy o mañana). Lo que sí hace falta es **aprobarlo antes de volver a asignarle trabajo**.
-
 ### Lo que sigue abierto y es del humano
 
-- Los **25 rechazos sin `ingreso_bodega_rechazo`** (~₡4.000): decidir después de la 425.
+- Los **25 rechazos sin `ingreso_bodega_rechazo`** (~₡4.000): decidir ahora que la 425 está fuera.
 - El correo con las **4 funcionalidades nuevas** (cierres de satélite, SINPE por bodega, mensajes el día
   anterior, documentación + asistente con IA): pendiente de aprobación del cliente; no se toca nada
   hasta entonces.
+
+### Seguimientos técnicos (ninguno bloquea)
+
+- La **carrera entre el R9 de la 412 y el N/V de la 271**: rojos falsos en el gate; ficha aparte.
+- **425:** tres casos que faltan en el test del `WHERE` (un rechazo anulado, uno con `cierre_id` y uno
+  de otro mensajero). Hoy los protege el literal del predicado.
+- **427:** la lista de destinos es solo de zona central (no sirve a una satélite); un mensajero sin
+  vehículo aparece habilitado; «Se movieron 1 orden»; la `$transaction` anidada del arnés de M1.
 
 ### Del entorno, para no re-diagnosticar
 
 - **Flake:** `ranking-snapshot-migration.test.ts` con `40P01` (deadlock) cambia de bloque entre
   corridas y es verde aislado. No es de ninguna ficha; no va al baseline.
-- A media sesión **cambió la cuenta** por límite semanal: la primera revisión de la 427 murió sin
-  escribir nada y se verificó el árbol limpio antes de relanzarla.
+- Una **release entre las 00:00 y las 00:30 CR** deja dos `analitica_rollup_diario` pendientes, y es
+  correcto: la siembra del build planta la clave del día antes de que el rollup la encadene, y el
+  `ON CONFLICT DO NOTHING` impide el duplicado.
 - El `reviewer` **no puede escribir archivos**: su informe lo escribe el leader.
 
 ---

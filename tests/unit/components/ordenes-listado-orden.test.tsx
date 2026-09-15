@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
@@ -139,9 +146,12 @@ describe("OrdenesListado — el control de orden está A LA VISTA", () => {
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
     const grupo = await screen.findByRole("group", { name: GRUPO_CAMPO });
 
+    // FICHA 428: el nombre de la opcion ya NO es su `textContent` —los botones van en solo
+    // icono— sino su NOMBRE ACCESIBLE. Lo que este caso ancla no cambia: son estas DOS
+    // opciones, en este orden, y ninguna mas. La lista literal sigue siendo el contrato.
     const botones = within(grupo)
       .getAllByRole("button")
-      .map((b) => b.textContent?.trim());
+      .map((b) => b.getAttribute("aria-label"));
     expect(botones).toEqual([ETIQUETA_FECHA, ETIQUETA_REMISION]);
   });
 
@@ -284,12 +294,18 @@ describe("OrdenesListado — las etiquetas de la dirección cambian con el campo
     const grupo = await screen.findByRole("group", {
       name: GRUPO_DIR_REMISION,
     });
+    // FICHA 428: por nombre accesible y no por `textContent`, igual que arriba.
     const botones = within(grupo)
       .getAllByRole("button")
-      .map((b) => b.textContent?.trim());
+      .map((b) => b.getAttribute("aria-label"));
     expect(botones).toEqual([ETIQUETA_ALTAS, ETIQUETA_BAJAS]);
     expect(screen.queryByRole("group", { name: GRUPO_DIR_FECHA })).toBeNull();
-    expect(screen.queryByText(ETIQUETA_RECIENTES)).toBeNull();
+    // Por ROL y no por texto: desde la 428 «Mas recientes» no esta escrito en ninguna parte,
+    // asi que un `queryByText` saldria null SIEMPRE y este caso no podria ponerse rojo nunca.
+    // Lo que se comprueba es que no queda un BOTON con ese nombre.
+    expect(
+      screen.queryByRole("button", { name: ETIQUETA_RECIENTES }),
+    ).toBeNull();
   });
 
   it("volver a la fecha devuelve las etiquetas temporales", async () => {
@@ -462,4 +478,108 @@ describe("OrdenesListado — el orden y la paginación", () => {
     await waitFor(() => expect(ultimaLlamada().sortBy).toBe("num_remision"));
     expect(ultimaLlamada().sortDir).toBe("asc");
   });
+});
+
+// FICHA 428 — LOS CUATRO BOTONES, EN SOLO ICONO.
+//
+// Pedido humano del 2026-09-15 sobre una captura de `/ordenes`: con el texto escrito, estos dos
+// conmutadores ocupaban ~800 px de los ~1480 de la fila —mas de la mitad de la barra, para dos
+// controles que no filtran nada— y empujaban «Filtros» a una tercera linea.
+//
+// LO QUE ESTOS CASOS PROTEGEN no es el aspecto, es el NOMBRE. La etiqueta no desaparece: se muda
+// al `aria-label` y al tooltip. Media suite de esta pantalla —y `ordenes-listado-filtros.test.tsx`,
+// que distingue el filtro «Fecha de creacion» del boton de orden con el mismo texto— localiza
+// estos botones por su nombre accesible. Si alguien lo quitara «porque ya esta el tooltip», el
+// cambio pareceria cosmetico y rompería pantallas que no son esta.
+describe("OrdenesListado — el orden va en SOLO ICONO, pero conserva sus nombres (428)", () => {
+  it("los CUATRO botones conservan su nombre accesible", async () => {
+    const user = userEvent.setup();
+    renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
+    await waitFor(() => expect(listarOrdenesMock).toHaveBeenCalled());
+
+    // Los dos del campo y los dos de la direccion de la FECHA, que es la que abre.
+    for (const nombre of [
+      ETIQUETA_FECHA,
+      ETIQUETA_REMISION,
+      ETIQUETA_RECIENTES,
+      ETIQUETA_ANTIGUAS,
+    ]) {
+      expect(
+        screen.getByRole("button", { name: nombre }),
+        `sin nombre accesible: ${nombre}`,
+      ).toBeInTheDocument();
+    }
+
+    // Y los dos de la direccion de la REMISION, que solo existen tras cambiar de campo.
+    await user.click(
+      within(grupoCampo()).getByRole("button", { name: ETIQUETA_REMISION }),
+    );
+    await screen.findByRole("group", { name: GRUPO_DIR_REMISION });
+    for (const nombre of [ETIQUETA_ALTAS, ETIQUETA_BAJAS]) {
+      expect(
+        screen.getByRole("button", { name: nombre }),
+        `sin nombre accesible: ${nombre}`,
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("ninguna etiqueta del orden queda ESCRITA en la barra", async () => {
+    // Este es el efecto que se pidio: el texto se va, el espacio vuelve. Si volviera a pintarse,
+    // «Filtros» volveria a la tercera linea y este caso lo dice.
+    renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
+    await screen.findByRole("group", { name: GRUPO_CAMPO });
+
+    for (const grupo of [grupoCampo(), grupoDireccion(GRUPO_DIR_FECHA)]) {
+      const botones = within(grupo).getAllByRole("button");
+      expect(botones).toHaveLength(2);
+      for (const boton of botones) {
+        expect(boton.textContent).toBe("");
+        // Vacio de TEXTO, no vacio: lo que hay dentro es el icono, y es decorativo.
+        expect(boton.querySelector("svg")).not.toBeNull();
+        expect(boton.querySelector("svg")).toHaveAttribute(
+          "aria-hidden",
+          "true",
+        );
+      }
+    }
+  });
+
+  it.each([
+    ["el campo de la fecha", () => grupoCampo(), ETIQUETA_FECHA],
+    ["el campo de la remision", () => grupoCampo(), ETIQUETA_REMISION],
+    [
+      "la direccion descendente",
+      () => grupoDireccion(GRUPO_DIR_FECHA),
+      ETIQUETA_RECIENTES,
+    ],
+    [
+      "la direccion ascendente",
+      () => grupoDireccion(GRUPO_DIR_FECHA),
+      ETIQUETA_ANTIGUAS,
+    ],
+  ])(
+    "%s revela su etiqueta en el tooltip al enfocarse",
+    async (_caso, grupo, etiqueta) => {
+      renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
+      await screen.findByRole("group", { name: GRUPO_CAMPO });
+
+      // Por FOCO y no por hover: el hover de base-ui pasa por su logica de puntero, que en jsdom
+      // no se activa con los eventos de `userEvent.hover` (medido en `NovedadesModule.test.tsx`).
+      // El foco ejerce el mismo camino de apertura y cubre a quien navega con teclado.
+      fireEvent.focus(within(grupo()).getByRole("button", { name: etiqueta }));
+
+      // Se lee el POPUP y no un `findByText` suelto: «Fecha de creacion» es TAMBIEN la cabecera
+      // de la 17.ª columna de la tabla, asi que un `findByText` encontraria dos nodos y fallaria
+      // por ambiguo — o peor, pasaria por el nodo equivocado si la cabecera se moviera.
+      //
+      // El tooltip trae la palabra que antes estaba impresa en el boton. Que sea la MISMA no es
+      // casual: es lo que hace que quitar el texto no pierda informacion.
+      await waitFor(() => {
+        const popups = [
+          ...document.querySelectorAll('[data-slot="tooltip-content"]'),
+        ].map((n) => n.textContent?.trim());
+        expect(popups).toContain(etiqueta);
+      });
+    },
+  );
 });

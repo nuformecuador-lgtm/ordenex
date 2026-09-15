@@ -5319,3 +5319,36 @@ históricas entran, avisando antes a quien aprueba.
 **Pendiente tras desplegar (V5):** sobre el primer cierre con rechazos, que `total_pago_mensajero` sea
 la suma del pago de las gestiones con `cierre_id` y que la contaminación dé 0. Si se aprueba antes el
 cierre del 11/09 de Arnel, sus tres órdenes saldrán por ese y V5 no demostraría la salida por la 425.
+
+---
+
+## 428 — los conmutadores de orden de `/ordenes`, solo con icono (2026-09-15)
+
+Nace de una captura: los DOS conmutadores de ORDEN ocupaban **~800 px de los ~1480** de la fila de
+la barra —más de la mitad, para dos controles que no filtran nada— y empujaban «Filtros» a una
+tercera línea.
+
+**Opt-in, no global.** `SegmentedToggle` gana `soloIcono` con default `false`, y solo la pasa
+`OrdenesListado`. Los otros 8 consumidores —cierres ×4, geografía, `historico/acciones`,
+`mis-asignaciones` y `monitoreo`— no cambian ni un píxel; en particular el «Más recientes/Más
+antiguas» de `/historico/acciones`, que es el mismo control y NO entra.
+
+**La etiqueta no desaparece, se muda** al `aria-label` y al tooltip. No es cosmética: media suite de
+la pantalla localiza estos botones por nombre accesible, así que los tests que ya existían siguen
+verdes sin tocarlos. Quitar el `aria-label` deja **27 casos rojos**.
+
+**Dos costes, aceptados por el humano con los números delante:** en móvil no hay hover y los iconos
+quedan mudos; y las MISMAS dos flechas significan «Más recientes/Más antiguas» con fecha y «Más
+altas/Más bajas» con remisión, sin que nada en pantalla lo diga. Se ofrecieron dos variantes más
+conservadoras y las descartó — **no reproponer**.
+
+**Revierte un argumento escrito.** `ordenamiento-ordenes.ts` defendía lo contrario («los iconos
+acompañan, no informan solos»). El comentario se reescribió en la misma ficha, marcando la frase
+vieja como histórica, para que el código no diga una cosa y haga otra.
+
+Revisión **OK sin bloqueantes**: 8 mutaciones aplicadas, 8 muertas. Detalle en `progress/impl_428.md`
+y `progress/review_428.md`.
+
+**Lo que el verde no cubre:** los píxeles. La suite corre en jsdom, sin CSS; la comprobación visual
+la hizo el humano abriendo la pantalla. Y la red contra «ponerlo en global» es UNA sola
+(`segmented-toggle-solo-icono.test.tsx`): las demás pantallas no se enterarían.

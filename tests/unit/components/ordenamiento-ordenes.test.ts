@@ -126,9 +126,12 @@ describe("ordenamiento-ordenes — las dos direcciones, con el texto DEL CAMPO",
     expect(fecha.filter((e) => remision.includes(e))).toEqual([]);
   });
 
-  it("cada opción dice en PALABRAS qué hace, no sólo con una flecha", () => {
-    // Un conmutador cuyo texto fuera `asc`/`desc` obliga a traducir vocabulario del servidor;
-    // uno con sólo iconos obliga a pulsarlo para averiguar qué hace.
+  it("cada opción dice en PALABRAS qué hace, no una clave del servidor", () => {
+    // Un conmutador cuya etiqueta fuera `asc`/`desc` obliga a traducir vocabulario del
+    // servidor. FICHA 428: desde que la barra los pinta en solo icono, esta exigencia PESA MÁS,
+    // no menos — la etiqueta ya no está escrita en pantalla, así que es lo único que anuncia un
+    // lector de pantalla y lo único que revela el tooltip. Un `desc` ahí sería el nombre del
+    // botón.
     for (const campo of CAMPOS_OFRECIDOS) {
       for (const opcion of OPCIONES_DIRECCION[campo]) {
         expect(opcion.etiqueta.trim().length).toBeGreaterThan(3);
@@ -137,6 +140,49 @@ describe("ordenamiento-ordenes — las dos direcciones, con el texto DEL CAMPO",
       expect(new Set(OPCIONES_DIRECCION[campo].map((o) => o.etiqueta)).size).toBe(
         OPCIONES_DIRECCION[campo].length,
       );
+    }
+  });
+});
+
+// FICHA 428 — LA GUARDIA QUE SOSTIENE EL SOLO-ICONO.
+//
+// `OrdenesListado` monta estos dos conmutadores con `soloIcono`, y ahí el `Icono` deja de ser
+// decoración: es LO ÚNICO que se pinta. `SegmentedToggle` tiene un fallback —la opción sin
+// icono cae al botón de texto— para que nunca salga un botón vacío, pero ese fallback es una
+// red, no el diseño: una opción que cayera en él aparecería con su texto al lado de tres
+// botones cuadrados, o sea la barra rota que esta ficha vino a arreglar.
+//
+// Y es UN FALLO MUDO, que es por lo que la guardia vive aquí y no se deja a la revisión: quitar
+// el `Icono` de una opción no rompe ningún otro test. El nombre accesible seguiría estando
+// —viene de `etiqueta`, no del icono—, `getByRole("button", { name })` seguiría encontrando el
+// botón y la suite entera seguiría verde con la pantalla descuadrada.
+describe("ordenamiento-ordenes — TODA opción trae icono (lo exige el solo-icono)", () => {
+  it("las dos opciones de CAMPO declaran su `Icono`", () => {
+    for (const opcion of OPCIONES_CAMPO_ORDEN) {
+      expect(opcion.Icono, `«${opcion.etiqueta}» sin Icono`).toBeDefined();
+    }
+  });
+
+  it("las dos opciones de DIRECCIÓN de CADA campo declaran su `Icono`", () => {
+    // Los DOS campos, no solo el que abre la pantalla: las opciones de la remisión solo se
+    // pintan después de pulsar el otro conmutador, así que un icono que faltara ahí no se vería
+    // ni entrando a `/ordenes`.
+    for (const campo of CAMPOS_OFRECIDOS) {
+      for (const opcion of OPCIONES_DIRECCION[campo]) {
+        expect(
+          opcion.Icono,
+          `«${opcion.etiqueta}» (${campo}) sin Icono`,
+        ).toBeDefined();
+      }
+    }
+  });
+
+  it("y ninguna lista se queda vacía, que dejaría la guardia sin nada que recorrer", () => {
+    // Un `for` sobre una lista vacía pasa en verde sin comprobar nada (memoria del repo: «test
+    // de integración verde sin datos»). Esto ancla que había algo que recorrer.
+    expect(OPCIONES_CAMPO_ORDEN.length).toBe(2);
+    for (const campo of CAMPOS_OFRECIDOS) {
+      expect(OPCIONES_DIRECCION[campo].length).toBe(2);
     }
   });
 });
