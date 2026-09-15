@@ -5129,6 +5129,7 @@
       "title": "el SINPE es uno solo para toda la operacion y vive fuera de la aplicacion",
       "description": "Un SINPE por bodega, editable desde la app por quien administra esa bodega.",
       "zone": "fullstack",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "branch": "feat/429-sinpe-por-bodega",
