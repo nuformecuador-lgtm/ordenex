@@ -156,3 +156,47 @@ desviación declarada de la mutación 12 en T13 (T16 la mata).
 2. M1 en el mismo ciclo: la mutación 9 en rojo.
 3. Los 22 archivos de la corrida base en verde y sin saltados. El gate completo solo si el cambio sale
    de `tests/`.
+
+
+---
+
+# Segunda vuelta — revisión acotada de los arreglos · **OK**
+
+> Revisión en un worktree aislado sobre `a5e23a1f` (`merge-base` da 0 para `a5e23a1f` y `526f7dbb`),
+> mientras el leader corría el gate completo en el árbol principal. Escrito por el leader a partir del
+> resultado del reviewer. Al terminar, `git diff HEAD` vacío, la copia del `.env` borrada y el worktree
+> quitado.
+
+**Veredicto: OK.** B1, B2, M1 y M2 quedan cerrados. **Sin bloqueantes.**
+
+| Mutación | Antes | Ahora (medido por el reviewer) |
+| --- | --- | --- |
+| 5 · servicio `loteId: validas[0].id` | sobrevivía, 72/72 | **rojo** — 1 failed / 45 passed; cae la aserción de B1 (`traspaso-mensajero-service.test.ts:550`) |
+| 9 · `traspasarConversaciones(this.prisma, …)` | sobrevivía, 23/23 | **rojo** — 1 failed / 23 passed, `EscrituraFueraDeLaTransaccion` en T9.10 |
+| 9b · jobs sin `tx` | sobrevivía | **rojo** — 1 failed / 23 passed, mismo error |
+| 10 · `UPDATE gestion_orden … WHERE orden_id IN (lote)` | sobrevivía, 23/23 | **rojo** — 1 failed / 23 passed (`traspaso-mensajero.int.test.ts:668`) |
+
+**Controles sin mutar:** servicio 46/46, integración 24/24 contra Postgres (0 saltados), componentes
+41/41. Ningún `40P01`. El control 11 de la mutación 10 también sale rojo.
+
+**Las aserciones nuevas no son falsas:** B1 compara con lo que recibió el repositorio, que es un valor
+distinto del que se afirma; B2 siembra la gestión en la orden que **sí** entra en el lote y afirma que
+esa orden pasó al destino; M1 solo se activa en modo `"fuera"` y los 24 casos pasan sin mutar; M2 usa
+literales escritos a mano y tres mutaciones del modal salen rojas.
+
+**Alcance correcto:** `a5e23a1f` toca los dos tests y `progress/impl_427.md`; `526f7dbb` toca el
+modal, sus dos tests y `progress/impl_427.md`.
+
+**Gate completo sobre `a5e23a1f`:** `INIT_EXIT=0`, **1.969/1.969** archivos, **28.745** tests, 0 rojos
+(esta vez sin el flake del ranking). Log en `progress/gate_427_c.log`, fuera del índice por su tamaño.
+
+## Menor nuevo, anotado como seguimiento
+
+**El arnés de M1 no ve un `$transaction` anidado del cliente externo.** Mutación fuera del plan:
+dentro del acto, `this.prisma.$transaction((t) => traspasarConversaciones(t, …))` → **sobrevive,
+24/24**. En producción abriría otra transacción en otra conexión, y si luego fallara el rastro los
+hilos quedarían movidos (R23). Causa: el proxy atiende `$transaction` antes de mirar el modo estricto
+(`traspaso-mensajero.int.test.ts:314`) y al terminar la llamada anidada pone `dentroDelActo = false`
+(`:302`/`:306`). Arreglo propuesto: en modo estricto, que `$transaction` dentro del acto lance, o un
+contador de profundidad en vez del booleano. **No bloquea:** exige escribir a propósito una transacción
+anidada sobre el cliente equivocado, y el camino real (mutaciones 7, 8 y 9) sí queda cubierto.

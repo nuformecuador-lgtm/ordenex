@@ -1116,3 +1116,69 @@ VITEST_EXIT=1
 ```
 
 Tras las seis corridas, `git diff --stat HEAD -- lib/` vuelve vacío: ninguna mutación quedó puesta.
+
+
+## T25 — LA APP FUNCIONANDO (leader, 2026-09-14)
+
+Playwright contra `pnpm dev` (reiniciado para cargar el cliente Prisma con las dos migraciones de la
+ficha) y la base local, como `admin.qa@ordenex.test`. **Se tocaron datos locales a propósito y se
+dejaron como estaban** (ver el final).
+
+### Lo que hubo que preparar, y por qué es información
+
+La primera corrida no pudo elegir destino: el modal decía «No hay otro mensajero al que traspasar
+estas órdenes» con **dos** mensajeros activos en la base. No era un fallo de carga: la lista viene de
+`listarMensajerosParaAsignacion`, que devuelve **solo los mensajeros de la zona central**
+(`findMensajerosByZona(centralZonaId)`), y en local el único central era el propio origen. Para
+probar se movió temporalmente a «Mensajero test» a la zona central.
+
+La segunda corrida sí eligió destino, y el servidor **rechazó con motivo** (`validation_error`, R10:
+«el mensajero no tiene un vehiculo asociado»). Medido en el navegador sondeando cada 250 ms: el
+modal lo muestra como **toast**, con el texto correcto — «Ese mensajero no tiene vehículo asociado.
+Asígnaselo en Configuración > Usuarios y vuelve a intentarlo.» **No hay fallo mudo.** Una sonda que
+mire los toasts pasados unos segundos concluye lo contrario, porque ya desaparecieron: le pasó al
+leader antes de medirlo bien. Se le dio vehículo temporal para seguir.
+
+### Cuatro traspasos reales de la misma orden, con el destino repetido
+
+`111136`: Marco → Mensajero test → Marco → Mensajero test → Marco. Es el escenario de B1: si el aviso
+se identificara por mensajero o por orden, los avisos al destino repetido se descartarían en silencio.
+
+| Acto | Respuesta de la action | Modal |
+| --- | --- | --- |
+| 1 · Marco → Mensajero test | `ok`, `movidas: 1`, `conversaciones: 0` | «Traspaso hecho…» + aviso de ruta a recalcular |
+| 2 · Mensajero test → Marco | `ok`, `movidas: 1` | ídem |
+| 3 · Marco → Mensajero test | `ok`, `movidas: 1` | ídem |
+| 4 · Mensajero test → Marco | `ok`, `movidas: 1` | ídem |
+
+**Cero respuestas 5xx.** Y en la base, después:
+
+| Medida | Esperado | Medido |
+| --- | --- | --- |
+| Filas en `orden_traspaso_mensajero` | 4 | **4** |
+| Avisos `traspaso_ordenes_recibido` | 4 | **4** |
+| Avisos `traspaso_ordenes_cedido` | 4 | **4** |
+| Entidades distintas de esos avisos (los `lote_id`) | 4 | **4** |
+| Dueño final de `111136` | Marco | **Marco** |
+
+**R42 queda medido en la app real, no solo en tests:** el segundo aviso al mismo mensajero salió.
+
+### Datos locales restaurados
+
+«Mensajero test» volvió a **zona Quepos y sin vehículo** (verificado con consulta), y `111136` está
+otra vez con Marco. Quedan en la base local las filas que los cuatro actos escribieron (rastro, avisos
+y jobs de optimización): son datos de QA y son la evidencia de esta prueba.
+
+### Seguimientos que deja T25 (ninguno bloquea)
+
+1. **La lista de destinos es solo de la zona central**, y el comentario de la prop en el modal dice «sin
+   filtro de zona»: el comentario miente. Para un lote de un mensajero de **satélite**, el modal
+   ofrecería mensajeros centrales y el servidor los rechazaría con motivo (R9 valida la zona de cada
+   orden), así que no hay riesgo de un traspaso a la zona equivocada. Encaja en **S1** (traspaso del
+   `adminSatelite`), que ya está anotado como ficha aparte.
+2. **Un mensajero sin vehículo aparece habilitado** en el selector y el rechazo llega después, como
+   toast. Es el mismo trato que los modales de asignación, que comparten la lista.
+3. **Concordancia del resumen:** dice «Se movieron 1 orden y 0 conversaciones de chat». El sustantivo ya
+   va en singular (M2), pero el verbo sigue en plural con una sola orden.
+4. **El arnés de M1 no ve un `$transaction` anidado del cliente externo** (menor de la revisión acotada):
+   una mutación que abra otra transacción desde `this.prisma` dentro del acto sobrevive 24/24.
