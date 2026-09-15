@@ -1,5 +1,27 @@
 # Estado — sesión del 2026-09-10 / 12 / 14 / 15
 
+## ABIERTO — ficha 428, PR #797 sin mergear
+
+`feat/428-orden-solo-icono` (`2a8837b3`) sobre `dev` = `31cbd6d4`. Los dos conmutadores de ORDEN de
+`/ordenes` pasan a solo icono + tooltip: ocupaban ~800 px de los ~1480 de la fila y empujaban
+«Filtros» a una tercera línea. Opt-in (`SegmentedToggle.soloIcono`, default `false`); solo lo pasa
+`OrdenesListado`, los otros 8 consumidores no cambian.
+
+**FALTA LA COMPROBACIÓN VISUAL, y es lo único que importa aquí:** la suite corre en jsdom, sin CSS,
+así que nadie ha visto si se ve bien ni si «Filtros» vuelve a la primera línea. No hay login local
+usable (los e2e llevan credenciales de relleno y el seed de QA rota hashes). **No mergear sin abrir
+la pantalla.**
+
+Los dos costes los aceptó el humano con los números delante — en móvil no hay hover, y las mismas
+dos flechas significan «Más recientes/Más antiguas» con fecha y «Más altas/Más bajas» con remisión.
+Se le ofrecieron dos variantes más conservadoras y las descartó: **no reproponer**.
+
+Anotado y FUERA de esta ficha: el naranja `brand-outline` de «Descargar» y del botón de columnas
+compite con el naranja de selección (22 tablas), y `ColumnasPopover` y «Filtros» usan el mismo
+icono `SlidersHorizontal` a 40 px uno del otro (12 pantallas).
+
+---
+
 ## Desplegado en producción y VERIFICADO — release del 2026-09-15
 
 **`prod` = `1ab83dd5`** (PR #796, merge commit con 2 padres) · despliegue
