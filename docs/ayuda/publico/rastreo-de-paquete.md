@@ -1,0 +1,41 @@
+---
+titulo: Rastrear un paquete
+modulo: paquete
+pantalla: /paquete/[numGuia]
+roles: [publico]
+actualizado: 2026-09-15
+fuentes:
+  - app/paquete/[numGuia]/page.tsx
+---
+
+# Rastrear un paquete
+
+La página pública donde **el cliente final** consulta su paquete. **No hace falta iniciar sesión**: se
+entra con el enlace que lleva el número de guía.
+
+Es el enlace que los mensajeros mandan por WhatsApp con la plantilla, y el que la tienda le pasa a su
+cliente.
+
+## Qué muestra
+
+Los datos de esa entrega: **destinatario**, **teléfono**, **dirección**, **producto**, la **tienda** que
+lo envía y el **monto a cobrar** si es contra entrega. Y la **ubicación**, cuando está registrada.
+
+## Por qué importa que sea pública
+
+El cliente final no tiene cuenta en Ordenex ni debería necesitarla. Esta página existe para que pueda
+confirmar que su paquete existe, que va a su dirección y cuánto le van a cobrar, sin llamar a nadie.
+
+## Si un cliente dice que no le funciona
+
+**Casi siempre es el número de guía.** El enlace lleva la guía dentro; si se copió cortado o se
+escribió a mano con un dígito de más, no encuentra nada.
+
+Lo más rápido es **volver a mandarle el enlace** desde la plantilla de WhatsApp, que lo arma solo con
+la guía correcta.
+
+## Lo que esta página NO hace
+
+- **No se cambia nada desde acá.** Es solo de consulta. Una dirección mal puesta se corrige desde
+  **Novedades**, del lado de la tienda.
+- **No muestra el historial completo.** El cliente ve su entrega, no el recorrido interno del paquete.
