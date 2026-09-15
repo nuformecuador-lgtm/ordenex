@@ -1,4 +1,4 @@
-import type { GestionCausaDevolucion, GestionResultado } from "@prisma/client";
+import type { GestionCausaDevolucion, GestionResultado, RolValue } from "@prisma/client";
 import type {
   FilaBodegaSatelite,
   OrdenDTO,
@@ -1260,6 +1260,59 @@ export interface RechazoSlaTiendaRow {
   monto: string | null;
 }
 
+// --- FICHA 427: traspasar a otro mensajero lo que ya lleva encima ---
+
+/**
+ * FICHA 427 (T8, design §6.1/§6.2) — UNA orden del lote a traspasar, tal y como el SERVICE la
+ * valido.
+ *
+ * `estatusIdEsperado` es el estatus que el service LEYO Y APROBO antes de abrir la transaccion, y
+ * es la mitad de R24: si al tomar el bloqueo la fila ya no esta en ese estatus, alguien la movio
+ * entremedias (la entrego, pidio ayuda, la barrio el corte) y el lote ENTERO se revierte. Sin
+ * este campo el repositorio guardaria contra lo que acaba de leer, que es una guarda que siempre
+ * se cumple: no compararia nada.
+ */
+export interface TraspasoMensajeroItem {
+  ordenId: string;
+  estatusIdEsperado: string;
+}
+
+/**
+ * FICHA 427 (T8) — lo que la transaccion devuelve, y es EXACTAMENTE lo que los avisos necesitan
+ * para emitirse FUERA de ella (design §6.5).
+ *
+ * Son CIFRAS, no listas (R36): alimentan «se movieron 31 ordenes y 31 conversaciones» sin
+ * devolver identificadores al navegador.
+ */
+export interface TraspasoMensajeroAplicado {
+  /** R27: el uuid del ACTO. LA ENTIDAD de los dos avisos (design §6.5). */
+  loteId: string;
+  /** Cuantas ordenes cambiaron de mensajero. Por el todo-o-nada, siempre `ordenes.length`. */
+  movidas: number;
+  /** Cuantas conversaciones de chat viajaron con ellas (R18). Puede ser 0, 1 o N por orden. */
+  conversaciones: number;
+}
+
+/**
+ * FICHA 427 (T8, R23/R24/R31) — al menos una orden del lote NO gano su guarda: o cambio de estado
+ * entre la validacion del service y el bloqueo de la transaccion, o dejo de pertenecer al
+ * mensajero de origen, o quedo borrada.
+ *
+ * Se LANZA dentro de la `$transaction` para revertirla ENTERA (todo-o-nada REAL, mismo criterio
+ * que `DeshacerAsignacionConflictoError` y por la misma razon: un traspaso parcial dejaria medio
+ * lote con un mensajero y medio con otro, sin forma de distinguirlos desde la UI — y con la mitad
+ * de las conversaciones movidas).
+ *
+ * `ordenIdsNoMovidas` NO se renderiza como texto en la UI (R37): sirve para que el service re-lea
+ * esas ordenes y componga el `detalle` por orden con motivos tipados (patron `detalleCarrera`).
+ */
+export class TraspasoMensajeroConflictoError extends Error {
+  constructor(public readonly ordenIdsNoMovidas: readonly string[]) {
+    super(`traspaso de mensajero: ${ordenIdsNoMovidas.length} orden(es) del lote no se movieron`);
+    this.name = "TraspasoMensajeroConflictoError";
+  }
+}
+
 export interface IOrdenRepository {
   /**
    * Feature 106/R6/R7/R11: pagina de ordenes cuyo `tienda_id` = `ownerId` (owner FORZADO en
@@ -2152,6 +2205,68 @@ export interface IOrdenRepository {
     zonaId: string | null,
     ctx: { actorUsuarioId: string; motivo: string },
   ): Promise<CorreccionDiaAplicada[]>;
+
+  // --- FICHA 427: traspasar a otro mensajero lo que ya lleva encima ---
+
+  /**
+   * FICHA 427 (T8, design §6) — LA TRANSACCION DEL TRASPASO. Mueve un lote de ordenes de un
+   * mensajero a otro, con sus conversaciones de chat y su rastro, TODO-O-NADA (R23/R31).
+   *
+   * Es el PRIMER escritor de `orden.mensajero_asignado_id` que parte de `en_reparto`: hasta esta
+   * ficha los unicos eran las dos asignaciones (que parten de bodega), la de recoleccion y la
+   * limpieza del deshacer.
+   *
+   * SEIS PASOS, todos dentro de UNA `$transaction`:
+   *
+   *  1. PRE-LECTURA BAJO BLOQUEO: `SELECT ... WHERE id IN (...) ORDER BY "id" FOR UPDATE`. El
+   *     `FOR UPDATE` impide que la foto quede rancia entre el `SELECT` y el `UPDATE`; el
+   *     `ORDER BY "id"` da un orden de bloqueo determinista entre dos lotes que se solapen (mismo
+   *     motivo que en `corregirDiaRepartoLote`).
+   *  2. R24: cada fila se compara contra `estatusIdEsperado` —lo que el service valido— y se exige
+   *     viva. Una sola discrepancia LANZA `TraspasoMensajeroConflictoError` y revierte el lote
+   *     ENTERO, antes de escribir nada.
+   *  3. UN `UPDATE` GUARDADO POR ORDEN (patron `deshacerAsignacionLote`), porque `fecha_reparto` se
+   *     conserva POR ORDEN y no es un valor comun al lote. Guardas del `WHERE`: `id` +
+   *     `mensajero_asignado_id = origen` + `estatus_id` + `deleted_at IS NULL`. Si alguna toca 0
+   *     filas, LANZA y revierte.
+   *  4. LAS CONVERSACIONES (R18/R19), via el choke point `traspasarConversaciones`, en la MISMA tx.
+   *  5. EL RASTRO (R25/R27/R31), via el choke point `registrarTraspasoMensajero`, en la MISMA tx:
+   *     si el rastro no se puede escribir, la orden NO queda movida, y al reves.
+   *  6. LOS DOS ENCOLADOS de reoptimizacion de ruta (R32), origen Y destino, con el patron OUTBOX
+   *     de la 92: si la tx revierte, los jobs se van con ella. Las claves de debounce son POR
+   *     MENSAJERO, asi que los dos no colisionan.
+   *
+   * QUE ESCRIBE EL `SET`, y las tres decisiones que congela (design §6.2):
+   *  - `mensajero_asignado_id` = destino (R15) y `asignado_at = NOW()` (R17): el esquema define esa
+   *    columna como «instante de la ULTIMA (RE)ASIGNACION», y un traspaso es exactamente eso.
+   *  - `fecha_reparto` SE REESCRIBE CON SU MISMO VALOR, como parametro `YYYY-MM-DD` (o NULL).
+   *    Por DOS razones duras: (a) la guardia `fecha-reparto-acompana-asignado-at` exige que toda
+   *    escritura que toque `asignado_at` toque el dia en la MISMA sentencia; (b) poner «hoy» seria
+   *    un SEGUNDO ESCRITOR SILENCIOSO del dia, saltandose el rastro de `orden_dia_reparto_cambio`
+   *    (262) sobre la poblacion exacta que esa ficha vino a rescatar. Nunca `NOW()::date`: la
+   *    clausula (d4) de esa guardia prohibe aritmetica horaria en el `SET`.
+   *  - `prioridad` NO SE TOCA (R16). `asignarBodegaLote` la apaga porque reasignar DESDE BODEGA
+   *    cierra un ciclo de reasignacion prioritaria (101/R5); un traspaso en calle no cierra ningun
+   *    ciclo, y apagarla perderia una marca que alguien puso a proposito.
+   *  - `estatus_id`, `num_guia` y `prioridad` quedan intactos (R16), y NO se escribe NI UNA fila en
+   *    `orden_historial_estado` (R21): un traspaso no cambia el estado, y `en_reparto ->
+   *    en_reparto` ni siquiera existe en el inventario de transiciones de la 140.
+   *
+   * LOS AVISOS NO SE EMITEN AQUI (design §6.5, R41): van FUERA de la transaccion y best-effort. El
+   * metodo devuelve lo que necesitan (`loteId`, `movidas`, `conversaciones`).
+   */
+  traspasarMensajeroLote(input: {
+    /** R27: el uuid del ACTO, generado por el service. UNO por traspaso, no uno por orden. */
+    loteId: string;
+    /** R8: DERIVADO de las ordenes por el service, nunca aceptado del cliente. */
+    mensajeroOrigenId: string;
+    mensajeroDestinoId: string;
+    ordenes: readonly TraspasoMensajeroItem[];
+    /** R25/R26: quien traspaso y con que rol, para congelarlo en el rastro. */
+    actor: { usuarioId: string; rol: RolValue };
+    /** R28: obligatorio, ya recortado en el borde. */
+    motivo: string;
+  }): Promise<TraspasoMensajeroAplicado>;
 
   // --- Feature 41 -> 241 -> 271: el bloqueo derivado, que ahora es un CONTEO (R1-R12) ---
 

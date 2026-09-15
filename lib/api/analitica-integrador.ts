@@ -11,6 +11,7 @@ import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { AnaliticaOperativaService } from "@/lib/services/AnaliticaOperativaService";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import type { IAnaliticaOperativaService } from "@/lib/interfaces/services/IAnaliticaOperativaService";
@@ -129,6 +130,7 @@ function construirServicio(now: () => Date): IAnaliticaOperativaService {
       new OrdenRepository(prisma),
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
     { now },
   );

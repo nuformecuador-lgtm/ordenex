@@ -333,6 +333,7 @@ describe("verCierrePasado — detalle de un cierre propio (solo lectura)", () =>
       findCierrePropioConGestiones: vi.fn(async () => ({
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
         cierre: CIERRE_PASADO,
         gestiones: [
           // El snapshot congelado dice 4.00 aunque la tarifa de HOY pague 5.00 (TARIFA_DEFECTO):
@@ -357,7 +358,7 @@ describe("verCierrePasado — detalle de un cierre propio (solo lectura)", () =>
   it("firma las evidencias y, si el storage falla, sirve el detalle SIN ellas", async () => {
     const gestiones = [pendiente({ gestionId: "g1", evidenciaStoragePath: "o1/foto.jpg" })];
     const repo = fakeRepo({
-      findCierrePropioConGestiones: vi.fn(async () => ({ sinGestion: [], sinGestionRegistrado: true, cierre: CIERRE_PASADO, gestiones })),
+      findCierrePropioConGestiones: vi.fn(async () => ({ sinGestion: [], sinGestionRegistrado: true, rechazosDeTienda: [], cierre: CIERRE_PASADO, gestiones })),
     });
 
     const okSigner = fakeSignedUrls();
@@ -2308,6 +2309,7 @@ describe("264/B9 — verCierrePasado emite `ordenesSinGestion` y `sinGestionRegi
         gestiones: [],
         sinGestion,
         sinGestionRegistrado,
+        rechazosDeTienda: [],
       })),
     });
   }
@@ -2531,5 +2533,135 @@ describe("246 · el gate del cierre no cuenta lo reservado para despues", () => 
     expect(hoyCR.getUTCMinutes()).toBe(0);
     expect(hoyCR.getUTCSeconds()).toBe(0);
     expect(hoyCR.getUTCMilliseconds()).toBe(0);
+  });
+});
+
+// ============================================================================================
+// FICHA 425 (B11) — `verCierrePasado` EMITE LOS RECHAZOS DE TIENDA DEL CIERRE.
+//
+// El servicio es un passthrough: la lista la congela y la ordena el repositorio (medido contra
+// Postgres en `cierre-rechazo-tienda-sql-real.test.ts`). Aqui se afirma el cableado: que llega, que
+// `[]` viaja como `[]`, que un cierre fuera de alcance no emite el campo y que la lista no se cuela en
+// los grupos del mensajero ni en la cabecera.
+// ============================================================================================
+
+describe("425/B11 — verCierrePasado emite `rechazosDeTienda`", () => {
+  const CIERRE = {
+    cierreId: "c1",
+    estado: "vencido" as const,
+    destinoTipo: "bodega_satelite" as const,
+    destinoZonaId: "z1",
+    totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+    totalPagoMensajero: "0.00",
+    totalIngresoBodegaRechazos: "0.00",
+    solicitadoAt: "2026-09-11T06:00:00.000Z",
+    resueltoAt: null,
+    motivoRechazo: null,
+  };
+
+  const RECHAZOS = [
+    {
+      gestionId: "g-947",
+      ordenId: "o-947",
+      numGuia: 19301246 as number | null,
+      numRemision: "NA-947",
+      destinatario: "Dest 947",
+      producto: "Sobre",
+      tiendaNombre: "Nuform",
+      zonaNombre: "Central",
+      rechazadoAt: "2026-09-10T14:05:00.000Z",
+      motivo: "No la recibe" as string | null,
+    },
+    {
+      gestionId: "g-981",
+      ordenId: "o-981",
+      numGuia: 58980454,
+      numRemision: "NA-981",
+      destinatario: "Dest 981",
+      producto: "Caja",
+      tiendaNombre: "Nuform",
+      zonaNombre: "Central",
+      rechazadoAt: "2026-09-10T15:30:00.000Z",
+      motivo: null,
+    },
+    {
+      gestionId: "g-1103",
+      ordenId: "o-1103",
+      numGuia: null,
+      numRemision: "NA-1103",
+      destinatario: "Dest 1103",
+      producto: "Caja",
+      tiendaNombre: "Nuform",
+      zonaNombre: "Central",
+      rechazadoAt: "2026-09-10T16:45:00.000Z",
+      motivo: "Direccion equivocada",
+    },
+  ];
+
+  function repoCon(rechazosDeTienda: typeof RECHAZOS) {
+    return fakeRepo({
+      findCierrePropioConGestiones: vi.fn(async () => ({
+        cierre: CIERRE,
+        gestiones: [],
+        sinGestion: [],
+        sinGestionRegistrado: true,
+        rechazosDeTienda,
+      })),
+    });
+  }
+
+  it("R14/R15: un cierre con 3 rechazos los emite los 3, con su fecha y su motivo", async () => {
+    const { service } = newService({ repo: repoCon(RECHAZOS) });
+
+    const r = await service.verCierrePasado("c1", MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.rechazosDeTienda.map((x) => `${x.numRemision}@${x.rechazadoAt}`)).toEqual([
+      "NA-947@2026-09-10T14:05:00.000Z",
+      "NA-981@2026-09-10T15:30:00.000Z",
+      "NA-1103@2026-09-10T16:45:00.000Z",
+    ]);
+    expect(r.rechazosDeTienda[2]).toEqual({
+      gestionId: "g-1103",
+      ordenId: "o-1103",
+      numGuia: null,
+      numRemision: "NA-1103",
+      destinatario: "Dest 1103",
+      producto: "Caja",
+      tiendaNombre: "Nuform",
+      zonaNombre: "Central",
+      rechazadoAt: "2026-09-10T16:45:00.000Z",
+      motivo: "Direccion equivocada",
+    });
+  });
+
+  it("un cierre sin ninguno emite `[]`", async () => {
+    const { service } = newService({ repo: repoCon([]) });
+
+    const r = await service.verCierrePasado("c1", MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.rechazosDeTienda).toEqual([]);
+  });
+
+  it("un cierre fuera de alcance (ajeno) no emite el campo", async () => {
+    const { service } = newService({ repo: fakeRepo() }); // el doble devuelve `null` por defecto
+
+    const r = await service.verCierrePasado("c-ajeno", MENSAJERO);
+
+    expect(r).toEqual({ status: "no_encontrada" });
+    expect(Object.keys(r)).toEqual(["status"]);
+  });
+
+  it("R16: los rechazos no entran en ningun grupo del mensajero ni mueven la cabecera", async () => {
+    const con = await newService({ repo: repoCon(RECHAZOS) }).service.verCierrePasado("c1", MENSAJERO);
+    const sin = await newService({ repo: repoCon([]) }).service.verCierrePasado("c1", MENSAJERO);
+    if (con.status !== "ok" || sin.status !== "ok") throw new Error("esperaba ok");
+
+    expect(con.grupos).toEqual(sin.grupos);
+    expect(con.cierre).toEqual(sin.cierre);
+    // Contrapunto: la lista SI llego, asi que las dos igualdades de arriba no son triviales.
+    expect(con.rechazosDeTienda).toHaveLength(3);
+    expect(sin.rechazosDeTienda).toHaveLength(0);
   });
 });

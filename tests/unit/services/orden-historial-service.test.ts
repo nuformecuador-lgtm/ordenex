@@ -3,6 +3,7 @@ import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IOrdenHistorialRepository } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { IOrdenDiaRepartoCambioRepository } from "@/lib/interfaces/repositories/IOrdenDiaRepartoCambioRepository";
+import type { IOrdenTraspasoRepository } from "@/lib/interfaces/repositories/IOrdenTraspasoRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenDTO } from "@/lib/types/orden";
 import type { OrdenHistorialTransicionDTO } from "@/lib/types/orden-historial";
@@ -114,15 +115,30 @@ function correccionRepo(
   };
 }
 
+// FICHA 427 (T20/T21): el servicio EXIGE tambien la TERCERA fuente. En este archivo el doble
+// devuelve SIEMPRE lista vacia a proposito, por la misma razon que el de correcciones: lo que se
+// prueba aqui es que, SIN traspasos, la linea de tiempo es exactamente la de antes de la ficha
+// (no-regresion). El caso con traspasos vive en `orden-historial-fusion.test.ts`.
+function traspasoRepo(
+  overrides: Partial<IOrdenTraspasoRepository> = {},
+): IOrdenTraspasoRepository {
+  return {
+    findTraspasosByOrden: vi.fn(async () => []),
+    ...overrides,
+  };
+}
+
 function newService(
   o: OrdenRepoMethods = ordenRepo(),
   h: HistorialRepoMethods = historialRepo(),
   c: IOrdenDiaRepartoCambioRepository = correccionRepo(),
+  t: IOrdenTraspasoRepository = traspasoRepo(),
 ) {
   return new OrdenHistorialService(
     o as unknown as IOrdenRepository,
     h as unknown as IOrdenHistorialRepository,
     c,
+    t,
   );
 }
 

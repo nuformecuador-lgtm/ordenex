@@ -315,6 +315,39 @@ export const CATALOGO_AVISOS: Record<NotificacionEvento, EntradaCatalogo> = {
     },
     destinatarios: ["mensajero"],
   },
+
+  // 16 — FICHA 427 (R38) — al mensajero DESTINO le acaban de pasar ordenes de otro. ACCIONABLE por
+  // las tres condiciones a la vez: (a) pide una accion —salir a repartir lo que le acaba de
+  // llegar—, (b) tiene consecuencia si no se hace —el paquete no llega, y son ordenes DE HOY— y
+  // (c) el es exactamente quien puede resolverla.
+  //
+  // ATAJO A `/mis-asignaciones`, que es donde estan esas ordenes y donde empieza su trabajo: la
+  // lista es el INSUMO de lo que va a hacer, no un mirador. Mismo destino que `reparto_manana`, y
+  // por el mismo motivo.
+  //
+  // SIN `titulo`, y NO es un olvido: este aviso NO es de los agregados con cifra VIVA. Su numero es
+  // el de UN ACTO CERRADO —«recibiste 31 ordenes»— y no cambia nunca: recalcularlo al leer diria
+  // «cuantas llevas ahora», que es OTRO dato y ademas falso como titulo de este aviso. Por eso el
+  // numero se persiste en la descripcion (design §6.5) y no se recompone.
+  traspaso_ordenes_recibido: {
+    porDefecto: {
+      clase: "accionable",
+      atajo: { href: "/mis-asignaciones", etiqueta: "Ver mi reparto" },
+    },
+    destinatarios: ["mensajero"],
+  },
+  // 17 — FICHA 427 (R39) — al mensajero de ORIGEN le quitaron ordenes. INFORMATIVA, y es la MISMA
+  // decision que lo deja fuera del push (R43): no le pide NINGUNA accion y no vence nada — deja de
+  // tener trabajo, no le aparece trabajo. Falla la condicion (a) de la definicion normativa, asi
+  // que es informativo, y un informativo NO PUEDE llevar atajo ni por accidente (R19): su rama del
+  // tipo ni siquiera tiene el campo.
+  //
+  // PERO SI LLEGA A LA CAMPANA, y eso es lo que se decide aqui: su lista encogio y este aviso es la
+  // explicacion. Sin el, el mensajero abre la app y le faltan 31 ordenes sin saber por que.
+  traspaso_ordenes_cedido: {
+    porDefecto: { clase: "informativa" },
+    destinatarios: ["mensajero"],
+  },
 };
 
 /**

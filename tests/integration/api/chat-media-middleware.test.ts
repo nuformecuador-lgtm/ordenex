@@ -26,13 +26,19 @@ beforeEach(() => {
 });
 
 describe("middleware — proxy de media del chat (R26)", () => {
-  it("GET sin cookie de sesion redirige (307) a /login", async () => {
+  // FEATURE 426 — CASO INVERTIDO. LO QUE R26 PROTEGIA SE CONSERVA INTACTO: la media del cliente
+  // sigue DETRAS del guard de sesion, una peticion sin cookie NO la alcanza, y la ruta no entro en
+  // ninguna lista de excepcion (eso lo siguen midiendo los dos casos de mas abajo, sin tocar).
+  // Lo unico que cambia es la FORMA del rechazo: el 307 a /login hacia que el `fetch` de
+  // `useMediaChat` siguiera el redirect, recibiera el HTML del login con 200 y pintara la burbuja
+  // como "listo" con una imagen rota; el 401 cae en `!res.ok` y deja el estado en "error".
+  it("GET sin cookie de sesion se rechaza con 401 JSON (ya no redirige a /login)", async () => {
     const res = await middleware(new NextRequest(new URL(RUTA, BASE_URL), { method: "GET" }));
 
-    expect(res.status).toBe(307);
-    const location = res.headers.get("location");
-    expect(location).not.toBeNull();
-    expect(new URL(location as string).pathname).toBe("/login");
+    expect(res.status).toBe(401);
+    expect(res.headers.get("content-type")).toMatch(/^application\/json/);
+    expect(res.headers.get("location")).toBeNull();
+    expect(((await res.json()) as { code?: string }).code).toBe("UNAUTHORIZED");
   });
 
   it("con cookie valida el middleware la deja pasar (la autorizacion real va en el handler)", async () => {

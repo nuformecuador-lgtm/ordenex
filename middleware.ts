@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME } from "@/lib/constants/auth";
 import { isSessionActive } from "@/lib/auth/session-guard";
+import { UnauthenticatedError } from "@/lib/errors/app-error";
+import { appErrorToResponse } from "@/lib/errors/http";
 
 // Rutas alcanzables SIN cookie `session`. Son las paginas publicas fuera de
 // `(app)`: login, recuperacion de contrasena (feature 20) y postulacion de
@@ -40,6 +42,14 @@ function matches(pathname: string, routes: string[]): boolean {
   return routes.some((r) => pathname === r || pathname.startsWith(`${r}/`));
 }
 
+// Feature 426 (R7) — que cuenta como ruta de API: el path `/api` y todo lo que cuelga de `/api/`.
+// Es la regla del PRIMER SEGMENTO, y no una lista nueva, a proposito: `/api-docs` es una PAGINA
+// (la que renderiza Swagger UI) y `/apitos` una pagina privada cualquiera; con `startsWith("/api")`
+// a secas las dos se tratarian como rutas de API y dejarian de redirigir a /login.
+function esRutaApi(pathname: string): boolean {
+  return pathname === "/api" || pathname.startsWith("/api/");
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -63,15 +73,37 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const response = matches(pathname, REDIRECT_TO_ROOT)
-    ? NextResponse.redirect(new URL("/", request.url))
-    : redirectALogin(request, pathname);
+  const response = rechazoSinSesion(request, pathname);
 
   // La cookie que acaba de fallar la validacion se borra: si no, el navegador
   // la sigue mandando y cada request repite el roundtrip a la DB para nada.
   if (sessionId) response.cookies.delete(SESSION_COOKIE_NAME);
 
   return response;
+}
+
+// FEATURE 426 — LA FORMA DEL RECHAZO POR FALTA DE SESION. El veredicto no cambia (quien no trae
+// sesion activa no pasa, ni una ruta mas ni una menos); lo que cambia es que una ruta de API ya
+// NO se rechaza redirigiendo.
+//
+// MEDIDO CONTRA PRODUCCION el 2026-09-14: `POST /api/ordenes/carga-masiva/chunk` con la sesion
+// vencida respondia 307 a `/login`. El 307 CONSERVA EL METODO, asi que el cliente repetia el POST
+// de su carga contra la pagina de login y recibia el HTML de esa pagina con **200**: desde fuera
+// es indistinguible de "el servidor se cayo", y eso fue lo que reporto el integrador.
+//
+// Las dos unicas rutas que llegan hasta aqui —`/api/ordenes/carga-masiva/chunk` y
+// `/api/chat/media/[mensajeId]`— YA tenian su 401 escrito en el handler, y no se habia ejecutado
+// jamas sin sesion porque este guard respondia el 307 antes. Esto NO escribe un 401 nuevo: deja de
+// tapar el que ya existia, emitiendo en el borde el mismo desenlace que habria dado el handler.
+//
+// El cuerpo es el `AppErrorShape` de la feature 10 y no un literal propio, para que "no hay sesion"
+// tenga UN SOLO contrato, caiga el rechazo en el borde o dentro del handler. Sin
+// `WWW-Authenticate`: el esquema aqui es una cookie, y anunciar Basic/Bearer haria que algunos
+// navegadores abrieran un dialogo de credenciales que no sirve de nada.
+function rechazoSinSesion(request: NextRequest, pathname: string): NextResponse {
+  if (esRutaApi(pathname)) return appErrorToResponse(new UnauthenticatedError().toShape());
+  if (matches(pathname, REDIRECT_TO_ROOT)) return NextResponse.redirect(new URL("/", request.url));
+  return redirectALogin(request, pathname);
 }
 
 function redirectALogin(request: NextRequest, pathname: string): NextResponse {

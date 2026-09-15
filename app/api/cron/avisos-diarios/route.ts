@@ -18,6 +18,7 @@ import { AvisoAgregadoRepository } from "@/lib/repositories/AvisoAgregadoReposit
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { loadCronConfig } from "@/lib/config/cron";
@@ -49,6 +50,7 @@ function buildService(): IAvisosDiariosService {
       new OrdenRepository(prisma),
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
     // R53: el umbral entra por configuracion, con su medicion al lado. No es un literal del
     // servicio.

@@ -117,6 +117,37 @@ describe("carga-masiva-chunks — procesarEnChunks", () => {
       }),
     ).rejects.toBeInstanceOf(ChunkRequestError);
   });
+
+  // Feature 426 (R11) — QUE PASA EN EL CLIENTE CUANDO LA SESION VENCIO.
+  //
+  // Hasta el 2026-09-14 este caso no se podia dar: el middleware respondia 307 a /login, el
+  // `fetch` lo seguia (modo `follow`), llegaba el HTML del login con `200`, `res.ok` era TRUE y la
+  // carga reventaba mas adelante en `res.json()` con «Unexpected token '<'». Con el 401 del borde,
+  // el lote falla donde tiene que fallar y con el numero que le corresponde, que es lo que la UI
+  // traduce a «La carga fallo (estado 401).».
+  it("lanza ChunkRequestError con status 401 si el lote responde 401 (sesion vencida)", async () => {
+    const cuerpo = JSON.stringify({
+      status: "error",
+      code: "UNAUTHORIZED",
+      message: "No hay una sesion valida.",
+    });
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(cuerpo, {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+
+    const error = await procesarEnChunks([fila("A", 1)], {
+      dryRun: false,
+      chunkSize: 10,
+      fetchImpl,
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ChunkRequestError);
+    expect((error as ChunkRequestError).status).toBe(401);
+  });
 });
 
 describe("carga-masiva-chunks — combinarResultados", () => {

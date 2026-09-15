@@ -35,7 +35,21 @@ const MENSAJERO: Actor = { usuarioId: "u-msg", rol: "mensajero" };
 const ADMIN_SATELITE: Actor = { usuarioId: "u-sat", rol: "adminSatelite" };
 const API_KEY: Actor = { usuarioId: "u-key", rol: "apiKey" };
 
-/** Todos los roles del esquema MENOS el maestro. Ninguno puede leer este modulo (Q4). */
+/**
+ * Todos los roles del esquema MENOS el maestro. Ninguno puede leer este modulo (Q4).
+ *
+ * ⭑ FICHA 424 (2026-09-14) — POR QUE EL `admin` DE ESTA LISTA IMPORTA MAS QUE AYER. Desde hoy el
+ * `admin` puede ELIMINAR ordenes (se revirtio el estrechamiento del 2026-08-27), y cada borrado
+ * suyo escribe una fila en este mismo registro con su nombre y su rol congelados. O sea: a partir
+ * de esta ficha el `admin` **genera** filas aqui y **sigue sin poder leerlas**.
+ *
+ * No es un descuido que quedo suelto: es la decision D2 de la ficha 362, ratificada por el humano
+ * el 2026-09-14 con esa consecuencia escrita. El registro es la CONTRAPARTIDA que sostiene la
+ * reversion del borrado, y la contrapartida no la revisa el revisado —«el registro guarda las
+ * decisiones de dinero del `admin` y no puede ser el `admin` quien revise su propio registro»—.
+ * Quien audita es el `maestro`. Medido tambien por el camino real y con una fila escrita por un
+ * borrado de verdad en `tests/integration/db/historial-accion-lectura.test.ts` (424/T8).
+ */
 const DENEGADOS: Actor[] = [ADMIN, ADMIN_TIENDA, MENSAJERO, ADMIN_SATELITE, API_KEY];
 
 function fila(overrides: Partial<FilaHistorialAccion> = {}): FilaHistorialAccion {

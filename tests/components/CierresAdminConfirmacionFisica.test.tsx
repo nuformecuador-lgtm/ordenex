@@ -229,6 +229,7 @@ function conGrupos(grupos: Partial<CierreGrupos>) {
   verDetalleMock.mockResolvedValue({
     ordenesSinGestion: [],
     sinGestionRegistrado: true,
+    rechazosDeTienda: [],
     status: "ok",
     desgloseIngresoBodegaRechazos: { sla: "0.00", manual: "0.00", total: "0.00" },
     cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),

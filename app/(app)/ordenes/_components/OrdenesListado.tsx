@@ -39,6 +39,12 @@ import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
 import { DeshacerAsignacionModal } from "./DeshacerAsignacionModal";
+// FICHA 427: traspasar a otro mensajero lo que uno ya lleva encima. El texto de la accion sale del
+// mismo modulo que el titulo del modal, por la misma razon que el de la 262.
+import {
+  TRASPASAR_MENSAJERO_ACCION,
+  TraspasarMensajeroModal,
+} from "./TraspasarMensajeroModal";
 import { EliminarOrdenModal } from "./EliminarOrdenModal";
 import { RecuperarOrdenModal } from "./RecuperarOrdenModal";
 import {
@@ -58,11 +64,15 @@ import {
   PLACEHOLDER_BUSQUEDA,
 } from "./ordenes-filtros-def";
 import {
+  CAMPO_ORDEN_INICIAL,
   DIRECCION_ORDEN_INICIAL,
-  ETIQUETA_ORDEN_CREACION,
-  OPCIONES_ORDEN_CREACION,
-  ordenamientoCreacion,
-} from "./ordenamiento-creacion";
+  ETIQUETA_CAMPO_ORDEN,
+  ETIQUETA_DIRECCION,
+  OPCIONES_CAMPO_ORDEN,
+  OPCIONES_DIRECCION,
+  ordenamientoDe,
+  type CampoOrdenOfrecido,
+} from "./ordenamiento-ordenes";
 // FICHA 355: el control de ESTADO se declara una sola vez y lo montan las dos superficies
 // (aquí y la bodega satélite). Ver la cabecera de ese módulo.
 import {
@@ -84,6 +94,7 @@ type ModalAbierto =
   | "recuperar-bodega"
   | "deshacer-asignacion"
   | "cambiar-dia-reparto" // feature 262
+  | "traspasar-mensajero" // ficha 427
   | "corregir-fecha-reprogramacion" // ficha 371
   | "eliminar" // feature «eliminar orden»
   | "recuperar-eliminada" // pedido humano 2026-08-27: la reversión del borrado
@@ -316,15 +327,22 @@ export function OrdenesListado({
   /**
    * Pedido humano (2026-08-27): ofrece ELIMINAR órdenes.
    *
-   * Prop propia y no `accionesLote` (que es maestro Y admin) porque el `admin` NO puede borrar:
-   * ese estrechamiento se decidió a propósito y sigue en pie. El servidor revalida el rol en la
-   * Server Action, así que esta prop decide qué se OFRECE, nunca qué se permite.
+   * Prop propia y no `accionesLote`, y sigue siéndolo aunque desde la ficha 424 los dos coincidan
+   * para `maestro`/`admin`: el `adminTienda` recibe ésta sin recibir aquélla, así que no son la
+   * misma pregunta. El servidor revalida el rol en la Server Action, así que esta prop decide qué
+   * se OFRECE, nunca qué se permite.
    *
    * ⭑ FICHA 358 (2026-09-02): ya no es «sólo el maestro». También el `adminTienda`, acotado a
    * SUS órdenes — la misma regla que la tienda ya tenía por API key. Quién es «lo suyo» no lo
    * decide esta pantalla: lo decide el servidor fila a fila, en el campo `eliminable` del DTO,
    * que sólo viaja `true` sobre órdenes que ese actor puede borrar de verdad. Aquí sólo se
    * pregunta `row.eliminable === true`.
+   *
+   * ⭑ FICHA 424 (2026-09-14): el `admin` TAMBIÉN, sin frontera de tienda. Se revirtió, a petición
+   * del humano, el estrechamiento del 2026-08-27 que se lo había quitado; lo que lo sostiene es
+   * que cada borrado deja hoy una fila con el nombre y el rol congelados de quien lo hizo (ficha
+   * 362). Este componente NO cambia ni una línea por ello, y es el punto: quién puede borrar se
+   * contesta en `resolverAlcanceBorradoOrden` y llega aquí por esta prop, ya resuelta.
    *
    * ⚠️ Encender esto para un rol SIN `accionesLote` monta la columna de casillas para él. La
    * barra no se le llena de acciones de flujo: `accionesDe` devuelve vacío sin `accionesLote`
@@ -340,6 +358,11 @@ export function OrdenesListado({
    * dueña y del mensajero asignado, y `RecuperarOrdenService` corta por rol; además `listar`
    * responde `forbidden` —no una lista vacía— a quien pida el interruptor sin serlo. Ofrecérselo
    * a la tienda sería pintar un control que el servidor rechaza.
+   *
+   * ⭑ Y SIGUE SIÉNDOLO TRAS LA FICHA 424 (2026-09-14): al `admin` se le devolvió `puedeEliminar`
+   * y NO ésta. Es decisión del humano ese mismo día (424/D1): «que borre»; la papelera no se le
+   * abre y, si se equivoca, se lo pide al `maestro`. Que las dos props estén separadas desde la
+   * 358 es lo que permite que diverjan sin tocar el componente.
    */
   puedeVerEliminadas?: boolean;
   /**
@@ -452,6 +475,19 @@ export function OrdenesListado({
     setModalAbierto("cambiar-dia-reparto");
   }
 
+  // FICHA 427 (T23, R34): «Traspasar a otro mensajero» sobre el lote seleccionado (`en_reparto` o
+  // `ayuda_tienda`, los dos estados en que el paquete va ENCIMA del mensajero). SIN filtro por
+  // zona, igual que «Deshacer asignación» y «Cambiar día de reparto»: maestro/admin
+  // (`esAccesoTotal`) traspasan órdenes de CUALQUIER zona y el service revalida el rol.
+  //
+  // El snapshot viaja ENTERO y NO se recorta al mensajero mayoritario: el origen se DERIVA de las
+  // órdenes (R8) y un lote con dos orígenes lo tiene que ver quien traspasa —el modal lo dice y no
+  // deja confirmar—, no arreglarlo esta función por su cuenta moviendo lo que nadie miró.
+  function abrirTraspasarMensajero(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("traspasar-mensajero");
+  }
+
   // FICHA 371: "Corregir fecha de reprogramación" sobre una orden que quedó esperando a la fecha
   // equivocada. SIN filtro por zona, igual que "Cambiar día de reparto": maestro/admin corrigen
   // órdenes de CUALQUIER zona y el service revalida el rol. El snapshot viaja ENTERO —no se
@@ -557,6 +593,22 @@ export function OrdenesListado({
     label: CAMBIAR_DIA_ACCION,
     variant: "outline",
     onRun: abrirCambiarDia,
+  };
+
+  /**
+   * FICHA 427 (T23, R34) — la acción de traspasar, declarada UNA vez y reusada por los DOS estados
+   * en que el paquete va encima del mensajero (`en_reparto` y `ayuda_tienda`). Se declara aquí y no
+   * dentro de cada `case` por lo mismo que su vecina: la `key` es la que agrupa la acción cuando la
+   * selección mezcla estados, así que dos `key` distintas pintarían dos botones iguales.
+   *
+   * PRIMARIA (sin `variant: "outline"`), al revés que «Cambiar día de reparto»: cuando alguien
+   * marca órdenes en reparto de un mensajero que no puede seguir, ésta es la decisión que trae a
+   * esta pantalla. Cambiar el día es un ajuste; traspasar es lo que desatasca el paquete.
+   */
+  const accionTraspasarMensajero: AccionLote = {
+    key: "traspasar-mensajero",
+    label: TRASPASAR_MENSAJERO_ACCION,
+    onRun: abrirTraspasarMensajero,
   };
 
   /**
@@ -681,9 +733,16 @@ export function OrdenesListado({
       // Los dos YA son opciones del filtro de estado para maestro/admin (`EXCLUDE_POR_ROL` sólo
       // les excluye `pendiente`), así que no hace falta abrir ninguna pantalla ni ningún filtro
       // nuevo para alcanzar la población atrapada.
+      //
+      // FICHA 427 (T23, R34): y son EXACTAMENTE los dos estados traspasables
+      // (`ESTADOS_TRASPASABLES`, R4). Ningún otro `case` ofrece el traspaso, y no es una
+      // coincidencia: en los demás o el paquete no está en la mano de nadie (`por_recoger` tiene su
+      // propia acción desde la 149), o moverlo afirmaría una custodia que nadie verificó
+      // (`devolviendo_a_tienda`), o sacaría la orden del cierre abierto de su mensajero
+      // (`sin_gestionar`).
       case "en_reparto":
       case "ayuda_tienda":
-        return [accionCambiarDia];
+        return [accionTraspasarMensajero, accionCambiarDia];
       // FICHA 371 — la orden ya no está en circulación: espera a la fecha de su reprogramación, y
       // esa fecha es lo ÚNICO que decide cuándo vuelve a la bodega. Si está equivocada, hasta hoy
       // no había forma de corregirla (este `case` no existía y el estado caía en el `default`).
@@ -784,16 +843,24 @@ export function OrdenesListado({
   const [resetFiltros, setResetFiltros] = useState(0);
 
   /**
-   * FICHA 356 — dirección del orden por fecha de creación. Arranca donde arranca el contrato
-   * (`DIRECCION_ORDEN_INICIAL`, «Más recientes»), así que entrar a la pantalla enseña
-   * exactamente el listado de siempre, con el control ya puesto en lo que se está viendo.
+   * FICHA 356 + FICHA 423 — el orden del listado, en sus DOS dimensiones: por qué campo y en
+   * qué sentido. Arrancan donde arranca el contrato (`created_at` + «Más recientes»), así que
+   * entrar a la pantalla enseña exactamente el listado de siempre, con el control ya puesto en
+   * lo que se está viendo.
    *
-   * Vive AQUÍ y no dentro de `OrdenesModule` por la misma razón que la selección de filtros:
+   * SON DOS ESTADOS Y NO UNO, y eso ES el requisito R10: cambiar de campo no toca la dirección.
+   * Quien venía de «Más recientes» cae en «remisiones más altas primero», y el conmutador de
+   * dirección —que sigue a la vista, al lado— es el clic que lo invierte. Mover las dos cosas
+   * con un solo clic haría que el usuario obtuviera un cambio que no pidió, y el segundo sería
+   * invisible hasta mirar el listado.
+   *
+   * Viven AQUÍ y no dentro de `OrdenesModule` por la misma razón que la selección de filtros:
    * el control se pinta en la barra, la barra la monta esta superficie y el módulo recibe el
    * resultado ya decidido.
    */
+  const [sortBy, setSortBy] = useState<CampoOrdenOfrecido>(CAMPO_ORDEN_INICIAL);
   const [sortDir, setSortDir] = useState<DireccionOrden>(DIRECCION_ORDEN_INICIAL);
-  const orden = useMemo(() => ordenamientoCreacion(sortDir), [sortDir]);
+  const orden = useMemo(() => ordenamientoDe(sortBy, sortDir), [sortBy, sortDir]);
 
   /** Deja la barra como recién abierta: sin valores y sin filtros puestos. */
   function limpiarFiltros() {
@@ -1171,10 +1238,25 @@ export function OrdenesListado({
                 filtros que se vayan pidiendo: un sitio fijo, que no baila según qué filtros
                 haya puestos. Y es `SegmentedToggle`, el mismo conmutador del portal del
                 mensajero y de cierres, con el alto por defecto (`h-8`) que comparten el campo
-                de búsqueda y el botón de descarga de esta misma línea. */}
+                de búsqueda y el botón de descarga de esta misma línea.
+
+                FICHA 423 — ahora son DOS conmutadores pegados: el CAMPO delante y la DIRECCIÓN
+                detrás, los dos a la vista sin desplegar nada (R1). Dos grupos y no un
+                desplegable de cuatro combinaciones, por lo mismo que decía la 356: el
+                conmutador enseña la opción que no está puesta; un desplegable esconde la mitad
+                del control detrás de un clic. Las etiquetas de la dirección CAMBIAN con el
+                campo —«Más recientes/Más antiguas» para la fecha, «Más altas/Más bajas» para la
+                remisión—: llamar «reciente» a un número alto sería falso con cuatro series
+                conviviendo. */}
             <SegmentedToggle
-              ariaLabel={ETIQUETA_ORDEN_CREACION}
-              options={OPCIONES_ORDEN_CREACION}
+              ariaLabel={ETIQUETA_CAMPO_ORDEN}
+              options={OPCIONES_CAMPO_ORDEN}
+              valor={sortBy}
+              onChange={setSortBy}
+            />
+            <SegmentedToggle
+              ariaLabel={ETIQUETA_DIRECCION[sortBy]}
+              options={OPCIONES_DIRECCION[sortBy]}
               valor={sortDir}
               onChange={setSortDir}
             />
@@ -1297,6 +1379,25 @@ export function OrdenesListado({
             fechasDiaReparto={fechasDiaReparto}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
+          />
+          {/* FICHA 427 (T23, R33/R36) — éxito ⇒ `revalidarTablas` y NO `handleSuccess`, y la
+              diferencia es el punto de esta pantalla: `handleSuccess` cerraría el modal, y con él
+              se irían las dos cifras del traspaso y el aviso de que la ruta del que recibe queda
+              pendiente de recalcularse. El listado se relee igualmente detrás —las órdenes pasan a
+              mostrar el mensajero nuevo—; el modal lo cierra la persona cuando ha leído el
+              desenlace. Mismo criterio que `CorregirFechaReprogramacionModal` (371).
+
+              Las tres listas de no-elegibles son LAS MISMAS que reciben los modales de asignación:
+              el conjunto que el servidor va a rechazar, sin re-derivarse aquí. */}
+          <TraspasarMensajeroModal
+            open={modalAbierto === "traspasar-mensajero"}
+            ordenes={ordenesSeleccionadas}
+            mensajeros={mensajeros ?? []}
+            mensajerosConRecoleccionIds={mensajerosConRecoleccionIds}
+            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+            mensajerosNoAsignablesIds={mensajerosNoAsignablesIds}
+            onOpenChange={cerrarModal}
+            onSuccess={revalidarTablas}
           />
           {/* FICHA 371 — éxito ⇒ `revalidarTablas` y NO `handleSuccess`, y la diferencia es el
               punto de esta pantalla: `handleSuccess` cerraría el modal, y con él se iría el

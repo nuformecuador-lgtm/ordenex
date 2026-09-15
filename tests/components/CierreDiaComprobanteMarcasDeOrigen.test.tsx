@@ -230,6 +230,7 @@ describe("R5 — el mensajero, en su pantalla, ya no lee la contradicción", () 
       grupos: { ...emptyGrupos(), rechazada: [rechazoDelCron()] },
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
     });
   });
 
@@ -291,6 +292,7 @@ describe("R9 — la tabla en vivo y el comprobante dicen la marca con las mismas
       },
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
     });
     renderModule({
       ...emptyGrupos(),
@@ -332,6 +334,7 @@ describe("R9 — la tabla en vivo y el comprobante dicen la marca con las mismas
       },
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
     });
     renderModule();
 

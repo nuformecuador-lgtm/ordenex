@@ -29,6 +29,7 @@ import type {
   CierreDetalleGestion,
   CierreGrupos,
   CierreOrdenSinGestion,
+  CierreRechazoDeTienda,
   CierreTotales,
   CierrePasadoDTO,
   CierreResultado,
@@ -115,6 +116,8 @@ interface DetalleCierrePasado {
   grupos: CierreGrupos;
   ordenesSinGestion: CierreOrdenSinGestion[];
   sinGestionRegistrado: boolean;
+  /** FICHA 425 (R14): los rechazos de tienda de ESTE cierre, de la misma lectura que `grupos`. */
+  rechazosDeTienda: CierreRechazoDeTienda[];
 }
 
 /** Feature 170 — FASE 2 (T I.2): la página de «Cierres solicitados» tal como la da el servidor. */
@@ -524,6 +527,9 @@ export function CierreDiaModule({
           // regla de audiencia de la 38/40 no aplica: son SUS órdenes.
           ordenesSinGestion: result.ordenesSinGestion,
           sinGestionRegistrado: result.sinGestionRegistrado,
+          // FICHA 425 (R14): la misma lista que ve el admin, por el mismo camino. No lleva ni un
+          // importe, así que la regla de audiencia de la 38/40 tampoco aplica aquí.
+          rechazosDeTienda: result.rechazosDeTienda,
         });
         return;
       }
@@ -980,6 +986,9 @@ export function CierreDiaModule({
                   // `cierre-detalle-superficies.guardia.test.ts`.
                   ordenesSinGestion={detallePasado.ordenesSinGestion}
                   sinGestionRegistrado={detallePasado.sinGestionRegistrado}
+                  // FICHA 425 (R14): la MISMA prop que pasa el módulo del admin. La sección vive
+                  // en el comprobante; aquí sólo se le entrega el dato del servidor.
+                  rechazosDeTienda={detallePasado.rechazosDeTienda}
                   onVerEvidencia={setEvidencia}
                 />
                 <p role="note" className="text-xs text-muted-foreground">

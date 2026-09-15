@@ -1,6 +1,10 @@
 import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
-import type { CierreResultado, CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
+import type {
+  CierreRechazoDeTienda,
+  CierreResultado,
+  CierreTotales,
+} from "@/lib/interfaces/services/ICierreDiaService";
 import type {
   CierreGestionPendienteRow,
   CierreSinGestionRow,
@@ -408,6 +412,12 @@ export interface ICierresAdminRepository {
     sinGestion: CierreSinGestionRow[];
     /** R27/R28: `false` = cierre ANTERIOR al registro; `[]` con `false` NO es «no hubo ninguna». */
     sinGestionRegistrado: boolean;
+    /**
+     * FICHA 425 (B11/R14) — los rechazos de tienda que ESTE cierre incorporo, del mas viejo al mas
+     * reciente. Acotados por `cierre_id` en el `where` de su propia consulta; el ALCANCE no se repite
+     * porque el `findFirst` de arriba ya devolvio `null` si el cierre no casa. `[]`, nunca `null`.
+     */
+    rechazosDeTienda: CierreRechazoDeTienda[];
   } | null>;
   /**
    * Feature 158 (T1.12, R19/R21/R25): las gestiones con `resultado = incidente` vinculadas a ESE

@@ -145,6 +145,7 @@ function conDetalleDe(cierre: CierreAdminResumen) {
   verDetalleMock.mockResolvedValue({
     ordenesSinGestion: [],
     sinGestionRegistrado: true,
+    rechazosDeTienda: [],
     status: "ok",
     cierre,
     grupos: emptyGrupos(),

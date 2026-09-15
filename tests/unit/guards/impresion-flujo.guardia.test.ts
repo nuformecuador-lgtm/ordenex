@@ -950,6 +950,20 @@ describe("feature 223 — que NO se parte, y donde NO se aplica (R19, R20)", () 
     //     SECCION entera NO lo lleva —puede tener sesenta filas (R34) y superar el alto de una
     //     pagina—, y eso lo comprueba el caso de R20 de aqui abajo.
     "flex break-inside-avoid flex-col gap-1 border-b border-border pb-2",
+    // ── FICHA 425 (2026-09-14): la hoja gana la seccion «Rechazados por la tienda», y con ella
+    //    DOS piezas mas, por la misma puerta y con el mismo criterio que la 264. Se dan de alta;
+    //    ninguna de las siete de arriba cambia.
+    //
+    // 8 — la FILA de un rechazo de tienda. Gemela de la pieza 6 con una columna mas (la FECHA del
+    //     rechazo) y `items-start` en vez de `items-center`, porque el motivo puede ocupar dos
+    //     lineas. Se repite N veces —hasta 19 en un cierre, medido en produccion— y partida deja
+    //     la guia en una pagina y la fecha en la siguiente.
+    "mb-2 grid break-inside-avoid items-start gap-2 rounded-[10px] border border-border px-2 py-2.5",
+    // 9 — el ENCABEZADO de esa seccion: los dos conteos («paga» / «revisar»), la nota de que no
+    //     suman al pago y lo que pasa al aprobar. Mismo criterio que la pieza 7: partido, la
+    //     primera pagina deja una lista de paquetes sin decir que son. La SECCION entera NO lo
+    //     lleva, y lo comprueba el caso de R20 de aqui abajo.
+    "flex break-inside-avoid flex-col gap-2 border-b border-border pb-2",
   ];
 
   it("`break-inside-avoid` esta EXACTAMENTE en las piezas de la lista cerrada", () => {
@@ -988,6 +1002,15 @@ describe("feature 223 — que NO se parte, y donde NO se aplica (R19, R20)", () 
       "la seccion de ordenes sin gestionar",
       () => {
         const i = hoja.indexOf("aria-label={SIN_GESTION_TITULO}");
+        return hoja.slice(i, hoja.indexOf(">", i));
+      },
+    ],
+    // FICHA 425: la seccion de rechazos de tienda, con el mismo criterio. Sin recorte puede traer
+    // 19 filas (medido en produccion): infragmentable no cabria en una pagina.
+    [
+      "la seccion de rechazados por la tienda",
+      () => {
+        const i = hoja.indexOf("aria-label={RECHAZOS_TITULO}");
         return hoja.slice(i, hoja.indexOf(">", i));
       },
     ],

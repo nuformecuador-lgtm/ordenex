@@ -6,6 +6,7 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenMensajeroMetaRepository } from "@/lib/repositories/OrdenMensajeroMetaRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { RutaOptimizadaRepository } from "@/lib/repositories/RutaOptimizadaRepository";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
@@ -90,6 +91,7 @@ function buildService(): IMisAsignacionesService {
       ordenRepo,
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
   );
 }

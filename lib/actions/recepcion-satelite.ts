@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { RecepcionSateliteService } from "@/lib/services/RecepcionSateliteService";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { AsignacionSateliteService } from "@/lib/services/AsignacionSateliteService";
@@ -73,6 +74,7 @@ function buildService(): IRecepcionSateliteService {
       ordenRepo,
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
   );
 }
@@ -92,6 +94,7 @@ function buildAsignacionService(): IAsignacionSateliteService {
       ordenRepo,
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
   );
 }

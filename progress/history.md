@@ -5175,3 +5175,147 @@ Cerrada y en produccion. Cuatro PR (#760, #761, #762, #763), release #764. Sin m
 - **El reviewer corrigio una explicacion que no se sostenia:** dos rojos atribuidos a «flakes,
   archivo distinto cada vez» eran **3 de 4 el mismo archivo**, que pasa en 7,9 s y cae a partir de
   ~10 s.
+
+## 423 — Ordenar las tablas de órdenes por número de remisión (2026-09-14)
+
+PR #791. El contrato del servidor ya aceptaba `num_remision` desde la 352; faltaba la interfaz,
+que la 356 había dejado a medias con una sola dimensión y el hueco escrito.
+
+**Lo que costaba el arreglo ingenuo:** `num_remision` es TEXT, y ordenarlo como texto dejaba
+**1.582 de 1.664** remisiones `NA-` fuera de sitio (`NA-107` caía entre `NA-1069` y `NA-1070`),
+porque esa serie mezcla 3 y 4 dígitos. La clave de ordenamiento es una columna **generada que no
+castea a número**: normaliza a texto rellenado con ceros y compara byte a byte con `COLLATE "C"`.
+Dos consecuencias buscadas: **no puede lanzar** al crear una orden, y el orden no depende del
+locale de la base.
+
+Los tests del orden corren contra Postgres real: mutar el `ORDER BY` los pone rojos. Verificada
+además en la app con Playwright — y ahí quedó anotada una trampa de medición: **las notas viven en
+el `<caption>` de la tabla**, así que una sonda que borre las tablas antes de leer concluye que el
+aviso no existe.
+
+## 426 — Una ruta de api con la sesión vencida responde 401 JSON, no HTML (2026-09-14)
+
+PR #792. Reportado por un integrador: «responde 200 pero con el HTML de la página». Reproducido:
+el guard devolvía **307 a `/login`**, y como el 307 conserva el método, el cliente repetía el POST
+contra la página de login y recibía su HTML con 200.
+
+**No lo rompió ningún despliegue** —el middleware no se tocaba desde el 2026-08-25 y el último
+deploy fue 60 h antes, con 48 h de cargas correctas por medio—: lo que venció fue **su sesión**,
+que dura 24 h clavadas.
+
+**El arreglo no escribe un 401 nuevo: desatasca el que ya existe.** Las dos rutas afectadas ya
+tenían su 401 en el handler y nunca corría. De 24 rutas bajo `app/api`, solo esas dos pasan por el
+guard de sesión — contado por separado por el implementador y el reviewer.
+
+Los 3 tests que afirmaban el defecto se **invirtieron** (mismo número de casos antes y después).
+La mutación que justifica un requisito entero: con el 401 convertido en `302` **y el mismo cuerpo
+JSON**, los dos casos del requisito principal **sobreviven verdes** y solo lo caza el requisito que
+prohíbe la redirección.
+
+⚠️ Pendiente antes de `prod`: **avisar a Nuform**, su cliente pasa de `200`+HTML a `401`+JSON. Y
+queda dicho que esto hace el síntoma legible, **no** arregla que su sesión caduque cada 24 h: para
+eso tienen una API key activa sin usar.
+
+## 424 — El admin vuelve a poder eliminar órdenes (2026-09-14)
+
+Petición expresa del humano. **Revierte la decisión del 2026-08-27** que había estrechado el
+borrado a «solo maestro», cuyo motivo era que «con dos roles capaces de borrar, el rastro de quien
+lo hizo deja de ser una sola persona». Se revierte con esa consecuencia sobre la mesa y queda
+escrita: el borrado de una orden pasa de depender de **2 personas a 6** (4 admins activos + 2
+maestros).
+
+El cambio de regla es **una sola línea**. Lo que costó trabajo fueron las dos contrapartidas:
+
+- **La pantalla deja de duplicar la regla.** `puedeEliminar` era una copia literal; ahora se deriva
+  de la fuente única, y la mutación lo demuestra: tocar **solo** la regla pone rojo el caso de
+  pantalla **sin tocar `page.tsx`**. Si fuese decorativo, el test no se enteraría. Es el mismo
+  defecto que provocó el «no me aparece el checkbox» de la 358.
+- **El rastro se midió, no se dedujo.** Contra Postgres: el registro del borrado queda con rol
+  `admin` y el `maestro` lo encuentra. El reviewer reprodujo la mutación (`actorRol: null` tumba
+  los dos archivos) y descartó una a una las tres formas de test falso del repo — la fila se lee de
+  la tabla, el `beforeAll` **lanza** si no hay datos en vez de saltarse el cuerpo, y no hay dobles.
+
+El `toEqual` de la clasificación de roles se **actualizó**, no se relajó: sigue siendo la lista
+completa con su orden.
+
+Límites aceptados y escritos: el `admin` borra pero **no** puede ver ni recuperar lo borrado —se lo
+pide al maestro—, ni leer `/histórico/acciones`, así que genera filas que no puede auditar. El
+canal por API queda cerrado para él a propósito, fijado con un test.
+
+## 427 — Traspasar a otro mensajero lo que ya lleva encima (2026-09-14)
+
+Nace de un caso real del mismo día: **Andy Cortés se enfermó** con 31 órdenes en reparto y hubo que
+pasárselas a Carlos Eduardo **escribiendo a mano en producción**, porque la app no sabía hacerlo:
+deshacer asignación solo cubre `por_recoger` y `en_ruta_bodega_satelite`, nunca una orden ya recogida.
+
+**Lo que el arreglo manual enseñó y la ficha recoge:** mover la orden no basta —hay que mover también
+sus **conversaciones de chat**, o el que recibe no puede escribir a esos clientes—; lo ya gestionado no
+cambia de dueño; y la ruta del que recibe queda obsoleta y hay que decirlo en pantalla.
+
+**Decisiones del humano:** traspaso por lote seleccionado; entran `en_reparto` y `ayuda_tienda`; el
+efecto sobre el ranking del día **se acepta tal cual**; se avisa **a los dos** mensajeros; el
+`adminSatelite` queda para otra ficha.
+
+**La entidad del aviso es el `lote_id`**, no la orden ni el mensajero: si no, el segundo traspaso a la
+misma persona se descartaría como repetido y no avisaría nunca — el fallo que ya pagaron 262, 403, 409
+y 412.
+
+**La primera revisión salió RECHAZADA, y con razón aunque el código estaba bien.** De 13 mutaciones,
+3 sobrevivían: el `loteId` cambiado por el id de una orden (72/72 en verde), el autor de las gestiones
+del lote reescrito —movería pago y cierre del origen al destino— (23/23, porque el test sembraba la
+gestión en una orden que **no** entraba en el lote), y las conversaciones escritas **fuera** de la
+transacción (el `ROLLBACK TO SAVEPOINT` del arnés tapaba lo que en producción quedaría movido). Se
+cerraron las tres añadiendo la red que faltaba, y las tres mutaciones pasaron a rojo.
+
+**Otras cosas que aparecieron por el camino:** una mutación sobrevivía por un defecto **del propio
+arnés** (el mismo objeto hacía de transacción y de cliente); dos rojos se atribuyeron mal y cada agente
+**midió de quién eran** antes de tocar; y al medir con mutaciones apareció un mensaje equivocado que
+habría salido a producción («mezcla varios mensajeros» en un lote de un solo origen).
+
+El gate dio rojo dos veces por `ranking-snapshot-migration.test.ts` con `40P01`: **flake de
+concurrencia**, bloque distinto en cada corrida y 49/49 aislado. Los otros 9 rojos sí eran de la ficha
+y se cerraron **ampliando** los censos de enum, sin borrar una línea de aserción.
+
+**Probada en la app funcionando (T25):** cuatro traspasos reales de la misma orden con el destino repetido dejaron 4 filas de rastro, 4 avisos recibidos y 4 cedidos en 4 lotes distintos (el segundo aviso al mismo mensajero sale), y un rechazo del servidor llega al usuario como toast con el texto correcto.
+
+## 425 — Los rechazos de la tienda llegan al cierre, sin cobrarse (2026-09-14)
+
+Nace de la **NA-981**: un admin no podía devolverla a tienda porque estaba en `rechazada`.
+
+**Lo que se creyó al principio y no era del todo cierto:** que su única salida era aprobar el cierre
+que contuviera esa gestión. El bloque 139 libera **todas** las órdenes `rechazada` del mensajero
+asignado al aprobar **cualquier** cierre suyo, así que la NA-981 habría salido aprobando el cierre del
+11/09 de Arnel, que estaba pendiente. Lo encontró el reviewer y el leader lo verificó en el código.
+
+**Lo que sí era un hueco, y es lo que pidió el humano (D1):** los rechazos que registra la tienda **no
+aparecían en ningún cierre**, así que quien aprueba no se enteraba del rechazo ni separaba el paquete.
+Ahora aparecen en la sección «Rechazados por la tienda», con su conteo «revisar» aparte del «paga».
+
+**El arreglo de una línea cobraba dos veces.** Sacar `rechazo_tienda` de la lista de exclusión metía
+el rechazo en el cierre como gestión, y la 337 ya cobra ese flete por `rechazo_tienda_cobro` (24
+cobros, ₡65.088, medidos). Se hizo un **vínculo de revisión en tabla propia**, sin `cierre_id` ni
+dinero. La mutación de ese arreglo pone el ingreso de bodega en 328 en vez de 164, y sale roja.
+
+**Decisiones del humano:** D1, la salida llega por un cierre; D2, solo los rechazos; D3, las 46
+históricas entran, avisando antes a quien aprueba.
+
+**Hallazgos del camino:**
+
+- **Un mensajero no puede pedir él mismo un cierre que solo trae rechazos:** los recoge el corte diario
+  como `vencido`. El corte elige a cualquiera con gestiones sin cierre de cualquier día; la primera
+  noche afecta a Andy y a Arnel, que no trabajan.
+- **Un `vencido` no se aprueba directamente** (`ESTADOS_RESOLUBLES = ["solicitado"]` desde la 111):
+  primero «Destrabar cierre vencido». El aviso decía lo contrario y ya se había enviado; se corrigió y
+  se redactó una corrección. El camino «destrabar y aprobar sin el mensajero» quedó como caso de test.
+- **El gate dio rojo por dos causas ajenas a la ficha:** residuo de la prueba T25 de la 427 (8 avisos
+  que rompían los `down.sql` de enums) y una **carrera entre dos tests antiguos** (el R9 de la 412
+  escribe un cierre fuera de la transacción para el primer usuario de la base; el N/V de la 271 lo ve).
+  Reproducida por el reviewer; arreglo en ficha aparte.
+
+**Revisión:** RECHAZADO solo por el aviso. **Ninguna mutación de dinero sobrevive** (el rechazo con
+`cierre_id`, el pago inflado y el doble cobro, las tres rojas). El cambio de semilla del test de la
+337 y el `lastCall` de la 69 se juzgaron legítimos, con mutaciones que lo demuestran.
+
+**Pendiente tras desplegar (V5):** sobre el primer cierre con rechazos, que `total_pago_mensajero` sea
+la suma del pago de las gestiones con `cierre_id` y que la contaminación dé 0. Si se aprueba antes el
+cierre del 11/09 de Arnel, sus tres órdenes saldrán por ese y V5 no demostraría la salida por la 425.

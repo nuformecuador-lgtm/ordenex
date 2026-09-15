@@ -71,8 +71,9 @@ export class EliminarOrdenService implements IEliminarOrdenService {
     actor: Actor,
   ): Promise<EliminarOrdenServiceResult> {
     // 1. Autorizacion antes de tocar dato alguno, y NO escrita aqui: la resuelve
-    // `resolverAlcanceBorradoOrden`, la MISMA funcion que usa el canal por API key. Devuelve
-    // «todas» (maestro), «propias» (la tienda, con su `ownerId`) o «denegado».
+    // `resolverAlcanceBorradoOrden`, la MISMA funcion que usa el canal por API key —y, desde la
+    // ficha 424, la MISMA que decide si la pantalla ofrece la accion (`app/(app)/ordenes/page.tsx`)—.
+    // Devuelve «todas» (maestro y admin), «propias» (la tienda, con su `ownerId`) o «denegado».
     //
     // ⭑ FICHA 358 (2026-09-02) — QUE CAMBIO Y QUE NO. El humano abrio el borrado POR PANTALLA a
     // la tienda, acotado a lo suyo. No es un permiso nuevo: es la MISMA regla que la tienda ya
@@ -80,11 +81,30 @@ export class EliminarOrdenService implements IEliminarOrdenService {
     // `where`— con otra forma. Lo reportado que lo motiva: «Nuform quiere eliminar NA-495 y no le
     // aparece el checkbox».
     //
-    // LO QUE SE CONSERVA de la decision del 2026-08-27 (que estrecho la regla de maestro/admin a
-    // solo maestro): el `admin` SIGUE sin poder borrar. Aquel motivo —«con dos roles capaces de
-    // borrar, el rastro de quien lo hizo deja de ser una sola persona»— hablaba de dos roles del
-    // EQUIPO borrando lo mismo. La tienda no entra en esa cuenta: solo alcanza lo suyo, y ya lo
-    // alcanzaba por API. `esAccesoTotal` sigue sin servir aqui a proposito.
+    // ⭑ FICHA 424 (2026-09-14) — PEDIDO HUMANO (Carlos Restrepo): **se REVIERTE el estrechamiento
+    // del 2026-08-27** y el `admin` vuelve a poder borrar, con alcance «todas» como el maestro.
+    // Hasta hoy este bloque decia lo contrario («el `admin` SIGUE sin poder borrar»), y el motivo
+    // de aquella decision era: «con dos roles capaces de borrar, el rastro de quien lo hizo deja
+    // de ser una sola persona». No se tacha: se le añade el capitulo nuevo.
+    //
+    // LO QUE SOSTIENE LA REVERSION, y es lo unico que la sostiene: la ficha 362. Hoy cada orden
+    // EFECTIVAMENTE borrada deja una fila en `historial_accion` con el NOMBRE y el ROL congelados
+    // de quien la borro, agrupadas por acto (`lote_id`) y consultables por el `maestro` en
+    // `/historico/acciones`. El rastro ya no es «una persona»: es «que persona, con que rol,
+    // sobre que orden y en que acto». Medido con el rol nuevo contra Postgres en
+    // `tests/integration/db/orden-eliminada-actor-admin.test.ts` y
+    // `historial-accion-lectura.test.ts`. Medido tambien el alcance: de 2 personas capaces de
+    // borrar se pasa a 6 (2 `maestro` + 4 `admin` activos en produccion, 2026-09-14).
+    //
+    // LO QUE **NO** SE LE ABRE (424/D1, mismo dia): RECUPERAR y ver las eliminadas siguen siendo
+    // del `maestro`, y `/historico/acciones` tambien. El `admin` genera filas en ese registro y
+    // no las lee; si borra por error, se lo pide al `maestro`.
+    //
+    // `esAccesoTotal` SIGUE sin servir aqui, y ahora que maestro y admin vuelven a coincidir es
+    // cuando mas hay que decirlo: aquella es una respuesta BINARIA y el borrado tiene TRES casos
+    // («todas», «propias» con dueño, «denegado»). Usarla dejaria a `adminTienda` y `apiKey` fuera
+    // del mismo punto de decision —justo lo que la 358 vino a arreglar— y convertiria una lista
+    // de inclusion en una paridad que arrastra cualquier capacidad futura del `admin`.
     //
     // ⚠️ ESTA AUTORIZACION NO ES LA FRONTERA. Que el alcance sea «propias» no impide nada por si
     // solo: lo que impide que la tienda A borre una orden de la tienda B es el `ownerId` que baja
@@ -92,7 +112,10 @@ export class EliminarOrdenService implements IEliminarOrdenService {
     // para poder decir POR QUE se rechaza, no para autorizar.
     const alcance = resolverAlcanceBorradoOrden(actor);
     if (alcance.alcance === "denegado") return { status: "forbidden" };
-    /** `null` = sin frontera de tienda (maestro). Viaja tal cual al `where` del repositorio. */
+    /**
+     * `null` = sin frontera de tienda (maestro y, desde la ficha 424, admin). Viaja tal cual al
+     * `where` del repositorio.
+     */
     const ownerId = alcance.alcance === "propias" ? alcance.ownerId : null;
 
     const ordenIds = [...new Set(input.ordenIds)];

@@ -493,4 +493,204 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     // R38: tampoco aquí se escapa un `YYYY-MM-DD`.
     expect(sello?.textContent ?? "").not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
+  /* ---------- FICHA 427 (T21, R26/R29/R30) — la TERCERA clase: el traspaso ---------- */
+
+  /**
+   * El caso real que origina la ficha: Andy Cortés se enfermó a media jornada y sus 31 órdenes
+   * las hizo Carlos Eduardo.
+   *
+   * ⚠️ TODOS LOS LITERALES DE ESTE BLOQUE VAN A MANO. Comparar «Traspaso a otro mensajero» contra
+   * la constante del componente estaría verde por construcción: afirmaría «la constante vale lo
+   * que vale» y dejaría pasar cualquier cambio de lo que la persona lee.
+   */
+  const TRASPASO: OrdenHistorialEntradaDTO = {
+    clase: "traspaso_mensajero",
+    mensajeroAnteriorNombre: "Andy Cortés",
+    mensajeroNuevoNombre: "Carlos Eduardo",
+    actorNombre: "Coordinadora Ana",
+    actorRol: "admin",
+    motivo: "Andy se reportó enfermo a media jornada",
+    createdAt: new Date("2026-09-14T20:30:00Z"),
+  };
+
+  it("R29: el traspaso nombra al de ORIGEN, al de DESTINO, a quien lo ejecutó y su motivo", () => {
+    render(<HistorialOrdenTimeline entradas={[TRASPASO]} />);
+
+    const item = screen.getByRole("listitem");
+    // La primera línea dice QUÉ es, con palabras y sin siglas.
+    expect(within(item).getByText("Traspaso a otro mensajero")).toBeInTheDocument();
+    // Los dos extremos, y en ESE sentido: de quién sale, a quién llega.
+    expect(within(item).getByText("De Andy Cortés a Carlos Eduardo")).toBeInTheDocument();
+    // Quién lo hizo, con su rol.
+    expect(within(item).getByText("Por Coordinadora Ana (Administrador)")).toBeInTheDocument();
+    // Y el motivo escrito por esa persona (R28), que es lo que explica el resto.
+    expect(
+      within(item).getByText("Motivo: Andy se reportó enfermo a media jornada"),
+    ).toBeInTheDocument();
+    // El sello de hora sigue siendo un `<time>`, como en cualquier otra entrada.
+    expect(
+      within(item).getByText((_, el) => el?.tagName.toLowerCase() === "time"),
+    ).toBeInTheDocument();
+  });
+
+  it("R29: el sentido IMPORTA — «de Andy a Carlos» no se lee igual que «de Carlos a Andy»", () => {
+    // Si la línea fuera simétrica (o si el componente cruzara los dos nombres), el rastro no
+    // serviría para lo único que existe: saber quién dejó de tenerla y quién la tiene ahora.
+    render(
+      <HistorialOrdenTimeline
+        entradas={[
+          TRASPASO,
+          {
+            ...TRASPASO,
+            mensajeroAnteriorNombre: "Carlos Eduardo",
+            mensajeroNuevoNombre: "Andy Cortés",
+            createdAt: new Date("2026-09-14T22:00:00Z"),
+          },
+        ]}
+      />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0].textContent ?? "").toContain("De Andy Cortés a Carlos Eduardo");
+    expect(items[0].textContent ?? "").not.toContain("De Carlos Eduardo a Andy Cortés");
+    expect(items[1].textContent ?? "").toContain("De Carlos Eduardo a Andy Cortés");
+    expect(items[0].textContent).not.toBe(items[1].textContent);
+  });
+
+  it("R26: el rol que se pinta es el CONGELADO de CADA fila, no uno resuelto para toda la lista", () => {
+    // Dos traspasos de la MISMA persona con roles distintos congelados: es el caso de alguien a
+    // quien ascendieron entre un acto y el otro. Si la pantalla resolviera el rol vivo —o lo
+    // tomara de la primera fila— las dos entradas dirían lo mismo y este caso caería.
+    render(
+      <HistorialOrdenTimeline
+        entradas={[
+          { ...TRASPASO, actorRol: "admin" },
+          {
+            ...TRASPASO,
+            actorRol: "maestro",
+            createdAt: new Date("2026-09-15T09:00:00Z"),
+          },
+        ]}
+      />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    expect(items[0].textContent ?? "").toContain("Por Coordinadora Ana (Administrador)");
+    expect(items[0].textContent ?? "").not.toContain("Maestro");
+    expect(items[1].textContent ?? "").toContain("Por Coordinadora Ana (Maestro)");
+    expect(items[1].textContent ?? "").not.toContain("Administrador");
+    // Y el `value` crudo del enum NO se pinta: se lee la etiqueta.
+    expect(screen.getByRole("list").textContent ?? "").not.toContain("(admin)");
+    expect(screen.getByRole("list").textContent ?? "").not.toContain("(maestro)");
+  });
+
+  it("R21: el traspaso NO se pinta como una transición — ni etiqueta de estado ni flecha", () => {
+    render(<HistorialOrdenTimeline entradas={[TRASPASO]} />);
+
+    const item = screen.getByRole("listitem");
+    // Un traspaso no cambia el estado de la orden: presentarlo con `estatusLabel` sería mentir
+    // sobre la máquina de estados.
+    for (const etiqueta of Object.values(L)) {
+      expect(within(item).queryByText(etiqueta)).toBeNull();
+    }
+    expect(item.textContent ?? "").not.toContain("→");
+    expect(within(item).queryByText("Creación")).toBeNull();
+
+    // CONTRAPRUEBA, sin la cual lo de arriba podría estar verde por mirar un render vacío.
+    cleanup();
+    render(<HistorialOrdenTimeline entradas={[ENTRADAS[1]]} />);
+    const transicion = screen.getByRole("listitem");
+    expect(within(transicion).getByText(L.reprogramada)).toBeInTheDocument();
+    expect(transicion.textContent ?? "").toContain("→");
+  });
+
+  it("R29: mezclado con las otras DOS clases, cada entrada sale en su sitio y se distingue por TEXTO", () => {
+    // El componente no ordena (R41): pinta el array tal cual lo fusionó el servidor.
+    render(
+      <HistorialOrdenTimeline entradas={[ENTRADAS[0], CORRECCION, TRASPASO, ENTRADAS[2]]} />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(4);
+    const textos = items.map((li) => li.textContent ?? "");
+
+    expect(textos[0]).toContain(L.en_preparacion);
+    expect(textos[1]).toContain("Día de reparto");
+    expect(textos[2]).toContain("Traspaso a otro mensajero");
+    expect(textos[3]).toContain(L.en_bodega_central);
+
+    // Y la palabra DISCRIMINA: ninguna de las otras tres la dice. Sin esta mitad, «se distingue
+    // por texto» se cumpliría con una palabra presente en todas las entradas.
+    expect(textos[0]).not.toContain("Traspaso a otro mensajero");
+    expect(textos[1]).not.toContain("Traspaso a otro mensajero");
+    expect(textos[3]).not.toContain("Traspaso a otro mensajero");
+    // Y al revés: el traspaso no se lee como una corrección del día.
+    expect(textos[2]).not.toContain("Día de reparto");
+  });
+
+  it("R30: dos traspasos de la misma orden son DOS entradas, y la primera no se reescribe", () => {
+    // El rastro es append-only: un traspaso posterior AÑADE una entrada. Lo que la pantalla tiene
+    // que enseñar es la cadena entera, no sólo quién la tiene ahora.
+    render(
+      <HistorialOrdenTimeline
+        entradas={[
+          TRASPASO,
+          {
+            clase: "traspaso_mensajero",
+            mensajeroAnteriorNombre: "Carlos Eduardo",
+            mensajeroNuevoNombre: "Marta Solís",
+            actorNombre: "Coordinadora Ana",
+            actorRol: "maestro",
+            motivo: "Carlos Eduardo no alcanza a cerrar la ruta antes de las 6",
+            createdAt: new Date("2026-09-14T23:10:00Z"),
+          },
+        ]}
+      />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0].textContent ?? "").toContain("De Andy Cortés a Carlos Eduardo");
+    expect(items[0].textContent ?? "").toContain(
+      "Motivo: Andy se reportó enfermo a media jornada",
+    );
+    expect(items[1].textContent ?? "").toContain("De Carlos Eduardo a Marta Solís");
+    expect(items[1].textContent ?? "").toContain(
+      "Motivo: Carlos Eduardo no alcanza a cerrar la ruta antes de las 6",
+    );
+    // La primera no se contamina con el motivo de la segunda.
+    expect(items[0].textContent ?? "").not.toContain("no alcanza a cerrar la ruta");
+  });
+
+  it("F7 heredado: la marca del traspaso difiere de la de una transición en algo que NO es color", () => {
+    render(<HistorialOrdenTimeline entradas={[ENTRADAS[1], TRASPASO]} />);
+    const [transicion, traspasoLi] = screen.getAllByRole("listitem");
+
+    const deTransicion = clasesDeLaEntrada(transicion);
+    const deTraspaso = clasesDeLaEntrada(traspasoLi);
+    const diferencia = [
+      ...Array.from(deTraspaso).filter((t) => !deTransicion.has(t)),
+      ...Array.from(deTransicion).filter((t) => !deTraspaso.has(t)),
+    ];
+
+    expect(
+      diferencia.filter(esMarcaDeForma),
+      "la única diferencia visual entre traspaso y transición es de color",
+    ).not.toHaveLength(0);
+    expect(deTraspaso.has("border-dashed")).toBe(true);
+    expect(deTransicion.has("border-dashed")).toBe(false);
+  });
+
+  it("R29: el sello del traspaso es un `<time>` en la zona FIJA del componente", () => {
+    render(<HistorialOrdenTimeline entradas={[TRASPASO]} />);
+
+    const sello = screen.getByRole("listitem").querySelector("time");
+    expect(sello, "el traspaso perdió su sello de hora").not.toBeNull();
+    expect(sello?.getAttribute("datetime")).toBe("2026-09-14T20:30:00.000Z");
+    // 20:30 UTC son las 14:30 en Costa Rica. Si el componente soltara el reloj del navegador,
+    // este número cambiaría con la máquina que corre la suite.
+    expect(sello?.textContent ?? "").toMatch(/2:30/);
+    expect(sello?.textContent ?? "").not.toMatch(/20:30/);
+  });
 });

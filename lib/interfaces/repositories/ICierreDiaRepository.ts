@@ -4,6 +4,7 @@ import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { OrderStatusValue } from "@/lib/types/order-status";
 import type {
   CierrePasadoDTO,
+  CierreRechazoDeTienda,
   CierreTotales,
   IngresoOrdenexDTO,
 } from "@/lib/interfaces/services/ICierreDiaService";
@@ -445,6 +446,12 @@ export interface ICierreDiaRepository {
     sinGestion: CierreSinGestionRow[];
     /** R27/R28: `false` = cierre ANTERIOR al registro; `[]` con `false` NO es «no hubo ninguna». */
     sinGestionRegistrado: boolean;
+    /**
+     * FICHA 425 (B11/R14) — los rechazos de tienda que ESTE cierre incorporo, leidos por `cierre_id`
+     * de `cierre_rechazo_tienda` y del mas viejo al mas reciente. Heredan el alcance del `findFirst`
+     * de arriba (`id` + `mensajero_id` en el WHERE), igual que `sinGestion`. `[]`, nunca `null`.
+     */
+    rechazosDeTienda: CierreRechazoDeTienda[];
   } | null>;
   /**
    * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA de los cierres del

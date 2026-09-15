@@ -492,6 +492,20 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // AGREGADO: el numero NO se persiste -lo compone el catalogo con la cifra VIVA en cada
       // lectura- y el BLOQUEADO por cierres no lo recibe (filtro de EMISION, no de lectura).
       "reparto_manana", // ficha 413 / §7
+      // FICHA 427 (design §6.5) - DECIMOSEXTO y DECIMOSEPTIMO valores, y este test rojo fue OTRA
+      // VEZ la prueba de que el inventario sigue CERRADO. Su productor es
+      // `TraspasoMensajeroService`, que los emite FUERA de la transaccion del traspaso y
+      // best-effort (R41): un aviso caido no puede revertir un traspaso legitimo y dejar el paquete
+      // con quien ya no puede entregarlo.
+      //
+      // POR QUE DOS Y NO UNO (precedente 271): piden acciones OPUESTAS. Al destino le dicen «sal a
+      // repartir esto»; al origen, «esto ya no es tuyo». El evento es lo que la campana usa para
+      // agrupar y deduplicar Y lo que el catalogo de push consulta, asi que meter la diferencia en
+      // la descripcion la volveria invisible — y estos DOS tienen perfiles de push OPUESTOS (R43).
+      //
+      // Son AGREGADOS: UNA fila por ACTO con el numero DENTRO del texto, jamas una por orden (R38).
+      "traspaso_ordenes_recibido", // ficha 427 / §6.5 - al que RECIBE; push si
+      "traspaso_ordenes_cedido", // ficha 427 / §6.5 - al que CEDE; push NO, y es la misma decision
     ]);
   });
 
@@ -570,6 +584,20 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // es un ROL CON ALCANCE y el alcance no esta en la clave unica; aqui es un USUARIO, y
       // `destinatario_usuario_id` YA ES una columna de `notificacion_dedupe_key`.
       "reparto_manana_dia", // ficha 413 / §7 - EL DIA ANUNCIADO, sin prefijo de mensajero
+      // FICHA 427 (design §6.5) - OCTAVO valor cuya entidad no es una FILA, aunque aqui SI exista
+      // tabla: la entidad de los dos avisos del traspaso es EL ACTO
+      // (`entidad_id = orden_traspaso_mensajero.lote_id`), no la orden ni el mensajero.
+      //
+      // POR QUE EL LOTE. `notificacion_dedupe_key` NO MIRA EL ESTADO DE LECTURA y `crear` absorbe
+      // el `P2002`. Con el MENSAJERO como entidad, la clave admitiria UNA sola fila por (evento,
+      // mensajero, mensajero) PARA SIEMPRE: el SEGUNDO traspaso del dia a la misma persona -el caso
+      // NORMAL cuando alguien se enferma y su carga se reparte en dos tandas- no avisaria JAMAS. Con
+      // la ORDEN, ademas, harian falta N filas por acto, contra R38.
+      //
+      // Y NO lleva prefijo de mensajero, por lo mismo que `reparto_manana_dia`: el destinatario es
+      // un USUARIO y `destinatario_usuario_id` YA ES una columna de la clave unica, asi que los DOS
+      // avisos del mismo acto no se pisan.
+      "orden_traspaso_lote", // ficha 427 / §6.5 - EL ACTO (`lote_id`), no la orden ni el mensajero
     ]);
   });
 });

@@ -262,6 +262,7 @@ const CON_RECHAZO: DetalleOk = {
   partesPorTienda: [],
   ordenesSinGestion: [],
   sinGestionRegistrado: true,
+  rechazosDeTienda: [],
 };
 
 /**
@@ -298,6 +299,7 @@ const SIN_RECHAZO: DetalleOk = {
   partesPorTienda: [],
   ordenesSinGestion: [],
   sinGestionRegistrado: true,
+  rechazosDeTienda: [],
 };
 
 /**
@@ -332,6 +334,7 @@ const NEGATIVOS: DetalleOk = {
   partesPorTienda: [],
   ordenesSinGestion: [],
   sinGestionRegistrado: true,
+  rechazosDeTienda: [],
 };
 
 const DE = "cierre de Ana Mensajera";

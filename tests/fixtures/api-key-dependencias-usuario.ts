@@ -149,6 +149,19 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
   "Orden.mensajeroAsignado": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
   "OrdenMensajeroMeta.usuario": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
   "OrdenNota.autor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // FICHA 427 — el rastro del traspaso entre mensajeros. TRES FKs a `usuario`, las tres `Restrict`
+  // y las tres INALCANZABLES para una cuenta dedicada de API key:
+  //   · los dos extremos exigen rol `mensajero`;
+  //   · el actor exige un operador HUMANO con `esAccesoTotal` (maestro/admin), y una cuenta
+  //     dedicada ni entra por el formulario ni tiene ese rol.
+  // Si alguna vez una API key pudiera traspasar (no esta pedido), estas tres pasarian a `bloquea`:
+  // la fila de rastro es evidencia y su `Restrict` pararia el borrado.
+  "OrdenTraspasoMensajero.mensajeroAnterior": {
+    categoria: "no_alcanzable",
+    motivo: SOLO_MENSAJERO,
+  },
+  "OrdenTraspasoMensajero.mensajeroNuevo": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
+  "OrdenTraspasoMensajero.actor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "GestionOrden.mensajero": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
   "GestionOrden.anuladaPorUsuario": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "GestionOrden.pagosEditadosPorUsuario": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },

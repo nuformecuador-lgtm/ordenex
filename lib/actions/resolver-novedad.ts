@@ -8,6 +8,7 @@ import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepositor
 import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBodegaRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { RechazoTiendaCobroRepository } from "@/lib/repositories/RechazoTiendaCobroRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
@@ -107,6 +108,7 @@ function buildReprogramacionService(): IReprogramacionTiendaService {
       ordenRepo,
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
   );
 }

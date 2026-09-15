@@ -890,6 +890,10 @@ export class CierresAdminService implements ICierresAdminService {
       // R27/R28: se emite TAL CUAL. Traducir un `false` a «lista vacia» seria volver a confundir
       // «no lo sabemos» con «no hubo ninguna», que es justo lo que esta feature vino a separar.
       sinGestionRegistrado: found.sinGestionRegistrado,
+      // FICHA 425 (B11, R14/R16) — MAPEO DIRECTO, igual de aburrido que el de la 264. No roza
+      // `grupos`, `totalesIngreso`, `ganancia`, `pagoTienda`, `partesPorTienda` ni el desglose: R6/R7
+      // se cumplen aqui por AUSENCIA de codigo, porque la lista no trae nada que sumar.
+      rechazosDeTienda: found.rechazosDeTienda,
     };
   }
 

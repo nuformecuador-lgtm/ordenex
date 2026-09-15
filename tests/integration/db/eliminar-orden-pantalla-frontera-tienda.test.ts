@@ -4,6 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { EliminarOrdenService } from "@/lib/services/EliminarOrdenService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -154,6 +155,7 @@ describeSiHayBase("ficha 358 — una tienda NO puede borrar por pantalla ordenes
         new OrdenRepository(tx as unknown as PrismaClient),
         new OrdenHistorialRepository(tx as unknown as PrismaClient),
         new OrdenDiaRepartoCambioRepository(tx as unknown as PrismaClient),
+        new OrdenTraspasoRepository(tx as unknown as PrismaClient),
       ),
     };
   }

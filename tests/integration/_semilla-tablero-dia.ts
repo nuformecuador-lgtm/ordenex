@@ -3,6 +3,7 @@ import type { GestionResultado, PrismaClient } from "@prisma/client";
 
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { TableroDiaRepository } from "@/lib/repositories/TableroDiaRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
@@ -316,6 +317,7 @@ export function servicioReal(tx: TxDeTest): TableroDiaService {
       ordenes,
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
   );
 }

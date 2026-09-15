@@ -5,6 +5,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { RechazosSlaTiendaService } from "@/lib/services/RechazosSlaTiendaService";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -66,6 +67,7 @@ function buildService(): IRechazosSlaTiendaService {
       ordenRepo,
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
   );
 }

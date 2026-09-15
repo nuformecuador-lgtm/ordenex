@@ -2,6 +2,7 @@ import { reintentosConfig } from "@/lib/config/reintentos";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IOrdenHistorialRepository } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { IOrdenDiaRepartoCambioRepository } from "@/lib/interfaces/repositories/IOrdenDiaRepartoCambioRepository";
+import type { IOrdenTraspasoRepository } from "@/lib/interfaces/repositories/IOrdenTraspasoRepository";
 import type { OrdenDTO } from "@/lib/types/orden";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -12,6 +13,7 @@ import type {
   OrdenHistorialCorreccionDiaDTO,
   OrdenHistorialEntradaDTO,
   OrdenHistorialTransicionDTO,
+  OrdenHistorialTraspasoDTO,
 } from "@/lib/types/orden-historial";
 
 // Roles reconocidos por la lectura del historial. Un rol fuera de este conjunto -> forbidden
@@ -25,7 +27,7 @@ const KNOWN_ROLES = new Set<string>([
 ]);
 
 /**
- * FEATURE 262 (B26, design §14.3) — EL ORDEN ENTRE LAS DOS CLASES CUANDO EL INSTANTE EMPATA.
+ * FEATURE 262 (B26, design §14.3) — EL ORDEN ENTRE LAS CLASES CUANDO EL INSTANTE EMPATA.
  *
  * Es una regla ARBITRARIA, y por eso se DECLARA en vez de dejarla al `sort`:
  * `Array.prototype.sort` es estable desde ES2019, pero la estabilidad solo fija el orden DENTRO
@@ -39,11 +41,25 @@ const KNOWN_ROLES = new Set<string>([
 const RANGO_POR_CLASE: Record<OrdenHistorialEntradaDTO["clase"], number> = {
   transicion: 0,
   correccion_dia: 1,
+  /**
+   * FICHA 427 (T20, design §9) — LA TERCERA CLASE, y este `Record` es donde la 262 dejo puesta la
+   * trampa que la obligo a decidirse: añadir `OrdenHistorialTraspasoDTO` a la union dejo este
+   * objeto SIN COMPILAR hasta escribir esta linea. Ese rojo era la funcionalidad.
+   *
+   * VA LA ULTIMA (rango 2) y es una regla ARBITRARIA, como las otras dos, pero no caprichosa: un
+   * traspaso NO cambia el estado de la orden (R21) ni su dia (R16), asi que cuando comparte
+   * instante con una transicion o con una correccion lo que paso PRIMERO es aquello —el cambio
+   * real sobre la orden— y el traspaso es el apunte de quien la lleva a partir de ahi.
+   */
+  traspaso_mensajero: 2,
 };
 
 /**
- * FEATURE 262 (B26, R40/R41) — LA FUSION DE LAS DOS FUENTES DE LA LINEA DE TIEMPO. Funcion PURA:
+ * FEATURE 262 (B26, R40/R41) — LA FUSION DE LAS FUENTES DE LA LINEA DE TIEMPO. Funcion PURA:
  * sin repos, sin reloj y sin `await`, para poder probar la regla de orden sin base y sin dobles.
+ *
+ * ⭑ FICHA 427 (T20, R29): desde hoy son TRES fuentes. El tercer parametro son los TRASPASOS de la
+ * orden entre mensajeros, y entra por la misma puerta y con las mismas reglas que las correcciones.
  *
  * POR QUE VIVE EN EL SERVIDOR Y NO EN EL COMPONENTE (R41, design §A18): 49/R26 puso el orden
  * cronologico en el servicio. Ordenar en el navegador seria una SEGUNDA definicion del orden y
@@ -66,13 +82,16 @@ const RANGO_POR_CLASE: Record<OrdenHistorialEntradaDTO["clase"], number> = {
  * Lo que NO se hace es inventar un segundo criterio para una de las dos.
  *
  * R45: con `correcciones` vacio el resultado es la lista de transiciones tal cual — mismas
- * entradas, mismo orden, mismo contenido.
+ * entradas, mismo orden, mismo contenido. Lo mismo vale, palabra por palabra, para `traspasos`
+ * (427/T21, no-regresion): la inmensa mayoria de las ordenes no se traspasan nunca y su linea de
+ * tiempo tiene que salir EXACTAMENTE como salia antes de esta ficha.
  */
 export function fusionarLineaDeTiempo(
   transiciones: readonly OrdenHistorialTransicionDTO[],
   correcciones: readonly OrdenHistorialCorreccionDiaDTO[],
+  traspasos: readonly OrdenHistorialTraspasoDTO[],
 ): OrdenHistorialEntradaDTO[] {
-  const entradas: OrdenHistorialEntradaDTO[] = [...transiciones, ...correcciones];
+  const entradas: OrdenHistorialEntradaDTO[] = [...transiciones, ...correcciones, ...traspasos];
   return entradas.sort((a, b) => {
     const delta = a.createdAt.getTime() - b.createdAt.getTime();
     if (delta !== 0) return delta;
@@ -102,6 +121,17 @@ export class OrdenHistorialService implements IOrdenHistorialService {
      * `pnpm typecheck`.
      */
     private readonly correccionRepo: IOrdenDiaRepartoCambioRepository,
+    /**
+     * FICHA 427 (T20, R29): la TERCERA fuente de la linea de tiempo, el rastro de traspasos de la
+     * orden entre mensajeros.
+     *
+     * ES OBLIGATORIO POR LA MISMA RAZON QUE SU VECINO, y no se repite el argumento por inercia: un
+     * parametro opcional con «sin traspasos» por defecto convertiria un cableado olvidado en un
+     * drawer que ENSEÑA MENOS de lo que hay —justo la orden cuyo mensajero cambio, que es la que
+     * mas falta hace explicar— y no rompe nada. Con el obligatorio, olvidarlo en cualquiera de los
+     * 33 sitios que construyen este servicio es un rojo de `pnpm typecheck`.
+     */
+    private readonly traspasoRepo: IOrdenTraspasoRepository,
   ) {}
 
   async obtenerHistorial(ordenId: string, actor: Actor): Promise<ObtenerHistorialServiceResult> {
@@ -119,11 +149,17 @@ export class OrdenHistorialService implements IOrdenHistorialService {
     // R44: las dos lecturas van DESPUES de `decision === "ok"`. La autorizacion NO se toca y NO
     // gana ninguna regla: quien puede ver la linea de tiempo ve tambien sus correcciones, y quien
     // no, no llega a leer ninguna de las dos.
-    const [transiciones, correcciones] = await Promise.all([
+    //
+    // FICHA 427 (T20, R29): y una TERCERA, el rastro de traspasos entre mensajeros. Entra por la
+    // misma puerta y DESPUES de `decision === "ok"`, por lo mismo: la autorizacion de lectura NO
+    // cambia y NO gana ninguna regla — quien ve la linea de tiempo de la orden ve tambien sus
+    // traspasos, con los mismos recortes por rol de hoy (design §9).
+    const [transiciones, correcciones, traspasos] = await Promise.all([
       this.historialRepo.findHistorialByOrden(ordenId), // R26 cronologico
       this.correccionRepo.findCorreccionesByOrden(ordenId), // created_at asc, id asc
+      this.traspasoRepo.findTraspasosByOrden(ordenId), // created_at asc, id asc
     ]);
-    const entradas = fusionarLineaDeTiempo(transiciones, correcciones); // R40
+    const entradas = fusionarLineaDeTiempo(transiciones, correcciones, traspasos); // R40 + 427/R29
     // Feature 47 (R15/R17): junto a la linea de tiempo, el conteo de intentos DERIVADO
     // (consume el derivador de la 49) y el umbral configurable, para que la UI muestre
     // "intento X de N" sin fetchear datos sensibles en el cliente. La autz NO cambia: esta

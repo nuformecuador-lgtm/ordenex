@@ -153,6 +153,9 @@ model Usuario {
   postulacionesRecursoAtendidas       PostulacionRecurso[]               @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
   diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]            @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
   fechaReprogramacionCambiosHechos    GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioActor") // ficha 371: correcciones de la fecha de una reprogramacion que ESTE usuario hizo; FK RESTRICT por el mismo motivo que la linea de arriba
+  traspasosCedidos                    OrdenTraspasoMensajero[]           @relation("OrdenTraspasoAnterior") // ficha 427/R25: ordenes que dejaron de ser de ESTE mensajero por un traspaso. FK RESTRICT: quien llevaba un paquete es evidencia y no se pierde al dar de baja al usuario
+  traspasosRecibidos                  OrdenTraspasoMensajero[]           @relation("OrdenTraspasoNuevo") // ficha 427/R25: ordenes que ESTE mensajero recibio por un traspaso. FK RESTRICT por el mismo motivo
+  traspasosEjecutados                 OrdenTraspasoMensajero[]           @relation("OrdenTraspasoActor") // ficha 427/R25/R26: traspasos que ESTE usuario ejecuto. `actor_rol` va CONGELADO en la fila, asi que esta relacion NO es la que pinta la linea de tiempo
   habilitacionesApiPedidas            OrdenHabilitacionApi[]             @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones pedidas por el canal integrador a nombre de ESTE usuario (302: el dueno resuelto de la key -- su cuenta dedicada, o la tienda real a la que apunta); la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   cobrosGastoFijo                     GastoFijoCobro[]                   @relation("GastoFijoCobroDecisor") // ficha 333/R15/R21: cobros de gasto fijo que ESTE usuario aprobo o rechazo; la FK es RESTRICT (quien autorizo dinero es evidencia y no se pierde al dar de baja al usuario), mismo criterio que `orden_dia_reparto_cambio.actor_usuario_id`
   cobrosRechazoTiendaDecididos        RechazoTiendaCobro[]               @relation("RechazoTiendaCobroDecisor") // ficha 337: cobros por rechazo de tienda que ESTE usuario aprobo o rechazo. FK RESTRICT por el mismo motivo que la linea de arriba: quien autorizo un cobro es evidencia y no se pierde al dar de baja al usuario.
@@ -708,6 +711,29 @@ model Orden {
   /// sentencia que, aplicada, no puede aplicarse (no hay default que quitar) y que solo
   /// existe porque el modelo callaba. Con el, el diff sale VACIO.
   busquedaTexto          String?   @default(dbgenerated()) @map("busqueda_texto")
+  /// FICHA 423 (design §2.1/§2.5) — columna GENERADA ALWAYS ... STORED en la base: la CLAVE DE
+  /// ORDEN NATURAL de `num_remision`. Deriva de ella `(serie, numero)` como texto comparable byte
+  /// a byte —prefijo alfanumerico en mayusculas + el bloque final de digitos rellenado a 18 con
+  /// `lpad`—, para que `NA-107` caiga antes que `NA-1069` (R3) y las series salgan agrupadas
+  /// `72912…`, `BS-`, `NA-`, `SC-` (R4). NUNCA se escribe desde la aplicacion: Postgres rechaza
+  /// cualquier INSERT/UPDATE sobre ella (R17), y el cliente la OMITE globalmente
+  /// (`lib/db/prisma-client.ts`, `PRISMA_OMIT`) para que no llegue a ningun DTO ni a la descarga
+  /// (R16). Su UNICO uso es el `orderBy` de `OrdenRepository.list` (`SORT_COLUMN`).
+  ///
+  /// ⚠️ LO QUE PRISMA NO PUEDE EXPRESAR Y POR TANTO **NO VIVE AQUI**, mismo hueco que el unico
+  /// parcial de la feature 294 unas lineas mas abajo: (a) el `COLLATE "C"` de la columna y (b) el
+  /// predicado `WHERE "deleted_at" IS NULL` del indice. Los dos estan escritos A MANO en
+  /// `db/migrations/20260916120000_orden_clave_remision/migration.sql`, que es donde hay que ir a
+  /// leerlos. `migrate diff --from-config-datasource` no los ve (no propone recrear nada), pero
+  /// `--from-empty --to-schema` —o sea `db push`— escribiria el indice SIN el `WHERE` y la columna
+  /// SIN la collation, y entonces el orden dependeria del locale de cada base sin que nada
+  /// fallara: exactamente el fallo mudo que R6 prohibe. Lo vigila
+  /// `tests/unit/db/orden-clave-remision.guardia.test.ts`.
+  ///
+  /// `@default(dbgenerated())` NO es decorativo, y se llego a el MIDIENDO (ficha 169, T1.5): sin
+  /// el, Prisma lee la expresion GENERATED como si fuera un DEFAULT de columna y cada
+  /// `migrate dev` futuro propone un `ALTER COLUMN ... DROP DEFAULT` imposible de aplicar.
+  claveRemision          String?   @default(dbgenerated()) @map("clave_remision")
   deletedAt              DateTime? @map("deleted_at") // soft delete
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
@@ -726,6 +752,7 @@ model Orden {
   historialEstados           OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
   cierreDetalles             CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
   cierresSinGestion          CierreSinGestion[] // feature 264/R1: cierres en cuyo corte esta orden fue barrida a `sin_gestionar`
+  cierresRechazoTienda       CierreRechazoTienda[] // ficha 425/R2: cierres que pusieron un rechazo de tienda de esta orden delante de quien los aprueba
   rutaParadas                RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
   mensajeroMetas             OrdenMensajeroMeta[]               @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
   chatConversaciones         ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
@@ -735,6 +762,7 @@ model Orden {
   notasHilo                  OrdenNota[]                        @relation("OrdenNotaOrden") // feature 227/R30: hilo de notas tienda<->mensajero de esta orden; la FK es CASCADE (borrar la orden se lleva su hilo)
   diaRepartoCambios          OrdenDiaRepartoCambio[]            @relation("OrdenDiaRepartoCambioOrden") // feature 262/R20-R23: rastro append-only de las correcciones del dia de reparto de esta orden
   fechaReprogramacionCambios GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioOrden") // ficha 371: rastro append-only de las correcciones de la fecha de reprogramacion de esta orden
+  traspasosMensajero         OrdenTraspasoMensajero[]           @relation("OrdenTraspasoOrden") // ficha 427/R25-R30: rastro append-only de los traspasos de esta orden entre mensajeros; la FK es RESTRICT (quien llevo un paquete es evidencia)
   habilitacionesApi          OrdenHabilitacionApi[]             @relation("OrdenHabilitacionApiOrden") // feature 266/R23-R24: bitacora append-only de las habilitaciones pedidas por el canal por API key sobre esta orden; la FK es CASCADE (borrar la orden se lleva su bitacora)
   // Ficha 337: los cobros a la tienda por rechazo desde novedades de ESTA orden. Coleccion y
   // no 1-1: la unicidad es por GESTION, y una orden podria acumular mas de un rechazo a lo
@@ -819,6 +847,22 @@ model Orden {
   // aplicado SI lo cualifica (`extensions.gin_trgm_ops`), que es lo que importa para que
   // la creacion no dependa del `search_path`.
   @@index([busquedaTexto(ops: raw("gin_trgm_ops"))], type: Gin, map: "orden_busqueda_texto_trgm_idx")
+  // FICHA 423 — el indice que sirve el orden por numero de remision de `/ordenes`. Copia el
+  // prefijo EXACTO del `ORDER BY` que arma `OrdenRepository.list`: `prioridad DESC` delante
+  // (feature 101/R6) y el desempate por `id` al final (ficha 352).
+  //
+  // ⚠️ EN LA BASE ES **PARCIAL** — `WHERE "deleted_at" IS NULL` — Y ESO NO SE PUEDE ESCRIBIR AQUI.
+  // Vive a mano en `db/migrations/20260916120000_orden_clave_remision/migration.sql`, igual que el
+  // predicado de `orden_tienda_id_num_remision_key` (294). `map:` reproduce el nombre exacto que
+  // la migracion escribio; sin el, Prisma propondria un RENAME INDEX (misma clase de drift que
+  // documenta `schema-drift-saneamiento.test.ts`). Si alguien "restaura" este indice desde el
+  // datamodel (`db push`), saldra SIN el `WHERE` y ademas la columna saldra sin su `COLLATE "C"`.
+  //
+  // Solo se declara el sentido ASCENDENTE de la clave, a proposito y con umbral escrito: el
+  // sentido descendente ORDENA en memoria (2.136 filas vivas, decenas de KB, muy por debajo del
+  // `work_mem` de 4 MB). El gemelo DESC se añade si `orden` supera las ~200.000 filas vivas; el
+  // SQL exacto esta en la cabecera de la migracion.
+  @@index([prioridad(sort: Desc), claveRemision, id], map: "orden_prioridad_clave_remision_idx")
   @@map("orden")
 }
 
@@ -1132,6 +1176,10 @@ model GestionOrden {
   // UNO A UNO (`rechazo_tienda_cobro_gestion_uq`): un rechazo, un cobro, en cualquier estado.
   // Opcional porque la inmensa mayoria de gestiones no son un rechazo de escritorio.
   cobroRechazoTienda         RechazoTiendaCobro?
+  // Ficha 425 (R2/R3): el vinculo de REVISION con el UNICO cierre que puso este rechazo de tienda
+  // delante de quien aprueba. 1-a-1 por `@@unique([gestionId])`. NO es `cierre`: esta gestion sigue
+  // con `cierre_id` NULL y no factura (ni pago al mensajero, ni ingreso de bodega, ni wallet).
+  vinculoRechazoTienda       CierreRechazoTienda?
   // Ficha 371: rastro append-only de las correcciones de `fecha_reprogramacion` de ESTA gestion.
   // La FK es RESTRICT: el rastro sobrevive a cualquier intento de borrar la gestion corregida.
   fechaReprogramacionCambios GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioGestion")
@@ -1328,6 +1376,7 @@ model CierreDia {
   gestiones          GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
   detalle            CierreDetail[] // feature 69/R1: snapshot congelado por orden de este cierre
   sinGestion         CierreSinGestion[] // feature 264/R1: las ordenes que el corte barrio a `sin_gestionar` al crear este cierre
+  rechazosTienda     CierreRechazoTienda[] // ficha 425/R1-R2: los rechazos de TIENDA que este cierre puso delante de quien lo aprueba. Vinculo de REVISION, no de dinero: esas gestiones conservan `cierre_id` NULL
   liquidacionPagos   LiquidacionPago[] // feature 172/R21/R22: pagos al mensajero registrados CONTRA este cierre
 
   @@index([mensajeroId])
@@ -2383,6 +2432,59 @@ model CierreSinGestion {
   @@map("cierre_sin_gestion")
 }
 
+// FICHA 425 (design §4.1, R1-R4/R21) — EL VINCULO DE REVISION entre un cierre del dia y cada
+// RECHAZO DE TIENDA (`origen_tipo = rechazo_tienda`, 240) que ese cierre pone delante de quien lo
+// aprueba.
+//
+// POR QUE EXISTE. La 139 hace que la unica salida de `rechazada` sea aprobar un cierre del mensajero,
+// y la 337 saco del cierre las gestiones de escritorio. Un mensajero cuyas unicas gestiones sueltas
+// eran rechazos de tienda no llegaba a tener cierre y su orden se quedaba sin salida para siempre
+// (NA-947, NA-981 y NA-1103, medido el 2026-09-14).
+//
+// POR QUE NO ES `gestion_orden.cierre_id`. Esa columna es la llave de los cinco caminos de dinero
+// (tres feeds de wallet, el congelado de pago/ingreso y la confirmacion fisica). Darsela al rechazo
+// cobraria DOS VECES a la tienda el flete de devolucion que ya cobra la via propia de la 337, y
+// exigiria escanear paquetes que no vienen con el mensajero (design §7.1). Aqui la gestion SE VE en
+// el cierre y su aprobacion destraba la orden, pero sigue con `cierre_id` NULL.
+//
+// NI UNA COLUMNA DE DINERO (R21), como `cierre_sin_gestion`: que esta lista no pueda mover un total
+// es ESTRUCTURAL. Si algun dia aparece aqui un `Decimal`, es un bug de diseño.
+//
+// `@@unique([gestionId])` y NO el par (cierre, gestion): una gestion pertenece a UN cierre en toda
+// su vida (R3), y eso lo impone Postgres, no un `if`.
+model CierreRechazoTienda {
+  id        String @id @default(uuid())
+  cierreId  String @map("cierre_id")
+  gestionId String @map("gestion_id")
+  ordenId   String @map("orden_id")
+
+  // --- descriptivos CONGELADOS al incorporar. Copia, no identidad (69/T18). ---
+  numGuia      Int?   @map("num_guia") // SIN @unique: es copia
+  numRemision  String @map("num_remision")
+  destinatario String
+  producto     String
+  tiendaNombre String @map("tienda_nombre")
+  zonaNombre   String @map("zona_nombre")
+
+  // R15 — la EDAD: `gestion_orden.created_at` de la gestion, o sea cuando la tienda rechazo. Es lo
+  // que evita que un documento con tres semanas de rechazos parezca un error (D3).
+  rechazadoAt DateTime @map("rechazado_at")
+  // El motivo que la tienda escribio (obligatorio en `rechazarDesdeDevuelta`, 240/R12).
+  motivo      String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  // SIN updated_at / deleted_at: fila INMUTABLE, como `cierre_sin_gestion`.
+
+  cierre  CierreDia    @relation(fields: [cierreId], references: [id])
+  gestion GestionOrden @relation(fields: [gestionId], references: [id])
+  orden   Orden        @relation(fields: [ordenId], references: [id])
+
+  @@unique([gestionId]) // R3: una gestion pertenece a UN cierre y a ninguno mas
+  @@index([cierreId]) // ruta caliente: el detalle filtra por cierre
+  @@index([ordenId]) // trazar en que cierre se reviso una orden
+  @@map("cierre_rechazo_tienda")
+}
+
 // Feature 81 (design §2): una API key emitida por un maestro. La key en claro NUNCA
 // se persiste: solo su hash SHA-256 [D7] (R16) y un `key_prefix` no secreto (R17)
 // para poder identificarla visualmente sin revelarla. 1:1 con su usuario dedicado
@@ -2695,6 +2797,28 @@ enum NotificacionEvento {
   // Su entidad es `reparto_manana_dia` (mas abajo) y lleva EL DIA ANUNCIADO dentro. PUSH: elegible
   // para el perfil `mensajero` y para ningun otro (`lib/notificaciones/push-elegibles.ts`).
   reparto_manana
+  // Ficha 427 (D3, R38/R43) - al mensajero DESTINO le avisan de que ha recibido ordenes de otro
+  // mensajero. Aviso AGREGADO: UNA sola notificacion por ACTO de traspaso, con el numero dentro
+  // del texto y el nombre del otro mensajero en el anexo; jamas una por orden (con 31 ordenes
+  // serian 31 avisos sueltos y 31 interrupciones de push). Lo emite `TraspasoMensajeroService`,
+  // FUERA de la transaccion y best-effort (R41): un aviso caido no puede revertir un traspaso
+  // legitimo y dejar el paquete con quien ya no puede entregarlo.
+  //
+  // Su entidad es `orden_traspaso_lote` (mas abajo) y lleva EL `lote_id` DEL ACTO dentro. PUSH:
+  // elegible para el perfil `mensajero` y para ningun otro (`lib/notificaciones/push-elegibles.ts`)
+  // -- tiene PLAZO (las ordenes son de hoy) y CONSECUENCIA personal (si no se entera, no sale a
+  // repartirlas).
+  traspaso_ordenes_recibido
+  // Ficha 427 (D3, R39/R43) - al mensajero de ORIGEN le avisan de que sus ordenes pasaron a otro.
+  // DOS eventos y no uno porque piden acciones OPUESTAS (precedente 271): al destino le dicen
+  // «sal a repartir esto»; al origen, «esto ya no es tuyo». El tipo de evento es lo que el panel
+  // de avisos usa para agrupar y deduplicar, asi que meter la diferencia solo en la descripcion la
+  // vuelve invisible.
+  //
+  // ⚠️ NO ES ELEGIBLE PARA PUSH, y no es un olvido (R43): no le pide NINGUNA accion y no vence
+  // nada -- deja de tener trabajo, no le aparece trabajo. En el panel de avisos si lo recibe, para
+  // que su lista encogida tenga explicacion.
+  traspaso_ordenes_cedido
 
   @@map("notificacion_evento")
 }
@@ -2799,6 +2923,28 @@ enum NotificacionEntidadTipo {
   // Y NO es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el indice
   // unico es PARCIAL, asi que saldria un aviso por cada ejecucion.
   reparto_manana_dia
+  // Ficha 427 (design 6.5) - OCTAVO `entidad_tipo` que NO apunta a una fila de tabla: la entidad
+  // de los dos avisos del traspaso es EL ACTO (`entidad_id = orden_traspaso_mensajero.lote_id`),
+  // no la orden ni el mensajero.
+  //
+  // ⚠️ POR QUE EL LOTE, Y ES LA DECISION QUE EVITA UN SILENCIO TOTAL. `notificacion_dedupe_key`
+  // es UNIQUE sobre (evento, entidad_id, destinatario_rol, destinatario_usuario_id) con
+  // `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`, NO mira el estado de lectura, y
+  // `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `null`. Con el MENSAJERO (o
+  // con una ORDEN) como entidad, la clave admitiria UNA sola fila por (evento, entidad,
+  // mensajero) PARA SIEMPRE: el SEGUNDO traspaso del dia a la misma persona -que es el caso
+  // normal cuando alguien se enferma y su carga se reparte en dos tandas- no avisaria NUNCA, sin
+  // error y sin log. Es el fallo que pagaron la 262 (orden), la 403 (suscripcion), la 409 y la
+  // 412.
+  //   · actos distintos => `lote_id` distintos => entidades distintas => DOS avisos (R42);
+  //   · el mismo acto emitido dos veces => misma entidad => UNO solo, y lo decide el INDICE
+  //     UNICO, no un `if` previo que una carrera pueda burlar.
+  //
+  // ⚠️ Y NO LLEVA PREFIJO DE MENSAJERO: el destinatario es un USUARIO y
+  // `destinatario_usuario_id` YA ES una columna de esa clave, asi que los dos avisos del mismo
+  // acto (origen y destino) no se pisan. La regla no es «prefija siempre», es «comprueba si el
+  // alcance esta en la clave» (413).
+  orden_traspaso_lote
 
   @@map("notificacion_entidad_tipo")
 }
@@ -3200,6 +3346,74 @@ model GestionFechaReprogramacionCambio {
   @@index([gestionId, createdAt]) // la FK RESTRICT a la gestion, indexada; y «el rastro de esta gestion»
   @@index([actorUsuarioId]) // la FK RESTRICT del actor, indexada (patron `orden_dia_reparto_cambio`)
   @@map("gestion_fecha_reprogramacion_cambio")
+}
+
+/// FICHA 427 (design §4.1, migracion `20260917120000_orden_traspaso_mensajero`) — RASTRO de los
+/// TRASPASOS de una orden entre mensajeros: quien la paso, desde quien, hacia quien, por que y
+/// cuando. Fila INMUTABLE, append-only: sin `updated_at`, sin `deleted_at`. Un traspaso posterior
+/// ANADE una fila (R30).
+///
+/// EL CASO QUE LA ORIGINA, medido el 2026-09-14: un mensajero se enfermo a media jornada y sus 31
+/// ordenes `en_reparto` las tuvo que hacer otro. La aplicacion no sabia hacerlo y se resolvio
+/// escribiendo a mano contra produccion, sin dejar rastro de quien lo hizo ni por que. Esta tabla
+/// es ese rastro.
+///
+/// ES LA HERMANA de `OrdenDiaRepartoCambio` (262) sobre otra columna de la misma orden: alli el dia
+/// en que el mensajero sale con el paquete, aqui QUIEN lo lleva. Se copia su forma entera —actor
+/// NOT NULL, motivo obligatorio, CHECK de «distinto», indice por (orden, instante)— porque es la
+/// misma operacion manual y las mismas trampas.
+///
+/// POR QUE UNA TABLA PROPIA Y NO SOLO `historial_accion` (362): el motivo es texto libre tecleado
+/// por una persona, y R5 de la 362 lo deja fuera de esa tabla a proposito (se descarga a un archivo
+/// y no se purga nunca). Mismo argumento, palabra por palabra, que la 371. Decidido el 2026-09-14
+/// (D6): UNA sola fuente de rastro, esta.
+///
+/// POR QUE NO VA EN `orden_historial_estado` (49): esa tabla es el registro de transiciones de
+/// ESTADO, y un traspaso NO cambia el estado. Su choke point VALIDA la transicion contra el
+/// inventario de la 140, asi que `en_reparto -> en_reparto` no es escribible: reventaria.
+model OrdenTraspasoMensajero {
+  id      String @id @default(uuid())
+  ordenId String @map("orden_id")
+
+  /// Los dos extremos. NOT NULL las dos: una orden sin mensajero no se traspasa, se asigna.
+  mensajeroAnteriorId String @map("mensajero_anterior_id")
+  mensajeroNuevoId    String @map("mensajero_nuevo_id")
+
+  /// NOT NULL, al reves que `orden_historial_estado.actor_usuario_id` (donde NULL = cron): AQUI
+  /// SIEMPRE HAY UNA PERSONA, y quien traspaso es la evidencia.
+  actorUsuarioId String @map("actor_usuario_id")
+
+  /// R26 — CONGELADO, no resuelto por join al leer. El rol de una persona cambia (la 362 registra
+  /// ese mismo evento), y leer el rol vivo al pintar RE-ETIQUETARIA la historia. Precedente
+  /// directo: `orden_nota.rol_autor` y `historial_accion.actor_rol`.
+  actorRol RolValue @map("actor_rol")
+
+  /// R28: obligatorio, ya recortado en el borde (`trim().min(10).max(300)`), mismo esquema que el
+  /// motivo del deshacer asignacion (149/D4).
+  motivo String
+
+  /// R27 — uuid POR ACTO, no por fila: todas las filas de un mismo traspaso lo comparten. Es lo que
+  /// distingue «se traspasaron 31 ordenes de una vez» de «hubo 31 traspasos». Precedente:
+  /// `historial_accion.lote_id`.
+  loteId String @map("lote_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  orden             Orden   @relation("OrdenTraspasoOrden", fields: [ordenId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  mensajeroAnterior Usuario @relation("OrdenTraspasoAnterior", fields: [mensajeroAnteriorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  mensajeroNuevo    Usuario @relation("OrdenTraspasoNuevo", fields: [mensajeroNuevoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  actor             Usuario @relation("OrdenTraspasoActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// EL CHECK `orden_traspaso_mensajero_distinto_check` (`mensajero_nuevo_id <>
+  /// mensajero_anterior_id`) VIVE SOLO EN LA MIGRACION: Prisma no expresa CHECK (mismo caso que
+  /// `orden_dia_reparto_cambio_dia_distinto`). Es R7 puesto en la base: un «traspaso» a la misma
+  /// persona no es escribible ni por error.
+  @@index([ordenId, createdAt]) // la lectura prevista: «el rastro de esta orden», en orden. Cubre ademas la FK a `orden` por prefijo
+  @@index([mensajeroAnteriorId, createdAt]) // «que se le quito a este mensajero»; indexa ademas la FK RESTRICT
+  @@index([mensajeroNuevoId, createdAt]) // «que recibio este mensajero»; idem
+  @@index([actorUsuarioId]) // la FK RESTRICT del actor, indexada (patron `orden_dia_reparto_cambio`)
+  @@index([loteId]) // reconstruir un acto completo (R27)
+  @@map("orden_traspaso_mensajero")
 }
 
 // =================================================================================================

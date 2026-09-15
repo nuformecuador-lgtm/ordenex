@@ -5,6 +5,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { EliminarOrdenService } from "@/lib/services/EliminarOrdenService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -56,6 +57,7 @@ function buildService(): IEliminarOrdenService {
       ordenRepo,
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
   );
 }

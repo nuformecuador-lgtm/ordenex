@@ -175,6 +175,7 @@ function conDetalleDe(cierre: CierreAdminResumen) {
   verDetalleMock.mockResolvedValue({
     ordenesSinGestion: [],
     sinGestionRegistrado: true,
+    rechazosDeTienda: [],
     status: "ok",
     cierre,
     grupos: emptyGrupos(), // sin incidentes: aprobar NO pasa por el sub-modal de la 158 (R36)
@@ -612,6 +613,7 @@ describe("T E.2/R19 — el detalle de un cierre APROBADO ofrece registrar el pag
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       cierre: { ...APROBADO, pendientePagoMensajero: "0.00" },
       grupos: emptyGrupos(),
