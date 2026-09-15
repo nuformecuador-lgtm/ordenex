@@ -34,8 +34,10 @@ misma base local se rompen el gate el uno al otro.
 ### Autorizaciones del punto 4
 
 - **Costos de operación: AUTORIZADOS** por el humano el 2026-09-15.
-- **PENDIENTES**: (a) que imágenes y audios con datos de clientes salgan a un proveedor externo de IA;
-  (b) qué modelo (el documento recomienda Sonnet 5).
+- **Datos de clientes a un proveedor externo de IA: AUTORIZADO** por el humano el 2026-09-15
+  («se asume lo de los datos del punto 4»).
+- **Modelo: Sonnet 5.** No se preguntó: el documento lo recomienda y el humano aprobó el documento.
+  Revisable cuando se mida el uso real — con caché de prompt el coste puede cambiar el cálculo.
 - Cuando toque, hay que montar cuenta con crédito + clave de API como variable de entorno en Vercel,
   **separada por entorno** — ver la nota de las variables mal repartidas.
 
