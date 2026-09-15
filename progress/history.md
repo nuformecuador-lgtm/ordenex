@@ -5277,3 +5277,45 @@ concurrencia**, bloque distinto en cada corrida y 49/49 aislado. Los otros 9 roj
 y se cerraron **ampliando** los censos de enum, sin borrar una línea de aserción.
 
 **Probada en la app funcionando (T25):** cuatro traspasos reales de la misma orden con el destino repetido dejaron 4 filas de rastro, 4 avisos recibidos y 4 cedidos en 4 lotes distintos (el segundo aviso al mismo mensajero sale), y un rechazo del servidor llega al usuario como toast con el texto correcto.
+
+## 425 — Los rechazos de la tienda llegan al cierre, sin cobrarse (2026-09-14)
+
+Nace de la **NA-981**: un admin no podía devolverla a tienda porque estaba en `rechazada`.
+
+**Lo que se creyó al principio y no era del todo cierto:** que su única salida era aprobar el cierre
+que contuviera esa gestión. El bloque 139 libera **todas** las órdenes `rechazada` del mensajero
+asignado al aprobar **cualquier** cierre suyo, así que la NA-981 habría salido aprobando el cierre del
+11/09 de Arnel, que estaba pendiente. Lo encontró el reviewer y el leader lo verificó en el código.
+
+**Lo que sí era un hueco, y es lo que pidió el humano (D1):** los rechazos que registra la tienda **no
+aparecían en ningún cierre**, así que quien aprueba no se enteraba del rechazo ni separaba el paquete.
+Ahora aparecen en la sección «Rechazados por la tienda», con su conteo «revisar» aparte del «paga».
+
+**El arreglo de una línea cobraba dos veces.** Sacar `rechazo_tienda` de la lista de exclusión metía
+el rechazo en el cierre como gestión, y la 337 ya cobra ese flete por `rechazo_tienda_cobro` (24
+cobros, ₡65.088, medidos). Se hizo un **vínculo de revisión en tabla propia**, sin `cierre_id` ni
+dinero. La mutación de ese arreglo pone el ingreso de bodega en 328 en vez de 164, y sale roja.
+
+**Decisiones del humano:** D1, la salida llega por un cierre; D2, solo los rechazos; D3, las 46
+históricas entran, avisando antes a quien aprueba.
+
+**Hallazgos del camino:**
+
+- **Un mensajero no puede pedir él mismo un cierre que solo trae rechazos:** los recoge el corte diario
+  como `vencido`. El corte elige a cualquiera con gestiones sin cierre de cualquier día; la primera
+  noche afecta a Andy y a Arnel, que no trabajan.
+- **Un `vencido` no se aprueba directamente** (`ESTADOS_RESOLUBLES = ["solicitado"]` desde la 111):
+  primero «Destrabar cierre vencido». El aviso decía lo contrario y ya se había enviado; se corrigió y
+  se redactó una corrección. El camino «destrabar y aprobar sin el mensajero» quedó como caso de test.
+- **El gate dio rojo por dos causas ajenas a la ficha:** residuo de la prueba T25 de la 427 (8 avisos
+  que rompían los `down.sql` de enums) y una **carrera entre dos tests antiguos** (el R9 de la 412
+  escribe un cierre fuera de la transacción para el primer usuario de la base; el N/V de la 271 lo ve).
+  Reproducida por el reviewer; arreglo en ficha aparte.
+
+**Revisión:** RECHAZADO solo por el aviso. **Ninguna mutación de dinero sobrevive** (el rechazo con
+`cierre_id`, el pago inflado y el doble cobro, las tres rojas). El cambio de semilla del test de la
+337 y el `lastCall` de la 69 se juzgaron legítimos, con mutaciones que lo demuestran.
+
+**Pendiente tras desplegar (V5):** sobre el primer cierre con rechazos, que `total_pago_mensajero` sea
+la suma del pago de las gestiones con `cierre_id` y que la contaminación dé 0. Si se aprueba antes el
+cierre del 11/09 de Arnel, sus tres órdenes saldrán por ese y V5 no demostraría la salida por la 425.
