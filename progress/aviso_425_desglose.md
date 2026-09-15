@@ -48,14 +48,20 @@ mensajeros, y ninguno de los dos está trabajando:
 | Arnel Guillen | un cierre `vencido` con sus 3 rechazos y los seis totales en ₡0,00 | no: sin actividad desde el 10/09 |
 
 - **Esos cierres son correctos.** Son documentos de revisión, no de dinero.
-- **Un administrador puede aprobarlos directamente**, sin que el mensajero haga nada. Al aprobar el
-  de Arnel, las tres órdenes atascadas (entre ellas la **NA-981**, que originó todo esto) pasan solas
-  a «por devolver a tienda».
-- **Los dos quedarán bloqueados para recibir trabajo** mientras esos cierres sigan abiertos; la app les
+- **Un cierre `vencido` no se aprueba directamente.** Primero hay que pulsar **«Destrabar cierre
+  vencido»** y después **«Aprobar»**. No hace falta que el mensajero haga nada.
+  *(Corregido el 2026-09-14: la primera versión de este aviso decía que se podía aprobar directamente,
+  y no es así.)*
+- **Las tres órdenes rechazadas de Arnel (NA-947, NA-981 y NA-1103) salen de «rechazada» en cuanto se
+  apruebe cualquier cierre de Arnel**, también el del 11/09 que ya está esperando: al aprobar un cierre,
+  el sistema pasa a «por devolver a tienda» todas las órdenes rechazadas que ese mensajero tiene
+  asignadas.
+- **Los dos quedarán bloqueados para recibir trabajo** mientras su cierre nuevo siga abierto; la app les
   dirá que vayan a «Cierre del día». Como ninguno está trabajando, hoy no tiene efecto.
-  - **Andy:** al volver, basta con que envíe su cierre a aprobación o con que se lo aprueben.
-  - **Arnel:** tiene además un cierre del 11/09 sin aprobar. **Hay que aprobar ese antes de volver a
-    asignarle trabajo.**
+  - **Andy:** al volver, basta con que envíe su cierre a aprobación, o con que un administrador lo
+    destrabe y lo apruebe.
+  - **Arnel:** **para que vuelva a recibir trabajo hay que resolver su cierre nuevo** (destrabarlo y
+    aprobarlo). Aprobar solo el del 11/09 no basta, porque el nuevo seguiría pendiente de reenvío.
 - **Los otros cuatro (Carlos Cambronero, Andrés Agüero, Johel y Kendall Hernández) no se ven afectados
   de forma nueva.** Sus rechazos entran en el cierre que pidan hoy o, si no lo piden, en el `vencido`
   que el corte ya les crea igual que cualquier otro día.
