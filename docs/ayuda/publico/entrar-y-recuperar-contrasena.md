@@ -16,11 +16,15 @@ crearla.
 
 ## El código de verificación
 
-A veces, después de la contraseña, se pide un **código de verificación**. No siempre aparece: se activa
-cuando el sistema quiere confirmar que sos vos.
+El sistema tiene un segundo paso de verificación por código, que se activa según un umbral de riesgo
+configurado por la operación. **Hoy está configurado de forma que en la práctica no se pide**, así que
+lo normal es entrar solo con correo y contraseña.
 
-Si te dice **«El código es inválido o ha expirado»**, pedí uno nuevo — los códigos duran poco a
-propósito.
+Si alguna vez te aparece y te dice **«El código es inválido o ha expirado»**, pedí uno nuevo — los
+códigos duran poco a propósito.
+
+> Para la oficina: si un usuario reporta que le piden un código, conviene revisarlo. Con la
+> configuración actual no debería estar pasando.
 
 ## Si no podés entrar
 
