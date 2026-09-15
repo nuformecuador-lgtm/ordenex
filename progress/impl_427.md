@@ -989,3 +989,130 @@ cerraron ampliando los censos de enum de las fichas 262, 253, 333 y 271 **sin bo
 de aserción**.
 
 > **Revisión 427/M2 (textos del modal), 2026-09-14:** «orden(es)» y «conversación(es)» pasan a singular y plural explícitos con el criterio `=== 1` de los emisores de la ficha —también el pronombre «se la / se las» de la confirmación—; el test del modal gana los casos de 1 y de varias para las dos palabras con literales a mano, incluidas filas MIXTAS (1 orden y 2 conversaciones, 3 órdenes y 1 conversación, 1 orden y 0 conversaciones) que caerían con una sola decisión para las dos, y `TraspasarMensajeroListado.test.tsx` actualiza sus dos literales, que afirmaban el texto viejo.
+
+---
+
+## 10. La revisión salió RECHAZADA (B1, B2, M1): el código estaba bien y los tests no lo ataban
+
+En los tres casos **el código de producción era correcto**; lo que faltaba es que una regresión
+pusiera algo en rojo. Las mutaciones del reviewer lo demostraban sobreviviendo. **Se cambian sólo
+tests** (`tests/unit/services/traspaso-mensajero-service.test.ts` y
+`tests/integration/db/traspaso-mensajero.int.test.ts`); `lib/` no se toca.
+
+Las mutaciones se re-ejecutaron con **los mismos scripts del reviewer**
+(`scratchpad/mut/m10_srv_orden.js`, `r20_gestion_lote.js`, `h_chat_fuera.js`, `m7_*.js`) y su
+`run.sh`, con logs nuevos `v2_*` para no pisar su evidencia. Cada una se restauró con
+`git checkout` antes de la siguiente, y los archivos de `integration/db` corrieron con
+`--no-file-parallelism`.
+
+### B1 — R42: nada ataba el `loteId` de los avisos al `lote_id` del acto
+
+**El hueco.** T16 «cada notificador EXACTAMENTE UNA VEZ» sólo exigía forma de uuid y que los dos
+avisos compartieran el valor. Con el servicio pasando `loteId: validas[0].id` —el id de la primera
+orden— eso seguía cumpliéndose: **72/72 en verde**. Y es el fallo que ya pagaron la 262, la 403, la
+409 y la 412: A → Carlos, vuelta a Andy, otra vez A → Carlos; la entidad se repite, `crear` absorbe
+el `P2002` y el tercer aviso queda **mudo para siempre**.
+
+**El arreglo.** El caso afirma ahora que los dos `loteId` son **el mismo valor que recibió
+`traspasarMensajeroLote`** (`espias.traspasarMensajeroLote.mock.calls[0][0].loteId`), que es lo que
+se persiste en `orden_traspaso_mensajero.lote_id`, y que no es el id de ninguna orden del lote.
+
+**Mutación 5, re-ejecutada — ROJA** (antes 72/72 verde):
+
+```
+=== MUTACION v2_m5_lote_orden sobre lib/services/TraspasoMensajeroService.ts
+-        loteId: aplicado.loteId,
++        loteId: validas[0].id,
+ FAIL  tests/unit/services/traspaso-mensajero-service.test.ts > 427/R38-R41 — los DOS avisos, fuera
+       de la transaccion y sin cambiar el desenlace > ⭑⭑ tras un traspaso correcto se llama a CADA
+       notificador EXACTAMENTE UNA VEZ
+AssertionError: expected '11111111-1111-4111-8111-111111111111' to be 'ec1c46d6-d6a4-476c-996c-7e39436405d2'
+    550|     expect(ctxRecibido.loteId).toBe(loteDelActo);
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 71 passed (72)
+VITEST_EXIT=1
+```
+
+### B2 — R20: T9.4 no sembraba ninguna gestión sobre una orden del lote
+
+**El hueco.** T9.4 ponía la gestión en la orden `entregada`, que **no entra** en
+`loteDe(ctx, [enReparto])`. Por eso la mutación 10 —`UPDATE gestion_orden SET mensajero_id =
+destino WHERE orden_id IN (lote)` dentro de la tx— sobrevivía **23/23**: el caso no tenía ninguna
+gestión en la población que esa sentencia toca. Su control (`WHERE mensajero_id = origen`) sí caía,
+así que el test no era vacío; le faltaba el caso que el requisito nombra.
+
+**Y es real.** `gestion_orden` no es única por orden; una orden `reprogramada` vuelve a reparto
+arrastrando su gestión con `cierre_id` y `pago_mensajero`; y R14 admite en el lote órdenes con el
+tope de intentos agotado. Reescribir el autor movería **pago y cierre del origen al destino** sin
+que nada se pusiera rojo.
+
+**El arreglo.** T9.4 siembra ahora un `cierre_dia` **aprobado** del origen y, **sobre la orden del
+lote**, una gestión `reprogramada` del origen con ese `cierre_id` y `pago_mensajero = 800`. Afirma
+que tras el traspaso conserva `mensajero_id`, `cierre_id`, `pago_mensajero`, `monto_recibido`,
+`ingreso_bodega_rechazo` y `resultado`; que el cierre sigue siendo del origen con el mismo total; y
+—anti-vacuidad— que la orden **sí** cambió de dueño. La gestión de la `entregada` fuera del lote se
+conserva como estaba.
+
+**Mutación 10, re-ejecutada — ROJA** (antes 23/23 verde):
+
+```
+=== MUTACION v2_m10_gestion_lote sobre lib/repositories/OrdenRepository.ts
++      await tx.$executeRaw`UPDATE "gestion_orden" SET "mensajero_id" = ${mensajeroDestinoId} WHERE "orden_id" IN (${Prisma.join(ids)})`;
+ FAIL  tests/integration/db/traspaso-mensajero.int.test.ts > 427/T9 — el traspaso entre mensajeros,
+       contra Postgres real > ⭑⭑ T9.4 (R20): las gestiones ya registradas NO cambian de dueno ni de importes
+AssertionError: expected '988eb3aa-e460-4bcd-8a10-bf4f0d136c5d' to be '2622d460-e0bb-48b9-bb7f-90c13bcad48c'
+    668|     expect(r.despuesDelLote.mensajeroId).toBe(r.origenId);
+ Test Files  1 failed (1)
+      Tests  1 failed | 23 passed (24)
+VITEST_EXIT=1
+```
+
+### M1 — R23: el chat y los jobs por el cliente del repositorio sobrevivían
+
+**El hueco.** `traspasarConversaciones(this.prisma, …)` (mutación 9) sobrevivía **23/23**. En el
+arnés, el `ROLLBACK TO SAVEPOINT` revierte también lo escrito por el cliente externo —es la misma
+conexión—, así que nada distinguía «dentro» de «fuera». En producción `this.prisma` es **otra
+conexión del pool**: si después fallara el rastro, los hilos quedarían movidos sin traspaso que los
+respalde. Lo mismo con `encolarOptimizacionDebounce`. Y el compilador no lo impide:
+`Pick<PrismaClient,"$queryRaw">` acepta el cliente entero.
+
+**El arreglo.** Con `romper: "fuera"`, el cliente externo de `clienteDelRepo` es ahora **estricto
+mientras dura su `$transaction`**: cualquier SQL crudo (`$queryRaw`, `$executeRaw`, y sus `Unsafe`)
+y cualquier método de escritura de un delegado de modelo lanza `EscrituraFueraDeLaTransaccion`. El
+caso «fuera» afirma además el **efecto** de las tres escrituras que R23 ata al movimiento —rastro,
+chat y jobs—, y hay un **CONTROL** nuevo que prueba que el cliente estricto sí lanza por las dos
+vías dentro del acto y escribe con normalidad fuera de él.
+
+**Mutación 9, re-ejecutada — ROJA** (antes 23/23 verde):
+
+```
+=== MUTACION v2_m9_chat_fuera sobre lib/repositories/OrdenRepository.ts
+-      const conversaciones = await traspasarConversaciones(tx, ids, mensajeroDestinoId);
++      const conversaciones = await traspasarConversaciones(this.prisma, ids, mensajeroDestinoId);
+ FAIL  tests/integration/db/traspaso-mensajero.int.test.ts > … > ⭑⭑ R23/R31 (mutaciones 7 y 9): el
+       rastro, el chat y los jobs van por el `tx`, NO por el cliente del repositorio
+EscrituraFueraDeLaTransaccion: escritura por el cliente del REPOSITORIO (this.prisma.$queryRaw) DENTRO del acto: tenia que ir por el tx de la transaccion
+ Test Files  1 failed (1)
+      Tests  1 failed | 23 passed (24)
+VITEST_EXIT=1
+```
+
+**La misma familia, medida también** (no la pidió el reviewer como bloqueante, pero es el mismo
+hueco): el encolado sin `tx` —`encolarOptimizacionDebounce(this.jobRepo, undefined, …)`—.
+
+```
+=== MUTACION v2_m9b_jobs_fuera sobre lib/repositories/OrdenRepository.ts
+ FAIL  … > ⭑⭑ R23/R31 (mutaciones 7 y 9): el rastro, el chat y los jobs van por el `tx`, NO por el cliente del repositorio
+EscrituraFueraDeLaTransaccion: escritura por el cliente del REPOSITORIO (this.prisma.$queryRaw) DENTRO del acto: tenia que ir por el tx de la transaccion
+      Tests  1 failed | 23 passed (24)
+VITEST_EXIT=1
+```
+
+**Y no se reabrió la mutación 7** al endurecer el arnés: las dos variantes del reviewer siguen rojas.
+
+```
+=== MUTACION v2_m7_thisprisma   ->  Tests  2 failed | 22 passed (24)   VITEST_EXIT=1   (RastroCaido)
+=== MUTACION v2_m7_despues      ->  Tests  2 failed | 22 passed (24)   VITEST_EXIT=1   (RastroCaido)
+```
+
+Tras las seis corridas, `git diff --stat HEAD -- lib/` vuelve vacío: ninguna mutación quedó puesta.

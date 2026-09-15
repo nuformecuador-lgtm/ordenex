@@ -256,10 +256,27 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
    * el mismo valor y ninguna asercion puede distinguirlos: escribir el rastro con uno o con otro da
    * exactamente el mismo resultado.
    *
-   * `romper` dice CUAL de los dos revienta al tocar la tabla del rastro:
-   *   · `"tx"`    — revienta el INTERNO: modela «el rastro no se puede escribir» (R31).
-   *   · `"fuera"` — revienta el EXTERNO y deja limpio el interno: si el repositorio escribiera el
-   *                 rastro con `this.prisma` en vez de con el `tx` de la transaccion, saltaria.
+   * `romper` dice CUAL de los dos revienta:
+   *   · `"tx"`    — revienta el INTERNO al tocar la tabla del rastro: modela «el rastro no se puede
+   *                 escribir» (R31).
+   *   · `"fuera"` — deja limpio el interno y vuelve ESTRICTO al externo: MIENTRAS DURA SU
+   *                 `$transaction`, cualquier escritura por el cliente del repositorio LANZA
+   *                 `EscrituraFueraDeLaTransaccion` —SQL crudo o delegado de modelo, a cualquier
+   *                 tabla—, y la tabla del rastro lanza siempre.
+   *
+   * ⚠️ POR QUE «CUALQUIER ESCRITURA» Y NO SOLO EL RASTRO (M1 del reviewer, 2026-09-14). Con solo el
+   * rastro vigilado, `traspasarConversaciones(this.prisma, …)` y
+   * `encolarOptimizacionDebounce(this.jobRepo, undefined, …)` SOBREVIVIAN 23/23: en este arnes el
+   * `ROLLBACK TO SAVEPOINT` revierte tambien lo escrito por el externo —es la misma conexion—, asi
+   * que nada distinguia «dentro» de «fuera». En PRODUCCION no es asi: `this.prisma` es OTRA
+   * conexion del pool, y si despues fallara el rastro los HILOS o los JOBS quedarian escritos sin
+   * traspaso que los respalde (R23). Y el compilador no lo impide: `Pick<PrismaClient,"$queryRaw">`
+   * acepta el cliente entero.
+   *
+   * El SQL crudo por el externo se trata ENTERO como escritura, lecturas incluidas, y es deliberado:
+   * el codigo correcto no usa `this.prisma` para NADA dentro del acto. Clasificar un `$queryRaw` en
+   * lectura/escritura exigiria parsear el SQL, y un detector que en la duda deja pasar es justo el que
+   * falla.
    */
   function clienteDelRepo(tx: TxDeTest, romper: "tx" | "fuera" | null): PrismaClient {
     const lanzador = {
@@ -267,6 +284,10 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
         throw new RastroCaido();
       },
     };
+    /** `true` solo mientras corre el callback del `$transaction` del EXTERNO. */
+    let dentroDelActo = false;
+    const esEstricto = romper === "fuera";
+
     const hacerProxy = (rompe: boolean, conTransaccion: boolean): PrismaClient =>
       new Proxy(tx as object, {
         get(objetivo, prop) {
@@ -275,23 +296,81 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
             return async (fn: (t: unknown) => unknown) => {
               const punto = `sp427_${randomUUID().replace(/-/g, "")}`;
               await tx.$executeRawUnsafe(`SAVEPOINT ${punto}`);
+              dentroDelActo = true;
               try {
                 const salida = await fn(interno);
+                dentroDelActo = false;
                 await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${punto}`);
                 return salida;
               } catch (error) {
+                dentroDelActo = false;
                 await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${punto}`);
                 throw error;
               }
             };
           }
           const valor = Reflect.get(objetivo, prop) as unknown;
+          // M1: el EXTERNO, dentro del acto, no escribe. Ni SQL crudo ni delegados de modelo.
+          if (conTransaccion && esEstricto && dentroDelActo && typeof prop === "string") {
+            if (SQL_CRUDO.has(prop)) {
+              return () => {
+                throw new EscrituraFueraDeLaTransaccion(prop);
+              };
+            }
+            if (esDelegadoDeModelo(valor)) {
+              return new Proxy(valor as object, {
+                get(delegado, metodo) {
+                  if (typeof metodo === "string" && METODOS_DE_ESCRITURA.has(metodo)) {
+                    return () => {
+                      throw new EscrituraFueraDeLaTransaccion(`${prop}.${metodo}`);
+                    };
+                  }
+                  const v = Reflect.get(delegado, metodo) as unknown;
+                  return typeof v === "function" ? v.bind(delegado) : v;
+                },
+              });
+            }
+          }
           return typeof valor === "function" ? valor.bind(objetivo) : valor;
         },
       }) as unknown as PrismaClient;
 
     const interno = hacerProxy(romper === "tx", false);
     return hacerProxy(romper === "fuera", true);
+  }
+
+  /** Superficie de SQL crudo del cliente Prisma: dentro del acto, por el externo, todo lanza. */
+  const SQL_CRUDO = new Set(["$queryRaw", "$executeRaw", "$queryRawUnsafe", "$executeRawUnsafe"]);
+
+  /** Metodos de un delegado de modelo que escriben. */
+  const METODOS_DE_ESCRITURA = new Set([
+    "create",
+    "createMany",
+    "createManyAndReturn",
+    "update",
+    "updateMany",
+    "updateManyAndReturn",
+    "upsert",
+    "delete",
+    "deleteMany",
+  ]);
+
+  function esDelegadoDeModelo(valor: unknown): boolean {
+    return (
+      typeof valor === "object" &&
+      valor !== null &&
+      typeof (valor as { findMany?: unknown }).findMany === "function"
+    );
+  }
+
+  class EscrituraFueraDeLaTransaccion extends Error {
+    constructor(que: string) {
+      super(
+        `escritura por el cliente del REPOSITORIO (this.prisma.${que}) DENTRO del acto: tenia que ` +
+          `ir por el tx de la transaccion`,
+      );
+      this.name = "EscrituraFueraDeLaTransaccion";
+    }
   }
 
   class RastroCaido extends Error {
@@ -484,9 +563,47 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
     // registro la gestion, no el asignado. Reescribirlo haria que las entregas del origen contaran
     // como del destino, moveria el pago al mensajero, el cierre del dia y el ranking, y dejaria al
     // origen sin cierre que aprobar (design §A6).
+    //
+    // ⚠️ B2 del reviewer (2026-09-14): la PRIMERA version de este caso sembraba la gestion SOLO en
+    // la orden `entregada`, que NO entra en el lote. Por eso la mutacion 10 —`UPDATE gestion_orden
+    // SET mensajero_id = destino WHERE orden_id IN (lote)` dentro de la tx— sobrevivio 23/23: el
+    // caso no tenia ninguna gestion en la poblacion que esa sentencia toca.
+    //
+    // Y el caso es REAL, no de laboratorio: `gestion_orden` NO es unica por orden, una orden
+    // `reprogramada` vuelve a reparto ARRASTRANDO su gestion con `cierre_id` y `pago_mensajero`, y
+    // R14 admite en el lote ordenes que ya agotaron intentos —o sea, que ya tienen gestiones—.
+    // Reescribir el autor de ESA gestion moveria el pago y el cierre del origen al destino sin que
+    // nada se pusiera rojo. Por eso se siembran las DOS: la de la orden del lote (con cierre e
+    // importes) y la de la entregada fuera del lote.
     const r = await conEscenario([{}, { estatusValue: "entregada" }], async (ctx) => {
       const [enReparto, entregada] = ctx.ids;
-      const gestion = await ctx.crudo.gestionOrden.create({
+
+      // El cierre del dia anterior del ORIGEN, ya aprobado, que contiene la gestion previa.
+      const cierre = await ctx.crudo.cierreDia.create({
+        data: {
+          mensajeroId: ctx.origenId,
+          estado: "aprobado",
+          destinoTipo: "bodega_central",
+          destinoZonaId: FKS.zonaId,
+          totalPagoMensajero: "800.00",
+        },
+        select: { id: true },
+      });
+      // ⭑ LA GESTION PREVIA DEL ORIGEN SOBRE UNA ORDEN **DEL LOTE**: la reprogramo ayer, su cierre
+      // se aprobo y se le pago; hoy la orden volvio a `en_reparto` y es la que se traspasa.
+      const gestionDelLote = await ctx.crudo.gestionOrden.create({
+        data: {
+          ordenId: enReparto,
+          mensajeroId: ctx.origenId,
+          resultado: "reprogramada",
+          motivo: "el cliente pidio recibirla otro dia",
+          cierreId: cierre.id,
+          pagoMensajero: "800.00",
+        },
+        select: { id: true },
+      });
+      // La de la orden `entregada`, que NO entra en el lote (las 37 entregadas del caso real).
+      const gestionFuera = await ctx.crudo.gestionOrden.create({
         data: {
           ordenId: entregada,
           mensajeroId: ctx.origenId,
@@ -496,29 +613,74 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
         },
         select: { id: true },
       });
+
       await ctx.repo.traspasarMensajeroLote(loteDe(ctx, [enReparto]));
-      const despues = await ctx.crudo.gestionOrden.findUniqueOrThrow({
-        where: { id: gestion.id },
-        select: {
-          mensajeroId: true,
-          cierreId: true,
-          montoRecibido: true,
-          pagoMensajero: true,
-          ordenId: true,
-        },
+
+      const columnas = {
+        mensajeroId: true,
+        cierreId: true,
+        montoRecibido: true,
+        pagoMensajero: true,
+        ingresoBodegaRechazo: true,
+        resultado: true,
+        ordenId: true,
+      } as const;
+      const despuesDelLote = await ctx.crudo.gestionOrden.findUniqueOrThrow({
+        where: { id: gestionDelLote.id },
+        select: columnas,
+      });
+      const despuesFuera = await ctx.crudo.gestionOrden.findUniqueOrThrow({
+        where: { id: gestionFuera.id },
+        select: columnas,
+      });
+      const cierreDespues = await ctx.crudo.cierreDia.findUniqueOrThrow({
+        where: { id: cierre.id },
+        select: { mensajeroId: true, totalPagoMensajero: true, estado: true },
+      });
+      // La orden del lote SI cambio de dueno: sin esto, el caso pasaria aunque no se traspasara nada.
+      const ordenDelLote = await ctx.crudo.orden.findUniqueOrThrow({
+        where: { id: enReparto },
+        select: { mensajeroAsignadoId: true },
       });
       // Y la orden `entregada`, que NO estaba en el lote, sigue siendo del origen.
       const ordenEntregada = await ctx.crudo.orden.findUniqueOrThrow({
         where: { id: entregada },
         select: { mensajeroAsignadoId: true },
       });
-      return { despues, ordenEntregada, origenId: ctx.origenId };
+      return {
+        cierreId: cierre.id,
+        despuesDelLote,
+        despuesFuera,
+        cierreDespues,
+        ordenDelLote,
+        ordenEntregada,
+        origenId: ctx.origenId,
+        destinoId: ctx.destinoId,
+        enReparto,
+      };
     });
 
-    expect(r.despues.mensajeroId).toBe(r.origenId);
-    expect(r.despues.cierreId).toBeNull();
-    expect(r.despues.montoRecibido?.toString()).toBe("15000");
-    expect(r.despues.pagoMensajero?.toString()).toBe("1200");
+    // Anti-vacuidad: la orden de esa gestion SI se traspaso.
+    expect(r.ordenDelLote.mensajeroAsignadoId).toBe(r.destinoId);
+
+    // ⭑⭑ R20 SOBRE UNA ORDEN DEL LOTE: la gestion previa conserva AUTOR, CIERRE e IMPORTES.
+    expect(r.despuesDelLote.ordenId).toBe(r.enReparto);
+    expect(r.despuesDelLote.mensajeroId).toBe(r.origenId);
+    expect(r.despuesDelLote.cierreId).toBe(r.cierreId);
+    expect(r.despuesDelLote.pagoMensajero?.toString()).toBe("800");
+    expect(r.despuesDelLote.montoRecibido).toBeNull();
+    expect(r.despuesDelLote.ingresoBodegaRechazo).toBeNull();
+    expect(r.despuesDelLote.resultado).toBe("reprogramada");
+    // Y el cierre que la contiene sigue siendo del origen, con el mismo total.
+    expect(r.cierreDespues.mensajeroId).toBe(r.origenId);
+    expect(r.cierreDespues.totalPagoMensajero.toString()).toBe("800");
+    expect(r.cierreDespues.estado).toBe("aprobado");
+
+    // Y la de la orden FUERA del lote, igual que antes.
+    expect(r.despuesFuera.mensajeroId).toBe(r.origenId);
+    expect(r.despuesFuera.cierreId).toBeNull();
+    expect(r.despuesFuera.montoRecibido?.toString()).toBe("15000");
+    expect(r.despuesFuera.pagoMensajero?.toString()).toBe("1200");
     expect(r.ordenEntregada.mensajeroAsignadoId).toBe(r.origenId);
   });
 
@@ -864,7 +1026,7 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
       }
     });
 
-    it("⭑⭑ R31/mutacion 7: el rastro se escribe con el `tx`, NO con el cliente del repositorio", async () => {
+    it("⭑⭑ R23/R31 (mutaciones 7 y 9): el rastro, el chat y los jobs van por el `tx`, NO por el cliente del repositorio", async () => {
       // ⚠️ ESTE ES EL CASO QUE MATA LA MUTACION 7, y esta escrito asi porque la primera version del
       // arnes NO la mataba: el `$transaction` del doble entregaba EL MISMO objeto que
       // `this.prisma`, asi que `registrarTraspasoMensajero(tx, ...)` y
@@ -877,6 +1039,12 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
       // Por que importa fuera del test: un rastro escrito FUERA de la transaccion del movimiento
       // rompe R31 en las dos direcciones —una orden movida sin rastro, o un rastro de algo que se
       // revirtio— y es el estado exacto del que esta ficha viene a sacar al sistema.
+      //
+      // ⚠️ M1 (2026-09-14): la PRIMERA version de este caso solo vigilaba el RASTRO, y la mutacion 9
+      // del reviewer —`traspasarConversaciones(this.prisma, …)`— sobrevivio 23/23. Ahora el externo
+      // lanza ante CUALQUIER escritura mientras dura el acto (ver `clienteDelRepo`), asi que las tres
+      // escrituras que R23 ata al movimiento —rastro, chat y jobs— quedan medidas a la vez. Y se
+      // afirma el EFECTO de las tres, para que el caso no pase por no haber escrito nada.
       const r = await conEscenario(
         [{}, {}],
         async (ctx) => {
@@ -887,14 +1055,60 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
           const ordenes = await ctx.crudo.orden.count({
             where: { id: { in: ctx.ids }, mensajeroAsignadoId: ctx.destinoId },
           });
-          return { aplicado, rastro, ordenes };
+          const hilos = await ctx.crudo.chatConversacion.count({
+            where: { ordenId: { in: ctx.ids }, mensajeroId: ctx.destinoId },
+          });
+          const jobs = await ctx.crudo.job.findMany({
+            where: { tipo: "optimizacion_ruta" },
+            select: { payload: true },
+          });
+          const jobsDelActo = jobs.filter((j) =>
+            [ctx.origenId, ctx.destinoId].includes(
+              (j.payload as { mensajeroId?: string }).mensajeroId ?? "",
+            ),
+          ).length;
+          return { aplicado, rastro, ordenes, hilos, jobsDelActo };
         },
         { romperRastro: "fuera" },
       );
 
       expect(r.aplicado.movidas).toBe(2);
-      expect(r.rastro).toBe(2);
       expect(r.ordenes).toBe(2);
+      expect(r.rastro).toBe(2); // mutacion 7
+      expect(r.hilos).toBe(2); // mutacion 9
+      expect(r.aplicado.conversaciones).toBe(2);
+      expect(r.jobsDelActo).toBe(2); // y el encolado, que tenia el mismo hueco
+    });
+
+    it("CONTROL de M1: el cliente estricto SI lanza si alguien escribe por el externo dentro del acto", async () => {
+      // Anti-vacuidad del caso de arriba. Sin esto, un `clienteDelRepo` que no vigilara nada lo
+      // dejaria en verde. Se abre el `$transaction` del EXTERNO y, desde dentro, se escribe POR EL
+      // EXTERNO: tiene que saltar `EscrituraFueraDeLaTransaccion`, y por las dos vias (SQL crudo y
+      // delegado de modelo). Y FUERA del acto el mismo cliente sigue escribiendo con normalidad.
+      const r = await enTransaccionRevertida(prisma, async (tx) => {
+        await serializarEscriturasReales(tx);
+        const externo = clienteDelRepo(tx, "fuera");
+        const errores: string[] = [];
+        await externo.$transaction(async () => {
+          try {
+            await externo.$executeRawUnsafe(`SELECT 1`);
+          } catch (e) {
+            errores.push((e as Error).name);
+          }
+          try {
+            await externo.chatConversacion.updateMany({ where: { id: "nada" }, data: {} });
+          } catch (e) {
+            errores.push((e as Error).name);
+          }
+        });
+        const fueraDelActo = await externo.chatConversacion.updateMany({
+          where: { id: "nada" },
+          data: {},
+        });
+        return { errores, fueraDelActo: fueraDelActo.count };
+      });
+      expect(r.errores).toEqual(["EscrituraFueraDeLaTransaccion", "EscrituraFueraDeLaTransaccion"]);
+      expect(r.fueraDelActo).toBe(0);
     });
 
     it("CONTROL: el mismo escenario SIN romper el rastro SI mueve (anti-vacuidad)", async () => {

@@ -501,7 +501,7 @@ describe("427/R38-R41 — los DOS avisos, fuera de la transaccion y sin cambiar 
     // emisor por orden llamaria 3 veces a cada uno.
     const recibido = vi.fn(async (_ctx: TraspasoOrdenesContexto) => {});
     const cedido = vi.fn(async (_ctx: TraspasoOrdenesContexto) => {});
-    const { repo } = buildRepo({
+    const { repo, espias } = buildRepo({
       findByIdsForTransicion: vi.fn(async () => [
         orden(),
         orden({ id: ORDEN_B }),
@@ -533,6 +533,26 @@ describe("427/R38-R41 — los DOS avisos, fuera de la transaccion y sin cambiar 
     expect(ctxCedido.cuantas).toBe(3);
     expect(ctxCedido.otroMensajeroNombre).toBe("Carlos Eduardo");
     expect(ctxCedido.loteId).toBe(ctxRecibido.loteId);
+
+    // ⭑⭑ R42 — Y ESE VALOR ES EL `lote_id` DEL ACTO, EL MISMO QUE SE LE PASO A LA TRANSACCION.
+    //
+    // ⚠️ SIN ESTE BLOQUE LA MUTACION 5 DEL REVIEWER SOBREVIVIA (72/72 verde): con el servicio
+    // pasando `loteId: validas[0].id` —el id de la PRIMERA ORDEN—, lo de arriba seguia cumpliendose,
+    // porque solo exigia forma de uuid y que los dos avisos compartieran el valor. Y ESE es el fallo
+    // que pagaron la 262, la 403, la 409 y la 412: A -> Carlos, vuelta a Andy, otra vez A -> Carlos;
+    // la entidad se repite, `crear` absorbe el `P2002` y el tercer aviso queda MUDO PARA SIEMPRE.
+    //
+    // Se afirma contra lo que RECIBIO `traspasarMensajeroLote` —que es lo que se persiste en
+    // `orden_traspaso_mensajero.lote_id`— y no contra un literal: es la unica igualdad que ata la
+    // entidad del aviso al rastro del acto.
+    expect(espias.traspasarMensajeroLote).toHaveBeenCalledTimes(1);
+    const loteDelActo = espias.traspasarMensajeroLote.mock.calls[0][0].loteId as string;
+    expect(ctxRecibido.loteId).toBe(loteDelActo);
+    expect(ctxCedido.loteId).toBe(loteDelActo);
+    // Y no es el id de NINGUNA orden del lote (la forma exacta de la mutacion 5).
+    for (const ordenId of [ORDEN_A, ORDEN_B, "33333333-3333-4333-8333-333333333333"]) {
+      expect(ctxRecibido.loteId).not.toBe(ordenId);
+    }
   });
 
   it("⭑ R40: el contexto de los avisos NO lleva el motivo escrito por quien traspaso", async () => {
