@@ -1,0 +1,51 @@
+---
+titulo: Recolección
+modulo: recoleccion
+pantalla: /recoleccion
+roles: [mensajero]
+actualizado: 2026-09-15
+fuentes:
+  - app/(app)/recoleccion/_components/RecoleccionModule.tsx
+  - app/(app)/recoleccion/_components/RecolectadasHoyLista.tsx
+  - app/(app)/recoleccion/_components/useRecolectarPorGuia.ts
+---
+
+# Recolección
+
+Acá recogés paquetes **en la tienda**: los que la tienda ya tiene listos y hay que llevarse para
+meterlos al sistema.
+
+Es distinto de **Por recoger**. Allá están los paquetes que ya te asignaron a vos; acá estás
+recolectando en la tienda lo que todavía no ha entrado al circuito.
+
+## Cómo se recolecta
+
+Igual que en Por recoger, dos formas y las dos valen:
+
+- **Escanear** el código con la cámara.
+- **Escribir el número de guía**.
+
+Elegís el paquete, confirmás la recolección y queda registrado a tu nombre.
+
+## Recolectadas hoy
+
+Debajo tenés la lista de **lo que llevás recolectado hoy**, para que puedas comprobar de un vistazo
+que no se te quedó nada y que no contaste dos veces lo mismo.
+
+La lista es del día: mañana arranca vacía.
+
+## Cosas que te pueden pasar
+
+**«Código inválido».** El número que escaneaste o escribiste no corresponde a ninguna orden por
+recolectar. Revisá el número; si el código está estropeado, escribilo a mano.
+
+**«No se pudo abrir la cámara».** El navegador no te dio permiso o la cámara está ocupada por otra
+app. Cerrá la otra app, o usá el campo de número de guía, que hace exactamente lo mismo.
+
+**«No tenés permiso para recolectar órdenes».** Esta pantalla es solo para mensajeros. Si te sale eso,
+tu cuenta no tiene ese rol — avisá a la oficina.
+
+## Lo que esta pantalla NO hace
+
+- **No se entrega nada acá.** Lo recolectado sigue su camino y las entregas se trabajan en **Reparto**.
+- **No es la lista de tus asignaciones.** Eso es **Por recoger**.
