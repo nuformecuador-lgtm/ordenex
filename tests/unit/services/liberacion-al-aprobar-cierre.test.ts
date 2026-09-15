@@ -83,6 +83,7 @@ function fakeRepo(
       gestiones: [],
       sinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
     })),
     resolverCierre: vi.fn(async () => {
       traza.push("resolverCierre");

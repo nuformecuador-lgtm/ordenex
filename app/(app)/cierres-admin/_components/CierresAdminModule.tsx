@@ -39,6 +39,7 @@ import type {
   CierreDetalleGestion,
   CierreGrupos,
   CierreOrdenSinGestion,
+  CierreRechazoDeTienda,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import { montoValido } from "@/app/(app)/wallet/_components/wallet-labels";
@@ -373,6 +374,12 @@ interface DetalleAbierto {
    * ninguna»; `[]` con `false` es «este cierre es anterior al registro y no lo sabemos».
    */
   sinGestionRegistrado: boolean;
+  /**
+   * FICHA 425 (R14) — los rechazos de tienda que este cierre pone delante de quien lo aprueba, tal
+   * como llegan del servidor (ya ordenados). Sin marca de registro: aquí «ninguno» y «no consta»
+   * son lo mismo, porque ningún cierre anterior a la ficha pudo llevarse uno.
+   */
+  rechazosDeTienda: CierreRechazoDeTienda[];
 }
 
 /**
@@ -662,6 +669,9 @@ export function CierresAdminModule({
         // servidor sabe cuál es cuál.
         ordenesSinGestion: result.ordenesSinGestion,
         sinGestionRegistrado: result.sinGestionRegistrado,
+        // FICHA 425 (R14): tal cual llega, sin filtrar ni reordenar. Es la misma lista que recibe
+        // el mensajero en su comprobante: las dos pantallas pintan lo mismo para el mismo cierre.
+        rechazosDeTienda: result.rechazosDeTienda,
       });
       return;
     }
@@ -1256,6 +1266,9 @@ export function CierresAdminModule({
               // otra es el arreglo a medias que se corrigió en la 263.
               ordenesSinGestion={detalle.ordenesSinGestion}
               sinGestionRegistrado={detalle.sinGestionRegistrado}
+              // FICHA 425 (R14): la MISMA prop que pasa el módulo del mensajero, del resultado del
+              // servidor. La vigila la guardia de superficies del detalle del cierre.
+              rechazosDeTienda={detalle.rechazosDeTienda}
               onVerEvidencia={setEvidencia}
               // Ausente cuando no se puede corregir: la hoja vuelve a ser de solo lectura sin
               // que la fila tenga que saber nada de roles ni de estados.

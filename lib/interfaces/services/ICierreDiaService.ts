@@ -324,6 +324,41 @@ export interface CierreOrdenSinGestion {
   estatusOrigen: OrderStatusValue | null;
 }
 
+/**
+ * FICHA 425 (R14/R15/R16/R21, design §5.2) — UN RECHAZO DE TIENDA PUESTO DELANTE DE QUIEN APRUEBA EL
+ * CIERRE, leido de `cierre_rechazo_tienda`.
+ *
+ * NO ES UNA GESTION DEL MENSAJERO NI ES FACTURABLE. La tienda lo decidio desde su escritorio (240) y
+ * su gestion conserva `cierre_id` NULL a proposito: esa columna es la llave de los cinco caminos de
+ * dinero, y darsela cobraria dos veces a la tienda el flete de devolucion que ya cobra la via propia
+ * de la 337. Esta fila existe para que quien aprueba SEPARE EL PAQUETE, y para que aprobar el cierre
+ * saque la orden de `rechazada`.
+ *
+ * NI UN CAMPO DE IMPORTE, ni siquiera `"0.00"`: un cero invita a sumarlo. Si algun dia aparece uno
+ * aqui, es un bug de diseño y no una mejora (R6/R7/R21).
+ *
+ * Los descriptivos son los CONGELADOS al incorporar (69/T18), no los que la orden tenga hoy.
+ *
+ * VIVE AQUI Y NO EN EL CONTRATO DEL ADMIN por la misma razon que `CierreOrdenSinGestion`: este archivo
+ * lo recorre el panel del mensajero, y el contrato del admin arrastraria Prisma al bundle del
+ * navegador. Desde alli se RE-EXPORTA.
+ */
+export interface CierreRechazoDeTienda {
+  gestionId: string;
+  ordenId: string;
+  /** `null` = la orden llego sin guia; la fila OMITE la pieza, no pinta un guion. */
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  producto: string;
+  tiendaNombre: string;
+  zonaNombre: string;
+  /** ISO 8601, congelado: CUANDO la tienda lo rechazo (R15). Es lo que explica su edad (D3). */
+  rechazadoAt: string;
+  /** El motivo que escribio la tienda al rechazar (obligatorio en 240/R12); `null` si no consta. */
+  motivo: string | null;
+}
+
 export type VerCierrePasadoServiceResult =
   | {
       status: "ok";
@@ -342,6 +377,16 @@ export type VerCierrePasadoServiceResult =
       ordenesSinGestion: CierreOrdenSinGestion[];
       /** R27/R28: `false` = cierre ANTERIOR al registro. `[]` con `false` NO es «no hubo ninguna». */
       sinGestionRegistrado: boolean;
+      /**
+       * FICHA 425 (R14/R15/R16) — los RECHAZOS DE TIENDA que este cierre puso delante de quien lo
+       * aprueba, del mas viejo al mas reciente. Viaja al mensajero por la misma razon que
+       * `ordenesSinGestion`: es EL MISMO componente de pantalla que el detalle del admin.
+       *
+       * LISTA VACIA, NUNCA `null`: aqui «ninguno» y «no consta» son lo mismo, porque ningun cierre
+       * anterior a la ficha pudo llevarse un rechazo (design §4.2). No son gestiones del mensajero y
+       * no suman a ningun total.
+       */
+      rechazosDeTienda: CierreRechazoDeTienda[];
     }
   | { status: "forbidden" } // rol != mensajero
   | { status: "no_encontrada" }; // id inexistente o de otro mensajero (no se distinguen)

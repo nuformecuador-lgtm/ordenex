@@ -272,6 +272,7 @@ const DOS_TIENDAS: DetalleOk = {
   partesPorTienda: [NORTE, SUR],
   ordenesSinGestion: [],
   sinGestionRegistrado: true,
+  rechazosDeTienda: [],
 };
 
 /**

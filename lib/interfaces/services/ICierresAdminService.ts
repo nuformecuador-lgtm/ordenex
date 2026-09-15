@@ -16,6 +16,7 @@ import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type {
   CierreGrupos,
   CierreOrdenSinGestion,
+  CierreRechazoDeTienda,
   CierreResultado,
   CierreTotales,
   IngresoOrdenexDTO,
@@ -335,6 +336,9 @@ export type ListarGestionesDescargaServiceResult =
 // VALOR— al grafo del panel del mensajero, y con ellos el cliente de Prisma al bundle del
 // navegador. Lo cazo `tests/unit/guards/pagos-captura.guardia.test.ts`.
 export type { CierreOrdenSinGestion } from "@/lib/interfaces/services/ICierreDiaService";
+// FICHA 425: mismo camino y mismo motivo que la linea de arriba — se declara en el contrato del
+// mensajero (el que recorre su panel) y aqui solo se RE-EXPORTA.
+export type { CierreRechazoDeTienda } from "@/lib/interfaces/services/ICierreDiaService";
 
 export type CierreDetalleAdminServiceResult =
   | {
@@ -463,6 +467,17 @@ export type CierreDetalleAdminServiceResult =
        * acordarse de distinguir los dos casos, y ya sabemos como acaba eso.
        */
       sinGestionRegistrado: boolean;
+      /**
+       * FICHA 425 (R14/R15/R16) — los RECHAZOS DE TIENDA que este cierre puso delante de quien lo
+       * aprueba, del mas viejo al mas reciente. Son decisiones de la TIENDA: no son gestiones del
+       * mensajero, no entran en `grupos` y no suman a ningun total ni a `pagoTienda`. Estan aqui
+       * para que quien aprueba separe el paquete; al aprobar, la orden sale de `rechazada` hacia
+       * `por_devolver_a_tienda` (central) o `por_devolver` (satelite).
+       *
+       * LISTA VACIA, NUNCA `null`: aqui «ninguno» y «no consta» son lo mismo (design §4.2), asi que
+       * no hace falta la marca `…Registrado` que la 264 si necesito.
+       */
+      rechazosDeTienda: CierreRechazoDeTienda[];
     }
   | { status: "forbidden" } // rol invalido (R1)
   | { status: "no_encontrada" }; // id inexistente o de otra bodega/zona (R13)

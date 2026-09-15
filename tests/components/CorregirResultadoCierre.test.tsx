@@ -341,6 +341,7 @@ async function abrirDetalleDelModulo(opciones: {
     partesPorTienda: [],
     ordenesSinGestion: [],
     sinGestionRegistrado: true,
+    rechazosDeTienda: [],
   });
 
   const cola = paginaInicial(resuelto ? [] : [cierre]);
@@ -440,6 +441,7 @@ describe("R16 — la corrección se ofrece únicamente desde el detalle de un ci
       partesPorTienda: [],
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
     });
     const cola = paginaInicial([cierre]);
     const historico = paginaInicial<CierreAdminResumen>([]);

@@ -177,6 +177,9 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     // Feature 264 (B4): la TERCERA consulta del detalle — las ordenes que el corte barrio al
     // crear el cierre. Vacio por defecto (el cierre normal no barrio ninguna).
     cierreSinGestion: { findMany: vi.fn().mockResolvedValue([]) },
+    // FICHA 425 (B11): la CUARTA consulta del detalle — los rechazos de tienda que el cierre puso
+    // delante de quien lo aprueba. Vacio por defecto (el cierre normal no incorporo ninguno).
+    cierreRechazoTienda: { findMany: vi.fn().mockResolvedValue([]) },
     // Feature 173/T B.2: al aprobar, el feed del contra-entrega LEE el ledger por tienda para
     // saber cuanto se le acredito a las tiendas en ESE cierre. En esta suite el repositorio
     // del ledger es un doble que no escribe nada, asi que el ledger esta VACIO — y devolver
@@ -1524,5 +1527,88 @@ describe("264/B4 — findCierreByIdEnAlcance devuelve las ordenes sin gestionar 
     // La guardia de alcance NO se repite en la consulta de la lista, y no hace falta: el
     // `findFirst` ya devolvio `null` y el `Promise.all` ni se lanza.
     expect(prisma.cierreSinGestion.findMany).not.toHaveBeenCalled();
+  });
+});
+
+// ==============================================================================================
+// FICHA 425 (B11) — EL DETALLE DEL ADMIN TRAE LOS RECHAZOS DE TIENDA QUE EL CIERRE INCORPORO.
+//
+// Cableado y proyeccion. Que la tabla tenga las filas correctas lo decide la escritura de
+// `crearCierre`, y eso se mide contra Postgres en `cierre-rechazo-tienda-sql-real.test.ts`.
+// ==============================================================================================
+
+describe("425/B11 — findCierreByIdEnAlcance devuelve los rechazos de tienda del cierre", () => {
+  const FILA_CRUDA = {
+    gestionId: "g-r1",
+    ordenId: "o-r1",
+    numGuia: 19301246,
+    numRemision: "NA-947",
+    destinatario: "Dest NA-947",
+    producto: "Sobre",
+    tiendaNombre: "Nuform",
+    zonaNombre: "Central",
+    rechazadoAt: new Date("2026-09-10T14:05:00.000Z"),
+    motivo: null,
+  };
+
+  function prismaConRechazos(filas: Record<string, unknown>[], cierre: unknown = cierreResumenRow()) {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findFirst.mockResolvedValue(cierre);
+    prisma.gestionOrden.findMany.mockResolvedValue([]);
+    (prisma.cierreRechazoTienda.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(filas);
+    return prisma;
+  }
+
+  it("R14: consulta por `cierre_id` en el WHERE, del mas viejo al mas reciente y con desempate total", async () => {
+    const prisma = prismaConRechazos([FILA_CRUDA]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    const arg = (prisma.cierreRechazoTienda.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      where: unknown;
+      orderBy: unknown;
+    };
+    expect(arg.where).toEqual({ cierreId: "c1" });
+    expect(arg.orderBy).toEqual([{ rechazadoAt: "asc" }, { gestionId: "asc" }]);
+  });
+
+  it("R15: devuelve lo congelado tal cual, con la fecha en ISO y NINGUN importe", async () => {
+    const prisma = prismaConRechazos([FILA_CRUDA]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    expect(r?.rechazosDeTienda).toEqual([
+      {
+        gestionId: "g-r1",
+        ordenId: "o-r1",
+        numGuia: 19301246,
+        numRemision: "NA-947",
+        destinatario: "Dest NA-947",
+        producto: "Sobre",
+        tiendaNombre: "Nuform",
+        zonaNombre: "Central",
+        rechazadoAt: "2026-09-10T14:05:00.000Z",
+        motivo: null,
+      },
+    ]);
+  });
+
+  it("sin rechazos devuelve `[]`, nunca `null`", async () => {
+    const prisma = prismaConRechazos([]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    expect(r?.rechazosDeTienda).toEqual([]);
+  });
+
+  it("R14/R13: fuera de alcance corta en `null` antes de consultar la lista", async () => {
+    const prisma = prismaConRechazos([FILA_CRUDA], null);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    expect(await repo.findCierreByIdEnAlcance("c-ajeno", ALCANCE_MAESTRO)).toBeNull();
+    expect(prisma.cierreRechazoTienda.findMany).not.toHaveBeenCalled();
   });
 });

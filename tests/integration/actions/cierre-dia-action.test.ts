@@ -99,6 +99,7 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
         gestiones: gestionesPorCierre.get(cierreId) ?? [],
         sinGestion: [],
         sinGestionRegistrado: true,
+        rechazosDeTienda: [],
       };
     }),
     // Feature 170 (T I.1): version paginada del mismo listado (no la ejercita esta suite).

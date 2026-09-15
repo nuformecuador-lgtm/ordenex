@@ -154,4 +154,20 @@ describe("💰 337 — los origenes admitidos en un cierre son un conjunto CERRA
     const fuera = new Set<string>(ORIGENES_GESTION_FUERA_DEL_CIERRE);
     expect(ORIGENES_GESTION_DE_LA_TIENDA.filter((o) => fuera.has(o))).toEqual(["rechazo_tienda"]);
   });
+
+  // FICHA 425 (2026-09-14, B9) — LA LISTA NO SE TOCA, Y ESTE CASO EXISTE PARA QUE NADIE LA «ARREGLE».
+  //
+  // La 425 resolvio la orden que se quedaba en `rechazada` sin salida, y lo hizo SIN sacar
+  // `rechazo_tienda` de aqui: el rechazo se VINCULA al cierre en `cierre_rechazo_tienda` (una tabla sin
+  // columnas de importe) y la gestion sigue con `cierre_id` NULL. Sacarlo de esta lista era el arreglo
+  // de una linea, y es la alternativa DESCARTADA con numeros (`specs/425-salida-rechazo-tienda/design.md`
+  // §7.1): con `cierre_id`, los feeds de la aprobacion volverian a emitir el flete de devolucion + IVA
+  // que la via propia de la 337 YA cobra (24 cobros aprobados, ₡65.088 medidos el 2026-09-14) —DOBLE
+  // COBRO a la tienda—, cada rechazo pasaria a exigir confirmacion fisica sin puerta de escape, y se
+  // congelaria `ingreso_bodega_rechazo` de rechazos historicos con la tarifa de hoy. No es una mejora
+  // pendiente: es la puerta que esta lista mantiene cerrada.
+  it("425: la lista de exclusion sigue siendo EXACTAMENTE `rechazo_tienda` y `reprogramacion_tienda`, en ese orden", () => {
+    expect([...ORIGENES_GESTION_FUERA_DEL_CIERRE]).toEqual(["rechazo_tienda", "reprogramacion_tienda"]);
+    expect([...ORIGENES_GESTION_FUERA_DEL_CIERRE]).toContain("rechazo_tienda");
+  });
 });

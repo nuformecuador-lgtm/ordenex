@@ -315,6 +315,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({
@@ -364,6 +365,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
@@ -398,6 +400,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({
@@ -437,6 +440,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
@@ -470,6 +474,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -555,6 +560,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -627,6 +633,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -667,6 +674,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -713,6 +721,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -764,6 +773,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -811,6 +821,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -850,6 +861,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -880,6 +892,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       // 6000 (SLA) + 3200 (manual) === 9200 (total snapshot), particionado server-side (R5).
       desgloseIngresoBodegaRechazos: makeDesglose({
@@ -944,6 +957,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose({
         sla: "6000.00",
@@ -991,6 +1005,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -1035,6 +1050,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
@@ -1074,6 +1090,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
@@ -1112,6 +1129,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
@@ -1162,6 +1180,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c2", estado: "aprobado", resueltoAt: "2026-07-12T00:00:00.000Z" }),
@@ -1201,6 +1220,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
@@ -1301,6 +1321,7 @@ describe("CierresAdminModule", () => {
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
+      rechazosDeTienda: [],
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),

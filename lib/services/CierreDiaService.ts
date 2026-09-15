@@ -424,6 +424,10 @@ export class CierreDiaService implements ICierreDiaService {
       // viajaran, el mensajero veria una hoja que le calla justo lo que le bloqueo el cierre.
       ordenesSinGestion: found.sinGestion,
       sinGestionRegistrado: found.sinGestionRegistrado, // R27/R28
+      // FICHA 425 (B11, R14): los rechazos de tienda del cierre, por el mismo camino y con el mismo
+      // mapeo (ninguno) que el detalle del admin. Passthrough: ni un filtro, ni una suma, ni un
+      // grupo — no son gestiones del mensajero y no se pueden colar en `grupos`.
+      rechazosDeTienda: found.rechazosDeTienda,
     };
   }
 
