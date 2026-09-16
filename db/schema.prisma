@@ -512,8 +512,15 @@ model Zona {
   /// las dos restricciones viven SOLO en el SQL de `20260918120200_zona_sinpe_no_nulo` —mismo
   /// patron que el `orden_monto_cobrar_entero_check` de la 305—:
   ///   CONSTRAINT "zona_sinpe_numero_check" CHECK ("sinpe_numero" ~ '^[678][0-9]{7}$')
-  ///   CONSTRAINT "zona_sinpe_nombre_check" CHECK (btrim("sinpe_nombre") <> '')
+  ///   CONSTRAINT "zona_sinpe_nombre_check" CHECK ("sinpe_nombre" ~ '[^[:space:]]')
   /// Este comentario existe para que nadie las eche de menos aqui y las "restaure" en el modelo.
+  ///
+  /// ⚠️ EL SEGUNDO ES `~ '[^[:space:]]'` Y NO `btrim(...) <> ''`, Y LA DIFERENCIA SE MIDIO. El
+  /// `design.md` proponia `btrim`, y `btrim` SIN SEGUNDO ARGUMENTO recorta SOLO el espacio (0x20):
+  /// un titular de un unico TABULADOR pasaba el `CHECK` mientras `sinpeNombreSchema` —que usa el
+  /// `.trim()` de JavaScript, que recorta todo el espacio en blanco— lo rechazaba. Si alguien
+  /// vuelve a escribir aqui la formulacion vieja, el siguiente que lea este modelo creera que la
+  /// base garantiza algo que no garantiza.
   /// El porque de que no basten las de zod: los seeds, los `scripts/` y cualquier `UPDATE` corrido
   /// a mano contra produccion entran por debajo del borde de la aplicacion.
   sinpeNumero String @map("sinpe_numero") @db.VarChar(8)

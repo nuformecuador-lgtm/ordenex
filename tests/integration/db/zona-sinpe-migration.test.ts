@@ -6,6 +6,12 @@ import type { PrismaClient } from "@prisma/client";
 
 import { CASOS_SINPE } from "@/tests/fixtures/sinpe-casos";
 import { sinpeNumeroONull } from "@/lib/utils/sinpe-cr";
+import {
+  ENV_NOMBRE,
+  ENV_NUMERO,
+  leerSemilla,
+  sembrarSinpeInicial,
+} from "@/scripts/seed-sinpe-inicial";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
@@ -44,6 +50,20 @@ const downRestricciones = fs.readFileSync(
 /** Valores FICTICIOS. El repositorio es publico: aqui no se escribe ningun SINPE real. */
 const SEMILLA_NUMERO = "80000000";
 const SEMILLA_NOMBRE = "Titular de Prueba";
+
+/** Lo que una bodega corrige A MANO despues de la siembra. La siembra NO puede pisarlo. */
+const CORREGIDO_NUMERO = "71234567";
+const CORREGIDO_NOMBRE = "Titular Corregido A Mano";
+/** La bodega que hace esa correccion. */
+const ID_CORREGIDA = "z-3";
+
+/**
+ * El entorno con el que se ejerce el trasvase. `NODE_ENV` va porque `NodeJS.ProcessEnv` lo declara
+ * obligatorio en este proyecto; aqui no lo lee nadie.
+ */
+function entornoDeSiembra(): NodeJS.ProcessEnv {
+  return { NODE_ENV: "test", [ENV_NUMERO]: SEMILLA_NUMERO, [ENV_NOMBRE]: SEMILLA_NOMBRE };
+}
 
 function soloEjecutable(sql: string): string {
   return sql
@@ -99,6 +119,60 @@ async function crearZonaPrevia(admin: PrismaClient, esquema: string): Promise<vo
        "cobro_vehiculo" BOOLEAN NOT NULL DEFAULT false,
        "es_central" BOOLEAN NOT NULL DEFAULT false)`,
   );
+}
+
+/**
+ * ⭑ EL CLIENTE CON EL QUE SE EJERCE `sembrarSinpeInicial` DE VERDAD, CONTRA EL CLON.
+ *
+ * ⚠️ POR QUE HACE FALTA UN ADAPTADOR Y NO VALE `crearPrismaDeTestEnEsquema`. MEDIDO, NO SUPUESTO:
+ * la opcion `schema` de `PrismaPg` solo viaja como `schemaName` en la informacion de conexion —es
+ * lo que cualifica las consultas de MODELO— y **nunca emite un `SET search_path`**. El SQL crudo
+ * se manda TAL CUAL, asi que el `UPDATE "zona"` del script iria a `public."zona"`: la tabla REAL.
+ * Un test que escribe en la tabla viva de la base de desarrollo no es un test, es un accidente.
+ *
+ * QUE HACE ESTE ADAPTADOR, Y QUE NO. Toma el SQL que emite el script —el texto sale del
+ * `$executeRaw` etiquetado del propio `scripts/seed-sinpe-inicial.ts`, no de este archivo— y le
+ * pone delante el esquema desechable, exactamente igual que `cualificar()` hace con el SQL de las
+ * migraciones unas lineas mas arriba. El `SET`, el `WHERE` y los parametros son los del script:
+ * si alguien le quita el `WHERE … IS NULL`, lo que se ejecuta aqui tambien lo pierde.
+ *
+ * ⚠️ EL `throw` NO ES DECORATIVO. Si la cualificacion fallara —porque el script dejara de escribir
+ * `"zona"` entrecomillado, por ejemplo— el SQL saldria apuntando a `public` y este archivo
+ * arrasaria la tabla real. Antes de ejecutar nada se comprueba que TODAS las apariciones de
+ * `"zona"` quedaron bajo el esquema del clon, y si no, se aborta.
+ */
+function clienteDeSiembra(
+  admin: PrismaClient,
+  esquema: string,
+): Pick<PrismaClient, "zona" | "$executeRaw"> {
+  const adaptador = {
+    zona: {
+      count: async (): Promise<number> => {
+        const [fila] = await admin.$queryRawUnsafe<{ n: number }[]>(
+          `SELECT COUNT(*)::int AS n FROM "${esquema}"."zona"`,
+        );
+        return fila.n;
+      },
+    },
+    $executeRaw: async (trozos: TemplateStringsArray, ...valores: unknown[]): Promise<number> => {
+      // Se rearma el SQL del script igual que lo arma Prisma: los valores salen del texto y entran
+      // como `$1`, `$2` — o sea que siguen viajando PARAMETRIZADOS, como en produccion.
+      let sql = trozos[0] ?? "";
+      for (let i = 0; i < valores.length; i += 1) sql += `$${i + 1}${trozos[i + 1] ?? ""}`;
+
+      const cualificado = cualificar(sql, esquema);
+      const apariciones = (cualificado.match(/"zona"/g) ?? []).length;
+      const bajoElClon = (cualificado.match(new RegExp(`"${esquema}"\\."zona"`, "g")) ?? []).length;
+      if (apariciones === 0 || apariciones !== bajoElClon) {
+        throw new Error(
+          `el SQL del seed no quedo cualificado al esquema del clon (${bajoElClon}/${apariciones}): ` +
+            `abortado ANTES de tocar la base. SQL: ${cualificado}`,
+        );
+      }
+      return admin.$executeRawUnsafe(cualificado, ...valores);
+    },
+  };
+  return adaptador as unknown as Pick<PrismaClient, "zona" | "$executeRaw">;
 }
 
 interface ColumnaInfo {
@@ -239,28 +313,80 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("429/T4 — el DDL contra Postgres real", ()
     expect(ahora.every((c) => c.is_nullable === "YES")).toBe(true);
   });
 
-  it("R10 — tras la siembra, CERO bodegas con otro numero y CERO revisadas", async () => {
-    // La siembra la hace `scripts/seed-sinpe-inicial.ts` con el MISMO `WHERE` de los NULL; aqui se
-    // reproduce esa sentencia contra el clon. Lo que se afirma es su RESULTADO.
-    await admin.$executeRawUnsafe(
-      `UPDATE "${esquema}"."zona" SET "sinpe_numero" = $1, "sinpe_nombre" = $2
-        WHERE "sinpe_numero" IS NULL OR "sinpe_nombre" IS NULL`,
+  it("⭑ R10 — la siembra REAL deja las ocho con el mismo par y NINGUNA revisada", async () => {
+    // ⚠️ ESTE CASO LLAMA A `sembrarSinpeInicial`, EL CODIGO QUE CORRE EN EL DESPLIEGUE, y esa es
+    // la correccion del bloqueante 1 de `progress/review_429.md`. Antes reescribia a mano el
+    // `UPDATE` del script contra el clon —«aqui se reproduce esa sentencia»—, o sea que afirmaba el
+    // resultado de un SQL que el mismo escribia: la mutacion que le quitaba el `WHERE … IS NULL`
+    // al script dejaba este archivo en verde, y con el los 19.902 tests de la suite.
+    //
+    // La semilla tambien sale de `leerSemilla`, no de un objeto a mano: asi el camino medido es el
+    // entero —entorno → validacion → escritura— y no solo su ultimo tramo.
+    const semilla = leerSemilla(entornoDeSiembra());
+    expect(semilla.ok, "los valores ficticios del test tienen que pasar la validacion").toBe(true);
+    if (!semilla.ok) return;
+
+    const resultado = await sembrarSinpeInicial(clienteDeSiembra(admin, esquema), semilla);
+    expect(resultado).toEqual({ rellenadas: 8, intactas: 0 });
+
+    const [fila] = await admin.$queryRawUnsafe<
+      { total: number; sembradas: number; distintas: number; revisadas: number }[]
+    >(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE "sinpe_numero" = $1 AND "sinpe_nombre" = $2)::int AS sembradas,
+              COUNT(*) FILTER (WHERE "sinpe_numero" <> $1 OR "sinpe_nombre" <> $2)::int AS distintas,
+              COUNT(*) FILTER (WHERE "sinpe_revisado_at" IS NOT NULL)::int AS revisadas
+         FROM "${esquema}"."zona"`,
       SEMILLA_NUMERO,
       SEMILLA_NOMBRE,
     );
-    const [fila] = await admin.$queryRawUnsafe<
-      { total: number; distintas: number; revisadas: number }[]
-    >(
-      `SELECT COUNT(*)::int AS total,
-              COUNT(*) FILTER (WHERE "sinpe_numero" <> $1)::int AS distintas,
+    expect(fila.total).toBe(8); // anti-vacuidad: si no hubiera filas, los ceros no dirian nada
+    // ⚠️ SE AFIRMA EL POSITIVO, no solo el «ninguna distinta»: un `<>` contra NULL da NULL y el
+    // `FILTER` no lo cuenta, asi que `distintas = 0` seria tambien el resultado de NO HABER
+    // ESCRITO NADA —por ejemplo si el `UPDATE` se hubiera ido a otro esquema—.
+    expect(fila.sembradas).toBe(8);
+    expect(fila.distintas).toBe(0);
+    // R5/R10: la marca de revision se queda VACIA a proposito. Nadie lo ha mirado.
+    expect(fila.revisadas).toBe(0);
+  });
+
+  it("⭑ R10 — segunda corrida: CERO rellenadas, y la correccion HUMANA no se pisa", async () => {
+    // ⚠️ ES LA PROPIEDAD QUE LA MUTACION DEL REVISOR ROMPIA, y la razon por la que la idempotencia
+    // del script es ESTRUCTURAL (`WHERE … IS NULL`) y no un `if` que alguien pueda quitar. El caso
+    // real: una bodega entra a la aplicacion, ve que la semilla no es su numero, lo corrige — y el
+    // siguiente despliegue vuelve a correr el seed. Si lo pisara, el cliente transferiria al numero
+    // de otra bodega y se sabria dias despues, por los reclamos.
+    const semilla = leerSemilla(entornoDeSiembra());
+    expect(semilla.ok).toBe(true);
+    if (!semilla.ok) return;
+
+    await admin.$executeRawUnsafe(
+      `UPDATE "${esquema}"."zona" SET "sinpe_numero" = $1, "sinpe_nombre" = $2 WHERE "id" = $3`,
+      CORREGIDO_NUMERO,
+      CORREGIDO_NOMBRE,
+      ID_CORREGIDA,
+    );
+
+    const segunda = await sembrarSinpeInicial(clienteDeSiembra(admin, esquema), semilla);
+    expect(segunda).toEqual({ rellenadas: 0, intactas: 8 });
+
+    // Y la fila corregida conserva SU par, caracter a caracter.
+    const [corregida] = await admin.$queryRawUnsafe<
+      { sinpe_numero: string; sinpe_nombre: string }[]
+    >(`SELECT "sinpe_numero", "sinpe_nombre" FROM "${esquema}"."zona" WHERE "id" = $1`, ID_CORREGIDA);
+    expect(corregida.sinpe_numero).toBe(CORREGIDO_NUMERO);
+    expect(corregida.sinpe_nombre).toBe(CORREGIDO_NOMBRE);
+
+    // Las otras siete siguen con la semilla: la segunda corrida no ha movido nada, ni en un sentido
+    // ni en el otro.
+    const [conteo] = await admin.$queryRawUnsafe<{ sembradas: number; revisadas: number }[]>(
+      `SELECT COUNT(*) FILTER (WHERE "sinpe_numero" = $1)::int AS sembradas,
               COUNT(*) FILTER (WHERE "sinpe_revisado_at" IS NOT NULL)::int AS revisadas
          FROM "${esquema}"."zona"`,
       SEMILLA_NUMERO,
     );
-    expect(fila.total).toBe(8); // anti-vacuidad: si no hubiera filas, los ceros no dirian nada
-    expect(fila.distintas).toBe(0);
-    // R5/R10: la marca de revision se queda VACIA a proposito. Nadie lo ha mirado.
-    expect(fila.revisadas).toBe(0);
+    expect(conteo.sembradas).toBe(7);
+    expect(conteo.revisadas).toBe(0);
   });
 
   it("el paso 3 ya se aplica, una vez lleno", async () => {

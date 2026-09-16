@@ -92,7 +92,15 @@ export const sinpeNumeroSchema = z
 
 /**
  * R8 — el titular. `trim()` ANTES del `min(1)`: `"   "` es un titular vacio, no uno de tres
- * caracteres. El `CHECK` de Postgres dice lo mismo con `btrim(...) <> ''`.
+ * caracteres. El `CHECK` de Postgres dice lo mismo con `~ '[^[:space:]]'`.
+ *
+ * ⚠️ `~ '[^[:space:]]'` Y NO `btrim(...) <> ''`, QUE ES LO QUE PROPONIA EL `design.md` Y SE
+ * DESCARTO MIDIENDOLO: `btrim` sin segundo argumento recorta SOLO el espacio (0x20), asi que un
+ * titular de un unico TABULADOR pasaba el `CHECK` mientras este esquema lo rechazaba. La clase
+ * POSIX `[:space:]` cubre espacio, tabulador, salto de linea, retorno y avance de pagina, que es
+ * exactamente lo que recorta el `.trim()` de JavaScript. Las dos fuentes dicen lo mismo, y
+ * `tests/integration/db/zona-sinpe-migration.test.ts` lo cobra corriendo los mismos casos contra
+ * las dos.
  */
 export const sinpeNombreSchema = z
   .string()

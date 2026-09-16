@@ -126,7 +126,7 @@ En los otros dos caminos se añade la relación `mensajeroAsignado.zona` acotada
 | R7 | `integration/db/zona-sinpe-migration.test.ts` (`it.each` sobre `CASOS_SINPE`) + `unit/utils/sinpe-cr.test.ts` |
 | R8 | `integration/db/zona-sinpe-migration.test.ts` · «espacio en blanco de CUALQUIER clase» + `unit/utils/sinpe-cr.test.ts` |
 | R9 | `unit/utils/sinpe-cr.test.ts` · bloque «la normalizacion, y lo que NO normaliza» + `integration/actions/sinpe-bodega-action.test.ts` |
-| R10 | `integration/db/zona-sinpe-migration.test.ts` · «tras la siembra, CERO bodegas con otro número y CERO revisadas» |
+| R10 | `integration/db/zona-sinpe-migration.test.ts` · «la siembra REAL deja las ocho con el mismo par y NINGUNA revisada» + «segunda corrida: CERO rellenadas, y la corrección HUMANA no se pisa» (los dos **llaman a `sembrarSinpeInicial`**) · y `unit/scripts/seed-sinpe-inicial.test.ts` para `leerSemilla` y la forma de la escritura |
 | R11 | `unit/types/zona-schema.test.ts` + `integration/actions/zonas-action.test.ts` + `unit/services/zona-service.test.ts` |
 | R12 | `integration/db/zona-sinpe-revision.test.ts` · «crear una bodega la deja REVISADA» |
 | R13 | `unit/utils/resolver-sinpe.test.ts` + `unit/repositories/orden-envio-reader.test.ts` |
@@ -143,9 +143,9 @@ En los otros dos caminos se añade la relación `mensajeroAsignado.zona` acotada
 | R24 | `integration/db/zona-sinpe-rastro.test.ts` · «si el registro revienta…» + `unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts` |
 | R25 | `integration/db/zona-sinpe-rastro.test.ts` + `zona-sinpe-revision.test.ts` |
 | R26 | `unit/auth/revision-sinpe-pendiente.test.ts` |
-| R27 | **PENDIENTE (T22, frontend)** — el resolvedor ya emite `editable: true`, y eso sí está probado |
+| R27 | `tests/components/RevisionSinpeBodega.test.tsx` · «429/R27 — se corrige EN EL SITIO, sin abandonar la pantalla» (guardar desde el propio aviso, y el número inválido pintando el error junto al campo) |
 | R28 | `unit/guards/revision-sinpe-no-bloquea.guardia.test.ts` (la mitad estructural; el montaje llega en T19/T22) |
-| R29 | **PENDIENTE (T22, frontend)** — es del componente |
+| R29 | `tests/components/RevisionSinpeBodega.test.tsx` · «429/R28+R29 — cerrarlo no confirma nada, y vuelve al siguiente ingreso» (con la marca de sesión no se pinta; sin ella, vuelve; la marca es POR bodega) |
 | R30 | `unit/auth/revision-sinpe-pendiente.test.ts` · «con fecha de revisión… nada que pedir», para los dos administradores |
 | R31 | `unit/auth/revision-sinpe-pendiente.test.ts` · «NO EMITE NINGUNA CONSULTA» |
 
@@ -544,3 +544,255 @@ INIT_EXIT=0
 `.env` se copió al worktree para el gate y **273 archivos de `tests/integration/db/`
 corrieron**. El `.env` está cubierto por `.gitignore` (`.env*`) y se comprobó que no entra en el
 índice.
+
+---
+---
+
+# Ficha 429 — bitácora del ARREGLO DE REVISIÓN (bloqueante 1 + menores 1, 2 y 3)
+
+**Rama:** `feat/429-sinpe-por-bodega`, sobre `cc4e17ce` (el informe de revisión).
+**Alcance:** el **bloqueante 1** de `progress/review_429.md` —el script de siembra sin un solo
+test— y sus tres menores 1, 2 y 3. **El bloqueante 2 (el plan de release) NO se toca**: es decisión
+del humano. Los menores 4, 5, 6 y 7 quedan como deuda declarada, por encargo.
+
+---
+
+## 1. El bloqueante: por qué el script no estaba cubierto, y qué se hizo
+
+`scripts/seed-sinpe-inicial.ts` decide el número que ocho bodegas le enseñan a cada cliente, y sus
+dos exports no los importaba **ningún** test. El revisor lo demostró con dos mutaciones a la vez
+—quitar el `WHERE … IS NULL` y hacer que `leerSemilla` invente un valor— y **19.902 tests siguieron
+en verde**.
+
+La causa no estaba en el código: **R10 colgaba de un caso que reescribía a mano el `UPDATE` del
+seed** contra el esquema clon (`zona-sinpe-migration.test.ts`, «aquí se reproduce esa sentencia»).
+Afirmaba el resultado de un SQL que él mismo escribía: la familia «probar el `WHERE` donde vive».
+
+**Lo que ahora existe:**
+
+1. **`tests/unit/scripts/seed-sinpe-inicial.test.ts` (nuevo, 20 casos)** — `leerSemilla` entera:
+   falta cada variable (y el motivo la nombra **a ella** y no a la otra), variable presente pero
+   vacía o solo espacios, los cuatro formatos inválidos del encargo (`12345678`, `50612345`,
+   `6123456`, `612345678`), el veredicto **caso a caso contra `CASOS_SINPE`** —la misma tabla que
+   juzgan el validador y el `CHECK` de Postgres—, el titular de 61 y el de 60 justos, la
+   normalización de `"+506 8888 1111"` → `88881111`, y que **el valor NUNCA aparece en el mensaje de
+   error** (hoy no aparece; ahora está afirmado, también troceado). Más la FORMA de la escritura de
+   `sembrarSinpeInicial` con un doble que apunta el SQL: una sola escritura, acotada a los NULL, con
+   los dos valores parametrizados y sin tocar `sinpe_revisado_at`.
+2. **R10 pasa a ejercer el código real.** Los dos casos de `zona-sinpe-migration.test.ts` llaman a
+   `sembrarSinpeInicial` **de verdad** —y la semilla sale de `leerSemilla`, no de un objeto a mano,
+   así que el camino medido es el entero: entorno → validación → escritura—. Y se añade el caso que
+   faltaba: **idempotencia**, segunda corrida con `rellenadas === 0` y una fila corregida a mano que
+   **no se pisa** (ni ella ni las otras siete).
+
+### ⚠️ La trampa que hubo que rodear para ejercer el seed contra el clon
+
+`sembrarSinpeInicial` escribe `UPDATE "zona"` **sin cualificar**, y la suite de migraciones trabaja
+en un esquema desechable. `crearPrismaDeTestEnEsquema` **no sirve**: la opción `schema` de `PrismaPg`
+solo viaja como `schemaName` en la información de conexión —lo que cualifica las consultas de
+MODELO— y **nunca emite un `SET search_path`** (comprobado en el `dist` del adaptador instalado: la
+cadena no aparece). El SQL crudo se manda tal cual, así que el `UPDATE` se habría ido a
+`public."zona"`: **la tabla real de la base de desarrollo**.
+
+La solución es un adaptador de 20 líneas que toma el SQL que emite el script —el texto sale del
+`$executeRaw` etiquetado del propio script, no del test— y le antepone el esquema del clon, igual
+que `cualificar()` hace con el SQL de las migraciones. **Con un `throw` que no es decorativo**: si
+alguna aparición de `"zona"` quedara sin cualificar, aborta ANTES de tocar la base en vez de
+arrasar la tabla viva.
+
+---
+
+## 2. Las DOS mutaciones del revisor, aplicadas otra vez — las dos mueren
+
+### Mutación A — quitar el `WHERE "sinpe_numero" IS NULL OR "sinpe_nombre" IS NULL`
+
+```
+ ❯ tests/unit/scripts/seed-sinpe-inicial.test.ts (20 tests | 1 failed)
+     × ⭑ el `UPDATE` va RESTRINGIDO a las filas sin valor: la idempotencia es del `WHERE`
+ ❯ tests/integration/db/zona-sinpe-migration.test.ts (32 tests | 1 failed)
+     × ⭑ R10 — segunda corrida: CERO rellenadas, y la correccion HUMANA no se pisa
+
+AssertionError: expected '\n    UPDATE "zona" SET "sinpe_numero…' to match
+  /WHERE\s+"sinpe_numero"\s+IS\s+NULL\s+OR\s+"sinpe_nombre"\s+IS\s+NULL/i
+
+AssertionError: expected { rellenadas: 8, intactas: +0 } to deeply equal { rellenadas: +0, intactas: 8 }
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 50 passed (52)
+```
+
+### Mutación B — `leerSemilla` inventa un valor y se borra la validación de formato
+
+```
+ ❯ tests/unit/scripts/seed-sinpe-inicial.test.ts (20 tests | 11 failed)
+     × ⭑ sin `NEXT_PUBLIC_SINPE_NUMERO` no se siembra, y el motivo nombra esa variable
+     × ⭑ sin `NEXT_PUBLIC_SINPE_NOMBRE` tampoco, y el motivo nombra ESA otra
+     × una variable PRESENTE pero vacia (o solo espacios) es lo mismo que ausente
+     × ⭑ `12345678` se rechaza (ocho digitos pero empieza por 1: no es una serie movil)
+     × ⭑ `50612345` se rechaza (ocho digitos que empiezan por 506: se rechaza por el primer digito)
+     × ⭑ `6123456` se rechaza (siete digitos: falta uno)
+     × ⭑ `612345678` se rechaza (nueve digitos: sobra uno)
+     × ⭑ el `506` de ocho digitos NO se convierte en `12345` por el camino
+     × ⭑ el MISMO veredicto que la tabla compartida, caso a caso
+     × ⭑ un titular de mas de 60 caracteres se rechaza AQUI, no lo trunca Postgres
+     × ⭑ ni el numero ni el titular aparecen en el mensaje: el log de un build se conserva
+
+AssertionError: se esperaba un rechazo y la semilla se acepto: expected true to be false
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  11 failed | 41 passed (52)
+```
+
+**El árbol se revirtió por copia tras cada mutación** (el estado del árbol vuelve a quedar limpio
+para `scripts/`), no por edición inversa: una reversión a mano es justo donde se cuela el residuo.
+
+**Límite declarado, para que nadie lo lea de más:** la mutación B deja el archivo de INTEGRACIÓN en
+verde —ese ejercita `leerSemilla` con valores válidos, que la mutación sigue aceptando—. Quien la
+mata es el unitario. Es el reparto buscado: el unitario juzga la lectura del entorno, la integración
+juzga lo que Postgres hace con la escritura.
+
+---
+
+## 3. Los tres menores
+
+**Menor 1 — el `CHECK` del titular, documentado con la formulación descartada.**
+`db/schema.prisma` y `lib/utils/sinpe-cr.ts` decían `btrim("sinpe_nombre") <> ''`. La real es
+`~ '[^[:space:]]'`, y la diferencia no es cosmética: `btrim` sin segundo argumento recorta **solo**
+el espacio 0x20, así que un titular de un único tabulador pasaba el `CHECK` mientras
+`sinpeNombreSchema` lo rechazaba. Los dos archivos corregidos **y con el porqué escrito**, para que
+la formulación vieja no «vuelva» en la siguiente lectura.
+`specs/429-sinpe-por-bodega/design.md` sigue diciendo `btrim` **a propósito**: es la propuesta
+original, y la desviación ya está anotada en §4 de la bitácora del backend.
+
+**Menor 2 — R27 y R29 decían PENDIENTE.** Sus tests existen desde la pasada de frontend
+(`tests/components/RevisionSinpeBodega.test.tsx`). Las dos filas del mapa apuntan ya al bloque
+concreto. De paso, **la fila de R10** apunta a los dos casos nuevos y al unitario.
+
+**Menor 3 — `tasks.md` sin un solo `[x]`.** Marcadas las 24 hechas, **comprobando el árbol y no la
+bitácora**. Sin marcar quedan cinco, cada una con su nota: **T0** (la mitad de los literales ya no
+aplica, y la medida del formato es el bloqueante 2, del humano), **T20** (la puerta de `/design` no
+deja registro en esta rama y su criterio de «hecho» es una aprobación humana) y **T27–T29**, que son
+posteriores al despliegue. T4 lleva nota de que se hizo en tres piezas, no en una.
+
+---
+
+## 4. Archivos de esta pasada
+
+| Archivo | Qué |
+| --- | --- |
+| `tests/unit/scripts/seed-sinpe-inicial.test.ts` | **NUEVO** — 20 casos: `leerSemilla` entera y la forma de la escritura |
+| `tests/integration/db/zona-sinpe-migration.test.ts` | R10 llama a `sembrarSinpeInicial` de verdad; + caso de idempotencia; + el adaptador al esquema clon |
+| `db/schema.prisma` | menor 1 — el `CHECK` del titular, con su porqué (solo comentario) |
+| `lib/utils/sinpe-cr.ts` | menor 1 — idem (solo comentario) |
+| `progress/impl_429.md` | menor 2 — R10, R27 y R29 en el mapa; y esta bitácora |
+| `specs/429-sinpe-por-bodega/tasks.md` | menor 3 — los `[x]`, y las notas de las cinco sin marcar |
+
+**Ni una línea de producción cambió de comportamiento:** los dos únicos archivos de `lib/` y `db/`
+tocados lo son **solo en comentarios**. Lo que cambia es lo que la suite ve.
+
+---
+
+## 5. Salidas reales
+
+### 5.1 `pnpm run typecheck`
+
+```
+> tsc --noEmit
+```
+Sin salida: verde. (Primer intento rojo con 3 errores `TS2345/TS2741`: `NodeJS.ProcessEnv` declara
+`NODE_ENV` **obligatorio** en este proyecto, así que un entorno de mentira `{}` no es asignable. Se
+arregló poniendo `NODE_ENV: "test"` en los dos ayudantes, no relajando el tipo.)
+
+### 5.2 `pnpm run lint`
+
+```
+✖ 200 problems (0 errors, 200 warnings)
+```
+**0 errores.** Los 200 avisos son los `no-unused-vars` de siempre, los mismos que traía `dev`;
+**ninguno cae en los archivos de esta pasada** (comprobado filtrando por sus rutas: sin resultados).
+
+### 5.3 `./init.sh` COMPLETO — dos corridas
+
+El rápido se niega solo con este diff (la rama lleva migraciones y `db/schema.prisma`), así que el
+veredicto sale del completo. `INIT_EXIT` escrito **dentro** del log y sin canalizar por `tail`.
+
+**Primera — `progress/gate_429_fix.log`: 1 rojo, y es un FLAKE de saturación.**
+
+```
+ Test Files  1 failed | 1994 passed (1995)
+      Tests  1 failed | 29116 passed | 26 skipped (29143)
+   Duration  675.25s
+INIT_EXIT=1
+
+ FAIL  tests/unit/guards/censo-order-status-rename.test.ts
+ Error: Test timed out in 20000ms.
+```
+
+Es el modo de fallo que el propio gate manda comprobar («corre ese archivo AISLADO»). **Aislado pasa
+en 2,21 s, con el caso en 688 ms contra un tope de 20 s**:
+
+```
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Duration  2.21s
+```
+
+Ese archivo **recorre el árbol de ficheros** (`app/`, `lib/`, `components/`, `hooks/`, `scripts/`,
+`tests/`, `e2e/`) y no importa nada de lo que vigila: bajo 1.995 archivos en paralelo es de los
+primeros que se queda sin CPU. No está en `tests/baseline-rojos.json` y **no se añade**: no es deuda
+de nadie, y meterlo ahí taparía un rojo de verdad el día que lo tenga.
+
+**Segunda — `progress/gate_429_fix_b.log`: VERDE, y confirma el flake.**
+
+```
+✓ typecheck paso
+✓ lint paso
+
+ Test Files  1995 passed (1995)
+      Tests  29117 passed | 26 skipped (29143)
+   Duration  635.31s
+
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1995 ejecutado(s))
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado
+  20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+El aviso de los tres `down.sql` que faltan es **anterior a esta ficha** (migraciones de agosto, de
+rutas) y sale igual en los gates previos de la rama. Las tres de la 429 traen el suyo.
+
+#### Los `skipped`, MIRADOS — y los de la base, CONTADOS
+
+**26 saltados, los de siempre**: `AnaliticaPage.test.tsx` (17) + `AnaliticaShell.test.tsx` (9). Es
+exactamente la cifra de referencia de las dos pasadas anteriores.
+
+**Y lo que de verdad hay que mirar en esta ficha: los `tests/integration/db/`.** Si se saltan, el
+verde no vale, porque los `CHECK`, el `NOT NULL` y ahora la siembra viven justo ahí.
+
+```
+273 archivos distintos de tests/integration/db/ en el log
+273 de ellos con la marca ✓  (o sea: TODOS corrieron, ninguno saltado)
+```
+
+El `.env` se copió al worktree para el gate y está cubierto por `.gitignore` (`.env*`): no entra en
+el índice.
+
+#### Las cifras, comparadas con la corrida del revisor
+
+| | revisor (sobre `1fa283b1`) | esta pasada |
+| --- | --- | --- |
+| archivos | 1.994 | **1.995** (+1: el unitario del seed) |
+| tests | 29.096 + 26 saltados | **29.117 + 26 saltados** (+21: 20 del unitario + 1 de idempotencia) |
+| `integration/db` | «SÍ corrieron» | **273, todos en verde** |
+| `INIT_EXIT` | 0 | **0** (en la segunda corrida; la primera, un flake de timeout) |
+
+---
+
+## 6. Veredicto
+
+**El bloqueante 1 está levantado y comprobado rompiéndolo**: las dos mutaciones que el revisor dejó
+sobrevivir ahora matan tests con nombre, y R10 dejó de afirmar el resultado de un SQL escrito por el
+propio test. Los tres menores encargados, hechos. El bloqueante 2 y los menores 4-7 siguen abiertos,
+a propósito.
