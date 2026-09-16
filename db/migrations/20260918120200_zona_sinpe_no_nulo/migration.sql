@@ -22,7 +22,7 @@
 --     los seeds, los `scripts/` y cualquier `UPDATE` corrido a mano contra produccion —via el MCP
 --     de Supabase, que es como se escribe en prod en este repo— entran por debajo del borde de la
 --     aplicacion. El `CHECK` los cubre a todos;
---   · un titular vacio o compuesto solo de espacios (`btrim(...) <> ''`).
+--   · un titular vacio o compuesto SOLO DE ESPACIOS EN BLANCO de cualquier clase.
 --
 -- ⚠️ LA MISMA REGLA VIVE EN `lib/utils/sinpe-cr.ts` (`SINPE_NUMERO_REGEX`). Son dos fuentes del
 -- mismo formato y pueden divergir: lo cierra `tests/fixtures/sinpe-casos.ts`, la MISMA tabla de
@@ -51,5 +51,13 @@ ALTER TABLE "zona" ALTER COLUMN "sinpe_nombre" SET NOT NULL;
 
 ALTER TABLE "zona" ADD CONSTRAINT "zona_sinpe_numero_check"
   CHECK ("sinpe_numero" ~ '^[678][0-9]{7}$');
+-- ⚠️ `~ '[^[:space:]]'` Y NO `btrim(...) <> ''`, Y ESTA MEDIDO. El `design.md` proponia `btrim`, y
+-- `btrim` SIN SEGUNDO ARGUMENTO recorta SOLO EL ESPACIO (0x20): un titular de un unico TABULADOR
+-- pasaba el `CHECK` mientras `sinpeNombreSchema` —que usa el `.trim()` de JavaScript, que recorta
+-- todo el espacio en blanco— lo rechazaba. Esa es exactamente la divergencia entre las dos fuentes
+-- del formato que el precio declarado de esta ficha admitia, y la cazo
+-- `tests/integration/db/zona-sinpe-migration.test.ts` corriendo los mismos casos contra las dos.
+-- La clase POSIX `[:space:]` cubre espacio, tabulador, salto de linea, retorno y avance de pagina,
+-- asi que «tiene al menos un caracter que no es espacio en blanco» dice lo mismo que el borde.
 ALTER TABLE "zona" ADD CONSTRAINT "zona_sinpe_nombre_check"
-  CHECK (btrim("sinpe_nombre") <> '');
+  CHECK ("sinpe_nombre" ~ '[^[:space:]]');

@@ -304,6 +304,42 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(21);
   });
 
+  it("⭑ FICHA 429 (R22): `zona_sinpe_cambiado` es DINERO, y no se reutilizo ninguna accion de zona", () => {
+    // POR QUE DINERO, y es la lectura MAS directa de la categoria que hay en todo el catalogo:
+    // estos dos campos deciden A QUE CUENTA VA A PARAR EL DINERO DEL CLIENTE. Mas directo todavia
+    // que `zona_pago_mensajero_cambiado`, que ya esta ahi. No es «hace desaparecer algo» —la zona
+    // sigue— ni «cambia quien puede hacer que» —ningun permiso cambia—.
+    expect(HISTORIAL_ACCION_TIPOS).toContain("zona_sinpe_cambiado");
+    expect(CATEGORIA_POR_ACCION.zona_sinpe_cambiado).toBe("mueve_dinero");
+    // Literal a proposito: el texto ES el contrato de la pantalla `/historial-de-acciones`.
+    expect(ACCION_LABELS.zona_sinpe_cambiado).toBe("Cambió el SINPE de una bodega");
+    // ⚠️ DISTINTO de las otras TRES acciones sobre la MISMA entidad. El listado tiene que poder
+    // distinguir «le cambiaron el numero de cobro» de «le movieron la marca de central», «le
+    // cambiaron el pago al mensajero» y «la borraron»: son cuatro hechos con cuatro consecuencias.
+    for (const hermana of [
+      "zona_central_cambiada",
+      "zona_pago_mensajero_cambiado",
+      "zona_borrada",
+    ] as const) {
+      expect(ACCION_LABELS.zona_sinpe_cambiado).not.toBe(ACCION_LABELS[hermana]);
+    }
+    // Se admite como valor de filtro del listado, y un inventado NO.
+    expect(filtroHistorialAccionSchema.safeParse({ accion: ["zona_sinpe_cambiado"] }).success).toBe(
+      true,
+    );
+    expect(
+      filtroHistorialAccionSchema.safeParse({ accion: ["zona_sinpe_cambiada"] }).success,
+    ).toBe(false);
+    // ⚠️ NO HAY un tipo «alguien lo miro» (R25). Confirmar sin cambiar nada NO deja fila: D6 pide
+    // el rastro de quien lo CAMBIO, y meter las visitas en la categoria del dinero la convertiria
+    // en un registro de visitas. La fecha de la revision vive en `zona.sinpe_revisado_at`.
+    expect(HISTORIAL_ACCION_TIPOS).not.toContain("zona_sinpe_revisado");
+    expect(HISTORIAL_ACCION_TIPOS).not.toContain("zona_sinpe_confirmado");
+    // La 429 NO amplia el enum de entidades: `zona` esta ahi desde los 17 originales de la 362.
+    expect(HISTORIAL_ACCION_ENTIDADES).toContain("zona");
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(21);
+  });
+
   it("⭑ FICHA 381: `cobro_tienda_registrado` es DINERO, con entidad NUEVA y sin reusar la caja", () => {
     // POR QUE DINERO (R41). Un cobro manual BAJA el disponible de una tienda por una decision
     // humana, y puede dejarlo NEGATIVO. No es «hace desaparecer algo» —el asiento se añade, no se

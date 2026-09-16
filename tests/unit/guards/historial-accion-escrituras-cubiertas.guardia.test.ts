@@ -265,6 +265,30 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.tarifaZonaMensajero\.deleteMany\(/,
   },
   {
+    // ⭑ FICHA 429 — EL SINPE DE UNA BODEGA. Metodo PROPIO y no una escritura mas dentro de
+    // `update`, y eso es deliberado: esta guardia mide POR METODO, no por escritura (medido dos
+    // veces en este repo, fichas 376 y 380). Si el guardado del SINPE viviera dentro de `update`
+    // —que ya llama a `appendAccion` por otros tres tipos— borrar SU `appendAccion` dejaria esta
+    // guardia VERDE. Con metodo propio, la unica escritura del cuerpo es la que la fila documenta
+    // y el limite conocido de la guardia no muerde aqui.
+    //
+    // ⚠️ LA MUTACION QUE SE EXIGE ES EL `update` DE LAS DOS COLUMNAS, que es exactamente lo que la
+    // fila documenta: a que cuenta se le va a pedir el dinero a los clientes de esa bodega.
+    //
+    // ⚠️ NO HAY ENTRADA PARA `create` NI PARA `confirmarSinpe`, y NO es un olvido:
+    //   · `create` escribe el par en el acto de crear la bodega, y el catalogo no tiene un tipo
+    //     «zona creada» (hay `zona_borrada` y no `zona_creada`, igual que `vehiculo_borrado` sin
+    //     `vehiculo_creado`). Añadir uno aqui ensancharia el alcance firmado.
+    //   · `confirmarSinpe` NO CAMBIA NADA (R25): solo pone la fecha de revision. D6 pide el rastro
+    //     de quien lo CAMBIO; un tipo «alguien lo miro» dentro de la categoria del dinero la
+    //     convertiria en un registro de visitas.
+    tipos: ["zona_sinpe_cambiado"],
+    archivo: "lib/repositories/ZonaRepository.ts",
+    metodo: "guardarSinpe",
+    forma: "abre_tx",
+    mutacion: /tx\.zona\.update\(/,
+  },
+  {
     // ⭑ FICHA 381 — EL COBRO MANUAL A UNA TIENDA. Forma `recibe_tx`, la FUERTE: el metodo recibe la
     // transaccion como primer parametro y su tipo (`WalletTiendaHistorialTxClient`) no expone
     // `$transaction`, asi que la atomicidad es del TIPO y no de la disciplina.
