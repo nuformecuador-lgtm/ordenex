@@ -339,3 +339,70 @@ el aviso, se puede corregir, se puede cerrar, no bloquea nada, y al volver a ent
 confirmado, no vuelve.
 **Hecho cuando:** los seis gestos están comprobados. La suite no ve lo que ve una persona mirando la
 pantalla.
+
+---
+
+## Fase 8-bis — EL PLAN DE RELEASE (bloqueante 2 de la revisión, resuelto el 2026-09-15)
+
+**Decisión del humano:** no se despliega la 429 sola. **Se acumulan las cuatro funcionalidades de
+SF-001 en `dev` y se despliega todo junto al final.**
+
+### T0 — MEDIDO (2026-09-15) ✅
+
+La pregunta era si el `NEXT_PUBLIC_SINPE_NUMERO` vigente cumple `^[678][0-9]{7}$`. **Sí.** Medido
+contra producción en solo lectura, sobre los mensajes realmente enviados:
+
+| | |
+| --- | --- |
+| Mensajes de chat que contienen el SINPE | **2.491** |
+| Números distintos entre ellos | **1** — confirma la premisa del documento firmado |
+| Cumplen `^[678][0-9]{7}$` | **Sí**, los 8 dígitos |
+
+El valor **no se anota aquí ni en ningún archivo**: el repositorio es público y solo hacía falta
+comprobar la forma. La consulta se puede repetir cuando se quiera.
+
+**Conclusión: el script de siembra no va a abortar por formato.**
+
+### Mergear a `dev` es SEGURO, y aquí está por qué
+
+`scripts/migrate-deploy-guardas.ts` → `decidirMigracion`:
+
+```
+VERCEL_ENV === "production"  → aplica
+VERCEL_ENV === "preview"     → NO aplica, salvo MIGRATE_ON_PREVIEW=true
+```
+
+Un merge a `dev` produce un despliegue **preview**, que **no corre migraciones**. Así que el PR entra a
+`dev` sin tocar ninguna base y sin riesgo de dejar `_prisma_migrations` sucio. **La trampa vive
+únicamente en el despliegue a `prod`.**
+
+### La trampa, escrita para que nadie la descubra el día de la release
+
+`pnpm run build` en producción hace `prisma generate && tsx scripts/migrate-deploy.ts && next build`,
+y `migrate deploy` aplica **todas** las migraciones pendientes de un tirón:
+
+1. `20260918120100_zona_sinpe` (columnas nullables) → OK.
+2. `20260918120200_zona_sinpe_no_nulo` levanta su `RAISE EXCEPTION` porque nadie sembró → **el build
+   muere**. Eso es lo diseñado.
+3. **Y ese fallo deja la migración marcada como `failed` en `_prisma_migrations`.** A partir de ahí
+   **todo `prisma migrate deploy` posterior se niega** hasta que alguien corra `prisma migrate
+   resolve`, que contra producción exige la `DATABASE_URL` de prod — **que en este repo es
+   `sensitive` e irrecuperable por CLI**. Se entra ahí desplegando mal **una sola vez**.
+
+### El orden obligatorio el día de la release
+
+1. **Antes de mergear a `prod`**: aplicar los pasos 1 y 2 **a mano contra producción por el MCP de
+   Supabase** — crear las columnas nullables y sembrar las 8 zonas con el SINPE vigente.
+2. **Verificar en solo lectura** que las 8 zonas quedaron con su par, y que `sinpe_revisado_at` es
+   `NULL` en las 8 (nadie ha revisado todavía; es lo correcto).
+3. **Recién entonces** mergear a `prod`. `migrate deploy` encontrará los pasos 1 y 2 ya aplicados y
+   solo tendrá que aplicar el 3, que ya no aborta porque no hay filas vacías.
+
+**Por qué esta vía y no dos despliegues:** dos despliegues son más ortodoxos, pero dejan una ventana en
+la que la columna existe vacía mientras la aplicación ya la lee como obligatoria. Esta vía no tiene esa
+ventana y nunca pone `_prisma_migrations` en estado sucio.
+
+### Después de desplegar (T27–T29, sin cambios)
+
+Medir producción en solo lectura, retirar `NEXT_PUBLIC_SINPE_NUMERO` / `NEXT_PUBLIC_SINPE_NOMBRE` de
+Vercel **solo después de verificar**, y ver la aplicación funcionando.
