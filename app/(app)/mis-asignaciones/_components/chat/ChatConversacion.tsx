@@ -728,7 +728,12 @@ export function ChatConversacion({
             aria-expanded={detalle.abierta}
             aria-controls={detalleId}
             onClick={detalle.abierta ? detalle.cerrar : detalle.abrir}
-            className="rounded-full px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            // Anillo de foco OPACO (`ring-3 ring-ring`), el estándar de `DESIGN.md`: con alfa
+            // (`ring-ring/50`) mide 1,71 en claro y 2,33 en oscuro, por debajo del 3:1 que WCAG
+            // 1.4.11 pide a un indicador de interfaz (medido en `contraste-tokens.guardia`). Los
+            // vecinos heredados de esta pantalla siguen en `/50` y son deuda previa; esta pieza es
+            // NUEVA, y la regla para lo nuevo es escribir el opaco.
+            className="rounded-full px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring"
           >
             {detalle.abierta ? DETALLE_OCULTAR : DETALLE_VER}
           </button>

@@ -58,13 +58,17 @@ export interface GruposDeContactos {
  * particionan por estatus en el servidor, así que una orden no puede estar en dos. Deduplicar aquí
  * escondería el día en que dejen de ser disjuntas, que es un fallo del servidor y no de la lista.
  *
- * `porRecoger` es opcional para el patrón aditivo de los fixtures; ausente = comportamiento previo
- * a esta ficha.
+ * ⛔ `porRecoger` NO TIENE VALOR POR DEFECTO, y es deliberado. La prop equivalente de
+ * `RepartoModuleProps` se hizo REQUERIDA justamente para que el typecheck enumerara a los
+ * productores —un `?` habría dejado pantallas sin contactos y sin un solo error—, y un `= []` aquí
+ * reabría el mismo agujero un piso más abajo: medido el 2026-09-16, quitar el tercer argumento en
+ * `ChatDelMensajero` dejaba el typecheck EN VERDE. Quien no tenga lista que pasar escribe `[]` a la
+ * vista, que es una decisión; la omisión es un descuido, y se lee igual.
  */
 export function agruparContactosChat(
   porGestionar: MiAsignacionDTO[],
   conAyuda: MiAsignacionDTO[],
-  porRecoger: MiAsignacionDTO[] = [],
+  porRecoger: MiAsignacionDTO[],
 ): GruposDeContactos {
   const conElPaquete = [...porGestionar, ...conAyuda];
   // La MISMA regla de partición que usa la pantalla «Por recoger» (277/R2-R5), importada y no

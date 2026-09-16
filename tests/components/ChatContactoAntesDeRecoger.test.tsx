@@ -181,16 +181,22 @@ function renderConSwr(ui: ReactElement) {
   );
 }
 
-/** El modal del chat, ya abierto. Todas las aserciones se acotan DENTRO de él. */
+/**
+ * El modal del chat, ya abierto. Todas las aserciones se acotan DENTRO de él.
+ *
+ * El nombre se casa por prefijo porque con pendientes sin leer el boton anuncia tambien la cifra
+ * («Abrir chat con clientes, 2 sin leer»). Que la cifra este EN ese nombre lo fija
+ * `ChatNoLeidos.test.tsx`; aqui solo hace falta entrar.
+ */
 async function abrirChat(): Promise<HTMLElement> {
   await userEvent.click(
-    screen.getByRole("button", { name: "Abrir chat con clientes" }),
+    screen.getByRole("button", { name: /^Abrir chat con clientes/ }),
   );
   return screen.getByRole("dialog");
 }
 
-/** Monta Reparto con una orden ya recogida y las dos por recoger, y abre el chat. */
-async function chatDesdeReparto(): Promise<HTMLElement> {
+/** Monta Reparto con una orden ya recogida y las dos por recoger. Sin abrir el chat. */
+async function montarReparto(): Promise<void> {
   renderConSwr(
     <RepartoModule
       porGestionar={[EN_REPARTO]}
@@ -204,6 +210,11 @@ async function chatDesdeReparto(): Promise<HTMLElement> {
   await act(async () => {
     await Promise.resolve();
   });
+}
+
+/** Lo mismo, y con el chat ya abierto. */
+async function chatDesdeReparto(): Promise<HTMLElement> {
+  await montarReparto();
   return abrirChat();
 }
 
@@ -363,8 +374,18 @@ describe("(2) el detalle completo de la orden, desde el chat", () => {
 });
 
 describe("(4) conversar no es aceptar: el chat no ofrece trabajar la orden", () => {
-  it("ninguna fila del chat lleva «Gestionar» ni «Recoger»", async () => {
+  it("ninguna fila del chat lleva «Gestionar» ni «Recoger», tampoco dentro de «Ver detalle»", async () => {
     const modal = await chatDesdeReparto();
+
+    // ⭑ EL DESPLEGABLE VA ABIERTO, y sin esto la guardia no medía la mitad de su superficie:
+    // con el detalle plegado su contenido ni siquiera está montado, así que una acción metida ahí
+    // dentro —que es justo donde caería, al lado del detalle de la orden— quedaba fuera de alcance.
+    // Medido el 2026-09-16: un `<button>Gestionar esta orden</button>` junto a `<AsignacionDetalle>`
+    // dejaba los 16 tests de este archivo en verde.
+    await userEvent.click(within(modal).getByRole("button", { name: "Ver detalle" }));
+    expect(
+      within(modal).getByRole("button", { name: "Ocultar detalle" }),
+    ).toBeInTheDocument();
 
     // OJO con el patron: la fila ES un boton y su nombre accesible contiene el chip «Por
     // recoger», asi que un /Recoger/i cazaria la propia fila. Lo que no puede existir son las
@@ -417,5 +438,51 @@ describe("(5) «Por recoger» monta el MISMO chat, con la MISMA lista", () => {
 
     expect(fila(modal, "Diana Para Mañana")).toHaveTextContent("Para mañana");
     expect(fila(modal, "Carlos Sin Recoger")).not.toHaveTextContent("Para mañana");
+  });
+});
+
+describe("(6) el distintivo de sin leer YA cuenta las asignadas sin recoger", () => {
+  // ⭑ ESTE ES EL EFECTO COLATERAL QUE SOSTIENE LA DECISION DE UNA SOLA LISTA, y hasta hoy no lo
+  // fijaba nada. `ChatFlotante` filtra el resumen del servidor contra las ordenes que la pantalla
+  // lista (`enChat`), porque un pendiente sin fila donde abrirse deja un distintivo que no se puede
+  // vaciar. Antes de esta ficha las `por_recoger` no estaban en esa lista, asi que sus entrantes
+  // —que el servidor SI devuelve: `contarNoLeidosPorMensajero` filtra solo por mensajero, ni estatus
+  // ni fecha— se caian del contador en silencio. Al entrar a la lista, dejan de caerse.
+  //
+  // Medido el 2026-09-16: reponer el filtro anterior a la ficha
+  // (`ordenes.filter((o) => o.estatusValue !== "por_recoger")` en `ChatFlotante`) dejaba 149 tests
+  // en verde, y los 65 de los dos archivos dedicados a los no leidos tambien.
+
+  it("los pendientes de una orden POR RECOGER suman al distintivo del botón flotante", async () => {
+    resumenNoLeidosChatMock.mockResolvedValue({
+      status: "ok",
+      conversaciones: [
+        { ordenId: "c", noLeidos: 2 }, // Carlos: asignada, sin recoger, para hoy
+        // La contraprueba de que el filtro SIGUE filtrando: un pendiente de una orden que ya no
+        // está asignada a este mensajero no tiene fila donde abrirse y no puede sumar. Sin esta
+        // línea, borrar el filtro entero también pasaría este test.
+        { ordenId: "z-entregada-hace-un-mes", noLeidos: 7 },
+      ],
+    });
+    await montarReparto();
+
+    // Con el chat CERRADO no hay conversación delante, así que no se descuenta ninguna: el total
+    // es exactamente lo que el filtro deja pasar.
+    expect(await screen.findByTestId("chat-no-leidos-total")).toHaveTextContent("2");
+  });
+
+  it("y esa orden luce SU número en la lista, que es donde el mensajero la abre", async () => {
+    resumenNoLeidosChatMock.mockResolvedValue({
+      status: "ok",
+      conversaciones: [{ ordenId: "c", noLeidos: 2 }],
+    });
+    const modal = await chatDesdeReparto();
+
+    // La cifra sobre el avatar de SU fila, y la fila donde abrir la conversación: sin las dos, el
+    // mensajero ve un número en el botón y no encuentra de quién es.
+    expect(await within(modal).findByTestId("chat-no-leidos-c")).toHaveTextContent("2");
+    expect(fila(modal, "Carlos Sin Recoger")).toBeInTheDocument();
+    // La cifra no puede vivir solo en el color ni solo en el tamaño.
+    expect(within(modal).getByText("2 mensajes sin leer")).toBeInTheDocument();
   });
 });

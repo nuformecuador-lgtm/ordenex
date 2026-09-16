@@ -70,9 +70,11 @@ describe("agruparContactosChat — LA ficha: las asignadas sin recoger son conta
   });
 
   it("sin esta ficha la lista era solo lo ya recogido: el tercer argumento es lo que cambia", () => {
-    // La contraprueba de que el test de arriba mide algo. Con las mismas dos primeras listas y
-    // SIN la tercera, la composicion es exactamente la de antes del 2026-09-15.
-    const antes = agruparContactosChat([EN_REPARTO], [CON_AYUDA]);
+    // La contraprueba de que el test de arriba mide algo. Con las mismas dos primeras listas y una
+    // tercera VACIA, la composicion es exactamente la de antes del 2026-09-15.
+    // El `[]` va escrito a la vista y no omitido: el parametro no tiene valor por defecto a
+    // proposito, para que omitirlo en un productor real sea un error de typecheck y no un silencio.
+    const antes = agruparContactosChat([EN_REPARTO], [CON_AYUDA], []);
 
     expect(ids(antes.todas)).toEqual(["a", "b"]);
     expect(antes.porRecogerHoy).toEqual([]);
