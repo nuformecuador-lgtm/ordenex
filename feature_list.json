@@ -5141,7 +5141,7 @@
       "title": "el mensajero no puede contactar al cliente hasta que recoge el paquete",
       "description": "Las ordenes asignadas entran al chat sin esperar a ser recogidas.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
       "branch": "feat/430-contacto-antes-de-recoger",
