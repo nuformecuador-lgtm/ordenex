@@ -6,6 +6,7 @@ import type {
   ListarSaldosSatelitesCompletoInput,
   ListarSaldosSatelitesInput,
   MarcarConsolidacionRecibidaInput,
+  ResumenSatelitesDTO,
   RevertirConciliacionInputBorde,
   SaldoSateliteDTO,
 } from "@/lib/types/conciliacion-satelites";
@@ -50,6 +51,16 @@ export type ListarConsolidacionesSateliteCompletoServiceResult =
  * NO hay `validation_error` aqui: el monto lo mata zod en el borde (R10). Si el servicio lo
  * redeclarara, serian dos definiciones de «cuanto dinero es valido».
  */
+/**
+ * ⭑ R20/R23 — las TRES cifras de cabecera de `/wallet/satelites`.
+ *
+ * Existe porque la pantalla NO PUEDE sumarlas: R20 prohibe aritmetica de dinero en el navegador y
+ * las tres son sumas sobre TODAS las bodegas. `forbidden` por el mismo predicado que el resto.
+ */
+export type ResumenSatelitesServiceResult =
+  | { status: "ok"; resumen: ResumenSatelitesDTO }
+  | { status: "forbidden" };
+
 export type MarcaConciliacionServiceResult =
   | { status: "ok"; cierreBodegaId: string }
   | { status: "conflict" }
@@ -86,4 +97,9 @@ export interface IConciliacionSatelitesService {
     input: RevertirConciliacionInputBorde,
     actor: Actor,
   ): Promise<MarcaConciliacionServiceResult>;
+  /**
+   * R20/R23 — las tres cifras de cabecera, YA CUADRADAS. No recibe input: el conjunto es «todas
+   * las bodegas satelite», que es el mismo de la tabla que encabeza.
+   */
+  obtenerResumenSatelites(actor: Actor): Promise<ResumenSatelitesServiceResult>;
 }

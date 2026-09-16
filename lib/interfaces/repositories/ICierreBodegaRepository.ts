@@ -54,6 +54,37 @@ export interface CierreBodegaResumenRow {
    * necesita un aviso, no un cuarto numero.
    */
   efectivoCubreDescuentos: boolean;
+  /**
+   * ⭑ FICHA 431 (R26/R28) — LA MARCA DE CONCILIACION, en la fila que las superficies de
+   * `/cierres-admin` ya leen.
+   *
+   * POR QUE VIAJA POR AQUI Y NO POR UNA LECTURA NUEVA: quien entrego el dinero tiene derecho a
+   * saber si la central dijo que llego, y la bodega satelite ve SUS consolidaciones **donde ya
+   * las ve hoy** —su pestana de cierres de bodega, acotada por zona en el `WHERE`
+   * (`design.md §5`)—. Abrirle `/wallet/satelites` seria darle la vista de TODAS las bodegas,
+   * que es justo lo que R27 prohibe. `ConsolidacionSateliteDTO` no le sirve: sus seis acciones
+   * responden `forbidden` a `adminSatelite`.
+   *
+   * Los cuatro campos son ADITIVOS y los rellena el MISMO mapper que las ocho lecturas de esta
+   * cabecera comparten (`toBodegaResumenRow`), asi que la tarjeta de la satelite y la de la
+   * central NO PUEDEN discrepar: salen del mismo sitio.
+   */
+  conciliado: boolean;
+  /** `null` = sin conciliar. NUNCA `"0.00"` por ausencia: cero recibido es otra cosa. */
+  montoRecibido: string | null;
+  /**
+   * R17/R18/R20 — `total_efectivo` − COALESCE(`monto_recibido`, 0), DERIVADO EN EL SERVIDOR con
+   * la MISMA funcion que usa `/wallet/satelites` (`lib/utils/conciliacion-satelite.saldoDe`).
+   * La pantalla NO resta dinero. Puede ser NEGATIVO (llego de mas) y se emite con su signo.
+   */
+  faltaPorRecibir: string;
+  conciliadoAt: string | null; // ISO
+  conciliadoPorNombre: string | null;
+  /**
+   * Texto libre corto de quien marco. SI se ensena en pantalla —es lo que distingue una
+   * conciliacion real de la RETROACTIVA del backfill (R30)— y NO baja a ninguna descarga.
+   */
+  conciliadoNota: string | null;
 }
 
 // Datos para crear la solicitud de cierre de bodega (R9/R10). Totales snapshot

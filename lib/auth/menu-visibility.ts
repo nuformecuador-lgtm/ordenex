@@ -488,6 +488,15 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
       { label: "Caja principal", href: "/wallet" },
       { label: "Tiendas", href: "/wallet/tiendas" },
       { label: "Mensajeros", href: "/wallet/mensajeros" },
+      // ⭑ FICHA 431 (T23, R23): CUARTO hijo. Las tres de arriba cuentan lo que Ordenex DEBE
+      // —a su caja, a una tienda, a un mensajero—; esta cuenta lo que le DEBEN: el efectivo que
+      // una bodega satelite ya consolido y todavia no ha llegado fisicamente a la central.
+      //
+      // Hereda `roles: ["maestro", "admin"]` del padre y NO declara los suyos, a proposito: la
+      // pantalla resuelve el rol server-side y hace `notFound()` con el MISMO `esAccesoTotal`
+      // que el servicio usa para responder `forbidden` (R27). Este item solo decide que se
+      // MUESTRA; una lista de roles escrita aqui seria una segunda que puede divergir.
+      { label: "Satélites", href: "/wallet/satelites" },
     ],
   },
   {

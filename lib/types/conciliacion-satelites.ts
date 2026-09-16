@@ -60,6 +60,49 @@ export interface SaldoSateliteDTO {
 }
 
 /**
+ * ⭑ FICHA 431 (pasada de frontend) — LAS TRES CIFRAS DE CABECERA de `/wallet/satelites`.
+ *
+ * ⚠️ POR QUE EXISTE ESTE DTO, y no se suman las filas en la pantalla: R20 prohibe que el
+ * navegador haga aritmetica de dinero, y las tres tarjetas son SUMAS sobre el conjunto entero de
+ * bodegas. Sumar cinco `saldoSinConciliar` en el cliente seria exactamente la operacion que la
+ * ficha 359 encontro rota en 13 pantallas. Las tres llegan YA CUADRADAS, como todo lo demas.
+ *
+ * Cada tarjeta lleva su CONTEO al lado a proposito: un importe sin cuantas filas lo componen no
+ * se puede perseguir, y perseguir efectivo es para lo que existe esta pantalla.
+ */
+export interface ResumenSatelitesDTO {
+  /**
+   * Tarjeta 1 — «Pendiente de conciliar»: Σ de `saldoSinConciliar` de TODAS las bodegas satelite.
+   * Es la misma formula de R17/R18 aplicada al conjunto, asi que la suma de la columna
+   * «Pendiente» de la tabla ES esta cifra. Puede ser NEGATIVA si llego mas de lo declarado.
+   */
+  pendienteTotal: string;
+  /** Cuantas consolidaciones siguen SIN marcar (`conciliado_at IS NULL`). */
+  consolidacionesSinConciliar: number;
+  /** En cuantas bodegas distintas hay saldo pendiente (distinto de cero). */
+  bodegasConPendiente: number;
+  /**
+   * Tarjeta 2 — «Recibido este mes»: Σ `monto_recibido` de lo marcado DENTRO del mes en curso
+   * del calendario de COSTA RICA, no del mes UTC ni del del navegador.
+   *
+   * ⚠️ Se corta por `conciliado_at` —cuando se marco— y NO por `solicitado_at`: la pregunta que
+   * responde es «cuanto efectivo entro a la central este mes», y una consolidacion de agosto que
+   * llego en septiembre entro en septiembre.
+   */
+  recibidoEsteMes: string;
+  /** Cuantas consolidaciones se marcaron este mes. */
+  consolidacionesRecibidasEsteMes: number;
+  /**
+   * Tarjeta 3 — «Con diferencia»: Σ de lo que FALTA en las consolidaciones YA marcadas por menos
+   * de lo declarado (R18). Solo cuenta el faltante POSITIVO: una que llego de mas no compensa a
+   * otra que llego de menos, porque son dos bultos distintos y dos conversaciones distintas.
+   */
+  diferenciaTotal: string;
+  /** Cuantas consolidaciones llegaron incompletas. */
+  consolidacionesConDiferencia: number;
+}
+
+/**
  * Una consolidacion en el desglose de su bodega (R22/R24).
  *
  * `conciliado` es `conciliadoAt !== null` ya derivado: la pantalla NO decide el estado comparando

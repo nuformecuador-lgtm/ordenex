@@ -535,6 +535,7 @@ import {
 import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 /**
  * El reparto que EXCEDE: se teclean 9.000 y el imputable real es 4.500,35. El
  * servidor devuelve `sobrante = 4.499,65`, así que en pantalla tiene que leerse
@@ -671,6 +672,8 @@ const BODEGA_CABECERA: CierreBodegaResumen = {
   // 126089.17 − 14000.55 − 250.25, derivado por el servidor.
   paraLaCentral: "111838.37",
   efectivoCubreDescuentos: true,
+  // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+  ...marcaSinConciliar("100000.17"),
 };
 
 /** El importe pintado que sigue a un rótulo dentro de una región. */

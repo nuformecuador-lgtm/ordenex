@@ -164,6 +164,7 @@ import { DetalleSecciones } from "@/app/(app)/cierres-admin/_components/cierre-d
 import { CierreDiaModule } from "@/app/(app)/cierre-dia/_components/CierreDiaModule";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 // --- Datos ---------------------------------------------------------------
 
 const TOTALES: CierreTotales = {
@@ -218,6 +219,8 @@ function cierreBodega(
     // el efectivo (1000.10) cubre los dos descuentos (105.10).
     paraLaCentral: "895.00",
     efectivoCubreDescuentos: true,
+    // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+    ...marcaSinConciliar("1000.10"),
     ...over,
   };
 }

@@ -10,6 +10,7 @@ import type {
   ListarConsolidacionesSateliteServiceResult,
   ListarSaldosSatelitesServiceResult,
   MarcaConciliacionServiceResult,
+  ResumenSatelitesServiceResult,
 } from "@/lib/interfaces/services/IConciliacionSatelitesService";
 import { CierresBodegaAdminRepository } from "@/lib/repositories/CierresBodegaAdminRepository";
 import { SaldosSatelitesRepository } from "@/lib/repositories/SaldosSatelitesRepository";
@@ -40,10 +41,15 @@ import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 //      `.strict()`— cualquier clave colada;
 //   3. el ROL lo decide el SERVICIO (`esAccesoTotal`), porque es dominio y no transporte.
 //
-// ⚠️ LAS DOS MITADES DEL CONTROL. Cuando llegue la pantalla, `/wallet/satelites` resolvera el rol
-// en servidor y hara `notFound()`, **y ademas** el servicio seguira respondiendo `forbidden` por su
-// cuenta (R27). Ocultar el boton no es un control por si solo: esta mitad es la que de verdad
-// rechaza al `adminSatelite` que llame a la accion a mano.
+// ⚠️ LAS DOS MITADES DEL CONTROL, y las dos estan puestas: `/wallet/satelites` resuelve el rol en
+// servidor y hace `notFound()`, **y ademas** el servicio responde `forbidden` por su cuenta (R27).
+// Ocultar el boton no es un control por si solo: esta mitad es la que de verdad rechaza al
+// `adminSatelite` que llame a la accion a mano.
+//
+// ⭑ LAS SEIS ANOTACIONES `@sin-superficie` SE RETIRARON EN EL COMMIT QUE MONTO LA PANTALLA, que
+// es lo que la guardia `superficie-de-uso` exige: la excepcion CADUCA cuando lo anotado vuelve a
+// ser alcanzable. Hoy las siete acciones de este modulo las monta `/wallet/satelites` —las dos
+// escrituras, ademas, desde la cola de `/cierres-admin`, donde sustituyen al «Aprobar» retirado—.
 
 function buildService(): IConciliacionSatelitesService {
   const prisma = getPrismaClient();
@@ -96,8 +102,6 @@ export type MarcaConciliacionActionResult =
 
 /**
  * R23 — la tabla de saldos sin conciliar de todas las bodegas satelite.
- *
- * @sin-superficie la pantalla `/wallet/satelites` entra en la fase 7 de la ficha 431 (T20/T21), que va en una pasada de frontend posterior a esta; el backend se entrega antes a proposito para que el diseño de la pantalla se haga contra datos reales. Esta anotacion CADUCA: en cuanto la pagina monte la accion, se borra en el mismo commit.
  */
 export async function listarSaldosSatelitesAction(
   input: unknown,
@@ -116,8 +120,6 @@ export async function listarSaldosSatelitesAction(
 /**
  * R29 — el mismo conjunto de saldos SIN paginar, para la descarga. El tope lo evalua el servicio y
  * `limite_excedido` viaja con conteos y sin filas.
- *
- * @sin-superficie el control de descarga de la tabla de saldos vive en `/wallet/satelites`, que entra en la fase 7 de la ficha 431 (frontend). Igual que su hermana paginada, la anotacion se borra en el commit que la cablee.
  */
 export async function listarSaldosSatelitesCompletoAction(
   input: unknown,
@@ -135,8 +137,6 @@ export async function listarSaldosSatelitesCompletoAction(
 
 /**
  * R24 — el desglose de consolidaciones de UNA bodega satelite.
- *
- * @sin-superficie el desglose por bodega es la fila desplegada de `/wallet/satelites`, que entra en la fase 7 de la ficha 431 (frontend). La anotacion caduca con el commit que la monte.
  */
 export async function listarConsolidacionesSateliteAction(
   input: unknown,
@@ -154,8 +154,6 @@ export async function listarConsolidacionesSateliteAction(
 
 /**
  * R29 — el desglose entero de esa bodega, para la descarga.
- *
- * @sin-superficie el control de descarga del desglose vive en `/wallet/satelites` (fase 7 de la ficha 431, pasada de frontend). La anotacion se borra en el commit que lo cablee.
  */
 export async function listarConsolidacionesSateliteCompletoAction(
   input: unknown,
@@ -176,8 +174,6 @@ export async function listarConsolidacionesSateliteCompletoAction(
  *
  * El monto muere en el BORDE si esta ausente, es negativo o trae tres decimales (R10,
  * `montoPositivoSchema`), y en ese caso no se llama al servicio ni se escribe nada.
- *
- * @sin-superficie las acciones de marcar y revertir viven en `/wallet/satelites`, que entra en la fase 7 de la ficha 431 (T20/T21) en una pasada de frontend posterior. La anotacion CADUCA: se borra en el commit que monte el boton.
  */
 export async function marcarConsolidacionRecibidaAction(
   input: unknown,
@@ -196,8 +192,6 @@ export async function marcarConsolidacionRecibidaAction(
 /**
  * R12/R13 — REVERTIR la marca. Devuelve la consolidacion a «Pendiente de conciliar» y borra los
  * cuatro datos de la marca; el monto que se borra queda documentado en el historial.
- *
- * @sin-superficie la accion de revertir vive en `/wallet/satelites`, que entra en la fase 7 de la ficha 431 (pasada de frontend posterior). La anotacion se borra en el commit que monte el boton.
  */
 export async function revertirConciliacionAction(
   input: unknown,
@@ -209,6 +203,36 @@ export async function revertirConciliacionAction(
     const data = revertirConciliacionSchema.parse(input);
     const service = deps.service ?? buildService();
     return service.revertirConciliacion(data, actor);
+  });
+  return isAppErrorShape(r) ? toConciliacionActionError(r) : r;
+}
+
+/**
+ * R20/R23 — LAS TRES CIFRAS DE CABECERA de `/wallet/satelites`, ya cuadradas por el servidor.
+ *
+ * ⚠️ NO ES UNA COMODIDAD: sin ella la pantalla tendria que SUMAR los saldos de las cinco bodegas
+ * en el navegador, que es exactamente la aritmetica de dinero que R20 prohibe y el defecto que la
+ * ficha 359 encontro repetido en 13 pantallas. Las tres salen de la MISMA formula que la tabla de
+ * abajo, asi que la cabecera y la columna no pueden discrepar.
+ *
+ * No lleva input: el conjunto es «todas las bodegas satelite», el mismo que la tabla que encabeza.
+ */
+export type ResumenSatelitesActionResult =
+  | ResumenSatelitesServiceResult
+  | { status: "unauthenticated" }
+  // Esta accion no parsea nada —no recibe input—, asi que `validation_error` no puede salir de
+  // aqui. Viaja en el tipo porque el traductor de errores del borde es el MISMO para las siete y
+  // estrecharlo para una sola seria la segunda forma de traducir errores de este modulo.
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+export async function obtenerResumenSatelitesAction(
+  deps: ConciliacionSatelitesDeps = {},
+): Promise<ResumenSatelitesActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const service = deps.service ?? buildService();
+    return service.obtenerResumenSatelites(actor);
   });
   return isAppErrorShape(r) ? toConciliacionActionError(r) : r;
 }

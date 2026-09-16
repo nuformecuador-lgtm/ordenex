@@ -1,6 +1,7 @@
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type {
   ConsolidacionSateliteDTO,
+  ResumenSatelitesDTO,
   SaldoSateliteDTO,
 } from "@/lib/types/conciliacion-satelites";
 
@@ -59,4 +60,12 @@ export interface ISaldosSatelitesRepository {
     zonaId: string,
     soloSinConciliar?: boolean,
   ): Promise<ConsolidacionSateliteDTO[]>;
+  /**
+   * ⭑ R20/R23 — las TRES cifras de cabecera de `/wallet/satelites`, ya cuadradas.
+   *
+   * Existe porque la pantalla NO PUEDE sumarlas (R20: nada de aritmetica de dinero en el
+   * navegador) y las tres son sumas sobre el conjunto entero de bodegas. Es la MISMA formula
+   * (`saldoDe`) aplicada a tres poblaciones distintas, no tres reglas nuevas.
+   */
+  findResumen(ahora?: Date): Promise<ResumenSatelitesDTO>;
 }

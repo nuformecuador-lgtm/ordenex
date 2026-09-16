@@ -156,6 +156,7 @@ import { CierreDiaModule } from "@/app/(app)/cierre-dia/_components/CierreDiaMod
 import { DescargarGestionesDialog } from "@/app/(app)/cierres-admin/_components/DescargarGestionesDialog";
 import { SELECTOR_DISPARADOR } from "@/app/(app)/cierres-admin/_components/DescargarCierresButton";
 import { COLUMNAS_DESCARGA_GESTIONES_FUNDIDA } from "@/app/(app)/cierres-admin/_components/cierres-gestiones-fundida-descarga-columnas";
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 import {
   AMBITO_DESCARGA_CIERRES_HISTORICO,
   AMBITO_DESCARGA_CIERRES_PENDIENTES,
@@ -249,6 +250,8 @@ function cierreBodega(
     // el efectivo (1000.10) cubre los dos descuentos (105.10).
     paraLaCentral: "895.00",
     efectivoCubreDescuentos: true,
+    // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+    ...marcaSinConciliar("1000.10"),
     ...over,
   };
 }

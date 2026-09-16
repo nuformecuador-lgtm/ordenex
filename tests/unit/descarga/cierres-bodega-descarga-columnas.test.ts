@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 import {
   COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
   COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
@@ -164,6 +165,8 @@ describe("feature 393 — «Para la central» en el archivo de los cierres de bo
     // arriba a proposito: la fila del archivo tiene que traer ESTE, no uno recalculado.
     paraLaCentral: "77777.77",
     efectivoCubreDescuentos: false,
+    // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+    ...marcaSinConciliar("100000.55"),
   };
 
   const CONSOLIDABLE: CierreBodegaResumenLite = {

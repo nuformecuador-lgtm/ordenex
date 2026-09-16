@@ -6,6 +6,7 @@ import {
 import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { ICierresBodegaAdminService } from "@/lib/interfaces/services/ICierresBodegaAdminService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { marcaRecibida } from "@/tests/fixtures/marca-conciliacion";
 
 // Feature 184 — Tanda E (T E.2, R4/R6/R7/R17) — el BORDE de los dos conjuntos de «Cierres de
 // bodega» del admin.
@@ -37,6 +38,9 @@ const CIERRE: CierreBodegaResumen = {
   // Feature 393: 500.00 - 50.00 - 0.00 = 450.00; el efectivo (500.00) cubre los descuentos.
   paraLaCentral: "450.00",
   efectivoCubreDescuentos: true,
+  // FICHA 431: `aprobado` YA NO PUEDE existir sin marca —lo prohibe el `CHECK` de la base—, asi
+  // que el doble de un cierre aprobado se marca. Llego completo: falta `0.00`.
+  ...marcaRecibida("500.00", "0.00"),
 };
 
 function fakeService(metodo: string, resultado: unknown) {

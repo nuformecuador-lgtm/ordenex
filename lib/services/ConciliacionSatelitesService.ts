@@ -10,6 +10,7 @@ import type {
   ListarSaldosSatelitesCompletoServiceResult,
   ListarSaldosSatelitesServiceResult,
   MarcaConciliacionServiceResult,
+  ResumenSatelitesServiceResult,
 } from "@/lib/interfaces/services/IConciliacionSatelitesService";
 import type {
   ListarConsolidacionesSateliteCompletoInput,
@@ -153,5 +154,19 @@ export class ConciliacionSatelitesService implements IConciliacionSatelitesServi
     if (res === "updated") return { status: "ok", cierreBodegaId: input.cierreBodegaId };
     if (res === "conflict") return { status: "conflict" }; // ya estaba pendiente de conciliar
     return { status: "no_encontrada" };
+  }
+
+  /**
+   * R20/R23 — las TRES cifras de cabecera de `/wallet/satelites`, ya cuadradas por el repositorio.
+   *
+   * El guard va PRIMERO, igual que en las otras cinco: estas tres cifras son el dinero agregado de
+   * la operacion entera, o sea la lectura mas sensible de la pantalla, no la menos.
+   *
+   * Aqui no se suma nada: el servicio deja pasar lo que el repositorio ya derivo con la MISMA
+   * formula que la tabla. Sumar por segunda vez seria la copia que un dia dice otra cosa.
+   */
+  async obtenerResumenSatelites(actor: Actor): Promise<ResumenSatelitesServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R27
+    return { status: "ok", resumen: await this.saldos.findResumen() };
   }
 }

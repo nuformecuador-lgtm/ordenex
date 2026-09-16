@@ -257,8 +257,14 @@ describe("CierreBodegaRepository.findCierresBodegaByZona (F1.4-h)", () => {
         solicitadoAt: new Date("2026-07-12T10:00:00.000Z"),
         resueltoAt: new Date("2026-07-12T12:00:00.000Z"),
         motivoRechazo: null,
+        // FICHA 431: la fila cruda de un `aprobado` trae SIEMPRE su marca — el `CHECK`
+        // `cierre_bodega_conciliacion_coherente` hace imposible lo contrario en la base.
+        montoRecibido: new Prisma.Decimal("10"),
+        conciliadoAt: new Date("2026-07-12T12:00:00.000Z"),
+        conciliadoNota: null,
         zona: { nombre: "Cartago" },
         solicitadoPorUsuario: { nombre: "Sara Satelite" },
+        conciliadoPorUsuario: { nombre: "Ana", primerApellido: "Rojas", segundoApellido: null },
         _count: { cierresDia: 3 },
       },
     ]);
@@ -286,6 +292,16 @@ describe("CierreBodegaRepository.findCierresBodegaByZona (F1.4-h)", () => {
       // el efectivo (10.00) NO cubre los dos descuentos (14.00), asi que el aviso se enciende.
       paraLaCentral: "1.50",
       efectivoCubreDescuentos: false,
+      // ⭑ FICHA 431 (R26/R28): el MISMO mapper deriva tambien la marca. La fila cruda esta
+      // marcada por 10.00 sobre un efectivo de 10.00, asi que NO falta nada: "0.00". Los
+      // valores van ESCRITOS A MANO y no derivados de la fila: comparar `faltaPorRecibir`
+      // contra la resta que lo produce seria una asercion contra su propia fuente.
+      conciliado: true,
+      montoRecibido: "10.00",
+      faltaPorRecibir: "0.00",
+      conciliadoAt: "2026-07-12T12:00:00.000Z",
+      conciliadoPorNombre: "Ana Rojas",
+      conciliadoNota: null,
     });
   });
 });
@@ -321,8 +337,14 @@ describe("feature 393 — el mapper deriva «Para la central» para TODAS las le
       solicitadoAt: new Date("2026-09-01T10:00:00.000Z"),
       resueltoAt: null,
       motivoRechazo: null,
+      // FICHA 431: sin marcar por defecto. Asi `faltaPorRecibir` vale el EFECTIVO entero
+      // (100000.55) y no un cero, que es lo que hace que el caso mida la formula.
+      montoRecibido: null,
+      conciliadoAt: null,
+      conciliadoNota: null,
       zona: { nombre: "Cartago" },
       solicitadoPorUsuario: { nombre: "Sara Satelite" },
+      conciliadoPorUsuario: null,
       _count: { cierresDia: 2 },
       ...overrides,
     };

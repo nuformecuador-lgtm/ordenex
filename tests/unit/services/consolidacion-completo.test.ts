@@ -9,6 +9,7 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
 import { descargaConfig } from "@/lib/config/descarga";
+import { marcaRecibida } from "@/tests/fixtures/marca-conciliacion";
 import {
   listarCierresBodegaPaginadoSchema,
   listarConsolidablesSchema,
@@ -129,6 +130,9 @@ function cierreBodega(
       // hoy, y meterlo ahi cambiaria lo que el test afirma, no solo el fixture.
       paraLaCentral: "270.00",
       efectivoCubreDescuentos: true,
+      // FICHA 431: un `aprobado` lleva SIEMPRE su marca (lo impone el `CHECK` de la base).
+      // Tampoco entra en las claves vigiladas: mide que campos LEE la descarga, no cuales hay.
+      ...marcaRecibida("300.00", "0.00"),
     },
     ["totales", "totalPagoMensajero", "totalIngresoBodegaRechazos"],
     lecturas,
@@ -260,6 +264,8 @@ function cierresPlanos(n: number): CierreBodegaResumenRow[] {
     motivoRechazo: null,
     // Feature 393: 1.00 - 1.00 - 0.00 = 0.00; el efectivo (1.00) cubre justo el descuento.
     paraLaCentral: "0.00",
+    // FICHA 431: `aprobado` -> marcado; llego completo (falta "0.00").
+    ...marcaRecibida("1.00", "0.00"),
     efectivoCubreDescuentos: true,
   }));
 }

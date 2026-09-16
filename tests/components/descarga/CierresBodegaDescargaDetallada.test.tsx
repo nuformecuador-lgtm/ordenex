@@ -68,6 +68,7 @@ import {
 } from "@/lib/actions/cierre-bodega";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CierresBodegaAdminModule } from "@/app/(app)/cierres-admin/_components/CierresBodegaAdminModule";
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 import {
   NIVEL_DETALLE_LABEL,
   SELECTOR_DISPARADOR,
@@ -114,6 +115,8 @@ function cierreBodega(
     // el efectivo (1000.10) cubre los dos descuentos (105.10).
     paraLaCentral: "895.00",
     efectivoCubreDescuentos: true,
+    // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+    ...marcaSinConciliar("1000.10"),
     ...over,
   };
 }

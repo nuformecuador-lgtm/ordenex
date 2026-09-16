@@ -3,9 +3,11 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { ISaldosSatelitesRepository } from "@/lib/interfaces/repositories/ISaldosSatelitesRepository";
 import type {
   ConsolidacionSateliteDTO,
+  ResumenSatelitesDTO,
   SaldoSateliteDTO,
 } from "@/lib/types/conciliacion-satelites";
-import { diasNaturalesCRDesde } from "@/lib/utils/fecha-cr";
+import { saldoDe } from "@/lib/utils/conciliacion-satelite";
+import { diasNaturalesCRDesde, inicioDelMesCREnUtc } from "@/lib/utils/fecha-cr";
 import { nombreCompletoUsuario, NOMBRE_USUARIO_SELECT } from "@/lib/utils/nombre-usuario";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
@@ -51,16 +53,13 @@ const CONSOLIDACION_SELECT = {
 
 type ConsolidacionRow = Prisma.CierreBodegaGetPayload<{ select: typeof CONSOLIDACION_SELECT }>;
 
-/**
- * LA FORMULA (R17/R18), escrita UNA vez: lo que falta por llegar de este efectivo.
- *
- * `null` en `recibido` significa «sin marcar» y aporta el efectivo integro; un recibido menor
- * aporta la diferencia; uno igual aporta cero; y uno MAYOR aporta un negativo, que se devuelve tal
- * cual sin recortar a cero (llego de mas — mismo criterio que la ficha 393 con «Para la central»).
- */
-function saldoDe(efectivo: Prisma.Decimal, recibido: Prisma.Decimal | null): Prisma.Decimal {
-  return efectivo.minus(recibido ?? new Prisma.Decimal(0));
-}
+// LA FORMULA (R17/R18) vive en `lib/utils/conciliacion-satelite.ts` y se importa arriba.
+//
+// ⭑ FICHA 431 (pasada de frontend) — SALIO DE ESTE ARCHIVO al ganar su SEGUNDO lector en el
+// servidor: `CierreBodegaRepository.toBodegaResumenRow`, que deriva el MISMO `faltaPorRecibir`
+// para las superficies de `/cierres-admin` —las que ve la bodega satelite (R26)—. Copiarla habria
+// dejado a la satelite y a la central capaces de leer la misma consolidacion con dos cifras
+// distintas. Sigue siendo `Prisma.Decimal` -> `toFixed(2)` en el emisor; aqui no cambia nada mas.
 
 function toConsolidacionDTO(r: ConsolidacionRow): ConsolidacionSateliteDTO {
   return {
@@ -220,6 +219,88 @@ export class SaldosSatelitesRepository implements ISaldosSatelitesRepository {
       zonaId,
       ...NO_RECHAZADAS,
       ...(soloSinConciliar === true ? { conciliadoAt: null } : {}),
+    };
+  }
+
+  /**
+   * ⭑ R20/R23 — LAS TRES CIFRAS DE CABECERA, derivadas en el servidor.
+   *
+   * ── UNA SOLA LECTURA, Y POR QUE ES UN BARRIDO Y NO CUATRO `groupBy`
+   * Las tres tarjetas preguntan sobre TRES POBLACIONES distintas de la misma tabla, y dos de
+   * ellas —«con diferencia» y «bodegas con pendiente»— comparan DOS COLUMNAS entre si
+   * (`monto_recibido` contra `total_efectivo`), que es justo lo que un `groupBy` de Prisma no
+   * sabe hacer. Las alternativas eran una referencia de campo o un `$queryRaw` con
+   * `FILTER (WHERE …)`: SQL a mano en un camino de dinero, para ahorrar un escaneo de 32 filas.
+   *
+   * VOLUMEN MEDIDO, que es lo que hace correcta esta decision: 32 consolidaciones en dos semanas
+   * de operacion real, ~800 al ano entre 5 satelites. El conjunto entero cabe de sobra, y el
+   * indice `cierre_bodega_zona_estado_idx` lo sirve. Si un dia fueran cientos de miles, la
+   * respuesta seria un agregado en la base — no repartir la formula en cuatro consultas.
+   *
+   * ── Y LA FORMULA SIGUE SIENDO UNA (`saldoDe`)
+   * Las tres cifras salen de la MISMA resta que la tabla y que el desglose. Escribir aqui una
+   * suma propia habria hecho que la cabecera y la columna de abajo pudieran decir cosas distintas
+   * sobre el mismo dinero, que es el defecto que la ficha 359 censo en 13 pantallas.
+   */
+  async findResumen(ahora: Date = new Date()): Promise<ResumenSatelitesDTO> {
+    const filas = await this.prisma.cierreBodega.findMany({
+      where: { ...NO_RECHAZADAS, zona: ZONA_SATELITE_WHERE },
+      select: {
+        zonaId: true,
+        totalEfectivo: true,
+        montoRecibido: true,
+        conciliadoAt: true,
+      },
+    });
+
+    // El corte del mes, en el calendario de COSTA RICA y resuelto en el SERVIDOR: con el mes del
+    // navegador, quien mirara la pantalla desde otro huso veria otra cifra de la misma caja.
+    const inicioDelMes = inicioDelMesCREnUtc(ahora);
+
+    let pendiente = new Prisma.Decimal(0);
+    let recibidoMes = new Prisma.Decimal(0);
+    let diferencia = new Prisma.Decimal(0);
+    let sinConciliar = 0;
+    let recibidasMes = 0;
+    let conDiferencia = 0;
+    /** El saldo acumulado POR ZONA: una bodega cuenta como «con pendiente» una sola vez. */
+    const saldoPorZona = new Map<string, Prisma.Decimal>();
+
+    for (const f of filas) {
+      const falta = saldoDe(f.totalEfectivo, f.montoRecibido);
+      pendiente = pendiente.plus(falta);
+      saldoPorZona.set(f.zonaId, (saldoPorZona.get(f.zonaId) ?? new Prisma.Decimal(0)).plus(falta));
+
+      if (f.conciliadoAt === null) {
+        sinConciliar += 1;
+        continue;
+      }
+      if (f.conciliadoAt >= inicioDelMes) {
+        recibidasMes += 1;
+        recibidoMes = recibidoMes.plus(f.montoRecibido ?? new Prisma.Decimal(0));
+      }
+      // «Con diferencia» cuenta SOLO el faltante positivo: una que llego de mas no compensa a
+      // otra que llego de menos. Son dos bultos y dos conversaciones distintas, y sumarlas con
+      // signo dejaria la tarjeta en cero justo cuando hay dos problemas, no ninguno.
+      if (falta.greaterThan(0)) {
+        conDiferencia += 1;
+        diferencia = diferencia.plus(falta);
+      }
+    }
+
+    let bodegasConPendiente = 0;
+    for (const saldo of saldoPorZona.values()) {
+      if (!saldo.isZero()) bodegasConPendiente += 1;
+    }
+
+    return {
+      pendienteTotal: pendiente.toFixed(2),
+      consolidacionesSinConciliar: sinConciliar,
+      bodegasConPendiente,
+      recibidoEsteMes: recibidoMes.toFixed(2),
+      consolidacionesRecibidasEsteMes: recibidasMes,
+      diferenciaTotal: diferencia.toFixed(2),
+      consolidacionesConDiferencia: conDiferencia,
     };
   }
 }

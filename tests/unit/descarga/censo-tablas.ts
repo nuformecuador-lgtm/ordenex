@@ -552,6 +552,38 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     tablas: [{ nombre: "Saldos de tiendas", estado: "con_descarga" }],
   },
   // ───────────────────────────────────────────────────────────────────────────────────────
+  // ⭑ FICHA 431 (T23, R29) — las DOS tablas de `/wallet/satelites`, la tercera hoja de saldos
+  // del módulo Wallet. Nacen las dos `con_descarga`, que es lo que la guardia obliga a decidir.
+  // ───────────────────────────────────────────────────────────────────────────────────────
+  {
+    ruta: "app/(app)/wallet/satelites/_components/SaldosSatelitesTable.tsx",
+    tablas: [
+      {
+        // Familia A canónica de la 170: libro de dinero paginado en el SERVIDOR y con su propia
+        // acción de conjunto completo (`listarSaldosSatelitesCompletoAction`). Precedente
+        // literal: su gemela `SaldosTiendasTable`, justo aquí arriba. Declararla `fuera` habría
+        // exigido un motivo que no existe.
+        nombre: "Saldos de bodegas satélite",
+        estado: "con_descarga",
+      },
+    ],
+  },
+  {
+    ruta: "app/(app)/wallet/satelites/_components/DesgloseConsolidacionesSatelite.tsx",
+    tablas: [
+      {
+        // Mismo caso que `DesgloseMovimientosTienda` (feature 171): se despliega desde cada fila
+        // de la tabla de arriba, pagina en el servidor y descarga el CONJUNTO FILTRADO de SU
+        // bodega, no la página visible.
+        //
+        // ⚠️ La NOTA de la conciliación (texto libre) se ve en pantalla y NO baja al archivo: es
+        // el mismo criterio con el que la ficha 362 la dejó fuera del registro de acciones.
+        nombre: "Consolidaciones de una bodega satélite",
+        estado: "con_descarga",
+      },
+    ],
+  },
+  // ───────────────────────────────────────────────────────────────────────────────────────
   // Feature 172 (T H.1) — el árbol `components/`, que la guardia NO recorría hasta hoy.
   // ───────────────────────────────────────────────────────────────────────────────────────
   {
