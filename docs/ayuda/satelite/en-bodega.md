@@ -3,13 +3,14 @@ titulo: En bodega
 modulo: recepcion-satelite
 pantalla: /recepcion-satelite/en-bodega
 roles: [adminSatelite]
-actualizado: 2026-09-15
+actualizado: 2026-09-16
 fuentes:
   - app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx
   - app/(app)/recepcion-satelite/_components/satelite-ordenes-filtros.ts
   - app/(app)/recepcion-satelite/_components/asignacion-satelite-bloqueo.ts
   - lib/services/AsignacionSateliteService.ts
   - lib/repositories/OrdenRepository.ts
+  - app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx
 ---
 
 # En bodega
@@ -45,9 +46,13 @@ generada—.
 
 ## Cosas que te pueden pasar
 
-**La app no te deja asignar.** Es lo más común, y siempre es por lo mismo: **tenés un cierre de bodega
-pendiente**. Mientras la central no lo resuelva, tu bodega no puede repartir trabajo nuevo. La pantalla
-te dice cuál es. Resolvelo con la central y se te habilita.
+**Te aparece un aviso de dinero pendiente de conciliar.** Es un aviso, **no un freno**: te dice cuánto
+efectivo consolidaste que la central todavía no marcó como recibido, y cuánto lleva esperando el más
+antiguo. **Podés seguir asignando con normalidad.** Sirve para que sepas qué tenés pendiente de
+entregar, no para pararte.
+
+> Antes esto sí te frenaba: mientras la central no aprobara tu cierre de bodega, no podías repartir
+> trabajo nuevo. **Eso se quitó**, porque dejaba a la bodega parada esperando una firma.
 
 **Un mensajero no aparece en la lista.** Solo salen los mensajeros de tu zona. Si falta alguno, hay que
 revisar a qué zona está asignado — eso lo hace la oficina.
@@ -59,3 +64,12 @@ no se aplica ninguna. Así no te quedás sin saber cuáles entraron y cuáles no
 
 - **No se reciben paquetes acá.** Eso es **Por recibir**.
 - **No se cierra el día.** Los cierres de tus mensajeros están en **Cierres**.
+- **El aviso de dinero pendiente no te bloquea.** Ahí se avisa, no se frena.
+
+## Lo que SÍ te sigue frenando al consolidar
+
+Cuando vayas a **consolidar** para enviarle el efectivo a la central, la app te va a parar si alguno
+de tus mensajeros tiene **su cierre del día sin resolver**. Ese control **no se quitó**, y no es el
+mismo de antes: consolidar es cuadrar la caja, y no se puede cuadrar con cierres a medias.
+
+Se arregla resolviendo esos cierres en **Cierres**, y después consolidás.
