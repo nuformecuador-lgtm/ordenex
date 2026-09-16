@@ -23,6 +23,7 @@ import { execSync } from "child_process";
 import { pathToFileURL } from "node:url";
 
 import {
+  decidirAutoResolucion,
   decidirMigracion,
   validarUrlMigraciones,
 } from "./migrate-deploy-guardas";
@@ -67,8 +68,22 @@ export interface EntornoDelPaso {
 export interface EfectosDelPaso {
   /** Entorno leido. Ver `EntornoDelPaso`. */
   env: EntornoDelPaso;
-  /** `prisma migrate deploy`. Lanza si falla (el orquestador traduce el desenlace). */
+  /**
+   * `prisma migrate deploy`. Lanza si falla, y el error LLEVA LA SALIDA pegada en `.message`:
+   * sin ella el orquestador no puede distinguir un P3009 de la lista blanca (ficha 432) de
+   * cualquier otro fallo, y auto-resolver a ciegas enmascararia fallos reales.
+   */
   aplicarMigraciones: () => void;
+  /**
+   * FICHA 432 — `prisma migrate resolve --rolled-back <migracion>`. Solo lo llama el
+   * orquestador, y solo con un nombre que `decidirAutoResolucion` haya aprobado.
+   */
+  resolverMigracionRevertida: (migracion: string) => void;
+  /**
+   * FICHA 432 — la siembra del SINPE por bodega. Es lo que tenia que correr ENTRE las dos
+   * migraciones de la 429 y no cabia. Idempotente: solo rellena las zonas sin valor.
+   */
+  sembrarSinpe: () => Promise<void>;
   /** Siembra de la primera ocurrencia de cada job recurrente. */
   sembrar: () => Promise<ResultadoSiembra[]>;
   log: (linea: string) => void;
@@ -88,7 +103,54 @@ function efectosReales(): EfectosDelPaso {
       DATABASE_URL: process.env.DATABASE_URL,
     },
     aplicarMigraciones: () => {
-      execSync("npx prisma migrate deploy", { stdio: "inherit", timeout: TIMEOUT_MS });
+      // FICHA 432: se captura la salida ADEMAS de mostrarla. `stdio: "inherit"` la mandaba
+      // directa a la consola y el proceso padre se quedaba sin ella, asi que el orquestador no
+      // podia leer el `P3009`. Con `pipe` se recoge, se reimprime tal cual —el log del build no
+      // pierde ni una linea— y viaja en el error para que la decision se tome sobre el texto
+      // real de Prisma, no sobre una suposicion.
+      try {
+        const salida = execSync("npx prisma migrate deploy", {
+          stdio: ["inherit", "pipe", "pipe"],
+          timeout: TIMEOUT_MS,
+          encoding: "utf8",
+        });
+        process.stdout.write(salida);
+      } catch (causa) {
+        const e = causa as { stdout?: string; stderr?: string; signal?: string };
+        const salida = `${e.stdout ?? ""}${e.stderr ?? ""}`;
+        process.stdout.write(salida);
+        const error = new Error(salida) as Error & { signal?: string };
+        // El orquestador distingue el timeout por la senal; no se pierde al reenvolver.
+        error.signal = e.signal;
+        throw error;
+      }
+    },
+    resolverMigracionRevertida: (migracion: string) => {
+      execSync(`npx prisma migrate resolve --rolled-back ${migracion}`, {
+        stdio: "inherit",
+        timeout: TIMEOUT_MS,
+      });
+    },
+    sembrarSinpe: async () => {
+      if (!process.env.DATABASE_URL && process.env.DIRECT_URL) {
+        process.env.DATABASE_URL = process.env.DIRECT_URL;
+      }
+      const { leerSemilla, sembrarSinpeInicial } = await import("./seed-sinpe-inicial");
+      const semilla = leerSemilla(process.env);
+      if (!semilla.ok) {
+        // El motivo NUNCA lleva el valor: este texto acaba en el log de un build.
+        throw new Error(`no se pudo leer la semilla del SINPE: ${semilla.motivo}`);
+      }
+      const { PrismaClient } = await import("@prisma/client");
+      const prisma = new PrismaClient();
+      try {
+        const { rellenadas, intactas } = await sembrarSinpeInicial(prisma, semilla);
+        console.log(
+          `${PREFIJO} SINPE sembrado: ${rellenadas} zona(s) rellenada(s), ${intactas} ya lo tenia(n).`,
+        );
+      } finally {
+        await prisma.$disconnect();
+      }
     },
     sembrar: () => {
       // El cliente Prisma de la app lee DATABASE_URL; el `migrate deploy` de arriba prefiere
@@ -194,7 +256,42 @@ export async function ejecutarPasoDeBaseDeDatos(
   log(`${PREFIJO} aplicando migraciones (URL de ${url.variable})…`);
   try {
     efectos.aplicarMigraciones();
-  } catch (causa) {
+  } catch (primeraCausa) {
+    // ── FICHA 432 — el desatasco ACOTADO, antes de tratar el fallo como terminal ───────────
+    //
+    // `decidirAutoResolucion` exige el codigo P3009 Y un nombre de la lista blanca, sobre la
+    // salida REAL de Prisma. Cualquier otro fallo cae al camino de siempre, unas lineas abajo.
+    const salida = primeraCausa instanceof Error ? primeraCausa.message : String(primeraCausa);
+    const auto = decidirAutoResolucion(salida);
+
+    if (auto.resolver) {
+      log(`${PREFIJO} P3009 sobre \`${auto.migracion}\`, que es la de la 429 y SI se desatasca.`);
+      log(`${PREFIJO} el orden correcto era: columnas -> siembra -> NOT NULL, y no cupo.`);
+      try {
+        efectos.resolverMigracionRevertida(auto.migracion);
+        log(`${PREFIJO} marcada como revertida; sembrando el SINPE antes de reintentar…`);
+        await efectos.sembrarSinpe();
+        log(`${PREFIJO} reintentando \`migrate deploy\` sobre columnas ya con datos…`);
+        efectos.aplicarMigraciones();
+        // Salio: se sigue al paso de siembra de jobs como en un despliegue normal.
+        await sembrarRecurrentes(efectos);
+        return;
+      } catch (segundaCausa) {
+        // El reintento es UNO. Si tambien falla, el fallo es real y se muere con los dos
+        // motivos a la vista: sin el primero, el log diria que fallo el reintento y no por que
+        // se llego a el.
+        error(
+          `${PREFIJO} el desatasco de \`${auto.migracion}\` NO funciono.\n` +
+            `${PREFIJO} fallo original:\n${salida}`,
+          segundaCausa,
+        );
+        salir(1);
+        return;
+      }
+    }
+
+    log(`${PREFIJO} no se desatasca solo: ${auto.motivo}.`);
+    const causa = primeraCausa;
     // `execSync` mata el proceso por timeout con SIGTERM; distinguirlo del
     // fallo normal es lo que convierte "el build se colgo" en un diagnostico.
     const señal = (causa as { signal?: string }).signal;
