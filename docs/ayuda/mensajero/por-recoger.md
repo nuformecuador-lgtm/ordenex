@@ -60,9 +60,9 @@ Dentro de la conversación, **Ver detalle** te muestra la orden entera: direcci�
 y lo que hay que cobrar.
 
 **Escribirle no es aceptar el paquete.** La orden se queda donde está, en esta pantalla, y la
-recogés cuando te toque. Y si es de **otro día**, la conversación te lo dice: lleva la marca **Para
-mañana** y la fecha desde la que vas a poder recogerla. Si el cliente te pide que se la llevés hoy,
-**no vas a poder** — decíselo antes de prometer nada.
+recogés cuando te toque. Y si es de **otro día**, la conversación te lo dice: lleva la marca
+**Para mañana** y la fecha desde la que vas a poder recogerla. Si el cliente te pide que se la
+llevés hoy, **no vas a poder** — decíselo antes de prometer nada.
 
 ## Cosas que te pueden pasar
 
