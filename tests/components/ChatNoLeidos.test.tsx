@@ -47,6 +47,10 @@ vi.mock("@/app/(app)/mis-asignaciones/_components/UbicacionMapa", () => ({
 }));
 
 import { ChatFlotante } from "@/app/(app)/mis-asignaciones/_components/chat/ChatFlotante";
+// FICHA 430: el chat recibe los contactos YA AGRUPADOS (`GruposDeContactos`) en vez de una
+// lista plana. Se compone con la MISMA funcion que usan las dos pantallas del portal, no a
+// mano: un objeto escrito aqui seria un espejo que sobrevive a un cambio de la composicion.
+import { agruparContactosChat } from "@/app/(app)/mis-asignaciones/_components/chat/chat-contactos";
 
 function orden(id: string, destinatario: string, remision: string): MiAsignacionDTO {
   return {
@@ -105,7 +109,7 @@ function renderChat(ui: ReactElement) {
 async function montar(abierto: boolean, ordenEnDetalleId: string | null = null) {
   const r = renderChat(
     <ChatFlotante
-      ordenes={ORDENES}
+      contactos={agruparContactosChat(ORDENES, [], [])}
       ordenEnDetalleId={ordenEnDetalleId}
       abierto={abierto}
       onAbiertoChange={() => {}}

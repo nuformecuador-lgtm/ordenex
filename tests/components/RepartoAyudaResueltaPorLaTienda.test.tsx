@@ -149,6 +149,7 @@ function renderPortal(conAyuda: MiAsignacionDTO[]) {
     <RepartoModule
       porGestionar={[OTRA]}
       conAyuda={conAyuda}
+      porRecoger={[]}
       ordenEnGestionId={null}
       ruta={RUTA_VIGENTE}
       bloqueo={SIN_BLOQUEO}

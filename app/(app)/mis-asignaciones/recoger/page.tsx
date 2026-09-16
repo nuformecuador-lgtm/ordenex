@@ -7,6 +7,7 @@ import { estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 import { RecogerModule } from "../_components/RecogerModule";
+import { ChatDelMensajero } from "../_components/chat/ChatDelMensajero";
 
 /**
  * Pantalla POR RECOGER del rol `mensajero` (2026-07-31, decisión del humano): la otra
@@ -39,6 +40,22 @@ export default async function RecogerPage() {
       description="Órdenes asignadas pendientes de recoger"
     >
       <RecogerModule porRecoger={result.porRecoger} bloqueo={bloqueo} />
+      {/* ⭑ FICHA 430 (SF-001, punto 3) — EL CHAT, TAMBIÉN AQUÍ.
+          Ésta es la pantalla donde vive lo que acaban de asignarle: cuando le llega un lote a las
+          ocho de la noche, el mensajero tiene CERO órdenes en Reparto —esa pantalla es la de los
+          paquetes que ya lleva encima— y entra por aquí. Dejar el chat sólo allí lo habría abierto
+          justo donde nadie lo iba a buscar.
+          Va junto al módulo y no dentro, igual que `KpisMensajero` en Reparto: `RecogerModule` es
+          la pantalla de recoger y no tiene por qué saber del chat. Y recibe las TRES listas —no
+          sólo `porRecoger`— porque la lista de contactos es UNA sola para las dos pantallas: si
+          aquí faltaran las que ya lleva encima, el distintivo de sin leer diría un número distinto
+          en cada una y cada pantalla escondería los pendientes de la otra.
+          ⛔ No añade ninguna acción sobre la orden: desde aquí se conversa, no se recoge. */}
+      <ChatDelMensajero
+        porGestionar={result.porGestionar}
+        conAyuda={result.conAyuda}
+        porRecoger={result.porRecoger}
+      />
     </AppPage>
   );
 }

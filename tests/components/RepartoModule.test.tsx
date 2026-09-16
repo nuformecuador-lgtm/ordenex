@@ -210,6 +210,10 @@ function renderModule(props?: Partial<Parameters<typeof RepartoModule>[0]>) {
       // Feature 235 (R18): el tercer grupo llega ya separado del servidor. Los escenarios de este
       // archivo no tienen ordenes en ayuda; los que si, viven en `RepartoAyuda.test.tsx`.
       conAyuda={props?.conAyuda ?? []}
+      // FICHA 430: las asignadas y todavia sin recoger bajan SOLO para el chat. Los
+      // escenarios de este archivo no las usan; su cobertura vive en
+      // `ChatContactoAntesDeRecoger.test.tsx`.
+      porRecoger={props?.porRecoger ?? []}
       ordenEnGestionId={props?.ordenEnGestionId ?? null}
       ruta={props?.ruta ?? RUTA_VIGENTE}
       bloqueo={props?.bloqueo ?? SIN_BLOQUEO}
@@ -1565,6 +1569,7 @@ describe("RepartoModule", () => {
       <RepartoModule
         porGestionar={porGestionar}
         conAyuda={[]}
+        porRecoger={[]}
         ordenEnGestionId="g2"
         ruta={RUTA_VIGENTE}
         bloqueo={SIN_BLOQUEO}
@@ -1582,6 +1587,7 @@ describe("RepartoModule", () => {
       <RepartoModule
         porGestionar={porGestionar}
         conAyuda={[]}
+        porRecoger={[]}
         ordenEnGestionId={null}
         ruta={RUTA_VIGENTE}
         bloqueo={SIN_BLOQUEO}

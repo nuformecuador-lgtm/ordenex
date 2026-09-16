@@ -104,6 +104,7 @@ function renderModule(porGestionar: MiAsignacionDTO[]) {
     <RepartoModule
       porGestionar={porGestionar}
       conAyuda={[]}
+      porRecoger={[]}
       ordenEnGestionId={null}
       ruta={RUTA_VIGENTE}
       bloqueo={SIN_BLOQUEO}

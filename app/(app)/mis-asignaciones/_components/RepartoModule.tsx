@@ -38,6 +38,7 @@ import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 import { GestionarOrdenCardButton } from "./GestionarOrdenCardButton";
 import { HiloNotasAyudaModal } from "./HiloNotasAyudaModal";
 import { ChatFlotante } from "./chat/ChatFlotante";
+import { agruparContactosChat } from "./chat/chat-contactos";
 import { PosOrderCardDetalle } from "./pos-card/PosOrderCardDetalle";
 import { RecuperarAyudaButton } from "./RecuperarAyudaButton";
 import { PosOrderCardMosaico } from "./pos-card/PosOrderCardMosaico";
@@ -89,6 +90,23 @@ export interface RepartoModuleProps {
    * vuelve a decidirlo.
    */
   conAyuda: MiAsignacionDTO[];
+  /**
+   * ⭑ FICHA 430 (SF-001, punto 3) — LAS ASIGNADAS Y TODAVÍA SIN RECOGER (`por_recoger`).
+   *
+   * Esta pantalla NO las pinta: sus cards viven en `/mis-asignaciones/recoger` y ahí siguen. Entran
+   * aquí por una sola razón, y es el CHAT: desde esta ficha el mensajero puede escribirle al
+   * cliente de un paquete que aún no lleva encima, así que tienen que estar entre los contactos.
+   *
+   * ⚠️ REQUERIDA, SIN `?`, Y ESO ES EL PUNTO. El typecheck enumera, uno por uno, todos los sitios
+   * que montan este módulo: una pantalla que se olvide de bajarlas NO COMPILA. Con un opcional, el
+   * chat se quedaría corto en silencio —el mensajero no vería ni la conversación ni su distintivo
+   * de sin leer— y nada fallaría, que es la familia de fallos que este repo tiene medida.
+   *
+   * ⛔ Y NO LAS VUELVE TRABAJABLES. No entran en la grilla, ni en el mapa, ni en el panel de
+   * gestión, ni en el buscador de la lista: sólo en `contactosChat`. La puerta de recoger/escoger/
+   * gestionar la sigue guardando el servidor (ficha 261) y esta ficha no la roza.
+   */
+  porRecoger: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
   ordenEnGestionId: string | null;
   /** Feature 97 (R27/R28/R30): estado de la ruta optimizada que produjo el orden. */
@@ -152,6 +170,7 @@ const SIN_PENDIENTES_TODAS_CON_AYUDA =
 export function RepartoModule({
   porGestionar,
   conAyuda,
+  porRecoger,
   ordenEnGestionId,
   ruta,
   bloqueo,
@@ -297,17 +316,25 @@ export function RepartoModule({
   // contiene ninguna orden con ayuda.
   const visualSinAyuda = porGestionarVisual;
 
-  // R30: la ruta no refleja el estado real si la última optimización falló
-  // (`desactualizada`) o si entraron paradas nuevas sin posición todavía.
   // Feature 235 (P8, firmada 2026-08-19) — EL CHAT CONSERVA A ESOS CLIENTES. Es una línea, y sin
   // ella el mensajero pierde EN SILENCIO la única entrada al chat que le queda sobre un paquete que
   // sigue llevando encima: al salir del grupo «en reparto», la orden se caía de la lista de
   // contactos. Contrapartida aceptada: la lista de contactos deja de coincidir con la de cards de
   // arriba.
-  const contactosChat = useMemo<MiAsignacionDTO[]>(
-    () => [...porGestionar, ...conAyuda],
-    [porGestionar, conAyuda],
+  //
+  // ⭑ FICHA 430 (SF-001, punto 3) — Y AHORA CONSERVA TAMBIÉN A LOS QUE TODAVÍA NO HA RECOGIDO.
+  // Aquí vivía `[...porGestionar, ...conAyuda]`, y ESA línea era todo lo que impedía escribirle al
+  // cliente de una orden asignada el día antes: nunca fue un permiso —el servidor autoriza el chat
+  // por propiedad de la orden y nada más—, era el efecto de listar sólo lo ya recogido. La
+  // composición se mudó a `agruparContactosChat`, que es pura y la comparten las dos pantallas del
+  // portal; la contrapartida de 2026-08-19 se ensancha y se asume igual.
+  const contactosChat = useMemo(
+    () => agruparContactosChat(porGestionar, conAyuda, porRecoger),
+    [porGestionar, conAyuda, porRecoger],
   );
+
+  // R30: la ruta no refleja el estado real si la última optimización falló
+  // (`desactualizada`) o si entraron paradas nuevas sin posición todavía.
 
   const rutaDesactualizada =
     ruta.estado === "desactualizada" || ruta.paradasSinOptimizar > 0;
@@ -906,10 +933,13 @@ export function RepartoModule({
           Botón flotante fijo abajo a la derecha que abre el chat con los clientes como
           modal. Se muestra en las dos vistas (foco y lista) porque el mensajero puede
           necesitar escribir en cualquier momento.
-          Contactos = SOLO las órdenes EN REPARTO (`porGestionar`, sin filtrar: el chat es
-          una capa aparte del buscador/filtro de la lista); las de "Por recoger" no tienen
-          gestión que conversar — por eso el chat vive aquí y no en su pantalla. La marcada
-          "en gestión" es la que el módulo tiene en DETALLE, y es por donde entra al abrirse.
+          Contactos = TODAS las órdenes asignadas al mensajero, sin filtrar (el chat es una capa
+          aparte del buscador/filtro de la lista). ⭑ FICHA 430: hasta el 2026-09-15 eran sólo las
+          EN REPARTO, y las de "Por recoger" quedaban fuera «porque no tienen gestión que
+          conversar»; el humano decidió lo contrario —coordinar antes de recoger es justo cuando
+          hace falta—, así que el mismo botón se monta también en la pantalla de "Por recoger"
+          (`ChatDelMensajero`) con esta MISMA lista. La marcada "en gestión" es la que el módulo
+          tiene en DETALLE, y es por donde entra al abrirse.
           Hasta el 2026-08-07 esta ruta convivía con `ChatWhatsappPanel` dentro del panel del
           detalle, que leía la misma conversación; ese panel se borró por decisión humana tras
           perder su montaje en `6dc18dc2`, así que este botón es hoy la ÚNICA entrada al chat:
@@ -927,7 +957,7 @@ export function RepartoModule({
       ) : null}
 
       <ChatFlotante
-        ordenes={contactosChat}
+        contactos={contactosChat}
         ordenEnDetalleId={detalleOrden?.id ?? null}
         abierto={chatAbierto}
         onAbiertoChange={setChatAbierto}

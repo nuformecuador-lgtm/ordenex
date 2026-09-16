@@ -7,6 +7,9 @@ actualizado: 2026-09-15
 fuentes:
   - app/(app)/mis-asignaciones/_components/RepartoModule.tsx
   - app/(app)/mis-asignaciones/_components/chat/ChatFlotante.tsx
+  - app/(app)/mis-asignaciones/_components/chat/ChatOrdenesLista.tsx
+  - app/(app)/mis-asignaciones/_components/chat/ChatConversacion.tsx
+  - app/(app)/mis-asignaciones/_components/chat/chat-contactos.ts
   - app/(app)/mis-asignaciones/_components/useFiltroCantonDistrito.ts
   - lib/services/MisAsignacionesService.ts
   - lib/constants/bloqueo-mensajero.ts
@@ -48,6 +51,27 @@ orden**: si el paquete pasa a otro mensajero, la conversación no se pierde.
 
 Hay plantillas listas para los mensajes más comunes, así no tenés que escribir lo mismo cada vez.
 
+**Están todas tus órdenes, no solo las que llevás encima.** En la lista de conversaciones vas a ver
+también los paquetes que todavía no recogiste, en sus propios grupos:
+
+| Grupo | Qué hay ahí |
+| --- | --- |
+| **En reparto** | Lo que ya llevás encima |
+| **Para recoger hoy** | Asignadas, todavía en bodega, las podés recoger hoy |
+| **Para otro día** | Asignadas y reservadas para una fecha posterior |
+
+Podés escribirle al cliente **desde que te la asignan**, sin esperar a recogerla. Conversar no es
+aceptar el paquete: la orden se queda donde está y la seguís recogiendo cuando te toque.
+
+**Ver la orden entera desde el chat.** Dentro de la conversación, **Ver detalle** despliega los
+datos completos de esa orden — dirección, producto, teléfono y lo que hay que cobrar — sin salir
+del chat.
+
+> **Ojo con las de otro día.** Las que están reservadas para una fecha posterior llevan la marca
+> **Para mañana** y, debajo, la fecha desde la que vas a poder recogerla. Si le escribís el día
+> antes y el cliente te pide que se la llevés hoy, **no vas a poder**: el sistema no te va a dejar
+> recogerla ni gestionarla hasta ese día. Decíselo antes de prometer nada.
+
 ## Registrar lo que pasó
 
 En cada orden tenés **Gestionar**, y desde ahí elegís qué pasó:
@@ -76,5 +100,6 @@ cálculo. Tocá **Sincronizar ruta** y se pone al día.
 
 ## Lo que esta pantalla NO hace
 
-- **No se recogen paquetes acá.** Eso es en **Por recoger**.
+- **No se recogen paquetes acá.** Eso es en **Por recoger**. Que un paquete por recoger te aparezca
+  en el chat no cambia eso: ahí se conversa, no se recoge.
 - **No se ve la plata.** Tus pagos y tu cierre del día están en **Mi wallet** y en **Cierre del día**.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Camera,
@@ -17,9 +17,15 @@ import {
 } from "lucide-react";
 import useSWR from "swr";
 
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
+import { useSeccionColapsable } from "@/hooks/useSeccionColapsable";
 import { useTonoAlIncrementar } from "@/hooks/useTonoAlIncrementar";
+import {
+  avisoReservaParaOtroDia,
+  ETIQUETA_PARA_MANANA,
+} from "@/lib/utils/dia-reparto-textos";
 import {
   enviarMediaChat,
   enviarMensajeChat,
@@ -49,6 +55,8 @@ import type { PlantillaTextoDTO } from "@/lib/types/whatsapp-envio";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { useGrabadorVoz } from "./hooks/useGrabadorVoz";
+import { AsignacionDetalle } from "../AsignacionDetalle";
+import { DETALLE_OCULTAR, DETALLE_VER } from "./chat-contactos";
 import { UbicacionModal } from "../UbicacionModal";
 import type { UbicacionPunto } from "../ubicacion-mapa-tipos";
 import { BurbujaContenido } from "./BurbujaContenido";
@@ -220,6 +228,21 @@ export function ChatConversacion({
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  // FICHA 430 (punto 2) — EL DETALLE COMPLETO DE LA ORDEN, dentro de la conversación.
+  //
+  // Por qué hace falta ahora y no antes: hasta esta ficha al chat sólo llegaban órdenes que el
+  // mensajero ya tenía en la mano, y para verlas enteras bastaba con salir a la card de Reparto.
+  // Con las asignadas sin recoger eso deja de valer — su card vive en OTRA pantalla —, y el
+  // encabezado de aquí sólo dice nombre, guía, estado y monto. Coordinar una entrega por el día
+  // anterior sin poder leer la dirección ni el producto es la mitad del trabajo.
+  //
+  // Es el MISMO `AsignacionDetalle` (Pedido / Entrega / Cobro) que pintan el panel de gestión y el
+  // desplegable de las cards POS: no hay una segunda versión del detalle que pueda divergir.
+  //
+  // Arranca PLEGADO: lo que se abre es un chat, y el hilo tiene que seguir siendo lo primero.
+  const detalle = useSeccionColapsable(false);
+  const detalleId = useId();
 
   // Feature 316 (design §6.1): estado del adjunto del composer.
   const [adjunto, setAdjunto] = useState<AdjuntoComposer | null>(null);
@@ -618,7 +641,7 @@ export function ChatConversacion({
           <p className="truncate text-sm font-semibold text-foreground">
             {orden.destinatario}
           </p>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="font-mono text-[11px] text-muted-foreground">
               {guiaVisible(orden)}
             </span>
@@ -630,6 +653,12 @@ export function ChatConversacion({
             >
               {chip.label}
             </span>
+            {/* FICHA 430 (punto 3): la marca del día acompaña al estado también AQUÍ, que es la
+                pantalla donde el mensajero está escribiendo. Mismo `Badge variant="info"` y mismo
+                literal que las cards del portal y que la fila de la lista. */}
+            {orden.esParaManana ? (
+              <Badge variant="info">{ETIQUETA_PARA_MANANA}</Badge>
+            ) : null}
           </div>
         </div>
 
@@ -666,6 +695,59 @@ export function ChatConversacion({
           </a>
         ) : null}
       </header>
+
+      {/* ---------- FICHA 430 — la franja de CONTEXTO de la orden ---------- */}
+      {/* Dos cosas que el encabezado de arriba no cabe: el aviso del día y la puerta al detalle
+          completo. Van juntas y pegadas al encabezado porque las dos responden a «¿qué es esta
+          orden?», que es lo que el mensajero necesita ANTES de escribir la primera línea. */}
+      <div className="flex flex-col gap-2 border-b border-border bg-card px-3 pb-2.5 md:px-4">
+        {/* Punto 3 — SI ES DE OTRO DÍA, LA PANTALLA LO DICE CON PALABRAS Y CON SU FECHA.
+            Escribiendo el día antes, el cliente le va a pedir que se la lleve hoy; el mensajero
+            tiene que saber, antes de prometer nada, que el sistema se lo va a impedir y desde qué
+            día podrá. El literal sale de la fuente única (`avisoReservaParaOtroDia`, 261/R15) —la
+            misma frase que devuelve el servidor al rechazar— con la fecha YA resuelta por el
+            servidor en `fechaRepartoISO` (261/R14): aquí no se construye ninguna fecha.
+            `role="note"`, como en la card: es contexto permanente de la orden, no una alerta que
+            acabe de ocurrir. */}
+        {orden.esParaManana ? (
+          <p
+            role="note"
+            className="rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-xs font-semibold text-warning-strong dark:bg-warning/15"
+          >
+            {avisoReservaParaOtroDia(orden.fechaRepartoISO)}
+          </p>
+        ) : null}
+
+        {/* Punto 2 — el detalle COMPLETO, a una pulsación. Patrón de revelación (`aria-expanded` +
+            `aria-controls`) y no una región con nombre: el contenedor existe SIEMPRE con su `id`
+            —si no, `aria-controls` apuntaría al vacío al estar plegado— y lo que entra y sale es
+            su contenido. */}
+        <div>
+          <button
+            type="button"
+            aria-expanded={detalle.abierta}
+            aria-controls={detalleId}
+            onClick={detalle.abierta ? detalle.cerrar : detalle.abrir}
+            // Anillo de foco OPACO (`ring-3 ring-ring`), el estándar de `DESIGN.md`: con alfa
+            // (`ring-ring/50`) mide 1,71 en claro y 2,33 en oscuro, por debajo del 3:1 que WCAG
+            // 1.4.11 pide a un indicador de interfaz (medido en `contraste-tokens.guardia`). Los
+            // vecinos heredados de esta pantalla siguen en `/50` y son deuda previa; esta pieza es
+            // NUEVA, y la regla para lo nuevo es escribir el opaco.
+            className="rounded-full px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring"
+          >
+            {detalle.abierta ? DETALLE_OCULTAR : DETALLE_VER}
+          </button>
+          <div id={detalleId}>
+            {detalle.montada ? (
+              // Acotado en alto y con su propio scroll: el detalle son tres cards y el hilo no
+              // puede quedarse sin sitio en un móvil.
+              <div className={`max-h-56 overflow-y-auto pt-2 ${detalle.clase}`}>
+                <AsignacionDetalle orden={orden} />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
 
       <div
         ref={scrollRef}

@@ -3,14 +3,28 @@
 import { useState } from "react";
 import { MessageSquareDot, Search } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { normalizeName } from "@/lib/utils/normalize";
+import {
+  avisoReservaParaOtroDia,
+  ETIQUETA_PARA_MANANA,
+  PESTANA_PARA_OTRO_DIA,
+  PESTANA_PARA_RECOGER_HOY,
+} from "@/lib/utils/dia-reparto-textos";
 
 import { coincideBusqueda } from "../mis-asignaciones-buscador";
 import { ESTADO_CHIP, estadoDe, iniciales, zonaCorta } from "./chat-format";
+import {
+  contadorContactos,
+  SECCION_CON_EL_PAQUETE,
+  SIN_COINCIDENCIAS,
+  SIN_CONTACTOS,
+  type GruposDeContactos,
+} from "./chat-contactos";
 
-// Rediseño del chat (rama ux) — columna izquierda: un contacto por orden EN REPARTO (su
+// Rediseño del chat (rama ux) — columna izquierda: un contacto por orden ASIGNADA (su
 // destinatario). Filtra en cliente con el MISMO criterio que el buscador del módulo
 // (`coincideBusqueda`: guía, remisión, teléfono o nombre), así que buscar aquí se siente
 // igual que buscar allá. Nada de datos inventados: cada fila muestra solo lo que trae el
@@ -20,6 +34,18 @@ import { ESTADO_CHIP, estadoDe, iniciales, zonaCorta } from "./chat-format";
 // SIN LEER: cada fila puede llevar un distintivo con los entrantes que el cliente mandó y el
 // mensajero todavía no ha visto. El conteo llega ya resuelto desde `ChatFlotante` (servidor,
 // `resumenNoLeidosChat`); aquí solo se pinta. Una fila sin entrada en el mapa es cero.
+//
+// ⭑ FICHA 430 (SF-001, punto 3) — LA LISTA DEJA DE SER SÓLO «EN REPARTO». Entran también las
+// órdenes ASIGNADAS y todavía sin recoger, que es lo que esta ficha vino a arreglar: hasta hoy el
+// mensajero no podía escribirle al cliente de un paquete que aún no llevaba encima. Por eso la
+// lista pasa a tener TRES grupos en vez de uno, y por eso el contador de la cabecera ya no puede
+// decir «en reparto».
+//
+// LOS TRES GRUPOS NO SON DECORACIÓN. Son la respuesta a «¿qué tengo en la mano ahora mismo?», que
+// es distinta de «¿con quién puedo hablar?»: la orden de otro día se conversa igual, pero el
+// servidor no la va a dejar recoger hasta su día. Mezclarla con las de hoy es exactamente lo que la
+// ficha 277 deshizo en la pantalla «Por recoger», y sus dos rótulos se importan de allí en vez de
+// escribirse otra vez.
 
 /** Tope del distintivo: por encima se pinta `+9` (el ancho de la burbuja es fijo). */
 const BADGE_MAX = 9;
@@ -78,7 +104,7 @@ function OrdenFila({
           </span>
         </div>
 
-        <div className="mt-0.5 flex items-center gap-1.5">
+        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
           {orden.numGuia !== null ? (
             <span className="font-mono text-[11px] text-muted-foreground">
               {orden.numGuia}
@@ -92,11 +118,36 @@ function OrdenFila({
           >
             {chip.label}
           </span>
+          {/* FICHA 430 (punto 3) — LA MARCA DEL DÍA VA EN LA FILA, no sólo en el grupo. El grupo
+              ordena la lista; la fila es lo que el mensajero lee cuando el buscador la ha sacado de
+              su sitio, y es lo que entra en el nombre accesible del botón. Cuelga de
+              `esParaManana` y NO del grupo a propósito: una orden ya recogida puede quedar marcada
+              para un día posterior (pasó en producción el 2026-08-21 con un `UPDATE` a mano), y así
+              la marca no se le cae por estar en «En reparto».
+              Mismo `Badge variant="info"` con el que la pintan las tres cards del portal: un solo
+              lenguaje para un solo dato. */}
+          {orden.esParaManana ? (
+            <Badge variant="info">{ETIQUETA_PARA_MANANA}</Badge>
+          ) : null}
         </div>
 
         <p className="mt-1 truncate text-xs text-muted-foreground">
           {zonaCorta(orden)}
         </p>
+
+        {/* FICHA 430 (punto 3) — Y CON PALABRAS, no sólo con el badge. Si el mensajero escribe el
+            día antes, el cliente le va a pedir que se la lleve hoy: tiene que saber, antes de
+            prometer nada, que el sistema se lo va a impedir y DESDE QUÉ DÍA podrá. El literal sale
+            de la fuente única (`avisoReservaParaOtroDia`, 261/R15) con la fecha ya resuelta por el
+            servidor (`fechaRepartoISO`, R14): aquí no se construye ninguna fecha.
+            Es un `<span>` de bloque y no un `<p role="note">` como en la card: dentro de un
+            `<button>` el texto se pliega al nombre accesible de la fila, así que un rol propio no
+            se anunciaría — y un `<p>` más dentro del botón tampoco mejora nada. */}
+        {orden.esParaManana ? (
+          <span className="mt-1 block text-[11px] font-semibold text-muted-foreground">
+            {avisoReservaParaOtroDia(orden.fechaRepartoISO)}
+          </span>
+        ) : null}
 
         {/* El distintivo de arriba es una cifra suelta sobre el avatar: fuera de contexto no
             dice de qué es. El nombre accesible del botón lo dice con palabras. */}
@@ -111,8 +162,12 @@ function OrdenFila({
 }
 
 export interface ChatOrdenesListaProps {
-  /** Órdenes en reparto: una fila por orden (su destinatario es el interlocutor). */
-  ordenes: MiAsignacionDTO[];
+  /**
+   * Ficha 430: los contactos YA AGRUPADOS por lo que el mensajero tiene en la mano. Llegan
+   * compuestos por `agruparContactosChat` desde el módulo de la pantalla; la lista no vuelve a
+   * decidir de qué grupo es cada orden, igual que la 235 hizo con el corte de «ayuda».
+   */
+  contactos: GruposDeContactos;
   /**
    * Entrantes sin leer por `ordenId`. Ausencia = cero. Lo resuelve `ChatFlotante` contra el
    * servidor; la lista no consulta nada por su cuenta.
@@ -127,7 +182,7 @@ export interface ChatOrdenesListaProps {
 }
 
 export function ChatOrdenesLista({
-  ordenes,
+  contactos,
   noLeidos,
   seleccionadaId,
   ordenEnDetalleId,
@@ -137,9 +192,23 @@ export function ChatOrdenesLista({
   const [query, setQuery] = useState("");
 
   const q = normalizeName(query);
-  const filtradas = ordenes.filter((o) => coincideBusqueda(o, q));
-  const enGestion = filtradas.find((o) => o.id === ordenEnDetalleId) ?? null;
-  const resto = filtradas.filter((o) => o.id !== ordenEnDetalleId);
+  const filtrar = (ordenes: MiAsignacionDTO[]) =>
+    ordenes.filter((o) => coincideBusqueda(o, q));
+
+  // La orden EN GESTIÓN se ancla arriba y sale de su grupo, para no aparecer dos veces. Sólo
+  // puede estar entre las ya recogidas: el puntero 1-a-1 del servidor apunta a una `en_reparto`.
+  const enGestion =
+    filtrar(contactos.conElPaquete).find((o) => o.id === ordenEnDetalleId) ?? null;
+  const grupos: { titulo: string; ordenes: MiAsignacionDTO[] }[] = [
+    {
+      titulo: SECCION_CON_EL_PAQUETE,
+      ordenes: filtrar(contactos.conElPaquete).filter((o) => o.id !== ordenEnDetalleId),
+    },
+    { titulo: PESTANA_PARA_RECOGER_HOY, ordenes: filtrar(contactos.porRecogerHoy) },
+    { titulo: PESTANA_PARA_OTRO_DIA, ordenes: filtrar(contactos.paraOtroDia) },
+  ];
+  const visibles =
+    (enGestion ? 1 : 0) + grupos.reduce((n, g) => n + g.ordenes.length, 0);
 
   return (
     <aside
@@ -154,9 +223,11 @@ export function ChatOrdenesLista({
         </h2>
         {/* `mr-10` (40px): en móvil la lista ocupa todo el ancho y esta esquina cae justo
             debajo de la X de cierre del Dialog. En ≥md la lista es la columna izquierda y la
-            X queda lejos, así que el margen se anula. */}
+            X queda lejos, así que el margen se anula.
+            Ficha 430: cuenta LO QUE EL MENSAJERO TIENE, no lo que el buscador deja a la vista —
+            mismo criterio que los contadores de «Por recoger» (277/R16). */}
         <span className="mr-10 text-[11px] text-muted-foreground md:mr-0">
-          {ordenes.length} en reparto
+          {contadorContactos(contactos.todas.length)}
         </span>
       </header>
 
@@ -195,31 +266,37 @@ export function ChatOrdenesLista({
           </section>
         ) : null}
 
-        <section aria-label="Todas las órdenes en reparto">
-          <div className="px-4 pb-1 pt-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Todas en reparto
-            </span>
-          </div>
-          <div className="divide-y divide-border/60">
-            {resto.map((orden) => (
-              <OrdenFila
-                key={orden.id}
-                orden={orden}
-                seleccionada={seleccionadaId === orden.id}
-                noLeidos={noLeidos.get(orden.id) ?? 0}
-                onSeleccionar={onSeleccionar}
-              />
-            ))}
-          </div>
-          {filtradas.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-              {ordenes.length === 0
-                ? "No tienes órdenes en reparto."
-                : "Ninguna conversación coincide con la búsqueda."}
-            </p>
-          ) : null}
-        </section>
+        {/* Un grupo vacío no se pinta: un encabezado sobre la nada no dice nada, y el vacío
+            general ya tiene su propio mensaje abajo. Los nombres accesibles de las secciones son
+            los TRES distintos, que es por donde se identifican. */}
+        {grupos.map((grupo) =>
+          grupo.ordenes.length === 0 ? null : (
+            <section key={grupo.titulo} aria-label={grupo.titulo}>
+              <div className="px-4 pb-1 pt-3">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {grupo.titulo}
+                </span>
+              </div>
+              <div className="divide-y divide-border/60">
+                {grupo.ordenes.map((orden) => (
+                  <OrdenFila
+                    key={orden.id}
+                    orden={orden}
+                    seleccionada={seleccionadaId === orden.id}
+                    noLeidos={noLeidos.get(orden.id) ?? 0}
+                    onSeleccionar={onSeleccionar}
+                  />
+                ))}
+              </div>
+            </section>
+          ),
+        )}
+
+        {visibles === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+            {contactos.todas.length === 0 ? SIN_CONTACTOS : SIN_COINCIDENCIAS}
+          </p>
+        ) : null}
       </div>
     </aside>
   );
