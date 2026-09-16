@@ -5401,3 +5401,48 @@ Mergear a `dev` es seguro: `decidirMigracion` no aplica migraciones en preview.
 Un `admin` no puede ver **quién** cambió un número (vive en `historial_accion`, lectura `maestro`-only);
 `admin` no tiene entrada de menú a `/configuracion/sinpe`; y `/mi-bodega` no ofrece «confirmar sin
 cambiar», así que quien cierre el aviso ve «Sin revisar» y no puede quitarlo sin editar algo.
+
+---
+
+## 430 — contacto al cliente antes de recoger (2026-09-16) · SF-001 punto 3
+
+El mensajero puede escribirle al cliente **desde que le asignan el paquete**, sin esperar a recogerlo.
+
+**El documento firmado se equivocaba, y a nuestro favor.** Decía que «ver la orden» y «trabajarla» son
+hoy la misma puerta, y estimaba 3–5 días en separarlas. **Nunca lo fueron**: el chat autoriza con `id` +
+`deletedAt` + `mensajeroAsignadoId` y nada más. Lo único que lo impedía era **una línea del cliente**.
+Cero archivos de `lib/`, `db/` o `app/api/` en el diff.
+
+**Contactar no es aceptar, y ya estaba garantizado dos veces** desde la ficha 246: al cierre solo entran
+órdenes ya recogidas, y de esas se excluyen las reservadas. No hubo que construirlo.
+
+**Una decisión de diseño que evitó un fallo mudo.** El chat vive en las dos pantallas con UNA sola
+lista, porque `ChatFlotante` filtra el resumen de no leídos contra los contactos que la pantalla lista:
+**dos listas habrían hecho que cada pantalla escondiera los pendientes de la otra, sin ningún error
+visible**. Y el caso de uso lo exigía — las asignaciones anticipadas ocurren a las 20:00, hora a la que
+el mensajero tiene cero órdenes en Reparto.
+
+### Los tres huecos que encontró la revisión, todos con la misma forma
+
+Una protección que existía y que, mirada de cerca, no cubría lo que decía cubrir:
+
+1. **El argumento central del diseño no tenía test**: reponer el filtro viejo del contador de no leídos
+   dejaba **149 tests en verde**.
+2. **La guardia de «conversar no es aceptar» miraba con el detalle plegado**: un botón de «Gestionar»
+   escondido en el desplegable sobrevivía.
+3. **Un `= []` deshacía la prop requerida**: sin el tercer argumento, el typecheck pasaba igual.
+
+Los tres cerrados, cada uno comprobado con su propia mutación en rojo.
+
+### La red de la 261 no se tocó
+
+Los seis archivos que fijan «una orden de mañana no se recoge ni se gestiona» no aparecen en el diff, y
+la revisión los corrió enteros: **72 tests verdes**, con los tres de `integration/db` contra Postgres.
+
+### La documentación se actualizó dentro del cambio
+
+Primera prueba de la disciplina que sostiene el punto 4. `por-recoger.md` decía «No hay chat acá», que
+dejó de ser cierto. La revisión contrastó **las 11 afirmaciones nuevas contra el código: las 11 se
+cumplen**.
+
+**NO se desplegó.** Las cuatro de SF-001 salen juntas.
