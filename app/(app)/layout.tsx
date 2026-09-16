@@ -4,13 +4,17 @@ import { Sidebar } from "./_components/Sidebar";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { AvisoVersionNueva } from "@/components/shared/AvisoVersionNueva";
 import { PushReactivacion } from "@/components/shared/PushReactivacion";
+import { RevisionSinpeBodega } from "@/components/shared/RevisionSinpeBodega";
 import { TemaProvider } from "@/providers/TemaProvider";
 import { COOKIE_TEMA, normalizarTema } from "@/lib/tema/tema";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { resolverRevisionSinpePendiente } from "@/lib/auth/revision-sinpe-pendiente";
+import { puedeEditarAlgunSinpe } from "@/lib/types/sinpe-bodega";
 import { itemsVisibles, SIDEBAR_ITEMS } from "@/lib/auth/menu-visibility";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
 import { UserRepository } from "@/lib/repositories/UserRepository";
 import { UsuarioPreferenciaRepository } from "@/lib/repositories/UsuarioPreferenciaRepository";
+import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import {
   SidebarInset,
@@ -48,12 +52,29 @@ export default async function AppLayout({
   // Las dos lecturas van en `Promise.all` y no encadenadas a propósito: este layout se pinta en
   // TODAS las páginas del portal, así que una segunda consulta en serie le sumaría su latencia a
   // cada carga. En paralelo, el coste en tiempo es el de la más lenta de las dos.
-  const [usuarioRow, avisosRecordados] = actor
+  //
+  // ⭑ FICHA 429 (T19 — R26, R28, R31) — LA TERCERA LECTURA: ¿hay un SINPE que poner delante de
+  // esta persona? `null` es la respuesta NORMAL; la mayoría de las cargas del portal no piden
+  // nada. Sale del SERVIDOR y con la zona que la BASE le asigna al actor, nunca con un dato que
+  // venga en la petición (R20).
+  //
+  // ⚠️ LOS QUE NO PAGAN NI UNA CONSULTA (R31). `mensajero`, `adminTienda` y las cuentas de API
+  // no entran en el `Promise.all`: la tercera posición es `null` LITERAL, así que ni se crea la
+  // promesa ni se construye el `ZonaRepository`. Este layout se pinta en TODAS las páginas del
+  // portal, y una consulta de más para quien no puede hacer nada con ella se paga en todas.
+  //
+  // ⚠️ ESTO NO DECIDE ACCESO (R28). Es un dato para PINTAR un aviso: ninguna rama de aquí
+  // redirige, ninguna devuelve 403 y ninguna deja de pintar `{children}`.
+  const pideRevisionSinpe = actor !== null && puedeEditarAlgunSinpe(actor.rol);
+  const [usuarioRow, avisosRecordados, revisionSinpe] = actor
     ? await Promise.all([
         new UserRepository(getPrismaClient()).findById(actor.usuarioId),
         new UsuarioPreferenciaRepository(getPrismaClient()).avisosPushDe(actor.usuarioId),
+        pideRevisionSinpe
+          ? resolverRevisionSinpePendiente(actor, new ZonaRepository(getPrismaClient()))
+          : null,
       ])
-    : ([null, false] as const);
+    : ([null, false, null] as const);
   const usuario =
     actor && usuarioRow
       ? { nombre: nombreCompletoUsuario(usuarioRow), rolLabel: ROL_LABELS[actor.rol] }
@@ -101,6 +122,17 @@ export default async function AppLayout({
             La guardia `push-alta-punto-unico.guardia.test.ts` exige que éste sea el único montaje
             del árbol. El componente no pinta nada: decide solo y en silencio. */}
         {actor && <PushReactivacion avisosRecordados={avisosRecordados} />}
+        {/* ⭑ Ficha 429 (T19/T22 — R26/R28) — el aviso de la revisión del primer ingreso.
+            ⚠️ HERMANO de `{children}`, JAMÁS envolviéndolo, y montado justo aquí al lado de
+            `PushReactivacion` por el mismo motivo por el que aquel vive aquí: este layout no se
+            pinta sin sesión, y persiste entre navegaciones del portal, así que el aviso aparece
+            una vez por CARGA y no una por página visitada.
+            Un envoltorio PODRÍA dejar de pintar el contenido con un `return null`; un hermano no
+            tiene dónde hacerlo — eso es lo que hace R28 estructural en vez de una promesa, y
+            `revision-sinpe-no-bloquea.guardia.test.ts` lo vigila sobre la forma del árbol.
+            La condición es el DATO, no el rol: `resolverRevisionSinpePendiente` ya devolvió
+            `null` para todo el que no tenga nada que revisar. */}
+        {actor && revisionSinpe && <RevisionSinpeBodega bodega={revisionSinpe} />}
       </ToastProvider>
     </TemaProvider>
   );

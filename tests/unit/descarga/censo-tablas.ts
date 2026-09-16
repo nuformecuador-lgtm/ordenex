@@ -301,6 +301,26 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     tablas: [{ nombre: "Plantillas de mensaje", estado: "con_descarga" }],
   },
   {
+    // ⭑ FICHA 429 (T21-B) — SUMA de una tabla: el SINPE de cada bodega. Nace `fuera`, que es
+    // lo que la guardia obliga a DECIDIR, y aqui la decision tiene dos motivos y ninguno es
+    // «no dio tiempo».
+    ruta: "app/(app)/configuracion/sinpe/_components/SinpeBodegasModule.tsx",
+    tablas: [
+      {
+        nombre: "SINPE por bodega",
+        estado: "fuera",
+        nota:
+          "no es un libro: son las OCHO bodegas de la operacion, un catalogo de configuracion " +
+          "que cabe entero en la pantalla, sin paginacion, sin filtros y sin accion de dataset " +
+          "completo que descargar. Y ademas su columna util es el numero al que transfieren los " +
+          "clientes: un archivo con las ocho cuentas de cobro circulando por correo no le da a " +
+          "quien administra nada que no tenga ya delante, y si le da a cualquier otro una lista " +
+          "que aqui esta detras de un rol. El dia que alguien necesite auditar los cambios, lo " +
+          "que quiere es el registro de acciones --que SI descarga-- y no esta foto",
+      },
+    ],
+  },
+  {
     // ⭑ FICHA 362 (T6.3) — SUMA de una tabla: el REGISTRO DE ACCIONES (quién hizo qué, sobre
     // qué y cuándo). Nace `con_descarga`, que es lo que la guardia obliga a decidir, y aquí
     // la decisión no tiene más de una respuesta razonable: es la Familia A canónica de la 170

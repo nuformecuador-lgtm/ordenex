@@ -350,3 +350,197 @@ INIT_EXIT=1
 De los 23, **19 eran ruido propio** y están cerrados en `cf44256d`: 12 por el CRLF del §4, 5 por
 `INSERT INTO "zona"` crudos, y 2 por censos que esta ficha obliga a actualizar (el orden del enum de
 la 398 y la lista de migraciones posteriores de la 427). Los 4 que quedan son los de arriba.
+
+
+---
+---
+
+# Ficha 429 — bitácora del FRONTEND (T21, T22, T23, T19)
+
+**Rama base:** `feat/429-sinpe-por-bodega`, commit `a9e9b5c9` (final del backend).
+**Alcance ejecutado:** el arreglo del formulario de zonas que tenía el gate en rojo, **T21**
+(las dos pantallas), **T22** (el aviso del primer ingreso), **T19** (el cableado del layout) y
+**T23** (el ítem de menú).
+
+---
+
+## 0. Lo primero: el rojo que dejó T11, cerrado
+
+`crearZonaSchema` exige `sinpeNumero`/`sinpeNombre` desde T11, y `CrearZonaForm` validaba su
+payload contra ESE esquema sin recoger los dos campos: **crear una zona desde la aplicación no
+funcionaba**, y caían 4 archivos con 32 casos.
+
+El arreglo tiene DOS mitades, y la segunda no estaba en el encargo:
+
+1. **Los dos campos**, en un `fieldset` propio con su `FormField` cada uno (pista, `required`, y el
+   error JUNTO A SU CAMPO por `aria-describedby`), y los dos añadidos al `candidate` de `validar()`.
+2. **`validar()` pasa a elegir esquema por modo.** Con un solo esquema el arreglo no podía estar
+   completo: `actualizarZonaSchema` **no** lleva el par —el SINPE se edita por su propia acción, y
+   meterlo en el reemplazo completo de `actualizarZona` dejaría que un guardado de distritos pisara
+   en silencio la corrección de un `adminSatelite`— y los dos esquemas son `.strict()`. Validar
+   siempre contra el de crear rompía las dos ramas a la vez: al crear no se recogían los campos, y
+   al editar se habrían mandado a un esquema que los rechaza.
+
+   Se elige por `zonaIdGuardada` y **no** por `mode`, que es la MISMA condición que ya decide a qué
+   acción se llama en `enviar()`: tras crear con éxito, un reintento es una actualización aunque el
+   modo siga siendo «crear». Dos condiciones distintas para la misma bifurcación divergirían sin que
+   nada se pusiera rojo.
+
+**Los cuatro archivos vuelven a verde (35/35).** Los 8 casos que quedaban tras el arreglo eran de
+modo «crear» y no tecleaban el SINPE: se arreglan **aportando el dato**, nunca aflojando el esquema
+(`tests/fixtures/sinpe-en-formulario-zona.ts`, que busca los campos por ROL y nombre accesible, así
+que se rompe si algún día el campo deja de estar etiquetado).
+
+---
+
+## 1. Archivos
+
+### Creados — producción
+
+| Archivo | Qué |
+| --- | --- |
+| `app/(app)/mi-bodega/page.tsx` | Server Component, gate por `ROLES_MI_BODEGA` (T21-A) |
+| `app/(app)/mi-bodega/_components/MiBodegaSinpeModule.tsx` | la tarjeta + la vista previa + el aviso |
+| `app/(app)/configuracion/sinpe/page.tsx` | Server Component, gate por `puedeEditarAlgunSinpe` (T21-B) |
+| `app/(app)/configuracion/sinpe/_components/SinpeBodegasModule.tsx` | la tabla de las 8 y su modal |
+| `components/shared/RevisionSinpeBodega.tsx` | el aviso del primer ingreso (T22) |
+| `components/shared/SinpeCampos.tsx` | los DOS campos, escritos una vez para las TRES superficies |
+| `components/shared/SinpeMensajePreview.tsx` | el mensaje real con el par resaltado |
+| `components/shared/sinpe-preview-segmentos.ts` | el mensaje partido en trozos, con el MISMO motor del envío |
+| `components/shared/SinpeAvisoRiesgo.tsx` | el aviso que nombra el daño |
+| `components/shared/sinpe-textos.ts` | todo el texto de la superficie, en un solo sitio |
+
+### Modificados — producción
+
+`app/(app)/layout.tsx` (T19: la tercera lectura y el montaje), `lib/auth/menu-visibility.ts`
+(T23: `ROLES_MI_BODEGA`, el ítem «Mi bodega» y el subítem «SINPE por bodega»),
+`app/(app)/_components/Sidebar.tsx` (el icono `warehouse`),
+`app/(app)/configuracion/tarifas/_components/CrearZonaForm.tsx` (el §0),
+`lib/actions/sinpe-bodega.ts` (**se retiran las tres anotaciones `@sin-superficie`**: la
+excepción CADUCA con el montaje, y dejarla habría fosilizado una excepción que
+`superficie-de-uso.guardia` se come en silencio).
+
+### Tests
+
+Nuevos: `tests/components/MiBodegaSinpe.test.tsx` (15), `tests/components/RevisionSinpeBodega.test.tsx`
+(11), `tests/components/SinpePorBodegaTabla.test.tsx` (11), `tests/unit/auth/menu-mi-bodega.test.ts`
+(15), `tests/fixtures/sinpe-en-formulario-zona.ts`.
+
+Actualizados: `tests/components/AppLayout.test.tsx` (5 casos de T19),
+`tests/components/Sidebar.test.tsx` (`warehouse` en el censo de `IconKey`),
+`tests/unit/auth/menu-visibility.test.ts` (las dos listas comparadas por igualdad),
+`tests/unit/guards/pwa-manifiesto-atajos.guardia.test.ts` (destinos por rol: `maestro` 19→20,
+`adminSatelite` 6→7; los otros tres NO se mueven, y eso es la mitad de lo que se afirma),
+`tests/unit/descarga/censo-tablas.ts` + `cobertura-tablas.guardia.test.ts` (la tabla nueva, `fuera`),
+y los cuatro del §0.
+
+---
+
+## 2. Las decisiones que no estaban en el encargo
+
+### 2.1 «Último cambio» pasa a decir **«Última revisión»**
+
+El diseño aprobado rotulaba la columna y el pie de la tarjeta como «Último cambio: <persona> ·
+<fecha>». Se entrega **«Última revisión: <fecha>»**, sin persona, por dos motivos medidos:
+
+- **La persona NO está en `SinpeBodegaDTO`.** Vive en `historial_accion`, cuya lectura es
+  `maestro`-only (`ROLES_HISTORIAL_ACCIONES`), así que el `adminSatelite` —el destinatario de
+  `/mi-bodega`— no puede verla. Traerla es backend nuevo y está fuera de este alcance.
+- **«Cambio» sería falso la mitad de las veces.** Lo que se pinta es `zona.sinpe_revisado_at`, y esa
+  fecha se mueve TAMBIÉN cuando alguien confirma **sin cambiar nada** —R25 dice que eso no deja fila
+  de historial precisamente porque no cambió nada—. Titularlo «Último cambio» le diría a la oficina
+  que ese día alguien tocó el número, y a veces no será verdad: un dato falso en una pantalla de
+  dinero, que es la familia de fallo entera de esta ficha.
+
+**Es reversible con dos líneas** (`SINPE_OFICINA.columnaRevision` y `SINPE_MI_BODEGA.ultimaRevision`)
+si el humano prefiere el rótulo original; lo que no se puede entregar sin backend es el «quién».
+
+### 2.2 El `admin` no tiene entrada de menú a «SINPE por bodega»
+
+El subítem cuelga de «Configuración», que es **`maestro`-only desde antes de esta ficha**. Abrirlo al
+`admin` le regalaría además Usuarios, Tarifas y API, que no lo pidió nadie. El gate de la página SÍ
+lo deja entrar (`puedeEditarAlgunSinpe`), así que llega por URL o desde el aviso del primer ingreso.
+**Queda dicho, no resuelto a la brava:** es una decisión de permisos de menú, no de esta ficha.
+
+### 2.3 La vista previa lee la plantilla REAL de la base
+
+`/mi-bodega` lee `PlantillaMensajeRepository.findByNombre("listo_para_entrega_mensajero")` desde el
+Server Component —el mismo patrón con el que `app/(app)/layout.tsx` lee `UserRepository`—. No pasa
+por `listarPlantillas`, que es `maestro`-only y devolvería `forbidden` justo al rol al que sirve esta
+pantalla. **Si la plantilla no está sincronizada, la pantalla LO DICE**: no se hornea un cuerpo de
+repuesto, porque una vista previa que existe para comparar contra el mensaje de verdad y enseña uno
+inventado es peor que no tener vista previa.
+
+El render usa `renderPlantilla(cuerpo, resolverValoresPlantilla(...))`, que es **literalmente** el par
+de llamadas del envío. El resaltado se hace con centinelas —no con una segunda regex de `{{clave}}`—
+para no crear otra fuente que pueda divergir de `PLACEHOLDER_RE`.
+
+### 2.4 La tabla de las 8 bodegas entra al censo como `fuera`
+
+Cuarto motivo distinto en ese censo, y ninguno de los tres anteriores servía: **no es un libro**. Son
+ocho filas de configuración que caben enteras en la pantalla, sin paginación ni acción de dataset
+completo; y lo único exportable de ellas es la lista de las ocho cuentas a las que cobran los
+clientes, que a quien administra no le da nada que no tenga delante.
+
+---
+
+## 3. Verificación
+
+### 3.1 Las tres mutaciones de esta pasada — las tres matan algo
+
+**(a) el chip «Sin revisar» pasa a `danger`** (la alarma roja que la ficha descarta)
+
+```
+FAIL tests/components/SinpePorBodegaTabla.test.tsx > ⭑ el chip es `warning` y NO una señal de error
+     Tests  1 failed | 10 passed (11)
+```
+
+**(b) «Ahora no» confirma la bodega** (el cierre que marca como revisado sin que nadie lea nada)
+
+```
+FAIL tests/components/RevisionSinpeBodega.test.tsx > ⭑ «Ahora no» NO llama a ninguna acción
+     Tests  1 failed | 10 passed (11)
+```
+
+**(c) la vista previa usa un cuerpo de relleno en vez del real de la plantilla**
+
+```
+FAIL tests/components/MiBodegaSinpe.test.tsx > ⭑ pinta el cuerpo de la plantilla con los demás campos ya resueltos
+     Tests  1 failed | 14 passed (15)
+```
+
+Las tres se revirtieron y las suites volvieron a verde (37/37 en los tres archivos).
+
+### 3.2 Una trampa del entorno, encontrada y cerrada
+
+`components/shared/sinpe-preview-segmentos.ts` se escribió con `\u0000` como literal y la
+herramienta dejó **cinco BYTES NUL de verdad dentro del fuente**. Un archivo con NUL deja de ser
+texto para `git`: el diff se vuelve ilegible y la normalización de `.gitattributes` no aplica. Se
+reescribió construyendo el centinela con `String.fromCharCode(0)`, **sin ningún literal de escape en
+el fuente**, y se barrió el árbol entero: 0 archivos NUL/CRLF entre los tocados por esta pasada (los
+10 que quedan en el repo vienen de `dev` y no los toca esta rama).
+
+### 3.3 `./init.sh` COMPLETO — `progress/gate_429_frontend.log`
+
+El rápido se niega solo con este diff (la rama lleva migraciones), así que el veredicto sale del
+completo.
+
+```
+✓ typecheck paso
+✓ lint paso            (0 errores; 200 warnings de `no-unused-vars`, los mismos que traía `dev`)
+
+ Test Files  1994 passed (1994)
+      Tests  29096 passed | 26 skipped (29122)
+   Duration  613.39s
+
+INIT_EXIT=0
+```
+
+#### Los `skipped`, MIRADOS
+
+**26 saltados, y están identificados**: `AnaliticaPage.test.tsx` (17) y
+`AnaliticaShell.test.tsx` (9) — los dos de siempre, la misma cifra que reportó la pasada de backend.
+**NO son los ~183 archivos de `tests/integration/db` que se saltan cuando falta `DATABASE_URL`**: el
+`.env` se copió al worktree para el gate y **273 archivos de `tests/integration/db/`
+corrieron**. El `.env` está cubierto por `.gitignore` (`.env*`) y se comprobó que no entra en el
+índice.

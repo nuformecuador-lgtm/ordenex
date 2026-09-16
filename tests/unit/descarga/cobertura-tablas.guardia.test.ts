@@ -177,8 +177,19 @@ const ARBOLES_UI = ["app", "components"] as const;
 // app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx #1» antes de tocar estos
 // numeros, que es la convencion escrita en este propio archivo. Censo total: 36 = 35
 // `<DataTable>` + 1 `<table>` cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 35;
-const TOTAL_INSTANCIAS_DATATABLE = 35;
+//
+// ⭑ FICHA 429 (T21-B): 35 -> 36 archivos y 35 -> 36 instancias, por el SINPE POR BODEGA
+// (`app/(app)/configuracion/sinpe/_components/SinpeBodegasModule.tsx`). Nace `fuera` --y por eso
+// la que sube es la cuenta de EXCLUSIONES, no la de dentro de alcance-- con un motivo distinto de
+// los ya registrados: no le falta la puerta ni es un recorte de otra descarga ni lo veto un spec;
+// es que NO ES UN LIBRO. Son las ocho bodegas de la operacion, un catalogo de configuracion que
+// cabe entero en la pantalla, sin paginacion ni accion de dataset completo. El motivo entero esta
+// en su entrada de `censo-tablas.ts`. Esta guardia se vio fallar PRIMERO con «hay tablas sin
+// registrar: app/(app)/configuracion/sinpe/_components/SinpeBodegasModule.tsx #1» antes de tocar
+// estos numeros, que es la convencion escrita en este propio archivo. Censo total: 37 = 36
+// `<DataTable>` + 1 `<table>` cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 36;
+const TOTAL_INSTANCIAS_DATATABLE = 36;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -327,7 +338,11 @@ describe("guardia de cobertura del censo de tablas", () => {
     // FICHA 411 (B7/T7.2): 11 -> 12. La de mas es la cohorte de carga por dia: `fuera` y sin
     // control porque ⟨P5⟩ del spec decidio que la descarga no entra en la ficha, no porque falte
     // la puerta ni por ser un recorte de otra descarga.
-    expect(excluidas.length).toBe(12);
+    // ⭑ FICHA 429 (T21-B): 12 -> 13. La de mas es el SINPE por bodega: `fuera` y sin control
+    // porque no es un libro --ocho filas de configuracion, sin paginacion ni dataset completo--
+    // y porque exportar las ocho cuentas de cobro a un archivo no le da a quien administra nada
+    // que no vea en pantalla.
+    expect(excluidas.length).toBe(13);
     for (const inst of excluidas) {
       const tabla = registro.get(inst.ruta)!.tablas[inst.indice];
       expect(inst.declaraDescarga, `${inst.ruta} :: ${tabla.nombre}`).toBe(false);
@@ -370,7 +385,9 @@ describe("guardia de cobertura del censo de tablas", () => {
     // la que entra nace `con_descarga`.
     // FICHA 411 (B7/T7.2): 35 → 36, por la cohorte de carga por día de `/analitica`. Las 23 con
     // descarga NO se mueven: la que entra nace `fuera`, con ⟨P5⟩ del spec como motivo.
-    expect(totalCensado).toBe(36);
+    // ⭑ FICHA 429 (T21-B): 36 → 37, por el SINPE de cada bodega. Las 23 con descarga NO se
+    // mueven: la que entra nace `fuera`.
+    expect(totalCensado).toBe(37);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -469,8 +486,14 @@ describe("guardia de cobertura del censo de tablas", () => {
     // 13. La que entra es la cohorte de carga por dia, y su motivo es el TERCERO distinto de
     // este censo: no es un recorte de algo que ya se descarga (343) ni le falta la puerta para
     // servirlo entero (347) — es que la descarga se pregunto y se decidio que no entra (⟨P5⟩).
+    // ⭑ FICHA 429 (T21-B): las 23 dentro de alcance NO se mueven y las exclusiones pasan de 13 a
+    // 14. La que entra es el SINPE por bodega, y su motivo es el CUARTO distinto de este censo:
+    // no es un recorte de algo que ya se descarga (343), ni le falta la puerta (347), ni se
+    // preguntó y se dijo que no (411) — es que NO ES UN LIBRO. Son ocho filas de configuración
+    // que caben enteras en la pantalla, sin paginación ni acción de dataset completo, y lo único
+    // exportable de ellas es la lista de las ocho cuentas a las que cobran los clientes.
     expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(23);
-    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(13);
+    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(14);
   });
 
   it("una tabla compartida declara TODAS las pantallas que la montan", () => {

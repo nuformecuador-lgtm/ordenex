@@ -82,8 +82,45 @@ vi.mock("@/components/shared/PushReactivacion", () => ({
   },
 }));
 
+// ⭑ FICHA 429 (T19) — la TERCERA lectura del layout: ¿hay un SINPE que poner delante de esta
+// persona? Se doblan las DOS piezas, y cada una mide algo distinto:
+//
+//   · `ZonaRepository` — para saber si SE CONSTRUYE. R31 exige que `mensajero` y `adminTienda` no
+//     paguen ni una consulta, y este layout se pinta en TODAS las paginas del portal: una lectura
+//     de mas para quien no puede hacer nada con ella se paga en todas.
+//   · `resolverRevisionSinpePendiente` — para saber si SE LLAMA, y con que actor.
+const { zonaRepoConstruido, resolverRevisionMock } = vi.hoisted(() => ({
+  zonaRepoConstruido: { veces: 0 },
+  resolverRevisionMock: vi.fn(),
+}));
+vi.mock("@/lib/repositories/ZonaRepository", () => ({
+  ZonaRepository: class {
+    constructor() {
+      zonaRepoConstruido.veces += 1;
+    }
+  },
+}));
+vi.mock("@/lib/auth/revision-sinpe-pendiente", () => ({
+  resolverRevisionSinpePendiente: (...a: unknown[]) => resolverRevisionMock(...a),
+}));
+
+// El aviso se dobla para poder AFIRMAR QUE ALGUIEN LE PASA LA BODEGA, igual que con
+// `PushReactivacion`: es la leccion de los dos notificadores muertos —se comprueba que se
+// INYECTA, no que se importa—.
+const { propsDelAvisoSinpe } = vi.hoisted(() => ({
+  propsDelAvisoSinpe: [] as { bodega: { zonaId: string } }[],
+}));
+vi.mock("@/components/shared/RevisionSinpeBodega", () => ({
+  RevisionSinpeBodega: (props: { bodega: { zonaId: string } }) => {
+    propsDelAvisoSinpe.push(props);
+    return null;
+  },
+}));
+
 // Por defecto, alguien que no ha decidido nada: la preferencia «no puesta» (422/R2).
 avisosPushDeMock.mockResolvedValue(false);
+// Por defecto, nada que pedir: es la respuesta NORMAL del resolvedor.
+resolverRevisionMock.mockResolvedValue(null);
 
 // Como el layout es async, se invoca y se espera su árbol antes de renderizar.
 async function renderLayout(children: ReactNode) {
@@ -309,5 +346,110 @@ describe("422/T5.2 — el layout lee la preferencia en el SERVIDOR y la baja por
 
     expect(propsDeLaReactivacion).toEqual([]);
     expect(avisosPushDeMock).not.toHaveBeenCalled();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 429 · T19 — EL AVISO DE LA REVISIÓN SE MONTA AQUÍ, Y NO LO PAGA QUIEN NO LO VE
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Tres propiedades, y las tres son estructurales:
+//
+//   · **R26** — con una bodega sin revisar, el aviso se MONTA y alguien le pasa la bodega. Sin la
+//     segunda mitad, `resolverRevisionSinpePendiente` seguiría funcionando y no saldría ningún
+//     aviso: backend vivo, pantalla muerta, suite verde.
+//   · **R31** — `mensajero` y `adminTienda` no emiten ninguna consulta: ni se llama al resolvedor
+//     ni se construye el repositorio. Se afirma CONTANDO, no leyendo el código.
+//   · **R28** — el contenido se pinta SIEMPRE, haya aviso o no. Es la mitad ejecutable de lo que
+//     la guardia estática vigila sobre la forma del árbol.
+
+describe("429/T19 — la revisión pendiente se resuelve en el servidor y se monta como hermana", () => {
+  const BODEGA = {
+    zonaId: "z-guanacaste",
+    zonaNombre: "Guanacaste",
+    esCentral: false,
+    numero: "80000000",
+    nombre: "Titular de Prueba",
+    revisadoAt: null,
+    editable: true,
+  };
+
+  beforeEach(() => {
+    propsDelAvisoSinpe.length = 0;
+    zonaRepoConstruido.veces = 0;
+    resolverRevisionMock.mockClear();
+    resolverRevisionMock.mockResolvedValue(null);
+    cookieTemaMock.mockReturnValue(undefined);
+  });
+
+  it("⭑ con una bodega SIN revisar, monta el aviso y ALGUIEN LE PASA la bodega", async () => {
+    const actor = { usuarioId: "u2", rol: "adminSatelite" };
+    resolveActorMock.mockResolvedValue(actor);
+    resolverRevisionMock.mockResolvedValue(BODEGA);
+
+    await renderLayout(<div data-testid="page-children">Contenido</div>);
+
+    expect(resolverRevisionMock).toHaveBeenCalledTimes(1);
+    // Con el actor DE LA SESIÓN: la zona la decide la base dentro del resolvedor, nunca un dato
+    // que venga en la petición (R20).
+    expect(resolverRevisionMock.mock.calls[0][0]).toEqual(actor);
+    expect(propsDelAvisoSinpe).toEqual([{ bodega: BODEGA }]);
+    // R28: el contenido se pinta igual. El aviso es HERMANO, no envoltorio.
+    expect(screen.getByTestId("page-children")).toBeInTheDocument();
+  });
+
+  it("⭑ sin nada que pedir (`null`), NO se monta ningún aviso — y la página se pinta igual", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
+    resolverRevisionMock.mockResolvedValue(null);
+
+    await renderLayout(<div data-testid="page-children">Contenido</div>);
+
+    expect(resolverRevisionMock).toHaveBeenCalledTimes(1);
+    expect(propsDelAvisoSinpe).toEqual([]);
+    expect(screen.getByTestId("page-children")).toBeInTheDocument();
+  });
+
+  it("⭑ R31 — `mensajero` y `adminTienda` NO pagan ni una consulta", async () => {
+    // Ni se llama al resolvedor ni se construye el repositorio: la tercera posición del
+    // `Promise.all` es `null` LITERAL para ellos. Este layout se pinta en todas las páginas del
+    // portal, así que una consulta de más aquí se paga en todas.
+    for (const rol of ["mensajero", "adminTienda"] as const) {
+      resolverRevisionMock.mockClear();
+      zonaRepoConstruido.veces = 0;
+      resolveActorMock.mockResolvedValue({ usuarioId: "u3", rol });
+
+      const { unmount } = await renderLayout(<div>Contenido</div>);
+
+      expect(resolverRevisionMock, rol).not.toHaveBeenCalled();
+      expect(zonaRepoConstruido.veces, rol).toBe(0);
+      expect(propsDelAvisoSinpe, rol).toEqual([]);
+      unmount();
+    }
+  });
+
+  it("los tres roles que SÍ pueden editar un SINPE lo consultan una vez", async () => {
+    // La otra mitad del caso de arriba: si el layout dejara de preguntar por los tres, el aviso
+    // no saldría nunca y R26 quedaría muerto sin romper nada.
+    for (const rol of ["maestro", "admin", "adminSatelite"] as const) {
+      resolverRevisionMock.mockClear();
+      zonaRepoConstruido.veces = 0;
+      resolveActorMock.mockResolvedValue({ usuarioId: "u4", rol });
+
+      const { unmount } = await renderLayout(<div>Contenido</div>);
+
+      expect(resolverRevisionMock, rol).toHaveBeenCalledTimes(1);
+      expect(zonaRepoConstruido.veces, rol).toBe(1);
+      unmount();
+    }
+  });
+
+  it("⭑ SIN sesión no se consulta nada ni se monta nada", async () => {
+    resolveActorMock.mockResolvedValue(null);
+
+    await renderLayout(<div>Contenido</div>);
+
+    expect(resolverRevisionMock).not.toHaveBeenCalled();
+    expect(zonaRepoConstruido.veces).toBe(0);
+    expect(propsDelAvisoSinpe).toEqual([]);
   });
 });

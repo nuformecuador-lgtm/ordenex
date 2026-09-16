@@ -4,6 +4,7 @@ import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { ProvinciaArbolDTO } from "@/lib/actions/geografia";
+import { tecleaSinpeDeLaZona } from "../fixtures/sinpe-en-formulario-zona";
 
 /**
  * ⭑ FICHA 392 — EL FORMULARIO DE ZONAS AVISA DE UN NOMBRE QUE LA ETIQUETA NO PUEDE IMPRIMIR.
@@ -150,6 +151,9 @@ describe("392 — el aviso del nombre que la etiqueta no puede imprimir", () => 
     });
     const user = userEvent.setup();
     renderForm({ mode: "crear" });
+    // FICHA 429 (R11): crear exige el SINPE. Sin teclearlo el formulario no llama a la accion,
+    // y lo que este caso mide es el error que DEVUELVE la accion.
+    await tecleaSinpeDeLaZona(user);
 
     await user.click(botonGuardar());
 
@@ -166,6 +170,9 @@ describe("392 — el aviso del nombre que la etiqueta no puede imprimir", () => 
     });
     const user = userEvent.setup();
     renderForm({ mode: "crear" });
+    // FICHA 429 (R11): crear exige el SINPE. Sin teclearlo el formulario no llama a la accion,
+    // y lo que este caso mide es el error que DEVUELVE la accion.
+    await tecleaSinpeDeLaZona(user);
 
     await user.click(botonGuardar());
 
@@ -197,6 +204,9 @@ describe("392 — el aviso del nombre que la etiqueta no puede imprimir", () => 
     });
     const user = userEvent.setup();
     renderForm({ mode: "crear" });
+    // FICHA 429 (R11): crear exige el SINPE. Sin teclearlo el formulario no llama a la accion,
+    // y lo que este caso mide es el error que DEVUELVE la accion.
+    await tecleaSinpeDeLaZona(user);
 
     await user.click(botonGuardar());
 

@@ -231,7 +231,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Incidentes");
   });
 
-  it("adminSatelite ve Analítica + Órdenes + Cierres del día + Incidentes", () => {
+  it("adminSatelite ve Analítica + Órdenes + Cierres del día + Incidentes + Mi bodega", () => {
     // Feature 158 (R48): el adminSatelite SÍ resuelve incidentes, acotado a su zona por el
     // service; por eso gana el ítem. Su "Órdenes" apunta a /recepcion-satelite.
     // Feature 133 (T2.3, R1): "Analítica" entra PRIMERA (posición 2 de SIDEBAR_ITEMS; este
@@ -241,8 +241,24 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // Feature 192 (R53): gana "Monitoreo", en segunda posición de su barra. Su aterrizaje
     // post-login SIGUE siendo `/recepcion-satelite` (R54): el ítem lleva
     // `destinoInicial: false` y `primerDestino` lo salta, igual que a "Analítica".
+    // ⭑ Ficha 429 (T23, Q3): gana «Mi bodega», y entra LA ÚLTIMA. La lista se sigue comparando
+    // por IGUALDAD y NO se relaja a `toContain`: es el contrato de qué ve este rol, y un ítem
+    // nuevo no declarado aquí tiene que seguir poniendo el caso rojo.
+    //
+    // Que vaya al final NO es cosmético: `primerDestino` devuelve el primer visible no marcado
+    // `destinoInicial: false`, así que el aterrizaje post-login de este rol sigue siendo
+    // `/recepcion-satelite/por-recibir`. Si algún día este literal pasara a ser
+    // `["Analítica", "Monitoreo", "Mi bodega", "Órdenes", …]`, el rol habría cambiado EN
+    // SILENCIO de puerta de entrada — el incidente de la 133 y la 192.
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Analítica", "Monitoreo", "Órdenes", "Cierres del día", "Incidentes"],
+      [
+        "Analítica",
+        "Monitoreo",
+        "Órdenes",
+        "Cierres del día",
+        "Incidentes",
+        "Mi bodega",
+      ],
     );
   });
 
@@ -317,6 +333,10 @@ describe("primerDestino (aterrizaje de /dashboard)", () => {
       // a proposito: `primerDestino` mira el primer hijo del primer item visible, asi que
       // añadir al final no mueve el aterrizaje post-login de ningun rol.
       "/configuracion/geografia",
+      // ⭑ Ficha 429 (T21-B/T23): el SINPE de las ocho bodegas. Va EL ÚLTIMO por el mismo motivo
+      // que «Geografía»: `primerDestino` mira el primer hijo del primer ítem visible, así que
+      // añadir al final no mueve el aterrizaje post-login de ningún rol.
+      "/configuracion/sinpe",
     ]);
   });
 

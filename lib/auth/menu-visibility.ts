@@ -48,7 +48,12 @@ export type IconKey =
   // es una unión cerrada y compartir icono con otra sección invitaría a leer el histórico
   // como parte de esa sección. Mismo criterio escrito para `shieldAlert` (158),
   // `chartColumn` (129), `store` (167) y `gauge` (192).
-  | "history";
+  | "history"
+  // ⭑ Ficha 429 (T23): «Mi bodega», la pantalla del SINPE del `adminSatelite`. Icono PROPIO y
+  // no reciclado: `IconKey` es una union cerrada y compartir icono con otra seccion invitaria a
+  // leer «Mi bodega» como parte de esa seccion. Mismo criterio escrito para `shieldAlert` (158),
+  // `chartColumn` (129), `store` (167), `gauge` (192) y `history` (321).
+  | "warehouse";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -265,6 +270,27 @@ export const ROLES_MI_WALLET = ["adminTienda"] as const satisfies readonly RolVa
  * subítem de menú puede REFERENCIARLA (se afirma con `toBe`, no con `toEqual`).
  */
 export const ROLES_HISTORIAL_ACCIONES = ["maestro"] as const satisfies readonly RolValue[];
+
+/**
+ * ⭑ FICHA 429 (T23, Q3) — QUIEN VE «Mi bodega», Y POR QUE SOLO EL `adminSatelite`.
+ *
+ * La lee el item de menu Y el gate `notFound()` de `app/(app)/mi-bodega/page.tsx`. Las dos capas
+ * leen ESTA constante y no un literal copiado: el precedente es la ficha 335, y el motivo es que
+ * dos listas de roles escritas a mano divergen sin que nada se ponga rojo — y entonces hay un
+ * menu que ofrece una pantalla que devuelve 404, o peor, al reves.
+ *
+ * SOLO `adminSatelite` porque «MI bodega» es literalmente eso: la suya, una sola ficha. `admin` y
+ * `maestro` no tienen una bodega propia; ven LAS OCHO, y eso es otra pantalla («SINPE por
+ * bodega», dentro de Configuracion). Meterlos aqui les pintaria «Mi bodega» con la central
+ * dentro, que es una media verdad sobre una pantalla de dinero.
+ *
+ * ⚠️ NO ES LA MISMA LISTA QUE `ROLES_QUE_EDITAN_SINPE` (`lib/types/sinpe-bodega.ts`), y la
+ * diferencia es deliberada: aquella dice QUIEN PUEDE EDITAR un SINPE —los tres roles— y la usan
+ * el servicio y el gate de «SINPE por bodega»; esta dice QUIEN VE ESTA RUTA. Son dos preguntas
+ * distintas y deben poder divergir; lo que no puede divergir es la lista y el gate de SU ruta, y
+ * eso lo impide que los dos lean la misma constante.
+ */
+export const ROLES_MI_BODEGA = ["adminSatelite"] as const satisfies readonly RolValue[];
 
 /**
  * Fuente de verdad del menu. Vive en este modulo server-safe (NO en el
@@ -510,6 +536,18 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
       // visible, así que un hijo añadido al final no puede mover el aterrizaje
       // post-login de ningún rol (R46).
       { label: "Geografía", href: "/configuracion/geografia" },
+      // ⭑ Ficha 429 (T21-B/T23): el SINPE de las ocho bodegas. AL FINAL del array, por el mismo
+      // motivo que «Geografía» (R46 de la 374): `primerDestino` devuelve el `href` del PRIMER
+      // hijo del PRIMER ítem visible, así que un hijo añadido al final no puede mover el
+      // aterrizaje post-login de ningún rol.
+      //
+      // Hereda la visibilidad `maestro`-only del padre y NO declara `roles` propios: no hay una
+      // segunda lista que pueda divergir (R3 de la 321). El gate de la página es más ancho
+      // —`puedeEditarAlgunSinpe`, o sea también `admin` y `adminSatelite`— y eso es correcto: el
+      // menú decide qué se MUESTRA, la ruta decide quién ENTRA, y aquí el menú es el estrecho.
+      // El `admin` llega por URL o desde el aviso del primer ingreso; abrirle «Configuración»
+      // entera para darle una entrada le regalaría además Usuarios, Tarifas y API.
+      { label: "SINPE por bodega", href: "/configuracion/sinpe" },
     ],
   },
   {
@@ -578,6 +616,30 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
         roles: ROLES_HISTORIAL_ACCIONES,
       },
     ],
+  },
+  {
+    // ⭑ FICHA 429 (T23, Q3) — «Mi bodega»: el SINPE al que cobran los clientes de ESTA bodega.
+    //
+    // ⚠️ LA POSICIÓN NO ES DECORATIVA, Y ES LA ÚLTIMA DEL ARCHIVO A PROPÓSITO.
+    // `primerDestino(itemsVisibles(...))` devuelve el `href` del primer ítem visible no marcado
+    // `destinoInicial: false`, y `/dashboard` redirige ahí. Para el `adminSatelite` los visibles
+    // son, en orden: «Analítica» y «Monitoreo» (las dos marcadas), «Órdenes», «Cierres del día»,
+    // «Incidentes» y ahora éste. Puesto al final, su aterrizaje post-login sigue siendo
+    // `/recepcion-satelite/por-recibir`; puesto antes de «Órdenes», habría cambiado EN SILENCIO
+    // — es el incidente que ya documentan «Analítica» (133) y «Monitoreo» (192).
+    //
+    // ⚠️ Y POR ESO **NO** LLEVA `destinoInicial: false`: la posición ya protege el aterrizaje, y
+    // `tests/unit/auth/destino-post-login.test.ts` afirma con un `toEqual` LITERAL que los ítems
+    // marcados son EXACTAMENTE `["/analitica", "/monitoreo"]`. Marcarlo aquí pondría rojo ese
+    // caso sin que nadie hubiera decidido nada — y la marca es para el aterrizaje, no un sello
+    // de «esto no es importante».
+    //
+    // `roles` apunta a LA CONSTANTE, no a un literal copiado: es la misma que lee el gate
+    // `notFound()` de la página.
+    label: "Mi bodega",
+    href: "/mi-bodega",
+    iconKey: "warehouse",
+    roles: ROLES_MI_BODEGA,
   },
   // "Perfil" SALE del menú para todos los roles (pedido humano) y su página se ELIMINÓ:
   // era un placeholder sin contenido que solo ocupaba un sitio en la barra.

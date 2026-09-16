@@ -80,13 +80,12 @@ export interface SinpeBodegaActionDeps {
 
 /**
  * Las bodegas que este actor puede ver, con su `editable` ya decidido en el servidor.
- * La consumira la pantalla de `/configuracion/sinpe` (T21): una ficha para el `adminSatelite`,
- * las ocho para `admin` y `maestro`.
  *
- * ⚠️ @sin-superficie La pantalla llega en la pasada de FRONTEND de esta misma ficha (T21/T22),
- * despues de la puerta de `/design` (D7). El backend va primero A PROPOSITO: la migracion obliga
- * al gate completo y esta ficha se implementa sola. La anotacion CADUCA con el montaje — en
- * cuanto la pantalla exista, la guardia de superficies exige quitarla.
+ * SUPERFICIE (T21): `app/(app)/configuracion/sinpe/page.tsx` —las ocho, para `admin` y
+ * `maestro`— y `app/(app)/mi-bodega/page.tsx` —una sola ficha, la del `adminSatelite`—. La
+ * anotacion `@sin-superficie` que este export llevo mientras las pantallas no existian se BORRO
+ * al cablearlas: dejarla habria fosilizado la excepcion y `superficie-de-uso.guardia` se la
+ * habria comido en silencio.
  */
 export async function listarSinpeBodegas(
   deps: SinpeBodegaActionDeps = {},
@@ -110,13 +109,10 @@ export async function listarSinpeBodegas(
  * se confunda con la identidad de lo que se toca. Y quien decide si ese id se puede tocar es el
  * SERVICIO, con la zona que la base le asigna al actor (R20).
  *
- * La consumiran el formulario de `/configuracion/sinpe` (T21) y la correccion en sitio del aviso
- * (T22, R27).
- *
- * ⚠️ @sin-superficie La pantalla llega en la pasada de FRONTEND de esta misma ficha (T21/T22),
- * despues de la puerta de `/design` (D7). El backend va primero A PROPOSITO: la migracion obliga
- * al gate completo y esta ficha se implementa sola. La anotacion CADUCA con el montaje — en
- * cuanto la pantalla exista, la guardia de superficies exige quitarla.
+ * SUPERFICIE (T21/T22): el modal de «SINPE por bodega», la tarjeta de `/mi-bodega` y la
+ * correccion EN EL SITIO del aviso del primer ingreso (`RevisionSinpeBodega`, R27). Las tres
+ * pintan el `validation_error` JUNTO AL CAMPO, que es para lo que el resultado trae `fieldErrors`
+ * y no un mensaje suelto.
  */
 export async function guardarSinpeBodega(
   zonaId: unknown,
@@ -139,12 +135,10 @@ export async function guardarSinpeBodega(
 
 /**
  * «Está bien»: marca la bodega como revisada. NO acepta valores (R25).
- * La consumira el boton de confirmacion del aviso de la revision obligatoria (T22).
  *
- * ⚠️ @sin-superficie La pantalla llega en la pasada de FRONTEND de esta misma ficha (T21/T22),
- * despues de la puerta de `/design` (D7). El backend va primero A PROPOSITO: la migracion obliga
- * al gate completo y esta ficha se implementa sola. La anotacion CADUCA con el montaje — en
- * cuanto la pantalla exista, la guardia de superficies exige quitarla.
+ * SUPERFICIE (T22): el boton «Confirmar» de `components/shared/RevisionSinpeBodega.tsx`, y SOLO
+ * cuando la persona no ha cambiado ninguno de los dos valores. Si cambio alguno se llama a
+ * `guardarSinpeBodega`, que ademas deja la fila de historial.
  */
 export async function confirmarSinpeBodega(
   zonaId: unknown,
