@@ -5352,3 +5352,52 @@ y `progress/review_428.md`.
 **Lo que el verde no cubre:** los píxeles. La suite corre en jsdom, sin CSS; la comprobación visual
 la hizo el humano abriendo la pantalla. Y la red contra «ponerlo en global» es UNA sola
 (`segmented-toggle-solo-icono.test.tsx`): las demás pantallas no se enterarían.
+
+---
+
+## 429 — el SINPE por bodega (2026-09-15) · SF-001 punto 2
+
+Hasta hoy había **un solo SINPE para toda la operación**, en variables de entorno. Cambiarlo obligaba a
+redesplegar: el prefijo `NEXT_PUBLIC_` lo hornea en el bundle del cliente en tiempo de *build*.
+
+**Son DOS campos, y el documento firmado se equivocaba** diciendo «solo el SINPE», en singular. La
+plantilla real empareja «al número `{{sinpe}}` a nombre de `{{sinpe_nombre}}`»: separarlos le da al
+cliente un número de una persona bajo el nombre de otra, y SINPE Móvil le enseña el titular al teclear.
+
+**La pieza central de la pantalla es la vista previa del mensaje real.** Un SINPE mal escrito no produce
+ningún error —los clientes transfieren a otra cuenta y se sabe días después por los reclamos—, así que
+la pantalla enseña la frase exacta que va a leer el cliente, con el número y el nombre resaltados.
+
+**Tres capas para que nunca haya un hueco:** migración con columnas nullables → script que siembra
+leyendo el entorno (idempotente por construcción, nunca imprime el valor) → segunda migración con
+`NOT NULL` y los `CHECK`. **El número real no entra al repositorio, que es público.**
+
+### La revisión lo RECHAZÓ, y tenía razón
+
+`scripts/seed-sinpe-inicial.ts` —el único archivo que decide qué número ven los clientes de ocho
+bodegas— **no tenía ni un test**. Mutarlo quitándole la idempotencia **y** el fallo ruidoso dejaba
+**19.902 tests en verde**. La causa era de trazabilidad: el requisito apuntaba a un caso que
+**reescribía a mano el `UPDATE` del seed** en vez de llamar a la función. Familia «probar el `WHERE`
+donde vive».
+
+### Y un casi-accidente que la revisión destapó
+
+El `UPDATE` del seed va **sin cualificar** y el adaptador de los tests de integración **no emite
+`SET search_path`** —comprobado en el `dist` del paquete instalado—, así que el test nuevo se habría
+escrito contra `public."zona"`, **la base de desarrollo real**. Resuelto cualificando el SQL, con un
+`throw` que aborta antes de tocar nada si alguna aparición queda sin cualificar.
+
+### Medido contra producción
+
+**2.491 mensajes** de chat llevan el SINPE, con **un solo número distinto** —lo que confirma la premisa
+del documento— y **cumple el formato**, así que el seed no abortará. El valor no se anotó en ningún
+archivo: solo hacía falta la forma.
+
+**NO se desplegó.** Por decisión del humano, las cuatro de SF-001 se acumulan en `dev` y salen juntas.
+Mergear a `dev` es seguro: `decidirMigracion` no aplica migraciones en preview.
+
+### Deuda declarada
+
+Un `admin` no puede ver **quién** cambió un número (vive en `historial_accion`, lectura `maestro`-only);
+`admin` no tiene entrada de menú a `/configuracion/sinpe`; y `/mi-bodega` no ofrece «confirmar sin
+cambiar», así que quien cierre el aviso ve «Sin revisar» y no puede quitarlo sin editar algo.
