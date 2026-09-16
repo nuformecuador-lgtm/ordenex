@@ -54,6 +54,11 @@ export default async function RepartoPage() {
         // Feature 235 (R18): la tercera lista llega YA SEPARADA del servidor; el módulo no vuelve
         // a decidir el corte.
         conAyuda={result.conAyuda}
+        // ⭑ FICHA 430 (SF-001, punto 3): las asignadas y todavía SIN RECOGER. Esta pantalla no las
+        // pinta —sus cards siguen en `/mis-asignaciones/recoger`—; bajan sólo para que entren a la
+        // lista de contactos del chat, que es lo que la ficha vino a abrir. La action ya las traía
+        // (`porRecoger`): no hay consulta nueva ni contrato nuevo.
+        porRecoger={result.porRecoger}
         ordenEnGestionId={result.ordenEnGestionId}
         ruta={result.ruta}
         bloqueo={bloqueo}

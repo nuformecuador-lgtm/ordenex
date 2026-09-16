@@ -8,6 +8,9 @@ fuentes:
   - app/(app)/mis-asignaciones/_components/RecogerModule.tsx
   - app/(app)/mis-asignaciones/_components/recoger-grupos.ts
   - app/(app)/mis-asignaciones/_components/useRecogerPorGuia.ts
+  - app/(app)/mis-asignaciones/recoger/page.tsx
+  - app/(app)/mis-asignaciones/_components/chat/ChatDelMensajero.tsx
+  - app/(app)/mis-asignaciones/_components/chat/chat-contactos.ts
   - lib/services/MisAsignacionesService.ts
 ---
 
@@ -45,6 +48,22 @@ fecha y hay que respetarla.
 
 El buscador filtra entre tus paquetes por recoger. Escribí el número de guía y te lo deja a la vista.
 
+## Escribirle al cliente
+
+Abajo a la derecha tenés el **botón de chat**, el mismo de **Reparto** y con **las mismas
+conversaciones**: están todas tus órdenes, las que ya llevás encima y las que todavía no recogiste.
+
+Podés escribirle al cliente **desde que te asignan el paquete**, sin esperar a recogerlo. Sirve para
+cuadrar la hora, confirmar la dirección o avisar que vas mañana.
+
+Dentro de la conversación, **Ver detalle** te muestra la orden entera: dirección, producto, teléfono
+y lo que hay que cobrar.
+
+**Escribirle no es aceptar el paquete.** La orden se queda donde está, en esta pantalla, y la
+recogés cuando te toque. Y si es de **otro día**, la conversación te lo dice: lleva la marca **Para
+mañana** y la fecha desde la que vas a poder recogerla. Si el cliente te pide que se la llevés hoy,
+**no vas a poder** — decíselo antes de prometer nada.
+
 ## Cosas que te pueden pasar
 
 **«No podés trabajar hasta resolver tus cierres».** Si tenés cierres del día pendientes, la app te
@@ -56,4 +75,6 @@ son las causas casi siempre.
 ## Lo que esta pantalla NO hace
 
 - **No se entregan paquetes acá.** Una vez recogido, el paquete se trabaja en **Reparto**.
-- **No hay chat acá.** El chat con el cliente aparece cuando el paquete ya lo llevás encima.
+- **Desde el chat no se recoge ni se gestiona nada.** Ahí se conversa. Recoger sigue siendo el
+  escáner o el número de guía de arriba, y las de *otro día* siguen sin poder recogerse hasta su
+  fecha por más que hables con el cliente.

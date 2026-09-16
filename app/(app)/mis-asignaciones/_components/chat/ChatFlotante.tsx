@@ -8,20 +8,26 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useTonoAlIncrementar } from "@/hooks/useTonoAlIncrementar";
 import { marcarChatLeido, resumenNoLeidosChat } from "@/lib/actions/chat-whatsapp";
 import type { ResumenNoLeidosChatResult } from "@/lib/types/chat-whatsapp";
-import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { ChatConversacion } from "./ChatConversacion";
 import { ChatOrdenesLista } from "./ChatOrdenesLista";
+import type { GruposDeContactos } from "./chat-contactos";
 
 // Rediseño del chat (rama ux) — botón flotante del chat del mensajero. Vive fijo en la
 // esquina inferior derecha del módulo "Mis asignaciones" y abre el chat como MODAL (Dialog
 // centrado, misma ventana, sin navegar).
 //
-// Contactos = las órdenes EN REPARTO (una por destinatario). Abrir el chat entra por la
-// conversación de la orden en DETALLE. El hilo y las plantillas son los REALES
+// Contactos = las órdenes ASIGNADAS al mensajero (una por destinatario). Abrir el chat entra por
+// la conversación de la orden en DETALLE. El hilo y las plantillas son los REALES
 // (`listarHiloChat`). Convivió con el chat del panel del detalle (`ChatWhatsappPanel`), que
 // leía la misma fuente; ese panel se borró el 2026-08-07 por decisión humana al quedarse sin
 // montaje, y esta ruta flotante es desde entonces la única entrada al hilo.
+//
+// ⭑ FICHA 430 (SF-001, punto 3) — ESTE BOTÓN VIVE AHORA EN LAS DOS PANTALLAS DEL PORTAL, Reparto
+// y «Por recoger», con LA MISMA lista. No es simetría estética: el distintivo de sin leer se filtra
+// contra los contactos que la pantalla lista (ver `noLeidos`, abajo), así que dos listas distintas
+// serían dos totales distintos y cada pantalla escondería en silencio los pendientes de la otra.
+// Una lista, un número, dos montajes.
 //
 // Layout del modal: dos columnas en ≥md (lista | conversación). En móvil solo se ve una a
 // la vez y el header de la conversación trae la flecha de "volver a la lista".
@@ -45,13 +51,18 @@ const BADGE_MAX = 9;
 
 export interface ChatFlotanteProps {
   /**
-   * Órdenes EN REPARTO del mensajero: cada una aporta un contacto (su destinatario).
-   * Las de "Por recoger" quedan fuera: todavía no hay gestión que conversar.
+   * Ficha 430: TODAS las órdenes asignadas al mensajero, ya agrupadas por lo que tiene en la
+   * mano (`agruparContactosChat`). Cada una aporta un contacto: su destinatario.
+   *
+   * Hasta el 2026-09-15 esto era la lista plana de las EN REPARTO, y las de «Por recoger»
+   * quedaban fuera «porque todavía no hay gestión que conversar». El humano decidió lo
+   * contrario: coordinar la entrega ANTES de recoger es justo el momento en que hace falta.
    */
-  ordenes: MiAsignacionDTO[];
+  contactos: GruposDeContactos;
   /**
    * Orden EN GESTIÓN = la que el módulo muestra en detalle ahora mismo, de entre las
-   * que están en reparto. `null` si no hay ninguna en detalle.
+   * que están en reparto. `null` si no hay ninguna en detalle — que es siempre el caso en
+   * «Por recoger», donde no hay panel de gestión.
    */
   ordenEnDetalleId: string | null;
   /**
@@ -63,11 +74,14 @@ export interface ChatFlotanteProps {
 }
 
 export function ChatFlotante({
-  ordenes,
+  contactos,
   ordenEnDetalleId,
   abierto,
   onAbiertoChange,
 }: Readonly<ChatFlotanteProps>) {
+  // La lista PLANA, para lo que no depende del grupo: elegir conversación y filtrar el
+  // resumen de sin leer. El reparto en grupos sólo lo necesita la columna izquierda.
+  const ordenes = contactos.todas;
   const [seleccionadaId, setSeleccionadaId] = useState<string | null>(null);
   // En móvil solo cabe una columna: con una orden en detalle se entra directo a su
   // conversación; sin ninguna, a la lista. Se resincroniza al cerrar el modal.
@@ -118,8 +132,11 @@ export function ChatFlotante({
   const noLeidos = useMemo(() => {
     const mapa = new Map<string, number>();
     if (resumen?.status !== "ok") return mapa;
-    // Solo las órdenes que el chat lista: un pendiente de una orden que ya salió de reparto
-    // no tiene fila donde abrirse, y un distintivo que no se puede vaciar no se apaga nunca.
+    // Solo las órdenes que el chat lista: un pendiente de una orden que ya no está asignada al
+    // mensajero no tiene fila donde abrirse, y un distintivo que no se puede vaciar no se apaga
+    // nunca. Ficha 430: al entrar las asignadas sin recoger, sus pendientes DEJAN de caerse aquí
+    // — el servidor ya los devolvía (`resumenNoLeidosChat` no mira estatus) y este filtro los
+    // descartaba por no tener fila.
     const enChat = new Set(ordenes.map((o) => o.id));
     for (const c of resumen.conversaciones) {
       if (c.noLeidos <= 0) continue;
@@ -192,7 +209,7 @@ export function ChatFlotante({
           <DialogTitle className="sr-only">Chat con clientes</DialogTitle>
           <div className="flex min-h-0 flex-1 md:flex-row">
             <ChatOrdenesLista
-              ordenes={ordenes}
+              contactos={contactos}
               noLeidos={noLeidos}
               seleccionadaId={seleccionada?.id ?? null}
               ordenEnDetalleId={ordenEnDetalleId}

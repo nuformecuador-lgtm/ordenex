@@ -151,6 +151,7 @@ function renderModule(
     <RepartoModule
       porGestionar={porGestionar}
       conAyuda={conAyuda}
+      porRecoger={[]}
       ordenEnGestionId={null}
       ruta={RUTA_VIGENTE}
       bloqueo={bloqueo}
