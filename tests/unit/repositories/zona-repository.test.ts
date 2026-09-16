@@ -73,8 +73,18 @@ describe("ZonaRepository.create", () => {
       tarifas: [],
     }, null);
 
+    // ⭑ FICHA 429 (R11/R12): el par del SINPE viaja en el MISMO acto de creacion, y la bodega
+    // nace REVISADA —lo acaba de teclear una persona—. `sinpeRevisadoAt` se comprueba por su TIPO
+    // y no por su valor: es `new Date()` y compararlo con un instante seria una carrera.
     expect(tx.zona.create).toHaveBeenCalledWith({
-      data: { nombre: "GAM", cobroVehiculo: false, esCentral: false },
+      data: {
+        nombre: "GAM",
+        cobroVehiculo: false,
+        esCentral: false,
+        sinpeNumero: "80000000",
+        sinpeNombre: "Titular de Prueba",
+        sinpeRevisadoAt: expect.any(Date),
+      },
     });
     expect(tx.zonaDistrito.createMany).toHaveBeenCalledWith({
       data: [

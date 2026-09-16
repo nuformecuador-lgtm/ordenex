@@ -167,16 +167,20 @@ describe("parsers XLSX (R34/R35)", () => {
   });
 });
 
+/**
+ * ⭑ FICHA 429 (R11) — crear una zona exige el par del SINPE tambien desde un script.
+ *
+ * ⚠️ VALORES FICTICIOS: el repositorio es PUBLICO y aqui no se escribe ningun numero real.
+ */
+const SINPE_FICTICIO = { numero: "80000000", nombre: "Titular de Prueba" };
+
 describe("seedZonas — dedup y defaults (R35/R37)", () => {
   it("GAM + Gam producen UNA sola zona con es_central=false", async () => {
     const { prisma, state } = makeFakePrisma();
     const hints = parseZonaHintRows(zonaWorksheet(ZONA_ROWS));
     // FICHA 429 (R11): crear una zona exige el par del SINPE tambien desde un script. Valores
     // FICTICIOS: el repositorio es publico y aqui no se escribe ningun numero real.
-    const zonaByKey = await seedZonas(prisma, hints, {
-      numero: "80000000",
-      nombre: "Titular de Prueba",
-    });
+    const zonaByKey = await seedZonas(prisma, hints, SINPE_FICTICIO);
 
     // GAM (dedup) + Zona Sur = 2 zonas
     expect(state.zona).toHaveLength(2);
@@ -193,7 +197,7 @@ describe("seedZonasCompleto — cruce y resumen (R34/R36/R38)", () => {
     const geoRows = parseGeografiaRows(geoWorksheet(GEO_ROWS));
     const hints = parseZonaHintRows(zonaWorksheet(ZONA_ROWS));
 
-    const summary = await seedZonasCompleto(prisma, geoRows, hints);
+    const summary = await seedZonasCompleto(prisma, geoRows, hints, SINPE_FICTICIO);
 
     // R34: 3 distritos poblados (Carmen, Merced, Limón); la fila geo incompleta se omite
     expect(summary.distritosPoblados).toBe(3);
@@ -226,7 +230,7 @@ describe("idempotencia (R39)", () => {
     const geoRows = parseGeografiaRows(geoWorksheet(GEO_ROWS));
     const hints = parseZonaHintRows(zonaWorksheet(ZONA_ROWS));
 
-    await seedZonasCompleto(prisma, geoRows, hints);
+    await seedZonasCompleto(prisma, geoRows, hints, SINPE_FICTICIO);
     const provIds = state.provincia.map((p) => p.id);
     const zonaIds = state.zona.map((z) => z.id);
     const zdIds = state.zonaDistrito.map((zd) => zd.id); // feature 69/R28
@@ -235,7 +239,7 @@ describe("idempotencia (R39)", () => {
     const gam = state.zona.find((z) => z.nombre === "GAM")!;
     gam.esCentral = true;
 
-    await seedZonasCompleto(prisma, geoRows, hints);
+    await seedZonasCompleto(prisma, geoRows, hints, SINPE_FICTICIO);
 
     // sin duplicados, mismos ids
     expect(state.provincia.map((p) => p.id)).toEqual(provIds);

@@ -78,7 +78,16 @@ export interface SinpeBodegaActionDeps {
   getActor?: () => Promise<Actor | null>;
 }
 
-/** Las bodegas que este actor puede ver, con su `editable` ya decidido en el servidor. */
+/**
+ * Las bodegas que este actor puede ver, con su `editable` ya decidido en el servidor.
+ * La consumira la pantalla de `/configuracion/sinpe` (T21): una ficha para el `adminSatelite`,
+ * las ocho para `admin` y `maestro`.
+ *
+ * ⚠️ @sin-superficie La pantalla llega en la pasada de FRONTEND de esta misma ficha (T21/T22),
+ * despues de la puerta de `/design` (D7). El backend va primero A PROPOSITO: la migracion obliga
+ * al gate completo y esta ficha se implementa sola. La anotacion CADUCA con el montaje — en
+ * cuanto la pantalla exista, la guardia de superficies exige quitarla.
+ */
 export async function listarSinpeBodegas(
   deps: SinpeBodegaActionDeps = {},
 ): Promise<ListarSinpeBodegasResult> {
@@ -100,6 +109,14 @@ export async function listarSinpeBodegas(
  * ⚠️ EL `zonaId` VIAJA APARTE del payload y no dentro: asi no hay forma de que un campo del cuerpo
  * se confunda con la identidad de lo que se toca. Y quien decide si ese id se puede tocar es el
  * SERVICIO, con la zona que la base le asigna al actor (R20).
+ *
+ * La consumiran el formulario de `/configuracion/sinpe` (T21) y la correccion en sitio del aviso
+ * (T22, R27).
+ *
+ * ⚠️ @sin-superficie La pantalla llega en la pasada de FRONTEND de esta misma ficha (T21/T22),
+ * despues de la puerta de `/design` (D7). El backend va primero A PROPOSITO: la migracion obliga
+ * al gate completo y esta ficha se implementa sola. La anotacion CADUCA con el montaje — en
+ * cuanto la pantalla exista, la guardia de superficies exige quitarla.
  */
 export async function guardarSinpeBodega(
   zonaId: unknown,
@@ -120,7 +137,15 @@ export async function guardarSinpeBodega(
   return isAppErrorShape(r) ? toSinpeActionError(r) : r;
 }
 
-/** «Está bien»: marca la bodega como revisada. NO acepta valores (R25). */
+/**
+ * «Está bien»: marca la bodega como revisada. NO acepta valores (R25).
+ * La consumira el boton de confirmacion del aviso de la revision obligatoria (T22).
+ *
+ * ⚠️ @sin-superficie La pantalla llega en la pasada de FRONTEND de esta misma ficha (T21/T22),
+ * despues de la puerta de `/design` (D7). El backend va primero A PROPOSITO: la migracion obliga
+ * al gate completo y esta ficha se implementa sola. La anotacion CADUCA con el montaje — en
+ * cuanto la pantalla exista, la guardia de superficies exige quitarla.
+ */
 export async function confirmarSinpeBodega(
   zonaId: unknown,
   deps: SinpeBodegaActionDeps = {},

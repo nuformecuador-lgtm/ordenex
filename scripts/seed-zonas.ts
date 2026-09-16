@@ -538,18 +538,19 @@ export async function seedZonasCompleto(
   prisma: GeoPrisma & ZonaPrisma & DistritoPrisma,
   geoRows: GeoRow[],
   hints: ZonaHintRow[],
+  /**
+   * ⭑ FICHA 429 (R11) — el SINPE con el que nace una zona creada por este seed.
+   *
+   * ⚠️ LLEGA POR PARAMETRO Y NO SE LEE DEL ENTORNO AQUI DENTRO, aunque el valor venga de ahi. Este
+   * orquestador se ejercita en tests con un Prisma falso; si leyera `process.env` por su cuenta,
+   * una variable ausente lo mataria con `process.exit(1)` EN MITAD DE UNA SUITE —medido: dos casos
+   * de `seed-zonas.test.ts` cayeron asi— y el fallo no diria nada del seed. La lectura y el
+   * `exit` viven donde les toca: en el entrypoint.
+   */
+  sinpeInicial: { numero: string; nombre: string },
 ): Promise<SeedZonasSummary> {
   const geo = await seedGeografia(prisma, geoRows);
-  // FICHA 429: la semilla del SINPE sale del ENTORNO, con la MISMA lectura y la MISMA validacion
-  // que `scripts/seed-sinpe-inicial.ts` — que es el unico archivo del arbol autorizado a nombrar
-  // esas variables. Si faltan, este seed NO crea ninguna zona: prefiere morir a crear una bodega
-  // cuyo numero de cobro nadie decidio.
-  const semilla = leerSemilla(process.env);
-  if (!semilla.ok) {
-    console.error(`[seed-zonas] no se puede crear ninguna zona: ${semilla.motivo}`);
-    process.exit(1);
-  }
-  const zonaByKey = await seedZonas(prisma, hints, semilla);
+  const zonaByKey = await seedZonas(prisma, hints, sinpeInicial);
   const cruce = await cruzarZonas(prisma, hints, zonaByKey, geo.distritoByTerna);
 
   return {
@@ -593,7 +594,16 @@ async function main(): Promise<void> {
 
   const prisma = getPrismaClient();
   try {
-    const summary = await seedZonasCompleto(prisma, geoRows, hints);
+    // FICHA 429: la semilla del SINPE sale del ENTORNO, con la MISMA lectura y la MISMA
+    // validacion que `scripts/seed-sinpe-inicial.ts` — el unico archivo del arbol autorizado a
+    // nombrar esas variables. Si faltan, este seed NO crea ninguna zona: prefiere morir a crear
+    // una bodega cuyo numero de cobro no decidio nadie.
+    const semilla = leerSemilla(process.env);
+    if (!semilla.ok) {
+      console.error(`[seed-zonas] no se puede crear ninguna zona: ${semilla.motivo}`);
+      process.exit(1);
+    }
+    const summary = await seedZonasCompleto(prisma, geoRows, hints, semilla);
     console.log("Seed de zonas completado:", JSON.stringify(summary, null, 2));
   } finally {
     await prisma.$disconnect();

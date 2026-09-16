@@ -372,7 +372,9 @@ describe("OrdenRepository.findNovedadesByTienda (R4/R10)", () => {
       createdAt: true,
       estatus: { select: { value: true } },
       tienda: { select: { nombre: true } },
-      zona: { select: { nombre: true } },
+      // FICHA 429: dos columnas mas en el `select` de zona que YA se hacia. La proyeccion crece,
+      // el numero de consultas no.
+      zona: { select: { nombre: true, sinpeNumero: true, sinpeNombre: true } },
       provincia: { select: { nombre: true } },
       canton: { select: { nombre: true } },
       distrito: { select: { nombre: true } },
@@ -380,7 +382,19 @@ describe("OrdenRepository.findNovedadesByTienda (R4/R10)", () => {
       // `toEqual` ES el contrato del `select` (por eso es literal y no se deriva de nada):
       // quitar una de estas claves lo pone rojo, y ampliarla a `true` —que arrastraria `email`,
       // `telefono`, `cedula` y `password_hash` hasta el navegador de la tienda— tambien.
-      mensajeroAsignado: { select: { nombre: true, primerApellido: true, segundoApellido: true } },
+      //
+      // ⚠️ FICHA 429: se le cuelga la ZONA del mensajero, y SOLO sus dos columnas del SINPE. NO se
+      // ensancho `NOMBRE_USUARIO_SELECT` —que es la identidad y la comparten otras lecturas—: la
+      // relacion se añade aparte, para que nadie acabe filtrando un SINPE a una pantalla que solo
+      // pedia un nombre. La regla de R13 (manda la bodega del mensajero) necesita este join.
+      mensajeroAsignado: {
+        select: {
+          nombre: true,
+          primerApellido: true,
+          segundoApellido: true,
+          zona: { select: { sinpeNumero: true, sinpeNombre: true } },
+        },
+      },
     });
     expect(arg.select).not.toHaveProperty("deletedAt");
   });

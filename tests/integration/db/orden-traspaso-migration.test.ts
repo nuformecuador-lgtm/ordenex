@@ -116,6 +116,12 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       // Ficha 425 (2026-09-14): la tabla del vinculo de revision `cierre_rechazo_tienda`. Nace
       // despues de toda migracion aplicada y no toca `orden_traspaso_mensajero`.
       "20260917120200_cierre_rechazo_tienda",
+      // Ficha 429 (2026-09-15): el SINPE por bodega. Tres migraciones —el valor de enum, las tres
+      // columnas de `zona` nullables y el `NOT NULL` + los dos `CHECK` una vez sembradas—. Ninguna
+      // toca `orden_traspaso_mensajero`.
+      "20260918120000_historial_accion_zona_sinpe",
+      "20260918120100_zona_sinpe",
+      "20260918120200_zona_sinpe_no_nulo",
     ]);
   });
 });

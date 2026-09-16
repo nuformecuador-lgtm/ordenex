@@ -170,7 +170,8 @@ describeSiHayBase("410/R24-R25 — conjunto contra conjunto, con cuatro formas d
       // Una segunda zona: sin ella, la rama de zona del predicado no se ejercita de verdad.
       const zonaB = randomUUID();
       await tx.$executeRawUnsafe(
-        `INSERT INTO "zona" ("id","nombre") VALUES ($1, $2)`,
+        `INSERT INTO "zona" ("id","nombre","sinpe_numero","sinpe_nombre")
+       VALUES ($1, $2, '80000000', 'Titular de Prueba')`,
         zonaB,
         `410 zona de prueba ${zonaB.slice(0, 8)}`,
       );
@@ -264,7 +265,8 @@ describeSiHayBase("410/R24-R25 — conjunto contra conjunto, con cuatro formas d
       const zonaA = fks!.zonaId;
       const zonaB = randomUUID();
       await tx.$executeRawUnsafe(
-        `INSERT INTO "zona" ("id","nombre") VALUES ($1, $2)`,
+        `INSERT INTO "zona" ("id","nombre","sinpe_numero","sinpe_nombre")
+       VALUES ($1, $2, '80000000', 'Titular de Prueba')`,
         zonaB,
         `410 zona mutacion ${zonaB.slice(0, 8)}`,
       );

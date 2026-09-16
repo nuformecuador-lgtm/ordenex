@@ -59,7 +59,8 @@ function fechaDate(iso: string): Date {
 async function crearZona(tx: TxDeTest): Promise<string> {
   const id = randomUUID();
   await tx.$executeRawUnsafe(
-    `INSERT INTO "zona" ("id","nombre") VALUES ($1, $2)`,
+    `INSERT INTO "zona" ("id","nombre","sinpe_numero","sinpe_nombre")
+       VALUES ($1, $2, '80000000', 'Titular de Prueba')`,
     id,
     `413-zona-${id.slice(0, 8)}`,
   );
