@@ -11,47 +11,42 @@ import {
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
-// ⭑ FICHA 380 / T3 — cobertura de `20260908120000_historial_accion_zona_pago_mensajero`.
+// ⭑ FICHA 431 / T1 — cobertura de `20260919120000_historial_accion_conciliacion_bodega`.
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 //
-// LAS CUATRO COSAS QUE MIDE:
-//   (estatico) el `up` es UNA sola sentencia `ADD VALUE`, aditiva, y no nombra el enum de
-//       entidades; el `down` NO nombra el valor nuevo y solo recastea `accion` (R14);
+// LAS CUATRO COSAS QUE MIDE, calcadas del archivo de la 429 (mismo enum, mismo patron de `down`):
+//   (estatico) el `up` son DOS sentencias `ADD VALUE`, aditivas, y no nombra el enum de entidades;
+//       el `down` NO nombra ninguno de los dos valores nuevos y solo recastea `accion`;
 //   (a) el enum de `public` coincide EXACTAMENTE con el catalogo cerrado de
 //       `lib/types/historial-accion.ts` —el `satisfies` de TypeScript compara contra el cliente
-//       GENERADO, no contra la base viva, asi que un `prisma generate` rancio lo dejaria pasar—,
-//       y el valor nuevo va DESPUES de `zona_central_cambiada` (R13);
-//   (b) el `down.sql` recrea la lista PREVIA (49 tipos) — medido COMPARANDO el estado de antes del
-//       up con el de despues del down, no leyendo el archivo (R15);
-//   (c) con UNA fila que use el valor nuevo, el rollback FALLA ruidosamente y NO borra esa fila
-//       (R16).
+//       GENERADO, no contra la base viva, asi que un `prisma generate` rancio lo dejaria pasar—;
+//   (b) el `down.sql` recrea la lista PREVIA (53 tipos) — medido COMPARANDO el estado de antes del
+//       `up` con el de despues del `down`, no leyendo el archivo;
+//   (c) con UNA fila que use un valor nuevo, el rollback FALLA ruidosamente y NO borra esa fila.
 //
-// ⚠️ LA MEJORA OBLIGATORIA RESPECTO DE `historial-accion-zona-central-migration.test.ts`: LAS
-// CARPETAS DEL ESTADO PREVIO SE DESCUBREN LEYENDO `db/migrations`, no se escriben como constantes
-// (`DIR_374`, `DIR_375`…).
+// ⚠️ POR QUE SON DOS VALORES Y NO UNO. La guardia del censo de historial mide POR METODO, no por
+// escritura (medido dos veces en este repo, fichas 376 y 380). Con `marcarConciliado` y
+// `revertirConciliacion` bajo un mismo tipo, borrar uno de los dos `appendAccion` dejaria la
+// guardia verde. Dos tipos obligan a dos entradas de censo y por tanto a dos metodos.
 //
-// Por que, y esta MEDIDO en este repo el 2026-09-07: un `down.sql` de enum recrea el tipo con la
-// lista COMPLETA, y esa lista es una FOTO del momento en que se escribio. El `down.sql` de una
+// ⚠️ LAS CARPETAS DEL ESTADO PREVIO SE DESCUBREN LEYENDO `db/migrations`, nunca se escriben como
+// constantes. Y esta MEDIDO en este repo el 2026-09-07 por que: un `down.sql` de enum recrea el
+// tipo con la lista COMPLETA, y esa lista es una FOTO del momento en que se escribio. El de una
 // rama ramificada antes del merge de la 376 BORRO `zona_central_cambiada` de la base local sin un
-// solo error; el sintoma fueron 7 tests rojos en 6 archivos ajenos. Con las carpetas escritas a
-// mano, este archivo NO se enteraria: si `dev` trae una ampliacion nueva mientras esta rama esta
-// abierta, la reconstruccion la ignoraria y el bloque (b) seguiria verde con un `down.sql` rancio.
-// Descubriendolas, la ampliacion ajena ENTRA en la reconstruccion, la comparacion falla y obliga a
-// actualizar la lista ANTES del PR. La diferencia entre un test que caduca en el merge y uno que
-// se entera.
-//
-// Y una asercion mas que cierra el circulo: la lista previa reconstruida DEBE ser exactamente
-// `HISTORIAL_ACCION_TIPOS` menos el valor nuevo. Si el catalogo de TypeScript y las migraciones
-// discreparan, no hay forma de que las tres cosas cuadren por casualidad.
+// solo error; el sintoma fueron 7 tests rojos en 6 archivos ajenos. Descubriendo las carpetas, una
+// ampliacion que `dev` mergee mientras esta rama esta abierta ENTRA en la reconstruccion, la
+// comparacion falla y obliga a actualizar la lista ANTES del PR.
 
 const ROOT = process.cwd();
 const MIGRACIONES = path.join(ROOT, "db", "migrations");
-const DIR_ESTA = "20260908120000_historial_accion_zona_pago_mensajero";
+const DIR_ESTA = "20260919120000_historial_accion_conciliacion_bodega";
 
 const upSql = fs.readFileSync(path.join(MIGRACIONES, DIR_ESTA, "migration.sql"), "utf8");
 const downSql = fs.readFileSync(path.join(MIGRACIONES, DIR_ESTA, "down.sql"), "utf8");
 
-const VALOR_NUEVO = "zona_pago_mensajero_cambiado";
+const VALOR_CONCILIADO = "cierre_bodega_conciliado";
+const VALOR_REVERTIDA = "cierre_bodega_conciliacion_revertida";
+const VALORES_NUEVOS = [VALOR_CONCILIADO, VALOR_REVERTIDA] as const;
 
 function soloEjecutable(sql: string): string {
   return sql
@@ -79,10 +74,9 @@ function createTypeDe(archivo: string, tipo: string): string {
 }
 
 // ---------------------------------------------------------------------------------------------
-// EL DESCUBRIMIENTO DE LA HISTORIA (la mejora de T3), sin una sola carpeta escrita a mano
+// EL DESCUBRIMIENTO DE LA HISTORIA, sin una sola carpeta escrita a mano
 // ---------------------------------------------------------------------------------------------
 
-/** Las carpetas de `db/migrations`, en orden de nombre (que es el orden en que Prisma las aplica). */
 function carpetasDeMigracion(): string[] {
   return fs
     .readdirSync(MIGRACIONES, { withFileTypes: true })
@@ -110,14 +104,6 @@ function carpetaDelOrigen(): string {
   return encontrada;
 }
 
-/**
- * Las carpetas que AMPLIAN alguno de los dos enums del historial, entre el origen (excluido) y
- * ESTA (excluida), en orden.
- *
- * ⚠️ Aqui esta la defensa: si `dev` mergea una ampliacion nueva mientras esta rama esta abierta,
- * aparece SOLA en esta lista, entra en la reconstruccion y el bloque (b) se pone rojo diciendo que
- * valor le falta al `down.sql`.
- */
 function carpetasQueAmplian(): string[] {
   const origen = carpetaDelOrigen();
   return carpetasDeMigracion().filter(
@@ -130,7 +116,6 @@ function carpetasQueAmplian(): string[] {
   );
 }
 
-/** Solo los `ALTER TYPE … ADD VALUE …` de los dos enums del historial de UN archivo. */
 function ampliacionesDe(dir: string): string[] {
   const sql = soloEjecutable(migrationSqlDe(dir));
   const patron = /ALTER TYPE "historial_accion_(?:tipo|entidad)"\s+ADD VALUE[^;]*/g;
@@ -189,8 +174,7 @@ async function valoresDeEnum(
 }
 
 /**
- * Levanta el estado PREVIO a esta ficha ejecutando las migraciones REALES anteriores: el
- * `CREATE TYPE` del origen mas TODOS los `ADD VALUE` posteriores, DESCUBIERTOS leyendo el disco.
+ * Levanta el estado PREVIO a esta ficha ejecutando las migraciones REALES anteriores.
  *
  * NO se copia nada del `down.sql` que este archivo esta probando: si se copiara, la comparacion
  * del bloque (b) seria circular y una lista mal escrita pasaria en verde.
@@ -221,31 +205,44 @@ async function crearEstadoPrevio(admin: PrismaClient, esquema: string): Promise<
 // Estatico: corre SIEMPRE, tambien sin base.
 // ---------------------------------------------------------------------------------------------
 
-describe("380/T3 — migracion del pago al mensajero: forma en disco", () => {
+describe("431/T1 — migracion de la conciliacion de bodega: forma en disco", () => {
   it("trae migration.sql y down.sql", () => {
     expect(fs.existsSync(path.join(MIGRACIONES, DIR_ESTA, "migration.sql"))).toBe(true);
     expect(fs.existsSync(path.join(MIGRACIONES, DIR_ESTA, "down.sql"))).toBe(true);
   });
 
-  it("el up añade UN solo valor, y a `historial_accion_tipo`", () => {
+  it("el up añade LOS DOS valores, y a `historial_accion_tipo`", () => {
     const ejecutable = soloEjecutable(upSql);
-    expect(sentencias(upSql)).toHaveLength(1);
-    expect(ejecutable).toContain(`'${VALOR_NUEVO}'`);
+    expect(sentencias(upSql)).toHaveLength(2);
+    for (const valor of VALORES_NUEVOS) expect(ejecutable).toContain(`'${valor}'`);
     expect(ejecutable).toMatch(/ALTER TYPE "historial_accion_tipo" ADD VALUE/);
-    // R14: NO amplia el enum de entidades. `zona` ya estaba entre los 17 originales de la 362.
+    // NO amplia el enum de entidades: `cierre_bodega` ya estaba entre los 17 originales de la 362
+    // (la usan `cierre_bodega_aprobado` y `cierre_bodega_rechazado`).
     expect(ejecutable).not.toMatch(/historial_accion_entidad/);
   });
 
-  it("el up es ADITIVO: ni tablas, ni columnas, ni indices, ni datos (R14)", () => {
-    // Un backfill o un `CREATE TABLE` aqui dentro reventaria con 55P04 o dejaria el `down` cojo.
-    // Y no hay backfill posible: nadie registro los cambios de pago anteriores.
+  it("⭑ son DOS valores y no uno: la guardia del censo mide POR METODO", () => {
+    // No es cosmetica: con UN solo tipo, `marcarConciliado` y `revertirConciliacion` cabrian en un
+    // metodo con un booleano, y borrar uno de los dos `appendAccion` dejaria la guardia del censo
+    // VERDE. Medido dos veces en este repo (fichas 376 y 380).
+    expect(new Set(VALORES_NUEVOS).size).toBe(2);
+    expect(HISTORIAL_ACCION_TIPOS).toContain(VALOR_CONCILIADO);
+    expect(HISTORIAL_ACCION_TIPOS).toContain(VALOR_REVERTIDA);
+  });
+
+  it("el up es ADITIVO: ni tablas, ni columnas, ni indices, ni datos", () => {
+    // Un backfill o un `CREATE TABLE` aqui dentro reventaria con 55P04 o dejaria el `down` cojo. El
+    // backfill de datos que SI lleva la ficha (R30) vive en la migracion hermana
+    // `20260919120100_cierre_bodega_conciliacion`, que no toca este enum.
     const ejecutable = soloEjecutable(upSql);
     expect(ejecutable).not.toMatch(/CREATE TABLE|ALTER TABLE|CREATE INDEX/i);
     expect(ejecutable).not.toMatch(/\b(INSERT|UPDATE|DELETE)\b/i);
   });
 
-  it("el down NO nombra el valor nuevo, que es justo lo que viene a quitar", () => {
-    expect(soloEjecutable(downSql)).not.toContain(`'${VALOR_NUEVO}'`);
+  it("el down NO nombra los valores nuevos, que es justo lo que viene a quitar", () => {
+    for (const valor of VALORES_NUEVOS) {
+      expect(soloEjecutable(downSql)).not.toContain(`'${valor}'`);
+    }
   });
 
   it("el down recastea SOLO la columna `accion` y no toca `entidad_tipo`", () => {
@@ -255,10 +252,9 @@ describe("380/T3 — migracion del pago al mensajero: forma en disco", () => {
   });
 
   it("⭑ el down lleva ESCRITO el aviso de que su lista es una FOTO que caduca", () => {
-    // No es decoracion: es la unica defensa de quien lo corra a mano desde una rama vieja. El
-    // 2026-09-07 un `down.sql` de enum borro `zona_central_cambiada` de la base local sin un solo
-    // error de Postgres. Si alguien recorta este archivo, el aviso se va con el.
-    expect(downSql).toMatch(/FOTO DEL 2026-09-08/);
+    // No es decoracion: es la unica defensa de quien lo corra a mano desde una rama vieja. Si
+    // alguien recorta este archivo, el aviso se va con el.
+    expect(downSql).toMatch(/FOTO DEL 2026-09-16/);
     expect(downSql).toMatch(/pg_enum/); // la consulta con la que medir el catalogo de HOY
   });
 
@@ -268,10 +264,10 @@ describe("380/T3 — migracion del pago al mensajero: forma en disco", () => {
     const origen = carpetaDelOrigen();
     const amplian = carpetasQueAmplian();
     expect(origen).toMatch(/historial_accion/);
-    expect(amplian.length, "ninguna migracion intermedia amplia el enum: imposible").toBeGreaterThan(
-      3,
-    );
-    // Todas ordenan entre el origen y esta, y todas traen al menos un `ADD VALUE`.
+    expect(
+      amplian.length,
+      "ninguna migracion intermedia amplia el enum: imposible",
+    ).toBeGreaterThan(5);
     for (const dir of amplian) {
       expect(dir > origen && dir < DIR_ESTA, `${dir} fuera de la ventana`).toBe(true);
       expect(ampliacionesDe(dir).length, `${dir} sin ADD VALUE`).toBeGreaterThan(0);
@@ -283,10 +279,10 @@ describe("380/T3 — migracion del pago al mensajero: forma en disco", () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// (a) La base viva contra el catalogo cerrado (R13).
+// (a) La base viva contra el catalogo cerrado.
 // ---------------------------------------------------------------------------------------------
 
-describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (a) — el enum de la base ES el catalogo", () => {
+describe.skipIf(!HAY_BASE_DE_DATOS)("431/T1 (a) — el enum de la base ES el catalogo", () => {
   let admin: PrismaClient;
 
   beforeAll(() => {
@@ -301,44 +297,37 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (a) — el enum de la base ES el cat
     const enLaBase = await valoresDeEnum(admin, "public", "historial_accion_tipo");
     expect(enLaBase.length).toBeGreaterThan(0); // anti-vacuidad
     expect([...enLaBase].sort()).toEqual([...HISTORIAL_ACCION_TIPOS].sort());
-    expect(enLaBase).toContain(VALOR_NUEVO);
+    for (const valor of VALORES_NUEVOS) expect(enLaBase).toContain(valor);
     // ⚠️ EL CONTEO SE COMPARA CONTRA EL CATALOGO, NO CONTRA UN NUMERO CONGELADO. El numero duro
     // vive en su sitio: la guardia de escrituras cubiertas, que ademas obliga a censar el
     // productor del tipo nuevo.
     expect(enLaBase).toHaveLength(HISTORIAL_ACCION_TIPOS.length);
   });
 
-  it("el valor nuevo va DESPUES del de la 376: `ADD VALUE` sin BEFORE/AFTER apende", async () => {
+  it("los dos valores van DESPUES del de la 429, y EN SU ORDEN: `ADD VALUE` apende", async () => {
     // Es de donde sale la lista previa del `down.sql` de la SIGUIENTE ficha que amplie el enum.
     const enLaBase = await valoresDeEnum(admin, "public", "historial_accion_tipo");
-    expect(enLaBase.indexOf(VALOR_NUEVO)).toBeGreaterThan(
-      enLaBase.indexOf("zona_central_cambiada"),
+    expect(enLaBase.indexOf(VALOR_CONCILIADO)).toBeGreaterThan(
+      enLaBase.indexOf("zona_sinpe_cambiado"),
     );
-    // ⚠️ YA NO ES EL ULTIMO, y esa es la señal que este caso existe para dar: la ficha 381 añadio
-    // `cobro_tienda_registrado` DESPUES (2026-09-08), y al hacerlo tuvo que pasar por aqui. Se
-    // afirma la POSICION RELATIVA —que es el invariante real, «`ADD VALUE` APENDE»— en vez de «es
-    // el ultimo», que caduca con cada ficha nueva. La afirmacion es MAS estrecha, no menos:
-    // inmediatamente antes del siguiente.
-    expect(enLaBase.indexOf("cobro_tienda_registrado")).toBe(enLaBase.indexOf(VALOR_NUEVO) + 1);
+    // Y el segundo despues del primero: se añadieron en ese orden, en dos sentencias.
+    expect(enLaBase.indexOf(VALOR_REVERTIDA)).toBeGreaterThan(enLaBase.indexOf(VALOR_CONCILIADO));
   });
 
-  it("la 380 NO amplio el enum de entidades: `zona` ya estaba", async () => {
+  it("la 431 NO amplio el enum de entidades: `cierre_bodega` ya estaba", async () => {
     const entidades = await valoresDeEnum(admin, "public", "historial_accion_entidad");
-    expect(entidades).toContain("zona");
-    // El conteo se compara contra el CATALOGO, no contra un numero congelado —el mismo criterio que
-    // el caso de los tipos aqui arriba—. La ficha 381 amplio este enum con
-    // `wallet_tienda_movimiento` (de 20 a 21) y la 380 sigue sin haberlo tocado.
+    expect(entidades).toContain("cierre_bodega");
     expect(entidades).toHaveLength(HISTORIAL_ACCION_ENTIDADES.length);
     expect(entidades).toEqual(expect.arrayContaining([...HISTORIAL_ACCION_ENTIDADES]));
   });
 });
 
 // ---------------------------------------------------------------------------------------------
-// (b) El down devuelve EXACTAMENTE la lista previa. Se mide comparando, no leyendo (R15).
+// (b) El down devuelve EXACTAMENTE la lista previa. Se mide comparando, no leyendo.
 // ---------------------------------------------------------------------------------------------
 
-describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (b) — el down recrea la lista PREVIA de 49", () => {
-  const esquema = `t_380_enum_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+describe.skipIf(!HAY_BASE_DE_DATOS)("431/T1 (b) — el down recrea la lista PREVIA de 53", () => {
+  const esquema = `t_431_enum_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   let admin: PrismaClient;
   let tiposAntes: string[] = [];
   let entidadesAntes: string[] = [];
@@ -363,44 +352,32 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (b) — el down recrea la lista PREV
     await admin?.$disconnect();
   });
 
-  it("el estado PREVIO reconstruido son 49 tipos y 20 entidades", () => {
+  it("el estado PREVIO reconstruido son 53 tipos y 21 entidades", () => {
     // Numeros DUROS: si las migraciones anteriores dejaran otra cosa, todo lo de abajo mediria
     // sobre una historia inventada.
-    expect(tiposAntes).toHaveLength(49);
-    expect(entidadesAntes).toHaveLength(20);
-    expect(tiposAntes.at(-1)).toBe("zona_central_cambiada");
-    expect(entidadesAntes).toContain("zona");
+    expect(tiposAntes).toHaveLength(53);
+    expect(entidadesAntes).toHaveLength(21);
+    expect(tiposAntes.at(-1)).toBe("zona_sinpe_cambiado"); // el ultimo antes de esta ficha (429)
+    expect(entidadesAntes).toContain("cierre_bodega");
   });
 
   it("⭑ el estado previo reconstruido ES el catalogo de HOY menos este valor y los posteriores", () => {
     // El cierre del circulo: si el catalogo de TypeScript y las migraciones discreparan, no hay
-    // forma de que esto y el caso de arriba cuadren a la vez por casualidad.
+    // forma de que esto y el caso de (a) cuadren a la vez por casualidad.
     //
     // ⚠️ CADA FICHA QUE AMPLIE EL ENUM DESPUES DE ESTA ENTRA AQUI, en orden de migracion. Es lo que
-    // convierte la comparacion en una cadena verificable —«el catalogo de hoy menos la 380 menos la
-    // 381»— en vez de en algo que caduca en silencio. Cada una tiene ademas su propio archivo:
-    //   · 381 — `cobro_tienda_registrado`, en `historial-accion-cobro-tienda-migration.test.ts`.
-    //   · 398 — `cierre_dia_gestion_corregida`, en `correccion-resultado-gestion-migration.test.ts`.
-    //   · 429 — `zona_sinpe_cambiado`, en `historial-accion-zona-sinpe-migration.test.ts`.
-    const POSTERIORES = [
-      "cobro_tienda_registrado",
-      "cierre_dia_gestion_corregida",
-      "zona_sinpe_cambiado",
-      // ficha 431 (2026-09-16): la MARCA DE CONCILIACION de una consolidacion de bodega y su
-      // reversion. Son DOS porque la guardia del censo mide por metodo. Su archivo:
-      // `historial-accion-conciliacion-bodega-migration.test.ts`.
-      "cierre_bodega_conciliado",
-      "cierre_bodega_conciliacion_revertida",
-    ];
+    // convierte la comparacion en una cadena verificable en vez de en algo que caduca en silencio.
+    const POSTERIORES: string[] = [];
     const catalogoPrevio = HISTORIAL_ACCION_TIPOS.filter(
-      (t) => t !== VALOR_NUEVO && !POSTERIORES.includes(t),
+      (t) => !VALORES_NUEVOS.includes(t as (typeof VALORES_NUEVOS)[number]) &&
+        !POSTERIORES.includes(t),
     );
     expect([...tiposAntes].sort()).toEqual([...catalogoPrevio].sort());
   });
 
-  it("el up deja 50 tipos, con el nuevo AL FINAL (`ADD VALUE` apende)", () => {
-    expect(tiposTrasUp).toHaveLength(50);
-    expect(tiposTrasUp.at(-1)).toBe(VALOR_NUEVO);
+  it("el up deja 55 tipos, con los DOS nuevos AL FINAL (`ADD VALUE` apende)", () => {
+    expect(tiposTrasUp).toHaveLength(55);
+    expect(tiposTrasUp.slice(-2)).toEqual([VALOR_CONCILIADO, VALOR_REVERTIDA]);
   });
 
   it("⭑ el down devuelve el enum a la lista previa, valor a valor y EN ORDEN", () => {
@@ -416,25 +393,26 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (b) — el down recrea la lista PREV
 });
 
 // ---------------------------------------------------------------------------------------------
-// (c) La precondicion ruidosa: con una fila que use el valor nuevo, el rollback ABORTA (R16).
+// (c) La precondicion ruidosa: con una fila que use el valor nuevo, el rollback ABORTA.
 // ---------------------------------------------------------------------------------------------
 
 describe.skipIf(!HAY_BASE_DE_DATOS)(
-  "380/T3 (c) — el down aborta si queda rastro de un cambio de pago",
+  "431/T1 (c) — el down aborta si queda rastro de una conciliacion",
   () => {
-    const esquema = `t_380_enum2_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    const esquema = `t_431_enum2_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     let admin: PrismaClient;
 
     beforeAll(async () => {
       admin = crearPrismaDeTest();
       await crearEstadoPrevio(admin, esquema);
       await aplicar(admin, upSql, esquema);
-      // ⚠️ `valor_anterior`/`valor_nuevo` van a NULL, que es la firma de Q2: la fila dice QUE el
-      // pago cambio, no de cuanto a cuanto.
+      // DOS filas, una por tipo nuevo: si el `down` solo tropezara con una de ellas, este bloque
+      // pasaria en verde con la mitad del rastro perdiendose en silencio.
       await admin.$executeRawUnsafe(
         `INSERT INTO "${esquema}"."historial_accion"
          ("id","accion","entidad_tipo","valor_anterior","valor_nuevo")
-       VALUES ('h1','${VALOR_NUEVO}','zona',NULL,NULL)`,
+       VALUES ('h1','${VALOR_CONCILIADO}','cierre_bodega',NULL,NULL),
+              ('h2','${VALOR_REVERTIDA}','cierre_bodega',NULL,NULL)`,
       );
     }, 120_000);
 
@@ -443,28 +421,23 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(
       await admin?.$disconnect();
     });
 
-    it("la fila con el valor nuevo esta escrita (anti-vacuidad)", async () => {
+    it("las dos filas con los valores nuevos estan escritas (anti-vacuidad)", async () => {
       const [fila] = await admin.$queryRawUnsafe<{ n: number }[]>(
         `SELECT COUNT(*)::int AS n FROM "${esquema}"."historial_accion"
-        WHERE "accion" = '${VALOR_NUEVO}'`,
+        WHERE "accion" IN ('${VALOR_CONCILIADO}','${VALOR_REVERTIDA}')`,
       );
-      expect(fila.n).toBe(1);
+      expect(fila.n).toBe(2);
     });
 
-    it("el rollback FALLA ruidosamente y NO borra ni reescribe esa fila", async () => {
+    it("el rollback FALLA ruidosamente y NO borra ni reescribe esas filas", async () => {
       await expect(aplicar(admin, downSql, esquema)).rejects.toThrow();
-      // Y la fila sigue ahi. Es lo unico que dice quien cambio lo que cobra una persona por
-      // entregar: por la firma de Q2 no hay ninguna otra copia de ese hecho en ninguna parte.
-      const [fila] = await admin.$queryRawUnsafe<
-        { n: number; accion: string; entidad: string }[]
-      >(
-        `SELECT COUNT(*)::int AS n, MIN("accion"::text) AS accion,
-              MIN("entidad_tipo"::text) AS entidad
-         FROM "${esquema}"."historial_accion"`,
+      // Y las dos filas siguen ahi. Son lo unico que dice quien afirmo que el bulto de efectivo de
+      // una bodega llego a la central, por cuanto y cuando — el UNICO rastro, porque revertir la
+      // marca VACIA las cuatro columnas de `cierre_bodega`.
+      const filas = await admin.$queryRawUnsafe<{ accion: string }[]>(
+        `SELECT "accion"::text AS accion FROM "${esquema}"."historial_accion" ORDER BY "id"`,
       );
-      expect(fila.n).toBe(1);
-      expect(fila.accion).toBe(VALOR_NUEVO);
-      expect(fila.entidad).toBe("zona");
+      expect(filas.map((f) => f.accion)).toEqual([VALOR_CONCILIADO, VALOR_REVERTIDA]);
     });
   },
 );

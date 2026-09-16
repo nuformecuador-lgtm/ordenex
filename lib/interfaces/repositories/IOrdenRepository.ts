@@ -923,9 +923,27 @@ export interface RecepcionSateliteFiltro {
   salioAReparto?: SalioAReparto;
 }
 
-// Feature 41 (R17/R18) -> 241 — resultado del bloqueo derivado de una bodega satelite.
-// `bloqueada = porCierreBodega`, y NADA MAS. `porCierreBodega` = existe su propio
-// CierreBodega hacia la central en `solicitado` (causa ii, bloqueo duro).
+// Feature 41 (R17/R18) -> 241 -> ⭑ FICHA 431 — resultado del bloqueo derivado de una bodega
+// satelite.
+//
+// ⭑ FICHA 431 (D4/R1/R4): `bloqueada` ES `false` SIEMPRE. HOY NINGUNA CAUSA BLOQUEA A LA BODEGA.
+// Hasta esta ficha era `bloqueada = porCierreBodega`: con su consolidacion hacia la central sin
+// aprobar, la satelite no podia asignar ni una orden mas. Esa era la unica consecuencia real de la
+// aprobacion de nivel 2 y es justo la que la ficha retira: la aprobacion pasa a ser una MARCA DE
+// CONCILIACION —«el efectivo llego»—, y una marca que ocurre cuando el bulto viaja no puede ser
+// ademas la puerta que deja trabajar.
+//
+// El CAMPO se conserva, y con el la rama `bodega_bloqueada` de `AsignacionSateliteService.asignar`:
+// es la lectura literal de D4 («se quita en UN solo sitio») y deja el punto de entrada por si
+// vuelve una causa. Lo ancla un test que afirma que ninguna combinacion produce hoy `true`, para
+// que un campo constante no se convierta en un mentiroso mudo. Destino final: Q4 de la ficha.
+//
+// ⚠️ NO SE CONFUNDA CON EL GATE DE NIVEL 1, que SIGUE VIVO: una satelite no puede CONSOLIDAR
+// mientras tenga cierres del dia de sus mensajeros sin resolver (R5,
+// `CierreBodegaService.solicitarCierreBodega`). Ese si es un cuadre, y sigue siendo puerta.
+//
+// `porCierreBodega` = tiene al menos una consolidacion hacia la central PENDIENTE DE CONCILIAR
+// (`solicitado`). Desde la 431 es AVISO, no veto, y viaja acompanado de su NUMERO.
 //
 // Causa (i), mensajeros: `porMensajeros` es `true` si AL MENOS 1 mensajero de la zona tiene
 // un cierre ABIERTO (los tres estados que no son `aprobado`). Desde la feature 241 NO ES UN
@@ -942,6 +960,21 @@ export interface BodegaBloqueoResult {
   bloqueada: boolean;
   porMensajeros: boolean;
   porCierreBodega: boolean;
+  /**
+   * ⭑ FICHA 431 (R2/R3) — CUANTAS consolidaciones de la zona siguen pendientes de conciliar.
+   *
+   * `porCierreBodega` dice «hay»; esto dice «cuantas», que es lo que el aviso necesita para
+   * escribir «tenes N consolidaciones que la central todavia no marco como recibidas». Hasta esta
+   * ficha el numero no hacia falta porque el indice unico parcial de la feature 40 garantizaba que
+   * era 1; ese indice se borro y ahora puede ser cualquiera.
+   *
+   * NO VIAJA DINERO POR ESTE CONTRATO, a proposito: el importe pendiente vive en la pantalla propia
+   * de la satelite. Meter un importe en un DTO de bloqueo abriria una superficie de dinero donde no
+   * hace falta.
+   *
+   * Opcional (aditivo), como sus hermanos informativos.
+   */
+  consolidacionesSinConciliar?: number;
   cierresAbiertos?: number;
   totalMensajeros?: number;
   mensajerosConCierreIds?: string[];

@@ -13,6 +13,9 @@ import {
   inicioDelDiaSiguienteCREnUtc,
 } from "@/lib/utils/fecha-cr";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
+// ⭑ FICHA 431 (R7): el error que aborta una consolidacion que enlazaria menos cierres de los que
+// sus totales snapshot ya sumaron. Modulo puro, compartido con el servicio que lo traduce.
+import { ConsolidacionParcialError } from "@/lib/utils/consolidacion-parcial";
 // Feature 393 (design §2.3): las dos derivaciones de la cascada «lo que va a la central».
 // La resta vive en la funcion pura; el repositorio solo la llama.
 import { efectivoCubreDescuentos, paraLaCentral } from "@/lib/utils/ingreso-ordenex";
@@ -339,15 +342,18 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
     });
   }
 
-  /** R8: existe un CierreBodega de la zona en estado `solicitado`. */
-  async existeCierreBodegaSolicitado(zonaId: string): Promise<boolean> {
-    const count = await this.prisma.cierreBodega.count({
-      where: { zonaId, estado: ESTADO_SOLICITADO },
-    });
-    return count > 0;
-  }
+  // ⭑ FICHA 431 — AQUI VIVIA `existeCierreBodegaSolicitado`, el gate «a lo sumo una consolidacion
+  // `solicitado` por zona» (feature 40/R8). Se retiro junto con el indice unico parcial que lo
+  // respaldaba, y no es limpieza: con la aprobacion convertida en marca de conciliacion, ese gate
+  // seria el MISMO bloqueo mudado de sitio. Lo que protegia esta ahora en el todo-o-nada de
+  // `crearCierreBodega`, aqui debajo.
 
-  /** R9/R10: INSERT cierre_bodega (snapshot Decimal) + vincular cierre_dia, atomico. */
+  /**
+   * R9/R10: INSERT cierre_bodega (snapshot Decimal) + vincular cierre_dia, atomico.
+   *
+   * ⭑ FICHA 431 (R7) — Y TODO-O-NADA DE VERDAD: si el `updateMany` vincula menos cierres de los
+   * que se le pidieron, se LANZA y la transaccion se deshace entera.
+   */
   async crearCierreBodega(input: CrearCierreBodegaInput): Promise<string> {
     const { zonaId, solicitadoPor, cierreDiaIds, totales, totalPagoMensajero, totalIngresoBodegaRechazos } =
       input;
@@ -370,7 +376,7 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
       });
       // R9: vincula SOLO los cierre_dia consolidables de la zona (guardia de propiedad
       // + no-consolidados + aprobados en el WHERE; concurrencia-segura).
-      await tx.cierreDia.updateMany({
+      const vinculados = await tx.cierreDia.updateMany({
         where: {
           id: { in: cierreDiaIds },
           cierreBodegaId: null,
@@ -379,6 +385,14 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
         },
         data: { cierreBodegaId: cierre.id },
       });
+      // ⭑ FICHA 431 (R7) — TODO-O-NADA. Sustituye al indice unico parcial que la ficha borra, y
+      // protege lo que aquel protegia DE VERDAD: que dos consolidaciones simultaneas no se repartan
+      // la misma cola. Los totales snapshot de arriba se calcularon sobre el conjunto ENTERO, asi
+      // que una consolidacion que enlace menos cierres de los que sumo declara mas dinero del que
+      // lleva. Lanzar aborta la `$transaction`: no queda ni la fila ni los enlaces.
+      if (vinculados.count !== cierreDiaIds.length) {
+        throw new ConsolidacionParcialError(vinculados.count, cierreDiaIds.length);
+      }
       return cierre.id;
     });
   }

@@ -122,6 +122,13 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       "20260918120000_historial_accion_zona_sinpe",
       "20260918120100_zona_sinpe",
       "20260918120200_zona_sinpe_no_nulo",
+      // Ficha 431 (2026-09-16): la conciliacion de las consolidaciones de bodega. DOS migraciones
+      // —los dos valores de `historial_accion_tipo`, que van solos porque Postgres prohibe usar un
+      // valor de enum en la misma transaccion que lo añade; y las cuatro columnas de la marca con
+      // su backfill, sus dos CHECK y el borrado del indice unico parcial de la feature 40—.
+      // Ninguna toca `orden_traspaso_mensajero`.
+      "20260919120000_historial_accion_conciliacion_bodega",
+      "20260919120100_cierre_bodega_conciliacion",
     ]);
   });
 });

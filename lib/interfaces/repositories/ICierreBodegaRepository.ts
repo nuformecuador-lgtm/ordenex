@@ -129,16 +129,27 @@ export interface ICierreBodegaRepository {
    * adminSatelite los resuelva). Precondicion para poder cerrar la bodega.
    */
   contarCierresDiaSolicitados(zonaId: string): Promise<number>;
-  /** R8: `true` si ya existe un CierreBodega de la zona en estado `solicitado`. */
-  existeCierreBodegaSolicitado(zonaId: string): Promise<boolean>;
+  // ⭑ FICHA 431 — AQUI VIVIA `existeCierreBodegaSolicitado(zonaId)`, el gate «a lo sumo una
+  // consolidacion `solicitado` por zona» de la feature 40 (su R8). SE RETIRO con el indice unico
+  // parcial que lo respaldaba (`cierre_bodega_zona_solicitado_uq`), y no es una limpieza: es el
+  // corazon de la ficha. Con la aprobacion convertida en marca de conciliacion, «una pendiente por
+  // zona» seria el MISMO bloqueo mudado de sitio — la satelite podria asignar pero no volver a
+  // consolidar hasta que la central marcara.
+  // Lo que ese gate protegia de verdad —que dos envios simultaneos no se repartan la misma cola—
+  // vive ahora en el TODO-O-NADA de `crearCierreBodega`, que es donde esta la carrera.
   /**
    * R9/R10: bajo prisma.$transaction (todo-o-nada): (a) INSERT cierre_bodega
    * (`solicitado`, snapshot de totales agregados como Prisma.Decimal), (b) UPDATE
    * cierre_dia SET cierre_bodega_id=<nuevo> WHERE id IN (cierreDiaIds) AND
    * cierre_bodega_id IS NULL AND estado='aprobado' AND destino_zona_id=zonaId
-   * (guardia concurrencia-segura). Devuelve el id del cierre de bodega. Una violacion
-   * del indice unico parcial (P2002) se propaga para que el service la traduzca a
-   * `conflict` (R8).
+   * (guardia concurrencia-segura). Devuelve el id del cierre de bodega.
+   *
+   * ⭑ FICHA 431 (R7) — Y SI LA GUARDIA VINCULA MENOS CIERRES DE LOS QUE SE LE PIDIERON, LANZA
+   * `ConsolidacionParcialError` Y ABORTA LA TRANSACCION: no queda ni la fila ni los enlaces. No es
+   * una precaucion generica. Los totales snapshot (`total_general`, `total_pago_mensajero`,
+   * `total_ingreso_bodega_rechazos`) se calculan sobre el conjunto ENTERO antes de escribir, asi
+   * que una consolidacion que enlace menos cierres de los que sumo DECLARA MAS DINERO DEL QUE
+   * LLEVA. El servicio lo traduce a `conflict`.
    */
   crearCierreBodega(input: CrearCierreBodegaInput): Promise<string>;
   /**

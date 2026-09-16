@@ -144,6 +144,12 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     // descarga detallada; el conjunto vacio deja el camino de la 40 intacto.
     findGestionesDeCierresBodegaCompleto: vi.fn(async () => []),
     resolverCierreBodega: vi.fn(async () => "updated" as const),
+    // ⭑ FICHA 431: las dos escrituras de la MARCA DE CONCILIACION completan el contrato. Este
+    // archivo NO las ejercita —sus casos viven en `conciliacion-satelites-service.test.ts` y en la
+    // integracion contra Postgres—, pero el doble tiene que implementar la interfaz entera o el
+    // typecheck deja de proteger a los demas.
+    marcarConciliado: vi.fn(async () => "updated" as const),
+    revertirConciliacion: vi.fn(async () => "updated" as const),
     ...overrides,
   };
 }

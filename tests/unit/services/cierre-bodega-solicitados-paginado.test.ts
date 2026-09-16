@@ -107,7 +107,7 @@ function repoEnMemoria(filas: CierreBodegaResumenRow[] = ALMACEN) {
       llamadas.push("contarCierresDiaSolicitados");
       return 0;
     }),
-    existeCierreBodegaSolicitado: vi.fn(async () => false),
+    // ⭑ FICHA 431: `existeCierreBodegaSolicitado` se retiro del contrato con su indice unico parcial.
     crearCierreBodega: vi.fn(async () => "cb-nuevo"),
   } as unknown as ICierreBodegaRepository;
 

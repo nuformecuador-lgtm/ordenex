@@ -1,0 +1,45 @@
+-- ⭑ FICHA 431 (T1) — EL RASTRO DE «EL DINERO DE LA SATELITE LLEGO», Y EL DE DESHACERLO.
+--
+-- QUE REGISTRAN LOS DOS VALORES. `cierre_bodega_conciliado`: alguien con acceso total afirmo que
+-- el bulto de efectivo de una consolidacion llego a la central, y por CUANTO. Su gemelo
+-- `cierre_bodega_conciliacion_revertida`: alguien deshizo esa afirmacion. Cuelgan de la
+-- CONSOLIDACION (`entidad_tipo = 'cierre_bodega'`), que es el bulto que viaja.
+--
+-- POR QUE ENTRAN EN «mueve dinero». R17 de la 362 exige EXACTAMENTE una categoria por tipo. Estas
+-- dos acciones NO hacen un asiento —la ficha 431 no escribe en `wallet_movimiento`,
+-- `wallet_tienda_movimiento` ni `pago_mensajero_movimiento` (R14)—, pero DECLARAN que ₡X llego o
+-- dejo de haber llegado y cambian el saldo con el que la central persigue el efectivo que anda
+-- fuera. Las otras dos categorias no describen esto en ningun sentido: no hace desaparecer nada y
+-- no cambia quien puede hacer que.
+--
+-- ⚠️ POR QUE SON DOS TIPOS Y NO UNO CON UN VALOR. Porque la guardia del censo de historial
+-- (`tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts`) mide POR METODO, no
+-- por escritura: medido dos veces en este repo (fichas 376 y 380). Con las dos acciones dentro del
+-- mismo metodo, borrar UNO de los dos `appendAccion` dejaria la guardia VERDE. Dos tipos obligan a
+-- dos entradas de censo, y por tanto a dos metodos: `marcarConciliado` y `revertirConciliacion`.
+--
+-- ⚠️ EL `monto` DE LA REVERSION ES EL MONTO QUE SE BORRA. Al revertir, `cierre_bodega` se queda sin
+-- `monto_recibido` (la migracion hermana lo pone a NULL), asi que la fila del historial es el UNICO
+-- sitio donde sobrevive cuanto se habia dado por recibido. Sin el, el rastro diria «alguien deshizo
+-- algo» en vez de «alguien deshizo un recibido de ₡500.000».
+--
+-- LA NOTA DE CONCILIACION **NO ENTRA** en el historial (R5 de la 362): es texto libre tecleado por
+-- una persona, igual que el motivo de un rechazo. Vive en `cierre_bodega.conciliado_nota`.
+--
+-- `historial_accion_entidad` NO SE TOCA: `cierre_bodega` ya esta entre sus valores desde
+-- `20260902120000_historial_accion` (la usan `cierre_bodega_aprobado` y `cierre_bodega_rechazado`).
+-- Aqui solo se amplia `historial_accion_tipo`.
+--
+-- VA SOLA, Y SEPARADA DE `20260919120100_cierre_bodega_conciliacion`: Postgres prohibe USAR un
+-- valor de enum en la misma transaccion que lo añade (55P04) y Prisma Migrate corre cada
+-- `migration.sql` en la suya. Mismo patron que `20260918120000_historial_accion_zona_sinpe` y las
+-- ocho ampliaciones anteriores.
+--
+-- ADITIVA: no crea ni altera tablas, columnas ni indices, y no escribe ni borra datos. La RLS de
+-- `historial_accion` —habilitada y sin policies desde la 362, solo service role— no se toca: un
+-- valor nuevo de enum no la afecta. NO HAY BACKFILL y no puede haberlo: nadie registro
+-- conciliaciones anteriores porque hasta hoy la conciliacion no existia. El backfill de datos que
+-- SI lleva esta ficha —los historicos dados por recibidos (R30)— vive en la migracion hermana y no
+-- deja fila de historial: no lo hizo una persona.
+ALTER TYPE "historial_accion_tipo" ADD VALUE IF NOT EXISTS 'cierre_bodega_conciliado';
+ALTER TYPE "historial_accion_tipo" ADD VALUE IF NOT EXISTS 'cierre_bodega_conciliacion_revertida';
