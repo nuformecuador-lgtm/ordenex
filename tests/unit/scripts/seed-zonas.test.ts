@@ -171,7 +171,12 @@ describe("seedZonas — dedup y defaults (R35/R37)", () => {
   it("GAM + Gam producen UNA sola zona con es_central=false", async () => {
     const { prisma, state } = makeFakePrisma();
     const hints = parseZonaHintRows(zonaWorksheet(ZONA_ROWS));
-    const zonaByKey = await seedZonas(prisma, hints);
+    // FICHA 429 (R11): crear una zona exige el par del SINPE tambien desde un script. Valores
+    // FICTICIOS: el repositorio es publico y aqui no se escribe ningun numero real.
+    const zonaByKey = await seedZonas(prisma, hints, {
+      numero: "80000000",
+      nombre: "Titular de Prueba",
+    });
 
     // GAM (dedup) + Zona Sur = 2 zonas
     expect(state.zona).toHaveLength(2);

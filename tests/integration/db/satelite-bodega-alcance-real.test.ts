@@ -115,7 +115,7 @@ async function sembrar(tx: Tx): Promise<Escenario> {
   }
 
   const crearZona = async (nombre: string): Promise<string> =>
-    (await tx.zona.create({ data: { nombre: `${sufijo}-${nombre}` }, select: { id: true } })).id;
+    (await tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `${sufijo}-${nombre}` }, select: { id: true } })).id;
 
   const crearUsuario = async (
     nombre: string,

@@ -112,7 +112,7 @@ describeSiHayBase("425/B6 — los totales del cierre no se mueven cuando entra u
 
   async function sembrarMensajeroConTarifa(tx: TxDeTest): Promise<string> {
     const clave = `${SUFIJO}${(n += 1)}`;
-    const zona = await tx.zona.create({ data: { nombre: `Zona 425 ${clave}` }, select: { id: true } });
+    const zona = await tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Zona 425 ${clave}` }, select: { id: true } });
     await tx.tarifaZonaMensajero.create({
       data: {
         zonaId: zona.id,

@@ -241,6 +241,13 @@ function repoConGuarda(): IZonaRepository {
     contarOrdenesVivasPorZona: vi.fn(async (ids: string[]) =>
       ids.map((zonaId) => ({ zonaId, ordenesVivas: zonaId === ZONA_CENTRAL ? 850 : 0 })),
     ),
+    // FICHA 429: los metodos de la superficie del SINPE por bodega. El doble los declara
+    // para seguir cumpliendo `IZonaRepository`; esta suite no los ejercita.
+    listarSinpe: vi.fn().mockResolvedValue([]),
+    findSinpeByZona: vi.fn().mockResolvedValue(null),
+    zonaIdDeUsuario: vi.fn().mockResolvedValue(null),
+    guardarSinpe: vi.fn().mockResolvedValue(null),
+    confirmarSinpe: vi.fn().mockResolvedValue(null),
   };
 }
 

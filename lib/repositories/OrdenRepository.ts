@@ -51,6 +51,28 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { zonaUnicaDeDistrito } from "@/lib/repositories/_shared/zona-colapso";
+import { resolverSinpeBodega, type SinpeBodega } from "@/lib/utils/sinpe-bodega";
+
+/**
+ * FICHA 429 (R13/R15) — el par del SINPE de una orden, con la regla UNICA del repo.
+ *
+ * Se escribe una vez y se usa desde la proyeccion de novedades. `zonaDelMensajero` llega en
+ * `snake`-menos —las dos columnas tal cual las trae Prisma— y puede ser `null` por partida doble:
+ * la orden puede no tener mensajero y el mensajero puede no tener zona.
+ */
+function sinpeDeLaOrden(
+  zonaDelMensajero: { sinpeNumero: string; sinpeNombre: string } | null,
+  zonaDeLaOrden: SinpeBodega,
+): { sinpeNumero: string; sinpeNombre: string } {
+  const par = resolverSinpeBodega({
+    zonaDelMensajero:
+      zonaDelMensajero === null
+        ? null
+        : { numero: zonaDelMensajero.sinpeNumero, nombre: zonaDelMensajero.sinpeNombre },
+    zonaDeLaOrden,
+  });
+  return { sinpeNumero: par.numero, sinpeNombre: par.nombre };
+}
 // FICHA 374: el predicado de la disponibilidad geografica vive en UN solo sitio; aqui solo se
 // PROYECTA (R31). Y `ESTADOS_TERMINALES` se importa de su fuente unica para el conteo de R61.
 import {
@@ -5449,7 +5471,8 @@ export class OrdenRepository implements IOrdenRepository {
         // `GestionOrdenRepository`). `distrito` es el unico opcional -> `?.nombre ?? null`.
         estatus: { select: { value: true } },
         tienda: { select: { nombre: true } },
-        zona: { select: { nombre: true } },
+        // FICHA 429 (R13/R15): dos columnas mas en el `select` de zona QUE YA EXISTIA.
+        zona: { select: { nombre: true, sinpeNumero: true, sinpeNombre: true } },
         provincia: { select: { nombre: true } },
         canton: { select: { nombre: true } },
         distrito: { select: { nombre: true } },
@@ -5458,7 +5481,17 @@ export class OrdenRepository implements IOrdenRepository {
         // El `select` acotado a la IDENTIDAD (nombre y apellidos) NO es cosmetico: la fila de
         // `usuario` lleva `email`, `telefono`, `cedula` y `password_hash`, y esta fila viaja al
         // navegador de la TIENDA.
-        mensajeroAsignado: { select: NOMBRE_USUARIO_SELECT },
+        //
+        // FICHA 429 (R13): + la ZONA del mensajero, acotada a las dos columnas del SINPE. NO se
+        // ensancha `NOMBRE_USUARIO_SELECT` —que es la identidad y la comparten otras lecturas—:
+        // se añade la relacion aparte, para que nadie acabe filtrando un SINPE a una pantalla que
+        // solo pedia un nombre.
+        mensajeroAsignado: {
+          select: {
+            ...NOMBRE_USUARIO_SELECT,
+            zona: { select: { sinpeNumero: true, sinpeNombre: true } },
+          },
+        },
       },
     });
     return rows.map((row) => ({
@@ -5487,6 +5520,13 @@ export class OrdenRepository implements IOrdenRepository {
       // vacia se pinta como una etiqueta sin valor y la tienda no sabria si es que no hay nadie
       // o si el nombre se perdio por el camino.
       mensajeroNombre: row.mensajeroAsignado ? nombreCompletoUsuario(row.mensajeroAsignado) : null,
+      // FICHA 429 (R13/R15/R16): la MISMA funcion pura que usan el envio por servidor y el portal
+      // del mensajero. `/novedades` pinta las mismas cards POS y compone en modo `wa.me`, asi que
+      // un numero distinto aqui llegaria al cliente igual que uno mandado por el servidor.
+      ...sinpeDeLaOrden(
+        row.mensajeroAsignado?.zona ?? null,
+        { numero: row.zona.sinpeNumero, nombre: row.zona.sinpeNombre },
+      ),
       createdAt: row.createdAt,
     }));
   }

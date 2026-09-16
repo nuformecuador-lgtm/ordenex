@@ -48,6 +48,13 @@ function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
     contarOrdenesVivasPorZona: vi.fn(async (ids: string[]) =>
       ids.map((zonaId) => ({ zonaId, ordenesVivas: 0 })),
     ),
+    // FICHA 429: los metodos de la superficie del SINPE por bodega. El doble los declara
+    // para seguir cumpliendo `IZonaRepository`; esta suite no los ejercita.
+    listarSinpe: vi.fn().mockResolvedValue([]),
+    findSinpeByZona: vi.fn().mockResolvedValue(null),
+    zonaIdDeUsuario: vi.fn().mockResolvedValue(null),
+    guardarSinpe: vi.fn().mockResolvedValue(null),
+    confirmarSinpe: vi.fn().mockResolvedValue(null),
     ...overrides,
   };
 }
@@ -59,6 +66,10 @@ function crearInput(overrides: Partial<CrearZonaInput> = {}): CrearZonaInput {
     esCentral: false, // feature 54
     distritoIds: ["d1"],
     tarifas: [],
+    // FICHA 429 (R11): crear una bodega EXIGE los dos campos del SINPE. Valores FICTICIOS: el
+    // repositorio es publico y aqui no se escribe ningun numero real.
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     ...overrides,
   };
 }
@@ -233,6 +244,13 @@ describe("376/Q4 — el impacto de mover la marca", () => {
         { zonaId: "z-gam", ordenesVivas: 850 },
         { zonaId: "z-nueva", ordenesVivas: 0 },
       ]),
+      // FICHA 429: los metodos de la superficie del SINPE por bodega. El doble los declara
+      // para seguir cumpliendo `IZonaRepository`; esta suite no los ejercita.
+      listarSinpe: vi.fn().mockResolvedValue([]),
+      findSinpeByZona: vi.fn().mockResolvedValue(null),
+      zonaIdDeUsuario: vi.fn().mockResolvedValue(null),
+      guardarSinpe: vi.fn().mockResolvedValue(null),
+      confirmarSinpe: vi.fn().mockResolvedValue(null),
     });
     service = new ZonaService(repo);
 

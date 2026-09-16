@@ -419,7 +419,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("398/T1.5 (b) — el down recrea las listas 
     // migracion, en la lista `POSTERIORES` que le toque. Es lo que convierte la comparacion en una
     // cadena verificable en vez de en algo que caduca en silencio.
     const ORIGENES_POSTERIORES: string[] = [];
-    const ACCIONES_POSTERIORES: string[] = [];
+    // ficha 429 (2026-09-15): `zona_sinpe_cambiado`, con su archivo
+    // `historial-accion-zona-sinpe-migration.test.ts`.
+    const ACCIONES_POSTERIORES: string[] = ["zona_sinpe_cambiado"];
     expect([...origenAntes].sort()).toEqual(
       ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter(
         (t) => t !== VALOR_ORIGEN && !ORIGENES_POSTERIORES.includes(t),

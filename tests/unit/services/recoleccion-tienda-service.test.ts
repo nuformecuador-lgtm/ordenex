@@ -270,6 +270,8 @@ function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRo
     provinciaNombre: "San Jose",
     cantonNombre: "Escazu",
     distritoNombre: "San Rafael",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     mensajeroAsignadoId: MENSAJERO.usuarioId,
     ...overrides,
   };
@@ -484,6 +486,8 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
         provinciaNombre: "San Jose",
         cantonNombre: "Escazu",
         distritoNombre: "San Rafael",
+        sinpeNumero: "80000000",
+        sinpeNombre: "Titular de Prueba",
         // Una orden que sigue en la tienda no es parada de ninguna ruta, no tiene marca privada
         // (es de la gestion en reparto) y no ha tenido ningun intento de entrega.
         secuenciaRuta: null,

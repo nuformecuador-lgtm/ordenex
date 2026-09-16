@@ -50,6 +50,8 @@ function row(id: string, estatusValue: string): MiAsignacionRow {
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: null,
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     mensajeroAsignadoId: "m-1",
   };
 }

@@ -41,14 +41,16 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // (`cobro_tienda_registrado`), que es dinero en el sentido mas directo: baja el disponible de una
 // tienda por una decision humana; y la ficha 398 añade el DUODECIMO (`cierre_dia_gestion_corregida`),
 // que tambien es dinero: saca de un cierre abierto un cobro que nadie recaudo y deja en cero el pago
-// de esa gestion al mensajero. El motivo de cada uno esta escrito a su lado.
+// de esa gestion al mensajero; y la ficha 429 añade el DECIMOTERCERO (`zona_sinpe_cambiado`), que
+// es dinero en el sentido MAS directo de todos: decide a que cuenta transfiere el cliente. El
+// motivo de cada uno esta escrito a su lado.
 
 /**
- * Los 52 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 53 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
-  // --- A.1 · mueve dinero (30) ---
+  // --- A.1 · mueve dinero (31) ---
   "cierre_dia_aprobado", // cierres-admin.aprobarCierre
   "cierre_dia_rechazado", // cierres-admin.rechazarCierre
   "cierre_dia_pagos_editados", // cierres-admin.actualizarPagosGestion
@@ -124,6 +126,29 @@ export const HISTORIAL_ACCION_TIPOS = [
   //     `zona_creada`, igual que `vehiculo_borrado` sin `vehiculo_creado`— por el motivo escrito
   //     mas abajo: lo que decide no es el nombre de la operacion sino su PAPEL.
   "zona_pago_mensajero_cambiado", // zonas.actualizarZona -> ZonaRepository.update (SOLO update)
+  // ⭑ FICHA 429 — EL SINPE DE UNA BODEGA QUEDO DISTINTO. Entra en DINERO y es el sentido MAS
+  // DIRECTO de la categoria, mas todavia que `zona_pago_mensajero_cambiado`: estos dos campos
+  // deciden A QUE CUENTA VA A PARAR EL DINERO DEL CLIENTE. Hasta esta ficha el SINPE era UNO para
+  // toda la operacion y vivia en una variable de entorno, asi que cambiarlo no dejaba rastro en
+  // ninguna parte — ni siquiera un despliegue con nombre.
+  //
+  // ⚠️ `valor_anterior`/`valor_nuevo` LLEVAN EL NUMERO Y EL TITULAR NO (R23). La columna admite
+  // «vocabulario CERRADO … nunca texto libre tecleado por una persona» (TSDoc de
+  // `HistorialAccion`). El numero NO es texto libre: son ocho digitos con un `CHECK` detras, es el
+  // dato PUBLICO que se le manda a cada cliente en cada mensaje, y es lo unico que contesta la
+  // pregunta del dia del reclamo —«¿a que numero transfirio el cliente el martes?»—. El titular SI
+  // es un nombre tecleado por una persona: fuera, por la misma regla que dejo fuera el motivo de un
+  // rechazo. `monto` va NULL: no hay un importe unico.
+  //
+  // ⚠️ LIMITE DECLARADO, con el precedente de la Q2 de la 380 delante: si un guardado cambia SOLO
+  // el titular, la fila existe y sus dos valores son el MISMO numero. El historial dira que el
+  // SINPE de esa bodega cambio, cual, quien y cuando — y no de que titular a que titular.
+  //
+  // ⚠️ CONFIRMAR SIN CAMBIAR NADA NO DEJA FILA (R25). D6 dice «quien lo CAMBIO»; una confirmacion
+  // no cambia nada y no mueve dinero. Meter un tipo «alguien lo miro» en la categoria del dinero la
+  // convertiria en un registro de visitas. La fecha queda en `zona.sinpe_revisado_at`; el «quien»
+  // de una confirmacion sin cambio, no.
+  "zona_sinpe_cambiado", // sinpe-bodega.guardarSinpeBodega -> ZonaRepository.guardarSinpe
   // ⭑ FICHA 381 — ALGUIEN LE COBRO UN COSTO A UNA TIENDA a mano, desde «Registrar movimiento».
   // Entra en DINERO y no admite discusion: la fila documenta que el disponible de esa tienda BAJO
   // por una decision humana, y que puede haber quedado NEGATIVO (el humano lo firmo asi el
@@ -339,6 +364,9 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   // FICHA 380: `tarifa_zona_mensajero` ES lo que cobra un mensajero por entregar y por recibir un
   // rechazo. No hay lectura mas literal de «mueve dinero».
   zona_pago_mensajero_cambiado: "mueve_dinero",
+  // FICHA 429: los dos campos deciden A QUE CUENTA va el dinero del cliente. No hay lectura mas
+  // directa de «mueve dinero», y R17 exige exactamente una categoria por tipo.
+  zona_sinpe_cambiado: "mueve_dinero",
   // FICHA 381 (R41): un cobro manual BAJA el disponible de una tienda. No hay lectura mas directa
   // de «mueve dinero», y R17 exige exactamente una categoria por tipo.
   cobro_tienda_registrado: "mueve_dinero",
@@ -402,6 +430,7 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   orden_zona_reconciliada: "Actualizó la zona de una orden",
   zona_central_cambiada: "Cambió la marca de zona central",
   zona_pago_mensajero_cambiado: "Cambió el pago al mensajero de una zona",
+  zona_sinpe_cambiado: "Cambió el SINPE de una bodega",
   cobro_tienda_registrado: "Cobró un costo a una tienda",
   cierre_dia_gestion_corregida: "Corrigió el resultado de una gestión",
   gestion_fecha_reprogramacion_corregida: "Corrigió la fecha de una reprogramación",

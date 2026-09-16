@@ -181,9 +181,9 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
 
       const nombres = { A: `366 A ${unico()}`, B: `366 B ${unico()}`, C: `366 C ${unico()}` };
       const [a, b, c] = await Promise.all([
-        tx.zona.create({ data: { nombre: nombres.A }, select: { id: true } }),
-        tx.zona.create({ data: { nombre: nombres.B }, select: { id: true } }),
-        tx.zona.create({ data: { nombre: nombres.C }, select: { id: true } }),
+        tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: nombres.A }, select: { id: true } }),
+        tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: nombres.B }, select: { id: true } }),
+        tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: nombres.C }, select: { id: true } }),
       ]);
 
       const escenario: Escenario = {
@@ -693,7 +693,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
       const conDeriva = await e.crearOrden({ distritoId: distrito, zonaId: e.zonas.A.id });
 
       await e.repo.create(
-        {
+        { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
           nombre: `366 NUEVA ${unico()}`,
           cobroVehiculo: false,
           esCentral: false,
@@ -1113,7 +1113,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
       });
 
       const creada = await e.repo.create(
-        {
+        { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
           nombre: `377 NUEVA ${unico()}`,
           cobroVehiculo: false,
           esCentral: false,

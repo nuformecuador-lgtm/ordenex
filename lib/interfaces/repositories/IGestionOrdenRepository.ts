@@ -72,6 +72,23 @@ export interface MiAsignacionRow {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+  /**
+   * ⭑ FICHA 429 (R13/R15) — EL SINPE DE LA BODEGA QUE COBRA ESTA ORDEN, ya resuelto.
+   *
+   * ⚠️ RESUELTO EN EL REPOSITORIO Y NO EN EL SERVICIO, al reves que `fechaReparto`. El criterio de
+   * aquel campo es «quien decide necesita un reloj, y el repositorio no lo tiene»; aqui no hay
+   * reloj ni ninguna otra dependencia del entorno: la regla es una funcion PURA de dos filas que
+   * SOLO el repositorio tiene delante (la zona de la orden y la del mensajero asignado). Subirlas
+   * las dos hasta el servicio para aplicar alli un `??` seria pasear dos pares de columnas por una
+   * capa que no los usa.
+   *
+   * ⚠️ REQUERIDOS, SIN `?`, al contrario que `tiendaTelefono?` y `fechaReparto?`: un doble de test
+   * que se los olvide tiene que ROMPER EL BUILD, no emitir `undefined` en silencio. El precedente
+   * literal de este mismo archivo es `OrdenGestionRow.fechaReparto`, obligatorio «porque es el
+   * insumo de una PUERTA, no un dato de pantalla». Este es el insumo de un COBRO.
+   */
+  sinpeNumero: string;
+  sinpeNombre: string;
   mensajeroAsignadoId: string | null;
   /**
    * Feature 246 (T3.7, R35) — dia de reparto CRUDO de la orden (`@db.Date`: medianoche UTC de la

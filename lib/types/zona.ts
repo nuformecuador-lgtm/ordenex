@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { zonasConfig } from "@/lib/config/zonas";
+import { sinpeNombreSchema, sinpeNumeroSchema } from "@/lib/utils/sinpe-cr";
 
 // Feature 24 (redefinida). Zod en el borde. Montos >= 0 (patron tarifa.ts).
 const montoSchema = z.number().nonnegative();
@@ -111,6 +112,23 @@ export const crearZonaSchema = z
     ...zonaFieldsComunes,
     // feature 54: flag de zona central (renombrado del viejo esGam). 376/R2: el default se queda.
     esCentral: z.boolean().default(false),
+    /**
+     * ⭑ FICHA 429 (R11) — OBLIGATORIOS AL CREAR, sin `.optional()` y SIN DEFAULT.
+     *
+     * Es la segunda capa de D3: una bodega nueva no puede nacer sin el numero al que sus clientes
+     * van a transferir. Un default —por ejemplo «el de la central»— convertiria el campo en una
+     * preseleccion invisible, y aceptar sin leer lo que ya viene relleno es un gesto de un
+     * segundo. «Obligatorio» significa teclearlo.
+     *
+     * ⚠️ NO ESTAN EN `actualizarZonaSchema`, y no es un olvido: el SINPE se edita por SU PROPIA
+     * accion (`lib/actions/sinpe-bodega.ts`), con su propio modelo de permisos. Si viajaran en el
+     * reemplazo completo de `actualizarZona` —que es `maestro`-only— un guardado de distritos
+     * pisaria en silencio la correccion que un `adminSatelite` acaba de hacer sobre su bodega.
+     * El zod de los dos esquemas es `.strict()`, asi que mandarlos a `actualizarZona` devuelve
+     * `validation_error` en vez de escribirlos por la puerta de atras.
+     */
+    sinpeNumero: sinpeNumeroSchema,
+    sinpeNombre: sinpeNombreSchema,
   })
   .strict()
   .superRefine(applyTarifaRules);

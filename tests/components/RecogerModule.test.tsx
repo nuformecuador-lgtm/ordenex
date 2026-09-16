@@ -87,6 +87,8 @@ function makeAsignacion(
     provinciaNombre: "San José",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     // Estas órdenes todavía no entraron en la ruta optimizada (feature 92/R28).
     secuenciaRuta: null,
     ...over,
@@ -254,6 +256,8 @@ describe("RecogerModule — listado de solo-visualización", () => {
           provinciaNombre: "Cartago",
           cantonNombre: "Oreamuno",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });

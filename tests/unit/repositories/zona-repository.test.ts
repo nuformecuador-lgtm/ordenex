@@ -65,7 +65,7 @@ describe("ZonaRepository.create", () => {
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
 
-    const dto = await repoOf(prisma).create({
+    const dto = await repoOf(prisma).create({ sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
       nombre: "GAM",
       cobroVehiculo: false,
       esCentral: false,
@@ -99,7 +99,7 @@ describe("ZonaRepository.create", () => {
     ]);
     const prisma = buildPrisma(tx);
 
-    const dto = await repoOf(prisma).create({
+    const dto = await repoOf(prisma).create({ sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
       nombre: "GAM",
       cobroVehiculo: true,
       esCentral: false,
@@ -123,7 +123,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
 
-    const dto = await repoOf(prisma).create({
+    const dto = await repoOf(prisma).create({ sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
       nombre: "NUEVA",
       cobroVehiculo: false,
       esCentral: true,
@@ -149,7 +149,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
 
-    await repoOf(prisma).create({
+    await repoOf(prisma).create({ sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
       nombre: "X",
       cobroVehiculo: false,
       esCentral: false,
@@ -211,7 +211,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     const prisma = buildPrisma(tx);
 
     await expect(
-      repoOf(prisma).create({
+      repoOf(prisma).create({ sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
         nombre: "NUEVA",
         cobroVehiculo: false,
         esCentral: true,
@@ -268,7 +268,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     const prisma = buildPrisma(tx);
 
     await expect(
-      repoOf(prisma).create({
+      repoOf(prisma).create({ sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
         nombre: "NUEVA",
         cobroVehiculo: false,
         esCentral: true,
@@ -300,7 +300,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     const prisma = buildPrisma(tx);
 
     await expect(
-      repoOf(prisma).create({
+      repoOf(prisma).create({ sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
         nombre: "DUP",
         cobroVehiculo: false,
         esCentral: false,
@@ -321,7 +321,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     const prisma = buildPrisma(tx);
 
     await expect(
-      repoOf(prisma).create({
+      repoOf(prisma).create({ sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
         nombre: "DUP",
         cobroVehiculo: false,
         esCentral: false,
@@ -664,7 +664,7 @@ describe("366/T4 — ZonaRepository.update reconcilia la zona de las ordenes", (
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
 
-    await repoOf(prisma).create({ ...DATOS_ZONA_A, nombre: "NUEVA" }, null);
+    await repoOf(prisma).create({ sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", ...DATOS_ZONA_A, nombre: "NUEVA" }, null);
 
     expect(tx.zonaDistrito.findMany).not.toHaveBeenCalled();
     expect(tx.orden.findMany).not.toHaveBeenCalled();
@@ -787,7 +787,7 @@ describe("377/T4 — el corte por estado y el conteo de retenidas", () => {
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
 
-    const dtoCreado = await repoOf(prisma).create({ ...DATOS_ZONA_A, nombre: "NUEVA" }, null);
+    const dtoCreado = await repoOf(prisma).create({ sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", ...DATOS_ZONA_A, nombre: "NUEVA" }, null);
 
     expect(tx.orden.count).not.toHaveBeenCalled();
     // Y el DTO de crear sigue sin ninguno de los dos conteos: `CrearZonaResult` no los lleva.
@@ -1051,7 +1051,7 @@ describe("376/T7 — el rastro de `create`", () => {
   it("⭑ R12: crear CON la marca habiendo otra central escribe DOS filas con el mismo lote", async () => {
     const tx = txDeCreacion();
     await repoOf(buildPrisma(tx)).create(
-      { ...DATOS_BASE, nombre: "NUEVA", esCentral: true },
+      { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", ...DATOS_BASE, nombre: "NUEVA", esCentral: true },
       "u-maestro",
     );
 
@@ -1080,7 +1080,7 @@ describe("376/T7 — el rastro de `create`", () => {
     });
 
     await repoOf(buildPrisma(tx)).create(
-      { ...DATOS_BASE, nombre: "NUEVA", esCentral: false },
+      { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", ...DATOS_BASE, nombre: "NUEVA", esCentral: false },
       "u-maestro",
     );
 

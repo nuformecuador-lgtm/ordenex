@@ -108,6 +108,9 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
       "cobro_tienda_registrado",
       // ficha 398 (2026-09-08): la correccion en sitio del resultado de una gestion
       "cierre_dia_gestion_corregida",
+      // ficha 429 (2026-09-15): el SINPE de una bodega, que decide a que cuenta transfiere el
+      // cliente. Su archivo: `historial-accion-zona-sinpe-migration.test.ts`.
+      "zona_sinpe_cambiado",
     ];
     expect([...HISTORIAL_ACCION_TIPOS].sort()).toEqual(
       [...previos, VALOR_NUEVO, ...POSTERIORES].sort(),

@@ -1,0 +1,43 @@
+-- ⭑ FICHA 429 (T3) — el rastro de CAMBIAR EL SINPE DE UNA BODEGA.
+--
+-- QUE REGISTRA: que el numero SINPE de una bodega quedo DISTINTO tras un guardado. Una fila por
+-- GUARDADO que deje el par distinto, colgada de la ZONA (`entidad_tipo = 'zona'`).
+--
+-- POR QUE ENTRA EN «mueve dinero». R17 de la 362 exige EXACTAMENTE una categoria por tipo. Estos
+-- dos campos deciden A QUE CUENTA VA A PARAR EL DINERO DEL CLIENTE: es el sentido mas directo de
+-- la categoria, mas directo todavia que `zona_pago_mensajero_cambiado`, que ya esta ahi. No es
+-- «hace desaparecer algo» (la zona sigue) ni «cambia quien puede hacer que» (ningun permiso
+-- cambia).
+--
+-- ⚠️ `valor_anterior`/`valor_nuevo` LLEVAN EL NUMERO, y el TITULAR NO. El TSDoc de
+-- `HistorialAccion` admite en esas columnas «vocabulario CERRADO … nunca texto libre tecleado por
+-- una persona». El numero NO es texto libre: son ocho digitos con un `CHECK` detras, es el dato
+-- PUBLICO que se le manda a cada cliente en cada mensaje, y es lo unico que contesta la pregunta
+-- del dia del reclamo —«¿a que numero transfirio el cliente el martes?»—. El titular SI es un
+-- nombre tecleado por una persona: se queda fuera por la misma regla que dejo fuera el motivo de
+-- un rechazo. `monto` va NULL: no hay un importe unico.
+--
+-- ⚠️ LIMITE DECLARADO, CON PRECEDENTE: si un guardado cambia SOLO el titular, la fila existe y sus
+-- dos valores son el mismo numero. El historial dira que el SINPE de esa bodega cambio, cual,
+-- quien y cuando — y no de que titular a que titular. Mismo alcance que el humano firmo para
+-- `zona_pago_mensajero_cambiado` (Q2 de la ficha 380).
+--
+-- ⚠️ CONFIRMAR SIN CAMBIAR NADA NO DEJA FILA (R25). D6 dice «quien lo CAMBIO»; una confirmacion no
+-- cambia nada y no mueve dinero. Meter un tipo «alguien lo miro» en la categoria del dinero la
+-- convertiria en un registro de visitas. La fecha de la revision queda en `zona.sinpe_revisado_at`;
+-- el «quien» de una confirmacion sin cambio, no.
+--
+-- `historial_accion_entidad` NO SE TOCA: `zona` ya esta entre sus valores desde
+-- `20260902120000_historial_accion` (la usan `zona_borrada`, `zona_central_cambiada` y
+-- `zona_pago_mensajero_cambiado`). Aqui solo se amplia `historial_accion_tipo`.
+--
+-- VA SOLA: Postgres prohibe USAR un valor de enum en la misma transaccion que lo añade (55P04) y
+-- Prisma Migrate corre cada `migration.sql` en su propia transaccion. Mismo patron que
+-- `20260908120000_historial_accion_zona_pago_mensajero` y las siete ampliaciones anteriores.
+--
+-- ADITIVA: no crea ni altera tablas, columnas ni indices, y no escribe ni borra datos. La RLS de
+-- `historial_accion` —habilitada y sin policies desde la 362, solo service role— no se toca: un
+-- valor nuevo de enum no la afecta. NO HAY BACKFILL y no puede haberlo: nadie registro los cambios
+-- de SINPE anteriores porque hasta hoy el SINPE no vivia en la base, sino en una variable de
+-- entorno. El rastro empieza el dia del despliegue.
+ALTER TYPE "historial_accion_tipo" ADD VALUE IF NOT EXISTS 'zona_sinpe_cambiado';

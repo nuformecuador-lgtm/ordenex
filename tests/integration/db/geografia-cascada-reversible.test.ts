@@ -75,7 +75,7 @@ describeSiHayBase("374 — la cascada es reversible (Postgres real)", () => {
       await serializarEscriturasReales(tx);
 
       const zona = (
-        await tx.zona.create({ data: { nombre: `Zona ${SUFIJO}` }, select: { id: true } })
+        await tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Zona ${SUFIJO}` }, select: { id: true } })
       ).id;
       const provincia = (
         await tx.provincia.create({ data: { nombre: `Prov ${SUFIJO}` }, select: { id: true } })
