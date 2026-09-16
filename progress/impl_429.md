@@ -278,4 +278,75 @@ rama toca (110 archivos) y las cuatro volvieron a verde sin tocar una línea de 
 `pnpm run lint` → **0 errores**, 200 warnings (`no-unused-vars` de parámetros con `_`, los mismos
 que ya traía `dev`; uno de ellos es del archivo nuevo `chat-whatsapp-sinpe-del-servidor.test.ts`).
 
-`./init.sh` completo (log en `progress/gate_429_backend.log`): ver el apartado siguiente.
+### `./init.sh` COMPLETO — `progress/gate_429_backend.log`
+
+El rápido **se niega solo** con este diff (migraciones + `db/schema.prisma` + `lib/types/**`), así
+que el veredicto sale del completo. Corrido dos veces; estas son las cifras de la **segunda**, sobre
+el árbol ya commiteado:
+
+```
+✓ typecheck paso
+✓ lint paso            (0 errores; 200 warnings de `no-unused-vars`, los mismos que traía `dev`)
+
+ Test Files   4 failed | 1986 passed (1990)
+      Tests  32 failed | 29007 passed | 26 skipped (29065)
+   Duration  638.63s
+
+INIT_EXIT=1
+```
+
+#### ⚠️ LOS `skipped`, MIRADOS — el veredicto de la capa de datos SÍ vale
+
+**26 saltados, y los 26 están identificados**: `AnaliticaPage.test.tsx` (17) y
+`AnaliticaShell.test.tsx` (9). Son los dos de siempre. **NO son los ~147-183 archivos de
+`tests/integration/db` que se saltan cuando falta `DATABASE_URL`** — esta ficha vive justo ahí, y un
+«init OK» con la capa de datos saltada no habría valido nada.
+
+**Medido, no supuesto: `273` archivos de `tests/integration/db/` corrieron en verde**, incluidos los
+cinco nuevos de esta ficha. El `.env` se copió al worktree para el gate y **se borra al terminar**;
+no está commiteado (`.gitignore` cubre `.env*`) y se comprobó que no entra en el índice.
+
+Las suites nuevas, una a una:
+
+```
+✓ tests/integration/db/zona-sinpe-migration.test.ts                   (31 tests) 2063ms
+✓ tests/integration/db/historial-accion-zona-sinpe-migration.test.ts  (17 tests) 1013ms
+✓ tests/integration/db/zona-sinpe-rastro.test.ts                      ( 6 tests)  538ms
+✓ tests/integration/db/zona-sinpe-permisos.test.ts                    ( 3 tests)  893ms
+✓ tests/integration/db/zona-sinpe-revision.test.ts                    ( 4 tests)  470ms
+✓ tests/integration/actions/sinpe-bodega-action.test.ts               (10 tests)   22ms
+✓ tests/unit/auth/revision-sinpe-pendiente.test.ts                    (12 tests)   13ms
+✓ tests/unit/guards/sinpe-sin-variables-de-entorno.guardia.test.ts    ( 6 tests)  831ms
+✓ tests/unit/guards/sinpe-en-toda-superficie.guardia.test.ts          ( 9 tests)  960ms
+✓ tests/unit/guards/revision-sinpe-no-bloquea.guardia.test.ts         ( 7 tests) 1110ms
+```
+
+#### Los 4 rojos: un solo defecto, y está fuera de alcance
+
+```
+❯ tests/components/CrearZonaFormReconciliacion.test.tsx (11 tests | 11 failed)
+❯ tests/components/ZonaCentralConfirmacion.test.tsx     (15 tests | 15 failed)
+❯ tests/components/ZonaNombreNoImprimible.test.tsx      ( 4 tests |  4 failed)
+❯ tests/components/ZonaDistritoEspecial.test.tsx        ( 5 tests |  2 failed)
+```
+
+Los 32 casos caen por **la misma causa**: `CrearZonaForm` valida contra `crearZonaSchema`, que desde
+T11 exige los dos campos del SINPE, y el formulario no los recoge — así que no llega a llamar a la
+acción («expected vi.fn() to be called … got 0 times»). Es el §3 de esta bitácora.
+
+**`tests/baseline-rojos.json` tiene `archivos: {}`**, así que el gate falla por estos cuatro y hace
+bien: son deuda de ESTA rama, no de `dev`. **No se añaden al baseline**: el propio archivo lo
+prohíbe («nunca añadas un archivo aquí para pasar el gate»), y aquí ni siquiera es deuda ajena — es
+la mitad de la ficha que falta.
+
+#### Primera corrida (antes del commit de arreglos), para que quede la traza
+
+```
+ Test Files  23 failed | 1967 passed (1990)
+      Tests 100 failed | 28875 passed | 26 skipped (29001)
+INIT_EXIT=1
+```
+
+De los 23, **19 eran ruido propio** y están cerrados en `cf44256d`: 12 por el CRLF del §4, 5 por
+`INSERT INTO "zona"` crudos, y 2 por censos que esta ficha obliga a actualizar (el orden del enum de
+la 398 y la lista de migraciones posteriores de la 427). Los 4 que quedan son los de arriba.
