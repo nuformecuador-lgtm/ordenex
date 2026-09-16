@@ -13,6 +13,8 @@
  * divergirían en cuanto alguien tocara uno. Mismo precedente que `desglose-tienda-labels`, que
  * reexporta los suyos de `/mi-wallet`.
  */
+import { money as formatearMonto } from "@/lib/config/moneda";
+
 export {
   ESTADO_CONCILIACION_LABEL,
   ESTADO_CONCILIACION_VARIANT,
@@ -29,6 +31,32 @@ export {
 
 /** El formateador compartido. Money-safe: NO convierte a número, sólo compone la cadena. */
 export { money } from "@/lib/config/moneda";
+
+/**
+ * ⚠️ FORMATEO DE FECHA FIJADO A COSTA RICA, y no es un detalle cosmético.
+ *
+ * Estas fechas llegan como ISO en UTC. Recortarlas con `iso.slice(0, 10)` —que es lo que parece
+ * inofensivo— da el día UTC: una consolidación marcada a las 19:00 del 15 de septiembre en Costa
+ * Rica es `2026-09-16T01:00:00Z`, y esa fila aparecería fechada **al día siguiente** en la
+ * pantalla de quien la marcó. En una pantalla que existe para perseguir bultos por su fecha, un
+ * día de desfase es la diferencia entre encontrar el bulto y discutir sobre cuál era.
+ *
+ * Tampoco se usa la zona del NAVEGADOR: la operación es de Costa Rica, y quien mire desde otro
+ * huso tiene que leer la misma fecha que quien recibió el efectivo. Mismo criterio y mismo
+ * `timeZone` que `fechaRevisionCR` en `sinpe-textos`.
+ */
+const FECHA_CORTA_CR = new Intl.DateTimeFormat("es-CR", {
+  day: "numeric",
+  month: "short",
+  timeZone: "America/Costa_Rica",
+});
+
+/** ISO → «16 sep» en el calendario de Costa Rica. Una fecha ilegible se pinta como ausencia. */
+export function diaCR(iso: string | null): string {
+  if (iso === null) return SIN_DATO;
+  const fecha = new Date(iso);
+  return Number.isNaN(fecha.getTime()) ? SIN_DATO : FECHA_CORTA_CR.format(fecha);
+}
 
 /** Cabecera de la página. */
 export const SATELITES_PAGINA = {
@@ -100,6 +128,24 @@ export function antiguedadLabel(dias: number | null): string {
   if (dias === 1) return "ayer";
   return `hace ${dias} días`;
 }
+
+/**
+ * ⭑ LA ÚLTIMA QUE LLEGÓ: «16 sep · ₡ 485.000», y «de ₡ 500.000» sólo si llegó incompleta.
+ *
+ * ⚠️ Es UNA consolidación, no el acumulado de la bodega. La columna promete «la última recibida»
+ * y tiene que cumplirlo: pintar ahí la suma histórica sería un número de seis cifras bajo un
+ * rótulo que dice otra cosa.
+ *
+ * Money-safe: los dos importes llegan como STRING del servidor y sólo se formatean. Quién decide
+ * si hubo diferencia es `hayFaltantePorRecibir` sobre el `faltaPorRecibir` que el servidor ya
+ * restó — aquí no se compara un importe contra otro.
+ */
+export const ULTIMA_RECIBIDA = {
+  /** Cuándo y cuánto. El separador es el mismo « · » que usa el resto de la pantalla. */
+  linea: (fecha: string, monto: string) => `${fecha} · ${formatearMonto(monto)}`,
+  /** El contexto que sólo aparece cuando la última llegó incompleta. */
+  deDeclarado: (declarado: string) => `de ${formatearMonto(declarado)}`,
+} as const;
 
 /** Nombres accesibles de la tabla de saldos y de sus controles. */
 export const SALDOS_SATELITES_NOMBRE = {

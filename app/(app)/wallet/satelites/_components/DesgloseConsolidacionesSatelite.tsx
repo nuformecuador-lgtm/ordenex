@@ -37,6 +37,7 @@ import {
   ESTADO_CONCILIACION_LABEL,
   ESTADO_CONCILIACION_VARIANT,
   SIN_DATO,
+  diaCR,
   estadoConciliacionDe,
   money,
 } from "./satelites-labels";
@@ -63,8 +64,14 @@ import {
 // declarado, la diferencia tiene que estar A LA VISTA de las dos partes; si sólo viviera en una
 // columna de una tabla, la bodega la descubriría semanas después, cuando alguien se la reclame.
 
-/** Tamaño de página del desglose. Sale de la config del dominio, no de un literal de pantalla. */
-const DESGLOSE_PAGE_SIZE = 20;
+/**
+ * Tamaño de página del desglose. Sale de la CONFIG DEL DOMINIO (`cierreBodegaConfig`), que es la
+ * misma de la que comen los dos listados de `/cierres-admin`: son el mismo dominio y el mismo
+ * borde, y su schema valida el `pageSize` contra ese tope. Un literal aquí sería el número que un
+ * día deja de caber en lo que el servidor acepta, y el desglose respondería `validation_error`
+ * en vez de filas.
+ */
+const DESGLOSE_PAGE_SIZE = cierreBodegaConfig.DEFAULT_PAGE_SIZE;
 
 /** Prefijo de la clave SWR. Identifica esta lectura entre todas las de la app. */
 const CLAVE_DESGLOSE = "wallet-satelites:desglose";
@@ -121,15 +128,10 @@ async function leerDesglose(
   return { items: res.items, total: res.total };
 }
 
-/** El día de la consolidación, como lo lee una persona. Sin horas: una bodega consolida una vez. */
-function dia(iso: string): string {
-  return iso.slice(0, 10);
-}
-
 /** Quién marcó y cuándo, en una línea. Sin marca no hay nada que decir. */
 function conciliadoPorTexto(c: ConsolidacionSateliteDTO): string {
   if (c.conciliadoPorNombre === null || c.conciliadoAt === null) return SIN_DATO;
-  return `${c.conciliadoPorNombre} · ${dia(c.conciliadoAt)}`;
+  return `${c.conciliadoPorNombre} · ${diaCR(c.conciliadoAt)}`;
 }
 
 export interface DesgloseConsolidacionesSateliteProps {
@@ -189,7 +191,7 @@ export function DesgloseConsolidacionesSatelite({
     {
       id: "consolidada",
       value: DESGLOSE_SATELITE_COLUMNAS.consolidada,
-      render: (c) => dia(c.solicitadoAt),
+      render: (c) => diaCR(c.solicitadoAt),
     },
     {
       id: "declarado",
@@ -246,7 +248,7 @@ export function DesgloseConsolidacionesSatelite({
         <ConciliacionAcciones
           cierreBodegaId={c.cierreBodegaId}
           bodega={zonaNombre}
-          fecha={dia(c.solicitadoAt)}
+          fecha={diaCR(c.solicitadoAt)}
           declarado={c.totales.efectivo}
           marca={c}
           nota={c.nota}

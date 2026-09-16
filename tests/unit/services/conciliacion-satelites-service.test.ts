@@ -50,6 +50,15 @@ function saldoDe(overrides: Partial<SaldoSateliteDTO> = {}): SaldoSateliteDTO {
     consolidacionesSinConciliar: 1,
     diasDeLaMasAntigua: 5,
     fechaDeLaMasAntigua: "2026-09-11T12:00:00.000Z",
+    // ⭑ La ULTIMA que llego: UNA consolidacion, con su fecha y su importe. No es `totalRecibido`
+    // —la suma historica de arriba— y por eso las dos cifras del doble son DISTINTAS a proposito:
+    // si alguien las igualara, un test no podria distinguir cual de las dos pinta la pantalla.
+    ultimaRecibida: {
+      fecha: "2026-09-14T22:10:00.000Z",
+      monto: "1285.00",
+      declarado: "1285.00",
+      faltaPorRecibir: "0.00",
+    },
     ...overrides,
   };
 }

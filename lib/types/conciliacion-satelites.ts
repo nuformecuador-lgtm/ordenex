@@ -57,6 +57,41 @@ export interface SaldoSateliteDTO {
   diasDeLaMasAntigua: number | null;
   /** ISO del `solicitado_at` de esa mas antigua. `null` si no hay ninguna pendiente. */
   fechaDeLaMasAntigua: string | null;
+  /**
+   * ⭑ La ULTIMA consolidacion de esta bodega que se marco como recibida. `null` = a esta bodega
+   * no se le ha marcado ninguna nunca.
+   *
+   * ⚠️ NO ES `totalRecibido`, Y LA DIFERENCIA IMPORTA. `totalRecibido` es la SUMA historica de
+   * todo lo que esta bodega ha entregado; esto es UNA fila: la ultima vez que llego un bulto,
+   * con lo que traia. La columna de la pantalla se llama «Ultima recibida» y pintar ahi el
+   * acumulado seria poner un numero de seis cifras bajo un rotulo que promete otro — el defecto
+   * exacto que la ficha 359 encontro repetido en 13 pantallas.
+   *
+   * Es CONTEXTO, no deuda: dice que esta bodega SI entrega, y cuando fue la ultima vez. Una que
+   * lleva dos meses sin una fila aqui es una conversacion distinta de una que entrego ayer.
+   */
+  ultimaRecibida: UltimaRecibidaDTO | null;
+}
+
+/**
+ * ⭑ FICHA 431 — la ULTIMA consolidacion recibida de una bodega, ya cuadrada por el servidor.
+ *
+ * Los tres importes son STRING de escala 2 y `faltaPorRecibir` llega DERIVADO (R20): la pantalla
+ * no resta para saber si esa ultima llego incompleta, lo pregunta sobre el string que ya le dan.
+ */
+export interface UltimaRecibidaDTO {
+  /** ISO de `conciliado_at`: CUANDO se marco que llego, no cuando se consolido. */
+  fecha: string;
+  /** `monto_recibido` de ESA consolidacion: lo que se conto al recibir el bulto. */
+  monto: string;
+  /** `total_efectivo` de ESA consolidacion: lo que la bodega habia declarado. */
+  declarado: string;
+  /**
+   * R17/R18/R20 — `declarado` − `monto` de ESA fila, derivado en el servidor con la MISMA
+   * `saldoDe` que el saldo de la bodega. Distinto de cero = esa ultima llego incompleta y la
+   * pantalla lo dice («₡ 485.000 de ₡ 500.000»). Puede ser NEGATIVO (llego de mas).
+   */
+  faltaPorRecibir: string;
 }
 
 /**

@@ -42,8 +42,11 @@ import {
 import {
   BODEGA_BLOQUEADA_TITULO,
   BODEGA_CIERRES_ABIERTOS_DETALLE,
+  CONSOLIDACIONES_SIN_CONCILIAR_ARIA,
+  CONSOLIDACIONES_SIN_CONCILIAR_DETALLE,
   bodegaBloqueadaLineas,
   bodegaCierresAbiertosTitulo,
+  consolidacionesSinConciliarTitulo,
   type BodegaBloqueoCausa,
 } from "./asignacion-satelite-bloqueo";
 
@@ -178,6 +181,14 @@ export interface RecepcionSateliteModuleProps {
     cierresAbiertos?: number;
     totalMensajeros?: number;
     mensajerosConCierreIds?: string[];
+    /**
+     * ⭑ FICHA 431 (R2) — cuántas consolidaciones de esta bodega siguen pendientes de conciliar.
+     * `porCierreBodega` dice «hay»; esto dice «cuántas», que es lo que el aviso necesita.
+     * Opcional como sus hermanos informativos: el defecto es `1`, no `0`, porque quien llega a
+     * pintar el aviso ya sabe que hay AL MENOS una — un «Tenés 0 consolidaciones» sería un aviso
+     * que se desmiente a sí mismo.
+     */
+    consolidacionesSinConciliar?: number;
   };
   /**
    * Feature 46 (R15/R16): órdenes liberadas HOY (CR) por el cron para esta bodega
@@ -503,6 +514,37 @@ export function RecepcionSateliteModule({
               {bodegaCierresAbiertosTitulo(bloqueoBodega.cierresAbiertos ?? 0)}
             </span>
             <span>{BODEGA_CIERRES_ABIERTOS_DETALLE}</span>
+          </div>
+        ) : null}
+
+        {/*
+          ⭑ FICHA 431 (T13, R2/R4) — EL AVISO QUE SUSTITUYE AL FRENO.
+
+          Hasta esta ficha, una consolidación sin resolver apagaba «Asignar» para la bodega
+          entera. Ahora CUENTA y NO FRENA: el botón sigue habilitado y el texto lo dice con
+          todas sus letras, porque quien ya conocía la pantalla espera lo contrario.
+
+          ── POR QUÉ ES UN HERMANO Y NO OTRA RAMA DEL TERNARIO DE ARRIBA
+          Las dos causas son INDEPENDIENTES desde la feature 241 (R3: el borde las distingue) y
+          pueden darse a la vez. Metido en el ternario, tener cierres de mensajeros abiertos
+          escondería el de las consolidaciones —o al revés—, y la bodega sólo se enteraría de la
+          mitad de lo que tiene pendiente.
+
+          ── SIN UMBRAL (Q6)
+          `role="status"` y tono `warning`, iguales pase el tiempo que pase: no hay un «a los N
+          días esto se pone rojo». Ese umbral sería el bloqueo volviendo por la puerta de atrás,
+          y la antigüedad ya se enseña —a quien puede hacer algo con ella— en `/wallet/satelites`.
+        */}
+        {bloqueoBodega.porCierreBodega ? (
+          <div
+            role="status"
+            aria-label={CONSOLIDACIONES_SIN_CONCILIAR_ARIA}
+            className="flex flex-col gap-1 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-strong"
+          >
+            <span className="font-medium">
+              {consolidacionesSinConciliarTitulo(bloqueoBodega.consolidacionesSinConciliar ?? 1)}
+            </span>
+            <span>{CONSOLIDACIONES_SIN_CONCILIAR_DETALLE}</span>
           </div>
         ) : null}
 

@@ -5,6 +5,7 @@ import type {
   ConsolidacionSateliteDTO,
   ResumenSatelitesDTO,
   SaldoSateliteDTO,
+  UltimaRecibidaDTO,
 } from "@/lib/types/conciliacion-satelites";
 import { saldoDe } from "@/lib/utils/conciliacion-satelite";
 import { diasNaturalesCRDesde, inicioDelMesCREnUtc } from "@/lib/utils/fecha-cr";
@@ -135,7 +136,7 @@ export class SaldosSatelitesRepository implements ISaldosSatelitesRepository {
     const zonaIds = zonas.map((z) => z.id);
     const ahora = new Date();
 
-    const [dinero, cola] = await Promise.all([
+    const [dinero, cola, ultimas] = await Promise.all([
       this.prisma.cierreBodega.groupBy({
         by: ["zonaId"],
         where: { zonaId: { in: zonaIds }, ...NO_RECHAZADAS },
@@ -147,10 +148,19 @@ export class SaldosSatelitesRepository implements ISaldosSatelitesRepository {
         _count: { _all: true },
         _min: { solicitadoAt: true },
       }),
+      // (c) LA ULTIMA RECIBIDA — el INSTANTE de la mas reciente de cada zona. Solo la fecha: un
+      // `groupBy` devuelve agregados, no la fila que los produjo, asi que el importe se busca
+      // despues con esa fecha.
+      this.prisma.cierreBodega.groupBy({
+        by: ["zonaId"],
+        where: { zonaId: { in: zonaIds }, conciliadoAt: { not: null }, ...NO_RECHAZADAS },
+        _max: { conciliadoAt: true },
+      }),
     ]);
 
     const dineroPorZona = new Map(dinero.map((d) => [d.zonaId, d]));
     const colaPorZona = new Map(cola.map((c) => [c.zonaId, c]));
+    const ultimaPorZona = await this.leerUltimasRecibidas(ultimas);
 
     return zonas.map((zona) => {
       const d = dineroPorZona.get(zona.id);
@@ -175,8 +185,62 @@ export class SaldosSatelitesRepository implements ISaldosSatelitesRepository {
         // cola, que NO es lo mismo que `0` («la mas vieja es de hoy»).
         diasDeLaMasAntigua: masAntigua === null ? null : diasNaturalesCRDesde(masAntigua, ahora),
         fechaDeLaMasAntigua: masAntigua === null ? null : masAntigua.toISOString(),
+        // La ULTIMA que llego. `null` = a esta bodega nunca se le marco ninguna. NO es el
+        // acumulado `totalRecibido` que va arriba: es UNA fila, con su fecha y su importe.
+        ultimaRecibida: ultimaPorZona.get(zona.id) ?? null,
       };
     });
+  }
+
+  /**
+   * ⭑ LA ULTIMA CONSOLIDACION RECIBIDA de cada zona, en DOS pasos y no en uno.
+   *
+   * POR QUE DOS: el `groupBy` de arriba sabe CUANDO fue la ultima (`_max.conciliado_at`) pero no
+   * devuelve la fila que lo produjo, y el importe vive en esa fila. Aqui se piden exactamente
+   * esas N filas —una por zona con alguna recibida— por su par (zona, instante).
+   *
+   * POR QUE NO UN `findMany` + `distinct`: el recorte a una fila por zona lo haria Prisma, pero
+   * si la version de turno no empuja el `DISTINCT ON` a Postgres, la consulta se trae TODAS las
+   * consolidaciones conciliadas de la operacion para quedarse con cinco. Este par de consultas
+   * esta acotado por construccion —como mucho una fila por zona— y no depende de esa semantica.
+   *
+   * EL EMPATE, dicho: dos consolidaciones de la MISMA zona marcadas en el MISMO microsegundo
+   * traerian dos filas. Se queda la primera y es DETERMINISTA por el `orderBy`: entre dos bultos
+   * marcados a la vez, cualquiera de los dos responde igual de bien a «cuando llego el ultimo»,
+   * pero alternar entre ellos en dos recargas si seria un defecto.
+   */
+  private async leerUltimasRecibidas(
+    ultimas: { zonaId: string; _max: { conciliadoAt: Date | null } }[],
+  ): Promise<Map<string, UltimaRecibidaDTO>> {
+    const pares = ultimas.flatMap((u) =>
+      u._max.conciliadoAt === null ? [] : [{ zonaId: u.zonaId, conciliadoAt: u._max.conciliadoAt }],
+    );
+    if (pares.length === 0) return new Map();
+
+    const filas = await this.prisma.cierreBodega.findMany({
+      where: { OR: pares },
+      orderBy: [{ conciliadoAt: "desc" }, { id: "asc" }], // el desempate, ver arriba
+      select: { zonaId: true, conciliadoAt: true, montoRecibido: true, totalEfectivo: true },
+    });
+
+    const porZona = new Map<string, UltimaRecibidaDTO>();
+    for (const f of filas) {
+      // `conciliadoAt` no puede ser nulo aqui —se busco por su valor— pero el tipo lo admite y
+      // un `!` seria la afirmacion que un dia deja de ser cierta sin avisar.
+      if (f.conciliadoAt === null || porZona.has(f.zonaId)) continue;
+      porZona.set(f.zonaId, {
+        fecha: f.conciliadoAt.toISOString(),
+        // Una fila con `conciliado_at` SIEMPRE tiene `monto_recibido`: lo impone el `CHECK`
+        // `cierre_bodega_conciliacion_coherente`. El `?? 0` es la lectura defensiva del tipo
+        // nulable, no una suposicion sobre el dato.
+        monto: (f.montoRecibido ?? new Prisma.Decimal(0)).toFixed(2),
+        declarado: f.totalEfectivo.toFixed(2),
+        // R20: la resta de ESA fila, hecha AQUI con la MISMA formula que el saldo de la bodega.
+        // La pantalla pregunta si falta algo; no lo calcula.
+        faltaPorRecibir: saldoDe(f.totalEfectivo, f.montoRecibido).toFixed(2),
+      });
+    }
+    return porZona;
   }
 
   async findConsolidacionesPaginado(

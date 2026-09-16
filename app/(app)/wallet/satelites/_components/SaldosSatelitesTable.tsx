@@ -33,9 +33,10 @@ import {
   SALDO_NO_ES_CAJA_NOTA_B,
   SALDO_NO_ES_CAJA_NOTA_DESTACADO,
   SALDO_NO_ES_CAJA_TITULO,
-  SALDO_NO_ES_CAJA_TITULO as TITULO_NOTA,
   SIN_DATO,
+  ULTIMA_RECIBIDA,
   antiguedadLabel,
+  diaCR,
   hayFaltantePorRecibir,
   money,
 } from "./satelites-labels";
@@ -212,12 +213,32 @@ export function SaldosSatelitesTable({
     {
       id: "ultimaRecibida",
       value: SALDOS_SATELITES_COLUMNAS.ultimaRecibida,
-      // Lo ya recibido, como contexto de que esta bodega SÍ entrega. Sin nada recibido, «—».
+      /**
+       * ⭑ LA ÚLTIMA VEZ QUE LLEGÓ UN BULTO: su fecha y lo que traía. Es contexto —dice que esta
+       * bodega SÍ entrega, y cuándo fue la última vez—, no deuda.
+       *
+       * ⚠️ NO es `totalRecibido`, que es la SUMA histórica de todo lo que ha entregado. Bajo un
+       * rótulo que dice «Última recibida», el acumulado sería un número de seis cifras que
+       * promete una cosa y cuenta otra. Sin ninguna recibida se pinta «—», no un cero.
+       *
+       * Y si esa última llegó incompleta, se dice ahí mismo («₡ 485.000 de ₡ 500.000»): es el
+       * sitio donde alguien mira cuando pregunta «¿llegó lo de esta bodega?». La pregunta se
+       * hace sobre el `faltaPorRecibir` que el SERVIDOR ya restó; aquí no se compara dinero.
+       */
       render: (s) =>
-        hayFaltantePorRecibir(s.totalRecibido) ? (
-          <span className="tabular-nums text-muted-foreground">{money(s.totalRecibido)}</span>
-        ) : (
+        s.ultimaRecibida === null ? (
           <span className="text-muted-foreground">{SIN_DATO}</span>
+        ) : (
+          <span className="flex flex-col">
+            <span className="tabular-nums text-muted-foreground">
+              {ULTIMA_RECIBIDA.linea(diaCR(s.ultimaRecibida.fecha), s.ultimaRecibida.monto)}
+            </span>
+            {hayFaltantePorRecibir(s.ultimaRecibida.faltaPorRecibir) ? (
+              <span className="text-xs tabular-nums text-warning-strong">
+                {ULTIMA_RECIBIDA.deDeclarado(s.ultimaRecibida.declarado)}
+              </span>
+            ) : null}
+          </span>
         ),
     },
   ];
@@ -348,7 +369,7 @@ export function SaldosSatelitesTable({
         caja cuando se aprobó el cierre de cada mensajero.
       */}
       <p role="note" className="text-xs leading-relaxed text-muted-foreground">
-        <strong className="font-semibold text-foreground">{TITULO_NOTA}</strong>{" "}
+        <strong className="font-semibold text-foreground">{SALDO_NO_ES_CAJA_TITULO}</strong>{" "}
         {SALDO_NO_ES_CAJA_NOTA_A}{" "}
         <strong className="font-semibold text-foreground">
           {SALDO_NO_ES_CAJA_NOTA_DESTACADO}
@@ -358,6 +379,3 @@ export function SaldosSatelitesTable({
     </div>
   );
 }
-
-/** Reexportado para que la guardia de vocabulario y los tests lo localicen por su nombre. */
-export { SALDO_NO_ES_CAJA_TITULO };

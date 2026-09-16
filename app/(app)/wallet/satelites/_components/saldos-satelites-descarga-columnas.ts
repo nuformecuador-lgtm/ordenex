@@ -28,6 +28,8 @@ export const COLUMNAS_DESCARGA_SALDOS_SATELITES: DescargaColumna[] = [
   { clave: "recibido", encabezado: "Recibido" },
   { clave: "sinConciliar", encabezado: "Consolidaciones sin conciliar" },
   { clave: "masAntigua", encabezado: "Más antigua sin conciliar" },
+  { clave: "ultimaRecibidaEl", encabezado: "Última recibida" },
+  { clave: "ultimaRecibidaMonto", encabezado: "Monto de la última recibida" },
 ];
 
 /**
@@ -47,5 +49,14 @@ export function filaDescargaSaldoSatelite(saldo: SaldoSateliteDTO): DescargaFila
     recibido: saldo.totalRecibido,
     sinConciliar: saldo.consolidacionesSinConciliar,
     masAntigua: saldo.fechaDeLaMasAntigua === null ? "" : saldo.fechaDeLaMasAntigua.slice(0, 10),
+    // La ÚLTIMA que llegó, en dos columnas: cuándo y cuánto. Son las dos mitades de la celda que
+    // la pantalla pinta en una, y van separadas porque una hoja de cálculo ordena por fecha y
+    // suma importes — no sabe hacer ninguna de las dos cosas con «16 sep · ₡ 485.000».
+    //
+    // ⚠️ `ultimaRecibidaMonto` es el de ESA consolidación, no el acumulado: `recibido` (arriba)
+    // ya lleva la suma histórica, y tener las dos cifras con el mismo nombre en el mismo archivo
+    // es lo que hace que nadie se fíe de ninguna.
+    ultimaRecibidaEl: saldo.ultimaRecibida === null ? "" : saldo.ultimaRecibida.fecha.slice(0, 10),
+    ultimaRecibidaMonto: saldo.ultimaRecibida === null ? "" : saldo.ultimaRecibida.monto,
   };
 }

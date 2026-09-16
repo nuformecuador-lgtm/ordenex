@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
+import { marcaRecibida, marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 import {
   COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
   COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
@@ -47,6 +47,9 @@ describe("orden de las columnas de descarga de los cierres de bodega", () => {
       "pagoMensajero",
       "ingresoBodega",
       "paraLaCentral", // feature 393/R22: la ultima
+      // ⭑ FICHA 431/R24: las DOS de la marca, detras de «Para la central» y sin mover ninguna.
+      "montoRecibido",
+      "faltaPorRecibir",
     ]);
     expect(COLUMNAS_DESCARGA_BODEGA_PENDIENTES.map((c) => c.encabezado)).toEqual([
       "Zona",
@@ -57,6 +60,8 @@ describe("orden de las columnas de descarga de los cierres de bodega", () => {
       "Pago mensajero",
       "Ingreso bodega",
       "Para la central",
+      "Monto recibido",
+      "Falta por recibir",
     ]);
   });
 
@@ -71,6 +76,8 @@ describe("orden de las columnas de descarga de los cierres de bodega", () => {
       "ingresoBodega",
       "motivo",
       "paraLaCentral", // feature 393/R22: la ultima
+      "montoRecibido", // ⭑ ficha 431/R24
+      "faltaPorRecibir",
     ]);
     expect(COLUMNAS_DESCARGA_BODEGA_RESUELTOS.map((c) => c.encabezado)).toEqual([
       "Estado",
@@ -82,6 +89,8 @@ describe("orden de las columnas de descarga de los cierres de bodega", () => {
       "Ingreso bodega",
       "Motivo",
       "Para la central",
+      "Monto recibido",
+      "Falta por recibir",
     ]);
   });
 
@@ -116,6 +125,10 @@ describe("orden de las columnas de descarga de los cierres de bodega", () => {
       "ingresoBodega",
       "motivo",
       "paraLaCentral", // feature 393/R22: la ultima
+      // ⭑ FICHA 431/R24/R26: la satélite descarga lo MISMO que ve. Sin estas dos, su archivo no
+      // llevaría la diferencia que su pantalla sí enseña.
+      "montoRecibido",
+      "faltaPorRecibir",
     ]);
     expect(COLUMNAS_DESCARGA_BODEGA_SOLICITADOS.map((c) => c.encabezado)).toEqual([
       "Estado",
@@ -126,7 +139,144 @@ describe("orden de las columnas de descarga de los cierres de bodega", () => {
       "Ingreso bodega",
       "Motivo",
       "Para la central",
+      "Monto recibido",
+      "Falta por recibir",
     ]);
+  });
+});
+
+/**
+ * ⭑ FICHA 431 (T17, R24/R26/R28) — LA MARCA EN EL ARCHIVO.
+ *
+ * Dos afirmaciones, y las dos son de dinero:
+ *
+ *  1. El ESTADO sale con el vocabulario de la CONCILIACIÓN y no con el del enum. Es lo que
+ *     hace que la hoja y la pantalla digan lo mismo, y es donde se ve que «Rechazado» dejó de
+ *     escribirse (R16).
+ *  2. `faltaPorRecibir` LLEGA DEL DTO y no se recalcula aquí. Es el mismo criterio que la 393
+ *     impuso para «Para la central», y por el mismo motivo: una segunda fórmula acaba diciendo
+ *     algo distinto de la tarjeta.
+ */
+describe("⭑ ficha 431 — la marca de conciliación en el archivo de los cierres de bodega", () => {
+  /** Una consolidación RECIBIDA POR MENOS: el caso entero de la ficha, con céntimos. */
+  const INCOMPLETA: CierreBodegaResumen = {
+    cierreBodegaId: "cb-2",
+    zonaId: "z-1",
+    zonaNombre: "Puntarenas",
+    solicitadoPorId: "u-sat",
+    solicitadoPorNombre: "Sara Satélite",
+    estado: "aprobado",
+    totales: {
+      efectivo: "500000.00",
+      simpe: "0.00",
+      transferencia: "0.00",
+      general: "500000.00",
+    },
+    totalPagoMensajero: "0.00",
+    totalIngresoBodegaRechazos: "0.00",
+    cantidadCierres: 3,
+    solicitadoAt: "2026-09-15T10:00:00.000Z",
+    resueltoAt: "2026-09-15T17:40:00.000Z",
+    motivoRechazo: null,
+    paraLaCentral: "500000.00",
+    efectivoCubreDescuentos: true,
+    // Llegaron ₡485.000 de ₡500.000: faltan ₡15.000. El faltante se escribe A MANO —no lo
+    // calcula el fixture— porque es justo la cifra que este bloque afirma.
+    ...marcaRecibida("485000.00", "15000.00"),
+  };
+
+  it("el ESTADO sale con el vocabulario de la CONCILIACIÓN, no con el del enum (R28)", () => {
+    // `estado` en la base es `aprobado`; en el archivo se lee «Recibido incompleto», porque
+    // falta dinero por llegar. Los dos listados que llevan la columna, no uno.
+    expect(filaDescargaBodegaResuelto(INCOMPLETA).estado).toBe("Recibido incompleto");
+    expect(filaDescargaBodegaSolicitado(INCOMPLETA).estado).toBe("Recibido incompleto");
+    // Y NO el del enum, que es lo que salía antes de esta ficha.
+    expect(filaDescargaBodegaResuelto(INCOMPLETA).estado).not.toBe("Aprobado");
+  });
+
+  it("una consolidación SIN MARCAR se lee «Pendiente de conciliar» y no «Solicitado»", () => {
+    const pendiente: CierreBodegaResumen = {
+      ...INCOMPLETA,
+      estado: "solicitado",
+      resueltoAt: null,
+      ...marcaSinConciliar("500000.00"),
+    };
+    expect(filaDescargaBodegaSolicitado(pendiente).estado).toBe("Pendiente de conciliar");
+    expect(filaDescargaBodegaSolicitado(pendiente).estado).not.toBe("Solicitado");
+  });
+
+  it("⭑ «Rechazado» ya no se escribe en el archivo, y la fila SIGUE bajando (R16)", () => {
+    // La mitad que importa: la consolidación rechazada NO desaparece del archivo —eso sería
+    // perder una fila de dinero— pero deja de anunciarse con el rótulo retirado. Sin marca, se
+    // lee por lo que es hoy: pendiente de que alguien diga si el efectivo llegó.
+    const rechazada: CierreBodegaResumen = {
+      ...INCOMPLETA,
+      estado: "rechazado",
+      motivoRechazo: "Faltaba el detalle",
+      ...marcaSinConciliar("500000.00"),
+    };
+    const fila = filaDescargaBodegaResuelto(rechazada);
+    expect(fila.estado).not.toBe("Rechazado");
+    expect(fila.estado).toBe("Pendiente de conciliar");
+    // La fila existe y conserva su dinero y su motivo: no se retira el dato, se retira el rótulo.
+    expect(fila.general).toBe("500000.00");
+    expect(fila.motivo).toBe("Faltaba el detalle");
+  });
+
+  it("`faltaPorRecibir` viaja DEL DTO, sin recalcularlo, en los TRES listados (R20/R24)", () => {
+    // El canario: un `faltaPorRecibir` que NO es la resta de los totales de la propia fila. Si
+    // alguna de las tres proyecciones lo recalculara, saldría "15000.00" ≠ "9999.99" aquí.
+    const canario: CierreBodegaResumen = {
+      ...INCOMPLETA,
+      ...marcaRecibida("485000.00", "9999.99"),
+    };
+    const filas = [
+      ["cola de pendientes", filaDescargaBodegaPendiente(canario)],
+      ["histórico de resueltos", filaDescargaBodegaResuelto(canario)],
+      ["solicitados de la satélite", filaDescargaBodegaSolicitado(canario)],
+    ] as const;
+    expect(filas).toHaveLength(3);
+    for (const [donde, fila] of filas) {
+      expect(fila.faltaPorRecibir, `${donde}: se recalculó en vez de leer el DTO`).toBe("9999.99");
+      expect(fila.montoRecibido).toBe("485000.00");
+      // Money-safe: STRING del servidor, sin símbolo y sin coma flotante.
+      expect(String(fila.faltaPorRecibir)).not.toContain("₡");
+      expect(fila.faltaPorRecibir).toMatch(/^-?\d+\.\d{2}$/);
+    }
+  });
+
+  it("sin marca, `montoRecibido` va VACÍO y jamás «0.00» (R7)", () => {
+    // Cero recibido significa que alguien contó y no había nada; sin marca nadie ha contado. En
+    // una hoja de cálculo la diferencia es que el cero SE SUMA y el vacío no.
+    const sinMarca: CierreBodegaResumen = { ...INCOMPLETA, ...marcaSinConciliar("500000.00") };
+    const fila = filaDescargaBodegaResuelto(sinMarca);
+    expect(fila.montoRecibido).toBeNull();
+    expect(fila.montoRecibido).not.toBe("0.00");
+    // Y lo que falta por llegar es el efectivo ÍNTEGRO, que sí es cierto y sí es el número que
+    // hay que perseguir.
+    expect(fila.faltaPorRecibir).toBe("500000.00");
+  });
+
+  it("la NOTA de la conciliación NO baja al archivo (texto libre, criterio de la 362)", () => {
+    const conNota: CierreBodegaResumen = {
+      ...INCOMPLETA,
+      ...marcaRecibida("485000.00", "15000.00", { conciliadoNota: "faltaron ₡15.000" }),
+    };
+    for (const columnas of [
+      COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
+      COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
+      COLUMNAS_DESCARGA_BODEGA_SOLICITADOS,
+    ]) {
+      expect(columnas.map((c) => c.clave)).not.toContain("conciliadoNota");
+    }
+    for (const fila of [
+      filaDescargaBodegaPendiente(conNota),
+      filaDescargaBodegaResuelto(conNota),
+      filaDescargaBodegaSolicitado(conNota),
+    ]) {
+      expect(fila).not.toHaveProperty("conciliadoNota");
+      expect(Object.values(fila)).not.toContain("faltaron ₡15.000");
+    }
   });
 });
 

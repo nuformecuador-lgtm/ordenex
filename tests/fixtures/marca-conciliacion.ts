@@ -40,12 +40,6 @@ export function marcaSinConciliar(totalEfectivo: string): MarcaConciliacionDoble
 }
 
 /**
- * RECIBIDA por `montoRecibido`. `faltaPorRecibir` lo pone QUIEN LLAMA, porque es justo la cifra
- * que los tests de esta ficha afirman: pasarla como parámetro obliga a escribirla a mano y así un
- * caso de «recibido incompleto» no puede colarse con la diferencia calculada por el propio
- * fixture. Con `faltaPorRecibir` distinto de cero, la presentación dice «Recibido incompleto».
- */
-/**
  * La marca que le CORRESPONDE a un estado, para los dobles que construyen filas con el estado
  * como parámetro.
  *
@@ -63,6 +57,12 @@ export function marcaPorEstado(estado: string, totalEfectivo: string): MarcaConc
     : marcaSinConciliar(totalEfectivo);
 }
 
+/**
+ * RECIBIDA por `montoRecibido`. `faltaPorRecibir` lo pone QUIEN LLAMA, porque es justo la cifra
+ * que los tests de esta ficha afirman: pasarla como parámetro obliga a escribirla a mano y así un
+ * caso de «recibido incompleto» no puede colarse con la diferencia calculada por el propio
+ * fixture. Con `faltaPorRecibir` distinto de cero, la presentación dice «Recibido incompleto».
+ */
 export function marcaRecibida(
   montoRecibido: string,
   faltaPorRecibir: string,

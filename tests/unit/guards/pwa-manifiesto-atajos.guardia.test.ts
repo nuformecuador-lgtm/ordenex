@@ -264,9 +264,20 @@ describe("pwa · los atajos del manifiesto", () => {
     // pueden EDITAR un SINPE— este mismo `toEqual` lo diría.
     // La CONCLUSIÓN no cambia: cada destino nuevo lo ve UN rol de cinco, la intersección sigue
     // vacía y por tanto siguen siendo CERO atajos.
+    // ⭑ FICHA 431 — `maestro` 20 -> 21 y `admin` 12 -> 13, por UN destino nuevo y solo uno: el
+    // subítem «Satélites» (`/wallet/satelites`), CUARTO hijo de «Wallet». Suben los DOS a la vez
+    // —y es lo que hay que mirar— porque el ítem NO declara roles propios: hereda los del padre
+    // (`maestro` y `admin`), que es exactamente quien `esAccesoTotal` deja entrar en la página
+    // (R27). Si hubiera subido uno solo, o si se hubiera movido `adminSatelite`, este `toEqual`
+    // diría que el menú y el `notFound()` de la página discrepan sobre quién llega.
+    // `adminSatelite`, `mensajero` y `adminTienda` NO se mueven, y que sigan clavados es parte de
+    // lo que se afirma aquí: la vista enseña el dinero de TODAS las bodegas y R27 se la niega
+    // justamente a la satélite.
+    // La CONCLUSIÓN no cambia: el destino nuevo lo ven DOS roles de cinco, la intersección sigue
+    // vacía y por tanto siguen siendo CERO atajos.
     expect(Object.fromEntries([...porRol].map(([rol, d]) => [rol, d.size]))).toEqual({
-      maestro: 20,
-      admin: 12,
+      maestro: 21,
+      admin: 13,
       adminSatelite: 7,
       mensajero: 6,
       adminTienda: 4,
