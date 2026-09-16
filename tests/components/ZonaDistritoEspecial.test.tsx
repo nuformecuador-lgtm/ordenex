@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { ProvinciaArbolDTO } from "@/lib/actions/geografia";
+import { tecleaSinpeDeLaZona } from "../fixtures/sinpe-en-formulario-zona";
 
 // Boton "Especial" (estrella) por distrito dentro de "Costos por zona". Se
 // mockean las Server Actions: aqui se prueba el estado visual del boton y que
@@ -226,6 +227,9 @@ describe("Marca de zona especial en el selector de distritos", () => {
       }),
     );
 
+    // FICHA 429 (R11): crear exige el SINPE de la bodega. Sin teclearlo, `validar()` falla y
+    // el delta de la marca no llega a enviarse nunca.
+    await tecleaSinpeDeLaZona(user);
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
@@ -248,6 +252,8 @@ describe("Marca de zona especial en el selector de distritos", () => {
     await user.click(
       checkboxDe("Test"),
     );
+    // FICHA 429 (R11): idem — sin SINPE no hay llamada a `crearZona` que medir.
+    await tecleaSinpeDeLaZona(user);
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => expect(crearZonaMock).toHaveBeenCalled());

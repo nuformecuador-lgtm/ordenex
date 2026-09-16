@@ -20,6 +20,7 @@ import {
   Truck,
   User,
   Wallet,
+  Warehouse,
   type LucideProps,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -178,6 +179,10 @@ export const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   // `clipboardCheck` de "Cierres del dia" y del `chartColumn` de "Analitica": leer el
   // chat pasado no es cerrar el dia ni analizar el negocio.
   history: History,
+  // Ficha 429 (T23): «Mi bodega», el SINPE de la bodega del adminSatelite. Icono PROPIO,
+  // distinto del `store` de "Recoleccion" —la tienda a la que va el mensajero no es la bodega
+  // en la que se cobra— y del `package` de las ordenes.
+  warehouse: Warehouse,
 };
 
 // Entrada escalonada de los items al cargar (solo la primera vez). Cada item

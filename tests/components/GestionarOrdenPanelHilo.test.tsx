@@ -88,6 +88,8 @@ function orden(over: Partial<MiAsignacionDTO> = {}): MiAsignacionDTO {
     provinciaNombre: "San José",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     secuenciaRuta: 1,
     ...over,
   };

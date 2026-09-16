@@ -4,6 +4,7 @@ import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { ProvinciaArbolDTO } from "@/lib/actions/geografia";
+import { tecleaSinpeDeLaZona } from "../fixtures/sinpe-en-formulario-zona";
 
 /**
  * Ficha 366 (T7) — al guardar una zona editada, la respuesta del servidor
@@ -188,6 +189,9 @@ describe("Toast de guardar zona — conteo de órdenes reubicadas (366/T7)", () 
     });
     const user = userEvent.setup();
     renderForm("crear");
+    // FICHA 429 (R11): crear una bodega EXIGE su SINPE. Sin teclearlo, el formulario ni
+    // siquiera llama a la accion y este caso mediria el silencio en vez del toast.
+    await tecleaSinpeDeLaZona(user);
 
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -349,6 +353,9 @@ describe("Toast de guardar zona — órdenes que se quedaron en su bodega (377/T
     });
     const user = userEvent.setup();
     renderForm("crear");
+    // FICHA 429 (R11): crear una bodega EXIGE su SINPE. Sin teclearlo, el formulario ni
+    // siquiera llama a la accion y este caso mediria el silencio en vez del toast.
+    await tecleaSinpeDeLaZona(user);
 
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 

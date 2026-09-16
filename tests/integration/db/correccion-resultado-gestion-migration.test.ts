@@ -353,7 +353,12 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("398/T1.5 (a) — los enums de la base SON l
     const origenes = await valoresDeEnum(admin, "public", "orden_historial_origen_tipo");
     const acciones = await valoresDeEnum(admin, "public", "historial_accion_tipo");
     expect(origenes.at(-1)).toBe(VALOR_ORIGEN);
-    expect(acciones.at(-1)).toBe(VALOR_ACCION);
+    // ⚠️ `historial_accion_tipo` YA NO acaba en `VALOR_ACCION`, y esa es justamente la señal que
+    // este caso existe para dar: la ficha 429 añadio `zona_sinpe_cambiado` DESPUES (2026-09-15) y
+    // al hacerlo tuvo que pasar por aqui. Se afirma la POSICION RELATIVA —el invariante real,
+    // «`ADD VALUE` APENDE»— en vez de «es el ultimo», que caduca con cada ficha nueva. La
+    // afirmacion es MAS estrecha, no menos: inmediatamente antes del siguiente.
+    expect(acciones.indexOf("zona_sinpe_cambiado")).toBe(acciones.indexOf(VALOR_ACCION) + 1);
     // La POSICION RELATIVA frente a los dos ultimos valores previos de cada enum, que es el
     // invariante real y no caduca con la siguiente ficha como si lo haria «es el ultimo».
     expect(origenes.indexOf(VALOR_ORIGEN)).toBeGreaterThan(origenes.indexOf("habilitacion_api"));
@@ -419,7 +424,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("398/T1.5 (b) — el down recrea las listas 
     // migracion, en la lista `POSTERIORES` que le toque. Es lo que convierte la comparacion en una
     // cadena verificable en vez de en algo que caduca en silencio.
     const ORIGENES_POSTERIORES: string[] = [];
-    const ACCIONES_POSTERIORES: string[] = [];
+    // ficha 429 (2026-09-15): `zona_sinpe_cambiado`, con su archivo
+    // `historial-accion-zona-sinpe-migration.test.ts`.
+    const ACCIONES_POSTERIORES: string[] = ["zona_sinpe_cambiado"];
     expect([...origenAntes].sort()).toEqual(
       ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter(
         (t) => t !== VALOR_ORIGEN && !ORIGENES_POSTERIORES.includes(t),

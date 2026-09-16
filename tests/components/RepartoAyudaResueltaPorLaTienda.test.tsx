@@ -108,6 +108,8 @@ function asignacion(
     provinciaNombre: "San Jose",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     secuenciaRuta: null,
     ...over,
   };

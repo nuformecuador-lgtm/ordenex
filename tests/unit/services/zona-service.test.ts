@@ -48,6 +48,13 @@ function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
     contarOrdenesVivasPorZona: vi.fn(async (ids: string[]) =>
       ids.map((zonaId) => ({ zonaId, ordenesVivas: 0 })),
     ),
+    // FICHA 429: los metodos de la superficie del SINPE por bodega. El doble los declara
+    // para seguir cumpliendo `IZonaRepository`; esta suite no los ejercita.
+    listarSinpe: vi.fn().mockResolvedValue([]),
+    findSinpeByZona: vi.fn().mockResolvedValue(null),
+    zonaIdDeUsuario: vi.fn().mockResolvedValue(null),
+    guardarSinpe: vi.fn().mockResolvedValue(null),
+    confirmarSinpe: vi.fn().mockResolvedValue(null),
     ...overrides,
   };
 }
@@ -59,6 +66,10 @@ function crearInput(overrides: Partial<CrearZonaInput> = {}): CrearZonaInput {
     esCentral: false, // feature 54
     distritoIds: ["d1"],
     tarifas: [],
+    // FICHA 429 (R11): crear una bodega EXIGE los dos campos del SINPE. Valores FICTICIOS: el
+    // repositorio es publico y aqui no se escribe ningun numero real.
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     ...overrides,
   };
 }
@@ -126,6 +137,31 @@ describe("crear — validacion de existencia", () => {
     await service.crear(crearInput({ cobroVehiculo: false, tarifas: [{ cobroEntregado: 1, cobroRechazado: 2 }] }), MAESTRO);
     const arg = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.tarifas[0].vehiculoId).toBeNull();
+  });
+
+  it("⭑ FICHA 429 (R11): el par del SINPE llega al repositorio TAL CUAL, sin default ni relleno", async () => {
+    // El servicio no decide nada sobre el formato: eso se decide UNA vez en el borde
+    // (`sinpeNumeroSchema`) y otra en el `CHECK` de la base. Aqui solo se comprueba que no se pierde
+    // ni se sustituye por un valor «por defecto» — que es como una bodega acabaria con el numero de
+    // otra sin que nadie lo pidiera.
+    await service.crear(
+      crearInput({ sinpeNumero: "70000001", sinpeNombre: "Otro Titular de Prueba" }),
+      MAESTRO,
+    );
+    const arg = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.sinpeNumero).toBe("70000001");
+    expect(arg.sinpeNombre).toBe("Otro Titular de Prueba");
+  });
+
+  it("⭑ FICHA 429: ACTUALIZAR no manda el SINPE al repositorio, ni siquiera como `undefined`", async () => {
+    // `UpdateZonaData` no lo lleva, y ese es el punto: un guardado de distritos no puede tocar el
+    // numero de cobro de una bodega. Se afirma sobre el ARGUMENTO, no sobre el tipo.
+    // Se le pasa un input que SI lleva los dos campos: si el servicio los reenviara, el argumento
+    // del repositorio los traeria. `prepararDatos` los deja fuera por construccion (`DatosSinMarca`).
+    await service.actualizar("z1", crearInput() as unknown as ActualizarZonaInput, MAESTRO);
+    const arg = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1] as Record<string, unknown>;
+    expect(Object.keys(arg)).not.toContain("sinpeNumero");
+    expect(Object.keys(arg)).not.toContain("sinpeNombre");
   });
 });
 
@@ -233,6 +269,13 @@ describe("376/Q4 — el impacto de mover la marca", () => {
         { zonaId: "z-gam", ordenesVivas: 850 },
         { zonaId: "z-nueva", ordenesVivas: 0 },
       ]),
+      // FICHA 429: los metodos de la superficie del SINPE por bodega. El doble los declara
+      // para seguir cumpliendo `IZonaRepository`; esta suite no los ejercita.
+      listarSinpe: vi.fn().mockResolvedValue([]),
+      findSinpeByZona: vi.fn().mockResolvedValue(null),
+      zonaIdDeUsuario: vi.fn().mockResolvedValue(null),
+      guardarSinpe: vi.fn().mockResolvedValue(null),
+      confirmarSinpe: vi.fn().mockResolvedValue(null),
     });
     service = new ZonaService(repo);
 

@@ -179,11 +179,27 @@ function repoZonas(): IZonaRepository {
     contarOrdenesVivasPorZona: vi.fn(async (ids: string[]) =>
       ids.map((zonaId) => ({ zonaId, ordenesVivas: 0 })),
     ),
+    // FICHA 429: los metodos de la superficie del SINPE por bodega. El doble los declara
+    // para seguir cumpliendo `IZonaRepository`; esta suite no los ejercita.
+    listarSinpe: vi.fn().mockResolvedValue([]),
+    findSinpeByZona: vi.fn().mockResolvedValue(null),
+    zonaIdDeUsuario: vi.fn().mockResolvedValue(null),
+    guardarSinpe: vi.fn().mockResolvedValue(null),
+    confirmarSinpe: vi.fn().mockResolvedValue(null),
   } as unknown as IZonaRepository;
 }
 
 function crearZona(nombre: string): CrearZonaInput {
-  return { nombre, cobroVehiculo: false, esCentral: false, distritoIds: ["d1"], tarifas: [] };
+  // FICHA 429 (R11): crear exige el par del SINPE. Valores ficticios.
+  return {
+    nombre,
+    cobroVehiculo: false,
+    esCentral: false,
+    distritoIds: ["d1"],
+    tarifas: [],
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
+  };
 }
 
 function actualizarZona(nombre: string): ActualizarZonaInput {

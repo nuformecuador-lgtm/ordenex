@@ -388,7 +388,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.7 (b) — el down recrea 50 tipos y 2
     // que convierte la comparacion en una cadena verificable —«el catalogo de hoy menos la 381
     // menos la 398»— en vez de en algo que caduca en silencio. Cada una tiene ademas su archivo:
     //   · 398 — `cierre_dia_gestion_corregida`, en `correccion-resultado-gestion-migration.test.ts`.
-    const POSTERIORES = ["cierre_dia_gestion_corregida"];
+    //   · 429 — `zona_sinpe_cambiado`, en `historial-accion-zona-sinpe-migration.test.ts`.
+    const POSTERIORES = ["cierre_dia_gestion_corregida", "zona_sinpe_cambiado"];
     expect([...tiposAntes].sort()).toEqual(
       [...HISTORIAL_ACCION_TIPOS]
         .filter((t) => t !== TIPO_NUEVO && !POSTERIORES.includes(t))

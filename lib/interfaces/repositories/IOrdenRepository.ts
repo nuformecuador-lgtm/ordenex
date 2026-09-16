@@ -998,6 +998,16 @@ export interface NovedadOrdenRow {
   cantonNombre: string;
   /** `distrito_id` es el UNICO FK geografico nullable -> `null` cuando la orden no lo tiene. */
   distritoNombre: string | null;
+  /**
+   * ⭑ FICHA 429 (R13/R15) — el SINPE de la bodega que cobra esta orden, YA RESUELTO por el
+   * repositorio con `resolverSinpeBodega` (la del mensajero asignado; si no tiene, la de la orden).
+   *
+   * REQUERIDOS, sin `?`: `/novedades` pinta las mismas cards POS que el portal del mensajero y
+   * compone el mensaje en modo `wa.me`, donde el texto que arma el navegador ES el que recibe el
+   * cliente. Un `undefined` en silencio aqui es un mensaje sin numero de cobro.
+   */
+  sinpeNumero: string;
+  sinpeNombre: string;
   // Feature 235 (T6.1, R40): aqui viajaba `ayuda: boolean`, la bandera. Se retira con la columna.
   // La pantalla sigue pudiendo decir POR QUE esta la fila —hay dos razones y siguen siendo dos—
   // pero ahora lo lee de `estatusValue`, que ya viajaba: `devuelta` = devolucion anclada,

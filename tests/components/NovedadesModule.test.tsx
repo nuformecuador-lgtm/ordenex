@@ -147,6 +147,8 @@ const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({
   provinciaNombre: "San José",
   cantonNombre: "Escazú",
   distritoNombre: "San Rafael",
+  sinpeNumero: "80000000",
+  sinpeNombre: "Titular de Prueba",
   // Estas órdenes no son paradas de ninguna ruta optimizada: el módulo monta la card con
   // `mostrarRuta={false}` y el DTO manda `secuenciaRuta` SIEMPRE en `null`.
   secuenciaRuta: null,
@@ -1336,6 +1338,8 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     montoCobrar: null,
     notas: null,
     distritoNombre: null,
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     peso: null,
     latitud: null,
     longitud: null,

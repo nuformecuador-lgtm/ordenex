@@ -497,6 +497,44 @@ model Zona {
   cobroVehiculo Boolean @default(false) @map("cobro_vehiculo") // feature 24: cobro extra por vehiculo en esta zona
   esCentral     Boolean @default(false) @map("es_central") // feature 54: flag de zona central (renombrado del viejo es_gam); a lo sumo una via indice unico parcial
 
+  /// ⭑ FICHA 429 — EL SINPE DE ESTA BODEGA: el numero al que el cliente transfiere y el titular a
+  /// cuyo nombre esta. Hasta esta ficha habia UNO SOLO para toda la operacion, en
+  /// `NEXT_PUBLIC_SINPE_*`, horneado en el bundle del cliente en tiempo de build.
+  ///
+  /// ⚠️ `NOT NULL` Y SIN `@default`, Y LAS DOS COSAS SON EL PUNTO. Una bodega sin SINPE no es un
+  /// estado representable (R6): resolveria `""` y el cliente leeria un mensaje sin numero, o peor,
+  /// alguien pondria un fallback y nadie se enteraria. Y sin `default` porque un default dejaria
+  /// viva PARA SIEMPRE la posibilidad de crear una bodega sin el suyo, que produciria en silencio
+  /// el numero de otra — el modo de fallo exacto que esta ficha persigue: un SINPE equivocado NO
+  /// produce ningun error visible, el cliente transfiere y se sabe dias despues por los reclamos.
+  ///
+  /// ⚠️ EL FORMATO LO GARANTIZA LA BASE, NO SOLO ZOD. Prisma no sabe expresar un `CHECK`, asi que
+  /// las dos restricciones viven SOLO en el SQL de `20260918120200_zona_sinpe_no_nulo` —mismo
+  /// patron que el `orden_monto_cobrar_entero_check` de la 305—:
+  ///   CONSTRAINT "zona_sinpe_numero_check" CHECK ("sinpe_numero" ~ '^[678][0-9]{7}$')
+  ///   CONSTRAINT "zona_sinpe_nombre_check" CHECK ("sinpe_nombre" ~ '[^[:space:]]')
+  /// Este comentario existe para que nadie las eche de menos aqui y las "restaure" en el modelo.
+  ///
+  /// ⚠️ EL SEGUNDO ES `~ '[^[:space:]]'` Y NO `btrim(...) <> ''`, Y LA DIFERENCIA SE MIDIO. El
+  /// `design.md` proponia `btrim`, y `btrim` SIN SEGUNDO ARGUMENTO recorta SOLO el espacio (0x20):
+  /// un titular de un unico TABULADOR pasaba el `CHECK` mientras `sinpeNombreSchema` —que usa el
+  /// `.trim()` de JavaScript, que recorta todo el espacio en blanco— lo rechazaba. Si alguien
+  /// vuelve a escribir aqui la formulacion vieja, el siguiente que lea este modelo creera que la
+  /// base garantiza algo que no garantiza.
+  /// El porque de que no basten las de zod: los seeds, los `scripts/` y cualquier `UPDATE` corrido
+  /// a mano contra produccion entran por debajo del borde de la aplicacion.
+  sinpeNumero String @map("sinpe_numero") @db.VarChar(8)
+  sinpeNombre String @map("sinpe_nombre") @db.VarChar(60)
+
+  /// ⭑ FICHA 429 — NULL SIGNIFICA ALGO: «es la semilla, y nadie lo ha mirado todavia DENTRO de la
+  /// aplicacion». Es la TERCERA capa de D3 y lo que dispara la revision obligatoria del primer
+  /// inicio de sesion (R26). Se queda nullable PARA SIEMPRE: una bodega sin revisar es un estado
+  /// legitimo, y confundirlo con «revisada» es justo lo que R5 prohibe.
+  ///
+  /// Lo escribe UN solo camino (`ZonaRepository.guardarSinpe`/`confirmarSinpe`) y la creacion de
+  /// una zona, que lo pone con fecha porque ahi el SINPE lo tecleo una persona (R12).
+  sinpeRevisadoAt DateTime? @map("sinpe_revisado_at")
+
   ordenes              Orden[]
   tarifaZonaMensajeros TarifaZonaMensajero[]
   tarifas              Tarifa[]              @relation("TarifaZona") // tarifas ACOTADAS a esta zona (zona_id nullable)
@@ -3531,6 +3569,22 @@ enum HistorialAccionTipo {
   /// del dominio (precedente: `usuario_fulfillment_cambiado`). El MOTIVO no entra (R5 de la 362):
   /// es texto libre tecleado por una persona y vive en `gestion_orden.motivo`.
   cierre_dia_gestion_corregida
+  /// FICHA 429: el SINPE de una BODEGA quedo distinto tras un guardado. Mueve dinero en el sentido
+  /// MAS directo de la categoria, mas todavia que `zona_pago_mensajero_cambiado`: estos dos campos
+  /// deciden A QUE CUENTA VA A PARAR EL DINERO DEL CLIENTE. Hasta esa ficha el SINPE era UNO para
+  /// toda la operacion y vivia en una variable de entorno, asi que cambiarlo no dejaba rastro en
+  /// ninguna parte.
+  ///
+  /// `valor_anterior`/`valor_nuevo` llevan EL NUMERO de antes y el de despues: no es texto libre
+  /// —son ocho digitos con un `CHECK` detras— y es el dato PUBLICO que se le manda a cada cliente
+  /// en cada mensaje. El TITULAR NO ENTRA (R23): ese si es un nombre tecleado por una persona, y lo
+  /// deja fuera la misma regla que dejo fuera el motivo de un rechazo. `monto` va NULL: no hay un
+  /// importe unico.
+  ///
+  /// ⚠️ CONFIRMAR SIN CAMBIAR NADA NO DEJA FILA (R25): la fecha de esa revision vive en
+  /// `zona.sinpe_revisado_at`, no aqui. Un tipo «alguien lo miro» dentro de la categoria del dinero
+  /// la convertiria en un registro de visitas.
+  zona_sinpe_cambiado
 
   // --- hace desaparecer algo (10) ---
   /// FICHA 371: corregir la fecha de una reprogramacion ya registrada. ENTRA POR «hace desaparecer

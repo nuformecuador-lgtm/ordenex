@@ -33,6 +33,24 @@ export interface MiAsignacionDTO {
   cantonNombre: string;
   distritoNombre: string | null;
   /**
+   * ⭑ FICHA 429 (R13/R14/R18) — EL SINPE DE LA BODEGA QUE COBRA ESTA ORDEN, ya resuelto por el
+   * SERVIDOR con `resolverSinpeBodega` (la del mensajero asignado; si no tiene, la de la orden).
+   *
+   * ⚠️ REQUERIDOS, SIN `?`, Y ESO ROMPE EL «PATRON ADITIVO» DE ESTE ARCHIVO A PROPOSITO.
+   * `marcarLuego?`, `intentosEntrega?` y `alUltimoIntento?` llevan `?` para que los fixtures no se
+   * rompan. Aqui QUE LOS FIXTURES SE ROMPAN ES EL OBJETIVO: el typecheck enumera, uno por uno y
+   * sin que nadie tenga que acordarse, TODOS los productores de este DTO —incluidos `NovedadDTO` y
+   * `RecoleccionOrdenDTO`, que lo extienden—. Una superficie que renderice plantillas sin tener el
+   * par en la mano NO COMPILA (R14), que es la unica red que sirve contra un fallo que no produce
+   * ningun error visible: el cliente transfiere a la cuenta equivocada y se sabe dias despues.
+   *
+   * ⚠️ NUNCA SE RELLENAN DESDE EL CLIENTE (R18). Viajan CON los datos de la orden porque en modo
+   * `wa.me` el texto que compone el navegador ES el que recibe el cliente —no una vista previa—,
+   * asi que el valor tiene que venir decidido por el servidor igual que en el envio real.
+   */
+  sinpeNumero: string;
+  sinpeNombre: string;
+  /**
    * Feature 92 (R28): posicion 1-based de esta orden en la ruta optimizada del mensajero.
    * `null` = la orden entro a la ruta DESPUES de la ultima optimizacion y todavia no tiene
    * posicion (se muestra al final, marcada como pendiente de optimizar).

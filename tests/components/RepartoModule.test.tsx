@@ -182,6 +182,8 @@ function makeAsignacion(
     provinciaNombre: "San José",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     // Feature 92/R28: sin posicion en la ruta salvo que el test la fije.
     secuenciaRuta: null,
     ...over,
@@ -1922,12 +1924,16 @@ describe("RepartoModule", () => {
           numRemision: "REM-G1",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
           numRemision: "REM-G2",
           cantonNombre: "Central",
           distritoNombre: "Merced",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g3",
@@ -1935,6 +1941,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });
@@ -1958,12 +1966,16 @@ describe("RepartoModule", () => {
           numRemision: "REM-G1",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
           numRemision: "REM-G2",
           cantonNombre: "Central",
           distritoNombre: "Merced",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g3",
@@ -1971,6 +1983,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });
@@ -2007,18 +2021,24 @@ describe("RepartoModule", () => {
           numRemision: "REM-G1",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
           numRemision: "REM-G2",
           cantonNombre: "Central",
           distritoNombre: "Merced",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g3",
           numRemision: "REM-G3",
           cantonNombre: "Central",
           distritoNombre: null,
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g4",
@@ -2026,6 +2046,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });
@@ -2053,6 +2075,8 @@ describe("RepartoModule", () => {
           numRemision: "REM-G1",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
@@ -2060,6 +2084,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });
@@ -2095,6 +2121,8 @@ describe("RepartoModule", () => {
           numRemision: "REM-G1",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
@@ -2102,6 +2130,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });
@@ -2164,6 +2194,8 @@ describe("RepartoModule", () => {
           numRemision: "REM-UNO",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
           secuenciaRuta: 1,
         }),
         // EN GESTIÓN, en OTRO cantón: no coincide con el filtro pero no se oculta.
@@ -2173,6 +2205,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
           secuenciaRuta: 2,
         }),
         // Control: otro cantón y NO en gestión ⇒ se filtra.
@@ -2182,6 +2216,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Cartago",
           provinciaNombre: "Cartago",
           distritoNombre: "Oriental",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
           secuenciaRuta: 3,
         }),
       ],
@@ -2230,6 +2266,8 @@ describe("RepartoModule", () => {
           destinatario: "Uno",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
           secuenciaRuta: 1,
         }),
         makeAsignacion({
@@ -2239,6 +2277,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
           secuenciaRuta: 2,
         }),
       ],
@@ -2274,6 +2314,8 @@ describe("RepartoModule", () => {
           destinatario: "Ana",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
@@ -2281,6 +2323,8 @@ describe("RepartoModule", () => {
           destinatario: "Beto",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g3",
@@ -2289,6 +2333,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });

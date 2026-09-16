@@ -97,7 +97,7 @@ describeSiHayBase("borrar tarifa/zona EN USO: la FK real, no la fabricada", () =
   /** Zona nueva, con nombre irrepetible. */
   async function sembrarZona(tx: TxDeTest, marca: string): Promise<string> {
     const z = await tx.zona.create({
-      data: { nombre: `${SUFIJO}-${marca}-${randomUUID().slice(0, 8)}` },
+      data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `${SUFIJO}-${marca}-${randomUUID().slice(0, 8)}` },
       select: { id: true },
     });
     return z.id;

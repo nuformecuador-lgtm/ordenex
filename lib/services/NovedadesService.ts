@@ -211,6 +211,10 @@ export class NovedadesService implements INovedadesService {
       // —y, por construccion, quien pidio la ayuda—; en `devolucion`, quien trae el paquete de
       // vuelta. `null` cuando no hay asignado; el service no lo disfraza de cadena vacia.
       mensajeroNombre: row.mensajeroNombre,
+      // FICHA 429 (R13/R14): el par viaja TAL CUAL desde la fila; el repositorio ya aplico la
+      // regla. Sin `?? ""` posible: los dos campos son requeridos en las dos puntas.
+      sinpeNumero: row.sinpeNumero,
+      sinpeNombre: row.sinpeNombre,
       // Feature 236 (R26): para el grupo de ayuda el mapa esta vacio A PROPOSITO y esto sale
       // `null`. La pantalla no debe pintar causa ninguna sobre esas filas, ni anunciar su ausencia.
       causa: causas.get(row.id)?.causa ?? null,

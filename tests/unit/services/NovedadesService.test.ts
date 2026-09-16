@@ -68,6 +68,8 @@ function ordenRow(overrides: Partial<NovedadOrdenRow> = {}): NovedadOrdenRow {
     provinciaNombre: "San Jose",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
   };
@@ -445,6 +447,8 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
       provinciaNombre: "San Jose",
       cantonNombre: "Central",
       distritoNombre: "Carmen",
+      sinpeNumero: "80000000",
+      sinpeNombre: "Titular de Prueba",
       // FICHA 296: el mensajero es uno de esos «TODOS los campos».
       mensajeroNombre: "Marta Mensajera",
     });
@@ -463,6 +467,8 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
           longitud: null,
           notas: null,
           distritoNombre: null,
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ]),
     });

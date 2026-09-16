@@ -255,10 +255,19 @@ describe("pwa · los atajos del manifiesto", () => {
     // un ítem `maestro`-only entero. Los otros cuatro roles NO se mueven, y que sigan clavados es
     // parte de lo que se afirma aquí. La CONCLUSIÓN no cambia: el destino nuevo lo ve UN rol de
     // cinco, la intersección sigue vacía y por tanto siguen siendo CERO atajos.
+    // ⭑ FICHA 429 — `maestro` 19 -> 20 y `adminSatelite` 6 -> 7, por DOS destinos nuevos y
+    // exactamente dos: el subítem «SINPE por bodega» (`/configuracion/sinpe`), añadido al final
+    // de los `children` de «Configuración», que es `maestro`-only entero; y el ítem «Mi bodega»
+    // (`/mi-bodega`), al final de la barra y visible SOLO para `adminSatelite` (`ROLES_MI_BODEGA`).
+    // `admin`, `mensajero` y `adminTienda` NO se mueven, y que sigan clavados es parte de lo que
+    // se afirma aquí: si «Mi bodega» se hubiera abierto de más —por ejemplo a los tres roles que
+    // pueden EDITAR un SINPE— este mismo `toEqual` lo diría.
+    // La CONCLUSIÓN no cambia: cada destino nuevo lo ve UN rol de cinco, la intersección sigue
+    // vacía y por tanto siguen siendo CERO atajos.
     expect(Object.fromEntries([...porRol].map(([rol, d]) => [rol, d.size]))).toEqual({
-      maestro: 19,
+      maestro: 20,
       admin: 12,
-      adminSatelite: 6,
+      adminSatelite: 7,
       mensajero: 6,
       adminTienda: 4,
     });

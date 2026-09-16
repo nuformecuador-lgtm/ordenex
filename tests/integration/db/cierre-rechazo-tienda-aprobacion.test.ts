@@ -138,7 +138,7 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
   async function sembrarPersonas(tx: TxDeTest) {
     const clave = `${SUFIJO}${(n += 1)}`;
     const zona = await tx.zona.create({
-      data: { nombre: `Zona satelite 425 ${clave}` },
+      data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Zona satelite 425 ${clave}` },
       select: { id: true },
     });
     await tx.tarifaZonaMensajero.create({

@@ -80,6 +80,8 @@ function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRo
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: "D",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     mensajeroAsignadoId: "m1",
     ...overrides,
   };

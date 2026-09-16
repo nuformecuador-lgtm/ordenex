@@ -7,6 +7,10 @@ function base(overrides: Record<string, unknown> = {}) {
     cobroVehiculo: false,
     distritoIds: ["d1"],
     tarifas: [],
+    // ⭑ FICHA 429 (R11): crear una bodega EXIGE el numero y el titular. Valores FICTICIOS: el
+    // repositorio es publico y aqui no se escribe ningun SINPE real.
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     ...overrides,
   };
 }

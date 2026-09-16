@@ -813,6 +813,11 @@ export function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     provinciaNombre: row.provinciaNombre,
     cantonNombre: row.cantonNombre,
     distritoNombre: row.distritoNombre,
+    // FICHA 429 (R13/R14): el par viaja TAL CUAL desde la fila; el repositorio ya aplico la regla
+    // de `resolverSinpeBodega`. Aqui no hay `?? ""` ni default posible: los dos campos son
+    // REQUERIDOS en las dos puntas, asi que este `toDTO` no puede emitir un mensaje mudo.
+    sinpeNumero: row.sinpeNumero,
+    sinpeNombre: row.sinpeNombre,
     // Feature 92 (R28): la posicion la resuelve el llamador con el mapa de la ruta; el
     // default `null` es correcto para "Por recoger", que nunca tiene posicion.
     secuenciaRuta: null,

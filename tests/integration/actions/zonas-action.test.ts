@@ -61,6 +61,26 @@ const validCrear = {
   esCentral: false,
   distritoIds: ["d1"],
   tarifas: [],
+  // ⭑ FICHA 429 (R11): crear una bodega EXIGE el numero y el titular. Valores FICTICIOS: el
+  // repositorio es publico y aqui no se escribe ningun SINPE real.
+  sinpeNumero: "80000000",
+  sinpeNombre: "Titular de Prueba",
+};
+
+/**
+ * ⭑ FICHA 429 — EL PAYLOAD DE ACTUALIZAR, QUE YA NO ES EL DE CREAR.
+ *
+ * Los dos esquemas se separaron en la 376 por `esCentral`; la 429 añade la segunda diferencia: el
+ * SINPE va SOLO al crear. Un guardado de distritos no puede tocar el numero de cobro de una bodega,
+ * y como los dos esquemas son `.strict()`, mandarlo aqui es un rechazo explicito —no un descarte
+ * mudo—. Por eso este payload existe en vez de reusar `validCrear`.
+ */
+const validActualizar = {
+  nombre: "Zona Sur",
+  cobroVehiculo: false,
+  esCentral: false,
+  distritoIds: ["d1"],
+  tarifas: [],
 };
 
 describe("sin sesion -> unauthenticated sin tocar el service", () => {
@@ -70,7 +90,7 @@ describe("sin sesion -> unauthenticated sin tocar el service", () => {
     expect((await crearZona(validCrear, deps)).status).toBe("unauthenticated");
     expect((await obtenerZona("z1", deps)).status).toBe("unauthenticated");
     expect((await listarZonas({}, deps)).status).toBe("unauthenticated");
-    expect((await actualizarZona("z1", validCrear, deps)).status).toBe("unauthenticated");
+    expect((await actualizarZona("z1", validActualizar, deps)).status).toBe("unauthenticated");
     expect((await borrarZona("z1", deps)).status).toBe("unauthenticated");
     expect(service.crear).not.toHaveBeenCalled();
     expect(service.listar).not.toHaveBeenCalled();
@@ -96,6 +116,64 @@ describe("validation_error del schema sin llamar al service", () => {
       { zonaService: service, getActor: getActor(MAESTRO) },
     );
     expect(r.status).toBe("validation_error");
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  // ⭑ FICHA 429 (R11) — UNA BODEGA NUEVA NO PUEDE NACER SIN SINPE.
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  // Es la SEGUNDA capa de D3. La primera (la siembra) cubre las ocho que ya existian; sin esta, la
+  // novena nace con un hueco y el primer cliente de esa bodega lee un mensaje sin numero.
+
+  it.each(["sinpeNumero", "sinpeNombre"] as const)(
+    "⭑ crear SIN `%s` -> `validation_error`, y el service NO se llama",
+    async (campo) => {
+      const service = fakeService();
+      const payload: Record<string, unknown> = { ...validCrear };
+      delete payload[campo];
+      const r = await crearZona(payload, { zonaService: service, getActor: getActor(MAESTRO) });
+      expect(r.status).toBe("validation_error");
+      // Colgado de SU campo, para que la pantalla lo pinte al lado y no como un toast generico.
+      if (r.status === "validation_error") expect(Object.keys(r.fieldErrors)).toContain(campo);
+      expect(service.crear).not.toHaveBeenCalled();
+    },
+  );
+
+  it("⭑ crear con un numero que no es un movil de Costa Rica -> error EN EL CAMPO DEL NUMERO", async () => {
+    const service = fakeService();
+    const r = await crearZona(
+      { ...validCrear, sinpeNumero: "12345678" }, // ocho digitos, pero empieza por 1
+      { zonaService: service, getActor: getActor(MAESTRO) },
+    );
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      expect(Object.keys(r.fieldErrors)).toContain("sinpeNumero");
+      expect(r.fieldErrors.sinpeNumero?.[0]).toMatch(/6, 7 u 8/);
+    }
+    expect(service.crear).not.toHaveBeenCalled();
+  });
+
+  it("⭑ crear con un titular en blanco -> error EN EL CAMPO DEL TITULAR", async () => {
+    const service = fakeService();
+    const r = await crearZona(
+      { ...validCrear, sinpeNombre: "   " },
+      { zonaService: service, getActor: getActor(MAESTRO) },
+    );
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") expect(Object.keys(r.fieldErrors)).toContain("sinpeNombre");
+  });
+
+  it("⭑ ACTUALIZAR una zona NO acepta el SINPE: se edita por su propia accion", async () => {
+    // Si viajara en el reemplazo completo de `actualizarZona` —que es `maestro`-only— un guardado
+    // de distritos pisaria en silencio la correccion que un `adminSatelite` acaba de hacer sobre su
+    // bodega. El `.strict()` lo convierte en un rechazo explicito en vez de un descarte mudo.
+    const service = fakeService();
+    const r = await actualizarZona(
+      "z1",
+      { ...validActualizar, sinpeNumero: "70000001" },
+      { zonaService: service, getActor: getActor(MAESTRO) },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.actualizar).not.toHaveBeenCalled();
   });
 });
 
@@ -129,7 +207,7 @@ describe("contrato discriminado por status (pass-through del service)", () => {
 
   it("not_found en actualizar se propaga", async () => {
     const service = fakeService({ actualizar: vi.fn().mockResolvedValue({ status: "not_found" }) });
-    const r = await actualizarZona("zX", validCrear, {
+    const r = await actualizarZona("zX", validActualizar, {
       zonaService: service,
       getActor: getActor(MAESTRO),
     });
@@ -172,7 +250,7 @@ describe("DTO nuevo (esCentral, sin campos internos)", () => {
         ordenesRetenidasEnBodegaSatelite: 3,
       }),
     });
-    const r = await actualizarZona("z1", validCrear, {
+    const r = await actualizarZona("z1", validActualizar, {
       zonaService: service,
       getActor: getActor(MAESTRO),
     });
@@ -241,6 +319,13 @@ function repoConGuarda(): IZonaRepository {
     contarOrdenesVivasPorZona: vi.fn(async (ids: string[]) =>
       ids.map((zonaId) => ({ zonaId, ordenesVivas: zonaId === ZONA_CENTRAL ? 850 : 0 })),
     ),
+    // FICHA 429: los metodos de la superficie del SINPE por bodega. El doble los declara
+    // para seguir cumpliendo `IZonaRepository`; esta suite no los ejercita.
+    listarSinpe: vi.fn().mockResolvedValue([]),
+    findSinpeByZona: vi.fn().mockResolvedValue(null),
+    zonaIdDeUsuario: vi.fn().mockResolvedValue(null),
+    guardarSinpe: vi.fn().mockResolvedValue(null),
+    confirmarSinpe: vi.fn().mockResolvedValue(null),
   };
 }
 

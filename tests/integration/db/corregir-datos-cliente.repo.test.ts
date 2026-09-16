@@ -436,16 +436,16 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
     const zonaCentral =
       (await tx.zona.findFirst({ where: { esCentral: true }, select: { id: true } })) ??
       (await tx.zona.create({
-        data: { nombre: `Z-327-central-${sufijo}`, esCentral: true },
+        data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Z-327-central-${sufijo}`, esCentral: true },
         select: { id: true },
       }));
     // La zona de DESTINO se crea siempre: asi se garantiza que es DISTINTA de la de la orden.
     const zonaDestino = await tx.zona.create({
-      data: { nombre: `Z-327-destino-${sufijo}`, esCentral: false },
+      data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Z-327-destino-${sufijo}`, esCentral: false },
       select: { id: true, nombre: true },
     });
     const zonaExtra = await tx.zona.create({
-      data: { nombre: `Z-327-extra-${sufijo}`, esCentral: false },
+      data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Z-327-extra-${sufijo}`, esCentral: false },
       select: { id: true },
     });
     const crearDistrito = async (

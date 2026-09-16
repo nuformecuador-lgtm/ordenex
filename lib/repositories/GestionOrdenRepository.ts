@@ -12,6 +12,7 @@ import type {
 import { SinGestionDevueltaError } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import { resolverSinpeBodega } from "@/lib/utils/sinpe-bodega";
 import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import {
@@ -245,7 +246,12 @@ const WITH_ASIGNACION = {
     // Feature 157 (R15): el telefono de la TIENDA acompaña a su nombre — el mensajero que va
     // a recolectar necesita poder contactarla, y el modelo no tiene direccion de tienda.
     tienda: { select: { nombre: true, telefono: true } },
-    zona: { select: { nombre: true } },
+    // FICHA 429 (R13/R15): dos columnas mas en el `select` de zona QUE YA EXISTIA, y la zona del
+    // MENSAJERO ASIGNADO —que es la que manda—. Antes de esta ficha aqui solo viajaba
+    // `mensajeroAsignadoId`; la relacion se anade con un `select` acotado a las dos columnas del
+    // SINPE, no a la fila de `usuario`, que lleva `password_hash` y el telefono de una persona.
+    zona: { select: { nombre: true, sinpeNumero: true, sinpeNombre: true } },
+    mensajeroAsignado: { select: { zona: { select: { sinpeNumero: true, sinpeNombre: true } } } },
     provincia: { select: { nombre: true } },
     canton: { select: { nombre: true } },
     distrito: { select: { nombre: true } },
@@ -253,6 +259,25 @@ const WITH_ASIGNACION = {
 } as const;
 
 type AsignacionRow = Prisma.OrdenGetPayload<typeof WITH_ASIGNACION>;
+
+/**
+ * FICHA 429 - el par del SINPE de una fila de asignacion, con la regla de `resolverSinpeBodega`.
+ *
+ * Se extrae a una funcion porque lo usan las dos proyecciones de este repositorio y porque el
+ * `?? null` del mensajero tiene que escribirse una sola vez: `mensajeroAsignado` es opcional (la
+ * orden puede no tener nadie asignado) y su `zona` tambien (`usuario.zona_id` es nullable).
+ */
+function sinpeDeLaFila(row: AsignacionRow): { sinpeNumero: string; sinpeNombre: string } {
+  const zonaDelMensajero = row.mensajeroAsignado?.zona ?? null;
+  const par = resolverSinpeBodega({
+    zonaDelMensajero:
+      zonaDelMensajero === null
+        ? null
+        : { numero: zonaDelMensajero.sinpeNumero, nombre: zonaDelMensajero.sinpeNombre },
+    zonaDeLaOrden: { numero: row.zona.sinpeNumero, nombre: row.zona.sinpeNombre },
+  });
+  return { sinpeNumero: par.numero, sinpeNombre: par.nombre };
+}
 
 function toMiAsignacionRow(row: AsignacionRow): MiAsignacionRow {
   return {
@@ -277,6 +302,9 @@ function toMiAsignacionRow(row: AsignacionRow): MiAsignacionRow {
     provinciaNombre: row.provincia.nombre,
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
+    // FICHA 429 (R13/R15/R16): la MISMA funcion pura que usa el envio por servidor. Que sea una
+    // sola es lo que impide que las dos superficies rindan numeros distintos para la misma orden.
+    ...sinpeDeLaFila(row),
     mensajeroAsignadoId: row.mensajeroAsignadoId,
     // Feature 246 (R35): la fecha CRUDA llega hasta el service, que es quien la compara con el dia
     // de Costa Rica en curso. El repositorio no interpreta el dia: no tiene reloj.

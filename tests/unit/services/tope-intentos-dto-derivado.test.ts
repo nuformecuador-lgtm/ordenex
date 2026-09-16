@@ -60,6 +60,8 @@ function filaAsignacion(over: Partial<MiAsignacionRow> & { id: string }): MiAsig
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: "D",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     mensajeroAsignadoId: "m1",
     ...over,
   };
@@ -212,6 +214,8 @@ function filaNovedad(over: Partial<NovedadOrdenRow> & { id: string }): NovedadOr
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: "D",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     mensajeroAsignadoId: "m1",
     intentosContacto: 0,
     createdAt: new Date("2026-08-20T10:00:00.000Z"),

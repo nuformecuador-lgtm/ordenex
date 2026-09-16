@@ -7,11 +7,17 @@ medio (T17).
 **Leyenda:** `[P]` = puede ir en paralelo con las tareas marcadas igual **dentro de su misma fase**.
 Cada tarea trae su criterio de «hecho»: si no se puede comprobar, no está hecha.
 
+**Estado (marcado el 2026-09-15, al levantar el bloqueante 1 de `progress/review_429.md`):**
+`[x]` = hecha y comprobada contra el árbol —el archivo existe y su test corre—; `[ ]` = no hecha.
+Las cinco sin marcar son **T0**, **T20** y las tres de la Fase 8: cada una dice debajo por qué.
+⚠️ El marcado se hizo mirando el repositorio, no la bitácora: una tarea está `[x]` porque su
+artefacto y su test están en la rama, no porque alguien escribiera que la había hecho.
+
 ---
 
 ## Fase 0 — la puerta que bloquea la migración
 
-### T0 — Medir los dos valores de la siembra
+### [ ] T0 — Medir los dos valores de la siembra
 **Depende de:** nada. **Bloquea:** T4, T15, T22.
 Pedir al humano (Q1 de `requirements.md`) el `NEXT_PUBLIC_SINPE_NUMERO` y el
 `NEXT_PUBLIC_SINPE_NOMBRE` vigentes en Vercel (entorno **Production**), y comprobar que el número
@@ -21,11 +27,20 @@ formato escrita, y el humano ha autorizado escribirlos como literales en `migrat
 **Si el número NO cumple el formato:** se para y se pregunta. Sembrar un número que el `CHECK`
 rechaza revienta la migración en producción; relajar el `CHECK` para que pase es tirar D5 a la basura.
 
+> **SIN MARCAR, Y LA MITAD DE ESTA TAREA YA NO APLICA.** El leader vetó el 2026-09-15 escribir el
+> par como literales en `migration.sql` —este repositorio es PÚBLICO y `git` conserva la historia—,
+> así que la autorización que pedía el «hecho cuando» no existe ni puede existir: el valor se queda
+> en el entorno del despliegue y lo traslada `scripts/seed-sinpe-inicial.ts`.
+> **Lo que SÍ sigue vivo, y sigue sin medirse, es la comprobación del formato:** si el
+> `NEXT_PUBLIC_SINPE_NUMERO` vigente en Vercel no cumple `^[678][0-9]{7}$`, la siembra sale con
+> `exit 1` y el paso 3 aborta en mitad de la release. Es el **bloqueante 2** de
+> `progress/review_429.md` y lo resuelve el humano; no se toca desde aquí.
+
 ---
 
 ## Fase 1 — módulos puros (backend)
 
-### T1 `[P]` — El validador del SINPE de Costa Rica
+### [x] T1 `[P]` — El validador del SINPE de Costa Rica
 **Depende de:** nada.
 `lib/utils/sinpe-cr.ts`: normalización (espacios, guiones, prefijo `+506`) y predicado de 8 dígitos
 que empiezan por 6, 7 u 8. Más el `sinpeNumeroSchema` de zod que lo usa. Módulo puro, sin
@@ -35,7 +50,7 @@ que empiezan por 6, 7 u 8. Más el `sinpeNumeroSchema` de zod que lo usa. Módul
 `"   "` inválidos; `"8888 1111"`, `"8888-1111"`, `"+506 88881111"` normalizan a `88881111`— y la
 tabla está exportada para que la reutilice el test contra Postgres de T4.
 
-### T2 `[P]` — El resolvedor de bodega
+### [x] T2 `[P]` — El resolvedor de bodega
 **Depende de:** nada.
 `lib/utils/sinpe-bodega.ts` con `resolverSinpeBodega` (design §2). Sin ramas de más: mensajero, y si
 no, orden.
@@ -46,7 +61,7 @@ mensajero, sin mensajero, mensajero sin zona) y afirma que el resultado **nunca*
 
 ## Fase 2 — base de datos
 
-### T3 — Migración A: el valor nuevo del enum
+### [x] T3 — Migración A: el valor nuevo del enum
 **Depende de:** nada. **Antes que T4** (orden de timestamps).
 `db/migrations/<ts>_historial_accion_zona_sinpe/` con `migration.sql`
 (`ALTER TYPE ... ADD VALUE IF NOT EXISTS 'zona_sinpe_cambiado';`) y su `down.sql`.
@@ -58,7 +73,7 @@ estado previo ejecutando las migraciones **reales** anteriores (descubiertas ley
 no escritas a mano), aplica el `up`, aplica el `down` y compara el enum **valor a valor y en orden**;
 y comprueba que con una fila que use el valor nuevo el `down` **falla ruidosamente** sin borrarla.
 
-### T4 — Migración B: las tres columnas, la siembra y los CHECK
+### [x] T4 — Migración B: las tres columnas, la siembra y los CHECK
 **Depende de:** T0, T3.
 `db/migrations/<ts>_zona_sinpe/` con el SQL de `design.md §1.3` en ese orden exacto (nullable →
 `UPDATE` de siembra → `SET NOT NULL` → `CHECK`), y su `down.sql` (quita los dos `CHECK` y las tres
@@ -69,7 +84,16 @@ afirma: las tres columnas con su tipo y nulabilidad (R1/R4); `INSERT`/`UPDATE` c
 `'   '` rechazados (R8); tras el `up`, **cero** zonas con número distinto del sembrado y **cero** con
 `sinpe_revisado_at` no nulo (R10); y que **no queda `DEFAULT`** en ninguna de las tres columnas.
 
-### T5 — `db/schema.prisma` + cliente
+> **HECHA, PERO EN TRES PIEZAS EN VEZ DE UNA, Y CONVIENE SABERLO.** El `UPDATE` de siembra NO vive
+> en `migration.sql` (repositorio público): son `20260918120100_zona_sinpe` (columnas nullables),
+> `scripts/seed-sinpe-inicial.ts` (el trasvase desde el entorno) y `20260918120200_zona_sinpe_no_nulo`
+> (`NOT NULL` + los dos `CHECK`, que aborta con un mensaje accionable si el paso 2 no corrió).
+> El `CHECK` del titular quedó en `~ '[^[:space:]]'` y **no** en el `btrim(...) <> ''` de
+> `design.md §1.2`: `btrim` sin segundo argumento recorta solo el espacio 0x20 y dejaba pasar un
+> titular de un único tabulador. Desde el arreglo del bloqueante 1, el caso de R10 llama a
+> `sembrarSinpeInicial` de verdad y hay un segundo que comprueba la idempotencia.
+
+### [x] T5 — `db/schema.prisma` + cliente
 **Depende de:** T4.
 Los tres campos en `model Zona` con su TSDoc (por qué `NOT NULL`, por qué sin default, qué significa
 `NULL` en la marca de revisión). `prisma migrate deploy` en local y `prisma generate`.
@@ -77,7 +101,7 @@ Los tres campos en `model Zona` con su TSDoc (por qué `NOT NULL`, por qué sin 
 nuevos. Si el dev server estaba levantado, se reinicia: un cliente Prisma rancio da 404 con el
 armazón pintado.
 
-### T6 — El catálogo de acciones
+### [x] T6 — El catálogo de acciones
 **Depende de:** T3.
 `lib/types/historial-accion.ts`: el tipo nuevo en la lista (con el comentario del censo apuntando al
 método productor), `CATEGORIA_POR_ACCION.zona_sinpe_cambiado = "mueve_dinero"`, y su etiqueta en
@@ -92,7 +116,7 @@ contra un número congelado a mano.
 
 ## Fase 3 — escritura y permisos (backend)
 
-### T7 — `ZonaRepository.guardarSinpe`
+### [x] T7 — `ZonaRepository.guardarSinpe`
 **Depende de:** T5, T6.
 Una `$transaction`: `FOR UPDATE` de la fila → `UPDATE` de los dos valores + `sinpe_revisado_at =
 now()` → si alguno cambió, `appendAccion(tx, ...)` con `etiquetaDeEntidad("zona", ...)`, `monto`
@@ -103,7 +127,7 @@ congelado, etiqueta, los dos números), R23 (el titular no aparece en ninguna co
 R24 (un guardado que revienta después del `UPDATE` deja 0 filas y el valor anterior intacto) y R25
 (confirmar sin cambios → 0 filas y fecha de revisión puesta).
 
-### T8 — La guardia del censo de historial
+### [x] T8 — La guardia del censo de historial
 **Depende de:** T7.
 Entrada nueva en `tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts`
 declarando `ZonaRepository.guardarSinpe` como productor de `zona_sinpe_cambiado`, con su mutación
@@ -112,7 +136,7 @@ exigida (el `update` de las dos columnas).
 mano y pegado en `progress/impl_429.md`). Recordatorio del límite conocido: esta guardia mide por
 método, no por escritura.
 
-### T9 — `SinpeBodegaService` + su interfaz
+### [x] T9 — `SinpeBodegaService` + su interfaz
 **Depende de:** T7.
 `lib/interfaces/services/ISinpeBodegaService.ts` y `lib/services/SinpeBodegaService.ts`: listar,
 guardar, confirmar. El permiso de R19/R20 se decide aquí, con la zona del actor **leída de la base**
@@ -120,7 +144,7 @@ por `usuarioId`; el `zonaId` del payload solo dice **qué** se quiere tocar, nun
 **Hecho cuando:** `tests/unit/services/sinpe-bodega-service.test.ts` cubre la matriz rol × bodega de
 R19 y el caso de R20 (payload con zona ajena → `forbidden`, sin escritura).
 
-### T10 — Las Server Actions
+### [x] T10 — Las Server Actions
 **Depende de:** T9, T1.
 `lib/actions/sinpe-bodega.ts` con las tres acciones de `design.md §4.1`, zod `.strict()` en el borde y
 el mapeo a resultado discriminado (patrón de `lib/actions/zonas.ts`).
@@ -128,7 +152,7 @@ el mapeo a resultado discriminado (patrón de `lib/actions/zonas.ts`).
 borde real, y que un payload con un campo desconocido devuelve `validation_error` (no un descarte
 mudo).
 
-### T11 — Crear y actualizar zona exigen el SINPE
+### [x] T11 — Crear y actualizar zona exigen el SINPE
 **Depende de:** T5, T1.
 `lib/types/zona.ts`: `sinpeNumero`/`sinpeNombre` en `zonaFieldsComunes`, con `sinpeNumeroSchema`.
 `ZonaRepository.create` escribe los dos valores **y** `sinpe_revisado_at = now()` (R12: lo tecleó una
@@ -143,7 +167,7 @@ pida lo contrario.
 
 ## Fase 4 — el valor llega a quien escribe el mensaje
 
-### T12 — `negocioDesdeEnv()` desaparece
+### [x] T12 — `negocioDesdeEnv()` desaparece
 **Depende de:** T2.
 Sustituirla por `negocioConSinpe(sinpe: SinpeBodega)` con el parámetro **obligatorio**. `urlBase`
 sigue leyendo `NEXT_PUBLIC_SITE_URL`. `datosPlantillaDesdeOrdenEnvio` y `resolverValoresOrden` reciben
@@ -152,7 +176,7 @@ no se «arregla»).
 **Hecho cuando:** `pnpm run typecheck` pasa y no queda ninguna lectura de `NEXT_PUBLIC_SINPE_*` en
 `lib/`.
 
-### T13 — `OrdenEnvioReader.findParaEnvio` resuelve por bodega
+### [x] T13 — `OrdenEnvioReader.findParaEnvio` resuelve por bodega
 **Depende de:** T12, T5.
 Añadir `sinpeNumero`/`sinpeNombre` a los dos `select` de zona que ese método **ya hace** (la de la
 orden y la del mensajero asignado) y componer el `negocio` con `resolverSinpeBodega`.
@@ -160,7 +184,7 @@ orden y la del mensajero asignado) y componer el `negocio` con `resolverSinpeBod
 la zona del mensajero **no es** la de la orden, y R15 con los dos casos de respaldo. Sin consultas
 nuevas: el test comprueba que el número de llamadas a Prisma no cambia.
 
-### T14 — El par viaja en `MiAsignacionDTO`
+### [x] T14 — El par viaja en `MiAsignacionDTO`
 **Depende de:** T13.
 Los dos campos **requeridos** en `MiAsignacionDTO`. El typecheck enumera los productores (incluidos
 `NovedadDTO` y `RecoleccionOrdenDTO`, que extienden el DTO) y cada uno los resuelve con la misma
@@ -169,7 +193,7 @@ función.
 productores tocados está en `progress/impl_429.md`. Los fixtures que se rompan se arreglan aportando
 el dato, nunca aflojando el tipo.
 
-### T15 — La prueba de equivalencia
+### [x] T15 — La prueba de equivalencia
 **Depende de:** T14, T0.
 Test que renderiza `listo_para_entrega_mensajero` con una zona cuyo SINPE sean **los valores de
 entorno de hoy**, por los dos caminos (servidor y dispositivo), y compara el texto con el que producía
@@ -178,7 +202,7 @@ el código anterior.
 `tests/unit/plantillas/preview-mismo-motor.test.ts`. Es la prueba de D8: si esto es verde, lo que ya
 funcionaba sigue funcionando igual.
 
-### T16 — Las guardias estáticas
+### [x] T16 — Las guardias estáticas
 **Depende de:** T12, T14.
 Tres, cada una con su contraprueba (inyectar el defecto y comprobar que la guardia se pone roja):
 1. `sinpe-sin-variables-de-entorno.guardia.test.ts` — la cadena `NEXT_PUBLIC_SINPE` no aparece en
@@ -189,7 +213,7 @@ Tres, cada una con su contraprueba (inyectar el defecto y comprobar que la guard
    layout, nunca envolviéndolo, y ninguna ruta redirige por revisión pendiente (R28).
 **Hecho cuando:** las tres pasan y las tres contrapruebas están ejecutadas y pegadas.
 
-### T17 — Limpieza de la configuración
+### [x] T17 — Limpieza de la configuración
 **Depende de:** T16.
 Borrar las dos variables de `.env.example`; actualizar el `campo` documental de `{{sinpe}}` y
 `{{sinpe_nombre}}` en `lib/types/plantilla-datos.ts` (`"env NEXT_PUBLIC_SINPE_NUMERO"` →
@@ -201,7 +225,7 @@ Borrar las dos variables de `.env.example`; actualizar el `campo` documental de 
 
 ## Fase 5 — la revisión del primer inicio de sesión (backend + layout)
 
-### T18 — El resolvedor de revisión pendiente
+### [x] T18 — El resolvedor de revisión pendiente
 **Depende de:** T5.
 `resolverRevisionSinpePendiente(actor)`: `null` para `mensajero`, `adminTienda`, cuentas de API y
 `adminSatelite` sin zona; la zona propia para `adminSatelite`; la central para `admin`/`maestro`. Solo
@@ -210,7 +234,7 @@ devuelve algo si `sinpe_revisado_at IS NULL`.
 el caso del `adminSatelite` sin zona** (devuelve `null`, no lanza), y afirma que para los roles sin
 permiso **no se emite ninguna consulta**.
 
-### T19 — Cableado en el layout
+### [x] T19 — Cableado en el layout
 **Depende de:** T18.
 Tercera lectura en el `Promise.all` de `app/(app)/layout.tsx`, solo para los tres roles que pueden
 editar. Montaje del componente como **hermano** de `{children}`, al lado de `PushReactivacion`.
@@ -221,7 +245,7 @@ editar. Montaje del componente como **hermano** de `{children}`, al lado de `Pus
 
 ## Fase 6 — pantalla (después de `/design`)
 
-### T20 — Puerta de `/design`
+### [ ] T20 — Puerta de `/design`
 **Depende de:** T19.
 Pasar a `/design` **el qué**, no el cómo: (a) el aviso de `design.md §6.2` con sus cuatro
 comportamientos; (b) la pantalla de `design.md §6.3` con sus dos vistas (una ficha para
@@ -230,7 +254,12 @@ que el ítem de menú va **al final** y por qué.
 **Hecho cuando:** `/design` devuelve la propuesta visual y el humano la aprueba. **Nada de T21/T22 se
 escribe antes.**
 
-### T21 — La pantalla
+> **SIN MARCAR POR FALTA DE REGISTRO, no por estar sin hacer.** En esta rama no hay commit ni
+> anotación de la puerta de `/design`: T21, T22 y T23 sí están escritas y probadas. Se deja `[ ]`
+> porque el criterio de «hecho» de esta tarea es *que el humano apruebe la propuesta*, y eso no se
+> puede comprobar leyendo el repositorio. Quien lo sepa, que lo marque.
+
+### [x] T21 — La pantalla
 **Depende de:** T20, T10.
 Ruta `app/(app)/configuracion/sinpe/page.tsx` (Server Component con gate por la MISMA constante de
 roles que el menú) + componentes cliente. Datos por props desde el servidor, nunca fetch desde el
@@ -239,14 +268,14 @@ cliente.
 que las no revisadas están marcadas, y que un guardado con número inválido pinta el error **junto al
 campo del número**, no como un toast genérico.
 
-### T22 — El aviso del primer login
+### [x] T22 — El aviso del primer login
 **Depende de:** T20, T19, T10.
 `RevisionSinpeBodega`: enseña, confirma, corrige en el sitio, se cierra sin confirmar, y no reaparece
 hasta el siguiente inicio de sesión.
 **Hecho cuando:** `tests/components/RevisionSinpeBodega.test.tsx` cubre R26, R27, R28 y R29,
 incluyendo que cerrarlo **no** marca la bodega como revisada.
 
-### T23 — El ítem de menú
+### [x] T23 — El ítem de menú
 **Depende de:** T21.
 Entrada nueva en `SIDEBAR_ITEMS`, **al final**, con `roles` apuntando a una constante compartida con
 el gate de la página.
@@ -257,7 +286,7 @@ y un test nuevo afirma que el aterrizaje post-login de los cinco roles es el mis
 
 ## Fase 7 — verificación y cierre
 
-### T24 — Gate completo, con base
+### [x] T24 — Gate completo, con base
 **Depende de:** todo lo anterior.
 `DATABASE_URL` exportada y `./init.sh` completo, con `INIT_EXIT=$?` escrito **dentro** del log (un
 `echo` posterior se come el código de salida). Sin canalizar por `tail`: trunca el fichero en origen
@@ -266,14 +295,14 @@ y el rojo se queda sin nombre.
 `skipped` está mirado y explicado. Un «init OK» con 147 archivos de integración saltados no vale para
 esta ficha: los `CHECK` viven justo ahí.
 
-### T25 — Las tres mutaciones
+### [x] T25 — Las tres mutaciones
 **Depende de:** T24.
 (a) `CHECK` a `^[0-9]{8}$`; (b) el resolvedor devuelve siempre la zona de la orden; (c) `appendAccion`
 recibe `this.prisma` en vez de `tx`. Cada una tiene que poner algo rojo.
 **Hecho cuando:** las tres salidas rojas están pegadas en `progress/impl_429.md`, con el nombre del
 test que cayó. Sin salida pegada, la mutación no se ha corrido.
 
-### T26 — Informe y commit
+### [x] T26 — Informe y commit
 **Depende de:** T25.
 `progress/impl_429.md` con el mapa `R<n> → test` completo (31 filas), los dos valores de la siembra,
 la lista de productores del DTO tocados y las evidencias de T8, T16 y T25.
@@ -284,23 +313,96 @@ HEAD:progress/impl_429.md`). Un informe que solo existe en disco se lo lleva el 
 
 ## Fase 8 — después del despliegue (no lo hace el implementer)
 
-### T27 — Medir producción en solo lectura
+> **LAS TRES VAN SIN MARCAR A PROPÓSITO, Y NO SON DEUDA: SON POSTERIORES AL DESPLIEGUE.** T27 mide
+> producción en solo lectura una vez aplicada la migración, T28 retira las variables de Vercel
+> cuando el despliegue lleve días estable, y T29 es mirar la aplicación con los ojos. Ninguna de las
+> tres se puede hacer desde la rama, y marcarlas `[x]` antes de tiempo convertiría la Fase 8 en un
+> adorno: son justo las que comprueban que la siembra hizo en la base lo que se esperaba.
+
+### [ ] T27 — Medir producción en solo lectura
 **Depende de:** la migración aplicada en producción.
 Las dos consultas de `design.md §8.5` por el MCP de Supabase.
 **Hecho cuando:** salen 8 filas, todas con el número de hoy y todas con `sinpe_revisado_at` en `NULL`,
 y el resultado está escrito. Si sale otra cosa, la release se para.
 
-### T28 — Retirar las variables de Vercel
+### [ ] T28 — Retirar las variables de Vercel
 **Depende de:** T27 y de que el despliegue lleve unos días estable.
 Borrar `NEXT_PUBLIC_SINPE_NUMERO` y `NEXT_PUBLIC_SINPE_NOMBRE` del proyecto **`ordenex`** (no
 `ordenex-app`, que es otro repo), en **los dos entornos**, Production y Preview.
 **Hecho cuando:** ya no aparecen en el panel. Mientras sigan ahí no hacen daño —no las lee nadie—,
 pero dejarlas invita a que alguien las «actualice» creyendo que sirven para algo.
 
-### T29 — Ver la aplicación
+### [ ] T29 — Ver la aplicación
 **Depende de:** T28.
 Entrar como `adminSatelite` de una bodega no revisada y como `admin`, y comprobar con los ojos: sale
 el aviso, se puede corregir, se puede cerrar, no bloquea nada, y al volver a entrar reaparece; una vez
 confirmado, no vuelve.
 **Hecho cuando:** los seis gestos están comprobados. La suite no ve lo que ve una persona mirando la
 pantalla.
+
+---
+
+## Fase 8-bis — EL PLAN DE RELEASE (bloqueante 2 de la revisión, resuelto el 2026-09-15)
+
+**Decisión del humano:** no se despliega la 429 sola. **Se acumulan las cuatro funcionalidades de
+SF-001 en `dev` y se despliega todo junto al final.**
+
+### T0 — MEDIDO (2026-09-15) ✅
+
+La pregunta era si el `NEXT_PUBLIC_SINPE_NUMERO` vigente cumple `^[678][0-9]{7}$`. **Sí.** Medido
+contra producción en solo lectura, sobre los mensajes realmente enviados:
+
+| | |
+| --- | --- |
+| Mensajes de chat que contienen el SINPE | **2.491** |
+| Números distintos entre ellos | **1** — confirma la premisa del documento firmado |
+| Cumplen `^[678][0-9]{7}$` | **Sí**, los 8 dígitos |
+
+El valor **no se anota aquí ni en ningún archivo**: el repositorio es público y solo hacía falta
+comprobar la forma. La consulta se puede repetir cuando se quiera.
+
+**Conclusión: el script de siembra no va a abortar por formato.**
+
+### Mergear a `dev` es SEGURO, y aquí está por qué
+
+`scripts/migrate-deploy-guardas.ts` → `decidirMigracion`:
+
+```
+VERCEL_ENV === "production"  → aplica
+VERCEL_ENV === "preview"     → NO aplica, salvo MIGRATE_ON_PREVIEW=true
+```
+
+Un merge a `dev` produce un despliegue **preview**, que **no corre migraciones**. Así que el PR entra a
+`dev` sin tocar ninguna base y sin riesgo de dejar `_prisma_migrations` sucio. **La trampa vive
+únicamente en el despliegue a `prod`.**
+
+### La trampa, escrita para que nadie la descubra el día de la release
+
+`pnpm run build` en producción hace `prisma generate && tsx scripts/migrate-deploy.ts && next build`,
+y `migrate deploy` aplica **todas** las migraciones pendientes de un tirón:
+
+1. `20260918120100_zona_sinpe` (columnas nullables) → OK.
+2. `20260918120200_zona_sinpe_no_nulo` levanta su `RAISE EXCEPTION` porque nadie sembró → **el build
+   muere**. Eso es lo diseñado.
+3. **Y ese fallo deja la migración marcada como `failed` en `_prisma_migrations`.** A partir de ahí
+   **todo `prisma migrate deploy` posterior se niega** hasta que alguien corra `prisma migrate
+   resolve`, que contra producción exige la `DATABASE_URL` de prod — **que en este repo es
+   `sensitive` e irrecuperable por CLI**. Se entra ahí desplegando mal **una sola vez**.
+
+### El orden obligatorio el día de la release
+
+1. **Antes de mergear a `prod`**: aplicar los pasos 1 y 2 **a mano contra producción por el MCP de
+   Supabase** — crear las columnas nullables y sembrar las 8 zonas con el SINPE vigente.
+2. **Verificar en solo lectura** que las 8 zonas quedaron con su par, y que `sinpe_revisado_at` es
+   `NULL` en las 8 (nadie ha revisado todavía; es lo correcto).
+3. **Recién entonces** mergear a `prod`. `migrate deploy` encontrará los pasos 1 y 2 ya aplicados y
+   solo tendrá que aplicar el 3, que ya no aborta porque no hay filas vacías.
+
+**Por qué esta vía y no dos despliegues:** dos despliegues son más ortodoxos, pero dejan una ventana en
+la que la columna existe vacía mientras la aplicación ya la lee como obligatoria. Esta vía no tiene esa
+ventana y nunca pone `_prisma_migrations` en estado sucio.
+
+### Después de desplegar (T27–T29, sin cambios)
+
+Medir producción en solo lectura, retirar `NEXT_PUBLIC_SINPE_NUMERO` / `NEXT_PUBLIC_SINPE_NOMBRE` de
+Vercel **solo después de verificar**, y ver la aplicación funcionando.

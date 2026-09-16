@@ -81,6 +81,8 @@ function novedad(over: Partial<NovedadDTO> & { id: string }): NovedadDTO {
     provinciaNombre: "San José",
     cantonNombre: "Escazú",
     distritoNombre: "San Rafael",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     secuenciaRuta: null,
     causa: "not_found",
     intentosEntrega: 2,

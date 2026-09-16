@@ -17,12 +17,29 @@ import type {
   IZonaRepository,
   ListZonasParams,
   ListZonasResult,
+  SinpeZonaRow,
   UpdateZonaData,
   UpdateZonaResult,
 } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { OpcionCatalogo } from "@/lib/types/filtros-ordenes";
 
 // Delegates + $transaction necesarios (permite acotar/mocakear en tests).
+/**
+ * FICHA 429 - LA PROYECCION DE LA SUPERFICIE DEL SINPE, escrita UNA vez.
+ *
+ * Lista blanca y no el row entero: `zona` no lleva nada sensible hoy, pero la proyeccion que viaja
+ * a la pantalla de un `adminSatelite` es exactamente el sitio por el que una columna futura se
+ * cuela sola si aqui hubiera un `findMany` sin `select`.
+ */
+const SINPE_ZONA_SELECT = {
+  id: true,
+  nombre: true,
+  esCentral: true,
+  sinpeNumero: true,
+  sinpeNombre: true,
+  sinpeRevisadoAt: true,
+} as const;
+
 type ZonaPrismaClient = Pick<
   PrismaClient,
   | "zona"
@@ -36,6 +53,10 @@ type ZonaPrismaClient = Pick<
   | "usuario"
   // FICHA 376 (Q4): el conteo de ordenes vivas que re-tarifaria mover la marca de zona central.
   | "orden"
+  // FICHA 429: el `SELECT ... FOR UPDATE` de `guardarSinpe`. Prisma no sabe expresar el bloqueo de
+  // fila por la API de modelo, y sin el dos guardados simultaneos sobre la misma bodega leerian el
+  // mismo valor «anterior» y escribirian dos filas que cuentan la misma transicion dos veces.
+  | "$queryRaw"
 >;
 
 /** Una zona nombrada, tal como la necesita una fila del historial (376/R12/R13). */
@@ -208,7 +229,18 @@ export class ZonaRepository implements IZonaRepository {
           await tx.zona.updateMany({ where: { esCentral: true }, data: { esCentral: false } });
         }
         const zona = await tx.zona.create({
-          data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esCentral: data.esCentral },
+          data: {
+            nombre: data.nombre,
+            cobroVehiculo: data.cobroVehiculo,
+            esCentral: data.esCentral,
+            // FICHA 429 (R11/R12) - los dos campos VAN EN EL MISMO ACTO de creacion, y la bodega
+            // nace REVISADA: el SINPE lo acaba de teclear una persona, asi que volver a pedirle
+            // que lo confirme al entrar seria ruido. Fecha explicita y no un default de la
+            // columna: la columna NO tiene default a proposito (ver `schema.prisma`).
+            sinpeNumero: data.sinpeNumero,
+            sinpeNombre: data.sinpeNombre,
+            sinpeRevisadoAt: new Date(),
+          },
         });
         if (data.distritoIds.length > 0) {
           await tx.zonaDistrito.createMany({
@@ -724,4 +756,131 @@ export class ZonaRepository implements IZonaRepository {
     const conteo = new Map(filas.map((f) => [f.zonaId, f._count._all]));
     return ids.map((zonaId) => ({ zonaId, ordenesVivas: conteo.get(zonaId) ?? 0 }));
   }
+
+  /* --- FICHA 429 - el SINPE por bodega -------------------------------------------------- */
+
+  async listarSinpe(): Promise<SinpeZonaRow[]> {
+    return this.prisma.zona.findMany({
+      select: SINPE_ZONA_SELECT,
+      orderBy: { nombre: "asc" }, // orden determinista: la pantalla lista las ocho
+    });
+  }
+
+  async findSinpeByZona(zonaId: string): Promise<SinpeZonaRow | null> {
+    return this.prisma.zona.findUnique({ where: { id: zonaId }, select: SINPE_ZONA_SELECT });
+  }
+
+  /**
+   * FICHA 429 (R20) - LA ZONA DEL ACTOR SALE DE LA BASE, NO DEL PAYLOAD.
+   *
+   * El `Actor` de la sesion ya trae un `zonaId` (feature 146), y aun asi el servicio llama aqui: la
+   * zona que decide un PERMISO no viaja en una cookie. `null` = esa persona no tiene bodega, que es
+   * un estado representable (`usuario.zona_id` es nullable) y significa «no puede editar ninguna»,
+   * nunca «puede editar todas».
+   */
+  async zonaIdDeUsuario(usuarioId: string): Promise<string | null> {
+    const fila = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { zonaId: true },
+    });
+    return fila?.zonaId ?? null;
+  }
+
+  /**
+   * FICHA 429 (R21/R24/R25) - GUARDAR EL SINPE DE UNA BODEGA, CON SU RASTRO, ATOMICO.
+   *
+   * Los tres pasos, todos DENTRO de la misma `$transaction` y todos con `tx`:
+   *   1. `SELECT ... FOR UPDATE` de la fila -> el numero y el titular PREVIOS. El bloqueo no es
+   *      decorativo: sin el, dos guardados simultaneos sobre la misma bodega leerian el mismo
+   *      «anterior» y escribirian dos filas que cuentan la misma transicion dos veces, perdiendo
+   *      una de las dos de verdad.
+   *   2. el `UPDATE` de los dos valores + la marca de revision - quien guarda, mira (R4);
+   *   3. si alguno de los dos quedo DISTINTO, `appendAccion(tx, ...)`.
+   *
+   * CON `tx`, JAMAS CON `this.prisma`. Escribir por `this.prisma` aqui dentro COMPILA, parece
+   * correcto y escribe FUERA de la transaccion: es la mutacion que sobrevivio en la ficha 373. Con
+   * `tx`, si el registro falla el `UPDATE` no persiste, y si el `UPDATE` falla no queda registro.
+   *
+   * R25 - CONFIRMAR SIN CAMBIAR NADA NO DEJA FILA. La comparacion es contra los valores PREVIOS
+   * leidos en el paso 1, no contra «se llamo a este metodo»: guardar dos veces el mismo par escribe
+   * UNA sola fila, la primera vez que de verdad cambio algo.
+   *
+   * R23 - EL TITULAR NO ENTRA EN LA FILA. `valorAnterior`/`valorNuevo` llevan el NUMERO, que no es
+   * texto libre (ocho digitos con un `CHECK` detras) y es el dato publico que se le manda a cada
+   * cliente en cada mensaje. `monto` va a NULL por el default de `appendAccion`: no hay un importe
+   * unico.
+   */
+  async guardarSinpe(
+    zonaId: string,
+    data: { numero: string; nombre: string },
+    actorUsuarioId: string | null,
+  ): Promise<SinpeZonaRow | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const previas = await tx.$queryRaw<FilaSinpePrevia[]>`
+        SELECT "id", "nombre", "sinpe_numero", "sinpe_nombre"
+          FROM "zona" WHERE "id" = ${zonaId} FOR UPDATE`;
+      const previa = previas[0];
+      if (previa === undefined) return null;
+
+      const zona = await tx.zona.update({
+        where: { id: zonaId },
+        data: {
+          sinpeNumero: data.numero,
+          sinpeNombre: data.nombre,
+          sinpeRevisadoAt: new Date(),
+        },
+        select: SINPE_ZONA_SELECT,
+      });
+
+      const cambio = previa.sinpe_numero !== data.numero || previa.sinpe_nombre !== data.nombre;
+      if (cambio) {
+        const actor = await resolverActorCongelado(tx, actorUsuarioId);
+        await appendAccion(
+          tx,
+          [
+            {
+              accion: "zona_sinpe_cambiado",
+              entidadTipo: "zona",
+              entidadId: zonaId,
+              entidadEtiqueta: etiquetaDeEntidad("zona", { nombre: previa.nombre }),
+              valorAnterior: previa.sinpe_numero,
+              valorNuevo: data.numero,
+              ...actor,
+            },
+          ],
+          randomUUID(), // R21: UN lote por guardado, aunque solo produzca una fila.
+        );
+      }
+      return zona;
+    });
+  }
+
+  /**
+   * FICHA 429 (R25) - «ESTA BIEN»: solo la marca de revision.
+   *
+   * No acepta valores y no puede escribir ninguno: la unica columna que toca es la fecha. Es lo que
+   * hace que confirmar no pueda cambiar un numero por accidente. Y NO deja fila de historial: D6
+   * dice «quien lo CAMBIO», y una confirmacion no cambia nada ni mueve dinero - un tipo «alguien lo
+   * miro» dentro de la categoria del dinero la convertiria en un registro de visitas.
+   */
+  async confirmarSinpe(zonaId: string): Promise<SinpeZonaRow | null> {
+    const existe = await this.prisma.zona.findUnique({
+      where: { id: zonaId },
+      select: { id: true },
+    });
+    if (existe === null) return null;
+    return this.prisma.zona.update({
+      where: { id: zonaId },
+      data: { sinpeRevisadoAt: new Date() },
+      select: SINPE_ZONA_SELECT,
+    });
+  }
+}
+
+/** FICHA 429 - la fila cruda del `SELECT ... FOR UPDATE` (columnas en `snake_case`). */
+interface FilaSinpePrevia {
+  id: string;
+  nombre: string;
+  sinpe_numero: string;
+  sinpe_nombre: string;
 }

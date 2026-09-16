@@ -11,6 +11,7 @@ import { FormField } from "@/components/shared/FormField";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import {
+  actualizarZonaSchema,
   crearZonaSchema,
   type ZonaActionError,
   type ZonaDTO,
@@ -147,6 +148,17 @@ export function CrearZonaForm({
     initial?.cobro ?? cobroVacio(),
   );
   const [esCentral, setEsCentral] = useState<boolean>(initial?.esCentral ?? false);
+  /**
+   * ⭑ FICHA 429 (R11) — EL SINPE DE LA BODEGA NUEVA, TECLEADO.
+   *
+   * Arrancan VACÍOS y solo se piden AL CREAR. En edición no se pintan ni se envían, porque
+   * `actualizarZonaSchema` no los lleva: el SINPE se edita por su propia acción, con otro
+   * modelo de permisos. Y no se precargan con «el de la central» ni con nada: un campo que ya
+   * viene relleno se acepta sin leerlo, y aceptar sin leer un número de cobro es exactamente el
+   * fallo mudo que esta ficha persigue. «Obligatorio» significa teclearlo.
+   */
+  const [sinpeNumero, setSinpeNumero] = useState("");
+  const [sinpeNombre, setSinpeNombre] = useState("");
   // Sección "Tarifas de zona": mismos campos que el formulario de tienda.
   const [tarifaValores, setTarifaValores] = useState<TarifaValores>(
     initial?.tarifaValores ?? tarifaValoresVacios(),
@@ -177,7 +189,25 @@ export function CrearZonaForm({
     setTarifaValores((prev) => ({ ...prev, [key]: value }));
   }
 
-  /** Arma el candidato y lo valida contra el mismo schema que la action. */
+  /**
+   * Arma el candidato y lo valida contra el MISMO schema que la acción que se va a llamar.
+   *
+   * ⭑ FICHA 429 — POR QUÉ AQUÍ HAY DOS ESQUEMAS Y ANTES HABÍA UNO. `crearZonaSchema` ganó
+   * `sinpeNumero`/`sinpeNombre` como OBLIGATORIOS (R11) y `actualizarZonaSchema` NO los lleva: el
+   * SINPE se edita por su propia acción, y meterlo en el reemplazo completo de `actualizarZona`
+   * —que arrastra distritos y tarifas— dejaría que un guardado de geografía pisara en silencio
+   * la corrección que un `adminSatelite` acaba de hacer sobre su bodega.
+   *
+   * Los dos esquemas son `.strict()`, así que seguir validando SIEMPRE contra el de crear rompía
+   * las dos ramas a la vez: al crear no se recogían los campos —y el formulario no llegaba ni a
+   * llamar a la acción, que es el rojo medido de 32 casos—, y al editar los habría mandado a un
+   * esquema que los rechaza.
+   *
+   * Se elige por `zonaIdGuardada` y NO por `mode`: tras crear con éxito, un reintento pasa a ser
+   * una actualización aunque el modo siga siendo «crear», y es la misma condición que ya decide
+   * a qué acción se llama en `enviar()`. Dos condiciones distintas para la misma bifurcación
+   * divergirían sin que nada se pusiera rojo.
+   */
   function validar() {
     const candidate = {
       nombre,
@@ -186,7 +216,8 @@ export function CrearZonaForm({
       distritoIds,
       tarifas: cobro.tarifas,
     };
-    return crearZonaSchema.safeParse(candidate);
+    if (zonaIdGuardada) return actualizarZonaSchema.safeParse(candidate);
+    return crearZonaSchema.safeParse({ ...candidate, sinpeNumero, sinpeNombre });
   }
 
   /**
@@ -410,6 +441,54 @@ export function CrearZonaForm({
           onChange={(e) => setNombre(e.target.value)}
         />
       </FormField>
+
+      {/* ⭑ FICHA 429 (R11) — EL SINPE DE LA BODEGA, EN EL MISMO ACTO DE CREARLA.
+          Solo al CREAR: en edición el par se cambia desde «SINPE por bodega», que es la
+          superficie que lleva el rastro de quién lo tocó. Los dos errores se pintan JUNTO A SU
+          CAMPO —`FormField` cablea `aria-invalid` y `aria-describedby`— y no como un toast
+          genérico: un «revisá los datos» no dice cuál de los dos números está mal. */}
+      {!zonaIdGuardada ? (
+        <fieldset className="flex flex-col gap-4 rounded-md border border-border p-4">
+          <legend className="px-1 text-sm font-semibold">
+            SINPE de la bodega
+          </legend>
+          <p className="max-w-prose text-xs text-muted-foreground">
+            Es el número al que los clientes de esta bodega transfieren cuando
+            pagan por SINPE. Lo usan todos los mensajeros de la bodega.
+          </p>
+
+          <FormField
+            id="sinpe-numero-zona"
+            label="Número SINPE"
+            required
+            hint="8 dígitos, empieza por 6, 7 u 8."
+            error={errors.sinpeNumero}
+          >
+            <Input
+              inputMode="numeric"
+              autoComplete="off"
+              value={sinpeNumero}
+              placeholder="Ej: 88881111"
+              onChange={(e) => setSinpeNumero(e.target.value)}
+            />
+          </FormField>
+
+          <FormField
+            id="sinpe-nombre-zona"
+            label="A nombre de"
+            required
+            hint="Tal como aparece en SINPE Móvil al teclear el número."
+            error={errors.sinpeNombre}
+          >
+            <Input
+              autoComplete="off"
+              value={sinpeNombre}
+              placeholder="Ej: Ordenex CR S.A."
+              onChange={(e) => setSinpeNombre(e.target.value)}
+            />
+          </FormField>
+        </fieldset>
+      ) : null}
 
       {/* FICHA 376 (R23): el rechazo del servidor por «tiene que haber una zona central» llega
           como `fieldErrors.esCentral` y hasta hoy no se pintaba en ningún sitio. Va JUNTO a la

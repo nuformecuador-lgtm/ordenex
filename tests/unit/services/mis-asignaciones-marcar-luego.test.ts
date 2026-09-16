@@ -36,6 +36,8 @@ function row(over: Partial<MiAsignacionRow> & { id: string }): MiAsignacionRow {
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: "D",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     mensajeroAsignadoId: "m1",
     ...over,
   };

@@ -265,6 +265,30 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.tarifaZonaMensajero\.deleteMany\(/,
   },
   {
+    // ⭑ FICHA 429 — EL SINPE DE UNA BODEGA. Metodo PROPIO y no una escritura mas dentro de
+    // `update`, y eso es deliberado: esta guardia mide POR METODO, no por escritura (medido dos
+    // veces en este repo, fichas 376 y 380). Si el guardado del SINPE viviera dentro de `update`
+    // —que ya llama a `appendAccion` por otros tres tipos— borrar SU `appendAccion` dejaria esta
+    // guardia VERDE. Con metodo propio, la unica escritura del cuerpo es la que la fila documenta
+    // y el limite conocido de la guardia no muerde aqui.
+    //
+    // ⚠️ LA MUTACION QUE SE EXIGE ES EL `update` DE LAS DOS COLUMNAS, que es exactamente lo que la
+    // fila documenta: a que cuenta se le va a pedir el dinero a los clientes de esa bodega.
+    //
+    // ⚠️ NO HAY ENTRADA PARA `create` NI PARA `confirmarSinpe`, y NO es un olvido:
+    //   · `create` escribe el par en el acto de crear la bodega, y el catalogo no tiene un tipo
+    //     «zona creada» (hay `zona_borrada` y no `zona_creada`, igual que `vehiculo_borrado` sin
+    //     `vehiculo_creado`). Añadir uno aqui ensancharia el alcance firmado.
+    //   · `confirmarSinpe` NO CAMBIA NADA (R25): solo pone la fecha de revision. D6 pide el rastro
+    //     de quien lo CAMBIO; un tipo «alguien lo miro» dentro de la categoria del dinero la
+    //     convertiria en un registro de visitas.
+    tipos: ["zona_sinpe_cambiado"],
+    archivo: "lib/repositories/ZonaRepository.ts",
+    metodo: "guardarSinpe",
+    forma: "abre_tx",
+    mutacion: /tx\.zona\.update\(/,
+  },
+  {
     // ⭑ FICHA 381 — EL COBRO MANUAL A UNA TIENDA. Forma `recibe_tx`, la FUERTE: el metodo recibe la
     // transaccion como primer parametro y su tipo (`WalletTiendaHistorialTxClient`) no expone
     // `$transaction`, asi que la atomicidad es del TIPO y no de la disciplina.
@@ -816,14 +840,15 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     expect(inventados, "el censo nombra un tipo que el catalogo no declara").toEqual([]);
   });
 
-  it("los 52 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375, la 376, la 380, la 381 y la 398) siguen siendo 52", () => {
+  it("los 53 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375, la 376, la 380, la 381, la 398 y la 429) siguen siendo 53", () => {
     // Numero DURO a proposito: añadir un tipo al enum obliga a pasar por aqui, y por tanto a
     // añadirlo al censo y a escribir su productor. Es el mecanismo de R14.
-    // 52 desde la ficha 398 (`cierre_dia_gestion_corregida`); 51 lo fue desde la 381
+    // 53 desde la ficha 429 (`zona_sinpe_cambiado`); 52 lo fue desde la 398
+    // (`cierre_dia_gestion_corregida`); 51 lo fue desde la 381
     // (`cobro_tienda_registrado`); 50 desde la 380 (`zona_pago_mensajero_cambiado`); 49 desde la
     // 376 (`zona_central_cambiada`); 48 desde la 375 (`nodo_geografico_renombrado`); 47 desde la
     // 374 (los dos `nodo_geografico_*` de activacion); 45 desde la 373.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(52);
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(53);
   });
 });
 

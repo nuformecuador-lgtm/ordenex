@@ -11,6 +11,7 @@ import { pathToFileURL } from "node:url";
 import type { PrismaClient } from "@prisma/client";
 import { canonicalZonaNombre, normalizeZonaKey } from "@/lib/geo/normalize";
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { leerSemilla } from "./seed-sinpe-inicial";
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 375 — EL CRUCE VA POR `codigo_dta`, NO POR NOMBRE.
@@ -431,7 +432,22 @@ export async function seedGeografia(prisma: GeoPrisma, rows: GeoRow[]): Promise<
  * clave normalizada, con es_central=false (default). En re-corridas el
  * `update: {}` NO pisa es_central editado por el maestro. Devuelve key -> zonaId.
  */
-export async function seedZonas(prisma: ZonaPrisma, hints: ZonaHintRow[]): Promise<Map<string, string>> {
+export async function seedZonas(
+  prisma: ZonaPrisma,
+  hints: ZonaHintRow[],
+  /**
+   * ⭑ FICHA 429 (R11) — EL SINPE CON EL QUE NACE UNA ZONA CREADA POR ESTE SEED.
+   *
+   * Parametro OBLIGATORIO y sin default: `zona.sinpe_numero`/`sinpe_nombre` son `NOT NULL` sin
+   * default, asi que una zona no puede nacer sin el par — tampoco desde un script. Un default
+   * aqui seria la puerta de atras que R11 cierra en el formulario.
+   *
+   * ⚠️ SOLO SE USA AL **CREAR**: el `update: {}` del upsert no lo toca, asi que una re-corrida NO
+   * pisa el SINPE que una bodega ya tenga (ni el sembrado ni el corregido a mano). Mismo criterio
+   * que `es_central` desde R39.
+   */
+  sinpeInicial: { numero: string; nombre: string },
+): Promise<Map<string, string>> {
   const zonaByKey = new Map<string, string>();
   for (const row of hints) {
     const key = normalizeZonaKey(row.zona);
@@ -442,7 +458,12 @@ export async function seedZonas(prisma: ZonaPrisma, hints: ZonaHintRow[]): Promi
     const zona = await prisma.zona.upsert({
       where: { nombre: canonical },
       update: {}, // R39: no sobrescribe es_central ya editado
-      create: { nombre: canonical }, // R35/R37: es_central false por default
+      // R35/R37: es_central false por default. FICHA 429: el par del SINPE es obligatorio.
+      create: {
+        nombre: canonical,
+        sinpeNumero: sinpeInicial.numero,
+        sinpeNombre: sinpeInicial.nombre,
+      },
       select: { id: true },
     });
     zonaByKey.set(key, zona.id);
@@ -517,9 +538,19 @@ export async function seedZonasCompleto(
   prisma: GeoPrisma & ZonaPrisma & DistritoPrisma,
   geoRows: GeoRow[],
   hints: ZonaHintRow[],
+  /**
+   * ⭑ FICHA 429 (R11) — el SINPE con el que nace una zona creada por este seed.
+   *
+   * ⚠️ LLEGA POR PARAMETRO Y NO SE LEE DEL ENTORNO AQUI DENTRO, aunque el valor venga de ahi. Este
+   * orquestador se ejercita en tests con un Prisma falso; si leyera `process.env` por su cuenta,
+   * una variable ausente lo mataria con `process.exit(1)` EN MITAD DE UNA SUITE —medido: dos casos
+   * de `seed-zonas.test.ts` cayeron asi— y el fallo no diria nada del seed. La lectura y el
+   * `exit` viven donde les toca: en el entrypoint.
+   */
+  sinpeInicial: { numero: string; nombre: string },
 ): Promise<SeedZonasSummary> {
   const geo = await seedGeografia(prisma, geoRows);
-  const zonaByKey = await seedZonas(prisma, hints);
+  const zonaByKey = await seedZonas(prisma, hints, sinpeInicial);
   const cruce = await cruzarZonas(prisma, hints, zonaByKey, geo.distritoByTerna);
 
   return {
@@ -563,7 +594,16 @@ async function main(): Promise<void> {
 
   const prisma = getPrismaClient();
   try {
-    const summary = await seedZonasCompleto(prisma, geoRows, hints);
+    // FICHA 429: la semilla del SINPE sale del ENTORNO, con la MISMA lectura y la MISMA
+    // validacion que `scripts/seed-sinpe-inicial.ts` — el unico archivo del arbol autorizado a
+    // nombrar esas variables. Si faltan, este seed NO crea ninguna zona: prefiere morir a crear
+    // una bodega cuyo numero de cobro no decidio nadie.
+    const semilla = leerSemilla(process.env);
+    if (!semilla.ok) {
+      console.error(`[seed-zonas] no se puede crear ninguna zona: ${semilla.motivo}`);
+      process.exit(1);
+    }
+    const summary = await seedZonasCompleto(prisma, geoRows, hints, semilla);
     console.log("Seed de zonas completado:", JSON.stringify(summary, null, 2));
   } finally {
     await prisma.$disconnect();
