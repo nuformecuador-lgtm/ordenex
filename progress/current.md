@@ -1,9 +1,59 @@
 # Estado — sesión del 2026-09-10 / 12 / 14 / 15
 
+## 🔴 ROTO AHORA MISMO — los deploys de PREVIEW fallan desde el 2026-09-16 02:33 UTC
+
+**Producción NO está afectada:** `prod` sigue en `efd06fb4` y no despliega desde la release del 15.
+
+```
+P3009: migrate found failed migrations in the target database
+La migracion `20260918120200_zona_sinpe_no_nulo` fallo el 2026-09-16 02:33:54 UTC
+```
+
+**Qué pasó, y es un error del leader.** Al mergear la 429 se concluyó que mergear a `dev` era seguro
+porque `decidirMigracion` no migra en preview *salvo que `MIGRATE_ON_PREVIEW=true`*. **Se verificó el
+código y se dio por hecha la configuración sin medirla.** Está en `true`, así que migró: la migración
+del `NOT NULL` encontró las columnas vacías y abortó —lo diseñado—, y ese fallo queda registrado, así
+que **todo `migrate deploy` posterior se niega**.
+
+**Lo que hay que hacer, contra la base de PREVIEW y en este orden** (la primera sola no basta: sin
+sembrar, el siguiente build vuelve a morir igual):
+
+```
+prisma migrate resolve --rolled-back 20260918120200_zona_sinpe_no_nulo
+pnpm exec tsx scripts/seed-sinpe-inicial.ts
+```
+
+**No se puede hacer desde aquí:** el MCP de Supabase está fijado al proyecto de producción
+(`list_branches` devuelve vacío) y no hay forma de leer las variables de Vercel desde las herramientas
+disponibles.
+
+**El arreglo de fondo es la ficha 432** (abajo): que la siembra corra DENTRO de `migrate-deploy.ts`, en
+vez de depender de que alguien la ejecute a mano entre dos migraciones.
+
+---
+
 ## EN CURSO — SF-001, las cuatro funcionalidades nuevas
 
 **Las cuatro aprobadas, ninguna prioritaria sobre otra.** Diseño de cada una revisado contra el código
-y escrito en `progress/design_sf001_p{1,2,3,4}_*.md`. **Ninguna implementada todavía.**
+y escrito en `progress/design_sf001_p{1,2,3,4}_*.md`.
+
+### Dónde va cada una (2026-09-16)
+
+| Punto | Ficha | Estado |
+| --- | --- | --- |
+| **2** · SINPE por bodega | 429 | ✅ **`done`**, en `dev`. PR #799. Revisión rechazada y levantada |
+| **3** · Contacto anticipado | 430 | ✅ **`done`**, en `dev`. PR #800. Revisión OK |
+| **1** · Cierres de satélite | 431 | 🔨 **backend hecho y verificado** (`82ffcc1e`, gate 2007/2007). Frontend en curso |
+| **4** · Documentación | — | 30 documentos en `dev`. Falta el módulo y el asistente |
+
+**Nada desplegado a producción**, como se acordó: las cuatro salen juntas.
+
+### El frontend de la 431 tuvo un relevo
+
+El primer agente **murió por límite de cuota** mientras hacía T23. Dejó **39 archivos sin commitear**
+—2.395 líneas, las pantallas ya creadas— que se rescataron en el commit **`900fa7b6`** de la rama
+`worktree-agent-a1ae1bb85ec71588a`. **Ese commit NO está verificado**: sin gate, sin typecheck, sin
+mutaciones. El relevo tiene el encargo de auditarlo antes de construir encima.
 
 **CONDICIÓN DEL HUMANO, aplica a las cuatro:** nada sale a producción hasta estar seguros de que no
 hace daño a lo que ya funciona. Tres de las cuatro tocan cosas vivas — el control del efectivo, el
