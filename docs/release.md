@@ -96,8 +96,40 @@ Si se cumplen las tres, el rojo es **del entorno**. Lo que vale como verificaci�
 no se mete nada en el baseline, no se «arregla» ningún test y no se fuerza el gate.
 
 **Lo que NO hay que hacer: rebobinar la base local al esquema de `prod`.** Es compartida, así que
-dejaría en rojo el gate de cualquier otra sesión o agente que esté trabajando sobre `dev`. Si un parche
-necesitara de verdad las pruebas contra base, eso es una conversación, no un comando.
+dejaría en rojo el gate de cualquier otra sesión o agente que esté trabajando sobre `dev`.
+
+### ✅ Pero SÍ se puede tener el gate entero en verde: una base copia, no la compartida
+
+**Añadido el 2026-09-17**, después de que la sección de arriba se quedara corta. La frase «no se puede»
+era falsa: lo que no se puede es **tocar la base compartida**. Una copia aparte no le hace nada a nadie,
+y con ella la integración —donde vive el SQL que estas releases suelen cambiar— sí se prueba de verdad.
+
+La receta, medida construyendo la release del 2026-09-17:
+
+1. **Clonar, no migrar desde cero.** `CREATE DATABASE ordenex_rel TEMPLATE ordenex` desde la base
+   `postgres` (antes, un `pg_terminate_backend` sobre las conexiones a la plantilla). Copiar es lo que
+   trae los DATOS. Crear una vacía y correrle `prisma migrate deploy` deja el esquema bien y **392
+   ficheros de integración en rojo**, porque muchas suites exigen una tabla `orden` poblada de la que
+   tomar las FKs; se niegan a correr y lo dicen. Que se nieguen es lo correcto —el fallo mudo sería
+   reportar verde sin comprobar nada— pero no sirve como verificación.
+2. **Quitar a mano lo que la rama no tiene.** Para SF-001 fueron las tres columnas `sinpe_*` de `zona`,
+   las cuatro de conciliación de `cierre_bodega` (con su FK, su índice y el CHECK de coherencia), la
+   tabla `asistente_uso_diario`, y borrar esas filas de `_prisma_migrations`.
+3. **Los valores de enum NO se pueden dropear**, y son los que quedan mordiendo: nueve ficheros
+   `*-migration.test.ts` siguieron rojos con `expected [ …(54) ] to deeply equal [ …(51) ]`. Se
+   recrea el tipo: `ALTER TABLE … ALTER COLUMN … TYPE text`, `DROP TYPE`, `CREATE TYPE` con la lista
+   leída de `pg_enum` menos los sobrantes, y `ALTER … USING`. Antes hay que borrar las filas que usen
+   un valor que se va (aquí fueron 0). Comprobar primero cuántas columnas dependen del tipo: si es
+   una, como aquí, la cirugía es de cuatro sentencias.
+4. **Apuntar el `.env` del worktree a la copia** —`DATABASE_URL` y `DIRECT_URL`— y `prisma generate`
+   ANTES de sembrar o probar nada: el cliente generado con el esquema de `dev` contra una base sin
+   esas columnas falla por «column does not exist» y parece otra cosa.
+5. **`prisma generate` se pisa entre árboles** (comparten `node_modules` por el junction). No correrlo
+   mientras hay otro gate vivo, y **regenerar en `dev` al terminar**, o el siguiente typecheck de `dev`
+   sale rojo sin motivo aparente.
+
+Resultado: `Test Files 1989 passed`, `Tests 29056 passed | 26 skipped`, `INIT_EXIT=0` — los mismos 26
+saltados que `dev`, o sea ninguno por falta de base.
 
 ### ⚠️ Y comprobá en qué rama estás JUSTO ANTES de commitear
 
