@@ -1742,3 +1742,43 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
     ).toBeNull();
   });
 });
+
+/**
+ * FICHA 440 — LA RECOGIDA, CUANDO LA BASE TROPIEZA
+ *
+ * Este camino era el MAS mudo de los tres. `useRecogerPorGuia` reparte los desenlaces con un
+ * `switch` que NO tiene `default`, asi que un desenlace no contemplado no pinta absolutamente
+ * nada: el `finally` apaga el spinner, la guia se queda sin recoger y el mensajero no recibe ni
+ * una pista. Antes de la ficha ni siquiera llegaba ahi —la action RELANZABA y el `await` se
+ * rechazaba sin `catch`—, con el mismo resultado visible: un boton que no hace nada.
+ *
+ * El 2026-09-17 esa cadena produjo 27 respuestas 500 en el portal. La causa raiz (una conexion
+ * que vuelve al pool con la transaccion abortada, 25P02) va aparte.
+ */
+describe("RecogerModule — un tropiezo de base se cuenta, no se traga (ficha 440)", () => {
+  it("recoger devuelve 'error': avisa, y el aviso invita a reintentar", async () => {
+    const user = userEvent.setup();
+    recogerMock.mockResolvedValue({ status: "error" });
+    renderModule({ porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })] });
+
+    await abrirRecogida(user);
+    const region = screen.getByRole("region", {
+      name: "Recoger por número de guía o escaneo",
+    });
+    await user.type(within(region).getByLabelText("Número de guía"), "1001");
+    await user.click(within(region).getByRole("button", { name: "Recoger" }));
+
+    // La action SI se llamo (la guia era suya y estaba por recoger): lo que fallo es la base.
+    await vi.waitFor(() => expect(recogerMock).toHaveBeenCalledWith({ ordenIds: ["r1"] }));
+    // Y se DICE. Sin esta asercion, el `switch` sin `default` se traga el desenlace y la suite
+    // entera sigue verde: ese es exactamente el fallo que llego a produccion.
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+
+    const texto = String(errorMock.mock.calls.at(-1)?.[0]);
+    expect(texto).toMatch(/[Ii]ntentá de nuevo/);
+    // Ni jerga ni culpas ajenas: no es un codigo invalido, ni falta de permiso, ni que la orden
+    // haya cambiado de estado. Cualquiera de esas tres le haria buscar un problema inexistente.
+    expect(texto).not.toMatch(/inválido|permiso|sesión|ya no está/i);
+    expect(texto).not.toMatch(/25P02|transaction|INTERNAL/i);
+  });
+});

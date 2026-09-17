@@ -46,13 +46,35 @@ import type { AppErrorShape } from "@/lib/errors";
 // borde (UNAUTHORIZED); `forbidden`/`conflict`/`validation_error` los devuelve el
 // service como resultado de dominio (nunca como excepcion).
 
-// Traduce el AppErrorShape que puede producir este borde: solo ZodError
-// (VALIDATION_ERROR) o falta de sesion (UNAUTHORIZED). `forbidden`/`conflict` los
-// devuelve el service directamente como resultado de dominio, por eso NO aparecen
-// aqui. Espejo EXACTO de `toGuiaActionError` en ordenes-guia.ts.
+// Traduce el AppErrorShape que puede producir este borde: ZodError (VALIDATION_ERROR),
+// falta de sesion (UNAUTHORIZED) o un tropiezo de infraestructura (INTERNAL).
+// `forbidden`/`conflict` los devuelve el service directamente como resultado de dominio,
+// por eso NO aparecen aqui.
+//
+// ── FICHA 440: POR QUE `INTERNAL` YA NO CAE EN EL `default`
+// Hasta el 2026-09-17 este switch solo contemplaba los dos primeros y INTERNAL caia en el
+// `default`, que RELANZA. Medido en produccion ese mismo dia: 27 respuestas 500 en
+// `/mis-asignaciones/reparto`, un solo mensajero, entre las 03:26 y las 04:34 UTC. El
+// origen era 25P02 («current transaction is aborted, commands ignored until end of
+// transaction block») en una LECTURA que no abre ninguna transaccion: la conexion volvia
+// del pool ya abortada. Esa causa raiz sigue viva y se ataca en la otra mitad de la ficha;
+// lo que se arregla aqui es el SINTOMA, que era el caro.
+//
+// Relanzar desde una Server Action no produce una pantalla de error: NO hay frontera que
+// recoja el fallo de una accion (un `error.tsx` cubre el RENDER, no el `await` de un
+// manejador de evento). La promesa se rechaza en el cliente, el `finally` del panel apaga
+// el spinner y nadie pinta nada: el mensajero ve un boton que no hace nada. Por eso
+// INTERNAL pasa a ser un desenlace (`error`) que la pantalla SI puede contar.
+//
+// El `default` se queda tal cual, y no es decorativo: FORBIDDEN/NOT_FOUND/CONFLICT siguen
+// siendo imposibles por este camino —el service los devuelve, no los lanza— y si algun dia
+// aparecen es que alguien cambio esa regla. Eso tiene que romper, no degradarse en silencio.
 function toMisAsignacionesActionError(
   shape: AppErrorShape,
-): { status: "validation_error"; fieldErrors: Record<string, string[]> } | { status: "unauthenticated" } {
+):
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" }
+  | { status: "error" } {
   switch (shape.code) {
     case "VALIDATION_ERROR":
       return {
@@ -61,11 +83,30 @@ function toMisAsignacionesActionError(
       };
     case "UNAUTHORIZED":
       return { status: "unauthenticated" };
+    case "INTERNAL":
+      // El error REAL ya quedo registrado por `withErrorHandler` (canal servidor, con su
+      // stack). Hacia la pantalla no viaja ni el mensaje ni el codigo de Postgres: solo
+      // «no se pudo».
+      return { status: "error" };
     default:
-      // FORBIDDEN/NOT_FOUND/CONFLICT/INTERNAL: este borde nunca los lanza como
-      // AppError; si algo desconocido llega aqui, se propaga como fallo real.
+      // FORBIDDEN/NOT_FOUND/CONFLICT: este borde nunca los lanza como AppError; si algo
+      // desconocido llega aqui, se propaga como fallo real.
       throw new Error(`mis-asignaciones: AppErrorCode inesperado ${shape.code}`);
   }
+}
+
+// Camino de LECTURA (`listarMisAsignaciones`): no pasa por zod, asi que los unicos codigos
+// alcanzables son UNAUTHORIZED —lanzado dos lineas mas arriba cuando no hay sesion— e
+// INTERNAL. Se separan a proposito: hasta la ficha 440 los DOS se aplanaban a
+// `unauthenticated`, y la pagina traducia eso a `notFound()`. Un tropiezo de base acababa
+// asi en un 404 que MIENTE —«esta pantalla no existe»— y que ademas no ofrece reintentar,
+// que es justo lo unico que podia resolverlo.
+function toListarMisAsignacionesError(
+  shape: AppErrorShape,
+): { status: "unauthenticated" } | { status: "error" } {
+  return shape.code === "UNAUTHORIZED"
+    ? { status: "unauthenticated" }
+    : { status: "error" };
 }
 
 function buildService(): IMisAsignacionesService {
@@ -118,8 +159,10 @@ export async function listarMisAsignaciones(
     const service = deps.service ?? buildService();
     return service.listarMisAsignaciones(actor!);
   });
-  // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
-  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+  // Ficha 440: `unauthenticated` (sin sesion) y `error` (la base tropezo) dejan de ser lo
+  // mismo. La pagina los trata distinto: el primero es un 404 legitimo, el segundo tiene
+  // que poder reintentarse.
+  return isAppErrorShape(r) ? toListarMisAsignacionesError(r) : r;
 }
 
 /** R14-R17: recoger (lote o de a una) por_recoger -> en_reparto. */

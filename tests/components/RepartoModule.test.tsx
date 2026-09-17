@@ -2915,3 +2915,137 @@ describe("RepartoModule — el orden de las paradas es aproximado (feature 265)"
     expect(props.trazado?.fuente).toBe("local");
   });
 });
+
+/**
+ * FICHA 440 — EL TROPIEZO DE BASE, CONTADO EN PANTALLA
+ *
+ * El 2026-09-17 este portal devolvio 27 respuestas 500 en `/mis-asignaciones/reparto`, todas del
+ * mismo mensajero, entre las 03:26 y las 04:34 UTC: una conexion volvia al pool con la transaccion
+ * abortada (25P02), el borde normalizaba a INTERNAL y RELANZABA. Una Server Action que lanza no
+ * tiene frontera de error que la recoja —un `error.tsx` cubre el RENDER, no el `await` de un
+ * manejador de evento—: la promesa se rechazaba, el `finally` apagaba el spinner y no se pintaba
+ * NADA. El boton no hacia nada y no decia por que.
+ *
+ * Ahora la action devuelve el desenlace `error`. Eso, por si solo, no arregla nada: si el modulo
+ * lo ignorara, el fallo seguiria siendo igual de mudo, solo que sin 500 en el registro —peor, no
+ * mejor—. Estos casos afirman la mitad que se ve: que se DICE algo, y que no se dice una mentira.
+ *
+ * La causa raiz (quien deja la transaccion abierta) es la otra mitad de la ficha y no se toca.
+ */
+describe("RepartoModule — un tropiezo de base se cuenta, no se traga (ficha 440)", () => {
+  it("escoger devuelve 'error': avisa y NO revela los 4 botones", async () => {
+    const user = userEvent.setup();
+    escogerMock.mockResolvedValue({ status: "error" });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", numGuia: 1001 })],
+    });
+
+    const panel = await abrirGestion(user);
+    await within(panel).findByLabelText("Número de guía");
+    await user.type(within(panel).getByLabelText("Número de guía"), "1001");
+    await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
+
+    // LO QUE IMPIDE EL FALLO MUDO: se pinta un aviso. Sin esta asercion, tragarse el desenlace
+    // pasaria la suite entera.
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+
+    // Y el gate sigue disponible: reintentar no le cuesta rehacer nada.
+    expect(within(panelDetalle()).getByLabelText("Número de guía")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Entregar" })).toBeNull();
+  });
+
+  it("escoger devuelve 'error': el aviso NO le echa la culpa a sus permisos ni a la orden", async () => {
+    const user = userEvent.setup();
+    escogerMock.mockResolvedValue({ status: "error" });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", numGuia: 1001 })],
+    });
+
+    const panel = await abrirGestion(user);
+    await within(panel).findByLabelText("Número de guía");
+    await user.type(within(panel).getByLabelText("Número de guía"), "1001");
+    await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
+
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    const texto = String(errorMock.mock.calls.at(-1)?.[0]);
+
+    // Antes de la ficha, `error` caia en la rama por defecto del reparto de mensajes y el
+    // mensajero leia «No puedes gestionar esta orden»: FALSO —si puede; lo que fallo fue la
+    // base— y le manda a buscar un permiso o un estado que no tiene nada roto. Una frase
+    // equivocada cuesta mas que un fallo confesado.
+    expect(texto).not.toMatch(/permiso|[Nn]o puedes|otra orden activa/);
+    // Lo que SI tiene que decir: que puede volver a intentarlo.
+    expect(texto).toMatch(/[Ii]ntentá de nuevo/);
+    // Y nada de jerga: ni el codigo de Postgres ni la palabra del registro del servidor.
+    expect(texto).not.toMatch(/25P02|transaction|INTERNAL/i);
+  });
+});
+
+/**
+ * FICHA 440 — EL CASO MAS CARO: GUARDAR LA GESTION.
+ *
+ * Es el peor sitio donde podia pasar. Cuando el mensajero pulsa «Guardar gestion» ya escribio el
+ * resultado, eligio el metodo de pago y SUBIO LA FOTO; esta parado en la puerta del cliente. Si
+ * ahi no se pinta nada, no sabe si la gestion entro o no: o la repite (y arriesga duplicarla) o se
+ * va creyendo que quedo registrada.
+ *
+ * El `try` del panel no tiene `catch`, solo `finally`. Con la action RELANZANDO, el `await` se
+ * rechazaba, `setEnviando(false)` apagaba el spinner y no se pintaba ni un toast ni un error de
+ * campo. Eso es lo que produjo las 27 respuestas 500 del 2026-09-17.
+ */
+describe("RepartoModule — guardar la gestión cuando la base tropieza (ficha 440)", () => {
+  it("gestionar devuelve 'error': avisa, y NO se da la gestión por registrada", async () => {
+    const user = userEvent.setup();
+    gestionarMock.mockResolvedValue({ status: "error" });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", montoCobrar: 150 })],
+    });
+
+    await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Entregar" });
+    await elegirEnSelect(user, "Método de pago línea 1", "Efectivo");
+    await subirEvidencia(user, "Foto de evidencia de entrega");
+    await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
+
+    await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
+    // (1) SE DICE. Sin esto, tragarse el desenlace deja la suite entera en verde.
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    // (2) NO se celebra: un `toast.success` aqui seria peor que el silencio.
+    expect(successMock).not.toHaveBeenCalled();
+
+    const texto = String(errorMock.mock.calls.at(-1)?.[0]);
+    // (3) Ni le echa la culpa a sus permisos ni le dice que la orden cambio de estado: las dos
+    // eran las ramas heredadas del reparto de mensajes, y las dos son falsas aqui.
+    expect(texto).not.toMatch(/permiso|ya no puede gestionarse|estado cambiado/i);
+    // (4) Le dice lo unico accionable que hay.
+    expect(texto).toMatch(/[Ii]ntentá de nuevo/);
+    expect(texto).not.toMatch(/25P02|transaction|INTERNAL/i);
+  });
+
+  it("gestionar devuelve 'error': el panel sigue abierto, con la captura intacta", async () => {
+    const user = userEvent.setup();
+    gestionarMock.mockResolvedValue({ status: "error" });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", montoCobrar: 150 })],
+    });
+
+    await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Entregar" });
+    await elegirEnSelect(user, "Método de pago línea 1", "Efectivo");
+    await subirEvidencia(user, "Foto de evidencia de entrega");
+
+    // El `escogerParaGestion` de `iniciarGestion` YA refresco una vez (asi fija el puntero), asi
+    // que aqui se mide el DELTA: lo que importa es que el fallo no dispare un refresco NUEVO.
+    // Comparar contra cero daria rojo por un refresco ajeno y el test estaria midiendo otra cosa.
+    const refrescosAntes = refreshMock.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
+
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+
+    // Reintentar no le puede costar rehacer la captura: la foto ya esta subida y el cliente
+    // esperando. El boton vuelve a estar disponible (no quedo en estado de envio) y la pantalla
+    // NO se refresco de nuevo, que es lo que borraria lo tecleado.
+    const boton = await screen.findByRole("button", { name: "Guardar gestión" });
+    expect(boton).toBeInTheDocument();
+    expect((boton as HTMLButtonElement).disabled).toBe(false);
+    expect(refreshMock.mock.calls.length).toBe(refrescosAntes);
+  });
+});

@@ -23,6 +23,12 @@ export default async function RecogerPage() {
   if (actor?.rol !== "mensajero") notFound(); // R9/R12
 
   const result = await listarMisAsignaciones();
+  // FICHA 440: mismo criterio que Reparto —lee la MISMA action, así que hereda el mismo fallo—.
+  // Un tropiezo de base se relanza para que la frontera del portal ofrezca reintentar, en vez de
+  // contarse como un 404 que miente. El porqué largo está en `../reparto/page.tsx`.
+  if (result.status === "error") {
+    throw new Error("No se pudo leer las asignaciones del mensajero");
+  }
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
   // Feature 111/R12/R14 -> FEATURE 271: el DETALLE del bloqueo, derivado server-side por la

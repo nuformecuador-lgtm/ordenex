@@ -793,6 +793,19 @@ export function GestionarOrdenPanel({
         setFieldErrors(result.fieldErrors);
         return;
       }
+      // FICHA 440 — EL CASO QUE LLEGÓ A PRODUCCIÓN. Si la base tropieza, la action ya NO relanza
+      // (devuelve `error`), y aquí hay que contarlo: este `try` no tiene `catch`, solo `finally`,
+      // así que cuando la action lanzaba el `await` reventaba, `setEnviando(false)` apagaba el
+      // spinner y no se pintaba ni un toast. Guardar la gestión no hacía nada y no decía por qué,
+      // con la evidencia ya subida y el mensajero parado en la puerta del cliente.
+      //
+      // Va antes del reparto de abajo para no heredar «No tienes permiso», que sería falso.
+      // `onSuccess()` NO se llama: la gestión no entró, el panel se queda abierto con la captura
+      // intacta y el botón vuelve a estar disponible —reintentar no le cuesta rehacer nada—.
+      if (result.status === "error") {
+        toast.error("No se pudo guardar la gestión. Intentá de nuevo.");
+        return;
+      }
       // R18/R21 (conflict) / R12 (forbidden) / unauthenticated: Toast de dominio.
       toast.error(
         result.status === "conflict"

@@ -427,6 +427,14 @@ export function RepartoModule({
       router.refresh(); // refleja el bloqueo de las demás (ordenEnGestionId)
       return true;
     }
+    // FICHA 440: el tropiezo de base va ANTES del reparto de abajo. Sin este caso caería en la
+    // rama por defecto y el mensajero leería «No puedes gestionar esta orden», que es falso —sí
+    // puede; lo que falló fue la base— y le manda a buscar un permiso o un estado que no tiene
+    // nada roto. Una frase equivocada cuesta más que un fallo confesado.
+    if (result.status === "error") {
+      toast.error("No se pudo abrir la gestión. Intentá de nuevo.");
+      return false;
+    }
     toast.error(
       result.status === "conflict"
         ? "Ya tienes otra orden activa en gestión."
