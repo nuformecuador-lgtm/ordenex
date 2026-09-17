@@ -284,8 +284,12 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
 
         // (5) EL CIERRE APROBADO Y YA CONSOLIDADO en un `cierre_bodega`. Es el que MIDE el
         //     invariante «abierto ⇒ no consolidado» con datos, en vez de razonarlo.
+        // ⭑ FICHA 431: `solicitado` y no `aprobado`. El `CHECK` de coherencia de
+        // `20260919120100_cierre_bodega_conciliacion` prohibe un `aprobado` sin los datos de la
+        // marca de conciliacion, y aqui el estado del cierre de BODEGA es irrelevante: lo que este
+        // corpus mide es que el `cierre_dia` este CONSOLIDADO (`cierre_bodega_id` no nulo).
         const cierreBodega = await tx.cierreBodega.create({
-          data: { zonaId: fks.zonaId, solicitadoPor: mensajeroId, estado: "aprobado" },
+          data: { zonaId: fks.zonaId, solicitadoPor: mensajeroId, estado: "solicitado" },
           select: { id: true },
         });
         const cierreConsolidado = await tx.cierreDia.create({

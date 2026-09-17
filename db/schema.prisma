@@ -119,6 +119,7 @@ model Usuario {
   cierresResueltos                    CierreDia[]                        @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
   cierresBodegaSolicitados            CierreBodega[]                     @relation("CierreBodegaSolicitadoPor") // feature 40: cierres de bodega solicitados por este adminSatelite
   cierresBodegaResueltos              CierreBodega[]                     @relation("CierreBodegaResueltoPor") // feature 40: cierres de bodega que este maestro aprobo/rechazo
+  cierresBodegaConciliados            CierreBodega[]                     @relation("CierreBodegaConciliadoPor") // ficha 431: consolidaciones que marco como recibidas
   walletMovimientosRegistrados        WalletMovimiento[]                 @relation("WalletMovimientoRegistrador") // feature 42/R2/R15: movimientos manuales que este usuario (maestro) registro
   walletTiendaMovimientos             WalletTiendaMovimiento[]           @relation("WalletTiendaMovimientoTienda") // feature 43/R1/R2: movimientos del ledger de ESTA tienda (rol adminTienda)
   walletTiendaMovimientosRegistrados  WalletTiendaMovimiento[]           @relation("WalletTiendaMovimientoRegistrador") // feature 43/R2: movimientos manuales del ledger de tienda que este usuario registro
@@ -1447,18 +1448,37 @@ model CierreBodega {
   resueltoPor                String?      @map("resuelto_por") // maestro actor; NULL mientras solicitado (R20)
   resueltoAt                 DateTime?    @map("resuelto_at") // marca de tiempo de la resolucion (R20)
   motivoRechazo              String?      @map("motivo_rechazo") // obligatorio SOLO al rechazar (R17); NULL si aprobado/solicitado
+  // ⭑ FICHA 431 — LA MARCA DE CONCILIACION: «este bulto de efectivo llego a la central».
+  // Cuelga de la CONSOLIDACION porque es el bulto que viaja (D1), no de la zona ni de `cierre_dia`.
+  // Las CUATRO viajan juntas o ninguna: lo impone el CHECK `cierre_bodega_conciliacion_coherente`
+  // de `20260919120100_cierre_bodega_conciliacion`, no la disciplina del servicio (R15).
+  conciliadoAt               DateTime?    @map("conciliado_at") // EL PREDICADO: NULL = sin conciliar. Instante, como `solicitado_at`/`resuelto_at`
+  conciliadoPor              String?      @map("conciliado_por") // FK usuario (esAccesoTotal) que marco; NULL mientras no este marcada
+  montoRecibido              Decimal?     @map("monto_recibido") @db.Decimal(12, 2) // cuanto se recibio DE VERDAD; puede ser MENOR (R18) o mayor que el total. Solo se prohibe el negativo
+  conciliadoNota             String?      @map("conciliado_nota") // texto libre corto, SIEMPRE opcional. NO entra al historial (R5 de la 362) ni a las descargas
   createdAt                  DateTime     @default(now()) @map("created_at")
   updatedAt                  DateTime     @updatedAt @map("updated_at")
 
   zona                 Zona        @relation(fields: [zonaId], references: [id])
   solicitadoPorUsuario Usuario     @relation("CierreBodegaSolicitadoPor", fields: [solicitadoPor], references: [id])
   resueltoPorUsuario   Usuario?    @relation("CierreBodegaResueltoPor", fields: [resueltoPor], references: [id])
+  conciliadoPorUsuario Usuario?    @relation("CierreBodegaConciliadoPor", fields: [conciliadoPor], references: [id], onDelete: Restrict) // ficha 431: quien afirmo que el dinero llego no se borra dejando la afirmacion huerfana
   cierresDia           CierreDia[] // los cierre_dia incluidos (cierre_bodega_id)
 
   @@index([zonaId])
   @@index([estado])
   @@index([solicitadoPor])
   @@index([resueltoPor])
+  @@index([conciliadoPor]) // ficha 431, simetrico al de `resueltoPor`
+  // ⭑ FICHA 431 — sustituye al indice UNICO PARCIAL `cierre_bodega_zona_solicitado_uq` (feature 40,
+  // `UNIQUE (zona_id) WHERE estado='solicitado'`), que la migracion `20260919120100` BORRA. Aquel
+  // permitia UNA sola consolidacion pendiente por zona: con la aprobacion convertida en marca de
+  // conciliacion —que ocurre cuando el efectivo llega fisicamente, no cuando alguien mira la
+  // pantalla— habria sido el MISMO bloqueo mudado de sitio. Lo que aquel indice protegia de verdad
+  // —que dos consolidaciones no se repartan la misma cola— vive ahora en el todo-o-nada de
+  // `CierreBodegaRepository.crearCierreBodega`. Este, NO unico, sirve a las dos lecturas del saldo.
+  @@index([zonaId, estado], map: "cierre_bodega_zona_estado_idx")
+  @@index([conciliadoAt]) // la cola de lo que sigue sin conciliar (R21)
   @@map("cierre_bodega")
 }
 
@@ -3585,6 +3605,20 @@ enum HistorialAccionTipo {
   /// `zona.sinpe_revisado_at`, no aqui. Un tipo «alguien lo miro» dentro de la categoria del dinero
   /// la convertiria en un registro de visitas.
   zona_sinpe_cambiado
+  /// FICHA 431: la central MARCO RECIBIDA una consolidacion de bodega, y por cuanto; y su gemelo,
+  /// alguien REVIRTIO esa marca. Entran en «mueve dinero» con un matiz que hay que decir: la ficha
+  /// 431 NO escribe en ningun libro (R14), asi que estas dos acciones no hacen un asiento. Lo que
+  /// hacen es DECLARAR que ₡X de efectivo llego —o dejo de haber llegado— a la central, y con eso
+  /// mueven el saldo sin conciliar con el que se persigue el dinero que anda fuera.
+  ///
+  /// ⚠️ SON DOS TIPOS Y NO UNO CON UN VALOR, y esta medido por que (fichas 376 y 380): la guardia
+  /// del censo de historial mide POR METODO. Un solo metodo con las dos acciones dentro dejaria la
+  /// guardia verde al borrar uno de los dos `appendAccion`.
+  ///
+  /// `monto` = el monto recibido; en la REVERSION, el monto que se BORRA — esta fila es el unico
+  /// sitio donde sobrevive. La NOTA no entra (R5 de la 362: texto libre tecleado por una persona).
+  cierre_bodega_conciliado
+  cierre_bodega_conciliacion_revertida
 
   // --- hace desaparecer algo (10) ---
   /// FICHA 371: corregir la fecha de una reprogramacion ya registrada. ENTRA POR «hace desaparecer

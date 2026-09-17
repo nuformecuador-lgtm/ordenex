@@ -11,6 +11,7 @@ import type { RangoPagina } from "@/lib/utils/rango-pagina";
 import { ESTADOS_COLA_SOLICITADO } from "@/lib/utils/colas-cierre";
 import { listarCierresBodegaPaginadoSchema } from "@/lib/types/cierre-bodega";
 
+import { marcaPorEstado } from "@/tests/fixtures/marca-conciliacion";
 // Feature 170 — FASE 2, T J.1 (R40/R41/R44/R49/R51/R54) — «Cierres de bodega pendientes», la
 // COLA paginada del maestro.
 //
@@ -62,6 +63,9 @@ function fila(
     // suite lee estos dos campos: solo existen para que el tipo cierre.
     paraLaCentral: paraLaCentral(general, pago, "1.00"),
     efectivoCubreDescuentos: efectivoCubreDescuentos(general, pago, "1.00"),
+    // FICHA 431: tambien parametrica, y por el mismo motivo. El efectivo de este doble ES
+    // `general`. Un `aprobado` sin marca es una fila que el `CHECK` de la base rechaza.
+    ...marcaPorEstado(estado, general),
   };
 }
 

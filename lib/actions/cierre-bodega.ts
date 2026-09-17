@@ -383,7 +383,11 @@ export async function verCierreBodegaDetalle(
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }
 
-/** R2/R16/R18-R20: aprueba un cierre de bodega `solicitado`; solo maestro (via service). */
+/**
+ * R2/R16/R18-R20: aprueba un cierre de bodega `solicitado`; solo maestro (via service).
+ *
+ * @sin-superficie FICHA 431 (T17, D2/R16/Q4): la aprobacion de nivel 2 DEJO DE SER UNA PUERTA y se retiro de la pantalla. Lo que la sustituye es la MARCA DE CONCILIACION —«el efectivo llego», con su monto— que escriben `marcarConsolidacionRecibidaAction` y `revertirConciliacionAction`. Esta accion se queda en el arbol A PROPOSITO y no es deuda olvidada: arrancarla exigiria quitar dos valores de un enum cerrado (`cierre_estado`, compartido con `cierre_dia`) y su entrada del censo de historial, que es mucho riesgo por cero beneficio (spec §«Lo que esta ficha NO hace» punto 4). Ademas YA ES IMPOSIBLE DE ESCRIBIR contra la base: el `CHECK` `cierre_bodega_conciliacion_coherente` (R15) rechaza un `aprobado` sin datos de marca, y esta accion no los escribe — medido en `cierre-bodega-conciliacion.int.test.ts` caso (d). Su retirada definitiva es Q4, y se decide despues del despliegue (T29). Esta anotacion CADUCA con ella.
+ */
 export async function aprobarCierreBodega(
   input: unknown,
   deps: CierreBodegaDeps = {},
@@ -398,7 +402,11 @@ export async function aprobarCierreBodega(
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }
 
-/** R2/R17-R20: rechaza un cierre de bodega `solicitado` con motivo obligatorio; solo maestro. */
+/**
+ * R2/R17-R20: rechaza un cierre de bodega `solicitado` con motivo obligatorio; solo maestro.
+ *
+ * @sin-superficie FICHA 431 (T17, R16/Q4): «Rechazar» se retiro de la pantalla SIN SUSTITUTO, y es el punto de la ficha. Rechazar una consolidacion era mandar a la satelite a corregir un bulto que ya habia salido; hoy la respuesta a «llego menos de lo declarado» es MARCAR POR LO QUE LLEGO y dejar la diferencia contando en el saldo de esa bodega (R18). Lo reversible es la marca («Desmarcar»), que no es lo mismo: no manda a nadie a corregir nada, solo dice que el efectivo todavia no ha llegado. Las consolidaciones `rechazado` historicas se quedan en la base y siguen siendo legibles —cero en produccion en dos semanas, medido—; lo que se retira es el rotulo, no el dato. El codigo no se arranca aqui por la misma razon que su hermana de arriba (enum cerrado + censo de historial), y su retirada definitiva es Q4/T29. Esta anotacion CADUCA con ella.
+ */
 export async function rechazarCierreBodega(
   input: unknown,
   deps: CierreBodegaDeps = {},

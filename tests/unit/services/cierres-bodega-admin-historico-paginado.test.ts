@@ -8,6 +8,7 @@ import type { RangoPagina } from "@/lib/utils/rango-pagina";
 import { ESTADOS_COLA_SOLICITADO } from "@/lib/utils/colas-cierre";
 import { listarCierresBodegaPaginadoSchema } from "@/lib/types/cierre-bodega";
 
+import { marcaPorEstado } from "@/tests/fixtures/marca-conciliacion";
 // Feature 170 — FASE 2, T I.1 (R40/R41/R44/R51/R54) — «Cierres de bodega resueltos» paginado.
 //
 // Aqui el acotamiento NO es por zona sino por ROL: el historico agregado de TODAS las bodegas
@@ -50,6 +51,8 @@ function fila(
     // Feature 393: 500.00 - 50.00 - 0.00 = 450.00; el efectivo (500.00) cubre los descuentos.
     paraLaCentral: "450.00",
     efectivoCubreDescuentos: true,
+    // FICHA 431: la marca que le corresponde a ESTE estado (el `CHECK` no admite otra cosa).
+    ...marcaPorEstado(estado, "500.00"),
   };
 }
 

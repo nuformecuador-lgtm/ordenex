@@ -12,6 +12,7 @@ import { descargaConfig } from "@/lib/config/descarga";
 import { listarCierresBodegaPaginadoSchema } from "@/lib/types/cierre-bodega";
 import { conPagos } from "@/tests/fixtures/cierre-pagos";
 
+import { marcaPorEstado } from "@/tests/fixtures/marca-conciliacion";
 // Feature 184 — Tanda E (T E.2, R1/R2/R4/R5/R6) — los CONJUNTOS de los que salen los archivos de
 // «Cierres de bodega pendientes» (listado 4) y «Cierres de bodega resueltos» (listado 5).
 //
@@ -75,6 +76,8 @@ function fila(
     // Feature 393: 500.00 - 50.00 - 0.00 = 450.00; el efectivo (500.00) cubre los descuentos.
     paraLaCentral: "450.00",
     efectivoCubreDescuentos: true,
+    // FICHA 431: la marca que le corresponde a ESTE estado (el `CHECK` no admite otra cosa).
+    ...marcaPorEstado(estado, "500.00"),
   };
 }
 

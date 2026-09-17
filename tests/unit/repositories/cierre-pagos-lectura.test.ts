@@ -314,6 +314,14 @@ describe("R23 — camino 3 (bodega): `CierresBodegaAdminRepository.findCierreBod
           solicitadoAt: new Date("2026-08-12T10:00:00.000Z"),
           resueltoAt: null,
           motivoRechazo: null,
+          // ⭑ FICHA 431: las cuatro columnas de la marca, que `BODEGA_RESUMEN_SELECT` ya pide.
+          // Esta consolidacion esta `solicitado`, o sea SIN conciliar, asi que las cuatro van
+          // vacias: es la unica combinacion que el `CHECK` de la base permite para ese estado.
+          // `montoRecibido` es `null` y NO `Decimal("0.00")` — cero recibido es otra cosa.
+          montoRecibido: null,
+          conciliadoAt: null,
+          conciliadoNota: null,
+          conciliadoPorUsuario: null,
           zona: { nombre: "Cartago" },
           solicitadoPorUsuario: { nombre: "Sara" },
           _count: { cierresDia: 1 },

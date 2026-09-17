@@ -89,6 +89,7 @@ import {
 import { CierresBodegaAdminModule } from "@/app/(app)/cierres-admin/_components/CierresBodegaAdminModule";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 // ---------------------------------------------------------------------------
 // Parseador de lo PINTADO (independiente del de `DineroIdentidadesEnPantalla`, a propósito).
 // ---------------------------------------------------------------------------
@@ -194,6 +195,8 @@ const CABECERA: CierreBodegaResumen = {
   motivoRechazo: null,
   paraLaCentral: "111838.37",
   efectivoCubreDescuentos: true,
+  // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+  ...marcaSinConciliar("100000.17"),
 };
 
 /** El día CON rechazo: su flete por rechazo es lo que hace que la línea puente importe. */
@@ -228,6 +231,8 @@ const DIA_ANA: CierreBodegaDetalleCierre = {
   partesPorTienda: [],
   paraLaCentral: "70749.55",
   efectivoCubreDescuentos: true,
+  // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+  ...marcaSinConciliar("60000.10"),
 };
 
 /** El día SIN rechazo: su flete por rechazo vale "0.00" y la línea puente TIENE que salir igual. */
@@ -259,6 +264,8 @@ const DIA_BETO: CierreBodegaDetalleCierre = {
   partesPorTienda: [],
   paraLaCentral: "41088.82",
   efectivoCubreDescuentos: true,
+  // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+  ...marcaSinConciliar("40000.07"),
 };
 
 const DETALLE_OK = {
@@ -280,6 +287,8 @@ const DETALLE_OK = {
   partesPorTienda: [],
   paraLaCentral: "111838.37",
   efectivoCubreDescuentos: true,
+  // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+  ...marcaSinConciliar("40000.07"),
 };
 
 type DetalleOk = typeof DETALLE_OK;
@@ -587,6 +596,8 @@ describe("393 · F6 — el caso raro, dicho en la pantalla", () => {
       totalIngresoBodegaRechazos: "0.00",
       paraLaCentral: "-1000.05",
       efectivoCubreDescuentos: false,
+      // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+      ...marcaSinConciliar("500.00"),
     },
     cierres: [],
     totalesIngreso: totalesIngreso({
@@ -601,6 +612,8 @@ describe("393 · F6 — el caso raro, dicho en la pantalla", () => {
     netoOrdenex: "-1699.95",
     paraLaCentral: "-1000.05",
     efectivoCubreDescuentos: false,
+    // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+    ...marcaSinConciliar("500.00"),
   };
 
   it("un «Para la central» NEGATIVO lleva su signo, su tono y SU NOTA (R36)", async () => {

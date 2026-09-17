@@ -188,8 +188,24 @@ const ARBOLES_UI = ["app", "components"] as const;
 // registrar: app/(app)/configuracion/sinpe/_components/SinpeBodegasModule.tsx #1» antes de tocar
 // estos numeros, que es la convencion escrita en este propio archivo. Censo total: 37 = 36
 // `<DataTable>` + 1 `<table>` cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 36;
-const TOTAL_INSTANCIAS_DATATABLE = 36;
+//
+// ⭑ FICHA 431 (T23, R29): 36 -> 38 archivos y 36 -> 38 instancias, por las DOS tablas de
+// `/wallet/satelites` --`SaldosSatelitesTable` (los saldos por bodega) y
+// `DesgloseConsolidacionesSatelite` (las consolidaciones de UNA bodega)--. Es la segunda vez que
+// este censo sube de dos en dos, y por el mismo motivo que la 344: son dos pantallas con dos
+// alcances distintos, no un recorte de la otra.
+//
+// LAS DOS NACEN `con_descarga`, asi que aqui sube la cuenta de DENTRO de alcance (23 -> 25) y las
+// exclusiones NO se mueven (siguen en 13/14). Precedente literal de las dos: sus gemelas de
+// tiendas (`SaldosTiendasTable` y `DesgloseMovimientosTienda`), que son libros de dinero
+// paginados en el servidor con su propia accion de conjunto completo. Declararlas `fuera` habria
+// exigido un motivo que no existe.
+//
+// Esta guardia se vio fallar PRIMERO --«expected 38 to be 36» en los archivos y «expected 39 to
+// be 37» en el censo total-- antes de tocar estos numeros, que es la convencion escrita arriba.
+// Censo total: 39 = 38 `<DataTable>` + 1 `<table>` cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 38;
+const TOTAL_INSTANCIAS_DATATABLE = 38;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -387,7 +403,10 @@ describe("guardia de cobertura del censo de tablas", () => {
     // descarga NO se mueven: la que entra nace `fuera`, con ⟨P5⟩ del spec como motivo.
     // ⭑ FICHA 429 (T21-B): 36 → 37, por el SINPE de cada bodega. Las 23 con descarga NO se
     // mueven: la que entra nace `fuera`.
-    expect(totalCensado).toBe(37);
+    // ⭑ FICHA 431 (T23): 37 → 39, por las DOS tablas de `/wallet/satelites`. Aquí las que suben
+    // son las de DENTRO de alcance (23 → 25): las dos nacen `con_descarga`, con el precedente
+    // literal de sus gemelas de tiendas. Las 14 exclusiones NO se mueven.
+    expect(totalCensado).toBe(39);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -492,7 +511,11 @@ describe("guardia de cobertura del censo de tablas", () => {
     // preguntó y se dijo que no (411) — es que NO ES UN LIBRO. Son ocho filas de configuración
     // que caben enteras en la pantalla, sin paginación ni acción de dataset completo, y lo único
     // exportable de ellas es la lista de las ocho cuentas a las que cobran los clientes.
-    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(23);
+    // ⭑ FICHA 431 (T23, R29): 23 → 25 dentro de alcance y las 14 exclusiones INTACTAS. Las dos
+    // que entran son las de `/wallet/satelites`, y nacen `con_descarga` porque son libros de
+    // dinero paginados en el servidor con su propia acción de conjunto completo — el mismo caso,
+    // archivo por archivo, que sus gemelas de tiendas.
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(25);
     expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(14);
   });
 

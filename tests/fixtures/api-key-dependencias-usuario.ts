@@ -177,6 +177,12 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
     motivo: `Lo solicita un mensajero o un adminSatelite: ${SOLO_OPERADOR}`,
   },
   "CierreBodega.resueltoPorUsuario": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // ⭑ FICHA 431 — quien MARCO la consolidacion como recibida. Misma categoria y mismo motivo que su
+  // hermana `resueltoPorUsuario`, y por la misma razon: marcar exige `esAccesoTotal` (maestro o
+  // admin), y una cuenta de API key nunca tiene ese rol, asi que su `usuario` NO puede aparecer en
+  // esta columna. La FK es `Restrict` a proposito —quien afirmo que el dinero llego no se borra
+  // dejando la afirmacion huerfana—, pero esa restriccion no alcanza al borrado de una API key.
+  "CierreBodega.conciliadoPorUsuario": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "WalletMovimiento.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "WalletTiendaMovimiento.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "PagoMensajeroMovimiento.mensajero": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },

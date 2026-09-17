@@ -512,5 +512,14 @@ function toResumen(row: CierreBodegaResumenRow): CierreBodegaResumen {
     // pasa por otro servicio— podria quedarse atras.
     paraLaCentral: row.paraLaCentral,
     efectivoCubreDescuentos: row.efectivoCubreDescuentos,
+    // ⭑ FICHA 431 (R26/R28): la marca viaja TAL CUAL, por el mismo motivo que los dos de
+    // arriba. `faltaPorRecibir` llega ya restado del mapper del repositorio; recomputarlo aqui
+    // seria la segunda formula que un dia dice otra cosa que la de `/wallet/satelites`.
+    conciliado: row.conciliado,
+    montoRecibido: row.montoRecibido,
+    faltaPorRecibir: row.faltaPorRecibir,
+    conciliadoAt: row.conciliadoAt,
+    conciliadoPorNombre: row.conciliadoPorNombre,
+    conciliadoNota: row.conciliadoNota,
   };
 }

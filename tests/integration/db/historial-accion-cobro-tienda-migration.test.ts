@@ -389,7 +389,15 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.7 (b) — el down recrea 50 tipos y 2
     // menos la 398»— en vez de en algo que caduca en silencio. Cada una tiene ademas su archivo:
     //   · 398 — `cierre_dia_gestion_corregida`, en `correccion-resultado-gestion-migration.test.ts`.
     //   · 429 — `zona_sinpe_cambiado`, en `historial-accion-zona-sinpe-migration.test.ts`.
-    const POSTERIORES = ["cierre_dia_gestion_corregida", "zona_sinpe_cambiado"];
+    const POSTERIORES = [
+      "cierre_dia_gestion_corregida",
+      "zona_sinpe_cambiado",
+      // ficha 431 (2026-09-16): la MARCA DE CONCILIACION de una consolidacion de bodega y su
+      // reversion. Son DOS porque la guardia del censo mide por metodo. Su archivo:
+      // `historial-accion-conciliacion-bodega-migration.test.ts`.
+      "cierre_bodega_conciliado",
+      "cierre_bodega_conciliacion_revertida",
+    ];
     expect([...tiposAntes].sort()).toEqual(
       [...HISTORIAL_ACCION_TIPOS]
         .filter((t) => t !== TIPO_NUEVO && !POSTERIORES.includes(t))

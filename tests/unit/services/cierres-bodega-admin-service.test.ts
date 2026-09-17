@@ -17,6 +17,7 @@ import { conPagos } from "@/tests/fixtures/cierre-pagos";
 // doble diciendo un numero que el mapper nunca produciria.
 import { efectivoCubreDescuentos, paraLaCentral } from "@/lib/utils/ingreso-ordenex";
 
+import { marcaPorEstado } from "@/tests/fixtures/marca-conciliacion";
 // Feature 40 — tests unit del CierresBodegaAdminService (lado maestro; dobles de
 // repo/signedUrls, sin DB/red). Cubre R2 (rol), R11 (detalle por cierre_dia con grupos
 // + totales), R12 (evidencia firmada), R13 (montos string, snapshot no recompute), R14
@@ -63,7 +64,25 @@ function bodegaResumenRow(
         base.totalPagoMensajero,
         base.totalIngresoBodegaRechazos,
       ),
+    // FICHA 431: la marca, derivada del ESTADO del doble por el mismo motivo que los dos de
+    // arriba (varios casos sobreescriben `estado` y `totales`). Un `aprobado` sin marca es una
+    // fila que el `CHECK` de la base rechaza, asi que el doble tampoco la produce.
+    ...marcaPorEstado(base.estado, base.totales.efectivo),
+    ...marcaDesdeOverrides(overrides),
   };
+}
+
+/** Los campos de la marca que un caso concreto quiera fijar, sin pisar los demas con `undefined`. */
+function marcaDesdeOverrides(overrides: Partial<CierreBodegaResumenRow>) {
+  const salida: Partial<CierreBodegaResumenRow> = {};
+  if (overrides.conciliado !== undefined) salida.conciliado = overrides.conciliado;
+  if (overrides.montoRecibido !== undefined) salida.montoRecibido = overrides.montoRecibido;
+  if (overrides.faltaPorRecibir !== undefined) salida.faltaPorRecibir = overrides.faltaPorRecibir;
+  if (overrides.conciliadoAt !== undefined) salida.conciliadoAt = overrides.conciliadoAt;
+  if (overrides.conciliadoPorNombre !== undefined)
+    salida.conciliadoPorNombre = overrides.conciliadoPorNombre;
+  if (overrides.conciliadoNota !== undefined) salida.conciliadoNota = overrides.conciliadoNota;
+  return salida;
 }
 
 function detalleCierreRow(
@@ -144,6 +163,12 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     // descarga detallada; el conjunto vacio deja el camino de la 40 intacto.
     findGestionesDeCierresBodegaCompleto: vi.fn(async () => []),
     resolverCierreBodega: vi.fn(async () => "updated" as const),
+    // ⭑ FICHA 431: las dos escrituras de la MARCA DE CONCILIACION completan el contrato. Este
+    // archivo NO las ejercita —sus casos viven en `conciliacion-satelites-service.test.ts` y en la
+    // integracion contra Postgres—, pero el doble tiene que implementar la interfaz entera o el
+    // typecheck deja de proteger a los demas.
+    marcarConciliado: vi.fn(async () => "updated" as const),
+    revertirConciliacion: vi.fn(async () => "updated" as const),
     ...overrides,
   };
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { Prisma } from "@prisma/client";
 import { CierreBodegaService } from "@/lib/services/CierreBodegaService";
+// ⭑ FICHA 431: el error que sustituye al `P2002` del indice unico parcial retirado.
+import { ConsolidacionParcialError } from "@/lib/utils/consolidacion-parcial";
 import type {
   CierreBodegaResumenRow,
   CierreDiaConsolidableRow,
@@ -11,8 +12,15 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 // Feature 40 — tests unit del CierreBodegaService (lado adminSatelite; dobles de
 // repo/orden, sin DB/red). Cubre R1 (rol), R3 (acota a su zona), R4 (sin zona), R5
-// (lista consolidables), R6 (pendientes -> conflict), R7 (vacio -> conflict), R8
-// (duplicado + P2002 -> conflict), R10 (totales agregados exactos), R23 (listar no muta).
+// (lista consolidables), R6 (pendientes -> conflict), R7 (vacio -> conflict),
+// R10 (totales agregados exactos), R23 (listar no muta).
+//
+// ⭑ FICHA 431 — R8 de la feature 40 («a lo sumo una consolidacion `solicitado` por zona») YA NO
+// EXISTE: se retiro con el indice unico parcial que lo respaldaba, porque con la aprobacion
+// convertida en marca de conciliacion era el mismo bloqueo mudado de sitio. En su sitio viven dos
+// casos de esta ficha: R6 (se puede consolidar otra vez) y R7 (la carrera la pierde el
+// todo-o-nada del repositorio, no un indice). Lo que SI se queda es el gate de NIVEL 1 (R5 de la
+// 431 = R6 de la 40), y esta anclado a proposito.
 
 const ADMIN_SATELITE: Actor = { usuarioId: "adm-sat", rol: "adminSatelite" };
 const MAESTRO: Actor = { usuarioId: "adm-maestro", rol: "maestro" };
@@ -44,7 +52,8 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     // comportamiento se mide contra Postgres real en `tests/integration/db`.
     resumirConsolidablesPendientes: vi.fn(async () => ({ cantidad: 0, totalGeneral: "0.00" })),
     contarCierresDiaSolicitados: vi.fn(async () => 0),
-    existeCierreBodegaSolicitado: vi.fn(async () => false),
+    // ⭑ FICHA 431: `existeCierreBodegaSolicitado` se retiro del contrato con el indice unico
+    // parcial que lo respaldaba. Ver el caso de R6 mas abajo.
     crearCierreBodega: vi.fn(async () => "cb1"),
     findCierresBodegaByZona: vi.fn(async () => [] as CierreBodegaResumenRow[]),
     // Feature 170 (T I.1): el listado paginado vive en su propia suite (*-paginado).
@@ -151,10 +160,16 @@ describe("CierreBodegaService.listarConsolidacion — consolidables (R5/R23)", (
   });
 });
 
-// --- precondiciones de solicitar (R6/R7/R8) ---
+// --- precondiciones de solicitar (R6/R7 de la 40; R5/R6/R7 de la ficha 431) ---
 
-describe("CierreBodegaService.solicitarCierreBodega — precondiciones (R6/R7/R8)", () => {
-  it("R6: con cierre_dia solicitado pendiente -> conflict, sin crear; y bloquea el gate al listar", async () => {
+describe("CierreBodegaService.solicitarCierreBodega — precondiciones (R6/R7)", () => {
+  // ⭑ FICHA 431 / R5 — EL GATE DE NIVEL 1, QUE **NO** SE TOCA. Este caso ya existia y ahora vale
+  // por dos: es el control de cuadre que SOBREVIVE a la ficha, y es el que mas facil se confunde
+  // con el que se retira. Si alguien se lo lleva por delante creyendo que era «el bloqueo de la
+  // 431», esto se pone rojo. Los dos son distintos:
+  //   · NIVEL 1 (este): cierres del DIA de sus mensajeros sin resolver -> NO puede consolidar. VIVE.
+  //   · NIVEL 2 (retirado): consolidacion pendiente de conciliar -> ya NO impide nada.
+  it("R6/431-R5: con cierre_dia solicitado pendiente -> conflict, sin crear; y bloquea el gate al listar", async () => {
     const repo = fakeRepo({ contarCierresDiaSolicitados: vi.fn(async () => 2) });
     const { service } = newService({ repo });
     const r = await service.solicitarCierreBodega(ADMIN_SATELITE);
@@ -175,27 +190,55 @@ describe("CierreBodegaService.solicitarCierreBodega — precondiciones (R6/R7/R8
     expect(repo.crearCierreBodega).not.toHaveBeenCalled();
   });
 
-  it("R8: ya existe un cierre de bodega solicitado -> conflict, sin crear", async () => {
-    const repo = fakeRepo({ existeCierreBodegaSolicitado: vi.fn(async () => true) });
+  // ⭑ FICHA 431 / R6 — AQUI VIVIA «R8: ya existe un cierre de bodega solicitado -> conflict», el
+  // caso que fijaba el gate «a lo sumo una consolidacion pendiente por zona». SE INVIERTE A
+  // PROPOSITO: ese gate era el mismo bloqueo mudado de sitio, y ahora la satelite puede consolidar
+  // otra vez sin que nadie marque la anterior. El caso no se borra, se da la vuelta.
+  it("⭑ 431/R6: con una consolidacion sin conciliar Y cola consolidable -> SE PUEDE consolidar otra vez", async () => {
+    const repo = fakeRepo({
+      // La cola de nivel 1 esta limpia; lo unico «pendiente» es la consolidacion anterior, que ya
+      // no es asunto de este camino: el servicio ni siquiera puede preguntarlo.
+      contarCierresDiaSolicitados: vi.fn(async () => 0),
+    });
     const { service } = newService({ repo });
+
     const r = await service.solicitarCierreBodega(ADMIN_SATELITE);
-    expect(r.status).toBe("conflict");
-    expect(repo.crearCierreBodega).not.toHaveBeenCalled();
+
+    expect(r.status).toBe("ok");
+    expect(repo.crearCierreBodega).toHaveBeenCalledTimes(1);
+    // Y el contrato ya no ofrece por donde volver a preguntarlo: el metodo no existe.
+    expect((repo as unknown as Record<string, unknown>).existeCierreBodegaSolicitado).toBeUndefined();
   });
 
-  it("R8: P2002 del indice unico parcial en crearCierreBodega -> conflict (carrera concurrente)", async () => {
-    const p2002 = new Prisma.PrismaClientKnownRequestError("unique violation", {
-      code: "P2002",
-      clientVersion: "test",
-    });
+  // ⭑ FICHA 431 / R7 — el `P2002` del indice unico parcial YA NO PUEDE OCURRIR (el indice se borro).
+  // Lo sustituye el todo-o-nada del repositorio, que lanza cuando vincularia menos cierres de los
+  // que sus totales snapshot ya sumaron. El desenlace sigue siendo `conflict`, con el motivo que YA
+  // existia (`MSG_VACIO`), sin inventar uno nuevo.
+  it("⭑ 431/R7: ConsolidacionParcialError del repositorio -> conflict (carrera concurrente)", async () => {
     const repo = fakeRepo({
       crearCierreBodega: vi.fn(async () => {
-        throw p2002;
+        throw new ConsolidacionParcialError(1, 3);
       }),
     });
     const { service } = newService({ repo });
+
     const r = await service.solicitarCierreBodega(ADMIN_SATELITE);
+
     expect(r.status).toBe("conflict");
+    if (r.status === "conflict") expect(r.motivo).toMatch(/aprobados para consolidar/i);
+  });
+
+  it("⭑ 431/R7: un error CUALQUIERA de `crearCierreBodega` NO se traga: se propaga", async () => {
+    // Sin este caso, el `catch` de arriba podria ampliarse a `catch (e) { return conflict }` y una
+    // caida de base se leeria en pantalla como «no hay nada que consolidar».
+    const repo = fakeRepo({
+      crearCierreBodega: vi.fn(async () => {
+        throw new Error("la base se cayo");
+      }),
+    });
+    const { service } = newService({ repo });
+
+    await expect(service.solicitarCierreBodega(ADMIN_SATELITE)).rejects.toThrow("la base se cayo");
   });
 });
 

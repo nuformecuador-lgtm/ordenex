@@ -42,11 +42,14 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // tienda por una decision humana; y la ficha 398 añade el DUODECIMO (`cierre_dia_gestion_corregida`),
 // que tambien es dinero: saca de un cierre abierto un cobro que nadie recaudo y deja en cero el pago
 // de esa gestion al mensajero; y la ficha 429 añade el DECIMOTERCERO (`zona_sinpe_cambiado`), que
-// es dinero en el sentido MAS directo de todos: decide a que cuenta transfiere el cliente. El
-// motivo de cada uno esta escrito a su lado.
+// es dinero en el sentido MAS directo de todos: decide a que cuenta transfiere el cliente; y la
+// ficha 431 añade el DECIMOCUARTO y el DECIMOQUINTO (`cierre_bodega_conciliado` y
+// `cierre_bodega_conciliacion_revertida`), que son dinero aunque no hagan asiento: declaran que el
+// bulto de efectivo de una satelite llego a la central —o que dejo de haber llegado— y mueven el
+// saldo con el que la central lo persigue. El motivo de cada uno esta escrito a su lado.
 
 /**
- * Los 53 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 55 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
@@ -189,6 +192,24 @@ export const HISTORIAL_ACCION_TIPOS = [
   // que es el vocabulario cerrado que esa columna admite (precedente: `usuario_fulfillment_cambiado`).
   // El MOTIVO NO ENTRA (R5): es texto libre tecleado por una persona y vive en `gestion_orden.motivo`.
   "cierre_dia_gestion_corregida", // CierresAdminRepository.corregirResultadoGestionEnCierre
+  // ⭑ FICHA 431 — LA CENTRAL DIJO QUE EL BULTO DE EFECTIVO DE UNA SATELITE LLEGO, Y POR CUANTO; y
+  // su gemelo, alguien deshizo esa afirmacion. Entran en DINERO, y el matiz importa: la ficha 431
+  // NO escribe en ningun libro (R14) — ni `wallet_movimiento`, ni `wallet_tienda_movimiento`, ni
+  // `pago_mensajero_movimiento`—, asi que estas dos acciones no hacen un asiento. Lo que hacen es
+  // DECLARAR que ₡X llego o dejo de haber llegado, y con eso mueven el saldo sin conciliar con el
+  // que la central persigue el efectivo que anda fuera. Las otras dos categorias no lo describen en
+  // ningun sentido: no hace desaparecer nada y no cambia quien puede hacer que.
+  //
+  // ⚠️ DOS TIPOS Y NO UNO CON UN VALOR, y el motivo esta MEDIDO en este repo (fichas 376 y 380): la
+  // guardia del censo de historial mide POR METODO, no por escritura. Con las dos acciones dentro
+  // del mismo metodo, borrar UNO de los dos `appendAccion` la dejaria VERDE. Dos tipos obligan a
+  // dos entradas de censo y por tanto a dos metodos.
+  //
+  // `monto` = el monto recibido. En la REVERSION es el monto que se esta BORRANDO: al revertir,
+  // `cierre_bodega.monto_recibido` vuelve a NULL, asi que esta fila es el UNICO sitio donde
+  // sobrevive cuanto se habia dado por recibido. La NOTA no entra (R5 de la 362: texto libre).
+  "cierre_bodega_conciliado", // CierresBodegaAdminRepository.marcarConciliado
+  "cierre_bodega_conciliacion_revertida", // CierresBodegaAdminRepository.revertirConciliacion
 
   // --- A.2 · hace desaparecer algo (10) ---
   // ⭑ FICHA 371 — la fecha de una reprogramacion ya registrada, corregida por un coordinador.
@@ -374,6 +395,11 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   // de esa gestion al mensajero. No hay lectura mas directa de «mueve dinero», y R17 exige
   // exactamente una categoria por tipo.
   cierre_dia_gestion_corregida: "mueve_dinero",
+  // FICHA 431: no hacen asiento (R14), pero declaran que ₡X de efectivo llego —o dejo de haber
+  // llegado— a la central, y mueven el saldo sin conciliar de esa bodega. R17 exige exactamente
+  // una categoria, y ninguna de las otras dos describe esto.
+  cierre_bodega_conciliado: "mueve_dinero",
+  cierre_bodega_conciliacion_revertida: "mueve_dinero",
   gestion_fecha_reprogramacion_corregida: "hace_desaparecer",
   orden_eliminada: "hace_desaparecer",
   orden_recuperada: "hace_desaparecer",
@@ -433,6 +459,8 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   zona_sinpe_cambiado: "Cambió el SINPE de una bodega",
   cobro_tienda_registrado: "Cobró un costo a una tienda",
   cierre_dia_gestion_corregida: "Corrigió el resultado de una gestión",
+  cierre_bodega_conciliado: "Marcó recibida una consolidación de bodega",
+  cierre_bodega_conciliacion_revertida: "Revirtió la conciliación de una consolidación de bodega",
   gestion_fecha_reprogramacion_corregida: "Corrigió la fecha de una reprogramación",
   orden_eliminada: "Eliminó una orden",
   orden_recuperada: "Recuperó una orden",

@@ -369,7 +369,23 @@ describe("AsignacionSateliteService.asignar — bloqueo (feature 41/R14/R18)", (
     expect(repo.findMensajeroIdsValidosByZona).not.toHaveBeenCalled();
   });
 
-  it("R18 (ii): bodega bloqueada por su propio CierreBodega pendiente -> bodega_bloqueada", async () => {
+  // ⭑ FICHA 431 — ESTE CASO CAMBIA DE NOMBRE, NO DE CONTENIDO, Y HAY QUE LEER POR QUE.
+  //
+  // Se llamaba «R18 (ii): bodega bloqueada por su propio CierreBodega pendiente». ESA CAUSA YA NO
+  // EXISTE: desde la ficha 431, `OrdenRepository.existeBodegaSateliteBloqueada` devuelve
+  // `bloqueada: false` SIEMPRE, y su test lo ancla barriendo las doce combinaciones
+  // (`tests/unit/repositories/orden-repository.bloqueo.test.ts`). O sea que la entrada de este caso
+  // —`{bloqueada: true, porCierreBodega: true}`— ya no la puede producir el repositorio real.
+  //
+  // El caso se CONSERVA igual, y con el doble sintetico a proposito: lo que mide NO es la causa,
+  // es que la RAMA `bodega_bloqueada` del servicio sigue ahi y sigue abortando el lote ANTES de
+  // escribir. D4 dice «el bloqueo se quita en UN solo sitio», y ese sitio es el repositorio; la
+  // rama del servicio queda como punto de entrada por si vuelve una causa (destino final: Q4).
+  // Borrar este caso al retirar la causa dejaria esa rama sin una sola prueba.
+  //
+  // Precedente exacto en este mismo archivo: `R18 (i)` ya usaba un doble sintetico —`porMensajeros`
+  // dejo de bloquear en la feature 241— y se conservo por el mismo motivo.
+  it("431/Q4: el desenlace `bodega_bloqueada` SIGUE abortando el lote (rama conservada, causa retirada)", async () => {
     const repo = fakeRepo({
       existeBodegaSateliteBloqueada: vi.fn(async () => ({
         bloqueada: true,
