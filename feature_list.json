@@ -5219,6 +5219,30 @@
       "branch": "feat/436-asistente",
       "depends_on": 433,
       "status_note": "SF-001 PUNTO 4, SEGUNDA MITAD. Mergeada en dev (PR #806) y NO desplegada. || RAG descartado CON MEDIDA: 33 documentos = ~21.000 tokens, ~$0,004/consulta cacheados contra ~$0,012 de RAG. El documento firmado acertaba en el 5-10x — SIN cache. || LA DECISION QUE MAS PESA ES DE SEGURIDAD, no de coste: el contexto se acota por rol reutilizando el predicado de LECTURA de la 435. Medido con mutacion: apagandolo viajaban 339 LINEAS DE LA OFICINA en la peticion de un mensajero. || LA REVISION RECHAZO, y los cuatro hallazgos valian el viaje: (1) EL MODELO NO SABIA CON QUIEN HABLABA —le dijo a un maestro «no tenes como asignar desde tu cuenta de tienda»—; el spec acoto los DOCUMENTOS y se olvido de la PERSONA, ningun R lo cubria. (2) El aviso de datos solo hablaba de capturas y condicionado: quien escribia sin adjuntar nunca se enteraba de que su texto salia de la empresa, Y EL TEST ANCLABA EL LITERAL EQUIVOCADO, asi que R28->test salia verde con R28 incumplido. (3) Un rechazo por tope contaba como consulta. (4) Hasta 40 imagenes por peticion, frenadas solo por el limite de cuerpo de Vercel. || EL NAVEGADOR ENCONTRO LO QUE 29.677 TESTS NO: el panel salia a 292px en vez de 390 (tailwind-merge solo dedupe con el mismo prefijo de variante) y el Markdown del modelo se pintaba en crudo (toHaveTextContent normaliza). || DOS TESTS SOBREVIVIERON EN VERDE CON EL CODIGO ROTO: el upsert atomico paso dos veces —conexiones frias, y sentencias preparadas de un caso anterior—, y el tope comprobado DESPUES de llamar dejaba el desenlace correcto: mirar solo el resultado habria pasado con el dinero gastado. || Gate: 2038/2038 archivos, 29.702 tests, INIT_EXIT=0. || T25/T26/T27 SIN MARCAR a proposito: falta ANTHROPIC_API_KEY en Vercel (preview y production POR SEPARADO). Esta en .env y probada con una llamada real a claude-sonnet-5."
+    },
+    {
+      "id": 437,
+      "title": "en el telefono el boton de Salir queda fuera de la pantalla",
+      "description": "El encabezado compartido a 390px: las acciones desbordan y el titulo se estruja.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "REPORTADO POR EL HUMANO con captura, 2026-09-17, y MEDIDO en /mis-asignaciones/reparto a 390x844: «Salir» empieza en x=352 y mide 75px, o sea que termina en 427 sobre una pantalla de 390. Y `document.scrollWidth == clientWidth`, asi que NO hay scroll horizontal: el boton es INALCANZABLE, no solo feo. || La descripcion se estruja en 3 lineas dentro de una columna de 93px. Medido antes en otras pantallas: /monitoreo 8 lineas en 118px, /cierres-admin 8 en 83px. || CAUSA: PageHeader.tsx:61 es una fila flex con justify-between y SIN flex-wrap, y los botones traen shrink-0 en la base de buttonVariants, asi que toda la compresion la come la columna del titulo hasta que las acciones se salen. || ES PRE-EXISTENTE —no lo trajo ninguna ficha de SF-001— pero el «?» de la 433 le resta ~38px mas en toda pantalla con documento. Afecta a las 32 pantallas del portal y sobre todo a los 18 mensajeros, que trabajan en telefono. || PIDE MEDICION ANTES/DESPUES: el arreglo se juzga con las cajas, no a ojo."
+    },
+    {
+      "id": 438,
+      "title": "una ruta que tu rol no puede abrir enseña el 404 de Next en ingles",
+      "description": "No existe not-found.tsx: cualquier notFound() cae en la pantalla por defecto.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "REPORTADO POR EL HUMANO, 2026-09-17: «recarga, deja el sidebar pero el contenido en blanco, no me dice que es algo a lo que no tengo acceso». || MEDIDO: no existe not-found.tsx NI en app/ NI en app/(app)/, asi que todo notFound() cae en la pantalla por defecto de Next — «404. This page could not be found.», EN INGLES, en una aplicacion que usan mensajeros en Costa Rica. || Y ES INCONSISTENTE: /ayuda/oficina/wallet-caja conserva el sidebar y mete el 404 dentro del armazon; /wallet/caja y /configuracion/usuarios pierden el armazon entero. || ALCANCE: son TODOS los notFound() del portal (/mi-bodega, /mi-wallet, /historico/acciones, /ranking/historico, /wallet/satelites, /configuracion/sinpe, los 33 slugs de ayuda...). || ⚠️ EL TEXTO NO PUEDE DECIR «no tenes acceso» A SECAS. La ficha 433 hace que «no existe» y «no podes leerlo» sean INDISTINGUIBLES a proposito: si distinguieran, un mensajero sabria que un documento existe por el hecho de que se le niegue. La frase tiene que ser verdad en los dos casos y no filtrar cual es — p.ej. «Esta pagina no existe, o no es para tu cuenta»."
     }
   ]
 }
