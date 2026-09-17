@@ -12,6 +12,8 @@
 
 import type { MetricaUnidad } from "@/lib/analytics/types";
 
+import type { JerarquiaKpi } from "./jerarquia";
+
 export type { MetricaUnidad };
 
 /**
@@ -204,6 +206,22 @@ export interface KpiCardProps extends EstadoVisual {
   readonly unidad: MetricaUnidad;
   readonly variacion?: VariacionKpi;
   readonly className?: string;
+  /**
+   * FICHA 441 — el RANGO de la tarjeta dentro de su fila. Default `"normal"`, que es como se
+   * pintan los KPI desde la 130: ninguna pantalla ya montada cambia de aspecto porque esta
+   * prop exista.
+   *
+   * ⚠ ES PROP Y NO `className` A PROPOSITO. Hasta esta ficha la unica manera de destacar un KPI
+   * era colarle clases desde el llamador, y por eso `/analitica` tenia cinco tarjetas con el
+   * mismo peso visual —«17,4 % de efectividad» leyendose igual que «En proceso 37»— con la
+   * causa escrita en el propio contrato: `KpiCard` no tenia ninguna propiedad de enfasis. Con
+   * la jerarquia dentro del contrato, subordinar una tarjeta es elegir otro valor de una union
+   * cerrada, no escribir clases mas pequenas a mano en cada pantalla.
+   *
+   * Las clases de cada rango viven en `./jerarquia`, no aqui: las comparte el heroe de
+   * `/analitica`, que NO es un `KpiCard` pero tiene que vestir la misma escala.
+   */
+  readonly jerarquia?: JerarquiaKpi;
 }
 
 /** Una columna de `TablaResumen`. La unidad fija el formato: el llamador NO pasa formateadores (R38). */

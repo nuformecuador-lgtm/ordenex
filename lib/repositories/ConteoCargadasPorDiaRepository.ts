@@ -35,21 +35,25 @@
 //
 // ─── COSTE DECLARADO ────────────────────────────────────────────────────────────────────
 //
-// Esta es la TERCERA escritura del mismo `where` (las otras dos: la de objetos Prisma en
-// `ConteoEntregasRepository` y la de SQL en `ConteoPorStatusRepository`), y pueden DIVERGIR.
-// Lo que se hace al respecto es lo mismo que alli: el recorte por rol se REUSA de verdad
-// —`condicionDeAlcance` se importa, no se reescribe—, las condiciones se construyen en
-// `condicionesDeCargadas`, funcion PURA y exportada para inspeccionarla sin base de datos, y
-// el alcance es SIEMPRE la primera condicion.
+// Esta es la SEGUNDA escritura del mismo `where` (la otra: la de SQL en
+// `ConteoPorStatusRepository`), y pueden DIVERGIR. Lo que se hace al respecto: el recorte por rol
+// se REUSA de verdad —`condicionDeAlcance` se importa, no se reescribe—, las condiciones se
+// construyen en `condicionesDeCargadas`, funcion PURA y exportada para inspeccionarla sin base de
+// datos, y el alcance es SIEMPRE la primera condicion.
 //
-// La condicion de FECHA, en cambio, es distinta a proposito y no debe converger nunca: alli la
-// ventana cae sobre `COALESCE(ultima gestion vigente, o.created_at)` («cuando paso algo con la
-// orden») y aqui sobre `o.created_at` a secas («cuando entro la orden»). Filtrar por la fecha
-// efectiva y agrupar por la de carga daria una serie con dias fuera del rango pedido.
+// ⚠ LA CONDICION DE FECHA YA NO ES LA DIVERGENTE, y hasta la ficha 441 esta cabecera decia lo
+// contrario: «es distinta a proposito y no debe converger nunca», porque alli la ventana caia
+// sobre `COALESCE(ultima gestion vigente, o.created_at)` y aqui sobre `o.created_at` a secas. El
+// 2026-09-17 se midio que aquella era el defecto —152 de 210 ordenes atribuidas a un dia se
+// habian cargado antes— y el desglose por status paso a preguntar por la fecha de CARGA. Las dos
+// lecturas comparten hoy `ventanaDeCarga`, que es una sola definicion importada por las dos. La
+// que sigue siendo distinta a proposito —y no debe converger jamas— es la de `CicloVidaRepository`,
+// que acota la transicion TERMINAL porque fecha el CIERRE y no la entrada del lote.
 
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 
+import { ventanaDeCarga } from "@/lib/repositories/ventana-de-carga";
 import { condicionDeAlcance } from "@/lib/repositories/ConteoPorStatusRepository";
 import { inicioDelDiaCREnUtc } from "@/lib/utils/fecha-cr";
 import type { ConsultaConteoEntregas } from "@/lib/analytics/entregas-conteo";
@@ -188,21 +192,10 @@ export function condicionesDeCargadas(consulta: ConsultaConteoEntregas): Prisma.
   const condiciones = condicionesSinFecha(consulta);
 
   // La ventana cae sobre `o."created_at"` — la fecha de CARGA, la misma por la que se agrupa.
-  // Es la unica condicion que NO coincide con la de las otras dos lecturas, y es deliberado
-  // (ver la cabecera): con la fecha efectiva aqui, la serie tendria dias fuera del rango.
-  //
-  // SEMIABIERTA `[desde, hasta)`: `resolverRango` devuelve `hasta` como las 00:00 CR del dia
-  // SIGUIENTE, justamente para que `hastaFecha` sea inclusiva. Un `<=` meteria el dia
-  // siguiente entero.
-  //
-  // SIN rango no se anade ninguna condicion de fecha: la pantalla no arranca con ventana
-  // puesta, y «sin filtrar» tiene que contar todas las ordenes y no las de una semana.
-  if (rango !== null) {
-    condiciones.push(
-      Prisma.sql`o."created_at" >= ${rango.desde}`,
-      Prisma.sql`o."created_at" <  ${rango.hasta}`,
-    );
-  }
+  // Se IMPORTA (`ventanaDeCarga`) y no se escribe aqui: desde la ficha 441 es la MISMA ventana
+  // que usan el desglose por status y la tabla de cohortes, y una sola definicion es lo que
+  // impide que una de las tres se mueva sola. Sin rango no aporta ninguna condicion.
+  condiciones.push(...ventanaDeCarga(rango));
 
   return condiciones;
 }

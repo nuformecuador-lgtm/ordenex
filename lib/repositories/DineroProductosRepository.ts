@@ -12,12 +12,22 @@
 // recorta con un criterio propio. O se sirve con el MISMO recorte que ya aplica el analisis de
 // productos, o no se sirve.
 //
-// ─── EL `LEFT JOIN LATERAL` ES OBLIGATORIO AUNQUE ESTA CONSULTA NO USE EL DESENLACE ─────────
+// ─── FICHA 441 — EL `LEFT JOIN LATERAL` SE FUE, Y CON EL LA ULTIMA GESTION ──────────────────
 //
-// `condicionesDeConsulta` referencia `u."created_at"` en la ventana de fecha. Sin el lateral con
-// alias `u`, el SQL NO COMPILA. Se copia literal del de la 345 —mismo `anulada_at IS NULL`,
-// mismo desempate `created_at DESC, id DESC`— para que la ventana temporal de esta consulta sea
-// la MISMA que la de la fila de volumen que va a su lado (R78).
+// Hasta el 2026-09-17 esta consulta arrastraba un `LEFT JOIN LATERAL ... LIMIT 1` con alias `u`
+// que NO proyectaba nada: existia solo porque `condicionesDeConsulta` referenciaba
+// `u."created_at"` en su ventana de fecha, y sin el el SQL no compilaba. Esa ventana paso a caer
+// sobre `o."created_at"` (la fecha de CARGA), asi que el lateral quedo sin un solo consumidor y
+// se retira: un join que se ejecuta por cada fila y cuya unica justificacion se evaporo no es
+// codigo inofensivo, es un comentario que miente.
+//
+// LO QUE NO CAMBIA es R78: la ventana temporal de esta consulta sigue siendo EXACTAMENTE la de
+// la fila de volumen que va a su lado, porque las dos la reciben del MISMO `condicionesDeConsulta`
+// y no la escriben. Lo que cambio es cual es esa ventana, y cambio para las dos a la vez.
+//
+// ⚠ Y NO afecta a las gestiones que aportan dinero: esas entran por el `JOIN "gestion_orden" g`
+// de mas abajo —con su `anulada_at IS NULL` y su `resultado IN (...)`—, que es otra cosa y sigue
+// intacto. El lateral solo servia para la fecha.
 //
 // ─── LA DECISION SOBRE LAS GESTIONES ANULADAS (⟨Q3⟩), Y SUS NUMEROS ──────────────────────────
 //
@@ -190,14 +200,6 @@ export class DineroProductosRepository implements IDineroProductosRepository {
       FROM "orden" o
       JOIN "order_status" s ON s."id" = o."estatus_id"
       JOIN "usuario"      t ON t."id" = o."tienda_id"
-      LEFT JOIN LATERAL (
-        SELECT g2."resultado", g2."created_at"
-        FROM "gestion_orden" g2
-        WHERE g2."orden_id" = o."id"
-          AND g2."anulada_at" IS NULL
-        ORDER BY g2."created_at" DESC, g2."id" DESC
-        LIMIT 1
-      ) u ON TRUE
       JOIN "gestion_orden" g ON g."orden_id" = o."id"
                             AND g."anulada_at" IS NULL
                             AND g."resultado"::text IN (${resultadosQueAportan()})
