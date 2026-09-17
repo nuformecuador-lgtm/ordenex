@@ -5165,12 +5165,12 @@
       "title": "una migracion que exige datos sembrados a mano rompe el despliegue de cualquier entorno nuevo",
       "description": "La siembra del SINPE corre dentro de migrate-deploy, no a mano entre dos migraciones.",
       "zone": "backend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "media",
       "branch": "fix/432-siembra-dentro-del-despliegue",
       "depends_on": null,
-      "status_note": "INCIDENTE REAL, 2026-09-16 02:33 UTC: los deploys de PREVIEW llevan caidos desde que se mergeo la 429. `20260918120200_zona_sinpe_no_nulo` encontro las columnas vacias y aborto —lo disenado—, pero ese fallo queda registrado en `_prisma_migrations` y desde entonces TODO `migrate deploy` se niega con P3009. Produccion NO afectada (`prod` = efd06fb4, sin desplegar desde el 15). || LA CAUSA DE FONDO: hay una migracion disenada para abortar si las columnas estan vacias, y entre ella y la siembra NO CABE NINGUN PASO porque `migrate deploy` las aplica todas de un tiron. Eso funciona si alguien siembra a mano antes, y revienta en cuanto aparece un entorno nuevo — que es exactamente lo que paso con preview. || ERROR DE PROCESO QUE LO DEJO PASAR: se concluyo que mergear a `dev` era seguro porque `decidirMigracion` no migra en preview SALVO `MIGRATE_ON_PREVIEW=true`. Se verifico el CODIGO y se dio por hecha la CONFIGURACION sin medirla. Esta en true. || ARREGLO: la siembra (`scripts/seed-sinpe-inicial.ts`) pasa a correr DENTRO de `scripts/migrate-deploy.ts`, despues de aplicar las migraciones y antes de que la siguiente exija el NOT NULL. Y la migracion del NOT NULL sale de la tanda actual para que el orden sea: despliegue A crea columnas vacias + siembra sola; despliegue B aplica el NOT NULL sobre datos ya presentes. Ningun paso manual, en ningun entorno. || OJO: toca una migracion YA MERGEADA en `dev`, asi que hay que decidir si se edita en sitio (drift: lo anadido tras aplicarse no llega nunca a esa base) o si se anade una tercera. Casi seguro lo segundo. || DESBLOQUEO INMEDIATO, aparte de esta ficha y lo hace el humano contra la base de PREVIEW: `prisma migrate resolve --rolled-back 20260918120200_zona_sinpe_no_nulo` y despues `pnpm exec tsx scripts/seed-sinpe-inicial.ts`. La primera sola no basta."
+      "status_note": "Mergeada en dev (PR #803, 0250a623) y NO desplegada. || DEJA DE SER LIMPIEZA Y PASA A SER REQUISITO DE LA RELEASE. Medido contra produccion el 2026-09-17: las TRES migraciones del SINPE estan sin aplicar y hay 8 zonas sin numero propio. Es el mismo estado que tumbo el preview 20 horas: migrate deploy aplica lo pendiente de un tiron, el NOT NULL encuentra las columnas vacias, aborta a proposito, y desde ahi todo migrate deploy se niega con P3009. || Ante un fallo lee la salida REAL de Prisma: si no es P3009 o la migracion no esta en la lista blanca, no toca nada. Si lo es, la marca revertida, siembra el SINPE y reintenta UNA vez, muriendo con los DOS motivos si el reintento tambien falla. || La siembra necesita NEXT_PUBLIC_SINPE_NUMERO y NEXT_PUBLIC_SINPE_NOMBRE, que SI existen en produccion (el codigo desplegado rellena el {{sinpe}} de la plantilla viva desde ahi). Residual que confirma el humano: que el valor sea ^[678][0-9]{7}$, sin guiones ni prefijo. || Gate: 2022/2022 archivos, 29.475 tests, INIT_EXIT=0."
     },
     {
       "id": 433,
@@ -5183,6 +5183,18 @@
       "branch": "feat/433-modulo-de-ayuda",
       "depends_on": null,
       "status_note": "SF-001 PUNTO 4, PRIMERA MITAD. Mergeada en dev (PR #802, e7886043) y NO desplegada. Los 31 .md se renderizan desde el repositorio: no hay copia en base ni artefacto generado. || REVISION RECHAZADA Y LEVANTADA: el comportamiento estaba bien, faltaba la red. Tres mutaciones sobrevivian a la suite entera —borrar el notFound() del acotamiento por rol, neutralizar el gate del layout y quitar el «?» de las 29 pantallas— mas borrar outputFileTracingIncludes, sin el cual esto funciona en local y da 404 en Vercel. Las cuatro cerradas con su test en rojo. || Y un hallazgo de radio de dano: el catalogo memoizaba la promesa RECHAZADA, asi que un fallo de un instante al leer los .md dejaba TODO el portal en 500 para el resto del proceso. Ahora la ayuda se degrada y la aplicacion sigue en pie. || Verificado con navegador en los cuatro roles: acotamiento correcto, 404 por URL directa, y el «?» desempata bien en /ordenes (oficina para el maestro, tienda para la tienda). || PENDIENTE DEL HUMANO: si maestro/admin deben poder LEER la ayuda de los otros portales (hoy 404). || TRES PANTALLAS SIN «?» por falta de documento: /configuracion/sinpe, /mi-bodega, /ranking/historico. || NO SALE A PRODUCCION sin estar seguros de que no dana lo que ya funciona (condicion del humano)."
+    },
+    {
+      "id": 434,
+      "title": "tres pantallas no tienen boton de ayuda porque no tienen documento",
+      "description": "Los documentos de ayuda que faltan para /configuracion/sinpe y /mi-bodega.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "Medido por la revision de la 433: de 32 pantallas con encabezado, TRES se quedan sin «?» para todo el mundo — /configuracion/sinpe, /mi-bodega y /ranking/historico — porque ningun .md declara esas rutas en su `pantalla:`. || /ranking/historico NO necesita documento nuevo: ya esta explicado dentro de docs/ayuda/mensajero/ranking.md (seccion «Historico»). Basta anadir la ruta a su `pantalla:`, que admite varias separadas por coma — el precedente vivo es publico/entrar-y-recuperar-contrasena.md. || Los otros dos SI llevan documento nuevo: oficina/configuracion-sinpe.md (roles maestro, admin) y satelite/mi-bodega.md (rol adminSatelite). Borradores ya escritos y verificados contra las cadenas reales de components/shared/sinpe-textos.ts. || ⚠️ AL ANADIRLOS HAY QUE MOVER UN LITERAL DE CONTRATO: tests/components/AyudaLayout.test.tsx afirma a mano los documentos por rol (maestro 22, admin 21, adminSatelite 9, mensajero 8, adminTienda 7). Pasan a 23 / 22 / 10 / 8 / 7. Ese literal ES el contrato —caza un acotamiento roto hacia «ensenar todo»—, asi que se mueve a proposito, no se afloja."
     }
   ]
 }
