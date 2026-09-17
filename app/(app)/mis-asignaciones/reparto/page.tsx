@@ -29,6 +29,24 @@ export default async function RepartoPage() {
   // de esa ruta. Los resuelve el service SERVER-SIDE: ni esta página ni el
   // módulo reordenan nada ni derivan el estado de la ruta por su cuenta.
   const result = await listarMisAsignaciones();
+  // FICHA 440 — un tropiezo de base NO es un 404. Antes, cualquier desenlace distinto de `ok`
+  // caía en el mismo `notFound()`, así que una lectura que falló se le contaba al mensajero como
+  // «esta pantalla no existe»: una respuesta que miente y que además no ofrece reintentar, que es
+  // lo único que podía resolverlo.
+  //
+  // Se relanza para que lo recoja la frontera del portal (`app/(app)/error.tsx`, feature 365), que
+  // ya dice exactamente lo que hace falta —«No pudimos cargar esta pantalla» + «Reintentar»—
+  // conservando la barra lateral. No se inventa pantalla nueva: se usa la que ya existe.
+  //
+  // ── POR QUÉ SE CAE TODA LA PANTALLA Y NO SOLO LA LISTA (medido, 2026-09-17)
+  // La gramática de la ficha 433 es degradar la PIEZA que falló. Aquí no hay pieza que aislar:
+  // la lista, los KPIs, `ruta` y `ordenEnGestionId` salen TODOS del mismo `result` —una sola
+  // lectura, un solo `await`—, así que si falla no queda nada que pintar; unos KPIs en blanco
+  // sobre una lista vacía se leen como «hoy no tenés trabajo», que es peor que decir que falló.
+  // Lo que SÍ se lee aparte es el bloqueo de cierre, y ese ya degrada por su cuenta (abajo).
+  if (result.status === "error") {
+    throw new Error("No se pudo leer las asignaciones del mensajero");
+  }
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
   // Feature 111/R12/R14 -> FEATURE 271: el DETALLE del bloqueo, DERIVADO server-side por la

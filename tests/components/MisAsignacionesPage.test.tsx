@@ -230,3 +230,46 @@ describe("RecogerPage — control de acceso por rol (R9/R12)", () => {
     await expect(RecogerPage()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });
+
+// --- FICHA 440: un tropiezo de base no se cuenta como un 404 ---
+
+/**
+ * El 2026-09-17 este portal devolvio 27 respuestas 500 en `/mis-asignaciones/reparto`. La causa
+ * raiz —una conexion que vuelve al pool con la transaccion abortada (25P02)— se ataca aparte; lo
+ * que se sujeta aqui es que el SINTOMA no vuelva a ser mudo.
+ *
+ * En el camino de LECTURA el sintoma no era un 500 sino algo igual de malo: `listarMisAsignaciones`
+ * aplanaba CUALQUIER fallo a `unauthenticated`, y estas dos paginas lo traducian a `notFound()`.
+ * Al mensajero se le contaba «esta pantalla no existe» cuando lo que pasaba era que la base no
+ * respondio: una respuesta que miente, y que ademas no ofrece reintentar —lo unico que lo
+ * resolvia—.
+ *
+ * Ahora el desenlace `error` se RELANZA para que lo recoja la frontera del portal
+ * (`app/(app)/error.tsx`, feature 365), que ya dice «No pudimos cargar esta pantalla» y ofrece
+ * «Reintentar» conservando la barra lateral. Lo que estos casos afirman es la bifurcacion: `error`
+ * NO puede seguir saliendo por la puerta del 404.
+ */
+describe("ficha 440: fallo de lectura vs. 404", () => {
+  for (const [nombre, Pagina] of [
+    ["RepartoPage", RepartoPage],
+    ["RecogerPage", RecogerPage],
+  ] as const) {
+    it(`${nombre}: el listado responde 'error' -> NO es NEXT_NOT_FOUND`, async () => {
+      resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "mensajero" });
+      listarMock.mockResolvedValue({ status: "error" });
+
+      // Se relanza (la frontera del portal lo recoge), pero NO por la puerta del 404: si esta
+      // asercion se relajara a un `rejects.toThrow()` pelado volveria a pasar el caso que
+      // produjo el 404 que miente, que es justo lo que este test existe para impedir.
+      await expect(Pagina()).rejects.not.toThrow("NEXT_NOT_FOUND");
+      await expect(Pagina()).rejects.toThrow(/No se pudo leer las asignaciones/);
+    });
+
+    it(`${nombre}: 'unauthenticated' SIGUE saliendo por el 404 (no se confunden)`, async () => {
+      resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "mensajero" });
+      listarMock.mockResolvedValue({ status: "unauthenticated" });
+
+      await expect(Pagina()).rejects.toThrow("NEXT_NOT_FOUND");
+    });
+  }
+});
