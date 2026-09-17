@@ -27,6 +27,13 @@ const FECHA = "2999-01-02";
 const FECHA_PRECALENTADO = "2999-01-04";
 const FECHA_CARRERA = "2999-01-05";
 const FECHA_NO_LO_SE = "2999-01-07";
+const FECHA_TOPE = "2999-01-11";
+
+/**
+ * El tope que se le pasa al contador en los casos que no lo están midiendo. Alto a propósito: lo
+ * que esos casos miden es el incremento y el día, no la frontera.
+ */
+const TOPE_HOLGADO = 1000;
 
 describeSiHayBase("436/R16-R17 — asistente_uso_diario contra Postgres real", () => {
   let admin: PrismaClient;
@@ -85,9 +92,9 @@ describeSiHayBase("436/R16-R17 — asistente_uso_diario contra Postgres real", (
   it("⭑ R16 — cuenta por usuario y día, y el día que se guarda es el que se pidió", async () => {
     const repo = new AsistenteUsoRepository(clienteA);
 
-    expect(await repo.consumirUnaConsulta(usuarioId, FECHA)).toBe(1);
-    expect(await repo.consumirUnaConsulta(usuarioId, FECHA)).toBe(2);
-    expect(await repo.consumirUnaConsulta(usuarioId, FECHA)).toBe(3);
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA, TOPE_HOLGADO)).toBe(1);
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA, TOPE_HOLGADO)).toBe(2);
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA, TOPE_HOLGADO)).toBe(3);
 
     const filas = await admin.$queryRawUnsafe<{ dia: string; consultas: number }[]>(
       `SELECT to_char("fecha", 'YYYY-MM-DD') AS dia, "consultas"
@@ -113,9 +120,9 @@ describeSiHayBase("436/R16-R17 — asistente_uso_diario contra Postgres real", (
 
     const repo = new AsistenteUsoRepository(clienteA);
     // La consulta de las 23:59 CR cae en la fila del día 2, que ya tiene 3 de la prueba anterior.
-    expect(await repo.consumirUnaConsulta(usuarioId, casiMedianoche)).toBe(4);
+    expect(await repo.consumirUnaConsulta(usuarioId, casiMedianoche, TOPE_HOLGADO)).toBe(4);
     // Y la de un minuto después estrena fila: el tope se reinicia con el día de Costa Rica.
-    expect(await repo.consumirUnaConsulta(usuarioId, yaEsOtroDia)).toBe(1);
+    expect(await repo.consumirUnaConsulta(usuarioId, yaEsOtroDia, TOPE_HOLGADO)).toBe(1);
 
     const filas = await admin.$queryRawUnsafe<{ dia: string; consultas: number }[]>(
       `SELECT to_char("fecha", 'YYYY-MM-DD') AS dia, "consultas"
@@ -169,16 +176,18 @@ describeSiHayBase("436/R16-R17 — asistente_uso_diario contra Postgres real", (
     // clase de test: el que mide una cosa distinta según el día. Se calientan los dos con una
     // consulta REAL sobre una fecha aparte —las mismas sentencias, la misma tabla— y a partir de
     // ahí las dos conexiones parten iguales.
-    await new AsistenteUsoRepository(clienteA).consumirUnaConsulta(usuarioId, FECHA_PRECALENTADO);
-    await new AsistenteUsoRepository(clienteB).consumirUnaConsulta(usuarioId, FECHA_PRECALENTADO);
+    const repoCalienteA = new AsistenteUsoRepository(clienteA);
+    const repoCalienteB = new AsistenteUsoRepository(clienteB);
+    await repoCalienteA.consumirUnaConsulta(usuarioId, FECHA_PRECALENTADO, TOPE_HOLGADO);
+    await repoCalienteB.consumirUnaConsulta(usuarioId, FECHA_PRECALENTADO, TOPE_HOLGADO);
 
     const barrera = crearBarrera(2);
     const repoA = new AsistenteUsoRepository(conBarreraEnLaPrimeraConsulta(clienteA, barrera));
     const repoB = new AsistenteUsoRepository(conBarreraEnLaPrimeraConsulta(clienteB, barrera));
 
     const [a, b] = await Promise.all([
-      repoA.consumirUnaConsulta(usuarioId, FECHA_CARRERA),
-      repoB.consumirUnaConsulta(usuarioId, FECHA_CARRERA),
+      repoA.consumirUnaConsulta(usuarioId, FECHA_CARRERA, TOPE_HOLGADO),
+      repoB.consumirUnaConsulta(usuarioId, FECHA_CARRERA, TOPE_HOLGADO),
     ]);
 
     // Si la barrera se abrió por el tope de seguridad, la ventana no se forzó y el caso no midió
@@ -187,7 +196,10 @@ describeSiHayBase("436/R16-R17 — asistente_uso_diario contra Postgres real", (
       true,
     );
 
-    expect([a, b].sort((x, y) => x - y)).toEqual([1, 2]);
+    // Con el tope holgado, ninguna de las dos puede volver `null`: si alguna lo hiciera, la
+    // carrera no midió lo que dice medir y se ve aquí en vez de disolverse en el `sort`.
+    expect([a, b].every((valor) => valor !== null), "una de las dos no llegó a contar").toBe(true);
+    expect([a, b].map((valor) => valor ?? -1).sort((x, y) => x - y)).toEqual([1, 2]);
 
     const filas = await admin.$queryRawUnsafe<{ consultas: number; n: bigint }[]>(
       `SELECT "consultas", COUNT(*) OVER ()::bigint AS n
@@ -199,9 +211,52 @@ describeSiHayBase("436/R16-R17 — asistente_uso_diario contra Postgres real", (
     expect(filas[0].consultas, "dos consultas simultáneas cuentan dos").toBe(2);
   });
 
+  it("⭑⭑ R17 — EN EL TOPE NO SE ESCRIBE NADA: un rechazo no es una consulta atendida", async () => {
+    // ⚠️ EL CASO QUE TRAE LA REVISIÓN (`m2`). Antes, el incremento era incondicional y la
+    // comparación con el tope venía después: quien ya estaba en el tope y seguía insistiendo
+    // SUMABA IGUAL. La columna `consultas` dejaba de medir «consultas atendidas» —que es lo que
+    // dice R17— y pasaba a medir intentos, en el único número que esta pieza deja para T27.
+    //
+    // Se mide contra Postgres porque es donde vive la decisión: el `WHERE` del `ON CONFLICT`. Con
+    // un doble, quitar ese `WHERE` no cambiaría nada y la mutación sobreviviría en verde.
+    const repo = new AsistenteUsoRepository(clienteA);
+    const tope = 3;
+
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA_TOPE, tope)).toBe(1);
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA_TOPE, tope)).toBe(2);
+    // La número 3 ENTRA: el tope es «hasta 3», no «menos de 3». Sin este caso, un `<=` en el
+    // `WHERE` pasaría igual de verde y se perdería una consulta por persona y día.
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA_TOPE, tope)).toBe(3);
+
+    // Y a partir de aquí, `null` y la fila QUIETA, por muchas veces que se insista.
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA_TOPE, tope)).toBeNull();
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA_TOPE, tope)).toBeNull();
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA_TOPE, tope)).toBeNull();
+
+    const filas = await admin.$queryRawUnsafe<{ consultas: number; no_lo_se: number }[]>(
+      `SELECT "consultas", "no_lo_se" FROM "asistente_uso_diario"
+        WHERE "usuario_id" = $1 AND "fecha" = $2::date`,
+      usuarioId,
+      FECHA_TOPE,
+    );
+    // ⭑ 3, no 6: los tres rechazos no dejaron rastro. Ésta es la línea que muere si el incremento
+    // vuelve a ser incondicional.
+    expect(filas[0], "tres intentos por encima del tope escribieron en la fila").toEqual({
+      consultas: 3,
+      no_lo_se: 0,
+    });
+  });
+
+  it("⭑ el tope de una persona NO afecta a otro día suyo (la frontera es la fila, no el usuario)", async () => {
+    // Control de que el `WHERE` mira la fila correcta: agotado el 11, el 12 arranca de cero.
+    const repo = new AsistenteUsoRepository(clienteA);
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA_TOPE, 3)).toBeNull();
+    expect(await repo.consumirUnaConsulta(usuarioId, "2999-01-12", 3)).toBe(1);
+  });
+
   it("Q5 — `contarNoLoSe` mueve SU columna y no toca `consultas`", async () => {
     const repo = new AsistenteUsoRepository(clienteA);
-    expect(await repo.consumirUnaConsulta(usuarioId, FECHA_NO_LO_SE)).toBe(1);
+    expect(await repo.consumirUnaConsulta(usuarioId, FECHA_NO_LO_SE, TOPE_HOLGADO)).toBe(1);
     await repo.contarNoLoSe(usuarioId, FECHA_NO_LO_SE);
     await repo.contarNoLoSe(usuarioId, FECHA_NO_LO_SE);
 

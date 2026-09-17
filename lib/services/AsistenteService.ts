@@ -65,9 +65,24 @@ export class AsistenteService implements IAsistenteService {
     // en voz alta y está escrito también en la migración: una consulta que el proveedor no llegue
     // a atender (caída, timeout, falta de credencial) TAMBIÉN gasta cupo. Con 30 al día eso es
     // ruido; que no sea una sorpresa es lo que importa.
+    //
+    // ⭑ R17 — **UN RECHAZO NO ES UNA CONSULTA.** El tope viaja al contador y el incremento sólo
+    // ocurre por debajo de él: quien ya está en el tope y sigue insistiendo NO suma nada. Antes
+    // sumaba, y como la columna `consultas` es la única telemetría que esta pieza deja (T27),
+    // medir el primer día real habría dado un número inflado por los reintentos — precisamente el
+    // número con el que se decide si Q2 deja de ser una pregunta.
+    //
+    // ⚠️ LA COMPARACIÓN SE QUEDA AQUÍ ADEMÁS DE EN EL `WHERE`, y no es duplicar por gusto: el SQL
+    // decide qué se ESCRIBE (y es el único sitio donde eso se puede decidir sin una carrera), y
+    // esta línea decide qué VE la persona. Con un contador que no respetara el tope —un doble, o
+    // una implementación futura— el rechazo sigue saliendo de aquí.
     const fecha = fechaCalendarioCR(this.ahora());
-    const consultasHoy = await this.deps.usoRepo.consumirUnaConsulta(actor.usuarioId, fecha);
-    if (consultasHoy > this.deps.maxConsultasDia) {
+    const consultasHoy = await this.deps.usoRepo.consumirUnaConsulta(
+      actor.usuarioId,
+      fecha,
+      this.deps.maxConsultasDia,
+    );
+    if (consultasHoy === null || consultasHoy > this.deps.maxConsultasDia) {
       return {
         status: "tope_alcanzado",
         mensaje: mensajeTopeAlcanzado(this.deps.maxConsultasDia),
@@ -81,8 +96,11 @@ export class AsistenteService implements IAsistenteService {
     const documentos = contextoPara(catalogo, actor.rol);
     const partida = documentoDePartida(catalogo, documentos, consulta.rutaActual);
 
+    // ⭑ R32 — EL ROL VA EN LAS INSTRUCCIONES, Y ES EL MISMO `actor.rol` QUE ACOTÓ LOS DOCUMENTOS.
+    // Una sola fuente para las dos cosas: no puede pasar que el contexto sea de un rol y el texto
+    // de sistema hable de otro.
     const respuesta = await this.deps.proveedor.responder({
-      instrucciones: instruccionesDelSistema(),
+      instrucciones: instruccionesDelSistema(actor.rol),
       documentos,
       mensajes: consulta.mensajes,
     });

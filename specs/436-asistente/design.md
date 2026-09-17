@@ -281,8 +281,15 @@ columna de texto libre.
 `AsistenteUsoRepository.consumirUnaConsulta(usuarioId, fecha, tope)`:
 
 - hace el `upsert` con incremento **y devuelve el valor resultante**;
-- si el resultante **supera** el tope, el servicio rechaza (R15) — y como el incremento ya ocurrió,
-  la consulta rechazada **no** llama al proveedor y **no** cuenta doble en el siguiente intento.
+- si el resultante **supera** el tope, el servicio rechaza (R15).
+
+> **Corregido tras la revisión (`m2`, 2026-09-17).** La primera implementación incrementaba SIEMPRE
+> y comparaba después: quien ya estaba en el tope y seguía insistiendo **también sumaba**, así que
+> `consultas` dejaba de medir «consultas atendidas» (R17) y pasaba a medir intentos — en el único
+> número que esta pieza deja para T27. Ahora el `tope` va dentro del `WHERE` del `ON CONFLICT DO
+> UPDATE`: por debajo del tope suma y devuelve el valor nuevo; en el tope **no escribe nada** y la
+> sentencia devuelve cero filas, que el repositorio traduce a `null`. Sigue siendo **una sola
+> sentencia**, que es lo que hace que comprobar y sumar no tengan una ventana en medio.
 
 **Orden deliberado: se cuenta ANTES de llamar al proveedor.** Al revés (llamar y luego contar) una
 ráfaga simultánea se cuela entera antes de que nadie haya contado nada, que es exactamente lo que un

@@ -124,6 +124,35 @@ describe("R7 — el rol sale de la SESIÓN", () => {
   });
 });
 
+describe("R32 — el modelo sabe CON QUIÉN habla, y lo dice la misma sesión que acotó los documentos", () => {
+  it("⭑⭑ el mismo cuerpo, dos sesiones: las instrucciones que se envían nombran a cada uno", async () => {
+    // ⚠️ POR QUÉ AQUÍ Y NO SÓLO EN `instrucciones.test.ts`. Ese archivo mide la FUNCIÓN; esto mide
+    // lo que de verdad sale hacia el proveedor, que es lo que el modelo lee. Con la función bien y
+    // el servicio llamándola sin rol —que es exactamente como estaba antes de la revisión— aquel
+    // archivo seguiría verde y éste no.
+    const { proveedor: deMensajero } = await llamar(MENSAJERO, CUERPO_VALIDO);
+    const { proveedor: deMaestro } = await llamar(MAESTRO, CUERPO_VALIDO);
+
+    expect(deMensajero.llamadas[0].instrucciones).toContain(
+      "Esta persona entra a Ordenex como Mensajero",
+    );
+    expect(deMaestro.llamadas[0].instrucciones).toContain(
+      "Esta persona entra a Ordenex como Maestro",
+    );
+    // Y ninguno lleva la frase del otro: lo único que cambia entre las dos llamadas es `getActor`.
+    expect(deMensajero.llamadas[0].instrucciones).not.toContain("como Maestro");
+    expect(deMaestro.llamadas[0].instrucciones).not.toContain("como Mensajero");
+  });
+
+  it("⭑ y un `rol` en el cuerpo no puede cambiarlo (es 422 antes de llegar a nadie)", async () => {
+    // La otra mitad de R7/R8 aplicada al rol que viaja en el texto: no hay forma de que el cliente
+    // le diga al modelo que es otra persona.
+    const { res, proveedor } = await llamar(MENSAJERO, { ...CUERPO_VALIDO, rol: "maestro" });
+    expect(res.status).toBe(422);
+    expect(proveedor.llamadas).toEqual([]);
+  });
+});
+
 describe("R8 — lo que mande el cliente sobre el rol o los documentos NO decide nada", () => {
   it("⭑⭑ un mensajero que manda `rol: \"maestro\"` y una lista de slugs recibe 422", async () => {
     const { res, proveedor } = await llamar(MENSAJERO, {

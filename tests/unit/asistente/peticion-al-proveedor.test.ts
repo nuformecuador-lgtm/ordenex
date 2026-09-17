@@ -45,7 +45,7 @@ function fetchEspia(capturas: Capturado[], sse = "data: {\"type\":\"message_stop
 }
 
 const consulta: ConsultaAsistente = {
-  instrucciones: instruccionesDelSistema(),
+  instrucciones: instruccionesDelSistema("mensajero"),
   documentos: [
     { slug: "mensajero/reparto", titulo: "Reparto", cuerpo: "Cómo se reparte." },
     { slug: "mensajero/recoleccion", titulo: "Recolección", cuerpo: "Cómo se recoge." },
@@ -115,7 +115,7 @@ describe("R6 — el `cache_control` marca el final del bloque de documentación"
 
     // El primer bloque son las instrucciones; los demás, un documento cada uno.
     expect(bloques).toHaveLength(1 + consulta.documentos.length);
-    expect(bloques[0].text).toBe(instruccionesDelSistema());
+    expect(bloques[0].text).toBe(instruccionesDelSistema("mensajero"));
     expect(bloques[0].cache_control).toBeUndefined();
 
     const ultimo = bloques[bloques.length - 1];

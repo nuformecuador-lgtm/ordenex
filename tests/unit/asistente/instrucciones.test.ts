@@ -17,7 +17,60 @@ import {
  * en verde. Es exactamente la familia del fallo mudo.
  */
 
-const texto = instruccionesDelSistema();
+const texto = instruccionesDelSistema("mensajero");
+
+describe("R32 — el modelo SABE con quién habla, y lo dice la sesión", () => {
+  /**
+   * ⚠️ QUÉ PASABA SIN ESTO, medido contra el proveedor de verdad: a un `maestro` —que recibe los 33
+   * documentos, de los cinco portales— el modelo le contestó «no tenés cómo asignar… desde tu
+   * cuenta de tienda». No tenía de dónde deducir el rol, así que lo adivinó, y lo adivinó con la
+   * misma seguridad con la que acierta. El documento era el correcto; la instrucción, falsa.
+   *
+   * Los literales van A MANO y no derivados de `ROL_LABELS`: comparar el texto contra la misma
+   * constante que lo genera es una aserción siempre verde (lección `m7` de la revisión).
+   */
+  it("⭑⭑ cada uno de los cinco roles se nombra a sí mismo, con su etiqueta", () => {
+    expect(instruccionesDelSistema("mensajero")).toContain(
+      "Esta persona entra a Ordenex como Mensajero",
+    );
+    expect(instruccionesDelSistema("maestro")).toContain(
+      "Esta persona entra a Ordenex como Maestro",
+    );
+    expect(instruccionesDelSistema("admin")).toContain(
+      "Esta persona entra a Ordenex como Administrador",
+    );
+    expect(instruccionesDelSistema("adminTienda")).toContain(
+      "Esta persona entra a Ordenex como Admin de tienda",
+    );
+    expect(instruccionesDelSistema("adminSatelite")).toContain(
+      "Esta persona entra a Ordenex como Admin satélite",
+    );
+  });
+
+  it("⭑ y no nombra a NINGÚN otro: al mensajero no se le habla de la oficina ni de la tienda", () => {
+    // El control que hace que el caso de arriba no sea vacuo: si la frase del rol desapareciera,
+    // los cinco `toContain` se caerían; si estuviera pero fuera siempre la misma, se caería éste.
+    const delMensajero = instruccionesDelSistema("mensajero");
+    expect(delMensajero).not.toContain("como Maestro");
+    expect(delMensajero).not.toContain("como Admin de tienda");
+    expect(delMensajero).toContain("reparte y recoge paquetes en la calle");
+
+    const delMaestro = instruccionesDelSistema("maestro");
+    expect(delMaestro).not.toContain("como Mensajero");
+    expect(delMaestro).toContain("trabaja en la oficina de Ordenex");
+  });
+
+  it("⭑ le prohíbe INVENTAR un límite de cuenta, que es el fallo que se midió", () => {
+    // «No tenés cómo asignar desde tu cuenta de tienda» dicho a un maestro no es un problema de
+    // contexto: es una limitación inventada. La instrucción la nombra por su forma exacta.
+    expect(texto).toContain("no lo puede hacer desde su cuenta");
+    expect(texto).toContain("a menos que lo diga la documentación");
+  });
+
+  it("y el rol NO se le pregunta a la persona: viene dicho", () => {
+    expect(texto).toContain("Eso lo dice su sesión, no ella");
+  });
+});
 
 describe("R5 — no inventar, y decir dónde mirar", () => {
   it("⭑ la orden de responder «No lo sé» está, con ese literal", () => {

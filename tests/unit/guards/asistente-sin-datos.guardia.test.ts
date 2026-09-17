@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { describe, it, expect } from "vitest";
 
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
+
 /**
  * ⭑ FICHA 436 · R3 — GUARDIA: EL ASISTENTE NO TIENE ACCESO A DATOS.
  *
@@ -114,18 +116,16 @@ const codigoDe = (archivo: string) => readFileSync(path.join(RAIZ, archivo), "ut
  * ⚠️ HACE FALTA, y lo descubrió esta misma guardia al nacer: el puerto EXPLICA en su cabecera que
  * «no hay `ejecutar()`» y que no lee `process.env`, así que una búsqueda sobre el texto crudo
  * encuentra justo las palabras que el archivo promete no usar y se pone roja por decir la verdad.
- * Se quitan los bloques de comentario y las líneas que empiezan por barra-barra o asterisco; NO se
- * toca nada dentro de una línea de código, así que una URL en una cadena sobrevive intacta.
+ *
+ * ⚠️ **ES EL QUITADOR COMPARTIDO DE LA 209, Y NO UNO PROPIO** (revisión de la ficha, `m6`). El que
+ * tenía aquí era el naíf de siempre —bloques primero, líneas después— y con él una barra-asterisco
+ * dentro de un comentario de LÍNEA abre un bloque y se traga el código de abajo. Es exactamente la
+ * mina que esta misma ficha plantó en su ruta. El compartido recorre el fuente sabiendo en qué
+ * contexto está, así que un `/*` dentro de un `//` o de una cadena no abre nada — y una URL en una
+ * cadena sobrevive intacta, que es lo que los casos de más abajo necesitan.
  */
 function sinComentarios(codigo: string): string {
-  return codigo
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split(/\r?\n/)
-    .filter((linea) => {
-      const t = linea.trim();
-      return !t.startsWith("//") && !t.startsWith("*");
-    })
-    .join("\n");
+  return quitarComentarios(codigo);
 }
 
 describe("436/R3 — el módulo del asistente no accede a datos", () => {
@@ -208,10 +208,27 @@ describe("436/D13 — el PUERTO es neutral, y por eso esto se puede probar sin c
 });
 
 describe("436 — el adaptador es el único que sabe que hay una red detrás", () => {
-  it("⭑ ningún archivo de `lib/asistente/**` menciona `fetch` ni una URL", () => {
-    // Si mañana alguien llama al proveedor desde un módulo puro, la pieza deja de ser verificable
-    // sin red — y un test podría salir a internet sin que nadie lo decidiera.
-    for (const archivo of listarTs("lib/asistente")) {
+  /**
+   * ⭑ EL BARRIDO ES DEL MÓDULO ENTERO, NO DE LOS CUATRO PUROS (revisión de la ficha, `m4`).
+   *
+   * Antes recorría sólo `lib/asistente/**` —los módulos puros, que por construcción no iban a
+   * tener red— y dejaba fuera justo los tres sitios donde una llamada sí cabe: el SERVICIO, el
+   * BORDE y la configuración. El adaptador se excluye porque es el único que DEBE tener la URL, y
+   * el caso de abajo mide lo suyo: que su `fetch` sea inyectable.
+   */
+  const SIN_RED = ARCHIVOS_DEL_MODULO.filter((a) => a !== "lib/clients/anthropic-asistente.ts");
+
+  it("CONTROL DE NO-VACUIDAD: el barrido cubre el servicio, el borde y los módulos puros", () => {
+    expect(SIN_RED).toContain("lib/services/AsistenteService.ts");
+    expect(SIN_RED).toContain(BORDE);
+    expect(SIN_RED).toContain("lib/asistente/citas.ts");
+    expect(SIN_RED).not.toContain("lib/clients/anthropic-asistente.ts");
+  });
+
+  it("⭑ ningún archivo del módulo (salvo el adaptador) menciona `fetch` ni una URL", () => {
+    // Si mañana alguien llama al proveedor desde el servicio o desde la ruta, la pieza deja de ser
+    // verificable sin red — y un test podría salir a internet sin que nadie lo decidiera.
+    for (const archivo of SIN_RED) {
       const codigo = sinComentarios(codigoDe(archivo));
       expect(codigo, archivo).not.toMatch(/\bfetch\s*\(/);
       expect(codigo, archivo).not.toMatch(/https?:\/\//);
@@ -222,5 +239,106 @@ describe("436 — el adaptador es el único que sabe que hay una red detrás", (
     const codigo = codigoDe("lib/clients/anthropic-asistente.ts");
     expect(codigo).toContain("fetchImpl");
     expect(codigo).toContain("opts.fetchImpl ?? fetch");
+  });
+});
+
+/**
+ * ⭑⭑ LA PUERTA QUE FALTABA: **ningún test puede invocar el borde del asistente sin un doble**
+ * (revisión de la ficha, `m4`).
+ *
+ * ⚠️ POR QUÉ NO BASTA CON LO DE ARRIBA, y está medido. `construirServicio()`
+ * (`app/api/asistente/route.ts`) construye el cliente REAL, sin `fetchImpl`, con la credencial que
+ * salga de `process.env` — y `tests/integration/db/_postgres-real.ts` llama a `process.loadEnvFile()`,
+ * así que en el worker de cualquier test que lo importe la clave real está cargada. Hoy no pasa
+ * porque los tres archivos que llaman al handler inyectan `service`, pero eso lo sostiene la
+ * disciplina: un `POST(req)` o un `handleAsistente(req)` sin `deps` saldría a internet, gastaría
+ * dinero y **ningún archivo se pondría rojo**.
+ */
+const DIR_TESTS = path.join(RAIZ, "tests");
+
+/** Los archivos de `tests/**` que importan el borde del asistente. */
+function testsQueLlamanAlBorde(): string[] {
+  const encontrados: string[] = [];
+  const recorrer = (dir: string) => {
+    for (const entrada of readdirSync(dir)) {
+      const completo = path.join(dir, entrada);
+      if (statSync(completo).isDirectory()) recorrer(completo);
+      // ⚠️ ESTE MISMO ARCHIVO SE EXCLUYE, y no es una excepción cómoda: la guardia lleva escrito el
+      // nombre del módulo que busca y los canarios de más abajo son llamadas SIN doble puestas a
+      // mano. Sin esto se denunciaría a sí misma por hacer su trabajo. No llama a nadie: sus
+      // «llamadas» son cadenas de texto.
+      else if (/\.tsx?$/.test(entrada) && completo !== __filename) {
+        const codigo = readFileSync(completo, "utf8");
+        if (codigo.includes("@/app/api/asistente/route")) {
+          encontrados.push(path.relative(RAIZ, completo).split(path.sep).join("/"));
+        }
+      }
+    }
+  };
+  recorrer(DIR_TESTS);
+  return encontrados;
+}
+
+/**
+ * ⭑ EL ANALIZADOR: las invocaciones del handler que NO llevan un doble.
+ *
+ * Se extrae el texto de la llamada con un recorrido de paréntesis equilibrados —un regex no puede
+ * con un objeto de dos niveles— y se exige que dentro aparezca `service:` o `fetchImpl:`. Se
+ * exporta para que el canario pueda darle código inventado.
+ */
+export function invocacionesSinDoble(codigo: string): string[] {
+  const ofensas: string[] = [];
+  for (const m of codigo.matchAll(/\b(handleAsistente|POST)\s*\(/g)) {
+    const abre = m.index! + m[0].length - 1;
+    let profundidad = 0;
+    let cierra = abre;
+    for (let i = abre; i < codigo.length; i += 1) {
+      if (codigo[i] === "(") profundidad += 1;
+      else if (codigo[i] === ")") {
+        profundidad -= 1;
+        if (profundidad === 0) {
+          cierra = i;
+          break;
+        }
+      }
+    }
+    const llamada = codigo.slice(m.index!, cierra + 1);
+    if (!/\bservice:|\bfetchImpl:/.test(llamada)) ofensas.push(llamada.split("\n")[0]);
+  }
+  return ofensas;
+}
+
+describe("436/D13 — ningún test invoca el borde del asistente sin doble (no se sale a internet)", () => {
+  it("CONTROL DE NO-VACUIDAD: se encuentran los archivos que llaman al borde", () => {
+    const archivos = testsQueLlamanAlBorde();
+    // DOS medidos el 2026-09-17 —los dos de integración—, y son los únicos que IMPORTAN el módulo:
+    // las tres guardias que nombran esa ruta la leen como texto, no la llaman. Si esto bajara a
+    // cero, el caso de abajo quedaría verde por vacío, que es justo lo que viene a cerrar.
+    expect(archivos.length).toBeGreaterThanOrEqual(2);
+    expect(archivos).toContain("tests/integration/asistente-route.test.ts");
+    expect(archivos).toContain("tests/integration/asistente-imagenes.test.ts");
+  });
+
+  it("⭑⭑ todas las invocaciones llevan `service:` (o `fetchImpl:`)", () => {
+    const ofensas = testsQueLlamanAlBorde().flatMap((archivo) =>
+      invocacionesSinDoble(readFileSync(path.join(RAIZ, archivo), "utf8")).map(
+        (linea) => `${archivo}: ${linea}`,
+      ),
+    );
+    expect(ofensas).toEqual([]);
+  });
+
+  it("⭑ CANARIO: una llamada sin doble se caza, y una con doble no", () => {
+    expect(invocacionesSinDoble(`await handleAsistente(peticion(cuerpo), { getActor });`)).toEqual([
+      "handleAsistente(peticion(cuerpo), { getActor })",
+    ]);
+    // El `POST` exportado NO acepta dependencias: llamarlo desde un test es salir a internet por
+    // definición, así que se caza siempre.
+    expect(invocacionesSinDoble(`const res = await POST(req);`)).toHaveLength(1);
+    expect(
+      invocacionesSinDoble(
+        `await handleAsistente(peticion(c), {\n  getActor: async () => A,\n  service: servicioReal(p),\n});`,
+      ),
+    ).toEqual([]);
   });
 });

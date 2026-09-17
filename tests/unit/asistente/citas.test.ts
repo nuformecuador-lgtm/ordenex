@@ -83,6 +83,47 @@ describe("R25 — sin señales no hay sección de fuentes", () => {
   });
 });
 
+describe("m1 — la cita se va CON SU HUECO: la puntuación queda como la escribiría una persona", () => {
+  /**
+   * ⚠️ LO QUE ESTO ARREGLA, y no es cosmético en una pieza que habla. Quitar sólo los caracteres
+   * del marcador dejaba dos formas rotas, las dos medidas sobre la salida real:
+   *
+   *     "…del lado de la oficina [[doc:x]]."   ->  "…del lado de la oficina ."
+   *     "Mirá [[doc:x]], y después confirmá."  ->  "Mirá , y después confirmá."
+   *
+   * La segunda es la peor: no es un espacio sobrante, es una frase que perdió su referente. Los dos
+   * casos que ya existían usaban la cita AL FINAL, que es la forma que ya funcionaba — por eso no
+   * lo cazaban. Y se lee en cada respuesta citada, que es casi todas.
+   */
+  it("⭑⭑ A MITAD DE FRASE: no queda un espacio delante de la coma", () => {
+    const respuesta = `Mirá ${cita("mensajero/reparto")}, y después confirmá.`;
+    expect(textoSinMarcadores(respuesta)).toBe("Mirá, y después confirmá.");
+  });
+
+  it("⭑ al final de la frase: no queda un espacio delante del punto", () => {
+    const respuesta = `Se cierra del lado de la oficina ${cita("mensajero/reparto")}.`;
+    expect(textoSinMarcadores(respuesta)).toBe("Se cierra del lado de la oficina.");
+  });
+
+  it("⭑ dos citas seguidas no dejan un boquete, y el signo de después tampoco se despega", () => {
+    const respuesta = `Lo tenés en ${cita("mensajero/reparto")} ${cita("mensajero/por-recoger")} ; y ya.`;
+    expect(textoSinMarcadores(respuesta)).toBe("Lo tenés en; y ya.");
+  });
+
+  it("⭑ pero SÍ queda un espacio cuando la frase sigue con una palabra", () => {
+    // El otro lado del mismo requisito: si el hueco se cerrara siempre, saldría «Miráy después».
+    const respuesta = `Mirá ${cita("mensajero/reparto")} y después confirmá.`;
+    expect(textoSinMarcadores(respuesta)).toBe("Mirá y después confirmá.");
+  });
+
+  it("no toca la sangría ni los saltos de línea (una lista sigue siendo una lista)", () => {
+    // Por eso la limpieza es de la COSTURA y no un «colapsar dobles espacios» global: el modelo
+    // escribe listas y bloques con sangría, y ahí los espacios son contenido.
+    const respuesta = `Pasos:\n  1. Abrí Reparto ${cita("mensajero/reparto")}\n  2. Tocá Cerrar.`;
+    expect(textoSinMarcadores(respuesta)).toBe("Pasos:\n  1. Abrí Reparto\n  2. Tocá Cerrar.");
+  });
+});
+
 describe("los marcadores no se le enseñan a nadie", () => {
   it("⭑ se quitan TODOS, también los descartados", () => {
     // Dejar visible un `[[doc:oficina/wallet-caja]]` que se descartó le estaría diciendo a un

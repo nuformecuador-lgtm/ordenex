@@ -75,21 +75,63 @@ export function citasDe(
 }
 
 /**
+ * Los signos que en español NO llevan espacio delante. Si una cita se quita y detrás viene uno de
+ * éstos, el hueco se cierra entero.
+ */
+const PUNTUACION_PEGADA = new Set([".", ",", ";", ":", "!", "?", ")", "]", "»", "…"]);
+
+/** El remate común: ningún espacio colgando al final de una línea ni del texto. */
+function rematar(texto: string): string {
+  return texto.replace(/[ \t]+\n/g, "\n").trimEnd();
+}
+
+/**
  * El texto sin los marcadores, que es lo que se le enseña a la persona.
  *
  * Los marcadores son un protocolo entre el modelo y nosotros, no prosa. Se quitan TODOS —también
  * los que no se pudieron validar—: dejar visible un `[[doc:oficina/wallet-caja]]` descartado le
  * estaría diciendo a un mensajero el nombre exacto del documento que no puede leer.
+ *
+ * ⚠️ **LA CITA SE VA CON SU HUECO** (revisión de la ficha, `m1`). Quitar sólo los caracteres del
+ * marcador deja la puntuación rota, y no de una forma sino de dos, medidas:
+ *
+ *     "…del lado de la oficina [[doc:x]]."   ->  "…del lado de la oficina ."
+ *     "Mirá [[doc:x]], y después confirmá."  ->  "Mirá , y después confirmá."
+ *
+ * La segunda es peor que un espacio sobrante: la frase pierde su referente y queda agramatical. Y
+ * se lee en CADA respuesta citada, que son casi todas. Por eso, en la costura de cada marcador se
+ * comen los espacios de sus dos lados y se devuelve UN espacio sólo si la frase sigue y lo que
+ * sigue no es un signo pegado.
+ *
+ * ⚠️ Se toca SÓLO la costura, y no el texto entero: un «colapsar dobles espacios» global se
+ * comería la sangría de una lista o de un bloque de código que el modelo haya escrito.
  */
 export function textoSinMarcadores(respuesta: string): string {
   let salida = "";
   let desde = 0;
   for (;;) {
     const abre = respuesta.indexOf(MARCADOR_CITA_ABRE, desde);
-    if (abre === -1) return (salida + respuesta.slice(desde)).replace(/[ \t]+\n/g, "\n").trimEnd();
+    if (abre === -1) return rematar(salida + respuesta.slice(desde));
     const cierra = respuesta.indexOf(MARCADOR_CITA_CIERRA, abre + MARCADOR_CITA_ABRE.length);
-    if (cierra === -1) return (salida + respuesta.slice(desde)).replace(/[ \t]+\n/g, "\n").trimEnd();
-    salida += respuesta.slice(desde, abre);
-    desde = cierra + MARCADOR_CITA_CIERRA.length;
+    if (cierra === -1) return rematar(salida + respuesta.slice(desde));
+
+    const izquierda = salida + respuesta.slice(desde, abre);
+    const sinCola = izquierda.replace(/[ \t]+$/, "");
+
+    const trasElCierre = cierra + MARCADOR_CITA_CIERRA.length;
+    let siguiente = trasElCierre;
+    while (respuesta[siguiente] === " " || respuesta[siguiente] === "\t") siguiente += 1;
+
+    const habiaHueco = sinCola.length < izquierda.length || siguiente > trasElCierre;
+    const loQueSigue = respuesta[siguiente];
+    const separa =
+      habiaHueco &&
+      sinCola !== "" &&
+      loQueSigue !== undefined &&
+      loQueSigue !== "\n" &&
+      !PUNTUACION_PEGADA.has(loQueSigue);
+
+    salida = separa ? `${sinCola} ` : sinCola;
+    desde = siguiente;
   }
 }

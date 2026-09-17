@@ -84,7 +84,30 @@ export const ASISTENTE_IMAGEN_MAX_BASE64 = Math.ceil(ASISTENTE_IMAGEN_MAX_BYTES 
  */
 export const ASISTENTE_IMAGENES_MAX_POR_MENSAJE = 1;
 
-/** Los formatos admitidos. LISTA BLANCA, nunca `image/*`: y `audio/*` no está ni puede estar (D12). */
+/**
+ * ⭑ **CUATRO IMÁGENES POR PETICIÓN**, contando el hilo entero (revisión de la ficha, `m3`).
+ *
+ * ⚠️ POR QUÉ NO BASTABA «una por mensaje». La conversación vive en el cliente (D10) y **viaja
+ * entera en cada pregunta**, imágenes incluidas: con 40 turnos admitidos, una imagen por mensaje
+ * son hasta 40 imágenes en UNA petición, y van en `messages`, fuera del prefijo cacheado, o sea
+ * que se pagan enteras cada vez. El tope diario cuenta preguntas; sin esto, **el coste de UNA
+ * pregunta no lo acotaba nada nuestro**: lo acotaba el límite de cuerpo de Vercel, que es
+ * plataforma y no código —y en local ni existe—.
+ *
+ * ⚠️ POR QUÉ CUATRO, y no un número redondo mayor. El panel comprime a 3 MB antes de enviar
+ * (`AsistentePanel.tsx`) y el cuerpo de un Route Handler en Vercel es ~4,5 MB: por encima de dos o
+ * tres capturas grandes la plataforma ya corta. Cuatro deja sitio de sobra para la conversación
+ * real —una duda de pantalla con sus capturas— y pone un techo de código donde sólo había uno de
+ * infraestructura. Quien necesite más, empieza una conversación nueva, y el rechazo se lo dice.
+ */
+export const ASISTENTE_IMAGENES_MAX_POR_PETICION = 4;
+
+/** Lo que ve quien manda más imágenes de las que caben. Dice el número y qué hacer, no «error». */
+export function mensajeDemasiadasImagenes(max: number): string {
+  return `Son demasiadas imágenes para una sola consulta (caben ${max}, contando las de toda la conversación). Empezá una conversación nueva y mandá sólo la captura que importa.`;
+}
+
+/** Los formatos admitidos. LISTA BLANCA, nunca un comodín: y el audio no está ni puede estar (D12). */
 export const ASISTENTE_IMAGEN_MEDIOS = ["image/png", "image/jpeg", "image/webp"] as const;
 
 /** Tope de turnos de la conversación que se aceptan en una petición. */

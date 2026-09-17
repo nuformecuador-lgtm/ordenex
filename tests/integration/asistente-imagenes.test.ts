@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
 
 import { handleAsistente } from "@/app/api/asistente/route";
+import { MSG } from "@/lib/errors";
 import { leerCatalogoAyuda } from "@/lib/ayuda/catalogo";
 import { AsistenteService } from "@/lib/services/AsistenteService";
 import { cuerpoDePeticion } from "@/lib/clients/anthropic-asistente";
 import {
   ASISTENTE_IMAGENES_MAX_POR_MENSAJE,
+  ASISTENTE_IMAGENES_MAX_POR_PETICION,
   ASISTENTE_IMAGEN_MAX_BASE64,
   ASISTENTE_IMAGEN_MAX_BYTES,
   ASISTENTE_IMAGEN_MEDIOS,
@@ -62,8 +64,10 @@ async function llamar(cuerpo: unknown, uso = usoQueCuenta()) {
       maxConsultasDia: 30,
     }),
   });
-  if (res.body) await res.text();
-  return { res, proveedor, uso };
+  // El cuerpo se consume SIEMPRE —un stream sin leer deja el generador a medias— y se devuelve,
+  // porque hay casos que miran lo que dice el rechazo y `res.json()` ya no se podría llamar.
+  const texto = res.body ? await res.text() : "";
+  return { res, proveedor, uso, texto };
 }
 
 /** Un PNG de un pixel, en base64. Pequeño de verdad: no hay que inventar bytes. */
@@ -180,6 +184,65 @@ describe("Q6 — una por mensaje, y hasta 5 MB", () => {
 
   it("un mensaje SIN imágenes sigue siendo válido (las imágenes son opcionales)", async () => {
     const { res } = await llamar({ mensajes: [{ autor: "usuario", texto: "¿cómo cierro?" }] });
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("m3 — el coste de UNA consulta también está acotado: las imágenes de toda la petición", () => {
+  /**
+   * ⚠️ EL AGUJERO QUE CIERRA, medido en la revisión de la ficha. «Una imagen por mensaje» no acota
+   * nada por sí solo: la conversación vive en el cliente (D10) y **viaja entera en cada pregunta**,
+   * así que con 40 mensajes admitidos cabían 40 imágenes en UNA petición. Van en `messages`, fuera
+   * del prefijo cacheado, o sea que se pagan enteras cada vez. El tope diario cuenta preguntas; lo
+   * único que acotaba el coste de una pregunta era el límite de cuerpo de Vercel — plataforma, no
+   * código, y en local ni existe.
+   */
+  const hilo = (cuantas: number) => ({
+    mensajes: Array.from({ length: cuantas }, (_, i) => ({
+      autor: "usuario",
+      texto: `pregunta ${i + 1}`,
+      imagenes: [{ medio: "image/png", datosBase64: PNG_1PX }],
+    })),
+  });
+
+  it("CONTROL: el número es el decidido, y es de PETICIÓN, no de mensaje", () => {
+    expect(ASISTENTE_IMAGENES_MAX_POR_PETICION).toBe(4);
+    expect(ASISTENTE_IMAGENES_MAX_POR_PETICION).toBeGreaterThan(ASISTENTE_IMAGENES_MAX_POR_MENSAJE);
+  });
+
+  it("⭑⭑ cinco mensajes con una imagen cada uno —cinco imágenes— se rechazan con 422", async () => {
+    const { res, proveedor } = await llamar(hilo(ASISTENTE_IMAGENES_MAX_POR_PETICION + 1));
+
+    expect(res.status).toBe(422);
+    // Y NO SE LLAMÓ AL PROVEEDOR: la propiedad que importa es que el gasto no ocurre, no el código.
+    expect(proveedor.llamadas).toEqual([]);
+  });
+
+  it("⭑ y el rechazo DICE QUÉ PASÓ: el número que cabe y qué hacer, no «datos inválidos»", async () => {
+    // Un 422 con el mensaje genérico dejaría a la persona sin saber qué quitar. El panel pinta
+    // este `message` tal cual (`AsistenteProvider`: los rechazos previos no se reescriben).
+    const { texto } = await llamar(hilo(ASISTENTE_IMAGENES_MAX_POR_PETICION + 1));
+    const cuerpo = JSON.parse(texto) as { code: string; message: string };
+
+    expect(cuerpo.code).toBe("VALIDATION_ERROR");
+    expect(cuerpo.message).toContain("demasiadas imágenes");
+    expect(cuerpo.message).toContain("caben 4");
+    expect(cuerpo.message).toContain("conversación nueva");
+    expect(cuerpo.message).not.toBe(MSG.VALIDATION_ERROR);
+  });
+
+  it("⭑ y JUSTO en el tope sí pasa (si no, el caso de arriba pasaría con cualquier número)", async () => {
+    const { res, proveedor } = await llamar(hilo(ASISTENTE_IMAGENES_MAX_POR_PETICION));
+    expect(res.status).toBe(200);
+    expect(proveedor.llamadas[0].mensajes).toHaveLength(ASISTENTE_IMAGENES_MAX_POR_PETICION);
+  });
+
+  it("una conversación larga SIN imágenes no se toca: lo que se cuenta son imágenes", async () => {
+    // El tope de turnos sigue siendo otro (40) y esto no lo estrecha: quien conversa mucho y no
+    // adjunta nada no se encuentra con ningún rechazo nuevo.
+    const { res } = await llamar({
+      mensajes: Array.from({ length: 20 }, (_, i) => ({ autor: "usuario", texto: `p${i}` })),
+    });
     expect(res.status).toBe(200);
   });
 });

@@ -1,3 +1,7 @@
+import type { RolValue } from "@prisma/client";
+
+import { ROL_LABELS } from "@/lib/auth/rol-label";
+
 /**
  * ⭑ FICHA 436 — EL TEXTO DE SISTEMA. Módulo PURO: sin `fs`, sin red, sin Prisma, sin `next/*`.
  *
@@ -41,14 +45,58 @@ export function pareceNoLoSe(respuesta: string): boolean {
 }
 
 /**
+ * ⭑ R32 — QUIÉN ES CADA ROL, en una frase y en el idioma de quien lee.
+ *
+ * ⚠️ NO ES TEXTO INVENTADO: sale de la tabla «Cómo está organizada» de `docs/ayuda/README.md`
+ * («`mensajero/` → los mensajeros», «`oficina/` → maestro y administradores», …), que es la misma
+ * fuente que agrupa el índice de la 433. Aquí está escrita a mano porque este módulo es PURO —no
+ * lee archivos— y porque un `Record` exhaustivo sobre `RolValue` obliga a decidir la frase el día
+ * que el esquema gane un rol, en vez de dejar al modelo sin saber con quién habla.
+ *
+ * `apiKey` está por exhaustividad del `Record` y NO llega nunca hasta aquí: el servicio lo rechaza
+ * antes de componer nada (R13), y ese rechazo tiene su propio test.
+ */
+export const QUIEN_PREGUNTA: Record<RolValue, string> = {
+  maestro: "trabaja en la oficina de Ordenex y ve el portal interno entero",
+  admin: "trabaja en la oficina de Ordenex",
+  mensajero: "reparte y recoge paquetes en la calle, con el teléfono en la mano",
+  adminTienda: "administra una tienda que le manda envíos a Ordenex",
+  adminSatelite: "administra una bodega satélite",
+  apiKey: "es una cuenta de máquina",
+};
+
+/**
  * ⭑ LAS INSTRUCCIONES. Función y no constante para que el formato de cita se derive de los
  * marcadores de arriba en vez de estar escrito dos veces (y desincronizarse una vez).
+ *
+ * ⭑⭑ R32 — **EL ROL VIAJA AQUÍ, Y SALE DE LA SESIÓN.** Hasta la revisión de la ficha, el modelo
+ * recibía los documentos correctos y **ninguna pista de con quién hablaba**: tenía que adivinar la
+ * persona a partir del contexto, y adivinaba con la misma seguridad con la que acierta. Medido: a
+ * un `maestro` —que recibe los 33 documentos, de los cinco portales— le contestó «no tenés cómo
+ * asignar… desde tu cuenta de tienda». El documento era el correcto; la instrucción, falsa. Es
+ * exactamente el modo de fallo que D4 y todo el acotamiento venían a evitar.
+ *
+ * ⚠️ **NO CUESTA UN PUNTO DE CACHÉ.** Las instrucciones son el PRIMER bloque del `system` y el
+ * `cache_control` va en el ÚLTIMO de documentación (`lib/clients/anthropic-asistente.ts`), así que
+ * el prefijo cacheable sigue siendo uno por rol —cinco, los que el diseño presupuestó— en vez de
+ * uno por conjunto de documentos. No hay compromiso que discutir.
+ *
+ * ⚠️ **Y NO VIAJA COMO CAMPO DEL PUERTO.** `ConsultaAsistente` sigue sin conocer `rol` a propósito
+ * (ver su cabecera): si el puerto lo llevara, alguien podría acabar decidiendo el acceso en el
+ * adaptador, que es el sitio donde nadie lo mira. El rol entra donde tiene efecto —el texto que el
+ * modelo lee— y el acotamiento sigue ocurriendo antes, en el servicio.
  */
-export function instruccionesDelSistema(): string {
+export function instruccionesDelSistema(rol: RolValue): string {
   return [
     "Sos el asistente de ayuda de Ordenex, una empresa de mensajería de Costa Rica.",
     "Respondés preguntas sobre CÓMO SE USA LA APLICACIÓN, y nada más.",
     "Hablás en español de Costa Rica, en segunda persona («tenés», «podés»), claro y corto.",
+    "",
+    `QUIÉN TE PREGUNTA. Esta persona entra a Ordenex como ${ROL_LABELS[rol]}: ${QUIEN_PREGUNTA[rol]}.`,
+    "Eso lo dice su sesión, no ella: no se lo preguntes y no lo deduzcas de lo que te cuente.",
+    "Explicale los pasos TAL Y COMO LOS VE ELLA, con las pantallas que tiene. Y NO le digas que",
+    "algo «no lo puede hacer desde su cuenta» a menos que lo diga la documentación de abajo: si no",
+    `lo sabés, decís «${ARRANQUE_NO_LO_SE}».`,
     "",
     "LÍMITES. Son cuatro y no tienen excepción:",
     "",

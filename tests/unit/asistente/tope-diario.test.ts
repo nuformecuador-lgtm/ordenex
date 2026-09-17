@@ -14,11 +14,21 @@ import { DobleProveedor } from "./_doble-proveedor";
  * no. Un tope que se comprueba después de gastar no es un tope; es una factura con disculpa.
  */
 
-/** Un contador de mentira que devuelve el número que el caso quiera. */
-function usoQueDevuelve(consultas: number): IAsistenteUsoRepository & { noLoSe: number } {
+/**
+ * Un contador de mentira que devuelve el número que el caso quiera —o `null`, que es como el
+ * contador de verdad dice «ya estaba en el tope y no he escrito nada»— y que APUNTA CON QUÉ
+ * ARGUMENTOS lo llamaron.
+ */
+function usoQueDevuelve(
+  consultas: number | null,
+): IAsistenteUsoRepository & { noLoSe: number; argumentos: unknown[][] } {
   return {
     noLoSe: 0,
-    consumirUnaConsulta: async () => consultas,
+    argumentos: [] as unknown[][],
+    async consumirUnaConsulta(usuarioId: string, fecha: string, tope: number) {
+      this.argumentos.push([usuarioId, fecha, tope]);
+      return consultas;
+    },
     async contarNoLoSe() {
       this.noLoSe += 1;
     },
@@ -91,6 +101,36 @@ describe("R15 — en el tope se rechaza ANTES de llamar al proveedor", () => {
     expect(resultado.status === "tope_alcanzado" && resultado.mensaje).toBe(
       "Llegaste a las 30 preguntas de hoy. Mañana volvés a tener.",
     );
+  });
+
+  it("⭑⭑ R17 — EL TOPE VIAJA AL CONTADOR: sin eso, un rechazo se escribiría igual", async () => {
+    // ⚠️ POR QUÉ ESTE CASO, y no sólo el de la base (revisión de la ficha, `m2`). Quien decide que
+    // un rechazo NO cuente es el `WHERE` del `ON CONFLICT`, y ese `WHERE` sólo puede comparar con
+    // un tope si alguien se lo pasa. Si el servicio dejara de pasarlo, la corrida de la base lo
+    // vería... **sólo si hay `.env`**; sin él, `tests/integration/db/**` se SALTA y la suite
+    // termina verde. Este caso no depende de la base y muere igual.
+    const uso = usoQueDevuelve(1);
+    await servicioCon(new DobleProveedor(), uso, 30).responder(consultaDe("mensajero"));
+
+    expect(uso.argumentos).toHaveLength(1);
+    expect(uso.argumentos[0][0]).toBe("u-1");
+    expect(uso.argumentos[0][2], "el servicio no le pasó el tope al contador").toBe(30);
+    // Y la fecha es la del día calendario de Costa Rica, no un `Date`.
+    expect(uso.argumentos[0][1]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("⭑⭑ R15/R17 — si el contador dice `null` (ya estaba en el tope), se rechaza sin llamar a nadie", async () => {
+    // `null` es el desenlace nuevo del contador: «no he escrito nada porque ya estaba en el tope».
+    // El servicio tiene que tratarlo como rechazo, no como «no sé cuántas lleva» — y desde luego
+    // no seguir adelante.
+    const proveedor = new DobleProveedor();
+    const resultado = await servicioCon(proveedor, usoQueDevuelve(null)).responder(
+      consultaDe("mensajero"),
+    );
+
+    expect(resultado.status).toBe("tope_alcanzado");
+    expect(resultado.status === "tope_alcanzado" && resultado.mensaje).toContain("30 preguntas");
+    expect(proveedor.llamadas).toEqual([]);
   });
 
   it("el tope es configurable: con 5, la sexta ya no pasa", async () => {

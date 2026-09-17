@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { describe, it, expect } from "vitest";
 
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
+
 /**
  * ⭑ FICHA 436 · R30 — GUARDIA: LA CONVERSACIÓN NO SE GUARDA.
  *
@@ -50,16 +52,14 @@ function listarTs(relativo: string): string[] {
  * NO usa la API de modelo de Prisma para esta tabla, y el analizador leía esa frase —que está en un
  * comentario— como si fuera una escritura. Una guardia que se pone roja por lo que un comentario
  * CUENTA mide el texto, no el código.
+ *
+ * ⚠️ **EL QUITADOR ES EL COMPARTIDO DE LA 209** (revisión de la ficha, `m6`): el propio que tenía
+ * aquí era el naíf —bloques antes que líneas—, con el que una barra-asterisco dentro de un
+ * comentario de línea abre un bloque y se lleva por delante el código de debajo. En una guardia de
+ * persistencia eso es un falso VERDE: el `INSERT` que buscaba podría estar en las líneas tragadas.
  */
 const codigoDe = (archivo: string) =>
-  readFileSync(path.join(RAIZ, archivo), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split(/\r?\n/)
-    .filter((linea) => {
-      const t = linea.trim();
-      return !t.startsWith("//") && !t.startsWith("*");
-    })
-    .join("\n");
+  quitarComentarios(readFileSync(path.join(RAIZ, archivo), "utf8"));
 
 /**
  * ⭑ EL ANALIZADOR: las TABLAS sobre las que un archivo escribe.

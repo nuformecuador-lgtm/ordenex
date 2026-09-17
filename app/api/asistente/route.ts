@@ -18,7 +18,9 @@ import { AsistenteService } from "@/lib/services/AsistenteService";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import {
   loadAsistenteConfig,
+  mensajeDemasiadasImagenes,
   ASISTENTE_IMAGENES_MAX_POR_MENSAJE,
+  ASISTENTE_IMAGENES_MAX_POR_PETICION,
   ASISTENTE_IMAGEN_MAX_BASE64,
   ASISTENTE_IMAGEN_MEDIOS,
   ASISTENTE_MENSAJES_MAX,
@@ -54,8 +56,17 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 export const runtime = "nodejs";
 
 const imagenSchema = z.object({
-  // LISTA BLANCA de formatos, nunca `image/*`. Y `audio/*` no está ni puede estar: el modelo que
-  // responde no transcribe voz, así que un audio aceptado aquí sería una promesa falsa (D12/R29).
+  // LISTA BLANCA de formatos, nunca un comodín de tipo de medio. Y el audio no está ni puede
+  // estar: el modelo que responde no transcribe voz, así que un audio aceptado aquí sería una
+  // promesa falsa (D12/R29).
+  //
+  // ⚠️ Y POR ESO ESTE COMENTARIO NO ESCRIBE `image` NI `audio` CON SU COMODÍN DETRÁS. Esa
+  // secuencia —barra y asterisco— dentro de un comentario de línea abre un comentario de BLOQUE
+  // para el quitador naíf de `tests/unit/guards/superficie-de-uso.guardia.test.ts`, que se tragaba
+  // los dos esquemas zod de aquí abajo (once líneas) y los dejaba fuera del grafo de esa guardia.
+  // Es la misma mina que la pasada de pantalla quitó del panel; arreglar la guardia ajena es otra
+  // ficha, no cebar la trampa cuesta nada. La lista de verdad es `ASISTENTE_IMAGEN_MEDIOS`, y
+  // `tests/integration/asistente-imagenes.test.ts` comprueba que el comodín se rechaza con 422.
   medio: z.enum(ASISTENTE_IMAGEN_MEDIOS),
   // Se mide la CADENA base64 y no los bytes: medir bytes exigiría decodificar primero, es decir,
   // aceptar antes de comprobar.
@@ -87,6 +98,21 @@ const cuerpoSchema = z
     rutaActual: z.string().startsWith("/").max(200).optional(),
   })
   .strict();
+
+/**
+ * ⭑ EL TOPE DE IMÁGENES **DE TODA LA PETICIÓN** (revisión de la ficha, `m3`).
+ *
+ * El schema admite una imagen por mensaje y hasta 40 mensajes, y la conversación entera viaja en
+ * cada pregunta (D10): sin esto, una sola consulta podía llevar 40 imágenes y su coste no lo
+ * acotaba ningún código nuestro.
+ *
+ * ⚠️ VA FUERA DEL SCHEMA, Y ES A PROPÓSITO. Un `superRefine` lo rechazaría igual, pero su mensaje
+ * muere en `fieldErrors` y la persona vería el «datos inválidos» genérico. Aquí el rechazo dice
+ * cuántas caben y qué hacer, que es lo que el panel pinta tal cual.
+ */
+function imagenesDeLaPeticion(mensajes: readonly { imagenes?: readonly unknown[] }[]): number {
+  return mensajes.reduce((total, mensaje) => total + (mensaje.imagenes?.length ?? 0), 0);
+}
 
 export interface AsistenteRouteDeps {
   getActor?: () => Promise<Actor | null>;
@@ -141,6 +167,13 @@ export async function handleAsistente(
     if (!leido.success) {
       const fieldErrors = z.flattenError(leido.error).fieldErrors as Record<string, string[]>;
       throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors });
+    }
+
+    const imagenes = imagenesDeLaPeticion(leido.data.mensajes);
+    if (imagenes > ASISTENTE_IMAGENES_MAX_POR_PETICION) {
+      throw new ValidationError(mensajeDemasiadasImagenes(ASISTENTE_IMAGENES_MAX_POR_PETICION), {
+        fieldErrors: { mensajes: [`${imagenes} imágenes en una petición`] },
+      });
     }
 
     // ⭑ R7 — EL ROL SALE DE LA SESIÓN. `actor.rol` viene de `resolveActorFromSession`, que lee la

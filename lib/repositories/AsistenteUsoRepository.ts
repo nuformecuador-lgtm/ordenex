@@ -4,7 +4,10 @@ import type { IAsistenteUsoRepository } from "@/lib/interfaces/repositories/IAsi
 
 /**
  * ⭑ FICHA 436 (design §4.2, T9) — el CONTADOR del tope. SOLO queries (`docs/architecture.md`):
- * ni una regla de negocio, ni un reloj, ni una comparación con el tope.
+ * ni una regla de negocio, ni un reloj, ni un mensaje para nadie.
+ *
+ * ⚠️ El tope entra como PARÁMETRO y sólo para meterlo en el `WHERE` (ver abajo): quién lo decide y
+ * qué se le cuenta a la persona sigue siendo del servicio. Aquí no se lee ninguna configuración.
  */
 
 /** Lo mínimo del cliente Prisma que este repositorio consume. Es también la costura de los tests. */
@@ -14,7 +17,7 @@ export class AsistenteUsoRepository implements IAsistenteUsoRepository {
   constructor(private readonly prisma: AsistenteUsoPrismaClient) {}
 
   /**
-   * ⭑ R17 — EL INCREMENTO ATÓMICO, EN UNA SOLA SENTENCIA.
+   * ⭑ R17 — EL INCREMENTO ATÓMICO **Y CONDICIONADO AL TOPE**, EN UNA SOLA SENTENCIA.
    *
    * ⚠️ SQL CRUDO Y NO `prisma.asistenteUsoDiario.upsert(...)`, a propósito. El `upsert` de Prisma
    * sólo se traduce a un `INSERT … ON CONFLICT` nativo si se cumplen varias condiciones que no
@@ -29,10 +32,26 @@ export class AsistenteUsoRepository implements IAsistenteUsoRepository {
    * reiniciaría seis horas antes de tiempo, todos los días, para todo el mundo. Con el `::date`
    * explícito sobre el texto no hay ninguna conversión de huso en el camino.
    *
+   * ⭑⭑ EL `WHERE` DEL `DO UPDATE` ES EL TOPE, y por eso está aquí y no en un `if` (revisión de la
+   * ficha, `m2`). Sumar siempre y comparar después hacía que un rechazo TAMBIÉN incrementara: la
+   * columna dejaba de medir «consultas atendidas» (R17) y pasaba a medir intentos, justo en el
+   * único número que esta pieza deja para T27. Comprobar y sumar en la MISMA sentencia es lo único
+   * que no abre una ventana entre las dos cosas.
+   *
+   * Qué devuelve Postgres en cada caso, que es de donde sale el `null`:
+   *  - no había fila               -> el `INSERT` entra con `consultas = 1` y devuelve 1;
+   *  - había fila y cabe una más   -> el `DO UPDATE` suma y devuelve el valor nuevo;
+   *  - había fila y está en el tope -> el `WHERE` no casa, **no se escribe nada** y la sentencia
+   *    devuelve CERO FILAS. Eso es el `null`.
+   *
    * El `WHERE` está en el `ON CONFLICT`, así que se prueba donde vive: en la base, no contra un
-   * doble que no tiene índice.
+   * doble que no tiene índice (`tests/integration/db/asistente-uso-diario.int.test.ts`).
    */
-  async consumirUnaConsulta(usuarioId: string, fecha: string): Promise<number> {
+  async consumirUnaConsulta(
+    usuarioId: string,
+    fecha: string,
+    tope: number,
+  ): Promise<number | null> {
     const filas = await this.prisma.$queryRaw<{ consultas: number }[]>`
       INSERT INTO "asistente_uso_diario"
         ("id", "usuario_id", "fecha", "consultas", "no_lo_se", "created_at", "updated_at")
@@ -41,16 +60,13 @@ export class AsistenteUsoRepository implements IAsistenteUsoRepository {
       ON CONFLICT ("usuario_id", "fecha") DO UPDATE
         SET "consultas" = "asistente_uso_diario"."consultas" + 1,
             "updated_at" = CURRENT_TIMESTAMP
+        WHERE "asistente_uso_diario"."consultas" < ${tope}
       RETURNING "consultas"
     `;
-    // Un `INSERT … ON CONFLICT DO UPDATE … RETURNING` devuelve SIEMPRE una fila: o la que insertó
-    // o la que actualizó. Si no la devolviera, callar y responder 0 dejaría el tope desactivado
-    // sin que nadie se enterara, así que se rompe ruidosamente.
+    // Cero filas NO es un fallo: es «esta persona ya está en el tope» (ver arriba). Se devuelve
+    // `null` y quien llama rechaza — el fallo seguro es no atender, nunca atender de más.
     const consultas = filas[0]?.consultas;
-    if (consultas === undefined) {
-      throw new Error("asistente_uso_diario: el upsert no devolvio ninguna fila");
-    }
-    return Number(consultas);
+    return consultas === undefined ? null : Number(consultas);
   }
 
   /**

@@ -87,7 +87,13 @@ tres agujeros de acceso que ya no existen.
 
 ---
 
-## Requisitos (EARS) — 31
+## Requisitos (EARS) — 33
+
+> **R32 y R33 nacen de la revisión** (`progress/review_436.md`, 2026-09-17) y no del diseño. Se
+> escriben aquí, y no en una ficha aparte, porque los dos son huecos **de este spec**: R32 acotó los
+> *documentos* (R9-R11) y se olvidó de la *persona*, y R33 puso tope al número de preguntas sin que
+> nada acotara el coste de UNA. Un hueco de requisito no lo caza la trazabilidad: por eso hace falta
+> escribirlo, no sólo arreglarlo.
 
 ### A — La fuente, y sólo la fuente
 
@@ -149,6 +155,12 @@ ese conteo DEBE vivir en el servidor.
 **R17** — El sistema DEBE incrementar el contador **una vez por consulta atendida**, y dos consultas
 simultáneas del mismo usuario NO DEBEN producir un solo incremento.
 
+> **Precisión de la revisión (`m2`), no requisito nuevo:** «atendida» se lee al pie de la letra. Una
+> consulta rechazada **por el tope** no incrementa nada —quien ya lo alcanzó e insiste no mueve la
+> columna—, porque `consultas` es el número que T27 va a leer. Sigue en pie el coste declarado en
+> §4.2 del diseño: una consulta que el proveedor no llegue a atender (caída, timeout, falta de
+> credencial) **sí** gasta cupo, porque se cuenta antes de llamarlo.
+
 **R18** — SI el cliente envía cualquier valor relacionado con el conteo o el tope, ENTONCES el
 servidor DEBE ignorarlo.
 
@@ -199,6 +211,29 @@ respuestas, ni las imágenes.
 **R31** — Los documentos DEBEN estar disponibles para la ruta del asistente **en el servidor de
 producción**, y el sistema DEBE tener una comprobación que se ponga roja si dejan de estarlo.
 
+### H — Lo que la revisión añadió
+
+**R32** — CUANDO el sistema componga la petición al proveedor, las instrucciones del sistema DEBEN
+decir **con qué rol entra quien pregunta**, y ese rol DEBE ser el de la **sesión** —el mismo que
+acota los documentos (R7/R9)— y ninguno que venga del cliente.
+
+*Por qué, medido:* sin esto el modelo recibía los documentos correctos y **ninguna pista de con
+quién hablaba**; a un `maestro` le contestó «no tenés cómo asignar… desde tu cuenta de tienda». Un
+asistente que se equivoca de persona da consejo erróneo con total seguridad, que es el modo de fallo
+que D4 y todo el acotamiento venían a evitar. **No cuesta caché**: las instrucciones son el primer
+bloque del `system` y el `cache_control` va en el último de documentación, así que el prefijo
+cacheable sigue siendo uno por rol —los cinco que el diseño presupuestó—.
+
+**R33** — El sistema DEBE acotar **cuántas imágenes admite una sola petición**, contando las de toda
+la conversación, y SI se pasan ENTONCES DEBE rechazarla con un mensaje que diga **qué pasó y cuántas
+caben**.
+
+*Por qué:* «una imagen por mensaje» (Q6) no acota el coste de una consulta. La conversación vive en
+el cliente (D10) y viaja entera en cada pregunta, así que con 40 mensajes admitidos cabían **40
+imágenes en una sola petición**, y van en `messages`, fuera del prefijo cacheado: se pagan enteras
+cada vez. Lo único que lo frenaba era el límite de cuerpo de Vercel — plataforma, no código, y en
+local ni existe.
+
 ---
 
 ## Mapa `R<n>` → test
@@ -238,6 +273,8 @@ Los archivos marcados **(nuevo)** los crea esta ficha. Los demás existen y se a
 | R29 | `tests/components/AsistentePanel.test.tsx` **(nuevo)** | hay un control de imagen; `accept` no admite `audio/*` y no existe control de grabación |
 | R30 | `tests/unit/guards/asistente-sin-persistencia.guardia.test.ts` **(nuevo)** | recorre el módulo y falla si aparece una escritura a cualquier tabla que no sea la del contador |
 | R31 | `tests/unit/guards/ayuda-md-viajan-a-produccion.guardia.test.ts` (existente, ampliado) | se añade el caso que exige que **la ruta del asistente** esté cubierta por la clave `/**` y que el catálogo sea su única vía de lectura |
+| R32 | `tests/unit/asistente/instrucciones.test.ts` y `tests/integration/asistente-route.test.ts` | los cinco roles se nombran con su etiqueta, **por literal a mano**; y el mismo cuerpo con dos sesiones produce dos textos de sistema distintos, medido sobre lo que llega al proveedor |
+| R33 | `tests/integration/asistente-imagenes.test.ts` | cinco imágenes repartidas en cinco mensajes → 422, proveedor **sin llamar**, y el mensaje dice cuántas caben; con cuatro, 200 |
 
 **Sin `R` propio, porque vigilan la forma y no una promesa concreta:**
 
