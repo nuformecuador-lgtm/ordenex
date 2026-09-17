@@ -5345,12 +5345,12 @@
       "title": "en desarrollo /analitica tira 500 por useToast y no es un fallo real",
       "description": "Ruido de Turbopack que ya costo tiempo a dos agentes.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": null,
       "depends_on": null,
-      "status_note": "NO ES UN FALLO DE PRODUCCION, y esto es lo importante de la ficha: medido con get_runtime_errors sobre /analitica en produccion, ventana de 7 dias -> CERO errores. || En DESARROLLO si aparece: «Error: useToast debe usarse dentro de un ToastProvider» en app/_components/LogoutButton.tsx:43, montado por PageHeader.tsx:141, durante el render de servidor. La pagina se recupera al hidratar, asi que no se ve rota. Un agente lo midio 7 veces en ~15 cargas con su propio dev server; otro concluyo que era cache de Turbopack corrompida por dos dev servers compartiendo .next y midio 3 vueltas sin y 3 con sus cambios, 0 errores. || YA LE COSTO TIEMPO A DOS AGENTES perseguirlo. El valor de arreglarlo no es el usuario final —no lo ve— sino que deja de contaminar toda verificacion local de esa pantalla."
+      "status_note": "CERRADA SIN TOCAR CODIGO DE PRODUCCION: no hay defecto que arreglar. Medido el 2026-09-17 con dev server LIMPIO (`rm -rf .next`, uno solo, sesion de admin): 24 cargas de /analitica -> 24 respuestas 200, CERO errores de consola y CERO apariciones de «useToast» en el log del servidor. || Contra la tasa previa de ~7 de cada 15 (~47 %), sacar 0 de 24 por azar es 1 entre 4 millones: el fantasma era la cache de Turbopack corrompida por DOS dev servers compartiendo `.next`, tal como concluyo el segundo agente. En produccion siempre fue 0 (get_runtime_errors, 7 dias). || EL ARREGLO REAL ES DOCUMENTAL, porque el coste fue el tiempo de dos agentes: entra una seccion en docs/verification.md —«El dev server: uno solo, y con su `.next` limpio»— con la tabla de las tres mediciones y la regla de no levantar un segundo dev server. || Lo que NO se hizo: buscarle un montaje culpable a LogoutButton. El ToastProvider SI es ancestro en `app/(app)/layout.tsx:107`; no habia nada roto."
     },
     {
       "id": 448,

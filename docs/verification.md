@@ -242,6 +242,32 @@ en un worktree y en CI —y si algún día intentara conectarse de verdad, se po
 pasar—. **No se saltó ni se metió en el baseline**: un guardia que se abstiene queda verde por
 vacío, que es justo el modo de fallo que existe para cerrar.
 
+### ⚠️ El dev server: uno solo, y con su `.next` limpio (ficha 447, 2026-09-17)
+
+**Dos dev servers comparten `.next` aunque escuches en puertos distintos.** El segundo corrompe la
+caché de Turbopack del primero, y lo que sale de ahí no son fallos: son **fantasmas que parecen
+fallos**, con traza, archivo y número de línea.
+
+El caso que abrió esto: `Error: useToast debe usarse dentro de un ToastProvider` en
+`app/_components/LogoutButton.tsx:43`, durante el render de servidor de `/analitica`. **Dos agentes
+lo persiguieron** creyendo que era un defecto de montaje. No lo era.
+
+Lo medido, y por eso la ficha se cierra sin tocar una línea de producción:
+
+| dónde | vueltas a `/analitica` | veces que apareció |
+| --- | --- | --- |
+| producción, ventana de 7 días (`get_runtime_errors`) | — | **0** |
+| dev server limpio, uno solo, `.next` borrado antes | **24** | **0** |
+| dev server con `.next` compartido con otro | ~15 | 7 |
+
+Las 24 vueltas dieron 200 las 24 veces, cero errores de consola y cero `useToast` en el log del
+servidor. Con una tasa previa de ~47 %, sacar 0 de 24 por azar es 1 entre 4 millones.
+
+**La regla, entonces:** antes de medir cualquier cosa en el navegador, `rm -rf .next` y **comprobar
+que no hay otro dev server vivo** (`Get-Process node`). Si un agente ya tiene el suyo, **no levantes
+otro**: pídele el puerto. Y un error que sólo aparece en desarrollo, nunca en producción y nunca dos
+veces igual, se mide antes de investigarse.
+
 ## Qué cuenta como evidencia
 - Salida real de los tests pasando, pegada en `progress/impl_<feature>.md`.
 - El mapa `R<n> → test`: para cada requisito, el test que lo cubre.
