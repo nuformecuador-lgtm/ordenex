@@ -38,6 +38,28 @@ const nextConfig: NextConfig = {
   // Quita el header `X-Powered-By: Next.js` (fingerprinting gratis para nadie).
   poweredByHeader: false,
 
+  // ⭑ FICHA 433 — LOS 31 `.md` DE LA AYUDA TIENEN QUE VIAJAR AL SERVIDOR DE PRODUCCION.
+  //
+  // El modulo de ayuda lee `docs/ayuda/**` con `fs` (ver el porque en `lib/ayuda/catalogo.ts`:
+  // los `.md` son la unica fuente y no se copian a ningun sitio). En Vercel el sistema de
+  // archivos en runtime NO es el del repositorio: solo se sube lo que el trazado de
+  // dependencias de `next build` detecta siguiendo los `import`. Y aqui no hay ningun `import`
+  // que seguir — la ruta se arma con `path.join(process.cwd(), "docs", "ayuda")` en tiempo de
+  // ejecucion, asi que el trazado no ve nada y los archivos se quedan fuera del bundle.
+  //
+  // Sin estas lineas el modulo funciona perfectamente en local y devuelve 404 en produccion,
+  // que es el fallo mudo clasico de leer archivos en serverless: el build pasa en verde, el
+  // typecheck pasa en verde y el rojo solo aparece cuando un usuario abre la ayuda.
+  //
+  // EL PATRON ES `/**` —TODAS las paginas— y no solo `/ayuda`, a proposito: el trazado es POR
+  // PAGINA y un layout NO hereda el de sus hijos, asi que declarar solo las dos rutas del
+  // modulo dejaria sin archivos al layout del portal, que es quien calcula el mapa del boton
+  // «?» en las 29 pantallas. El coste es ~90 KB de texto replicados por funcion; el de
+  // equivocarse es que el «?» desaparezca en produccion y en ningun otro sitio.
+  outputFileTracingIncludes: {
+    "/**": ["./docs/ayuda/**/*.md"],
+  },
+
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -399,6 +399,8 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     "history",
     // Ficha 429 (T23): «Mi bodega», la pantalla del SINPE del adminSatelite.
     "warehouse",
+    // Ficha 433: «Ayuda», el índice del módulo de documentación.
+    "circleHelp",
   ] as const satisfies readonly IconKey[];
   // Comprobación de exhaustividad tipada: si `IconKey` gana una clave que no está en
   // el array de arriba, `Exclude<IconKey, (typeof TODAS_LAS_CLAVES)[number]>` deja de

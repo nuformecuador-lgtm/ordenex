@@ -162,11 +162,19 @@ describe("R20 — el aterrizaje post-login no cambia para NADIE", () => {
     });
   }
 
-  it("el apartado «Histórico» sigue siendo el ÚLTIMO de quien lo ve", () => {
+  it("el apartado «Histórico» sigue yendo AL FINAL de la barra de quien lo ve", () => {
     // La posición es lo que hace que añadir un subítem no mueva el aterrizaje de nadie.
+    //
+    // 2026-09-16 · ficha 433: cambiado a mano. «Ayuda» la ven los CINCO roles y va la última de
+    // `SIDEBAR_ITEMS`, así que «Histórico» pasa a ser el penúltimo de `maestro` y `admin`. Lo
+    // que este caso protege —que «Histórico» esté al final y no arriba, donde un subítem nuevo
+    // sí movería el aterrizaje— no cambia: los dos siguen sin ser el primero de su barra, y los
+    // cinco aterrizajes de este mismo `describe` siguen en su valor.
     for (const rol of ROLES_HISTORICO_CONVERSACIONES) {
       const visibles = itemsVisibles(SIDEBAR_ITEMS, actor(rol));
-      expect(visibles.at(-1)?.label).toBe(LABEL_PADRE);
+      expect(visibles.at(-1)?.label).toBe("Ayuda");
+      expect(visibles.at(-2)?.label).toBe(LABEL_PADRE);
+      expect(visibles[0]?.label).not.toBe(LABEL_PADRE);
     }
   });
 });

@@ -153,6 +153,12 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       // ningún rol y por eso el ítem no necesita `destinoInicial: false`. La lista se
       // sigue comparando por IGUALDAD: un ítem nuevo no declarado aquí pone el caso rojo.
       "Histórico",
+      // ⭑ Ficha 433: «Ayuda» entra LA ÚLTIMA, detrás de «Histórico». Es el ÚNICO ítem visible
+      // para los cinco roles, así que es también el único capaz de mover el aterrizaje de
+      // TODOS a la vez: arriba, `primerDestino` habría mandado a los cinco a `/ayuda`. La
+      // lista se sigue comparando por IGUALDAD: un ítem nuevo no declarado aquí pone el caso
+      // rojo.
+      "Ayuda",
     ]);
   });
 
@@ -171,7 +177,8 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Wallet",
       "Cierres del día",
       "Incidentes", // feature 158 (Q-I)
-      "Histórico", // feature 321 (R2/R9): el ÚLTIMO, para no mover el aterrizaje de nadie
+      "Histórico", // feature 321 (R2/R9): para no mover el aterrizaje de nadie
+      "Ayuda", // ⭑ ficha 433: LA ÚLTIMA, y por el mismo motivo — la ven los cinco roles
     ]);
     expect(visibles).not.toContain("Configuración");
   });
@@ -192,7 +199,9 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // marcado `destinoInicial: false`, así que el aterrizaje post-login del rol sigue siendo
     // «Órdenes» (R35). Si algún día este literal pasara a ser
     // `["Analítica", "Mi wallet", "Órdenes", …]`, el rol habría cambiado de puerta de entrada.
-    expect(visibles).toEqual(["Analítica", "Órdenes", "Novedades", "Mi wallet"]);
+    // ⭑ Ficha 433: entra «Ayuda», DETRÁS de «Mi wallet». Sigue comparándose por IGUALDAD y el
+    // aterrizaje del rol sigue siendo «Órdenes»: `/ayuda` va la última de `SIDEBAR_ITEMS`.
+    expect(visibles).toEqual(["Analítica", "Órdenes", "Novedades", "Mi wallet", "Ayuda"]);
     expect(visibles).not.toContain("Incidentes"); // feature 158 (R48)
     expect(visibles).not.toContain("Configuración");
     // "Ranking" es solo del maestro.
@@ -221,6 +230,10 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Recolección",
       "Ranking",
       "Cierre del día",
+      // ⭑ Ficha 433: «Ayuda», la última. El mensajero es el rol que más la necesita —18 de los
+      // 37 usuarios, en la calle— y su aterrizaje NO se mueve: «Entregas» sigue siendo el
+      // primero de su barra.
+      "Ayuda",
     ]);
     expect(visibles).not.toContain("Analítica");
     expect(visibles).not.toContain("Órdenes");
@@ -258,6 +271,9 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
         "Cierres del día",
         "Incidentes",
         "Mi bodega",
+        // ⭑ Ficha 433: «Ayuda», DETRÁS de «Mi bodega». El aterrizaje de este rol sigue siendo
+        // `/recepcion-satelite/por-recibir`, que es lo que protege que ambas vayan al final.
+        "Ayuda",
       ],
     );
   });
