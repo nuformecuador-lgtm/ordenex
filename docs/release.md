@@ -109,18 +109,39 @@ verde y la sección no existía en ninguna parte.
 `git branch --show-current` antes de `git add`. Y si el trabajo desaparece, está en `git reflog`:
 `git reflog | grep commit` lo encuentra, y un `cherry-pick` lo devuelve.
 
-### Lo que NO se puede sacar por aquí, medido el 2026-09-17
+### ⚠️ CORREGIDO el 2026-09-17: reimplementar no es lo mismo que hacer `cherry-pick`
 
-Una ficha construida **encima** de `dev` no se puede llevar sola a `prod` aunque arregle algo
-pre-existente, porque su diff se apoya en código que `prod` no tiene:
+**Lo que esta sección decía, y estaba mal:** que una ficha construida encima de `dev` «no se puede
+llevar sola a `prod`» porque su diff se apoya en código que `prod` no tiene. El ejemplo era la
+**437** (el encabezado), que en `dev` toca un `PageHeader` donde vive `AyudaBoton` —2 referencias en
+`dev`, 0 en `prod`—, y la conclusión era que llevarla exigía «escribir a mano una segunda versión».
 
-- **437** (el encabezado en el teléfono) se apoya en un `PageHeader` que monta `AyudaBoton` —2
-  referencias en `dev`, **0 en `prod`**—. Llevarla sola exige escribir a mano una segunda versión.
-- **439** (el botón invisible) trae una guardia cuyos umbrales de no-vacuidad están calibrados al
-  árbol de `dev`; en `prod` hay 7 archivos con `buttonVariants` contra los ≥6 que exige. Al límite.
+**Lo medido al construir la release del 2026-09-17:** `git cherry-pick 40899ebf` sobre una rama
+nacida de `origin/prod` **aplicó limpio**, sin conflicto. Y con él los otros nueve commits del lote
+(438, 439, 441, 442, 443, 444, 445, 446). Diez de diez.
 
-**Criterio:** si arregla algo que lleva meses roto, **viaja con la release**. La vía de `prod` es para
-lo que está rompiéndose ahora, no para adelantar mejoras.
+La razón es que el conflicto no se decide por «de qué árbol viene el archivo» sino por **si los dos
+cambios tocan las mismas líneas**. La 437 cambia clases de Tailwind en la fila del encabezado; la 433
+añade un `<AyudaBoton />` doce líneas más abajo. Regiones distintas del mismo archivo → `git` las
+mezcla sin preguntar.
+
+**La comprobación que sí vale**, y que sustituye a la anterior: traer los commits y **diffear el
+resultado contra `dev`**.
+
+```
+git diff origin/prod <rama-release> --name-only > /tmp/archivos.txt
+git diff <rama-release> origin/dev --stat -- $(tr '\n' ' ' < /tmp/archivos.txt)
+```
+
+De los 65 archivos que aportó aquella release, **64 salieron byte a byte idénticos a `dev`**. El
+único distinto fue `PageHeader.tsx`, y la diferencia eran exactamente las 12 líneas del `AyudaBoton`
+—o sea, justo lo que NO debía viajar—. Eso es lo que convierte «parece que aplicó» en «es `dev`
+menos lo que se queda».
+
+**Lo que sí sigue siendo cierto:** el criterio de cuándo usar esta vía. Si arregla algo que lleva
+meses roto y nadie se está quejando hoy, **viaja con la release**; la vía de `prod` es para lo que
+está rompiéndose ahora. Lo que cambia es que, cuando hay que usarla, **es mucho más barata de lo que
+esta sección prometía**.
 
 ### El coste de esperar, para tenerlo a la vista
 
