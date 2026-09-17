@@ -22,8 +22,13 @@ Estuvieron caídos **unas 20 horas** (desde las 02:33 UTC). Producción nunca se
   que usan todos los gates.
 - **Un error puede tapar a otro.** Dar por arreglado tras levantar el primero habría dejado el preview
   igual de caído, y con la sensación de haberlo resuelto.
-- **Las credenciales de producción pueden estar igual de rancias.** No se ha comprobado. Hay que
-  mirarlo ANTES de la release de SF-001, no durante.
+- **En producción la que hay que mirar es `DIRECT_URL`, no `DATABASE_URL`.** La de ejecución está
+  probada sola: `ordenex.co` sirve a gente real cada día, así que es válida. Pero `DIRECT_URL` la usa
+  **sólo `migrate deploy`**, y la última release —la 428, del 2026-09-15— fue 100 % de presentación,
+  **sin una sola migración**: esa credencial lleva sin ejercitarse desde vaya a saber cuándo. La
+  release de SF-001 **sí trae migraciones** (429 y 431). Es exactamente la forma del fallo de preview:
+  una credencial que nadie tocó en meses y que sólo se descubre rota cuando hace falta. **Comprobarla
+  antes de abrir la release, no durante.**
 
 **El arreglo de fondo sigue pendiente: la ficha 432** — que la siembra corra DENTRO de
 `migrate-deploy.ts` en vez de depender de que alguien la ejecute a mano entre dos migraciones.
