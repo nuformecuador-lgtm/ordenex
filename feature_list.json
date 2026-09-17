@@ -5309,36 +5309,36 @@
       "title": "«Cargadas hoy» dice que no hay datos aunque hoy entraron 75 ordenes",
       "description": "El panel pregunta por el rango del filtro en vez de por hoy.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/444-445-446-analitica",
       "depends_on": null,
-      "status_note": "ENCONTRADO MIRANDO la pantalla el 2026-09-17. El panel «Cargadas hoy (2026-09-17)» dice «Sin datos en el rango» y ocupa media pantalla en blanco. MEDIDO contra produccion: ese dia entraron 75 ordenes. || Pregunta por el rango del FILTRO en vez de por HOY, que es lo que su propio titulo promete —lleva la fecha de hoy escrita en el encabezado—. Lo ven los cuatro roles. || Decidir cual de las dos cosas es: si es «hoy», que ignore el filtro; si sigue al filtro, que no se llame «hoy»."
+      "status_note": "Mergeada en dev (PR #813, a1b69250) y NO desplegada. || ⚠️ LA PREMISA DE LA FICHA ERA FALSA y conviene que quede escrito: el panel NUNCA leyo el rango del filtro. `ConteoHoyGestionService.consultar` resuelve el dia con `resolverRango({ preset: 'dia' }, this.now())` y el repositorio acota `o.created_at` con ESE dia. || El «75» sale de progress/impl_441.md, donde esta atribuido al DIA ANTERIOR. Comprobado contra produccion el 2026-09-17: hoy 95 cargadas, ayer 80 — el panel SI pinta. La captura del diseno se tomo contra la base local, donde hoy = 0. || LO QUE FALLABA ERAN LAS PALABRAS: el vacio COMPARTIDO decia «Sin datos en el rango» bajo un titulo que promete hoy. Ahora el vacio habla del dia en curso, y el panel anuncia —tambien con cifras en pantalla, no solo en el vacio— que no sigue al filtro de fechas pero si a los de zona y tienda."
     },
     {
       "id": 445,
       "title": "el eje de «cargadas por dia» trata las fechas como categorias",
       "description": "Seis semanas de hueco se dibujan igual que un dia: la tendencia es falsa.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/444-445-446-analitica",
       "depends_on": null,
-      "status_note": "ENCONTRADO MIRANDO la pantalla el 2026-09-17, sin que nadie lo pidiera. El eje va «2026-07-21 · 2026-07-22 · 2026-07-23 · 2026-09-04» con EL MISMO ESPACIO entre puntos. || Los dias sin carga no existen en el eje, asi que seis semanas de hueco se dibujan igual que un dia. CUALQUIER lectura de tendencia sobre ese grafico es falsa, y es un grafico de tendencia. || El arreglo es un eje continuo donde un dia sin carga valga cero, no se salte. Lo ven los cuatro roles."
+      "status_note": "Mergeada en dev (PR #813, c558d54f) y NO desplegada. || Modulo PURO `eje-de-dias.ts`: un punto por dia calendario entre los extremos, los dias sin carga a CERO —la consulta cubrio ese dia y no entro nada, no es dato ausente—. `LineasLienzo` y recharts intactos: el contrato del DTO ya decia que el relleno vive en la grafica. || Medido a 1440 con los datos reales: ANTES 5 puntos, y un dia y 42 dias median LO MISMO (110,5 px). DESPUES 46 puntos, paso constante de 9,82 px/dia, 412,5 px los 42. || Se RETIRO «no inventa los dias que no llegaron»: exigia literalmente lo contrario de este arreglo, era la codificacion del defecto. Lo sustituyen dos casos con los numeros medidos. || El techo de puntos se recorta ANTES de entregar la serie —rellenar hace crecer la serie y `aplicarTopePuntos` LANZA fuera de produccion— y se anuncia en pantalla."
     },
     {
       "id": 446,
       "title": "a 390px el buscador de secciones y el boton Actualizar se solapan",
       "description": "La barra de filtros de Analitica, en telefono.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/444-445-446-analitica",
       "depends_on": null,
-      "status_note": "ENCONTRADO MIRANDO durante la 441, a 390px con sesion de maestro. Es ANTERIOR a esa ficha. || Lo ven los cuatro roles que abren Analitica. Misma familia que la 437 —una fila que no puede envolver— pero en otra barra."
+      "status_note": "Mergeada en dev (PR #813, 185b69b7) y NO desplegada. || LA CAUSA NO ERA LA DE LA 437: la fila YA declaraba `flex-wrap`. Lo que impedia que envolviera era la celda del filtro con `min-w-0 flex-1`, que podia encogerse hasta cero mientras su contenido no (`BuscadorFiltros` declara `min-w-[250px]`): la fila nunca tenia motivo para partirse y el campo se salia de su PROPIA celda, por debajo del boton. || Medido a 390: ANTES solape de 114x32 px, boton encima del campo, y `scrollWidth − clientWidth = 0` —por eso ninguna guardia de desborde lo veia—. DESPUES `solapan: false`, cada control en su linea. A 1440 no se movio nada. || `flex-col` de base + `lg:flex-row`, como la 437. La guardia toma el minimo sobre el SALTO del sidebar, no el ancho en el propio breakpoint: con `sm` la fila se rompia de 768 a 1023, una tableta entera."
     },
     {
       "id": 447,
