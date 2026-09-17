@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 /**
  * AVISO QUE SUSTITUYE AL FORMULARIO DE RECUPERACIÓN — desactivación del 2026-09-04.
@@ -51,7 +52,13 @@ export function RecuperacionDesactivadaAviso() {
         </p>
       </div>
 
-      <Link href="/login" className={buttonVariants({ className: "w-full" })}>
+      {/* `cn(...)` y no `buttonVariants(...)` a pelo: ficha 439. Esta variante es la de
+          fondo solido, asi que HOY no se ve nada raro, pero la composicion es la misma que
+          dejo la salida de `ErrorState` sin borde visible —sin tailwind-merge sobreviven las
+          clases en conflicto y gana la de la base—. Un enlace con pinta de boton pasa por
+          `cn`, siempre. Lo sostiene
+          `tests/unit/guards/buttonvariants-pasa-por-cn.guardia.test.ts`. */}
+      <Link href="/login" className={cn(buttonVariants({ className: "w-full" }))}>
         Volver a iniciar sesión
       </Link>
     </Card>
