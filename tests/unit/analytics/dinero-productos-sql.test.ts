@@ -133,19 +133,22 @@ describe("R74 · las ordenes borradas quedan fuera", () => {
 });
 
 describe("La forma del SQL: LATERAL, resultados, joins y orden", () => {
-  it("el `LEFT JOIN LATERAL` con alias `u` esta, y es OBLIGATORIO aunque no se use el desenlace", async () => {
-    // `condicionesDeConsulta` referencia `u."created_at"` en la ventana de fecha: sin el lateral
-    // el SQL NO COMPILA. Se comprueba con la consulta CON rango, que es la que lo referencia.
+  it("FICHA 441 · el `LEFT JOIN LATERAL` con alias `u` YA NO ESTA, porque ya no lo usa nadie", async () => {
+    // Hasta el 2026-09-17 esta consulta arrastraba un lateral que no proyectaba nada: existia
+    // solo porque `condicionesDeConsulta` referenciaba `u."created_at"` en su ventana de fecha.
+    // Esa ventana paso a caer sobre `o."created_at"` (la fecha de CARGA) y el lateral se quedo
+    // sin un solo consumidor. Lo que este caso mide no es el gusto por limpiar: es que el `where`
+    // NO se apoye en la ultima gestion, que es el defecto de la ficha.
     const conRango = consultaDe({ rango: "semana" }, "maestro");
     const { sql } = await sqlDe(conRango);
 
-    expect(sql).toContain("LEFT JOIN LATERAL");
-    expect(sql).toContain(") u ON TRUE");
-    expect(sql).toContain('u."created_at"');
-    // El lateral filtra las gestiones ANULADAS y desempata: es copia literal del de la 345, para
-    // que la ventana temporal de las dos lecturas sea la MISMA (R78).
-    expect(sql).toContain('g2."anulada_at" IS NULL');
-    expect(sql).toContain('ORDER BY g2."created_at" DESC, g2."id" DESC');
+    expect(sql, "volvio la ventana sobre la ultima gestion").not.toContain('u."created_at"');
+    expect(sql).not.toContain("LEFT JOIN LATERAL");
+    expect(sql).not.toContain(") u ON TRUE");
+    // ANTI-VACIO: lo que se retiro es el lateral de la FECHA, no el `JOIN` que trae las gestiones
+    // que aportan dinero. Ese sigue entero, con su clausula de anuladas.
+    expect(sql).toContain('JOIN "gestion_orden" g ON g."orden_id" = o."id"');
+    expect(sql).toContain('g."anulada_at" IS NULL');
   });
 
   it("R24 · `resultado IN (...)` sale de `RESULTADOS_QUE_APORTAN`, con un parametro por resultado", async () => {
@@ -164,11 +167,15 @@ describe("La forma del SQL: LATERAL, resultados, joins y orden", () => {
     // Decision del humano, con medicion: 2 gestiones anuladas con recaudo (₡33.564) y las dos
     // FUERA de todo cierre y de todo snapshot. Ese dinero nunca entro en la contabilidad.
     expect(sql).toContain('g."anulada_at" IS NULL');
-    // Y esta en el JOIN de las gestiones aportantes (`g`), no solo en el lateral (`g2`).
-    const [antesDelLateral] = sql.split("LEFT JOIN LATERAL");
-    const trasElLateral = sql.slice(sql.indexOf(") u ON TRUE"));
-    expect(antesDelLateral.length).toBeGreaterThan(0);
-    expect(trasElLateral).toContain('g."anulada_at" IS NULL');
+    // Y esta en el JOIN de las gestiones APORTANTES, que es lo que esta afirmacion siempre quiso
+    // decir. Antes de la ficha 441 se comprobaba partiendo el SQL por el `LEFT JOIN LATERAL`,
+    // para distinguir este `g` del `g2` de aquel lateral; el lateral ya no existe, asi que se
+    // mide directamente sobre el tramo que empieza en el JOIN aportante —y se afirma ademas que
+    // no queda ningun `g2` al que la clausula pudiera pertenecer.
+    const desdeElJoinAportante = sql.slice(sql.indexOf('JOIN "gestion_orden" g ON'));
+    expect(desdeElJoinAportante.length).toBeGreaterThan(0);
+    expect(desdeElJoinAportante).toContain('g."anulada_at" IS NULL');
+    expect(sql).not.toContain("g2.");
   });
 
   it("el cierre y el detalle entran por LEFT JOIN: lo PENDIENTE tiene que aparecer (R28)", async () => {

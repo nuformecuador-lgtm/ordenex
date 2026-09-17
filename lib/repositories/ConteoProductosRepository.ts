@@ -12,9 +12,16 @@
 //
 // `condicionesDeConsulta` de `ConteoPorStatusRepository` ya es una funcion PURA y exportada que
 // devuelve el array de fragmentos: alcance primero, `deleted_at IS NULL`, las cinco facetas por
-// `IN`, el `EXISTS` del mensajero y la ventana semiabierta sobre `COALESCE(u.created_at,
-// o.created_at)`. Se importa y se usa TAL CUAL. Su cabecera ya declara que hay DOS
-// implementaciones del mismo recorte y que pueden divergir; una TERCERA seria peor.
+// `IN`, el `EXISTS` del mensajero y la ventana semiabierta. Se importa y se usa TAL CUAL; una
+// segunda escritura del mismo recorte seria peor.
+//
+// ⚠ FICHA 441 — ESA VENTANA CAMBIO DE COLUMNA, y esta tabla se mueve con ella. Hasta el
+// 2026-09-17 acotaba `COALESCE(u.created_at, o.created_at)` —«ordenes con ACTIVIDAD en el
+// periodo»— y hoy acota `o."created_at"` —«ordenes CARGADAS en el periodo»—. Aqui no se decide
+// nada: se hereda, y ese es justamente el motivo de no tener `where` propio. La consecuencia hay
+// que saberla: la columna «Efectividad de entrega» de esta tabla es el MISMO numero que el KPI de
+// dos secciones mas arriba, y si las dos ventanas se separaran, la misma metrica diria dos cosas
+// en la misma pantalla.
 //
 // ─── Y EL `LATERAL` TAMPOCO (R27) ─────────────────────────────────────────────────────────
 //
@@ -23,6 +30,11 @@
 // dos pantallas: si aqui se escribiera «la ultima gestion» de otra manera, un producto podria
 // aparecer como rechazado en esta tabla y entregado en la de al lado, sobre la misma orden.
 // `LEFT` y no `INNER`: las ordenes sin gestion entran por `s."value"`.
+//
+// ⚠ AQUI EL LATERAL SI SE QUEDA, y no es por simetria: esta consulta PROYECTA `u."resultado"` en
+// el `SELECT` (`COALESCE(u."resultado"::text, s."value")`), asi que sin el no hay desenlace que
+// agrupar. `DineroProductosRepository` no lo proyectaba —solo lo necesitaba para la ventana— y
+// por eso alli se retiro en esta misma ficha.
 
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
