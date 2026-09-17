@@ -49,10 +49,9 @@ Las seis aserciones de `AyudaBoton.test.tsx` y la de `PageHeader.test.tsx` **se 
 de afirmar un `href` a afirmar que el control abre el panel con ese slug como contexto. Son contratos
 vivos y se cambian a propósito, no se aflojan.
 
-⚠️ **Y hay una colisión que el spec encontró y yo no había visto:** en el módulo del mensajero ya vive
-un chat flotante (`ChatFlotante.tsx`) y el layout le reserva `pb-12`. **Dos burbujas en la misma
-esquina de un teléfono es peor que lo de hoy**, y ahí trabajan 18 de los 37 usuarios. Esto lo resuelve
-el `/design`, no la implementación.
+La colisión que el spec encontró —en el módulo del mensajero ya vive un chat flotante
+(`ChatFlotante.tsx`), un círculo de 56 px fijo a 20 px de las esquinas inferior y derecha, y el layout
+le reserva `pb-12`— **es justo lo que resuelve la opción A: no se añade ninguna burbuja.**
 
 ## Q4 — `/configuracion/sinpe` + `adminSatelite` → **se queda sin «?»**
 
@@ -83,11 +82,15 @@ está dando más contexto, está gastando tres veces.
 
 Cuenta como una consulta normal: el tope mide preguntas, no bytes.
 
-## Q7 — `ANTHROPIC_API_KEY` → **pendiente del humano, y NO bloquea**
+## Q7 — `ANTHROPIC_API_KEY` → **ENTREGADA y probada** el 2026-09-17
 
-Pedida el 2026-09-17, con los pasos dados. No bloquea ni la implementación ni el merge: toda la pieza
-se construye y se verifica contra el doble. Bloquea **sólo** T25 y T26, que son puertas de
-despliegue.
+Está en `.env`. Comprobada con una llamada real mínima: `claude-sonnet-5` respondió (14 tokens de
+entrada, 4 de salida), así que la credencial vale, el nombre del modelo existe y la cuenta tiene
+saldo.
+
+**NO está en Vercel**, a propósito: allí sólo hace falta para T25/T26 (una consulta real por rol sobre
+el despliegue), que son puertas de **despliegue**, no de merge. Cuando toque va a Preview y a
+Production **por separado** — nunca una sola variable marcada en los dos entornos.
 
 ---
 
