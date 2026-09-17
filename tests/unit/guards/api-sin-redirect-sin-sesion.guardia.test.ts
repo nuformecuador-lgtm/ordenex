@@ -81,9 +81,12 @@ describe("R10 — ninguna ruta de app/api responde 3xx sin cookie de sesion", ()
   it("CONTROL DE NO-VACUIDAD: el barrido encuentra los archivos de ruta del arbol", () => {
     // Una guardia que no encuentra archivos queda verde POR VACIO, que es justo el fallo que
     // vino a cerrar. 24 archivos medidos el 2026-09-14; el numero solo puede crecer.
-    expect(ARCHIVOS.length).toBeGreaterThanOrEqual(24);
+    expect(ARCHIVOS.length).toBeGreaterThanOrEqual(25);
     expect(ARCHIVOS).toContain("app/api/ordenes/carga-masiva/chunk/route.ts");
     expect(ARCHIVOS).toContain("app/api/chat/media/[mensajeId]/route.ts");
+    // ⭑ FICHA 436 — la 25.ª. El comentario de cabecera decia «la ruta de API NUMERO 25 no esta
+    // escrita todavia»; esta es, y entra sola en el barrido porque la guardia recorre el arbol.
+    expect(ARCHIVOS).toContain("app/api/asistente/route.ts");
   });
 
   it("CONTROL DE NO-VACUIDAD: los pathnames se construyen bien (el `[param]` se sustituye)", () => {
@@ -113,13 +116,20 @@ describe("R10 — ninguna ruta de app/api responde 3xx sin cookie de sesion", ()
     expect(ofensores).toEqual([]);
   });
 
-  it("CONTROL: las dos rutas guardadas por sesion responden 401 con JSON (no es que pasen todas)", async () => {
+  it("CONTROL: las TRES rutas guardadas por sesion responden 401 con JSON (no es que pasen todas)", async () => {
     // Sin este control la guardia seguiria verde si alguien "arreglara" el 3xx metiendo
     // `/api/chat` o `/api/ordenes` en una lista de excepcion —lo que ademas abriria la media
     // del cliente al mundo—. Aqui se exige el rechazo, no solo la ausencia de redirect.
+    //
+    // ⭑ FICHA 436 (R12) — se suma `/api/asistente`, y no es de adorno: esa ruta manda a un
+    // proveedor externo la documentacion QUE ESA PERSONA PUEDE LEER, acotada por el rol de la
+    // sesion. Si algun dia cayera en `PUBLIC_ROUTES` o en `SELF_AUTH_ROUTES`, entraria sin sesion
+    // —y sin sesion no hay rol, asi que el acotamiento por rol dejaria de existir—. Se comprueba
+    // que este caso muerde metiendo `/api/asistente` en `PUBLIC_ROUTES`: se pone rojo.
     for (const archivo of [
       "app/api/ordenes/carga-masiva/chunk/route.ts",
       "app/api/chat/media/[mensajeId]/route.ts",
+      "app/api/asistente/route.ts",
     ]) {
       const res = await middleware(sinCookie(pathnameDe(archivo), "POST"));
 

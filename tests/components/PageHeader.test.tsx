@@ -104,7 +104,10 @@ describe("433/R18 — el encabezado MONTA el «?» de la ayuda de esa pantalla",
     "/mis-asignaciones/reparto": "mensajero/reparto",
   };
 
-  const ayuda = () => screen.queryByRole("link", { name: "Ayuda de esta pantalla" });
+  // ⭑ FICHA 436 (T17 — R26): el control pasó de `<Link>` a disparador del asistente, así que el
+  // selector es `button`. Lo que este bloque afirma NO cambia —que el encabezado MONTA el «?» y
+  // que es el de ESTA pantalla—; cambia la forma del control, a propósito y una sola vez.
+  const ayuda = () => screen.queryByRole("button", { name: "Ayuda de esta pantalla" });
 
   function montarEnLaRuta(ruta: string, mapa: Record<string, string> = MAPA) {
     rutaActual = ruta;
@@ -118,20 +121,20 @@ describe("433/R18 — el encabezado MONTA el «?» de la ayuda de esa pantalla",
   it("⭑ con proveedor y documento para esa ruta, el «?» está EN el encabezado", () => {
     montarEnLaRuta("/wallet");
 
-    const enlace = ayuda();
-    expect(enlace, "el «?» no está montado en el PageHeader").not.toBeNull();
-    expect(enlace).toHaveAttribute("href", "/ayuda/oficina/wallet-caja");
+    const control = ayuda();
+    expect(control, "el «?» no está montado en el PageHeader").not.toBeNull();
+    expect(control).toHaveAttribute("data-ayuda-slug", "oficina/wallet-caja");
     // Dentro del <header>, junto a los demás controles: no en cualquier sitio del árbol.
-    expect(enlace!.closest("header")).not.toBeNull();
+    expect(control!.closest("header")).not.toBeNull();
     // Y convive con lo que ya había: montar la ayuda no puede desplazar al resto.
     expect(screen.getByRole("button", { name: "Salir" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Wallet" })).toBeInTheDocument();
   });
 
-  it("⭑ lleva a la ayuda de LA PANTALLA EN LA QUE ESTÁS, no a una fija", () => {
-    // El control negativo del caso de arriba: un `href` constante lo pasaría igual.
+  it("⭑ ofrece la ayuda de LA PANTALLA EN LA QUE ESTÁS, no una fija", () => {
+    // El control negativo del caso de arriba: un slug constante lo pasaría igual.
     montarEnLaRuta("/mis-asignaciones/reparto");
-    expect(ayuda()).toHaveAttribute("href", "/ayuda/mensajero/reparto");
+    expect(ayuda()).toHaveAttribute("data-ayuda-slug", "mensajero/reparto");
   });
 
   it("en una pantalla SIN documento el encabezado queda como estaba (nunca un «?» a un vacío)", () => {

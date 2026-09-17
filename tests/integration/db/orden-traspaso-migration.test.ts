@@ -129,6 +129,10 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       // Ninguna toca `orden_traspaso_mensajero`.
       "20260919120000_historial_accion_conciliacion_bodega",
       "20260919120100_cierre_bodega_conciliacion",
+      // Ficha 436 (2026-09-17): `asistente_uso_diario`, el contador del tope del asistente de
+      // ayuda. ADITIVA PURA: crea una tabla nueva y su FK a `usuario`; no toca
+      // `orden_traspaso_mensajero` ni ningun otro objeto preexistente, y no crea ningun enum.
+      "20260920120000_asistente_uso_diario",
     ]);
   });
 });

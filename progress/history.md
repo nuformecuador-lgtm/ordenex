@@ -5549,3 +5549,56 @@ auxilio con una orden). No hay colisión de símbolos, pero cualquier búsqueda 
 devuelve dos dominios sin relación.
 
 **NO se desplegó.** Las cuatro de SF-001 salen juntas.
+
+---
+
+## 436 — el asistente (2026-09-17) · SF-001 punto 4, segunda mitad
+
+Responde preguntas sobre **cómo se usa la aplicación**, y nada más. La única fuente son los 33 `.md`
+de `docs/ayuda/**`, los mismos que renderiza el módulo de la 433.
+
+**RAG quedó descartado con medida, no con opinión.** Los 33 documentos son ~21.000 tokens: caben
+enteros y cacheados, ~$0,004 por consulta contra ~$0,012 de buscar fragmentos. El documento firmado
+acertaba al decir que mandarlo todo costaría cinco o diez veces más —**eso era cierto sin caché**—;
+con caché se invierte, y desaparece la pieza más compleja del proyecto.
+
+**La decisión que más pesa no es de coste sino de seguridad: el contexto se acota por rol**,
+reutilizando el predicado de LECTURA de la 435. Sin eso, un mensajero le sonsaca al asistente cómo
+funciona la caja de la empresa y el `notFound()` que la 433 puso en el servidor queda decorativo:
+puerta cerrada en `/ayuda`, ventana abierta en el chat. Medido con la mutación: apagando el
+acotamiento viajaban **339 líneas de la oficina** en la petición de un mensajero.
+
+**Los cuatro límites son producto, no disculpa:** no consulta datos, no ejecuta nada (la petición va
+**sin `tools`**), no inventa —dice «no lo sé» y señala dónde mirar—, y **cada respuesta cita sus
+documentos**; una cita que no esté en el conjunto entregado se descarta.
+
+### Lo que la revisión encontró, y por qué importa
+
+- **El modelo no sabía con quién hablaba.** Le dijo a un `maestro` «no tenés cómo asignar… desde tu
+  cuenta de tienda». El spec acotó los *documentos* y se olvidó de la *persona*: ningún requisito lo
+  cubría. Ahora el rol viaja en el primer bloque del `system` —donde no cuesta caché— y hay requisito
+  con test.
+- **El aviso de datos sólo hablaba de capturas, y condicionado.** Quien escribía sin adjuntar nada
+  nunca se enteraba de que su texto salía de la empresa. El diseño aprobado traía la redacción
+  correcta y se había abandonado sin declararlo — y el test anclaba el literal equivocado, así que el
+  mapa requisito→test salía verde con el requisito incumplido. El test nuevo afirma **las dos mitades
+  por separado** y por propiedad, no copiando la cadena.
+- **Un rechazo por tope contaba como consulta**, inflando la única telemetría que esta pieza tiene.
+- **El coste de UNA pregunta no estaba acotado por nada nuestro**: el esquema admitía hasta 40
+  imágenes por petición y sólo lo frenaba el límite de cuerpo de Vercel, que es plataforma.
+
+### Lo que el navegador encontró y la suite no
+
+Dos cosas, con 29.677 tests en verde: el panel salía a **292 px** en vez de 390 —`tailwind-merge`
+sólo dedupe clases con el mismo prefijo de variante—, y el modelo responde en Markdown, así que la
+pantalla enseñaba los `**` en crudo. `toHaveTextContent` normaliza y ningún test lo veía.
+
+### Dos formas de test que sobrevivieron en verde antes de morir
+
+El `upsert` atómico **pasó dos veces con el código roto**: la primera por conexiones frías, la segunda
+porque un caso anterior había dejado sus sentencias preparadas. El veredicto dependía de qué otros
+casos hubieran corrido antes. Y el tope comprobado *después* de llamar al proveedor dejaba el
+**desenlace correcto**: un test que sólo mirara el resultado habría pasado con el dinero ya gastado.
+
+**NO se desplegó.** `ANTHROPIC_API_KEY` está en `.env` y probada con una llamada real, pero **no en
+Vercel**: T25, T26 y T27 quedan sin marcar a propósito, que es la señal de que falta.
