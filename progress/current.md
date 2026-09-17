@@ -36,6 +36,35 @@ Committeada en `fix/432-siembra-dentro-del-despliegue` (`c6467fe5`), **sin gate 
 
 ---
 
+## HALLAZGO NUEVO (2026-09-16) — a PREVIEW no se puede entrar. Nadie puede.
+
+Medido hoy, intentando verificar el módulo de ayuda en el despliegue de preview:
+
+1. El muro SSO de Vercel se pasa con el token de compartición (`ssoProtection` está en
+   `all_except_custom_domains`). Hasta ahí, bien.
+2. **La aplicación acepta las credenciales de `maestro.qa@ordenex.test` y pide segundo factor**:
+   *«Se ha enviado un código de 6 dígitos a tu correo electrónico»*.
+3. Ese correo **no llega a ninguna parte**: `@ordenex.test` no es un dominio que reciba nada. Y el
+   código no se puede sacar de la base — `email_otp_challenge.code_hash` guarda el hash, nunca el
+   código en claro (que es lo correcto).
+
+**Conclusión: el entorno de preview no es verificable a mano por nadie, ni por mí ni por el humano.**
+Sólo sirve para comprobar que el build pasa.
+
+**Por qué pasa:** `lib/config/auth.ts:43` usa 50 por defecto para `AUTH_RISK_THRESHOLD`, y preview no
+lo declara. Producción sí lo tiene en 999 —es decir, con el segundo factor apagado a propósito,
+porque el envío de correo tampoco funciona allí—. **Preview es la anomalía, no producción.**
+
+**Lo que costaría arreglarlo: una variable de entorno** (`AUTH_RISK_THRESHOLD=999` sólo en preview,
+igual que ya está en producción). No debilita nada respecto de lo que hoy corre en producción. **No lo
+he hecho por mi cuenta**: es un control de autenticación y la decisión es del humano.
+
+**Por qué importa ahora:** la condición del humano para SF-001 es que nada salga *«hasta estar seguros
+de que no hace daño a lo que ya está funcionando»*. Ahora mismo el único escalón entre `dev` y
+producción sólo sabe decir «compila».
+
+---
+
 ## EN CURSO — SF-001, las cuatro funcionalidades nuevas
 
 **Las cuatro aprobadas, ninguna prioritaria sobre otra.** Diseño de cada una revisado contra el código
