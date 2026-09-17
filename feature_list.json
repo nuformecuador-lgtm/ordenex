@@ -5201,12 +5201,12 @@
       "title": "la oficina no puede leer la ayuda de los mensajeros a los que atiende",
       "description": "Maestro y admin pasan a leer los 33 documentos; el resto sigue acotado.",
       "zone": "backend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/435-oficina-lee-toda-la-ayuda",
       "depends_on": null,
-      "status_note": "DECISION DEL HUMANO (2026-09-17), preguntada y respondida: «Si, la oficina lee todo». Hoy /ayuda/mensajero/reparto da 404 a maestro y admin; el acotamiento es simetrico y la oficina es quien atiende las dudas de los 18 mensajeros. || SE ENSANCHA SOLO LA LECTURA. Predicado NUEVO en lib/ayuda/documento.ts para el gate de la pagina y el indice; mapaRutaDocumento se queda ESTRICTO. Si no, el maestro tendria dos documentos candidatos para /ordenes (oficina y tienda) y ganaria el primero por orden alfabetico de slug — un desempate inventado. || ⚠️ VA JUNTO CON m3 DE LA REVISION DE LA 433: ayuda-pantalla-ruta-existe.guardia.test.ts REIMPLEMENTA la regla en vez de importarla, asi que hoy no se enteraria del cambio y el choque de /ordenes se colaria en silencio. || El literal de AyudaLayout pasa a maestro 33 y admin 33; los otros tres no se mueven."
+      "status_note": "Mergeada en dev (PR #805, 75a3cd53) y NO desplegada. Maestro y admin pasan de 23 y 22 documentos a los 33; satelite (10), mensajero (8) y tienda (7) NO se mueven — eso ultimo es media ficha: si alguno se moviera, el ensanche se fue por donde no debia. || DOS PREDICADOS, no uno ensanchado: `documentoVisiblePara` (estricto, intacto) sigue alimentando mapaRutaDocumento y el boton «?»; `puedeLeerDocumento` (nuevo) alimenta el notFound() de la pagina y el indice. || EL RIESGO CENTRAL ESTABA SIN RED Y AHORA ESTA MEDIDO: bajo la mutacion «el mapa pasa al predicado ancho», el caso que ya existia —mapaRutaDocumento(docs,'maestro')['/ordenes'] === 'oficina/ordenes'— SEGUIA VERDE, porque oficina gana el desempate alfabetico y el mapa se come el segundo candidato en silencio. Se extrajo candidatosRutaDocumento() y el test nuevo mira los CANDIDATOS, no el ganador. || LIMITE CONOCIDO, decidido no arreglar: ORDEN_GRUPOS se fijo cuando el indice del maestro traia UNA entrada de mensajero; ahora sus 18 documentos de Oficina empiezan en la entrada 12. En escritorio —donde trabaja la oficina— los 6 grupos se ven a la vez; en telefono es scroll. Se puede cambiar sin tocar frontend (la constante vive en lib/ayuda/documento.ts). || Gate: 2022/2022 archivos, 29.492 tests, INIT_EXIT=0. La primera corrida cayo por el flake 40P01 conocido en un archivo de DB que esta rama no toca; aislado 24/24."
     },
     {
       "id": 436,
