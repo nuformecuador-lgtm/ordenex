@@ -37,6 +37,59 @@
 - [ ] Esperar a que el despliegue de producción quede en **READY** — no basta con que el PR esté
       mergeado.
 
+## 2 bis · Desplegar un parche SIN arrastrar lo que espera en `dev`
+
+> **Vigente desde el 2026-09-17 y mientras SF-001 siga sin desplegarse.** Decisión del humano:
+> SF-001 sale cuando él lo diga, y hasta entonces lo urgente tiene que poder salir solo.
+
+`dev` es un superconjunto de `prod` y lleva **109 commits / 435 archivos / 6 migraciones** de ventaja.
+Un PR de `dev` → `prod` se lo lleva **todo**. Así que un parche que tenga que salir antes **no se
+ramifica de `dev`**:
+
+```
+git fetch origin
+git checkout -b fix/<id>-<slug> origin/prod     # ← de prod, NO de dev
+# … arreglo + gate …
+# PR contra prod, merge, esperar READY
+git checkout dev && git merge prod              # ← devolverlo a dev, o dev deja de ser superconjunto
+```
+
+El paso de vuelta **no es opcional**: si se olvida, el parche se pierde en la siguiente release de
+`dev` y el defecto vuelve sin que nadie entienda por qué.
+
+### Las tres condiciones que hacen que esto sea barato
+
+1. **Sin migración, sin tocar el esquema.** Las 6 migraciones que esperan en `dev` fueron escritas
+   suponiendo el esquema de hoy. Si un parche lo cambia en producción, esas migraciones se van a
+   aplicar sobre un esquema que ya no es el que suponían. **Si un parche necesita migración de
+   verdad, se para y se replantea la espera** — no se improvisa.
+2. **Comprobar que el archivo es el mismo en las dos ramas** antes de empezar:
+   `git diff origin/prod...origin/dev --name-only -- <ruta>`. Si sale vacío, el arreglo aplica limpio
+   en ambas. Si no, estás escribiendo **dos versiones** de la misma corrección, y eso hay que
+   decidirlo a sabiendas.
+3. **Un parche, un problema.** La tentación de «ya que estoy» es lo que convierte un desvío de una
+   tarde en una segunda rama de mantenimiento.
+
+### Lo que NO se puede sacar por aquí, medido el 2026-09-17
+
+Una ficha construida **encima** de `dev` no se puede llevar sola a `prod` aunque arregle algo
+pre-existente, porque su diff se apoya en código que `prod` no tiene:
+
+- **437** (el encabezado en el teléfono) se apoya en un `PageHeader` que monta `AyudaBoton` —2
+  referencias en `dev`, **0 en `prod`**—. Llevarla sola exige escribir a mano una segunda versión.
+- **439** (el botón invisible) trae una guardia cuyos umbrales de no-vacuidad están calibrados al
+  árbol de `dev`; en `prod` hay 7 archivos con `buttonVariants` contra los ≥6 que exige. Al límite.
+
+**Criterio:** si arregla algo que lleva meses roto, **viaja con la release**. La vía de `prod` es para
+lo que está rompiéndose ahora, no para adelantar mejoras.
+
+### El coste de esperar, para tenerlo a la vista
+
+Cada semana que SF-001 siga en `dev`, su release es más grande y el desvío de cada parche más
+probable. **La divergencia no es gratis**: este repo ya pagó una vez una release con 65 archivos en
+conflicto por romper la ascendencia. Si la espera se alarga, la conversación no es «cómo parcheamos»
+sino «por qué seguimos esperando».
+
 ## 3 · Después de desplegar, y esto no es opcional
 
 - [ ] **Errores de runtime**: `get_runtime_errors` con una ventana que cubra el despliegue. Cero es
