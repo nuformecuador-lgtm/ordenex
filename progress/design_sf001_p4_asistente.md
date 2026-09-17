@@ -13,7 +13,7 @@ todavía no existía y varias cosas se daban por desconocidas. Ya no lo son.
 
 | Lo que aquel documento dejaba abierto | Lo que hoy está medido |
 | --- | --- |
-| «Puede que RAG sobre. No está afirmado: depende de cuánto ocupe la documentación» | **Sobra.** 32 documentos, 11.733 palabras, 75.875 caracteres ≈ **21.000 tokens**. Cabe entero y cacheado |
+| «Puede que RAG sobre. No está afirmado: depende de cuánto ocupe la documentación» | **Sobra.** 32 documentos (**hoy 33**, tras la ficha 434), 11.733 palabras, 75.875 caracteres ≈ **21.000 tokens**. Cabe entero y cacheado |
 | «Sigue sin leerse el PDF firmado» | Leído. Las cuatro aprobadas, ninguna prioritaria sobre otra |
 | «Pendiente: autorización de datos de clientes a un proveedor externo» | **Concedida** por el humano: *«si no hay problema se asume lo de los datos del punto 4»* |
 | «La documentación no existe» | Existe, verificada contra el código, y ya se puso a prueba dos veces (fichas 430 y 431) |
@@ -42,7 +42,7 @@ magnitud es el mismo: esto no es una decisión de coste, es una decisión de sim
 
 ## La decisión que abarata y protege a la vez: el contexto se acota por rol
 
-El asistente NO recibe los 32 documentos. Recibe **los que esa persona puede leer**, reutilizando
+El asistente NO recibe los 33 documentos. Recibe **los que esa persona puede leer**, reutilizando
 `documentosVisiblesPara()` de la ficha 433 — la misma función que ya decide el índice y el `notFound()`.
 
 Dos cosas salen de ahí, y ninguna es un extra:
@@ -85,13 +85,18 @@ además pudiera actuar las tendría mayores.
 | Audios | **fuera de la v1** | el modelo que responde no transcribe voz: es otro proveedor, otro contrato y otro coste. Se dice, no se promete |
 | Imágenes | dentro, con el aviso visible en la propia pantalla | autorizado por el humano. El aviso no es burocracia: quien manda una captura tiene que saber que sale de casa |
 
-### La trampa heredada de la 433
+### La trampa heredada de la 433 — y me equivoqué al describirla
 
-La ruta del asistente lee los `.md` con el mismo `lib/ayuda/catalogo.ts`, que toca `fs` en tiempo de
-ejecución. En Vercel eso sólo funciona si la ruta está declarada en `outputFileTracingIncludes` de
-`next.config.ts`. **Hay que añadir `app/api/asistente/route.ts` a esa lista**, o el asistente responde
-«no lo sé» a todo en producción y verde en local: el fallo mudo exacto contra el que la 433 ya escribió
-su aviso.
+Escribí arriba que «hay que añadir `app/api/asistente/route.ts` a `outputFileTracingIncludes`».
+**Es falso, y comprobado contra el archivo:** `next.config.ts:59-61` declara la clave **`/**`** —todas
+las páginas y rutas, no una lista— y `ayuda-md-viajan-a-produccion.guardia.test.ts` **exige** que siga
+siendo `/**`, porque el trazado es por página y un layout no hereda el de sus hijos. Acotarla para
+nombrar la ruta nueva pondría roja esa guardia. **No hay nada que añadir.**
+
+Lo que sí falta es lo contrario, y es más sutil: **hoy nada mide que la ruta del asistente lea ese
+catálogo**. Si alguien le pusiera otra fuente, la guardia seguiría verde y el asistente diría «no lo
+sé» a todo en producción — verde en local, mudo en producción, que es la familia de fallo entera de
+este repo. Por eso el spec lo convierte en requisito propio y en puerta de despliegue.
 
 ### Dónde vive
 
