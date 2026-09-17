@@ -165,6 +165,7 @@ model Usuario {
   pushSuscripciones                   PushSuscripcion[]                  @relation("PushSuscripcionUsuario") // ficha 410/R16/R22: suscripciones push de los DISPOSITIVOS de este usuario. La FK es CASCADE: una credencial de entrega no es evidencia, y dejarla huerfana seria mandar push a nombre de nadie
   pushEnviosDia                       PushEnvioDia[]                     @relation("PushEnvioDiaUsuario") // ficha 410/R6/R22: cupo diario de push consumido por este usuario. CASCADE por el mismo motivo: es un contador del canal, no historia
   preferencia                         UsuarioPreferencia?                @relation("UsuarioPreferenciaUsuario") // ficha 422/R1/R4: LA DECISION DE ESTA PERSONA sobre los avisos, aparte de sus dispositivos. 1:1. La FK es CASCADE: una preferencia no es evidencia (criterio de `push_suscripcion`, no el de `historial_accion`). Tabla propia y no columna aqui a proposito: ver el comentario del modelo `UsuarioPreferencia`.
+  asistenteUsoDiario                  AsistenteUsoDiario[]               @relation("AsistenteUsoDiarioUsuario") // ficha 436/R16/R17: cuantas veces le pregunto ESTA persona al asistente cada dia. CASCADE por el mismo criterio que `push_envio_dia`: es un CONTADOR de un canal, no historia, y el conteo de alguien que ya no existe no significa nada
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -3960,4 +3961,62 @@ model UsuarioPreferencia {
   usuario Usuario @relation("UsuarioPreferenciaUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@map("usuario_preferencia")
+}
+
+// ⭑ FICHA 436 (design §4.1, R16/R17/R30) — EL TOPE DE GASTO DEL ASISTENTE: una fila por
+// PERSONA y DIA. Es un CONTADOR, y es lo UNICO que esta ficha persiste.
+//
+// ⚠️ LO QUE ESTA TABLA NO GUARDA, Y ES DELIBERADO: ni la pregunta, ni la respuesta, ni la imagen,
+// ni el slug consultado. La conversacion vive en el cliente y desaparece al recargar (D10/R30).
+// Una guardia del arbol (`asistente-sin-persistencia.guardia.test.ts`) se pone roja si alguien le
+// anade una columna de texto libre: el dia que eso pase, el texto que la gente escribe —que puede
+// llevar el nombre y la direccion de un cliente— empezaria a quedarse en la base sin que nadie lo
+// haya decidido.
+//
+// ⚠️ POR QUE EN POSTGRES Y NO EN MEMORIA DEL PROCESO. En Vercel cada funcion tiene su proceso y los
+// arranques en frio son la norma: un contador en memoria cuenta «las consultas de esta instancia
+// desde que arranco», que no es un tope sino una sensacion. Y ademas no seria verificable — un test
+// sobre un `Map` afirma sobre el `Map`, no sobre el sistema. El precio se dice entero: una
+// migracion, y con ella el gate rapido negado (`docs/verification.md`).
+model AsistenteUsoDiario {
+  id        String @id @default(uuid())
+  usuarioId String @map("usuario_id")
+
+  /// El dia CALENDARIO DE COSTA RICA (`fechaCalendarioCR`), no el instante ni el dia UTC.
+  ///
+  /// ⚠️ Se ESCRIBE Y SE LEE con un `::date` explicito sobre la cadena `YYYY-MM-DD`
+  /// (`AsistenteUsoRepository`), nunca dejando que un `Date` de JavaScript se convierta por el
+  /// camino: despues de las 18:00 de Costa Rica un `Date` serializado en otro huso cae en el dia
+  /// SIGUIENTE, y el tope se reiniciaria seis horas antes de tiempo para todo el mundo.
+  fecha DateTime @db.Date
+
+  /// R14/R16 — consultas ATENDIDAS o RECHAZADAS POR TOPE de ese dia. Se incrementa ANTES de llamar
+  /// al proveedor (design §4.2): al reves, una rafaga simultanea se cuela entera antes de que nadie
+  /// haya contado nada, que es justo lo que un tope existe para impedir.
+  consultas Int @default(0)
+
+  /// ⭑ Q5 — CUANTAS VECES DIJO «no lo se» ESE DIA. **El numero, nunca el texto.**
+  ///
+  /// Es el UNICO bucle de realimentacion de toda la pieza: sin el, nadie sabria jamas si el
+  /// asistente sirve ni que documento falta escribir. Una columna entera mas sobre una fila que ya
+  /// se escribe una vez por consulta no cuesta practicamente nada, y es la diferencia entre saber
+  /// y no saber. NO es texto y no puede serlo: ver la guardia de R30.
+  noLoSe Int @default(0) @map("no_lo_se")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  /// CASCADE, criterio de `push_envio_dia` y `usuario_preferencia`: un contador NO es evidencia.
+  /// Cuantas preguntas hizo alguien que ya no existe no significa nada, y dejarlo huerfano solo
+  /// sirve para que un recuento futuro sume filas de nadie.
+  usuario Usuario @relation("AsistenteUsoDiarioUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  /// ⚠️ ESTE INDICE **ES** LA ATOMICIDAD DE R17, no una optimizacion de lectura. El incremento es un
+  /// `INSERT ... ON CONFLICT DO UPDATE SET consultas = consultas + 1`: dos peticiones simultaneas de
+  /// la misma persona chocan contra LA BASE y no contra un `if` del codigo. Con un indice normal —o
+  /// con un `SELECT` previo— las dos leerian el mismo valor y las dos escribirian el mismo +1: el
+  /// tope se saltaria sin que ningun test lo notara. Mismo argumento que `push_envio_dia_cupo` y
+  /// `ranking_snapshot_dia_fecha_key`.
+  @@unique([usuarioId, fecha])
+  @@map("asistente_uso_diario")
 }

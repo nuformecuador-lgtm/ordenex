@@ -249,4 +249,18 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
       "migracion copia de `push_suscripcion`, que es inalcanzable por lo mismo, asi que tampoco " +
       `puede crearla. ${SOLO_OPERADOR}`,
   },
+  // ── FICHA 436 (2026-09-17): el contador del asistente de ayuda ────────────────────────────────
+  // CASCADE, mismo criterio que sus tres vecinas de arriba: un CONTADOR no es evidencia. Y es
+  // INALCANZABLE, pero por un motivo MAS FUERTE que el de aquellas: aqui no es que el camino sea
+  // improbable, es que hay un rechazo EXPLICITO por rol, medido y con test propio.
+  "AsistenteUsoDiario.usuario": {
+    categoria: "no_alcanzable",
+    motivo:
+      "R13 de la ficha 436: `AsistenteService.responder` rechaza con `rol_no_admitido` TODO rol " +
+      "que no este en `ROLES_AYUDA` —y `apiKey` no esta— ANTES de tocar el contador, asi que una " +
+      "cuenta dedicada no puede abrir ni una fila de esta tabla. El test " +
+      "`tests/unit/asistente/tope-diario.test.ts` lo afirma midiendo las DOS mitades: el desenlace " +
+      "y que el repositorio del contador no se llamo ni una vez. Ademas el asistente vive detras " +
+      `del guard de SESION: sin cookie, /api/asistente responde 401 con JSON. ${SOLO_OPERADOR}`,
+  },
 };

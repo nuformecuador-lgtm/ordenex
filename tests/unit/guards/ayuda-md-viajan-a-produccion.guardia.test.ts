@@ -134,3 +134,96 @@ describe("433/R19 — los .md de la ayuda viajan al servidor de producción", ()
     }
   });
 });
+
+/**
+ * ⭑ FICHA 436 · R31 — Y LA RUTA DEL ASISTENTE LEE **ESE** CATÁLOGO.
+ *
+ * ⚠️ POR QUÉ HACÍA FALTA OTRO CASO, Y DÓNDE VIVE EL RIESGO DE VERDAD. Lo de arriba mide la FORMA
+ * del `next.config.ts`: que la declaración existe, que la clave es `/**` y que el patrón apunta a
+ * la carpeta que lee `catalogo.ts`. Lo que **nadie medía** es la otra punta: que la ruta que manda
+ * la documentación al proveedor la saque de ahí.
+ *
+ * Si mañana alguien le pone al asistente una fuente distinta —un módulo generado, una copia en
+ * `public/`, una tabla— la guardia de arriba SIGUE VERDE, el typecheck pasa, la suite pasa, y el
+ * asistente responde «no lo sé» a todo en producción mientras en local funciona. Es exactamente la
+ * familia de fallo mudo que este archivo vino a cerrar, un año después y en otro sitio.
+ *
+ * ⚠️ AQUÍ NO SE TOCA `next.config.ts`, y es deliberado (hallazgo H1 del spec). El diseño aprobado
+ * pedía «añadir la ruta del asistente a `outputFileTracingIncludes`»: **no hay nada que añadir**,
+ * porque la clave declarada es `/**` —todas las páginas y rutas— y ACOTARLA pondría roja la
+ * aserción de más arriba. Lo que faltaba era esto.
+ */
+
+const RUTA_ASISTENTE = "app/api/asistente/route.ts";
+
+/** Las vías por las que un archivo podría leer documentación que NO sea el catálogo. */
+export function fuentesDeDocumentacionEn(codigo: string): string[] {
+  const sospechas: string[] = [];
+  const sinComentarios = codigo
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split(/\r?\n/)
+    .filter((l) => {
+      const t = l.trim();
+      return !t.startsWith("//") && !t.startsWith("*");
+    })
+    .join("\n");
+
+  if (/readFile|readFileSync|readdir|readdirSync/.test(sinComentarios)) sospechas.push("lee fs");
+  if (/process\.cwd\s*\(/.test(sinComentarios)) sospechas.push("arma una ruta de disco");
+  if (/docs\/ayuda/.test(sinComentarios)) sospechas.push("nombra docs/ayuda a mano");
+  if (/\.md["'`]/.test(sinComentarios)) sospechas.push("nombra un .md");
+  return sospechas;
+}
+
+describe("436/R31 — la ruta del asistente lee la documentación del catálogo, y de nada más", () => {
+  it("CONTROL DE NO-VACUIDAD: la ruta del asistente existe y tiene código", () => {
+    // Si el archivo se renombrara, todo lo de abajo quedaría verde por vacío.
+    expect(existsSync(path.join(RAIZ, RUTA_ASISTENTE))).toBe(true);
+    expect(readFileSync(path.join(RAIZ, RUTA_ASISTENTE), "utf8").length).toBeGreaterThan(500);
+  });
+
+  it("⭑ su ÚNICA vía de documentación es `lib/ayuda/catalogo.ts`", () => {
+    const codigo = readFileSync(path.join(RAIZ, RUTA_ASISTENTE), "utf8");
+    // La importa por su nombre...
+    expect(codigo).toMatch(/import\s*\{\s*leerCatalogoAyuda\s*\}\s*from\s*["']@\/lib\/ayuda\/catalogo["']/);
+    // ...y se la PASA al servicio: importarla y no usarla sería un composition root que no inyecta.
+    expect(codigo).toMatch(/leerCatalogo:\s*leerCatalogoAyuda/);
+    // Y no hay ninguna otra: ni `fs`, ni `process.cwd()`, ni un `.md` nombrado a mano.
+    expect(fuentesDeDocumentacionEn(codigo)).toEqual([]);
+  });
+
+  it("⭑ y tampoco la hay en el resto del módulo del asistente", () => {
+    const delModulo = [
+      "lib/services/AsistenteService.ts",
+      "lib/asistente/contexto.ts",
+      "lib/asistente/instrucciones.ts",
+      "lib/asistente/citas.ts",
+      "lib/asistente/protocolo.ts",
+      "lib/clients/anthropic-asistente.ts",
+    ];
+    const ofensas = delModulo.flatMap((archivo) =>
+      fuentesDeDocumentacionEn(readFileSync(path.join(RAIZ, archivo), "utf8")).map(
+        (s) => `${archivo}: ${s}`,
+      ),
+    );
+    expect(ofensas).toEqual([]);
+  });
+
+  it("⭑ CANARIO: una fuente distinta metida a mano se detecta", () => {
+    // Sin esto, «no hay sospechas» podría significar «el analizador no mira nada».
+    expect(
+      fuentesDeDocumentacionEn(`const t = readFileSync(path.join(process.cwd(), "docs/ayuda/x.md"));`),
+    ).toEqual(["lee fs", "arma una ruta de disco", "nombra docs/ayuda a mano", "nombra un .md"]);
+    expect(fuentesDeDocumentacionEn(`import { DOCS } from "@/lib/ayuda/generado";`)).toEqual([]);
+  });
+
+  it("⭑ la clave `/**` cubre la ruta del asistente sin nombrarla (y por eso no se toca el config)", () => {
+    // `/**` son TODAS las páginas y rutas: `app/api/asistente` entra sin escribir nada. Este caso
+    // deja constancia de la conclusión medida —no hay nada que añadir— para que la próxima ficha
+    // no vuelva a proponer acotar la clave.
+    const claves = Object.keys(INCLUDES ?? {});
+    expect(claves).toContain("/**");
+    expect(claves, "acotar la clave dejaría sin .md a la ruta del asistente").toEqual(["/**"]);
+    expect((INCLUDES ?? {})["/**"]).toEqual([`./${RUTA_DOCS}/**/*.md`]);
+  });
+});
