@@ -34,7 +34,7 @@ import { DESENLACES } from "@/lib/types/conteo-entregas";
 import type { ConteoDeStatus } from "@/lib/types/conteo-por-status";
 
 import { DESENLACES_CON_COLUMNA_PROPIA } from "./efectividad";
-import { etiquetaDeDesenlace } from "./etiqueta-desenlace";
+import { etiquetaDeDesenlaceContada } from "./etiqueta-desenlace";
 
 /** Los cinco desenlaces como conjunto, para clasificar en O(1). Derivado, nunca reescrito. */
 const CON_DESENLACE: ReadonlySet<string> = new Set<string>(DESENLACES);
@@ -105,16 +105,22 @@ export function composicionOtrosResultados(
  * etiquetas escrita aqui: `order_status` no tiene columna `label` y una tabla propia se
  * desincronizaria en el proximo renombre.
  *
- * @param etiquetar como nombrar un desenlace. Se INYECTA en vez de importarse para que este
- *                  modulo siga sin depender de nada de UI; el valor por defecto es el mecanismo
- *                  vivo, asi que ningun consumidor tiene que pasarlo.
+ * ⚠ FICHA 442 — Y CONCUERDA EN NUMERO: «4 devueltas» pero «1 devuelta». El singular no se
+ * calcula, ES el `value` del catalogo (ver `etiquetaDeDesenlaceContada`), asi que esto no
+ * introduce ninguna regla de morfologia del español ni ninguna tabla de excepciones. La misma
+ * funcion la usa la frase de «En qué terminaron» de la tabla, para que la pantalla y el archivo
+ * que se abre al lado no digan la misma fila de dos formas distintas.
+ *
+ * @param etiquetar como nombrar un desenlace SEGUN su cantidad. Se INYECTA en vez de importarse
+ *                  para que este modulo siga sin depender de nada de UI; el valor por defecto es
+ *                  el mecanismo vivo, asi que ningun consumidor tiene que pasarlo.
  */
 export function textoComposicionOtrosResultados(
   porStatus: readonly ConteoDeStatus[],
-  etiquetar: (status: string) => string = etiquetaPorDefecto,
+  etiquetar: (status: string, conteo: number) => string = etiquetaPorDefecto,
 ): string {
   return composicionOtrosResultados(porStatus)
-    .map((trozo) => `${trozo.conteo} ${etiquetar(trozo.status).toLowerCase()}`)
+    .map((trozo) => `${trozo.conteo} ${etiquetar(trozo.status, trozo.conteo).toLowerCase()}`)
     .join(SEPARADOR_COMPOSICION);
 }
 
@@ -123,6 +129,6 @@ export function textoComposicionOtrosResultados(
  * por defecto del parametro de arriba y quede claro que `composicionOtrosResultados` —el
  * calculo— no sabe nada de etiquetas.
  */
-function etiquetaPorDefecto(status: string): string {
-  return etiquetaDeDesenlace(status);
+function etiquetaPorDefecto(status: string, conteo: number): string {
+  return etiquetaDeDesenlaceContada(status, conteo);
 }

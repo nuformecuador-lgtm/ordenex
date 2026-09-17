@@ -4,11 +4,43 @@
 // FICHA 346 — el cubo que faltaba en el desglose.
 // FICHA 347 — CUANTA PLATA movio cada producto, y DE QUE se compone «Otros resultados».
 // FICHA 348 — QUE NINGUNA PALABRA SE PARTA: trece minimos medidos y el aviso fuera del rotulo.
+// FICHA 354 — un dato por renglon en la celda de «Recaudado».
+// FICHA 442 — QUE LA TABLA SE PUEDA LEER: de 14 columnas a 5 mas una fila que se abre.
 //
-// Es la septima lectura viva de la seccion de entregas y comparte con las otras seis todo lo
-// que se puede compartir: el mismo filtro (`FiltroEntregasProvider`), el mismo prefijo de clave
-// SWR (asi el boton «Actualizar» la revalida sin conocerla), los mismos textos de error y la
-// misma regla de que un problema de permisos NO se degrada a una tabla vacia.
+// ─── EL DEFECTO DE LA 442, MEDIDO (1440 px, sesion de maestro, 2026-09-17) ──────────────────
+//
+// | | |
+// |---|---|
+// | columnas                          | **14** (13 para tienda)      |
+// | visibles sin desplazar            | **7**                        |
+// | posicion de «Efectividad»         | **13.ª — fuera de pantalla** |
+// | ancho de la tabla                 | 1584 px en una ventana de 1440 |
+//
+// Y lo primero que se veia eran las TRES columnas de dinero —Recaudado, Cobro Ordenex, Para la
+// tienda—, las tres en «—» en las 25 filas, cada una arrastrando una linea secundaria («Con otro
+// producto: 0 de 6») que doblaba el alto de cada fila. «Tienda» repetia el mismo nombre 25 veces
+// y encima de la tabla habia SEIS lineas de advertencias en gris.
+//
+// Las fichas 348 y 354 hicieron bien su trabajo —ninguna palabra se parte, ninguna frase se
+// pliega— pero respondian a otra pregunta. Trece columnas perfectamente medidas siguen siendo
+// trece columnas: el arreglo no era de ancho, era de CUANTO se enseña de golpe.
+//
+// ─── LO QUE ENSEÑA AHORA (diseño aprobado: `design-analitica/Productos.dc.html`) ────────────
+//
+//  - **Cinco columnas**: Producto · Órdenes · **En qué terminaron** (una barra y su frase, no
+//    cuatro columnas de numeros) · **Efectividad** · Recaudado.
+//  - **Una fila que se abre** con el resto: unidades, cobro Ordenex, para la tienda, otros
+//    resultados, % de rechazo — y, cuando hay dinero, el detalle orden por orden de la 347.
+//  - **«Tienda» deja de ser una columna repetida** cuando es constante: pasa a un chip que la
+//    dice UNA vez. Ver `hayVariasTiendas`.
+//  - Las seis lineas de advertencias se pliegan en un **«Cómo se cuenta»** que se despliega.
+//  - **La advertencia del dinero viaja con el dinero**: vive DENTRO del detalle, pegada a las
+//    cifras, que es donde alguien podria sumarlas por error.
+//
+// ⚠ NO SE ESCONDE NI UN DATO, y esa es la condicion de todo lo anterior. Lo que sale de la
+// pantalla entra en la fila desplegable, y **el archivo descargable no pierde ni una columna**
+// (`analitica-productos-descarga-columnas.ts`, intacto: once columnas base y veinte con dinero).
+// Esconder una columna en pantalla no es quitarla del dato.
 //
 // ─── LAS CUATRO COSAS QUE ESTE COMPONENTE NO HACE, Y CADA UNA POR SU MOTIVO ────────────────
 //
@@ -18,32 +50,34 @@
 //     DTO tal cual— y ademas convertiria la paginacion en una loteria: la pagina 2 dependeria
 //     de cual de los dos ordenes gano.
 //  2. **No calcula ningun porcentaje.** `calcularEfectividad(fila.porStatus)` fila a fila, que
-//     es la MISMA funcion que produce la fila de KPIs de mas arriba (R28). Por construccion el
-//     denominador por producto es el universo entero del recorte, incluidas las ordenes que
-//     siguen en proceso (R29). Una segunda definicion de «efectividad» a dos secciones de
-//     distancia es exactamente lo que la alternativa A6 del diseño descarto.
+//     es la MISMA funcion que produce la tarjeta heroe de la ficha 441 y la fila de KPIs (R28).
+//     Por construccion el denominador por producto es el universo entero del recorte, incluidas
+//     las ordenes que siguen en proceso (R29). Una segunda definicion de «efectividad» a dos
+//     secciones de distancia es exactamente lo que la alternativa A6 del diseño descarto — y lo
+//     que el `ConteoProductosService` dice por escrito que no se haga.
 //  3. **No escribe ningun literal de estado del catalogo** (`entregada`, `rechazada`...). Los
-//     buckets los reparte `calcularEfectividad` y la composicion la deriva
-//     `composicionOtrosResultados`, las dos leyendo `DESENLACES`. Una lista de estados aqui se
-//     quedaria atras el dia que el catalogo gane uno, en silencio.
+//     buckets los reparte `calcularEfectividad`, la composicion la deriva
+//     `composicionOtrosResultados` y la frase de desenlaces la arma `desenlaces-de-fila.ts`,
+//     todas leyendo `DESENLACES`. Una lista de estados aqui se quedaria atras el dia que el
+//     catalogo gane uno, en silencio.
 //  4. **No razona sobre permisos para pintar la columna «Tienda».** Ver `hayVariasTiendas`.
 //
 // ─── EL AVISO QUE NO PUEDE FALTAR (R36 de la 345, R45 de la 347) ────────────────────────────
 //
 // Una orden con varios productos cuenta en CADA uno de ellos. El 12 % de las ordenes medidas en
 // produccion lleva mas de uno, asi que la suma de la columna «Ordenes» puede superar el total
-// del rango sin que nada este roto. Sin el rotulo, quien sume la columna concluye que las
-// cifras no cuadran — y tendra razon en lo que ve y no en lo que deduce.
+// del rango sin que nada este roto.
 //
 // Con el DINERO eso deja de ser una molestia y pasa a ser una trampa: el importe COMPLETO de
 // una orden se atribuye a CADA producto que contiene, asi que **la columna «Recaudado» NO SE
-// PUEDE SUMAR HACIA ABAJO** — sumarla cuenta la misma plata tantas veces como productos tenga
-// la orden. Por eso la advertencia se dice TRES veces y de tres formas distintas, que es lo que
-// R45 pide: en el parrafo de arriba (POR QUE), en la leyenda que lo sigue (CUALES columnas, ver
-// `textoColumnasNoSumables`) y en el encabezado del archivo descargable (R49, porque el parrafo
-// de pantalla no viaja con el `.xlsx`). Y `ordenesAcompanadas` va en la propia celda: dice en
-// cuantas de las ordenes de esa fila el importe se esta atribuyendo tambien a otro producto,
-// que es lo que permite calibrar cuanto pesa la advertencia en ESTA fila.
+// PUEDE SUMAR HACIA ABAJO**. Por eso la advertencia se sigue diciendo TRES veces y de tres
+// formas distintas, que es lo que R45 pide — lo que la 442 cambia es DONDE:
+//
+//   1. **dentro del detalle, pegada a las cifras de dinero** (POR QUE). Es la mudanza de esta
+//      ficha y la pidio el humano: la advertencia sirve donde alguien podria sumar;
+//   2. en «Cómo se cuenta», con la leyenda que NOMBRA la columna afectada derivandola de las
+//      columnas realmente pintadas (ver `textoColumnasNoSumables`);
+//   3. en el encabezado del archivo descargable (R49), porque un `.xlsx` no lleva leyenda.
 //
 // ⚠ NO HAY —NI PUEDE HABER— NINGUN TOTAL AL PIE de una columna de dinero de esta tabla (R46), y
 // eso no depende de que alguien se acuerde: lo vigila
@@ -60,7 +94,7 @@
 // (R63): dinero cortado no se ve roto, se ve como OTRO numero.
 
 import { useMemo, useState, type ReactNode } from "react";
-import { PackageSearch } from "lucide-react";
+import { ChevronDown, PackageSearch } from "lucide-react";
 import useSWR from "swr";
 
 import { serializarFiltroEntregas } from "@/app/(app)/_components/entregas-filtro-analitica";
@@ -69,9 +103,14 @@ import { formatearValor } from "@/components/private/analytics/formato";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { filasLocales } from "@/components/shared/descarga-resultado";
 import { Pagination } from "@/components/shared/Pagination";
+import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { money } from "@/lib/config/moneda";
-import { cn } from "@/lib/utils";
 import type { FilaProductoDTO, ResultadoConteoProductos } from "@/lib/types/conteo-productos";
 
 import {
@@ -84,6 +123,11 @@ import {
 import { textoSello, textoSelloCompleto } from "./ActualizarAnalitica";
 import { DineroProductoDetalle } from "./DineroProductoDetalle";
 import { calcularEfectividad } from "./efectividad";
+import {
+  textoDesenlacesDeFila,
+  tramosDeFila,
+  type IdTramoDesenlace,
+} from "./desenlaces-de-fila";
 import { textoComposicionOtrosResultados } from "./otros-resultados";
 import {
   descargaAnaliticaProductos,
@@ -103,33 +147,51 @@ export const PRODUCTOS_TEXTOS = {
   titulo: "Productos",
   tabla: "Productos del rango, por unidades movidas",
   descarga: "Productos",
+  /**
+   * FICHA 442 — el control que despliega las reglas de lectura.
+   *
+   * ⚠ LAS SEIS LINEAS EN GRIS ERAN EL PRIMER DEFECTO DE LA PANTALLA, y no por su contenido: cada
+   * una de ellas dice algo cierto y necesario. El problema es que se leen ANTES que la tabla, en
+   * un bloque que empuja las filas fuera de la primera pantalla, y quien viene a mirar productos
+   * las salta — con lo que el aviso no protege a nadie y ademas estorba.
+   *
+   * Plegadas bajo un disclosure siguen ahi, se abren cuando hacen falta y no cuestan un renglon
+   * cuando no. La unica que NO se pliega es la del dinero, que se muda a donde de verdad muerde:
+   * dentro del detalle, junto a las cifras.
+   */
+  comoSeCuenta: "Cómo se cuenta",
   /** R36 — el aviso que impide leer la columna «Ordenes» como si fuera sumable. */
   aviso:
     "Una orden con varios productos cuenta en cada uno: la suma de la columna Órdenes puede superar el total del rango.",
   /**
    * FICHA 346 — la regla de lectura del desglose, dicha en la pantalla.
    *
-   * Va aqui porque el defecto que esta ficha repara era INVISIBLE: quien sumaba las columnas y
-   * le faltaban seis ordenes no tenia forma de saber si el error estaba en la tabla o en su
-   * cuenta. Con la frase, la igualdad es una promesa comprobable a simple vista.
+   * FICHA 442 — y sigue siendo cierta con la forma nueva: la frase de «En qué terminaron»
+   * enumera los MISMOS cuatro cubos que antes eran cuatro columnas, asi que sigue sumando la
+   * columna «Órdenes». Lo que cambio es que ahora se leen en una linea en vez de en cuatro
+   * celdas separadas por 400 px de tabla.
    */
   avisoDesglose:
     "Cada orden cuenta en un solo grupo: entregadas, rechazadas, otros resultados y en proceso suman la columna Órdenes.",
   /**
    * FICHA 347 (R45) — EL AVISO DEL DINERO, y es el mas importante de los tres.
    *
-   * Dice las dos cosas que hacen ilegibles las columnas de dinero si no se saben: que el
-   * importe es el de la ORDEN entera (no el del producto, que NO EXISTE en ninguna parte del
-   * sistema — `orden.producto` solo trae `cantidad * nombre`) y que por eso la columna no se
-   * puede sumar hacia abajo.
+   * Dice las dos cosas que hacen ilegibles las cifras de dinero si no se saben: que el importe
+   * es el de la ORDEN entera (no el del producto, que NO EXISTE en ninguna parte del sistema —
+   * `orden.producto` solo trae `cantidad * nombre`) y que por eso no se pueden sumar hacia
+   * abajo.
+   *
+   * ⚠ FICHA 442 — VIVE DENTRO DEL DETALLE, pegado a las cifras. Arriba, en el bloque de seis
+   * lineas grises, lo leia quien no iba a sumar nada; aqui lo lee quien tiene los tres importes
+   * delante. Sigue tambien en «Cómo se cuenta» y en el archivo descargable (R45 pide tres).
    */
   avisoDinero:
-    "Las cifras de dinero son de la ORDEN completa, no del producto: una orden con varios productos cuenta entera en cada uno. Estas columnas no se pueden sumar hacia abajo.",
+    "El dinero es de la ORDEN completa, no del producto: una orden con varios productos cuenta entera en cada uno, así que estas cifras no se pueden sumar hacia abajo.",
   /**
    * FICHA 347 (R29) — de que habla el reparto. Va junto al aviso de arriba porque las dos
-   * columnas del reparto solo tienen sentido leidas con esta frase delante: lo que Ordenex
-   * cobro y lo que es de la tienda se saben SOLO de las ordenes ya liquidadas; de las demas no
-   * se proyecta nada (R31) y por eso su celda dice «—» y no «0,00» (R30).
+   * cifras del reparto solo tienen sentido leidas con esta frase delante: lo que Ordenex cobro
+   * y lo que es de la tienda se saben SOLO de las ordenes ya liquidadas; de las demas no se
+   * proyecta nada (R31) y por eso su celda dice «—» y no «0,00» (R30).
    */
   avisoLiquidado:
     "«Cobró Ordenex» y «Para la tienda» son solo de las órdenes ya liquidadas (cierre aprobado). Lo cobrado y aún sin liquidar se muestra aparte, en la celda de Recaudado.",
@@ -139,66 +201,50 @@ export const PRODUCTOS_TEXTOS = {
   /** FICHA 347 (R76) — el tope de la lectura de dinero, superado. El volumen sigue en pie. */
   dineroLimiteExcedido: (limite: number) =>
     `El filtro seleccionado supera las ${limite} órdenes que la lectura de dinero puede recorrer, así que no se muestra ninguna cifra: una suma sobre un conjunto truncado parecería firme y estaría incompleta. Acote el rango o las facetas.`,
-  /** FICHA 347 (R32) — el nombre accesible del control que abre el detalle de UNA fila. */
+  /**
+   * FICHA 347 (R32) — el nombre accesible del control que abre UNA fila.
+   *
+   * FICHA 442 — y ya no habla solo de dinero: la fila se abre SIEMPRE porque ahi vive tambien el
+   * volumen que salio de las columnas (unidades, otros resultados, % de rechazo). Identifica SU
+   * fila —producto y tienda— y no un «Ver detalle» repetido veinticinco veces.
+   */
   abrirDetalle: (producto: string, tienda: string) =>
-    `Ver las órdenes con dinero de ${producto} en ${tienda}`,
+    `Ver el detalle de ${producto} en ${tienda}`,
 } as const;
-
-/**
- * FICHA 348 — LA MARCA CORTA YA NO VIVE EN LOS ENCABEZADOS, y aqui esta el numero que lo decide.
- *
- * La 347 la escribia dentro de los tres rotulos (`Recaudado (no sumable)`). Medido en Chromium a
- * 1440 px sobre la tabla real: en dos de esas tres columnas la palabra mas ancha del encabezado
- * era literalmente **`sumable)` (61 px)** —ni el rotulo ni la cifra—, asi que el aviso decidia el
- * ancho de una columna de dinero. Y como la palabra mas larga fija el ancho, el encabezado
- * quedaba en 3 y 4 lineas: es la mitad del «apeñuscado» que reporto el humano.
- *
- * ⚠ EL AVISO NO SE PIERDE, SE MUDA Y AFIRMA MAS. Ahora es una leyenda sobre la tabla que NOMBRA
- * las columnas afectadas, y las nombra DERIVANDOLAS de `ORDEN_DINERO` (ver
- * `textoColumnasNoSumables`): el dia que aparezca una cuarta columna de dinero, la leyenda la
- * nombra sola. La marca por encabezado no podia hacer eso —habia que acordarse de escribirla—.
- *
- * ⚠ Y SIGUE VIVA EN EL ARCHIVO DESCARGABLE (`MARCA_NO_SUMABLE_ARCHIVO`), que es donde de verdad
- * hace falta: un CSV no lleva leyenda encima, y ahi el ancho no cuesta nada.
- */
 
 /** Los encabezados de columna, aparte para que la vista de teléfono use LOS MISMOS. */
 export const PRODUCTOS_COLUMNAS = {
   tienda: "Tienda",
   producto: "Producto",
-  unidades: "Unidades",
   ordenes: "Órdenes",
-  entregadas: "Entregadas",
-  rechazadas: "Rechazadas",
   /**
-   * FICHA 346 — el cubo que faltaba: los desenlaces que no son entrega ni rechazo.
+   * FICHA 442 — LA COLUMNA QUE SUSTITUYE A CUATRO.
    *
-   * SE LLAMA «Otros resultados» y no «Otros», que es como se llama el cubo del anillo de al
-   * lado, porque son cosas OPUESTAS: alli «Otros» son las ordenes SIN desenlace y aqui esas
-   * mismas ordenes se llaman «En proceso». Dos rotulos iguales con significados contrarios en
-   * la misma pantalla se leen uno por el otro.
+   * Antes eran `Entregadas`, `Rechazadas`, `Otros resultados` y `En proceso`: cuatro columnas de
+   * numeros, 200 px cada una, para responder una sola pregunta. Ahora es una barra con los tres
+   * tramos del heroe de la 441 y, debajo, la frase que los enumera con sus cifras.
    *
-   * ⚠ FICHA 347 — Y SIGUE SIN ENUMERAR («Devueltas y reprogramadas»): la etiqueta mentiria el
-   * dia que el catalogo gane un desenlace mas, que es el defecto que la 346 acaba de reparar.
-   * Lo que esta ficha añade no es un rotulo mas largo, es la COMPOSICION REAL de cada fila
-   * —dato derivado de `porStatus`— como segunda linea de la celda. Crece sola con el catalogo.
+   * SE LLAMA «En qué terminaron» y no «Desglose» ni «Estado»: dice la pregunta que contesta, que
+   * es lo que el rotulo tiene que hacer cuando la celda no es un numero.
    */
-  otrosResultados: "Otros resultados",
-  enProceso: "En proceso",
+  desenlaces: "En qué terminaron",
   efectividad: "Efectividad de entrega",
-  rechazo: "% de rechazo",
   /**
-   * FICHA 347 — las TRES columnas de dinero. FICHA 348 — ya SIN la marca dentro del rotulo.
+   * FICHA 347 — de las TRES cifras de dinero, esta es la unica que queda como COLUMNA.
    *
-   * Son tres y no siete (⟨Q6⟩ pedia los cuatro nombres de la wallet: flete, comision, IVA y
-   * pago a la tienda) porque esta tabla ya lleva diez columnas y a 390 px tiene DOS arreglos de
-   * ancho medidos. El desglose fino vive en el panel que se abre bajo la fila.
-   *
-   * El aviso de «no sumable» esta en la leyenda de arriba, que las nombra a las tres.
+   * FICHA 442 — las otras dos bajan al detalle, y el numero que lo decide esta medido: en las 25
+   * filas de la captura del humano las tres columnas de dinero estaban en «—», ocupaban el sitio
+   * de honor (justo detras del producto) y empujaban «Efectividad» a la 13.ª posicion, fuera de
+   * pantalla. `Recaudado` se queda porque es la cifra que se pidio; el reparto se lee cuando se
+   * abre la fila, que es cuando interesa.
    */
   recaudado: "Recaudado",
   ordenex: "Cobró Ordenex",
   paraTienda: "Para la tienda",
+  /** Las cifras que bajan al detalle de la fila. */
+  unidades: "Unidades",
+  otrosResultados: "Otros resultados",
+  rechazo: "% de rechazo",
   /** Solo en la vista de teléfono: la celda que apila las cifras de arriba. */
   cifras: "Resultado",
 } as const;
@@ -211,11 +257,27 @@ export function textoUniverso(ordenes: number, sinProducto: number): string {
 }
 
 /**
+ * FICHA 442 — LA TIENDA, DICHA UNA VEZ.
+ *
+ * Cuando la respuesta trae una sola tienda, su nombre no es un dato de la fila: es una propiedad
+ * del recorte entero. Repetirlo veinticinco veces en una columna cuesta 128 px de tabla para
+ * decir lo mismo veinticinco veces.
+ */
+export function textoTiendaUnica(tienda: string): string {
+  return `Tienda: ${tienda}`;
+}
+
+/**
  * FICHA 347 (R13) — cuantas de las ordenes de esta fila iban ACOMPAÑADAS de otro producto.
  *
  * Es la cifra que permite calibrar el aviso de no-sumable EN ESTA FILA: con 0 acompañadas el
  * recaudado de la fila no se solapa con ninguna otra; con 8 de 8, ese importe entero esta
  * tambien en otra fila de la tabla.
+ *
+ * ⚠ FICHA 442 — SE LEE EN EL DETALLE, no bajo la cifra de la columna. En la captura del humano
+ * esta linea aparecia en las 25 filas diciendo «Con otro producto: 0 de 6» —o sea, no aportaba
+ * nada en ninguna— y doblaba el alto de CADA fila. Junto al aviso del dinero, que es lo que
+ * calibra, dice lo mismo y cuesta cero renglones mientras la fila esta cerrada.
  */
 export function textoAcompanadas(acompanadas: number, ordenes: number): string {
   const n = formatearValor(acompanadas, UNIDAD_CONTEO);
@@ -285,7 +347,7 @@ export function mensajeDe(
 }
 
 /**
- * R37/R46 — ¿se pinta la columna «Tienda»?
+ * R37/R46 — ¿se pinta la columna «Tienda», o se dice una vez en un chip?
  *
  * SE DECIDE POR EL CONTENIDO DE LA RESPUESTA Y NUNCA POR EL ROL, y esa es la mitad del punto:
  * para un `adminTienda` siempre hay una sola tienda, asi que la columna desaparece sola sin que
@@ -293,10 +355,32 @@ export function mensajeDe(
  * Con un `if (rol === …)` aqui habria una segunda regla de alcance en el navegador, que es donde
  * menos vale.
  *
+ * ⚠ POR QUE PARA UN `adminTienda` ES SIEMPRE FALSO, comprobado y no supuesto: su alcance se
+ * resuelve en `lib/analytics/alcance.ts` como `{ tipo: "tienda", tiendaId: actor.usuarioId }` y
+ * `whereOrden` lo traduce a `{ tiendaId }` (`lib/analytics/alcance-columnas.ts`). El servidor no
+ * puede devolverle filas de dos tiendas, asi que el `Set` de `tiendaId` tiene siempre tamaño 1.
+ * No hace falta ninguna regla de rol en el cliente para conseguirlo: ya es imposible.
+ *
+ * ⚠ Y UN MAESTRO MIRANDO TODAS LAS TIENDAS SI LA NECESITA. La columna no «sobra» siempre: sobra
+ * cuando es CONSTANTE. Por eso la decision no es «quitarla», es «decirla una vez cuando no
+ * distingue nada y pintarla cuando distingue».
+ *
  * Se cuenta por `tiendaId` y no por nombre: dos tiendas homonimas son dos tiendas.
  */
 export function hayVariasTiendas(filas: readonly FilaProductoDTO[]): boolean {
   return new Set(filas.map((fila) => fila.tiendaId)).size > 1;
+}
+
+/**
+ * FICHA 442 — el nombre de la tienda cuando es UNA sola, o `null`.
+ *
+ * `null` con cero filas (no hay tienda que decir) y `null` con varias (entonces la columna la
+ * dice fila a fila). Es la otra mitad de `hayVariasTiendas` y se declara junto a ella para que
+ * las dos decisiones se lean de una vez: no puede haber chip Y columna, ni ninguna de las dos.
+ */
+export function tiendaUnicaDe(filas: readonly FilaProductoDTO[]): string | null {
+  if (filas.length === 0 || hayVariasTiendas(filas)) return null;
+  return filas[0].tienda;
 }
 
 /** Clave de fila: la tienda Y el producto. Un producto solo no es unico entre tiendas (R37). */
@@ -305,60 +389,59 @@ function claveDeFila(fila: FilaProductoDTO): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Las columnas                                                                */
+/* Las cifras                                                                  */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Las CIFRAS de una fila, en el orden del diseño. Se declaran una vez y las consumen las dos
- * vistas —la de escritorio como columnas y la de telefono como lineas apiladas—, de modo que
- * un telefono no puede acabar enseñando menos datos que un portatil (R46/R64).
+ * Las CIFRAS de conteo de una fila. Se declaran una vez y cada una dice DONDE se lee: las dos
+ * que contestan «cuanto se movio y cuanto llego» son columna, y las tres de apoyo viven en la
+ * fila que se abre.
  *
  * `efectividadGestion` existe en `EfectividadEntrega` y NO se pinta, a proposito: en la lectura
  * por producto lo que interesa es el rechazo COMERCIAL, y dos porcentajes que suman distinto en
  * la misma fila invitan a leer uno por el otro.
  */
-type IdCifra =
-  | "unidades"
-  | "ordenes"
-  | "entregadas"
-  | "rechazadas"
-  | "otrosResultados"
-  | "enProceso"
-  | "efectividad"
-  | "rechazo";
+type IdCifra = "unidades" | "ordenes" | "otrosResultados" | "efectividad" | "rechazo";
+
+interface DeclaracionCifra {
+  readonly id: IdCifra;
+  readonly etiqueta: string;
+  /** `true` = columna de la tabla; `false` = dato de la fila desplegable. */
+  readonly enColumna: boolean;
+}
 
 /**
- * El ORDEN de las ocho cifras, declarado una vez. Es el de `design.md §7.3` mas el cubo que
- * anadio la ficha 346.
+ * LAS CINCO CIFRAS Y SU SITIO, declarados UNA vez.
  *
- * LAS CUATRO PRIMERAS DE CONTEO SUMAN LA COLUMNA «Órdenes» —entregadas, rechazadas, otros
- * resultados y en proceso—, y esa igualdad es el arreglo de la 346: antes eran tres y el
- * desglose se quedaba corto. La comprueba `tests/components/ProductosTabla.test.tsx` leyendo
- * las CELDAS pintadas, no la funcion.
+ * ⚠ ESTA LISTA ES LA DECISION DE LA 442 y se lee entera de un vistazo a proposito: quien quiera
+ * devolver «% de rechazo» a la cabecera cambia un `false` por un `true` aqui y en ningun otro
+ * sitio — no hay una segunda lista de columnas que pueda discrepar de esta.
+ *
+ * `unidades` baja al detalle y no es un descuido: el orden de las filas lo fija el servicio POR
+ * unidades (contrato R33), asi que la columna ya esta ordenada por una cifra que no se ve. Lo
+ * que se pregunta mirando la tabla es cuantas ORDENES movio un producto y como acabaron; las
+ * unidades son el desempate, y se leen al abrir.
  */
-const ORDEN_CIFRAS: readonly { readonly id: IdCifra; readonly etiqueta: string }[] = [
-  { id: "unidades", etiqueta: PRODUCTOS_COLUMNAS.unidades },
-  { id: "ordenes", etiqueta: PRODUCTOS_COLUMNAS.ordenes },
-  { id: "entregadas", etiqueta: PRODUCTOS_COLUMNAS.entregadas },
-  { id: "rechazadas", etiqueta: PRODUCTOS_COLUMNAS.rechazadas },
-  // FICHA 346 — va PEGADA a las dos anteriores y antes de «En proceso»: las tres primeras son
-  // ordenes ya resueltas y la cuarta es trabajo vivo. Leidas en ese orden, la suma de las
-  // cuatro es la columna «Órdenes» sin tener que saltar de sitio.
-  { id: "otrosResultados", etiqueta: PRODUCTOS_COLUMNAS.otrosResultados },
-  { id: "enProceso", etiqueta: PRODUCTOS_COLUMNAS.enProceso },
-  { id: "efectividad", etiqueta: PRODUCTOS_COLUMNAS.efectividad },
-  { id: "rechazo", etiqueta: PRODUCTOS_COLUMNAS.rechazo },
+const CIFRAS: readonly DeclaracionCifra[] = [
+  { id: "ordenes", etiqueta: PRODUCTOS_COLUMNAS.ordenes, enColumna: true },
+  { id: "efectividad", etiqueta: PRODUCTOS_COLUMNAS.efectividad, enColumna: true },
+  { id: "unidades", etiqueta: PRODUCTOS_COLUMNAS.unidades, enColumna: false },
+  { id: "otrosResultados", etiqueta: PRODUCTOS_COLUMNAS.otrosResultados, enColumna: false },
+  { id: "rechazo", etiqueta: PRODUCTOS_COLUMNAS.rechazo, enColumna: false },
 ];
+
+/** Las dos que son columna, en su orden. Derivadas, nunca reescritas. */
+const CIFRAS_EN_COLUMNA = CIFRAS.filter((cifra) => cifra.enColumna);
+
+/** Las tres que viven en la fila desplegable, en su orden. */
+const CIFRAS_EN_DETALLE = CIFRAS.filter((cifra) => !cifra.enColumna);
 
 function cifrasDeFila(fila: FilaProductoDTO): Readonly<Record<IdCifra, string>> {
   const e = calcularEfectividad(fila.porStatus);
   return {
     unidades: formatearValor(fila.unidades, UNIDAD_CONTEO),
     ordenes: formatearValor(fila.ordenes, UNIDAD_CONTEO),
-    entregadas: formatearValor(e.entregadas, UNIDAD_CONTEO),
-    rechazadas: formatearValor(e.rechazadas, UNIDAD_CONTEO),
     otrosResultados: formatearValor(e.otrosDesenlaces, UNIDAD_CONTEO),
-    enProceso: formatearValor(e.enProceso, UNIDAD_CONTEO),
     efectividad: formatearValor(e.efectividad, UNIDAD_PORCENTAJE),
     rechazo: formatearValor(e.tasaRechazo, UNIDAD_PORCENTAJE),
   };
@@ -366,26 +449,41 @@ function cifrasDeFila(fila: FilaProductoDTO): Readonly<Record<IdCifra, string>> 
 
 /**
  * FICHA 347 — LAS TRES CIFRAS DE DINERO de una fila, declaradas igual que sus hermanas de
- * conteo y por el mismo motivo: las consumen las DOS vistas, asi que el telefono no puede
- * quedarse con menos dinero que el escritorio (R64).
+ * conteo y con el mismo campo `enColumna`: las consumen las DOS vistas y las dos las reparten
+ * igual, asi que el telefono no puede quedarse con menos dinero que el escritorio (R64).
  */
 type IdDinero = "recaudado" | "ordenex" | "paraTienda";
 
-const ORDEN_DINERO: readonly { readonly id: IdDinero; readonly etiqueta: string }[] = [
-  { id: "recaudado", etiqueta: PRODUCTOS_COLUMNAS.recaudado },
-  { id: "ordenex", etiqueta: PRODUCTOS_COLUMNAS.ordenex },
-  { id: "paraTienda", etiqueta: PRODUCTOS_COLUMNAS.paraTienda },
+interface DeclaracionDinero {
+  readonly id: IdDinero;
+  readonly etiqueta: string;
+  readonly enColumna: boolean;
+}
+
+const DINERO: readonly DeclaracionDinero[] = [
+  { id: "recaudado", etiqueta: PRODUCTOS_COLUMNAS.recaudado, enColumna: true },
+  { id: "ordenex", etiqueta: PRODUCTOS_COLUMNAS.ordenex, enColumna: false },
+  { id: "paraTienda", etiqueta: PRODUCTOS_COLUMNAS.paraTienda, enColumna: false },
 ];
+
+/** La unica cifra de dinero que es COLUMNA. Derivada de la lista de arriba. */
+const DINERO_EN_COLUMNA = DINERO.filter((cifra) => cifra.enColumna);
+
+/** El reparto, que se lee al abrir la fila. */
+const DINERO_EN_DETALLE = DINERO.filter((cifra) => !cifra.enColumna);
 
 /**
  * FICHA 348 (R45, en su forma nueva) — QUE COLUMNAS no se pueden sumar, dichas por su nombre.
  *
- * Es lo unico que la marca `(no sumable)` del encabezado aportaba y el aviso largo de arriba no
- * decia: CUALES son. Se DERIVA de `ORDEN_DINERO` —la misma lista que construye las columnas— y
- * no de tres literales escritos aparte, asi que no puede quedarse atras: una cuarta columna de
- * dinero aparece aqui sola, en su orden. Escribir «Recaudado, Cobró Ordenex y Para la tienda» a
- * mano es la mutacion que `ProductosTablaDinero` › «la leyenda NOMBRA las columnas de dinero…»
- * pone en rojo, porque compara contra las columnas REALMENTE pintadas.
+ * Es lo unico que la marca `(no sumable)` del encabezado aportaba y el aviso largo no decia:
+ * CUALES son. Se DERIVA de la lista de arriba —la misma que construye las columnas— y no de
+ * literales escritos aparte, asi que no puede quedarse atras: el dia que una segunda cifra de
+ * dinero vuelva a ser columna, aparece aqui sola y en su orden.
+ *
+ * ⚠ FICHA 442 — HOY DICE «La columna … que no se puede», EN SINGULAR, y es correcto: de las tres
+ * cifras de dinero solo `Recaudado` es columna. Las otras dos viven dentro del detalle de UNA
+ * fila, donde no hay nada debajo que sumar; alli la advertencia que corresponde es la de
+ * `avisoDinero` —«el importe es de la orden completa»—, y es la que se pinta a su lado.
  *
  * La conjuncion es «y» sin coma antes (norma del español, no del inglés) y con la coma de
  * separacion en el resto: con dos columnas sale «A y B» y con una, «A», sin sobras.
@@ -420,6 +518,10 @@ function importeDeFila(fila: FilaProductoDTO, id: IdDinero): string | null {
   return dinero.liquidado.tienda;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Piezas de presentación                                                      */
+/* -------------------------------------------------------------------------- */
+
 /**
  * Una cifra de la tabla. `tabular-nums` para que dos filas seguidas queden en rejilla y
  * `whitespace-nowrap` para que un porcentaje o un importe no se parta por la mitad.
@@ -434,238 +536,304 @@ function Cifra({ children }: { readonly children: string }) {
 /**
  * Una LINEA DE CONTEXTO bajo una cifra: mas pequeña y apagada.
  *
- * FICHA 354 — Y AHORA CON DOS FORMAS, porque la 348 solo tenia una y ahi estaba el defecto.
+ * ⚠ FICHA 442 — YA NO TIENE LA VARIANTE `unaLinea` de la 354, y no es un descuido: aquella
+ * subia el `min-content` de la columna «Recaudado» a 272 px para que sus dos frases de apoyo
+ * cupieran en un renglon. Esas dos frases se mudaron al detalle, donde el ancho disponible es el
+ * de la fila entera y no el de una columna, asi que no hay ninguna que forzar. Mantener la
+ * variante sin consumidor seria dejar viva la regla que engordaba la columna.
  *
- * `unaLinea` es la diferencia entre una linea de contexto que es una FRASE («Pendiente de
- * cierre: ₡23.798 (2 órdenes)») y una que es una ENUMERACION corta («Devueltas 1 ·
- * reprogramadas 2»). Solo la primera pide el trato de frase.
- *
- * ⚠ POR QUE NO ES `wrap-anywhere` AL REVES. `whitespace-nowrap` NO recorta, NO esconde y NO
- * abrevia: sube el `min-content` de la columna de su palabra mas larga a LA FRASE ENTERA, y a
- * partir de ahi el ancho lo decide el dato. Es lo contrario de `wrap-anywhere` —que la 348
- * quito de aqui al lado— y por eso no reintroduce su defecto: aquel BAJABA el `min-content` a
- * un caracter y autorizaba a partir palabras.
- *
- * ⚠ NO SE APLICA A `Contexto` ENTERO A PROPOSITO. La composicion de «Otros resultados» tambien
- * es un `Contexto` y crece con el catalogo de desenlaces; forzarla a una linea la convertiria
- * en una columna de 300 px que nadie ha pedido. Se declara donde la frase lo justifica.
+ * ⚠ SIGUE SIN `wrap-anywhere` (ficha 348): aquel bajaba el `min-content` a un caracter y
+ * autorizaba a partir palabras por dentro.
  */
-function Contexto({
-  children,
-  unaLinea = false,
-}: {
-  readonly children: ReactNode;
-  readonly unaLinea?: boolean;
-}) {
-  return (
-    <span className={cn("text-xs text-muted-foreground", unaLinea && "whitespace-nowrap")}>
-      {children}
-    </span>
-  );
+function Contexto({ children }: { readonly children: ReactNode }) {
+  return <span className="text-xs text-muted-foreground">{children}</span>;
 }
 
 /**
  * Un nombre de TEXTO de la tabla: el del producto y el de la tienda.
  *
- * ⚠ FICHA 348 — AQUI ESTABA `wrap-anywhere` Y ERA LA CAUSA DEL DEFECTO REPORTADO. La 347 lo puso
- * a proposito («reduce el `min-content`, que es la medida que aqui manda») y ese es justo el
- * problema: reducir el `min-content` a UN CARACTER autoriza al navegador a dejar la columna mas
- * estrecha que su palabra mas larga, y entonces la parte por dentro.
- *
- * MEDIDO EN CHROMIUM a 1440 px con la columna «Tienda» montada —el caso de produccion, que la
- * base local no reproduce sola—: la columna quedaba en **66 px** (el `min-content` de su propio
- * encabezado) cuando su dato mas ancho pedia **114**, y el navegador partia `Nuform` en dos
- * lineas (`Nufor` + `m`), `Distribuidora` en tres y `Ecuador` en dos. Es literalmente el
- * `Nufor/m` de la captura del humano. A 390 px pasaba lo mismo con seis palabras del nombre de
- * producto (`HIDROLIZADO`, `PRESENTACION`, `TURKESTERONE`, `Hemorroides`, `USB-C`,
- * `Blanqueadora`).
+ * ⚠ FICHA 348 — AQUI ESTABA `wrap-anywhere` Y ERA LA CAUSA DEL DEFECTO REPORTADO. Reducir el
+ * `min-content` a UN CARACTER autoriza al navegador a dejar la columna mas estrecha que su
+ * palabra mas larga, y entonces la parte por dentro. Medido en Chromium a 1440 px con la columna
+ * «Tienda» montada: la columna quedaba en 66 px cuando su dato mas ancho pedia 114, y el
+ * navegador partia `Nuform` en dos lineas (`Nufor` + `m`), `Distribuidora` en tres y `Ecuador`
+ * en dos.
  *
  * SIN NINGUNA CLASE DE PARTIDO —ni `wrap-anywhere` ni `break-words`— el `min-content` de la
- * columna vuelve a ser su palabra mas larga, que es exactamente la garantia que pidio el humano:
- * **ninguna palabra se parte a ningun ancho**. Lo que eso cuesta es ANCHO DE TABLA, y se paga a
- * sabiendas: con los minimos declarados abajo la tabla desborda y aparece el scroll horizontal,
- * que es el comportamiento declarado de `DataTable`. Mejor desplazar que estrujar.
+ * columna vuelve a ser su palabra mas larga, que es la garantia que pidio el humano: **ninguna
+ * palabra se parte a ningun ancho**.
  */
 function NombreProducto({ children }: { readonly children: string }) {
   return <span>{children}</span>;
 }
 
 /**
- * FICHA 347 (entrega B, R50/R54/R57) — la celda de «Otros resultados»: el CONTEO y, debajo, DE
- * QUE se compone.
+ * FICHA 442 — LA BARRA DE «En qué terminaron», y sus tres tramos son los del heroe de la 441.
  *
- * SEGUNDA LINEA Y NO UN TOOLTIP, y la decision esta medida (alternativa A5): un tooltip no
- * existe en tactil —y esta tabla ya lleva dos arreglos de ancho a 390 px—, no se copia con el
- * raton y los lectores de pantalla lo tratan de forma desigual. La composicion es DATO en el
- * DOM, legible siempre y sin apuntar a nada.
+ * ⚠ ES DECORATIVA (`aria-hidden`), y por la misma razon que la del heroe: no aporta ni un dato
+ * que la frase de debajo no diga con numeros. Un `role="img"` con su descripcion obligaria a
+ * mantener DOS redacciones del mismo hecho, y la que se quedaria atras seria siempre la que no
+ * se ve. La frase es texto en el DOM y la lee cualquier tecnologia de apoyo.
  *
- * TAMPOCO una celda expandible: añadiria un SEGUNDO control por fila en una tabla que ya va a
- * tener uno (el del detalle de dinero), y dos disclosures por fila es exactamente el ruido que
- * la 343 quito de la wallet.
+ * ⚠ LOS COLORES SON LOS DEL HEROE, literalmente los mismos tokens: `bg-brand` para lo entregado,
+ * `bg-foreground/80` para lo que acabo de otra forma y `bg-muted-foreground/30` para lo que
+ * sigue en proceso. Dos vocabularios de color en la misma pantalla —naranja significando una
+ * cosa arriba y otra abajo— es exactamente lo que la ficha 292 arreglo en el monitoreo.
  *
- * Con el conteo en cero no se pinta NADA debajo (R54): una composicion vacia es una linea en
- * blanco que hace la tabla mas alta sin decir nada.
+ * ⚠ NI UN HEXADECIMAL: los tres tokens giran con el modo oscuro. Un `#0d2444` fijo, que es lo
+ * que propone el mockup, desapareceria sobre fondo oscuro.
+ *
+ * Un tramo en CERO no pinta segmento (misma regla que la 258): un `<span>` de ancho 0 % es un
+ * nodo invisible que ensucia el DOM sin decir nada.
  */
-function CeldaOtrosResultados({ fila, cifra }: { readonly fila: FilaProductoDTO; readonly cifra: string }) {
+const TRAMOS_BARRA: readonly { readonly id: IdTramoDesenlace; readonly color: string }[] = [
+  { id: "entregadas", color: "bg-brand" },
+  { id: "otroDesenlace", color: "bg-foreground/80" },
+  { id: "enProceso", color: "bg-muted-foreground/30" },
+];
+
+function BarraDesenlaces({ fila }: { readonly fila: FilaProductoDTO }) {
+  const tramos = tramosDeFila(fila.porStatus);
+  if (tramos.total === 0) return null;
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-2 w-full overflow-hidden rounded-full bg-muted"
+    >
+      {TRAMOS_BARRA.filter((tramo) => tramos[tramo.id] > 0).map((tramo) => (
+        <span
+          key={tramo.id}
+          className={tramo.color}
+          // El ancho es un DATO, no una clase: Tailwind compila estaticamente y no puede
+          // generar `w-[66.7%]` en tiempo de ejecucion.
+          style={{ width: `${(tramos[tramo.id] / tramos.total) * 100}%` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * La celda de «En qué terminaron»: la barra y, debajo, la frase que la dice con numeros.
+ *
+ * SEGUNDA LINEA Y NO UN TOOLTIP (decision de la 347, que sigue en pie): un tooltip no existe en
+ * tactil, no se copia con el raton y los lectores de pantalla lo tratan de forma desigual. La
+ * composicion es DATO en el DOM, legible siempre y sin apuntar a nada.
+ */
+function CeldaDesenlaces({ fila }: { readonly fila: FilaProductoDTO }) {
+  const texto = textoDesenlacesDeFila(fila.porStatus);
+  return (
+    <span className="flex flex-col gap-1">
+      <BarraDesenlaces fila={fila} />
+      {texto === "" ? null : <Contexto>{texto}</Contexto>}
+    </span>
+  );
+}
+
+/**
+ * Una linea de la vista de TELEFONO: la etiqueta a la izquierda y la cifra a la derecha.
+ *
+ * ⚠ LA ETIQUETA PUEDE PARTIRSE Y LA CIFRA NO. Medido a 390 px por la ficha 348: con la linea
+ * entera en `whitespace-nowrap`, «Efectividad de entrega: 33,3%» fijaba un minimo de 204 px para
+ * esta columna y dejaba el nombre del producto en 104, partiendo palabras por la mitad. Dejando
+ * respirar a la etiqueta, el minimo cae y el nombre recupera sitio. La CIFRA sigue sin partirse:
+ * `whitespace-nowrap` vive dentro de `Cifra`, que es donde importa.
+ */
+function LineaApilada({ rotulo, valor }: { readonly rotulo: string; readonly valor: string }) {
+  return (
+    <span className="flex items-baseline justify-between gap-2">
+      <span className="text-left text-xs text-muted-foreground">{rotulo}</span>
+      <Cifra>{valor}</Cifra>
+    </span>
+  );
+}
+
+/** Un dato del detalle: su rotulo arriba, su cifra debajo y, si lo tiene, su linea de apoyo. */
+function DatoDeDetalle({
+  rotulo,
+  valor,
+  apoyo,
+}: {
+  readonly rotulo: string;
+  readonly valor: string;
+  readonly apoyo?: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-24 flex-col gap-0.5">
+      <span className="text-xs text-muted-foreground">{rotulo}</span>
+      <span className="text-sm font-medium tabular-nums whitespace-nowrap">{valor}</span>
+      {apoyo === undefined || apoyo === null ? null : apoyo}
+    </div>
+  );
+}
+
+/**
+ * FICHA 442 — LA FILA QUE SE ABRE: todo lo que salio de las columnas, y nada mas escondido.
+ *
+ * ⚠ SE PINTA SIEMPRE, con dinero y sin el. Hasta la 442 esta fila solo existia para el detalle
+ * de dinero de la 347 y por eso las filas sin concesion no tenian control de abrir; ahora lleva
+ * tambien el volumen que bajo de la cabecera (unidades, otros resultados, % de rechazo), asi que
+ * una fila sin dinero SIGUE teniendo algo que enseñar. Lo que no tiene es el panel de ordenes.
+ *
+ * ⚠ EL AVISO DEL DINERO VA AQUI DENTRO, pegado a las cifras, y es el pedido explicito del
+ * humano: «la advertencia que sí importa vive dentro del detalle, junto al dinero, que es donde
+ * alguien podría sumarlo por error». Arriba lo leia quien no iba a sumar nada.
+ *
+ * ⚠ `DineroProductoDetalle` SOLO CUANDO HAY DINERO QUE DETALLAR. `DataTable` construye este
+ * elemento por fila pero solo lo mete en el DOM cuando la fila esta abierta, y un elemento de
+ * React que no se monta no ejecuta ningun efecto: por eso la tabla cerrada sigue costando CERO
+ * lecturas de detalle (R33) y abrir una fila SIN dinero no consulta nada.
+ */
+function DetalleDeFila({
+  fila,
+  conDinero,
+  filtroSerializado,
+}: {
+  readonly fila: FilaProductoDTO;
+  readonly conDinero: boolean;
+  readonly filtroSerializado: string;
+}) {
+  const cifras = cifrasDeFila(fila);
   const composicion = textoComposicionOtrosResultados(fila.porStatus);
-  return (
-    <span className="flex flex-col items-end gap-0.5">
-      <Cifra>{cifra}</Cifra>
-      {composicion === "" ? null : <Contexto>{composicion}</Contexto>}
-    </span>
-  );
-}
-
-/**
- * FICHA 347 — la celda de «Recaudado»: el importe y DOS lineas de contexto.
- *
- * Son lineas y no columnas nuevas, y el motivo es de ancho medido: la tabla ya tiene diez
- * columnas y a 390 px lleva dos arreglos por desbordes reales. Tres columnas de dinero mas
- * caben; siete no.
- *
- * La linea de pendiente solo aparece cuando hay algo pendiente: un «Pendiente de cierre: ₡0 (0
- * órdenes)» en cada fila seria ruido en la fila donde todo esta liquidado, que es el caso bueno.
- *
- * ─── FICHA 354 · UN DATO POR RENGLON, Y EL RENGLON LO PAGA LA COLUMNA ──────────────────────
- *
- * LO QUE LA 348 NO ARREGLO, con el numero que lo dice. La 348 midio «cero palabras partidas» y
- * era verdad, pero respondia a otra pregunta: ninguna PALABRA se partia y la celda seguia
- * ilegible. Medido en Chromium a 1440 px, con la columna «Tienda» montada y el caso de la
- * captura del humano (`₡35.697` · 4 de 33 · pendiente `₡23.798` de 2 ordenes), esta celda
- * ocupaba **OCHO RENGLONES** para TRES datos:
- *
- *     ₡35.697 / Con otro / producto: 4 / de 33 / Pendiente / de cierre: / ₡23.798 (2 / órdenes)
- *
- * LA CAUSA, MEDIDA PIEZA A PIEZA (`min-content` y `max-content` de cada linea, clonando el nodo
- * real con su propia fuente):
- *
- * | pieza                                      | palabra mas ancha | FRASE entera |
- * | ------------------------------------------ | ----------------- | ------------ |
- * | `₡35.697`                                  |  65 px            |  65 px       |
- * | `Con otro producto: 4 de 33`               |  58 px            | **161 px**   |
- * | `Pendiente de cierre: ₡23.798 (2 órdenes)` |  61 px            | **244 px**   |
- *
- * El minimo de la 348 (6,5rem = 104 px) se calculo sobre LA PALABRA MAS LARGA, y en esta
- * columna la palabra mas larga es la cifra (65 px). Las lineas de apoyo no son palabras, son
- * FRASES: piden 161 y 244. Con 104 px de columna el navegador hacia lo unico que podia —
- * plegarlas—, y ninguna guardia lo veia porque ninguna palabra se rompia por dentro.
- *
- * EL ARREGLO SON DOS PIEZAS QUE SE SOSTIENEN LA UNA A LA OTRA:
- *
- *  1. **`unaLinea` en las dos lineas de apoyo.** Sube el `min-content` de la columna de la
- *     palabra a la FRASE, y lo hace SOLO: el dia que el importe pendiente tenga dos digitos mas
- *     o las ordenes pasen de 999, la columna crece con el dato sin que nadie edite un numero.
- *     Es la garantia; el minimo declarado es el suelo.
- *  2. **`MIN_DINERO.recaudado` medido sobre la frase** (ver la tabla de minimos mas abajo).
- *
- * ⚠ NO ES UN RECORTE. `whitespace-nowrap` no esconde ni una cifra —R63 sigue vigente y su
- * guardia tambien—: lo que hace es prohibirle a la columna ser mas estrecha que su frase. El
- * precio esta medido y se paga a sabiendas: el desborde horizontal de la tabla crece, que es
- * exactamente el canje que este modulo ya tiene decidido («mejor deslizar que estrujar»).
- */
-function CeldaRecaudado({ fila }: { readonly fila: FilaProductoDTO }) {
   const dinero = fila.dinero;
+  /**
+   * ⚠ LA CONCESION Y EL DATO SON DOS COSAS DISTINTAS, y por eso hay dos banderas.
+   *
+   * `conDinero` decide si SE PINTAN las cifras de dinero; `dinero === null` significa que esta
+   * fila no tiene ninguna orden que aporte, y eso se pinta «—» (R30) — nunca se calla y nunca se
+   * rellena con `0,00`. Lo que si depende del dato es el panel orden por orden: sin ordenes que
+   * listar, un panel vacio es peor que no tenerlo.
+   */
   const pendiente = dinero !== null && dinero.pendiente.ordenes > 0;
+
   return (
-    <span className="flex flex-col items-end gap-0.5">
-      <Cifra>{money(importeDeFila(fila, "recaudado"))}</Cifra>
-      <Contexto unaLinea>{textoAcompanadas(fila.ordenesAcompanadas, fila.ordenes)}</Contexto>
-      {pendiente && dinero !== null ? (
-        <Contexto unaLinea>
-          {textoPendiente(dinero.pendiente.recaudado, dinero.pendiente.ordenes)}
-        </Contexto>
+    <div className="flex flex-col gap-4">
+      {/**
+       * `data-slot` para que una suite pueda leer ESTE bloque y no el del panel de la 347, que
+       * repite los mismos rótulos a propósito: sus totales existen «para cotejar» (R38). Sin el
+       * marcador, un `getByText("Cobró Ordenex")` encuentra dos y no se sabe cuál mide.
+       */}
+      <div data-slot="detalle-producto" className="flex flex-wrap gap-x-8 gap-y-3">
+        {CIFRAS_EN_DETALLE.map((cifra) => (
+          <DatoDeDetalle
+            key={cifra.id}
+            rotulo={cifra.etiqueta}
+            valor={cifras[cifra.id]}
+            apoyo={
+              cifra.id === "otrosResultados" && composicion !== "" ? (
+                <Contexto>{composicion}</Contexto>
+              ) : null
+            }
+          />
+        ))}
+        {/* R6 — sin la concesion no se declara ni una cifra de dinero. No se pinta vacia, no se
+            pinta en cero y no se pinta deshabilitada: no existe. */}
+        {conDinero
+          ? DINERO_EN_DETALLE.map((cifra) => (
+              <DatoDeDetalle
+                key={cifra.id}
+                rotulo={cifra.etiqueta}
+                valor={money(importeDeFila(fila, cifra.id))}
+              />
+            ))
+          : null}
+      </div>
+
+      {/* Las dos lineas de apoyo que la 354 tuvo que meter en la columna «Recaudado» —y que
+          costaban 272 px de columna y hasta ocho renglones por fila— se leen aqui enteras, sin
+          abreviar y sin forzar ningun renglon: el ancho disponible es el de la fila entera. */}
+      {conDinero ? (
+        <div className="flex flex-col gap-1">
+          <Contexto>{textoAcompanadas(fila.ordenesAcompanadas, fila.ordenes)}</Contexto>
+          {pendiente && dinero !== null ? (
+            <Contexto>
+              {textoPendiente(dinero.pendiente.recaudado, dinero.pendiente.ordenes)}
+            </Contexto>
+          ) : null}
+          {/* R45 — LA ADVERTENCIA, donde muerde. */}
+          <p className="text-xs text-muted-foreground">{PRODUCTOS_TEXTOS.avisoDinero}</p>
+        </div>
       ) : null}
-    </span>
+
+      {conDinero && dinero !== null ? (
+        <DineroProductoDetalle
+          filtroSerializado={filtroSerializado}
+          tiendaId={fila.tiendaId}
+          tiendaNombre={fila.tienda}
+          producto={fila.producto}
+        />
+      ) : null}
+    </div>
   );
 }
 
-/** La celda de una cifra de dinero. `recaudado` lleva sus dos lineas; las otras dos, no. */
-function celdaDinero(fila: FilaProductoDTO, id: IdDinero): ReactNode {
-  if (id === "recaudado") return <CeldaRecaudado fila={fila} />;
-  return <Cifra>{money(importeDeFila(fila, id))}</Cifra>;
-}
+/* -------------------------------------------------------------------------- */
+/* Las columnas                                                                */
+/* -------------------------------------------------------------------------- */
 
 /**
- * FICHA 348 — EL ANCHO MINIMO DE CADA UNA DE LAS TRECE COLUMNAS, y de donde sale cada numero.
+ * FICHA 442 — EL ANCHO MINIMO DE CADA COLUMNA, recalculado sobre las que quedan.
  *
- * La 347 declaraba TRES minimos para trece columnas, y `DataTable` dice en su prop `minWidth`
- * que «el `min-width` del `<th>` gobierna toda la columna» y que «si la suma de mínimos excede
- * el ancho disponible, la tabla desborda y aparece el scroll horizontal (comportamiento
- * deseado: antes las columnas se estrujaban)». O sea: la via correcta era declarar, no encoger.
+ * `DataTable` dice en su prop `minWidth` que «el `min-width` del `<th>` gobierna toda la
+ * columna» y que «si la suma de mínimos excede el ancho disponible, la tabla desborda y aparece
+ * el scroll horizontal». O sea: los minimos deciden si hay desplazamiento horizontal o no.
  *
- * CADA VALOR SE MIDIO, no se estimo. En Chromium a 1440 px, con la columna «Tienda» montada y
- * nombres reales, se midio la PALABRA MAS ANCHA de cada columna —encabezado y celdas, cada una
- * con su propia fuente— y se sumo el relleno del `<th>` (24 px):
+ * LOS NUMEROS DE LA 348 SE CONSERVAN donde la columna sobrevive —se midieron en Chromium sobre
+ * la palabra mas ancha de cada una, encabezado y celdas, mas el relleno del `<th>` (24 px)— y
+ * solo cambian los dos que esta ficha toca:
  *
  * | columna              | palabra mas ancha            | px  | +relleno | declarado |
  * | -------------------- | ---------------------------- | --- | -------- | --------- |
- * | Tienda               | `Distribuidora` (dato)       |  90 |   114    | **8rem**  |
+ * | Tienda               | `Distribuidora` (dato)       |  90 |   114    | 8rem      |
  * | Producto             | `PRESENTACION` (dato)        | 102 |   126    | 14rem     |
- * | Recaudado            | `Recaudado` (rotulo)         |  71 |    95    | 6.5rem ⚠  |
- * | Cobró Ordenex        | `₡393.433` (cifra)           |  65 |    89    | **6rem**  |
- * | Para la tienda       | `₡393.433` (cifra)           |  65 |    89    | **6rem**  |
- * | Unidades             | `Unidades` (rotulo)          |  59 |    83    | **5.5rem**|
- * | Órdenes              | `Órdenes` (rotulo)           |  53 |    77    | **5rem**  |
- * | Entregadas           | `Entregadas` (rotulo)        |  72 |    96    | **6rem**  |
- * | Rechazadas           | `Rechazadas` (rotulo)        |  76 |   100    | **6.5rem**|
- * | Otros resultados     | `reprogramadas` (composicion)|  96 |   120    | **7.5rem**|
- * | En proceso           | `proceso` (rotulo)           |  50 |    74    | **5rem**  |
- * | Efectividad          | `Efectividad` (rotulo)       |  70 |    94    | **6rem**  |
- * | % de rechazo         | `rechazo` (rotulo)           |  50 |    74    | **5rem**  |
+ * | Órdenes              | `Órdenes` (rotulo)           |  53 |    77    | 5rem      |
+ * | En qué terminaron    | `terminaron` (rotulo)        |  78 |   102    | **13rem** |
+ * | Efectividad          | `Efectividad` (rotulo)       |  70 |    94    | 6rem      |
+ * | Recaudado            | `Recaudado` (rotulo)         |  71 |    95    | **6.5rem**|
  *
- * ⚠ LA FILA DE «Recaudado» LA DEROGO LA 354 (ver mas abajo): 6,5rem salia de la palabra mas
- * ancha y esa columna no lleva palabras sueltas, lleva dos FRASES. Hoy declara 17rem.
+ * ⚠ «En qué terminaron» DECLARA MUY POR ENCIMA DE SU PALABRA (13rem = 208 px frente a 102), y es
+ * la unica columna de la tabla que lo hace. No es un ensanche por gusto: su celda lleva una
+ * BARRA, que es una pieza cuyo ancho no lo fija ningun contenido —una barra de 102 px no se lee—
+ * y una FRASE («4 entregadas · 1 rechazadas · 2 devueltas · 1 en proceso») que sin sitio se
+ * pliega en cuatro renglones. Es el mismo razonamiento de la 354 sobre «Recaudado», aplicado a
+ * la unica celda que hoy lleva una frase.
  *
- * ⚠ EL MINIMO NO RESERVA SITIO PARA UN IMPORTE MAS GRANDE, Y NO HACE FALTA: `Cifra` lleva
- * `whitespace-nowrap`, asi que un `₡12.345.678` (81 px, medido por la 347) empuja la columna el
- * solo. El minimo esta para que el ENCABEZADO se lea, no para sostener el dato.
+ * ⚠ «Recaudado» VUELVE DE 17rem A 6,5rem, y el numero de la 354 NO se deroga: aquel salia de la
+ * frase mas larga de la celda («Pendiente de cierre: ₡23.798 (2 órdenes)», 244 px + relleno) y
+ * esa frase ya no esta en la celda — se lee en el detalle. Sin frases, el suelo vuelve a ser el
+ * del rotulo, que es lo que la 348 midio. Si algun dia una linea de apoyo volviera a esta
+ * columna, hay que remedir: es exactamente lo que la 354 dejo escrito.
  *
- * ⚠ SOLO DOS COLUMNAS CRECEN DE VERDAD: «Tienda» (66 → 128) y las tres de dinero. Las otras
- * nueve ya estaban EXACTAMENTE en su palabra mas larga —se midio— y su minimo es un suelo
- * declarado, no un ensanche: sirve para que el dia que un rotulo crezca no vuelva a decidirlo el
- * azar del reparto. Coste medido a 1440: el scroller pasa de 1302 a 1416 px de contenido.
- *
- * ─── FICHA 354 · EL MINIMO DE «Recaudado» SE RECALCULA, Y SOBRE OTRA COSA ──────────────────
- *
- * La tabla de arriba mide, columna a columna, LA PALABRA MAS ANCHA. Para once columnas eso es
- * correcto: su contenido son palabras sueltas y cifras. Para «Recaudado» no lo era, y ese es el
- * defecto que la 354 repara: su celda lleva DOS FRASES debajo de la cifra, y una frase no cabe
- * porque quepa su palabra mas larga.
- *
- * | pieza de la celda                          | palabra | FRASE  | +relleno |
- * | ------------------------------------------ | ------- | ------ | -------- |
- * | `₡35.697`                                  |  65 px  |  65 px |    89    |
- * | `Con otro producto: 4 de 33`               |  58 px  | 161 px |   185    |
- * | `Pendiente de cierre: ₡23.798 (2 órdenes)` |  61 px  | 244 px | **268**  |
- *
- * 6,5rem = 104 px salia de la palabra (la cifra, 65 + 24 + holgura). **17rem = 272 px** sale de
- * la frase mas larga con su relleno (268) y cuatro pixeles de holgura. Las otras dos columnas de
- * dinero NO cambian: su celda es UNA cifra y su renglon ya era uno solo — medido, no supuesto.
- *
- * ⚠ ESTE NUMERO ES UN SUELO, NO LA GARANTIA. La garantia es `unaLinea` en `CeldaRecaudado`: con
- * un importe pendiente mas largo la frase pide mas de 272 px y la columna crece sola. Si algun
- * dia se prefiere una columna mas estrecha, lo que hay que cambiar es la FRASE —no este numero—,
- * porque bajarlo sin acortarla devuelve el acordeon de la captura.
+ * SUMA A 1440 px, con las cinco columnas y sin «Tienda»: 14 + 5 + 13 + 6 + 6,5 = **44,5rem =
+ * 712 px** mas la columna del control (~44 px) = 756, en un contenedor de 1102. Con «Tienda»
+ * montada, 884. Antes eran 1416 en 1102. El desborde pasa de 314 px a CERO.
  */
 const MIN_TIENDA = "8rem";
 const MIN_PRODUCTO = "14rem";
-const MIN_DINERO: Readonly<Record<IdDinero, string>> = {
-  recaudado: "17rem",
-  ordenex: "6rem",
-  paraTienda: "6rem",
-};
+const MIN_DESENLACES = "13rem";
 const MIN_CIFRA: Readonly<Record<IdCifra, string>> = {
   unidades: "5.5rem",
   ordenes: "5rem",
-  entregadas: "6rem",
-  rechazadas: "6.5rem",
   otrosResultados: "7.5rem",
-  enProceso: "5rem",
   efectividad: "6rem",
   rechazo: "5rem",
 };
+const MIN_DINERO: Readonly<Record<IdDinero, string>> = {
+  recaudado: "6.5rem",
+  ordenex: "6rem",
+  paraTienda: "6rem",
+};
 
-/** Las columnas de ESCRITORIO. La de tienda se antepone solo cuando hace falta. */
+/**
+ * Las columnas de ESCRITORIO: cinco, o seis cuando hay varias tiendas.
+ *
+ * ⚠ EL ORDEN ES EL DEL DISEÑO APROBADO y contesta la pregunta de la pantalla en el orden en que
+ * se hace: QUE producto, CUANTAS ordenes, COMO acabaron, CUANTO se entrego, CUANTO se recaudo.
+ * El dinero vuelve al FINAL —la 347 lo habia puesto el segundo porque con trece columnas algo
+ * quedaba fuera pase lo que pase y prefirio que lo que se arrastrara fuera «% de rechazo»—: con
+ * cinco columnas no se queda fuera nada, asi que esa disyuntiva ya no existe y el dinero deja de
+ * ocupar el sitio de honor que el humano vio lleno de rayas.
+ */
 function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<FilaProductoDTO>[] {
   const tienda: Column<FilaProductoDTO>[] = conTienda
     ? [
@@ -678,54 +846,21 @@ function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<Fila
       ]
     : [];
 
-  // R6 — sin la concesion NO SE DECLARA ni una columna de dinero. No se pinta vacia, no se
-  // pinta en cero y no se pinta deshabilitada: no existe.
   const dinero: Column<FilaProductoDTO>[] = conDinero
-    ? ORDEN_DINERO.map<Column<FilaProductoDTO>>((cifra) => ({
+    ? DINERO_EN_COLUMNA.map<Column<FilaProductoDTO>>((cifra) => ({
         id: cifra.id,
         value: cifra.etiqueta,
         align: "right",
-        // FICHA 348 — el minimo VUELVE, y con otro numero y otro motivo que el de la 347.
-        //
-        // La 347 probo `minWidth: "10rem"` (160 px) «porque un importe largo necesita sitio», el
-        // navegador dijo que no —la cifra ocupa 81 px y `whitespace-nowrap` ya la protege— y se
-        // retiro entero. Retirarlo ENTERO fue pasarse: sin suelo, la columna la decidia la
-        // palabra mas ancha del encabezado, y esa palabra era `sumable)`.
-        //
-        // Ahora el suelo es el del ROTULO ya sin marca (6-6,5rem, tabla de arriba), que es la
-        // mitad de aquellos 160 px. Sigue siendo cierto que el importe no lo necesita.
         minWidth: MIN_DINERO[cifra.id],
-        render: (fila) => celdaDinero(fila, cifra.id),
+        render: (fila) => <Cifra>{money(importeDeFila(fila, cifra.id))}</Cifra>,
       }))
     : [];
 
-  // ⚠ EL DINERO VA JUSTO DETRAS DEL PRODUCTO, Y NO AL FINAL. NO ES EL ORDEN «NATURAL» —el que
-  // diseñaron la 345 y la 346 es producto → volumen → desenlace, y el dinero llegaria detras—,
-  // asi que conviene saber por que se rompe, con el numero delante.
-  //
-  // MEDIDO EN CHROMIUM a 1440x950 (la anchura de escritorio mas comun aqui): con las trece
-  // columnas y los minimos de la 348 la tabla pide **1416 px** y su contenedor da **1102**. Se
-  // quedan fuera 314, y no hay forma honesta de recuperarlos: la 347 probo cuatro y las cuatro
-  // llegan a cero destrozando algo —`hyphens:auto` deja las cabeceras leyendose «Uni-da-des» en
-  // vertical, y quitarle el suelo a «Producto» parte los nombres («Hemorroid/es»)—, que es
-  // exactamente el defecto que esta ficha viene a reparar.
-  //
-  // ⚠ FICHA 348 — EL DESBORDE CRECIO A PROPOSITO, de 200 a 314 px (con la columna «Tienda»
-  // montada, que es el caso de produccion). Ese es el precio de que ninguna palabra se parta, y
-  // el humano ya eligio: «lo ideal es que la informacion sea facil de leer y no se corten
-  // palabras». Se paga en desplazamiento horizontal, que ademas ahora tiene su flecha
-  // funcionando como la de `/ordenes` (ver `app/(app)/analitica/page.tsx`).
-  //
-  // Si algo se queda fuera pase lo que pase, **la pregunta es QUE**. Y ahi no hay empate: el
-  // dinero es el dato que se PIDIO —«falta saber cuanto dinero se ha podido recaudar»— y
-  // «% de rechazo» es una cifra DERIVADA de dos columnas que estan a la vista. Con este orden,
-  // el que pide arrastre es «% de rechazo» y no el dinero.
-  //
-  // No esconde ninguna columna y no encoge ninguna cifra. A 390 px la vista apilada pasa de
-  // desbordar 0 a desbordar **8 px** —y por eso ahi tambien aparecen las dos flechas—: es lo
-  // que cuesta que `PRESENTACION` y `TURKESTERONE` dejen de partirse. El orden lo fija
-  // `ProductosTablaDinero.test.tsx` › «el ORDEN de escritorio pone el dinero...»: devolverlo al
-  // final pone ese caso rojo.
+  // Las dos cifras que son columna, en el orden en que `CIFRAS` las declara: «Órdenes» primero
+  // y «Efectividad» después, con «En qué terminaron» entre las dos — que es el orden en que se
+  // hacen las preguntas (cuántas entraron, cómo acabaron, cuántas llegaron).
+  const [ordenes, efectividad] = CIFRAS_EN_COLUMNA;
+
   return [
     ...tienda,
     {
@@ -734,40 +869,49 @@ function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<Fila
       minWidth: MIN_PRODUCTO,
       render: (fila) => <NombreProducto>{fila.producto}</NombreProducto>,
     },
-    ...dinero,
-    ...ORDEN_CIFRAS.map<Column<FilaProductoDTO>>((cifra) => ({
-      id: cifra.id,
-      value: cifra.etiqueta,
+    {
+      id: ordenes.id,
+      value: ordenes.etiqueta,
       align: "right",
-      minWidth: MIN_CIFRA[cifra.id],
-      render: (fila) =>
-        cifra.id === "otrosResultados" ? (
-          <CeldaOtrosResultados fila={fila} cifra={cifrasDeFila(fila)[cifra.id]} />
-        ) : (
-          <Cifra>{cifrasDeFila(fila)[cifra.id]}</Cifra>
-        ),
-    })),
+      minWidth: MIN_CIFRA[ordenes.id],
+      render: (fila) => <Cifra>{cifrasDeFila(fila)[ordenes.id]}</Cifra>,
+    },
+    {
+      id: "desenlaces",
+      value: PRODUCTOS_COLUMNAS.desenlaces,
+      minWidth: MIN_DESENLACES,
+      render: (fila) => <CeldaDesenlaces fila={fila} />,
+    },
+    {
+      id: efectividad.id,
+      value: efectividad.etiqueta,
+      align: "right",
+      minWidth: MIN_CIFRA[efectividad.id],
+      render: (fila) => <Cifra>{cifrasDeFila(fila)[efectividad.id]}</Cifra>,
+    },
+    ...dinero,
   ];
 }
 
 /**
- * Las columnas de TELEFONO: dos, y ni un dato menos.
+ * Las columnas de TELEFONO: dos, y ni un dato menos que en el portatil.
  *
  * EL DEFECTO QUE ESTO EVITA, medido por las fichas 343 y 344 en Chromium a 390x844: una tabla de
  * cuatro columnas pedia 309 px en un hueco de 284 y el ultimo numero acababa fuera del area
- * visible; en la 344, 674 px fuera. Esta tabla tiene DIEZ columnas —TRECE con el dinero— y
- * nombres de producto de 62 caracteres, asi que el problema seria peor por construccion.
+ * visible. Con nombres de producto de 62 caracteres, el problema seria peor por construccion.
  *
- * Se apilan: el producto (con su tienda debajo cuando hay varias) en una celda y las cifras,
- * cada una con su etiqueta, en la otra. No se oculta ni un dato y no se abrevia ninguno (R64).
+ * Se apilan: el producto (con su tienda debajo cuando hay varias) en una celda y, en la otra,
+ * las MISMAS cifras que el escritorio pone en columna —ordenes, desenlaces, efectividad y
+ * recaudado—, cada una con su etiqueta. El resto vive en la misma fila desplegable que en
+ * escritorio, asi que las dos vistas enseñan exactamente lo mismo (R64).
  */
 function columnasTelefono(conTienda: boolean, conDinero: boolean): Column<FilaProductoDTO>[] {
   return [
     {
       id: "producto",
       value: PRODUCTOS_COLUMNAS.producto,
-      // FICHA 348 — sin `wrap-anywhere`, por lo mismo que arriba: a 390 px partia SEIS palabras
-      // del nombre (`HIDROLIZADO`, `PRESENTACION`, `TURKESTERONE`, `Hemorroides`, `USB-C`,
+      // FICHA 348 — sin `wrap-anywhere`: a 390 px partia SEIS palabras del nombre
+      // (`HIDROLIZADO`, `PRESENTACION`, `TURKESTERONE`, `Hemorroides`, `USB-C`,
       // `Blanqueadora`), medidas con `Range.getClientRects()` y no a ojo.
       render: (fila) => (
         <div className="flex flex-col gap-0.5">
@@ -784,50 +928,27 @@ function columnasTelefono(conTienda: boolean, conDinero: boolean): Column<FilaPr
       align: "right",
       render: (fila) => {
         const cifras = cifrasDeFila(fila);
-        const composicion = textoComposicionOtrosResultados(fila.porStatus);
-        const dinero = fila.dinero;
-        const pendiente = dinero !== null && dinero.pendiente.ordenes > 0;
+        const [ordenes, efectividad] = CIFRAS_EN_COLUMNA;
         return (
-          <div className="flex flex-col gap-0.5">
-            {ORDEN_CIFRAS.map((cifra) => (
-              // La etiqueta a la izquierda y la cifra a la derecha, y la ETIQUETA PUEDE PARTIRSE.
-              // Medido a 390 px: con la linea entera en `whitespace-nowrap`, «Efectividad de
-              // entrega: 33,3%» fijaba un minimo de 204 px para esta columna y dejaba el nombre
-              // del producto en 104 px, partiendo palabras por la mitad. Dejando respirar a la
-              // etiqueta, el minimo cae y el nombre recupera sitio. La CIFRA nunca se parte:
-              // `whitespace-nowrap` sigue vivo dentro de `Cifra`, que es donde importa.
-              //
-              // FICHA 347 — la composicion de «Otros resultados» cae como SUB-LINEA de su cifra,
-              // no dentro de ella: asi la pareja etiqueta+cifra se sigue leyendo igual y el
-              // telefono no pierde el dato (R57/R64).
-              <span key={cifra.id} className="flex flex-col gap-0.5">
-                <span className="flex items-baseline justify-between gap-2">
-                  <span className="text-left text-xs text-muted-foreground">{cifra.etiqueta}</span>
-                  <Cifra>{cifras[cifra.id]}</Cifra>
-                </span>
-                {cifra.id === "otrosResultados" && composicion !== "" ? (
-                  <Contexto>{composicion}</Contexto>
-                ) : null}
+          <div className="flex flex-col gap-1">
+            {/* EL MISMO ORDEN QUE EL ESCRITORIO: cuántas entraron, cómo acabaron, cuántas
+                llegaron y cuánto se recaudó. Dos ordenes distintos para las mismas cifras
+                obligan a releer la pantalla al cambiar de dispositivo. */}
+            <LineaApilada rotulo={ordenes.etiqueta} valor={cifras[ordenes.id]} />
+            <span className="flex flex-col gap-1 text-left">
+              <span className="text-xs text-muted-foreground">
+                {PRODUCTOS_COLUMNAS.desenlaces}
               </span>
-            ))}
+              <CeldaDesenlaces fila={fila} />
+            </span>
+            <LineaApilada rotulo={efectividad.etiqueta} valor={cifras[efectividad.id]} />
             {conDinero
-              ? ORDEN_DINERO.map((cifra) => (
-                  <span key={cifra.id} className="flex flex-col gap-0.5">
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span className="text-left text-xs text-muted-foreground">
-                        {cifra.etiqueta}
-                      </span>
-                      <Cifra>{money(importeDeFila(fila, cifra.id))}</Cifra>
-                    </span>
-                    {cifra.id === "recaudado" ? (
-                      <Contexto>{textoAcompanadas(fila.ordenesAcompanadas, fila.ordenes)}</Contexto>
-                    ) : null}
-                    {cifra.id === "recaudado" && pendiente && dinero !== null ? (
-                      <Contexto>
-                        {textoPendiente(dinero.pendiente.recaudado, dinero.pendiente.ordenes)}
-                      </Contexto>
-                    ) : null}
-                  </span>
+              ? DINERO_EN_COLUMNA.map((cifra) => (
+                  <LineaApilada
+                    key={cifra.id}
+                    rotulo={cifra.etiqueta}
+                    valor={money(importeDeFila(fila, cifra.id))}
+                  />
                 ))
               : null}
           </div>
@@ -883,8 +1004,7 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
    * R45 — LA PAGINACION ES DEL NAVEGADOR, y es una decision con fecha: la respuesta trae el
    * recorte entero (84 productos medidos en produccion, acotados por el CATALOGO y no por las
    * ventas), asi que paginar en el servidor costaria una consulta por pagina para ahorrar
-   * pintar cincuenta filas. ⟨Q3⟩ del spec pregunta a partir de cuantos productos deja de valer;
-   * mientras no haya numero, no se inventa un tope.
+   * pintar cincuenta filas.
    *
    * La pagina se recorta contra el total: si el filtro cambia y ahora hay menos productos, una
    * pagina 4 que ya no existe dejaria la tabla vacia con datos detras.
@@ -899,6 +1019,7 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
   // R46 — por CONTENIDO. Se mira la respuesta ENTERA y no la pagina visible: si no, la columna
   // aparecería y desaparecería al pasar de página, que es peor que no tenerla.
   const conTienda = hayVariasTiendas(filas);
+  const tiendaUnica = tiendaUnicaDe(filas);
 
   /**
    * FICHA 347 (R6) — el dinero se pinta cuando SE CONCEDE EN LOS DOS SITIOS: la prop del
@@ -908,7 +1029,7 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
    * el estado de la respuesta es «que se sirvio». Cuando el estado es `limite_excedido` (R76) la
    * concesion existe pero NO HAY CIFRAS, y pintar las columnas con «—» en todas las filas se
    * leeria como «este producto no movio dinero», que es una afirmacion falsa. En ese caso se
-   * dice por escrito y las columnas de VOLUMEN siguen intactas.
+   * dice por escrito y las cifras de VOLUMEN siguen intactas.
    */
   const estadoDinero = datos?.dinero ?? null;
   const conDinero = dinero && estadoDinero?.estado === "concedido";
@@ -925,16 +1046,16 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
    * que el archivo no puede discrepar de la tabla; y son TODAS las filas del recorte, no las de
    * la pagina: la paginacion es un asunto de la pantalla y nadie descarga «la pagina 2».
    *
+   * ⚠ FICHA 442 — EL ARCHIVO NO PIERDE NI UNA COLUMNA. La pantalla enseña cinco y el `.xlsx`
+   * sigue llevando las once base (o las veinte con dinero), porque la proyeccion es la MISMA
+   * funcion de siempre (`filaDescargaAnaliticaProductos`) y este componente no la filtra.
+   * Esconder una columna en pantalla no es quitarla del dato — y lo vigila
+   * `tests/unit/descarga/analitica-productos-descarga-columnas.test.ts` con su asercion de
+   * orden, que nombra las columnas una a una.
+   *
    * Familia B, y por el ADAPTADOR COMUN (`filasLocales`) y no armando el resultado a mano: ahi
    * es donde vive el tope unico de la app (5.000 filas, `descargaConfig.MAX_FILAS`) y el
-   * mensaje accionable cuando se supera. Una tabla que se construyera su `DescargaFilasResult`
-   * se saltaria ese tope entera y en silencio — lo vigila
-   * `tests/components/descarga/ControlDescargaTransversal.test.tsx`, y esta tabla se vio caer en
-   * el antes de cablearlo asi.
-   *
-   * FICHA 347 (R66/R67) — la proyeccion y las columnas van CONDICIONADAS a la MISMA concesion
-   * que la pantalla. Sin ella el archivo no lleva ninguna columna de dinero: ni vacia, ni en
-   * cero. Y con `limite_excedido` tampoco, porque no hay cifra que escribir.
+   * mensaje accionable cuando se supera.
    */
   const obtenerFilas = () =>
     filasLocales(filas, (f) => filaDescargaAnaliticaProductos(f, conDinero));
@@ -949,50 +1070,68 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
    * Se DESESTRUCTURA aquí y baja al `descarga` como propiedad abreviada. No es estilo:
    * `ambito-columnas.guardia` lee el árbol como texto y solo resuelve literales e
    * identificadores; escribir `ambitoColumnas: descargaArchivo.ambitoColumnas` —o un ternario—
-   * le saldría sin resolver y la pondría roja, y con razón, porque un ámbito que no puede leer
-   * es un ámbito cuya unicidad no puede comprobar. La declaración que sí lee vive junto a las
-   * columnas, que es donde se puede contrastar contra el resto del árbol.
+   * le saldría sin resolver y la pondría roja.
    */
-  const { columnas: columnasArchivo, ambitoColumnas } =
-    descargaAnaliticaProductos(conDinero);
+  const { columnas: columnasArchivo, ambitoColumnas } = descargaAnaliticaProductos(conDinero);
 
   return (
     <div className="flex w-full flex-col gap-3">
-      {/* R36/R35/R45 — los avisos y, debajo, el universo del recorte. Van ARRIBA y no al pie:
-          quien lee una columna tiene que haber leido antes por que puede sumar de mas. El
-          universo solo se pinta cuando hay respuesta: con un error, un total de cero seria una
-          cifra inventada. */}
-      <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-        <p>{PRODUCTOS_TEXTOS.aviso}</p>
-        {/* FICHA 346 — y cómo se leen las columnas del desglose, que desde esta ficha suman. */}
-        <p>{PRODUCTOS_TEXTOS.avisoDesglose}</p>
-        {/* FICHA 347 (R45/R29) — los dos avisos del dinero, solo cuando hay dinero que leer. */}
-        {conDinero ? <p>{PRODUCTOS_TEXTOS.avisoDinero}</p> : null}
-        {/* FICHA 348 — LA LEYENDA que sustituye a la marca `(no sumable)` de los encabezados.
-            Va PEGADA al aviso de arriba —que dice POR QUE— porque ella dice CUALES, y las dos
-            juntas son lo que antes decia el rotulo de cada columna. Se pinta junto a la tabla y
-            no dentro (`<caption>`) a proposito: el `<caption>` vive DENTRO del scroller
-            horizontal, mide lo que mide la tabla (1416 px medidos) y su final quedaria fuera de
-            la ventana — habria que arrastrar la tabla para leer el aviso. */}
-        {conDinero ? (
-          <p>{textoColumnasNoSumables(ORDEN_DINERO.map((cifra) => cifra.etiqueta))}</p>
-        ) : null}
-        {conDinero ? <p>{PRODUCTOS_TEXTOS.avisoLiquidado}</p> : null}
-        {/* R76 — el tope, dicho. No es un error: el volumen de al lado es correcto. */}
-        {limiteExcedido === null ? null : (
-          <p>{PRODUCTOS_TEXTOS.dineroLimiteExcedido(limiteExcedido)}</p>
-        )}
-        {datos === null ? null : (
-          <p>{textoUniverso(datos.ordenes, datos.ordenesSinProducto)}</p>
-        )}
-        {/* R65 — CUANDO se leyeron estas cifras de la base. La respuesta se sirve de una cache
-            de 15 minutos, asi que sin el sello la pantalla afirma implicitamente que el numero
-            es de este segundo. Sale del MISMO `lastSync` que sella el productor de la cache, o
-            sea el mismo instante para el volumen y para el dinero (R78). */}
-        {datos === null ? null : (
-          <p title={textoSelloCompleto(datos.lastSync)}>{textoSello(datos.lastSync)}</p>
-        )}
-      </div>
+      {/**
+       * FICHA 442 — UNA LINEA, Y LAS REGLAS BAJO DEMANDA.
+       *
+       * Antes de esta ficha aqui habia SEIS parrafos en gris —el aviso de multiproducto, el del
+       * desglose, el del dinero, la leyenda de no-sumables, el del liquidado y el universo— mas
+       * el sello, todos siempre visibles y todos por encima de la tabla. Medido: empujaban la
+       * primera fila fuera de la primera pantalla.
+       *
+       * Ahora la linea dice lo que IDENTIFICA a este recorte (de que tienda es, cuantas ordenes
+       * tiene y cuando se leyo) y las REGLAS DE LECTURA se abren con «Cómo se cuenta». Lo que la
+       * pantalla ya explicaba en su encabezado de seccion no se repite.
+       */}
+      <Collapsible className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {/* La tienda, dicha UNA vez cuando es constante (ver `tiendaUnicaDe`). Es una
+              ETIQUETA, no un control: quitar el filtro desde aquí dejaría la barra de arriba
+              enseñando una tienda que ya no está aplicada, que es un fallo mudo de los que este
+              repo persigue. Quien quiera cambiarla usa la barra, que es donde se puso. */}
+          {tiendaUnica === null ? null : (
+            <Badge variant="secondary">{textoTiendaUnica(tiendaUnica)}</Badge>
+          )}
+          {datos === null ? null : <span>{textoUniverso(datos.ordenes, datos.ordenesSinProducto)}</span>}
+          {/* R65 — CUANDO se leyeron estas cifras de la base. La respuesta se sirve de una cache
+              de 15 minutos, asi que sin el sello la pantalla afirma implicitamente que el numero
+              es de este segundo. Sale del MISMO `lastSync` que sella el productor de la cache, o
+              sea el mismo instante para el volumen y para el dinero (R78). */}
+          {datos === null ? null : (
+            <span title={textoSelloCompleto(datos.lastSync)}>{textoSello(datos.lastSync)}</span>
+          )}
+          <CollapsibleTrigger className="inline-flex items-center gap-1 rounded-sm underline decoration-dotted underline-offset-4 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
+            {PRODUCTOS_TEXTOS.comoSeCuenta}
+            <ChevronDown aria-hidden="true" className="size-3" />
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent>
+          <ul className="flex list-disc flex-col gap-1 py-1 pl-4">
+            <li>{PRODUCTOS_TEXTOS.aviso}</li>
+            {/* FICHA 346 — y cómo se lee el desglose, que desde aquella ficha suma. */}
+            <li>{PRODUCTOS_TEXTOS.avisoDesglose}</li>
+            {/* FICHA 347 (R45/R29) — las reglas del dinero, solo cuando hay dinero que leer. */}
+            {conDinero ? <li>{PRODUCTOS_TEXTOS.avisoDinero}</li> : null}
+            {conDinero ? (
+              <li>{textoColumnasNoSumables(DINERO_EN_COLUMNA.map((cifra) => cifra.etiqueta))}</li>
+            ) : null}
+            {conDinero ? <li>{PRODUCTOS_TEXTOS.avisoLiquidado}</li> : null}
+          </ul>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* R76 — el tope, dicho. NO se pliega: no es una regla de lectura, es el estado de esta
+          consulta, y quien no lo lea creerá que estos productos no movieron dinero. */}
+      {limiteExcedido === null ? null : (
+        <p className="text-xs text-muted-foreground">
+          {PRODUCTOS_TEXTOS.dineroLimiteExcedido(limiteExcedido)}
+        </p>
+      )}
 
       <DataTable
         columns={columnas}
@@ -1007,32 +1146,21 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
           description: PRODUCTOS_TEXTOS.vacioDescripcion,
         }}
         /**
-         * FICHA 347 (R32/R33/R34) — LA FILA QUE SE ABRE.
+         * FICHA 442 — LA FILA SE ABRE SIEMPRE, y por eso `renderExpanded` ya no es condicional.
          *
-         * `renderExpanded` se pasa SOLO con el dinero concedido: sin el, la tabla no antepone
-         * la columna del control y queda EXACTAMENTE como estaba (R6).
-         *
-         * `DataTable` construye este elemento por fila pero solo lo mete en el DOM cuando la
-         * fila esta abierta, y un elemento de React que no se monta no ejecuta ningun efecto:
-         * por eso la tabla cerrada cuesta CERO lecturas de detalle (R33).
-         *
-         * `null` en las filas sin dinero: sin ordenes que aporten no hay detalle que abrir, y
-         * `DataTable` no pinta boton para ellas — un control que abre un panel vacio es peor
-         * que no tenerlo.
+         * Hasta la 347 la fila solo se abria para el dinero, asi que sin concesion no habia
+         * control. Desde esta ficha el detalle lleva ademas el volumen que bajo de la cabecera
+         * (unidades, otros resultados, % de rechazo), que existe en TODAS las filas — incluidas
+         * las de un actor sin dinero concedido. Un control que abre un panel vacio seria peor
+         * que no tenerlo; aqui nunca esta vacio.
          */
-        renderExpanded={
-          conDinero
-            ? (fila) =>
-                fila.dinero === null ? null : (
-                  <DineroProductoDetalle
-                    filtroSerializado={filtroSerializado}
-                    tiendaId={fila.tiendaId}
-                    tiendaNombre={fila.tienda}
-                    producto={fila.producto}
-                  />
-                )
-            : undefined
-        }
+        renderExpanded={(fila) => (
+          <DetalleDeFila
+            fila={fila}
+            conDinero={conDinero}
+            filtroSerializado={filtroSerializado}
+          />
+        )}
         // El nombre accesible identifica SU fila —producto y tienda—, no un «Ver detalle»
         // repetido N veces: con veinticinco filas abiertas, N botones homonimos no dicen nada.
         expandAriaLabel={(fila) => PRODUCTOS_TEXTOS.abrirDetalle(fila.producto, fila.tienda)}
@@ -1044,7 +1172,7 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
                 columnas: columnasArchivo,
                 // FICHA 388 — el parámetro que enciende el selector de columnas del control
                 // común. Sin él la clave es `null` y el hook «no lee, no escribe y devuelve las
-                // columnas declaradas tal cual» (R33 de la 314), que es como estaba esta tabla.
+                // columnas declaradas tal cual» (R33 de la 314).
                 ambitoColumnas,
                 obtenerFilas,
               }
