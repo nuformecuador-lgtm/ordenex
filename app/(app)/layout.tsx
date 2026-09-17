@@ -8,6 +8,8 @@ import { PushReactivacion } from "@/components/shared/PushReactivacion";
 import { RevisionSinpeBodega } from "@/components/shared/RevisionSinpeBodega";
 import { TemaProvider } from "@/providers/TemaProvider";
 import { AyudaProvider } from "@/providers/AyudaProvider";
+import { AsistenteProvider } from "@/providers/AsistenteProvider";
+import { AsistentePanel } from "@/components/shared/AsistentePanel";
 import { leerResumenesAyuda } from "@/lib/ayuda/catalogo";
 import { mapaRutaDocumento } from "@/lib/ayuda/documento";
 import { COOKIE_TEMA, normalizarTema } from "@/lib/tema/tema";
@@ -103,59 +105,78 @@ export default async function AppLayout({
   return (
     <TemaProvider temaInicial={tema}>
       <ToastProvider>
-        <SidebarProvider>
-          <Sidebar items={items} usuario={usuario} />
-          {/* overflow-x-clip: la columna de contenido nunca empuja el ancho más
-              allá del viewport (evita scroll horizontal accidental en responsive).
-              El contenido genuinamente ancho (tablas) scrollea dentro de su propio
-              contenedor overflow-x-auto, así que este clip no lo recorta. clip (no
-              hidden) para no convertir el main en contenedor de scroll vertical. */}
-          {/* `pb-12` (48px): aire al final de TODAS las páginas del portal. Sin él, el
-              último elemento queda pegado al borde inferior y, en el módulo del mensajero,
-              debajo del botón flotante del chat. */}
-          {/* `data-rol` + `group/app`: el rol del actor viaja por CSS hasta el `PageHeader`,
-              que se tiñe con un color claro distinto por portal (pedido humano). Se pone aquí
-              porque es el único sitio que ya resuelve al actor; el header sigue siendo
-              presentación pura, usable desde páginas server y client. */}
-          <SidebarInset
-            data-rol={actor?.rol}
-            className="group/app overflow-x-clip pb-12"
-          >
-            <SidebarTrigger className={"relative md:hidden"} />
-            {/* ⭑ Ficha 433 — el proveedor envuelve SÓLO a `{children}` porque es ahí donde
-                vive el `PageHeader` que consume el mapa, y así el cambio no re-indenta el
-                resto del layout. No pinta ninguna caja: es un proveedor de contexto. */}
-            <AyudaProvider mapa={mapaAyuda}>{children}</AyudaProvider>
-          </SidebarInset>
-        </SidebarProvider>
-        {/* Feature 284 — aviso de version nueva del service worker. Va en el portal y no en el
-            layout raiz: aqui viven las sesiones de trabajo (y la PWA instalada), y el layout
-            raiz cubre ademas la landing publica, que hoy es estatica y no necesita este JS.
-            El componente decide solo cuando pintarse; mientras el usuario tenga algo a medias
-            no aparece. */}
-        <AvisoVersionNueva />
-        {/* Ficha 422 — la reactivación silenciosa de los avisos. Va aquí, y solo aquí, por dos
-            razones que no son de estilo:
-              · R24 — este layout NO SE PINTA sin sesión, así que nada puede intentar reactivar a
-                quien no ha entrado. Montarlo en el layout raíz lo intentaría en la landing.
-              · R23 — el layout persiste entre navegaciones del portal, así que el intento ocurre
-                una vez por CARGA y no una por página visitada.
-            Dentro del panel de la campana no serviría: ese panel es un portal sin `keepMounted` y
-            no existe hasta que alguien ABRE la campana — justo el gesto que esta ficha evita.
-            La guardia `push-alta-punto-unico.guardia.test.ts` exige que éste sea el único montaje
-            del árbol. El componente no pinta nada: decide solo y en silencio. */}
-        {actor && <PushReactivacion avisosRecordados={avisosRecordados} />}
-        {/* ⭑ Ficha 429 (T19/T22 — R26/R28) — el aviso de la revisión del primer ingreso.
-            ⚠️ HERMANO de `{children}`, JAMÁS envolviéndolo, y montado justo aquí al lado de
-            `PushReactivacion` por el mismo motivo por el que aquel vive aquí: este layout no se
-            pinta sin sesión, y persiste entre navegaciones del portal, así que el aviso aparece
-            una vez por CARGA y no una por página visitada.
-            Un envoltorio PODRÍA dejar de pintar el contenido con un `return null`; un hermano no
-            tiene dónde hacerlo — eso es lo que hace R28 estructural en vez de una promesa, y
-            `revision-sinpe-no-bloquea.guardia.test.ts` lo vigila sobre la forma del árbol.
-            La condición es el DATO, no el rol: `resolverRevisionSinpePendiente` ya devolvió
-            `null` para todo el que no tenga nada que revisar. */}
-        {actor && revisionSinpe && <RevisionSinpeBodega bodega={revisionSinpe} />}
+        {/* ⭑ FICHA 436 (T14/T15 — R22, R26, R30) — EL ASISTENTE.
+            El PROVEEDOR envuelve, porque el «?» que lo abre vive dentro de `{children}` (en el
+            `PageHeader`) y el PANEL vive fuera: los dos tienen que ver el mismo contexto. Es un
+            proveedor de contexto sin ninguna rama —no pinta caja y no puede dejar de pintar a sus
+            hijos—, igual que `AyudaProvider` unas líneas más abajo.
+            La conversación vive AQUÍ, en el cliente, y desaparece al recargar. Eso es R30 y es la
+            funcionalidad: nada de lo que la gente escriba se guarda en ninguna parte. */}
+        <AsistenteProvider>
+          <SidebarProvider>
+            <Sidebar items={items} usuario={usuario} />
+            {/* overflow-x-clip: la columna de contenido nunca empuja el ancho más
+                allá del viewport (evita scroll horizontal accidental en responsive).
+                El contenido genuinamente ancho (tablas) scrollea dentro de su propio
+                contenedor overflow-x-auto, así que este clip no lo recorta. clip (no
+                hidden) para no convertir el main en contenedor de scroll vertical. */}
+            {/* `pb-12` (48px): aire al final de TODAS las páginas del portal. Sin él, el
+                último elemento queda pegado al borde inferior y, en el módulo del mensajero,
+                debajo del botón flotante del chat. */}
+            {/* `data-rol` + `group/app`: el rol del actor viaja por CSS hasta el `PageHeader`,
+                que se tiñe con un color claro distinto por portal (pedido humano). Se pone aquí
+                porque es el único sitio que ya resuelve al actor; el header sigue siendo
+                presentación pura, usable desde páginas server y client. */}
+            <SidebarInset
+              data-rol={actor?.rol}
+              className="group/app overflow-x-clip pb-12"
+            >
+              <SidebarTrigger className={"relative md:hidden"} />
+              {/* ⭑ Ficha 433 — el proveedor envuelve SÓLO a `{children}` porque es ahí donde
+                  vive el `PageHeader` que consume el mapa, y así el cambio no re-indenta el
+                  resto del layout. No pinta ninguna caja: es un proveedor de contexto. */}
+              <AyudaProvider mapa={mapaAyuda}>{children}</AyudaProvider>
+            </SidebarInset>
+          </SidebarProvider>
+          {/* Feature 284 — aviso de version nueva del service worker. Va en el portal y no en el
+              layout raiz: aqui viven las sesiones de trabajo (y la PWA instalada), y el layout
+              raiz cubre ademas la landing publica, que hoy es estatica y no necesita este JS.
+              El componente decide solo cuando pintarse; mientras el usuario tenga algo a medias
+              no aparece. */}
+          <AvisoVersionNueva />
+          {/* Ficha 422 — la reactivación silenciosa de los avisos. Va aquí, y solo aquí, por dos
+              razones que no son de estilo:
+                · R24 — este layout NO SE PINTA sin sesión, así que nada puede intentar reactivar a
+                  quien no ha entrado. Montarlo en el layout raíz lo intentaría en la landing.
+                · R23 — el layout persiste entre navegaciones del portal, así que el intento ocurre
+                  una vez por CARGA y no una por página visitada.
+              Dentro del panel de la campana no serviría: ese panel es un portal sin `keepMounted` y
+              no existe hasta que alguien ABRE la campana — justo el gesto que esta ficha evita.
+              La guardia `push-alta-punto-unico.guardia.test.ts` exige que éste sea el único montaje
+              del árbol. El componente no pinta nada: decide solo y en silencio. */}
+          {actor && <PushReactivacion avisosRecordados={avisosRecordados} />}
+          {/* ⭑ Ficha 429 (T19/T22 — R26/R28) — el aviso de la revisión del primer ingreso.
+              ⚠️ HERMANO de `{children}`, JAMÁS envolviéndolo, y montado justo aquí al lado de
+              `PushReactivacion` por el mismo motivo por el que aquel vive aquí: este layout no se
+              pinta sin sesión, y persiste entre navegaciones del portal, así que el aviso aparece
+              una vez por CARGA y no una por página visitada.
+              Un envoltorio PODRÍA dejar de pintar el contenido con un `return null`; un hermano no
+              tiene dónde hacerlo — eso es lo que hace R28 estructural en vez de una promesa, y
+              `revision-sinpe-no-bloquea.guardia.test.ts` lo vigila sobre la forma del árbol.
+              La condición es el DATO, no el rol: `resolverRevisionSinpePendiente` ya devolvió
+              `null` para todo el que no tenga nada que revisar. */}
+          {actor && revisionSinpe && <RevisionSinpeBodega bodega={revisionSinpe} />}
+          {/* ⭑ Ficha 436 (T15 — R22) — EL PANEL DEL ASISTENTE.
+              ⚠️ HERMANO de `{children}`, JAMÁS envolviéndolo, y montado aquí junto a
+              `PushReactivacion` y `RevisionSinpeBodega` por la misma razón escrita arriba: este
+              layout no se pinta sin sesión y persiste entre navegaciones, así que el panel existe
+              UNA vez por carga del portal y conserva la conversación al cambiar de pantalla.
+              Un envoltorio PODRÍA dejar de pintar la página con un `return null`; un hermano no
+              tiene dónde hacerlo — eso es lo que hace R22 estructural en vez de una promesa, y
+              `asistente-panel-hermano.guardia.test.ts` lo vigila sobre la forma del árbol.
+              No pinta nada mientras está cerrado, y quien lo abre es el «?» del encabezado. */}
+          <AsistentePanel />
+        </AsistenteProvider>
       </ToastProvider>
     </TemaProvider>
   );
