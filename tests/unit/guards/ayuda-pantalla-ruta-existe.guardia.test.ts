@@ -4,10 +4,13 @@ import path from "node:path";
 
 import { partirFrontmatter } from "@/lib/ayuda/frontmatter";
 import {
-  documentoVisiblePara,
+  candidatosRutaDocumento,
+  documentosQuePuedeLeer,
+  documentosVisiblesPara,
   ETIQUETAS_GRUPO,
   PSEUDO_ROLES_AYUDA,
   ROLES_AYUDA,
+  ROLES_LECTURA_TOTAL_AYUDA,
   rutasDeDocumento,
 } from "@/lib/ayuda/documento";
 import { ARCHIVO_EXCLUIDO } from "@/lib/ayuda/catalogo";
@@ -86,6 +89,18 @@ const DOCUMENTOS = ARCHIVOS.filter((relativo) => relativo !== ARCHIVO_EXCLUIDO).
   },
 );
 const RUTAS_APP = rutasDeLaApp();
+
+/**
+ * Los mismos documentos del disco con la FORMA que pide `lib/ayuda/documento.ts`, para poder
+ * preguntarle a las funciones de verdad en vez de re-implementarlas aquí. El `slug` se deja
+ * con su `.md`: esta guardia habla de ARCHIVOS, y así el mensaje de un fallo nombra el que hay
+ * que abrir.
+ */
+const COMO_RESUMEN = DOCUMENTOS.map((doc) => ({
+  slug: doc.relativo,
+  rutas: doc.rutas,
+  roles: doc.datos.roles ?? [],
+}));
 const ROLES_VALIDOS = new Set<string>([...ROLES_AYUDA, ...PSEUDO_ROLES_AYUDA]);
 
 describe("ayuda · el frontmatter no puede apuntar al vacío", () => {
@@ -151,24 +166,62 @@ describe("ayuda · el frontmatter no puede apuntar al vacío", () => {
     // le queden dos al mismo rol — ahí el «?» elegiría por orden de lectura del disco, que es
     // una preferencia que nadie decidió.
     //
-    // ⚠️ SE PREGUNTA CON `documentoVisiblePara`, EL PREDICADO DE VERDAD, y no con una copia de
-    // la regla escrita aquí. Antes esta guardia la re-implementaba: coincidía con la del módulo,
-    // sí, pero el día que alguien cambie el acotamiento —por ejemplo para que el maestro pueda
-    // leer la ayuda de los otros portales— la guardia seguiría midiendo la regla VIEJA y el
-    // choque de `/ordenes` que existe para impedir se colaría en silencio.
+    // ⭑ FICHA 435 — SE PREGUNTA POR `candidatosRutaDocumento`, QUE ES DE DONDE SALE EL MAPA
+    // DEL «?», y no con una copia de la regla escrita aquí (hallazgo m3 de la revisión 433).
+    // No es un detalle de estilo y esta ficha es la prueba: la oficina pasó a LEER el catálogo
+    // entero, y si alguien ensanchara también el «?» —`mapaRutaDocumento` con el predicado de
+    // lectura—, `/ordenes` le daría al maestro DOS candidatos. El mapa se come el segundo en
+    // silencio (gana el primero por orden alfabético de slug) y hasta el caso de
+    // `acotamiento-por-rol` que afirma `oficina/ordenes` seguiría verde. Mirando los
+    // CANDIDATOS, no el ganador, el empate se ve.
     const choques: string[] = [];
     for (const rol of ROLES_AYUDA) {
-      const porRuta = new Map<string, string[]>();
-      for (const doc of DOCUMENTOS) {
-        if (!documentoVisiblePara({ roles: doc.datos.roles ?? [] }, rol)) continue;
-        for (const ruta of doc.rutas) {
-          porRuta.set(ruta, [...(porRuta.get(ruta) ?? []), doc.relativo]);
-        }
-      }
-      for (const [ruta, docs] of porRuta) {
+      for (const [ruta, docs] of candidatosRutaDocumento(COMO_RESUMEN, rol)) {
         if (docs.length > 1) choques.push(`${rol} · ${ruta} -> ${docs.join(", ")}`);
       }
     }
     expect(choques).toEqual([]);
+  });
+
+  it("y el empate de /ordenes EXISTE de verdad: sin esto, el caso de arriba sería vacuo", () => {
+    // El modo de fallo del caso anterior es que `candidatosRutaDocumento` devuelva un mapa
+    // vacío —por un cambio de forma en los datos que le paso— y entonces no haya nada que
+    // comparar. Estos dos anclajes son la ruta que SÍ está disputada: el maestro tiene un solo
+    // candidato y es el de oficina; la tienda, el suyo. Los dos documentos existen.
+    expect(candidatosRutaDocumento(COMO_RESUMEN, "maestro").get("/ordenes")).toEqual([
+      "oficina/ordenes.md",
+    ]);
+    expect(candidatosRutaDocumento(COMO_RESUMEN, "adminTienda").get("/ordenes")).toEqual([
+      "tienda/ordenes.md",
+    ]);
+    expect(DOCUMENTOS.filter((doc) => doc.rutas.includes("/ordenes")).length).toBe(2);
+  });
+});
+
+describe("ayuda · el acotamiento de LECTURA (ficha 435) no se puede ensanchar sin que se vea", () => {
+  // ⭑ FICHA 435 — la oficina lee el catálogo entero; los otros tres roles, sólo lo suyo. Los
+  // recuentos por rol viven en `tests/components/AyudaLayout.test.tsx`, que es donde se ve lo
+  // que la persona recibe. Lo que se cierra AQUÍ es la forma de la regla, contra los archivos
+  // del disco y en una guardia —que corre siempre, también en el gate rápido—.
+
+  it("los dos roles de lectura total son de OFICINA, y están dentro de ROLES_AYUDA", () => {
+    // Escrito a mano: si alguien mete `mensajero`, `adminTienda` o `adminSatelite` en la lista,
+    // esto se pone rojo antes de que ningún recuento se mueva. Son cuentas de gente ajena a la
+    // empresa (tiendas y satélites) o de calle: leer la ayuda de la caja no es asunto suyo.
+    expect([...ROLES_LECTURA_TOTAL_AYUDA]).toEqual(["maestro", "admin"]);
+    for (const rol of ROLES_LECTURA_TOTAL_AYUDA) {
+      expect((ROLES_AYUDA as readonly string[]).includes(rol), rol).toBe(true);
+    }
+  });
+
+  it("leer NUNCA es más estrecho que «es tu pantalla»: quien ve un documento puede abrirlo", () => {
+    // La otra mitad, y la que impide el 404 tonto: un índice que ofrece un enlace que el gate
+    // de la página rechaza. Se recorre rol por rol sobre los documentos REALES.
+    for (const rol of ROLES_AYUDA) {
+      const suyos = documentosVisiblesPara(COMO_RESUMEN, rol).map((doc) => doc.slug);
+      const legibles = new Set(documentosQuePuedeLeer(COMO_RESUMEN, rol).map((d) => d.slug));
+      expect(suyos.length, rol).toBeGreaterThan(0);
+      expect(suyos.filter((slug) => !legibles.has(slug)), rol).toEqual([]);
+    }
   });
 });

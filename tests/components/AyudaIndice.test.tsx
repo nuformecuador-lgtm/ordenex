@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 import { AyudaIndice } from "@/app/(app)/ayuda/_components/AyudaIndice";
 import { leerResumenesAyuda } from "@/lib/ayuda/catalogo";
-import { documentosVisiblesPara } from "@/lib/ayuda/documento";
+import { documentosQuePuedeLeer } from "@/lib/ayuda/documento";
 import type { RolValue } from "@prisma/client";
 
 // ⭑ FICHA 433 — EL ÍNDICE: la columna de la izquierda y su buscador, montados de verdad.
@@ -21,8 +21,13 @@ vi.mock("next/navigation", () => ({
 
 const resumenes = await leerResumenesAyuda();
 
+/**
+ * ⭑ FICHA 435 — se le pasa lo que le pasa el layout: `documentosQuePuedeLeer`, el predicado
+ * de LECTURA. No es cosmético: montarlo con el estricto sería probar una lista que la
+ * aplicación ya no le entrega a la oficina.
+ */
 function montar(rol: RolValue) {
-  return render(<AyudaIndice documentos={documentosVisiblesPara(resumenes, rol)} />);
+  return render(<AyudaIndice documentos={documentosQuePuedeLeer(resumenes, rol)} />);
 }
 
 const enlaces = () =>

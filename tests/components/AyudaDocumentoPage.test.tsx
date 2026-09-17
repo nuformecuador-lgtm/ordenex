@@ -63,6 +63,10 @@ afterEach(() => {
 });
 
 describe("R16 — la URL de un documento no se abre por escribirla: el rol manda", () => {
+  // ⭑ FICHA 435 — ESTE BLOQUE NO SE TOCA, Y ÉSA ES LA MITAD QUE IMPORTA. La lectura se
+  // ensanchó SÓLO para maestro y admin (`ROLES_LECTURA_TOTAL_AYUDA`): el mensajero, la tienda
+  // y el satélite —gente ajena a la empresa— siguen recibiendo 404 en cada uno de los casos
+  // de abajo. Si alguien mete un cuarto rol en esa lista, esto se pone rojo.
   it("⭑ los tres roles NO-oficina no pueden leer la ayuda de la caja de la empresa", async () => {
     // `oficina/wallet-caja` declara `roles: [maestro, admin]`. Los otros tres son cuentas de
     // persona con acceso al módulo (ven `/ayuda`), así que el gate del layout NO los para: lo
@@ -154,6 +158,45 @@ describe("R16 (mitad positiva) — quien SÍ puede, lee el documento entero", ()
     entra("mensajero");
     render(await AyudaDocumentoPage(props(["mensajero", "reparto"])));
     expect(screen.getByRole("heading", { level: 2, name: "Reparto" })).toBeInTheDocument();
+  });
+
+  // ⭑ FICHA 435 · R21 — LA OFICINA ABRE LA AYUDA DE LOS OTROS PORTALES.
+  //
+  // Hasta hoy `/ayuda/mensajero/reparto` le daba 404 al maestro, y el acotamiento simétrico era
+  // deliberado. La decisión del humano del 2026-09-16 lo cambia por una razón medida: la
+  // oficina es quien atiende por teléfono las dudas de los 18 mensajeros y de las tiendas, y
+  // quien contesta no tenía delante la misma pantalla que quien pregunta.
+  //
+  // ⚠️ ESTE ES EL CASO QUE MUERE si alguien devuelve `puedeLeerDocumento` al predicado
+  // estricto: es el único sitio donde la mitad POSITIVA del ensanche se afirma sobre la página
+  // real. Las negativas de arriba —mensajero, tienda y satélite contra la caja— siguen
+  // intactas: lo que se ensanchó es la lectura de la OFICINA, no el gate.
+  it("⭑ el maestro abre `/ayuda/mensajero/reparto`, que antes le daba 404", async () => {
+    entra("maestro");
+    render(await AyudaDocumentoPage(props(["mensajero", "reparto"])));
+    expect(screen.getByRole("heading", { level: 2, name: "Reparto" })).toBeInTheDocument();
+    // Y el cuerpo, no sólo el título: un `notFound()` mal doblado pasaría la línea de arriba
+    // si la página se quedara en su encabezado.
+    expect(screen.getByText(/esos viven en/i)).toBeInTheDocument();
+  });
+
+  it("y el admin también, y los dos leen la de la tienda y la del satélite", async () => {
+    // Los tres portales ajenos, uno por uno: si el ensanche cubriera sólo `mensajero/`, este
+    // caso lo dice. Son documentos cuyo `roles:` NO nombra ni a maestro ni a admin.
+    for (const rol of ["maestro", "admin"] as const) {
+      for (const slug of [
+        ["tienda", "ordenes"],
+        ["tienda", "mi-wallet"],
+        ["satelite", "en-bodega"],
+        ["mensajero", "cierre-del-dia"],
+      ]) {
+        entra(rol);
+        await expect(
+          AyudaDocumentoPage(props(slug)),
+          `${rol} · ${slug.join("/")}`,
+        ).resolves.toBeTruthy();
+      }
+    }
   });
 
   it("un documento `publico:` se le sirve a cualquiera de los cinco roles", async () => {

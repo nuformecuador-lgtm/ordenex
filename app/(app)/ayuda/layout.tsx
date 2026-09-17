@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { AppPage } from "@/components/shared/AppPage";
 import { leerResumenesAyuda } from "@/lib/ayuda/catalogo";
-import { documentosVisiblesPara, ROLES_AYUDA } from "@/lib/ayuda/documento";
+import { documentosQuePuedeLeer, ROLES_AYUDA } from "@/lib/ayuda/documento";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 
 import { AyudaIndice } from "./_components/AyudaIndice";
@@ -23,6 +23,12 @@ import { AyudaIndice } from "./_components/AyudaIndice";
  *
  * El índice se resuelve AQUÍ, en el layout, y no en cada página: así no se recalcula al
  * navegar entre documentos —el layout persiste entre navegaciones— y la lista no parpadea.
+ *
+ * ⭑ FICHA 435 — EL ÍNDICE SE LLENA CON `documentosQuePuedeLeer`, EL PREDICADO DE LECTURA, la
+ * misma pregunta que el `notFound()` de `[...slug]/page.tsx`. Las dos tienen que ser LA MISMA
+ * o se vuelve al modo de fallo de la 335 por otro camino: un índice que ofrece un enlace que
+ * da 404, o un documento legible que no aparece en ninguna lista. Para la oficina son ahora
+ * los 33 del catálogo; para los otros tres roles, exactamente los de antes.
  */
 export default async function AyudaLayout({ children }: Readonly<{ children: ReactNode }>) {
   const actor = await resolveActorFromSession();
@@ -30,7 +36,7 @@ export default async function AyudaLayout({ children }: Readonly<{ children: Rea
     notFound();
   }
 
-  const documentos = documentosVisiblesPara(await leerResumenesAyuda(), actor.rol);
+  const documentos = documentosQuePuedeLeer(await leerResumenesAyuda(), actor.rol);
 
   return (
     <AppPage
