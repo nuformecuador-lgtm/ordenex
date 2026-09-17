@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { prepararConteoEntregas, type ConsultaConteoEntregas } from "@/lib/analytics/entregas-conteo";
+import { ventanaDeCarga } from "@/lib/repositories/ventana-de-carga";
 import {
   condicionDeAlcance,
   condicionesDeConsulta,
@@ -10,12 +11,13 @@ import {
 // El `where` del desglose por status va en SQL, así que se comprueba sobre los fragmentos que
 // `condicionesDeConsulta` produce: su texto y sus PARÁMETROS. Sin base de datos.
 //
-// ⚠ ESTE ARCHIVO ES LA RED CONTRA UNA DERIVA CONCRETA Y DECLARADA. Hay dos implementaciones
-// del mismo recorte —la de objetos Prisma en `ConteoEntregasRepository.whereDeConsulta` y la
-// de SQL de aquí— porque «la última gestión vigente» no se expresa con el query builder. Los
-// casos de este archivo hacen faceta por faceta las MISMAS preguntas que
-// `conteo-entregas-where.test.ts`: si alguien toca un endpoint y no el otro, esto es lo único
-// que lo va a decir.
+// ⚠ ESTE ARCHIVO ES LA RED DE UN `where` QUE HOY COMPARTEN CUATRO LECTURAS. La cabecera decía,
+// hasta la ficha 441, que había dos implementaciones del mismo recorte —ésta y la de objetos
+// Prisma en `ConteoEntregasRepository.whereDeConsulta`—; aquélla dejó de existir el 2026-08-18,
+// cuando ese repositorio pasó a DELEGAR en éste. Lo que sí es cierto hoy: de estas condiciones
+// cuelgan el desglose por status, el anillo que lo pliega, la tabla de productos y el dinero por
+// producto. Un cambio aquí los mueve a los cuatro, y es deliberado: dos paneles de la misma
+// pantalla no pueden hablar de dos poblaciones distintas.
 
 const AHORA = new Date("2026-08-17T12:00:00.000Z");
 
@@ -132,15 +134,44 @@ describe("Las seis dimensiones de recorte", () => {
 });
 
 describe("La ventana temporal", () => {
-  // La fecha efectiva es la MISMA regla que el otro endpoint: COALESCE(última gestión vigente,
-  // orden.created_at). Aquí se lee directa porque el LATERAL ya trajo esa gestión.
-  it("compara `COALESCE(gestión, orden)` y no una sola de las dos", () => {
+  // ⭑ FICHA 441 — LA VENTANA CAE SOBRE LA FECHA DE CARGA, NO SOBRE LA ÚLTIMA GESTIÓN.
+  //
+  // Hasta el 2026-09-17 este mismo bloque afirmaba lo CONTRARIO —que la ventana comparaba
+  // `COALESCE(u."created_at", o."created_at")`, la fecha efectiva— y era el defecto: «ayer»
+  // significaba «actividad de ayer» y no «cargadas ayer». Medido en producción: de las 210
+  // órdenes que el KPI atribuía a ayer, 152 se habían cargado antes.
+  //
+  // Esta aserción sola NO basta y no pretende bastar: es sobre el TEXTO del `where`, y el texto
+  // puede ser correcto y la consulta contestar otra cosa. Quien mata de verdad la mutación
+  // «devolver la ventana al COALESCE» es
+  // `tests/integration/db/conteo-por-status-cohorte.int.test.ts`, contra Postgres real, con una
+  // orden cargada fuera de la ventana y gestionada dentro.
+  it("compara `o.created_at` y NUNCA la fecha de la última gestión", () => {
     const sql = sqlDe(consultaDe({ rango: "dia" }));
 
-    expect(sql).toContain('COALESCE(u."created_at", o."created_at")');
-    // La mutación que mata: comparar sólo `o.created_at`. Entonces una orden creada en enero y
-    // gestionada hoy no entraría en el rango de hoy.
-    expect(sql).not.toMatch(/(?<!COALESCE\(u\."created_at", )o\."created_at" >=/);
+    expect(sql).toContain('o."created_at" >=');
+    expect(sql).toContain('o."created_at" <');
+    // La mutación que mata: volver a `COALESCE(u.created_at, o.created_at)`. Entonces una orden
+    // cargada en enero y gestionada hoy volvería a contar como orden de hoy.
+    expect(sql).not.toContain("COALESCE");
+    expect(sql, "la ventana no puede referirse al lateral de la gestión").not.toContain(
+      'u."created_at"',
+    );
+  });
+
+  // Y sale de la MISMA función que usan la serie de cargadas por día y la tabla de cohortes: no
+  // es una tercera escritura parecida. Si alguien reescribiera aquí las dos líneas, este caso
+  // seguiría verde — por eso lo que se compara es el fragmento producido por `ventanaDeCarga`,
+  // no su apariencia.
+  it("la ventana es LITERALMENTE la de `ventanaDeCarga`, no una copia parecida", () => {
+    const consulta = consultaDe({ rango: "dia" });
+    const compartida = ventanaDeCarga(consulta.rango).map((c) => c.sql);
+    const propias = condicionesDeConsulta(consulta)
+      .map((c) => c.sql)
+      .filter((s) => s.includes("created_at"));
+
+    expect(compartida.length).toBe(2);
+    expect(propias).toEqual(compartida);
   });
 
   // Ventana SEMIABIERTA `[desde, hasta)`: `resolverRango` devuelve `hasta` como las 00:00 CR

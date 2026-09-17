@@ -14,27 +14,45 @@
 //     todo el rango antes de deduplicar.
 //
 // Con `LEFT JOIN LATERAL ... LIMIT 1` sale en UNA consulta y se apoya en el indice
-// `gestion_orden(orden_id)` que ya existe. Ademas la ventana temporal queda MAS clara aqui
-// que en Prisma: la fecha efectiva es literalmente `COALESCE(u.created_at, o.created_at)`, en
-// vez de las dos ramas mutuamente excluyentes que `ConteoEntregasRepository` tiene que
-// escribir para decir lo mismo sin `MAX()`.
+// `gestion_orden(orden_id)` que ya existe.
 //
-// ⚠ COSTE ACEPTADO Y DECLARADO: hay DOS implementaciones del mismo `where` —la de objetos
-// Prisma en `ConteoEntregasRepository.whereDeConsulta` y la de SQL de aqui—, y pueden
-// DIVERGIR. No se ha encontrado forma de tener una sola sin renunciar a la correccion de uno
-// de los dos endpoints. Lo que se hace al respecto:
+// ⚠ EL `where` YA NO ESTA ESCRITO DOS VECES, y la cabecera lo decia hasta la ficha 441. Aquel
+// aviso —«hay DOS implementaciones, la de objetos Prisma en
+// `ConteoEntregasRepository.whereDeConsulta` y la de SQL de aqui»— dejo de ser cierto el
+// 2026-08-18: desde entonces `ConteoEntregasRepository` DELEGA en este repositorio y solo pliega
+// sus buckets en seis, asi que `whereDeConsulta` ya no existe. Este archivo es hoy el UNICO
+// sitio donde se escribe el recorte de la vertical, y lo consumen tres lecturas mas
+// —`ConteoProductosRepository`, `DineroProductosRepository` y, para el alcance,
+// `ConteoCargadasPorDiaRepository` / `CicloVidaRepository` / `ConteoDevolucionesRepository`—.
+// Lo que sigue en pie de aquel parrafo:
 //   (a) las condiciones se construyen en `condicionesDeConsulta`, funcion PURA y exportada,
 //       para poder inspeccionarlas en un test sin base de datos;
-//   (b) `tests/unit/analytics/conteo-por-status-sql.test.ts` cubre faceta por faceta las
-//       MISMAS preguntas que el test del `where` de Prisma, incluida la del alcance;
+//   (b) `tests/unit/analytics/conteo-por-status-sql.test.ts` la cubre faceta por faceta;
 //   (c) el recorte por rol es la PRIMERA condicion siempre, y hay un caso que lo exige.
-// Si algun dia estos dos endpoints dejan de compartir semantica sera porque alguien toco uno
-// y no el otro — y esos tests son lo unico que lo va a decir.
+//
+// ─── FICHA 441 — LA VENTANA CAE SOBRE LA CARGA, NO SOBRE LA ULTIMA GESTION ──────────────
+//
+// Hasta el 2026-09-17 la ventana caia sobre `COALESCE(u."created_at", o."created_at")` —la fecha
+// de la ULTIMA GESTION, y solo la de creacion si la orden nunca se gestiono—, asi que «ayer»
+// significaba «actividad de ayer» y no «cargadas ayer». MEDIDO EN PRODUCCION para el dia
+// anterior: 210 ordenes y 49,0 % de efectividad por fecha efectiva, contra 75 ordenes y 14,7 %
+// por cohorte de carga. **152 de las 210 se habian cargado antes**: tres cuartas partes de la
+// cifra eran arrastre. El humano pidio la segunda lectura.
+//
+// La ventana se IMPORTA de `ventanaDeCarga` y no se escribe aqui: es la MISMA funcion que usan
+// la serie de cargadas por dia y la tabla de cohortes, que ya preguntaban por `o."created_at"`.
+// Ver ese archivo para el porque de una sola definicion.
+//
+// CONSECUENCIA, DELIBERADA: las cuatro lecturas que comparten este `where` —el desglose por
+// status, el anillo que lo pliega, la tabla de productos y el dinero por producto— se mueven
+// JUNTAS a la cohorte de carga. Esa es la mitad del punto: con una sola ventana, dos paneles de
+// la misma pantalla no pueden hablar de dos poblaciones distintas.
 
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 
 import type { ConsultaConteoEntregas, RecorteDeOrdenes } from "@/lib/analytics/entregas-conteo";
+import { ventanaDeCarga } from "@/lib/repositories/ventana-de-carga";
 import type { AlcanceDatos } from "@/lib/analytics/alcance";
 import type { IConteoPorStatusRepository } from "@/lib/interfaces/repositories/IConteoPorStatusRepository";
 import type { ConteoDeStatus } from "@/lib/types/conteo-por-status";
@@ -138,21 +156,18 @@ export function condicionesDeConsulta(consulta: RecorteDeOrdenes): Prisma.Sql[] 
     )`);
   }
 
-  // La fecha efectiva: `COALESCE(ultima gestion vigente, orden.created_at)`, la MISMA regla
-  // que el otro endpoint. Aqui se lee directa porque el LATERAL ya trajo esa gestion.
+  // ⚠ FICHA 441 — LA VENTANA CAE SOBRE `o."created_at"`, LA FECHA DE CARGA. Ni una linea de
+  // fecha escrita aqui: se IMPORTA `ventanaDeCarga`, la misma que ya usaban la serie de
+  // cargadas por dia y la tabla de cohortes. Sin rango no aporta ninguna condicion.
   //
-  // Ventana SEMIABIERTA `[desde, hasta)`: `resolverRango` devuelve `hasta` como las 00:00 CR
-  // del dia SIGUIENTE, justamente para que `hastaFecha` sea inclusiva. Un `<=` aqui meteria
-  // el dia siguiente entero.
-  //
-  // SIN rango no se anade ninguna condicion de fecha: la pantalla no arranca con ventana
-  // puesta, y «sin filtrar» tiene que contar todas las ordenes y no las de una semana.
-  if (rango !== null) {
-    condiciones.push(
-      Prisma.sql`COALESCE(u."created_at", o."created_at") >= ${rango.desde}`,
-      Prisma.sql`COALESCE(u."created_at", o."created_at") <  ${rango.hasta}`,
-    );
-  }
+  // LO QUE HABIA ANTES, para que nadie lo reponga sin saber que hace: la ventana comparaba
+  // `COALESCE(u."created_at", o."created_at")` —la ULTIMA GESTION VIGENTE, y solo la creacion
+  // si nunca se gestiono—. Con eso, una orden cargada en enero y gestionada ayer contaba como
+  // orden de AYER. Medido en produccion el 2026-09-17: 152 de las 210 ordenes que el KPI
+  // atribuia a «ayer» se habian cargado antes. La mutacion «devolver la ventana al `COALESCE`»
+  // la caza `tests/integration/db/conteo-por-status-cohorte.int.test.ts` contra Postgres real,
+  // con una orden cargada FUERA de la ventana y gestionada DENTRO — el caso exacto de las 152.
+  condiciones.push(...ventanaDeCarga(rango));
 
   return condiciones;
 }
