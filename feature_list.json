@@ -5285,12 +5285,12 @@
       "title": "la tabla de productos esconde la columna que importa detras de 13 columnas",
       "description": "De 14 columnas a 5 mas detalle desplegable; efectividad de la 13.a a la 4.a.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "media",
-      "branch": null,
+      "branch": "fix/442-tabla-productos",
       "depends_on": null,
-      "status_note": "DISENO APROBADO por el humano el 2026-09-17: artboards en design-analitica/ (analitica-el-numero-que-importa). MEDIDO el 2026-09-17 a 1440px con sesion de maestro: 14 columnas, solo 7 visibles sin desplazar, la tabla mide 1584px en una ventana de 1440, y «Efectividad de entrega» esta en la posicion 13 — FUERA DE PANTALLA. || Las tres columnas que SI se ven primero (Recaudado, Cobro Ordenex, Para la tienda) estan TODAS en «—» en las 25 filas, y cada una arrastra una linea secundaria que dobla el alto de cada fila. «Tienda» repite el mismo nombre 25 veces: es un filtro disfrazado de columna. Y antes de la tabla hay SEIS lineas de advertencias en gris. || EL DISENO: 5 columnas (Producto, Ordenes, En que terminaron como BARRA, Efectividad, Recaudado) mas fila desplegable con el resto. La advertencia que si importa —que el dinero no se suma hacia abajo— vive DENTRO del detalle, junto al dinero."
+      "status_note": "Mergeada en dev (PR #811, 3a118240) y NO desplegada. MEDIDO antes/despues en Chromium, y el «antes» se midio de verdad revirtiendo los archivos a origin/dev, no copiando cifras: 14 columnas -> 7; ancho 1584px -> 1102 en ventana de 1440; desbordamiento 562px -> 0; «Efectividad» de la 13.a INVISIBLE a la 6.a a la vista; 5 lineas de aviso en gris -> 0; alto de fila a 390px 306-324 -> 168-200 (-45%). || LAS TRES QUE NO SE PODIAN ROMPER: (1) «Tienda» habla como columna O como chip, nunca las dos ni ninguna, decidido por contenido y verificado en los dos roles; para adminTienda es imposible que exista y se comprobo en el codigo. (2) UNA sola efectividad: la barra solo REPARTE lo que calcularEfectividad ya conto, con los tokens del heroe de la 441. (3) La descarga byte a byte igual que origin/dev — esconder una columna en pantalla no es quitarla del dato. || El chip NO lleva «x» a proposito: el filtro de tienda vive en la barra compartida, y limpiarlo desde aqui la dejaria mostrando una tienda ya no aplicada. Es etiqueta, no control. || Extra encontrado mirando: decia «1 rechazadas». El singular NO se calcula, ES el value del catalogo, asi que la correccion no introduce reglas de morfologia. || Gate --rapido, INIT_EXIT=0. 7 mutaciones, 7 muertas."
     },
     {
       "id": 443,
@@ -5339,6 +5339,18 @@
       "branch": null,
       "depends_on": null,
       "status_note": "ENCONTRADO MIRANDO durante la 441, a 390px con sesion de maestro. Es ANTERIOR a esa ficha. || Lo ven los cuatro roles que abren Analitica. Misma familia que la 437 —una fila que no puede envolver— pero en otra barra."
+    },
+    {
+      "id": 447,
+      "title": "en desarrollo /analitica tira 500 por useToast y no es un fallo real",
+      "description": "Ruido de Turbopack que ya costo tiempo a dos agentes.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "NO ES UN FALLO DE PRODUCCION, y esto es lo importante de la ficha: medido con get_runtime_errors sobre /analitica en produccion, ventana de 7 dias -> CERO errores. || En DESARROLLO si aparece: «Error: useToast debe usarse dentro de un ToastProvider» en app/_components/LogoutButton.tsx:43, montado por PageHeader.tsx:141, durante el render de servidor. La pagina se recupera al hidratar, asi que no se ve rota. Un agente lo midio 7 veces en ~15 cargas con su propio dev server; otro concluyo que era cache de Turbopack corrompida por dos dev servers compartiendo .next y midio 3 vueltas sin y 3 con sus cambios, 0 errores. || YA LE COSTO TIEMPO A DOS AGENTES perseguirlo. El valor de arreglarlo no es el usuario final —no lo ve— sino que deja de contaminar toda verificacion local de esa pantalla."
     }
   ]
 }
