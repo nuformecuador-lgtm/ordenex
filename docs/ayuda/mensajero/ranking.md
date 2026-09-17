@@ -1,9 +1,9 @@
 ---
 titulo: Ranking
 modulo: ranking
-pantalla: /ranking
+pantalla: /ranking, /ranking/historico
 roles: [mensajero, maestro, admin]
-actualizado: 2026-09-15
+actualizado: 2026-09-16
 fuentes:
   - app/(app)/ranking/_components/RankingModule.tsx
   - app/(app)/ranking/_components/RankingPodio.tsx
