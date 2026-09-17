@@ -93,10 +93,25 @@ y escrito en `progress/design_sf001_p{1,2,3,4}_*.md`.
 | **2** · SINPE por bodega | 429 | ✅ **`done`**, en `dev`. PR #799. Revisión rechazada y levantada |
 | **3** · Contacto anticipado | 430 | ✅ **`done`**, en `dev`. PR #800. Revisión OK |
 | **1** · Cierres de satélite | 431 | ✅ **`done`**, en `dev`. PR #801. Revisión OK tras relevo del frontend |
-| **4a** · Módulo de documentación | 433 | 🔨 **implementado y verificado con el navegador**. En revisión |
-| **4b** · Asistente | — | Diseño escrito (`design_sf001_p4_asistente.md`). **Bloqueado por la clave de API** |
+| **4a** · Módulo de documentación | 433 | ✅ **`done`**, en `dev`. PR #802. Revisión rechazada y levantada |
+| **4b** · Asistente | 436 | ✅ **`done`**, en `dev`. PR #806. Revisión rechazada y levantada |
 
-**Nada desplegado a producción**, como se acordó: las cuatro salen juntas.
+**SF-001 ESTÁ COMPLETA EN `dev`.** Nada desplegado a producción, como se acordó: las cuatro salen
+juntas. Fichas de apoyo que salieron por el camino y también están en `dev`: **432** (el despliegue se
+desatasca solo), **434** (las tres pantallas sin ayuda) y **435** (la oficina lee la ayuda de los
+portales que atiende).
+
+### Lo que hay que hacer ANTES de abrir la release
+
+1. **`DIRECT_URL` de producción**: es la credencial que sólo usa `migrate deploy`, y la última release
+   no llevó ni una migración. Ésta trae cinco. Comprobarla antes, no durante.
+2. **Que la `DATABASE_URL` de producción NO sea el pooler de sesión** (5432, tope 15). Es el fallo que
+   tumbó preview durante horas.
+3. **`ANTHROPIC_API_KEY` en Vercel**, preview y production **por separado**. Sin ella, T25/T26/T27 de
+   la 436 no se pueden cerrar.
+4. **Recapturar los números de la 431** (`max(updated_at)` y el conteo de `aprobado` en
+   `cierre_bodega`): medidos el 2026-09-17 daban 35 aprobados, ninguno con campos nulos — pero la
+   referencia caduca sola.
 
 ### El frontend de la 431 tuvo un relevo
 
