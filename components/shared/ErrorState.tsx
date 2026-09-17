@@ -8,6 +8,7 @@ import { TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { reemitirEnCliente } from "@/lib/errors/reemitir-en-cliente";
+import { cn } from "@/lib/utils";
 
 /**
  * Forma del error que Next entrega a un `error.tsx`. En produccion, si el fallo ocurrio en el
@@ -117,7 +118,19 @@ export function ErrorState({
               {etiquetaReintentar}
             </Button>
             {etiquetaInicio === null ? null : (
-              <Link href={hrefInicio} className={buttonVariants({ variant: "outline" })}>
+              // ⚠️ `cn(...)` Y NO `buttonVariants(...)` A PELO —el mismo porqué que en
+              // `NoEncontradoState`, y aquí MEDIDO en el navegador el 2026-09-17 sobre esta
+              // pieza: a pelo el enlace salía con `border-top-color: rgba(0, 0, 0, 0)` y
+              // `bg-background` rgb(247, 248, 252) sobre un fondo de página del MISMO
+              // rgb(247, 248, 252), o sea que la salida segura de la pantalla de error se leía
+              // como texto en negrita. La causa: la base de `buttonVariants` trae
+              // `border border-transparent` y la variante `outline` trae `border-border`; sin
+              // tailwind-merge sobreviven LAS DOS en la cadena y gana el transparente por
+              // cascada. `<Button>` no lo sufre porque pasa por `cn` por dentro; aquí no hay
+              // `<Button>` —es un `<Link>`, y tiene que serlo: es navegación, no una acción—,
+              // así que el `cn` va a mano. Re-medido tras el arreglo: rgb(227, 232, 242), 1px.
+              // Lo sostiene `tests/unit/guards/buttonvariants-pasa-por-cn.guardia.test.ts`.
+              <Link href={hrefInicio} className={cn(buttonVariants({ variant: "outline" }))}>
                 {etiquetaInicio}
               </Link>
             )}
