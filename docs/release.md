@@ -70,6 +70,45 @@ El paso de vuelta **no es opcional**: si se olvida, el parche se pierde en la si
 3. **Un parche, un problema.** La tentación de «ya que estoy» es lo que convierte un desvío de una
    tarde en una segunda rama de mantenimiento.
 
+### ⚠️ El gate de una rama nacida de `prod` NO puede pasar en verde, y no es culpa del parche
+
+**Medido el 2026-09-17 con la ficha 440**, la primera que usó este procedimiento. La base local está
+migrada al esquema de `dev` —incluidas las 6 migraciones que esperan—, pero el código de la rama es el
+de `prod`, que no sabe que esas columnas existen:
+
+```
+Test Files  52 failed | 1923 passed
+     Tests  342 failed | 28512 passed
+INIT_EXIT=1
+Raw query failed. Code: 23502.
+el valor nulo en la columna «sinpe_numero» de la relación «zona» viola la restricción not-null
+```
+
+**Cómo se distingue de un rojo de verdad.** Las tres condiciones, y hay que comprobar las tres:
+
+1. **Todos los rojos caen bajo `tests/integration/`.** Ni uno fuera.
+2. **Ninguno es de un archivo de tu ficha.**
+3. **Los mensajes son de esquema** —columna inexistente, `not null` violado, relación que no está—,
+   no aserciones de negocio fallando.
+
+Si se cumplen las tres, el rojo es **del entorno**. Lo que vale como verificación es
+**typecheck + lint + todo lo que no sea `integration`**, y eso **se escribe en el PR con sus cifras**:
+no se mete nada en el baseline, no se «arregla» ningún test y no se fuerza el gate.
+
+**Lo que NO hay que hacer: rebobinar la base local al esquema de `prod`.** Es compartida, así que
+dejaría en rojo el gate de cualquier otra sesión o agente que esté trabajando sobre `dev`. Si un parche
+necesitara de verdad las pruebas contra base, eso es una conversación, no un comando.
+
+### ⚠️ Y comprobá en qué rama estás JUSTO ANTES de commitear
+
+**Pasó el 2026-09-17, escribiendo esta misma sección.** Un agente trabajando en la copia principal
+cambió la rama por debajo, el commit aterrizó en la rama del parche en vez de en `dev`, y el
+`git push origin dev` **salió con éxito porque no había nada que empujar**. La cadena entera reportó
+verde y la sección no existía en ninguna parte.
+
+`git branch --show-current` antes de `git add`. Y si el trabajo desaparece, está en `git reflog`:
+`git reflog | grep commit` lo encuentra, y un `cherry-pick` lo devuelve.
+
 ### Lo que NO se puede sacar por aquí, medido el 2026-09-17
 
 Una ficha construida **encima** de `dev` no se puede llevar sola a `prod` aunque arregle algo
