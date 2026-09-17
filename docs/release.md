@@ -205,6 +205,56 @@ sino «por qué seguimos esperando».
 
 ---
 
+## Release del 2026-09-17 — todo lo que esperaba en `dev` MENOS SF-001
+
+**`prod` = `9a1b40be`** · PR #814 · deployment `783LDc7yrDfog6npD1ZnSoHwoPqH`, **success**.
+
+La primera que usa la vía de §2 bis para lo contrario de un parche: en vez de sacar una ficha sola,
+saca **todas menos una familia**. Diez fichas —437, 438, 439, 440, 441, 442, 443, 444, 445, 446—
+traídas por `cherry-pick` a una rama nacida de `origin/prod`. **Cero conflictos en los trece commits.**
+
+**La comprobación que hace que esto sea creíble** no es que aplicara limpio, es el diff de vuelta: de
+los 65 ficheros que la rama aportaba, **64 salieron byte a byte idénticos a `dev`**, y el único
+distinto —`PageHeader.tsx`— se diferenciaba en exactamente las 12 líneas del `AyudaBoton` de SF-001.
+O sea: `dev` menos lo que se queda, no una reescritura.
+
+Lo verificado, con su evidencia:
+
+- **Gate completo en verde sobre la rama**: `Test Files 1989 passed`, `Tests 29056 passed | 26 skipped`,
+  `INIT_EXIT=0` (`progress/gate_release_2026-09-17.log`). Los 26 saltados son los mismos que deja
+  `dev`: **ninguno por falta de base**, con 378 ficheros de integración corridos. Cómo se consiguió
+  contra el esquema de `prod`: la receta de «✅ Pero SÍ se puede tener el gate entero en verde».
+- **Sin migraciones**: 199 antes y 199 después, última `20260917120200_cierre_rechazo_tienda`. Las 6
+  de SF-001 siguen esperando en `dev`.
+- **Errores de runtime**: `get_runtime_errors` con ventana de 1 h tras el despliegue → **cero**.
+- **Los recurrentes tienen su fila**: una `pending` de `liberar_reprogramadas` y una de
+  `analitica_rollup_diario`.
+- **La app responde**: `/` y `/login` en 200. Y el componente de la 438 viaja en el payload servido
+  —«No encontramos esta página» aparece en el HTML de `/login`—, que es la confirmación de que el
+  código desplegado ES esta rama. *(Ojo: `/ruta-inexistente` sin sesión da 307 a `/login`, así que el
+  404 en sí no se puede comprobar sin iniciar sesión. Queda pendiente de mirar con sesión.)*
+
+**Los números de Analítica, medidos contra producción ANTES del despliegue**, para comparar contra lo
+que se vea en pantalla. La ventana va en UTC a propósito: `orden.created_at` es un `timestamp` sin
+zona que guarda UTC, y convertirlo con `AT TIME ZONE` lo desplaza seis horas.
+
+| ventana | base antes | base después | % antes | % después |
+| --- | --- | --- | --- | --- |
+| últimos 7 días | 1098 órdenes | **724** | 41,4 % | **40,2 %** |
+| 16-sep (CR) | 321 órdenes | **67** | 33,9 % | **23,9 %** |
+
+Lo que se arregla es **la base**: un día deja de arrastrar órdenes cargadas otros días. El porcentaje
+de los 7 días casi no se mueve; el de un día concreto baja 10 puntos, y esa era la cifra que mentía.
+
+**Lo que NO salió, y sigue esperando:** SF-001 entero (fichas 429, 430, 431, 432, 433, 434, 435, 436),
+con sus 6 migraciones. Sale cuando lo diga el humano.
+
+**Media ficha desplegada:** la **440** salió a medias **a propósito**. El síntoma está taponado —un
+tropiezo de base ya no es un 500 mudo en el portal del mensajero— pero la causa raíz, la conexión que
+vuelve al pool con la transacción abortada, no se ha tocado. La ficha se queda `pending` diciéndolo.
+
+---
+
 ## Release del 2026-08-23 (2.ª) — la 271, recorrida
 
 **`prod` = `37b5944b`** · desplegado y **READY** · PR #484.
