@@ -10,6 +10,7 @@ import {
 } from "@/lib/types/postulacion-mensajero";
 import { POSTULACION_ALLOWED_MIME, postulacionConfig } from "@/lib/config/postulacion";
 import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
+import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -323,7 +324,13 @@ export function PostulacionForm({
             avisaremos cuando sea revisada. Aún no tienes acceso a la plataforma.
           </p>
         </div>
-        <Link href="/login" className={buttonVariants({ className: "w-full" })}>
+        {/* `cn(...)` y no `buttonVariants(...)` a pelo: ficha 439. Esta variante es la de
+            fondo solido, asi que HOY no se ve nada raro, pero la composicion es la misma que
+            dejo la salida de `ErrorState` sin borde visible —sin tailwind-merge sobreviven las
+            clases en conflicto y gana la de la base—. Un enlace con pinta de boton pasa por
+            `cn`, siempre. Lo sostiene
+            `tests/unit/guards/buttonvariants-pasa-por-cn.guardia.test.ts`. */}
+        <Link href="/login" className={cn(buttonVariants({ className: "w-full" }))}>
           Volver a iniciar sesión
         </Link>
       </Card>
