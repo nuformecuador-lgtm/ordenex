@@ -5249,12 +5249,12 @@
       "title": "el boton de salida de ErrorState es invisible sobre el fondo de la pagina",
       "description": "border-transparent de la base le gana a border-border de la variante outline.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/439-boton-invisible-errorstate",
       "depends_on": null,
-      "status_note": "ENCONTRADO MIRANDO durante la 438, y confirmado en el archivo: components/shared/ErrorState.tsx compone las clases del enlace SIN pasar por cn(), asi que `border-transparent` de la base de buttonVariants y `border-border` de la variante outline SOBREVIVEN las dos y gana el transparente por cascada. Resultado medido en la 438: border-top-color rgba(0,0,0,0) y bg-background #f7f8fc sobre una pagina del mismo #f7f8fc — la unica salida de la pantalla se lee como texto en negrita. || <Button> no lo sufre porque pasa por cn (tailwind-merge). La 438 lo arreglo en SU pieza; ErrorState sigue igual. || Vale la pena barrer el arbol: cualquier otro sitio que componga buttonVariants a mano tiene el mismo defecto, y es invisible en una captura porque el boton SI esta ahi."
+      "status_note": "Mergeada en dev (PR #809, 59de502f) y NO desplegada. Lo encontro la 438 MIRANDO la pantalla, no la suite: la unica salida de una pantalla de error se leia como texto en negrita. || MEDIDO EN EL NAVEGADOR antes y despues: border-top-color rgba(0,0,0,0) -> rgb(227,232,242). Y la confirmacion que importa, porque el color solo no basta: ANTES el DOM llevaba las DOS clases vivas (border-transparent y border-border); despues border-transparent desaparecio de la cadena. Eso descarta el CSS rancio del dev server — cambio la clase, no el pixel. || SE TOMO LA OPCION ESTRICTA y tambien con medida: cn obligatorio en TODOS los usos. Se montaron las cuatro combinaciones y se compararon 9 propiedades computadas: en la variante por defecto CERO diferencias; en outline, la del borde. Asi no hay que mantener a mano una lista de «variantes con borde» que dejaria fuera la que alguien anada manana. || LA GUARDIA USA EL AST DE TYPESCRIPT, no texto: un barrido hacia atras daria por malo cn(\"shrink-0\", buttonVariants({...})) —que es correcto— y se tragaria un cn( escrito en un comentario. tests/ queda fuera a proposito: button.test.tsx llama buttonVariants a pelo para afirmar sobre la salida cruda de cva, y ahi la cadena cruda ES el sujeto. || PRUEBA NO PLANEADA: mientras existia la sonda temporal del medidor, la guardia la detecto sola — un archivo que no existia cuando se escribio. || LIMITACION DICHA: si alguien importa buttonVariants con alias, la guardia no lo ve."
     }
   ]
 }
