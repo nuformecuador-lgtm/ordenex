@@ -5273,12 +5273,12 @@
       "title": "la efectividad cuenta ordenes que no son de ese dia, y no se distingue del resto",
       "description": "El KPI pasa a cohorte de carga, con la madurez a la vista.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "media",
-      "branch": null,
+      "branch": "fix/441-efectividad-por-cohorte",
       "depends_on": null,
-      "status_note": "PEDIDO POR EL HUMANO: «de las cargadas, cuantas ya se entregaron, ese es el verdadero numero». || LA CAUSA, en ConteoPorStatusRepository: la ventana cae sobre COALESCE(u.created_at, o.created_at) —la ULTIMA GESTION, y solo cae a la creacion si nunca se gestiono—. Asi, «ayer» significa «actividad de ayer», no «cargadas ayer». || MEDIDO CONTRA PRODUCCION el 2026-09-17, para ayer: por fecha efectiva 210 ordenes y 49,0% de efectividad; por cohorte de carga 75 ordenes y 14,7%. **152 de las 210 se cargaron ANTES de ayer**: tres cuartas partes del numero son arrastre. || EL MOTOR YA EXISTE Y ES CORRECTO: CohorteCargaRepository pone la ventana sobre o.created_at y su comentario dice que es «exactamente lo contrario» de la de ciclo de vida; tiene test de integracion contra Postgres real. Falta CONECTARLE EL KPI, no construirlo. || ⚠️ Y HAY UNA TRAMPA EN LA DIRECCION CONTRARIA, medida: una cohorte joven lee mal por ser joven, no por ir mal. Cohortes de produccion: 1 dia 14,7% · 3 dias 43,9% · 7 dias 54,3% · 14 dias 56,1%. Si se cambia el filtro y nada mas, manana el tablero dice que el negocio se hundio. LA PANTALLA TIENE QUE ENSENAR LA MADUREZ —de 75 cargadas: 11 entregadas, 58 en proceso— y el porcentaje SOBRE LAS YA RESUELTAS al lado (64,7% para esa misma cohorte). || JERARQUIA, pedida por el humano: el porcentaje de entrega es EL numero y hoy se lee igual que «En proceso» — cuatro KpiCard identicos, y KpiCard no tiene ninguna prop de enfasis (solo etiqueta, valor, unidad, variacion y className). || Roles que ven Analitica: maestro, admin, adminTienda, adminSatelite. || DISENO APROBADO por el humano el 2026-09-17: artboards en design-analitica/ (analitica-el-numero-que-importa). LO QUE EL DISENO ANADE A ESTA FICHA: (a) el porcentaje pasa a HEROE — tarjeta del doble de ancho, cifra a 68px, y los otros cuatro numeros bajan de rango; (b) la MADUREZ va DENTRO de la tarjeta: barra entregadas/otro desenlace/aun vivas mas el porcentaje sobre las YA CERRADAS; (c) aviso explicito cuando el periodo aun se cierra, con su numero. || DOS ESTADOS QUE HOY NADIE CONTEMPLA y que el diseno exige: CERO CERRADAS -> no se pinta porcentaje (un % sobre cero no es un cero, es que no hay dato; medido: Puntarenas 0 de 27); y BASE MUY CHICA -> tampoco (con 3 ordenes cada una vale 33 puntos). Es la 360 llevada un paso mas alla: alli se escribio el denominador al lado, aqui se ESCONDE el porcentaje cuando el denominador no lo sostiene."
+      "status_note": "Mergeada en dev (PR #810, b74d61af) y NO desplegada. || MEDIDO contra produccion para ayer: 210 ordenes y 49,0% por fecha efectiva contra 75 y 14,7% por cohorte. 152 de las 210 se cargaron ANTES de ayer. || UNA SOLA POBLACION EN TODA LA PANTALLA: el riesgo no era cambiar el filtro sino cambiarlo A MEDIAS. Se movieron juntos KPIs, dona, anillo y tabla de productos (comparten condicionesDeConsulta). Fuera con motivo: ciclo de vida (mide duracion fechada en el cierre), causas de devolucion (cuenta gestiones) y gestion de hoy (ignora el filtro). || DOS ESTADOS NUEVOS: cero cerradas -> no se pinta porcentaje (Puntarenas 0 de 27); base < 20 -> tampoco. El umbral SALE de exigir que ninguna orden valga mas de 5 puntos, y el test comprueba LA DERIVACION, no el numero. || «CERRADAS» SIGNIFICABA TRES COSAS en la misma fila. No se unificaron las definiciones —son tres preguntas legitimas— pero se les quito la palabra: el heroe dice «ordenes con desenlace». Hay un test que renderiza LA FILA ENTERA, extrae del DOM los pares cifra+sustantivo y falla si un sustantivo apunta a dos cifras, con los sustantivos sacados de una constante exportada. || DOS COMENTARIOS QUE MENTIAN, corregidos: el aviso de «dos implementaciones del mismo where» llevaba un mes siendo falso. Y se borraron dos console.log que corrian en PRODUCCION en cada carga de analitica desde agosto. || El implementador MANTUVO «Efectividad de la gestion» en la fila de apoyo contra mi artboard, y tenia razon: cambiarla borraba un KPI vivo con su decision de negocio (345/360). || Gate: 2047/2047 archivos, 29.815 tests, INIT_EXIT=0. 8 mutaciones, 8 muertas."
     },
     {
       "id": 442,
@@ -5327,6 +5327,18 @@
       "branch": null,
       "depends_on": null,
       "status_note": "ENCONTRADO MIRANDO la pantalla el 2026-09-17, sin que nadie lo pidiera. El eje va «2026-07-21 · 2026-07-22 · 2026-07-23 · 2026-09-04» con EL MISMO ESPACIO entre puntos. || Los dias sin carga no existen en el eje, asi que seis semanas de hueco se dibujan igual que un dia. CUALQUIER lectura de tendencia sobre ese grafico es falsa, y es un grafico de tendencia. || El arreglo es un eje continuo donde un dia sin carga valga cero, no se salte. Lo ven los cuatro roles."
+    },
+    {
+      "id": 446,
+      "title": "a 390px el buscador de secciones y el boton Actualizar se solapan",
+      "description": "La barra de filtros de Analitica, en telefono.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "ENCONTRADO MIRANDO durante la 441, a 390px con sesion de maestro. Es ANTERIOR a esa ficha. || Lo ven los cuatro roles que abren Analitica. Misma familia que la 437 —una fila que no puede envolver— pero en otra barra."
     }
   ]
 }
