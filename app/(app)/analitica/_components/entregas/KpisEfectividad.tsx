@@ -18,7 +18,16 @@
 // vuelven dos consultas: la clave es contrato compartido, no un detalle local.
 //
 // El reparto lo hace `calcularEfectividad`, que es puro y vive aparte; aquí solo se resuelven
-// los estados (cargando, error, sin datos) y se pintan tres tarjetas.
+// los estados (cargando, error, sin datos) y se pinta la fila.
+//
+// ─── FICHA 441: LA FILA DEJA DE SER CINCO TARJETAS IGUALES ──────────────────────────────
+//
+// Medido a 1440 px el 2026-09-17: las cinco tarjetas pesaban lo mismo, así que «17,4 % de
+// efectividad» se leía igual que «En proceso 37». Desde esta ficha la efectividad es un HÉROE
+// —`EfectividadHeroe`, con la madurez de la cohorte dentro— y las tres tarjetas de aquí bajan
+// de rango con `jerarquia="apoyo"`, igual que el ciclo de vida que comparte fila. «Bajar de
+// rango» es elegir un valor de una unión cerrada del contrato de `KpiCard`, no colarle clases
+// más pequeñas por `className`: ver `components/private/analytics/jerarquia.ts`.
 //
 // ─── FICHA 360: LOS DOS PORCENTAJES DICEN SOBRE CUÁNTAS ÓRDENES SE CALCULAN ─────────────
 //
@@ -28,9 +37,10 @@
 // y la cifra sola no las distingue — el mismo argumento que ya obligó a `CicloVidaKpi` a
 // escribir su `n`.
 //
-// LA SOLUCIÓN NO ES NUEVA: ES LA DE `CicloVidaKpi`, la quinta tarjeta de esta misma fila. El
-// denominador va DENTRO del rótulo, en `text-sm` (la etiqueta ya es la letra pequeña de la
-// tarjeta; la cifra es `text-2xl`), y con sus dos cuidados:
+// LA SOLUCIÓN NO ES NUEVA: ES LA DE `CicloVidaKpi`, la última tarjeta de esta misma fila. El
+// denominador va DENTRO del rótulo, que es la letra pequeña de la tarjeta frente a su cifra
+// (ver `jerarquia.ts`: el rótulo y la cifra bajan juntos al pasar a `apoyo`), y con sus dos
+// cuidados:
 //
 //   - mientras la consulta está EN VUELO o hay ERROR no se escribe ninguna base: un
 //     «(0 órdenes)» ahí es una afirmación de negocio que nadie ha hecho;
@@ -55,6 +65,7 @@ import { serializarFiltroEntregas } from "@/app/(app)/_components/entregas-filtr
 import { useFiltroEntregas } from "@/app/(app)/_components/filtro-entregas";
 import { KpiCard } from "@/components/private/analytics/KpiCard";
 import { consultarConteoPorStatus } from "@/lib/actions/conteo-por-status";
+import { evaluarMadurezDeCohorte } from "@/lib/analytics/madurez-cohorte";
 import type { ResultadoConteoPorStatus } from "@/lib/types/conteo-por-status";
 
 import {
@@ -66,25 +77,14 @@ import {
 import { CLAVE_TABLERO } from "../operativo/PanelOperativo";
 
 import { contarOrdenes, ORDENES, rotuloConBase } from "./base-del-kpi";
+import { EfectividadHeroe } from "./EfectividadHeroe";
 import { calcularEfectividad } from "./efectividad";
 
 const ETIQUETA = {
-  efectividad: "Efectividad de entrega",
   efectividadGestion: "Efectividad de la gestión",
   entregadas: "Entregadas",
   enProceso: "En proceso",
 } as const;
-
-/**
- * FICHA 360 — «Efectividad de entrega (877 órdenes)».
- *
- * Aquí la base basta sola: el numerador de esta tarjeta son las entregadas, y «efectividad de
- * entrega» ya lo dice. Además la tarjeta «Entregadas» está en la misma fila con esa cifra
- * exacta, así que el 29,5 % de 877 se puede comprobar de un vistazo.
- */
-function rotuloEfectividad(total: number): string {
-  return rotuloConBase(ETIQUETA.efectividad, contarOrdenes(total, ORDENES));
-}
 
 /**
  * FICHA 360 — «Efectividad de la gestión (entregadas y rechazadas de 877 órdenes)».
@@ -141,9 +141,15 @@ export function KpisEfectividad() {
 
   const mensaje = mensajeDe(data, error !== undefined);
   const datos = data?.status === "ok" ? data.datos : null;
-  const { entregadas, enProceso, efectividad, efectividadGestion, total } = calcularEfectividad(
-    datos?.porStatus ?? [],
-  );
+  const reparto = calcularEfectividad(datos?.porStatus ?? []);
+  const { entregadas, enProceso, efectividadGestion, total } = reparto;
+
+  // FICHA 441 — LA MADUREZ DE LA COHORTE, derivada del MISMO reparto que ya alimentaba estas
+  // tarjetas. No se recuenta nada: `evaluarMadurezDeCohorte` recibe la partición hecha (por eso
+  // sus nombres son los de `calcularEfectividad`) y sólo deriva cerradas, vivas y los dos
+  // porcentajes con su motivo. Una segunda partición de la misma población es exactamente el
+  // defecto que la ficha 346 pagó.
+  const madurez = evaluarMadurezDeCohorte(reparto);
 
   // Sin universo no se pintan ceros: `KpiCard` con `null` escribe el marcador de dato ausente.
   // Un «0 %» donde no hubo órdenes afirma que se falló cada entrega, que es otra cosa.
@@ -160,23 +166,23 @@ export function KpisEfectividad() {
   // guion que aparece en el valor: no es que falte el dato, es que no entró ninguna orden.
   const seConoceLaBase = datos !== null && mensaje === null;
 
-  // ⚠ DEVUELVE UN FRAGMENTO, NO UNA REJILLA, y es deliberado: estas tres tarjetas comparten
-  // fila con el KPI de ciclo de vida, que es otro componente. Si cada uno trajera su propia
-  // rejilla serian dos filas pegadas —con dos `gap` y dos anchos de columna— en vez de una fila
-  // de cuatro tarjetas iguales. La rejilla la pone quien compone la fila (`page.tsx`), que es
-  // el unico que sabe cuantas tarjetas hay en ella.
+  // ⚠ DEVUELVE UN FRAGMENTO, NO UNA REJILLA, y es deliberado: el heroe y estas tres tarjetas
+  // comparten fila con el KPI de ciclo de vida, que es otro componente. Si cada uno trajera su
+  // propia rejilla serian dos filas pegadas —con dos `gap` y dos anchos de columna— en vez de
+  // una fila. La rejilla la pone quien compone la fila (`page.tsx`), que es el unico que sabe
+  // cuantas tarjetas hay en ella y cuantas columnas ocupa el heroe.
   return (
     <>
-      <KpiCard
-        // FICHA 360 — el rótulo lleva DENTRO la base sobre la que se calcula el porcentaje, y
-        // esa base sale de `total`, que es el MISMO `calcularEfectividad` de arriba que produjo
-        // `efectividad`. Ver la cabecera: leerla de `datos.total` —que hoy vale lo mismo— es la
-        // mutación que el test de procedencia pone en rojo.
-        etiqueta={seConoceLaBase ? rotuloEfectividad(total) : ETIQUETA.efectividad}
-        // Fracción, no puntos: `formatearValor(_, "porcentaje")` multiplica por 100 y pone el
-        // símbolo en el locale configurado.
-        valor={hayDato ? efectividad : null}
-        unidad="porcentaje"
+      {/* FICHA 441 — EL HÉROE. Ocupa el hueco de dos tarjetas (lo decide la rejilla de
+          `page.tsx`, no él) y se lleva dentro la efectividad, la madurez de la cohorte y el
+          porcentaje sobre las que ya tienen desenlace.
+
+          ⚠ LA MADUREZ SÓLO VIAJA CUANDO SE CONOCE: con la consulta en vuelo o con un aviso en
+          pantalla se pasa `null` y la tarjeta enseña su esqueleto. Pasarle el reparto vacío
+          pintaría «No entró ninguna orden» mientras carga, que es una afirmación de negocio que
+          nadie ha hecho — el mismo cuidado que la base de la ficha 360. */}
+      <EfectividadHeroe
+        madurez={seConoceLaBase ? madurez : null}
         cargando={isLoading}
         error={mensaje}
       />
@@ -191,10 +197,18 @@ export function KpisEfectividad() {
         etiqueta={
           seConoceLaBase ? rotuloEfectividadGestion(total) : ETIQUETA.efectividadGestion
         }
-        valor={hayDato ? efectividadGestion : null}
+        // ⚠ FICHA 441 — COMPARTE EL VETO DEL HÉROE, y no es una precaución de más: esta cifra
+        // tiene el MISMO universo y el MISMO denominador que la de arriba, así que cuando aquélla
+        // no se puede afirmar, ésta tampoco. Sin el veto, la zona Puntarenas (0 de 27, medido)
+        // enseñaría el héroe diciendo «ninguna ha terminado todavía» y, tres centímetros más
+        // allá, un «0,0 %» afirmando que se falló cada gestión. Aquí sí es un guion —esta
+        // tarjeta no tiene sitio para una frase— pero su rótulo lleva la base, que es lo que
+        // explica el guion (ficha 360).
+        valor={hayDato && madurez.sobreCargadas.valor !== null ? efectividadGestion : null}
         unidad="porcentaje"
         cargando={isLoading}
         error={mensaje}
+        jerarquia="apoyo"
       />
       <KpiCard
         etiqueta={ETIQUETA.entregadas}
@@ -202,6 +216,7 @@ export function KpisEfectividad() {
         unidad="conteo"
         cargando={isLoading}
         error={mensaje}
+        jerarquia="apoyo"
       />
       <KpiCard
         // «En proceso» es EXACTAMENTE el cubo «Otros» del anillo de desenlaces: lo que todavía
@@ -212,6 +227,7 @@ export function KpisEfectividad() {
         unidad="conteo"
         cargando={isLoading}
         error={mensaje}
+        jerarquia="apoyo"
       />
     </>
   );

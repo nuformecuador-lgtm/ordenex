@@ -11,6 +11,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { KpiCard } from "@/components/private/analytics/KpiCard";
 import { formatearValor } from "@/components/private/analytics/formato";
+import { CLASES_CIFRA } from "@/components/private/analytics/jerarquia";
 import { formatMonto, SIN_MONTO } from "@/lib/config/moneda";
 
 /**
@@ -194,5 +195,56 @@ describe("KpiCard (R12-R15)", () => {
     render(<KpiCard etiqueta="Entregas" valor={null} unidad="conteo" />);
 
     expect(screen.getByText(SIN_MONTO)).toBeInTheDocument();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* FICHA 441 — la JERARQUIA es una prop del contrato, no estilo suelto         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * El defecto que la ficha 441 midio en `/analitica`: cinco tarjetas con el MISMO peso visual,
+ * de modo que «17,4 % de efectividad» se leia igual que «En proceso 37». La causa estaba en
+ * este contrato —`KpiCard` no tenia ninguna propiedad de enfasis— y por eso la reparacion es
+ * una prop y no un `className` en el llamador.
+ *
+ * ⚠ LO QUE MAS IMPORTA DE ESTE BLOQUE es el PRIMER caso: el default no cambia. Las otras cuatro
+ * pantallas que montan `KpiCard` (tablero financiero, KPIs financieros, paneles operativos y el
+ * ciclo de vida antes de bajar de rango) no pasan `jerarquia`, y tienen que pintarse exactamente
+ * igual que antes de esta ficha.
+ */
+describe("jerarquia (ficha 441)", () => {
+  /** El parrafo de la cifra: el que lleva el tamaño de la tarjeta. */
+  function cifraDe(texto: string): HTMLElement {
+    const nodo = screen.getByText(texto).closest("p");
+    if (nodo === null) throw new Error("la cifra no esta dentro de un parrafo");
+    return nodo;
+  }
+
+  it("sin pedir nada, la tarjeta se pinta como antes de la ficha", () => {
+    render(<KpiCard etiqueta="Entregas" valor={1234} unidad="conteo" />);
+
+    // `text-2xl` es literalmente lo que `KpiCard` escribia antes de que existiera la prop: es
+    // el contrato con las pantallas que no la pasan, no una preferencia de hoy.
+    expect(cifraDe(norm(formatearValor(1234, "conteo"))).classList.contains("text-2xl")).toBe(true);
+    expect(screen.getByText("Entregas").classList.contains("text-sm")).toBe(true);
+  });
+
+  it("«apoyo» baja de rango la cifra Y el rotulo", () => {
+    render(<KpiCard etiqueta="Entregas" valor={1234} unidad="conteo" jerarquia="apoyo" />);
+
+    const cifra = cifraDe(norm(formatearValor(1234, "conteo")));
+    expect(cifra.classList.contains("text-2xl")).toBe(false);
+    expect(cifra.classList.contains("text-[22px]")).toBe(true);
+    expect(screen.getByText("Entregas").classList.contains("text-xs")).toBe(true);
+  });
+
+  // Si alguien vaciara el catalogo o pusiera los tres rangos iguales, «bajar de rango» dejaria
+  // de significar nada y las tarjetas volverian a pesar lo mismo — sin que nada se pusiera rojo.
+  it("los tres rangos son tres tamaños distintos, no tres nombres del mismo", () => {
+    const tamanos = [CLASES_CIFRA.heroe, CLASES_CIFRA.normal, CLASES_CIFRA.apoyo];
+
+    expect(new Set(tamanos).size).toBe(3);
+    for (const clases of tamanos) expect(clases.trim()).not.toBe("");
   });
 });

@@ -15,6 +15,7 @@ import { ContenedorSeccion } from "@/components/shared/ContenedorSeccion";
 
 import { AnaliticaShell } from "./_components/AnaliticaShell";
 import { ActualizarAnalitica } from "./_components/entregas/ActualizarAnalitica";
+import { AvisoPeriodoEnCurso } from "./_components/entregas/AvisoPeriodoEnCurso";
 import { ConteoEntregasAnillo } from "./_components/entregas/ConteoEntregasAnillo";
 import { ConteoPorStatusDona } from "./_components/entregas/ConteoPorStatusDona";
 import { CargadasPorDiaBarras } from "./_components/entregas/CargadasPorDiaBarras";
@@ -275,23 +276,36 @@ export default async function AnaliticaPage() {
               fuentes.
 
               LA REJILLA LA PONE AQUÍ LA PÁGINA y no cada componente: `KpisEfectividad` devuelve
-              sus tres tarjetas sueltas y el ciclo de vida es un cuarto componente, así que sólo
-              este nivel sabe cuántas tarjetas hay en la fila. Con una rejilla dentro de cada
+              el héroe y sus tres tarjetas sueltas, y el ciclo de vida es otro componente, así que
+              sólo este nivel sabe cuántas tarjetas hay en la fila. Con una rejilla dentro de cada
               uno serían dos filas pegadas, con dos `gap` y dos anchos de columna distintos.
+
+              CUATRO COLUMNAS Y NO CINCO (ficha 441): el héroe ocupa DOS —`lg:col-span-2` y dos
+              filas de alto, que es lo que pide el diseño aprobado— y las cuatro de apoyo se
+              reparten las otras dos columnas en 2x2. A `sm` el héroe ocupa la fila entera y las
+              de apoyo quedan 2x2 debajo, que es exactamente el artboard de teléfono.
 
               ⚠ SIN la caja de borde y sombra que llevan las celdas de las gráficas: `KpiCard`
               YA es una `Card` con su propio `ring` y su fondo, y envolverla dejaría una tarjeta
               dentro de otra. `items-start` para que una tarjeta de dos líneas no se estire al
               alto de la de al lado —el ciclo de vida lleva su denominador debajo— y deje la
               cifra flotando en medio del hueco. */}
-          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KpisEfectividad />
             {/* El ciclo de vida NO comparte petición con los otros tres: tiene su propia acción
                 y su propia clave. Comparte fila porque responde a la misma pregunta —cómo va la
                 operación— pero su cifra es un promedio de tiempo, no un reparto de órdenes, y
-                sólo cuenta las CERRADAS (ver `CicloVidaKpi`). */}
+                sólo cuenta las que llegaron a un estado TERMINAL, fechadas por su cierre (ver
+                `CicloVidaKpi`). Por eso dice «órdenes cerradas» y el héroe dice «órdenes con
+                desenlace»: son dos cifras distintas y no pueden compartir sustantivo. */}
             <CicloVidaKpi />
           </div>
+          {/* FICHA 441 — EL AVISO DE COHORTE JOVEN, a ancho completo y debajo de la fila, como
+              pide el diseño aprobado. Se pinta SOLO cuando quedan órdenes vivas, y por eso es un
+              hermano y no una línea dentro del héroe: una celda de la rejilla no puede ocupar
+              el ancho entero. Comparte la clave de SWR con `KpisEfectividad`, así que no cuesta
+              una petición y no puede contar otras órdenes que la barra de madurez. */}
+          <AvisoPeriodoEnCurso />
           {/* Los dos graficos, uno junto a otro y al 50 %.
 
               `sm` (640 px) y no `md` (768) porque el corte pedido es 600 y `sm` es el
