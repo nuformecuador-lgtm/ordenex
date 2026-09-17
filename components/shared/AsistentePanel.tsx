@@ -69,12 +69,22 @@ import {
  * ⭑ R28 — EL AVISO DE DATOS. **Siempre visible, bajo la barra de entrada.**
  *
  * No va en un desplegable, ni en un icono con tooltip, ni en un documento: un aviso que hay que
- * abrir es un aviso que nadie lee, y esto es lo único que le dice a la persona que lo que escribe
- * sale de la empresa. El test lo busca por su LITERAL y comprueba que no cuelga de ningún
- * `<details>`; sin ese ancla, un aviso se «mejora» hasta desaparecer.
+ * abrir es un aviso que nadie lee, y esto es lo único que le dice a la persona que lo suyo sale de
+ * la empresa.
+ *
+ * ⚠️ **NOMBRA LAS DOS MITADES, Y NINGUNA CUELGA DE UN «SI».** R28 pide avisar de que lo que se
+ * escribe *y* las imágenes que se adjuntan viajan a un tercero. La primera redacción decía «si
+ * mandás una captura, su contenido...»: sólo hablaba de imágenes, y encima tras una condición, así
+ * que quien escribe una pregunta y no adjunta nada —que es casi todo el mundo— leía un aviso que
+ * no le aplicaba y nunca se enteraba de que su texto sale de la empresa (revisión de la ficha,
+ * `B1`). De ahí el orden: primero lo que se escribe, después lo que se adjunta.
+ *
+ * El test NO copia esta cadena: afirma las dos mitades POR SEPARADO, así que volver a un aviso de
+ * sólo-imágenes lo pone rojo. Y comprueba que no cuelga de ningún `<details>`: sin ese ancla, un
+ * aviso se «mejora» hasta desaparecer.
  */
 export const AVISO_DATOS_ASISTENTE =
-  "Si mandás una captura, su contenido se procesa con un proveedor externo de inteligencia artificial. Evitá enviar datos de clientes si no hace falta.";
+  "Lo que escribís y las imágenes que adjuntás se envían a un proveedor externo de inteligencia artificial para poder responderte. Evitá enviar datos de clientes si no hace falta.";
 
 /**
  * ⭑ EL TOPE DE BYTES CON EL QUE SE ENVÍA, Y POR QUÉ NO SON LOS 5 MB DEL SCHEMA.

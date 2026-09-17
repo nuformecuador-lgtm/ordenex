@@ -298,19 +298,70 @@ describe("436/R25 — sin documentos señalados no hay sección de fuentes ni en
 });
 
 describe("436/R28 — el aviso de datos, siempre a la vista y sin abrir nada", () => {
-  // ⭑ EL LITERAL VA ESCRITO A MANO, no importado de la constante. Compararlo contra su propia
-  // fuente estaría verde aunque el aviso cambiara a «enviamos cosas a sitios» — y este aviso es
-  // lo ÚNICO que le dice a la persona que lo que escribe sale de la empresa.
-  const AVISO =
-    "Si mandás una captura, su contenido se procesa con un proveedor externo de inteligencia artificial. Evitá enviar datos de clientes si no hace falta.";
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  // ⚠️ AQUÍ NO SE COPIA EL LITERAL DEL AVISO, Y NO ES UN DESCUIDO.
+  //
+  // Copiar la cadena —o peor, importar la constante— deja el caso verde diga lo que diga la
+  // pantalla, y eso ya pasó: el aviso decía «si mandás una captura, su contenido...», el test
+  // afirmaba esa misma cadena, y el mapa «R28 a test» salía verde con R28 INCUMPLIDO, porque lo
+  // que se teclea —que es lo que manda casi todo el mundo— no se nombraba en ninguna parte.
+  //
+  // R28 pide DOS mitades: lo que se escribe y lo que se adjunta. Así que se afirman como dos
+  // propiedades, POR SEPARADO, sobre el texto que de verdad se ve. La redacción puede mejorarse
+  // sin tocar este archivo; perder una mitad, no.
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
 
-  it("⭑ con el panel recién abierto, el aviso se lee TAL CUAL, sin tocar nada más", async () => {
+  /** Mitad 1 — lo que se TECLEA. Sin ella, quien no adjunta nada no se entera de nada. */
+  const LO_QUE_SE_ESCRIBE = /escrib\w*|teclea\w*|tus? (pregunta|mensaje)\w*/i;
+  /** Mitad 2 — lo que se ADJUNTA. */
+  const LO_QUE_SE_ADJUNTA = /im[áa]gen\w*|captur\w*|adjunt\w*|fotos?/i;
+  /** Y a dónde va todo eso: fuera. Sin este trozo, las dos mitades no avisan de nada. */
+  const SALE_DE_LA_EMPRESA = /extern\w*|(a|de) un tercero|otra empresa/i;
+
+  /**
+   * El aviso, LOCALIZADO POR DÓNDE VIVE Y NO POR LO QUE DICE: el único párrafo de la barra de
+   * entrada que no es un mensaje de error. Buscarlo por su texto volvería a atar el caso a la
+   * redacción de hoy, que es justo el fallo que este bloque existe para no repetir.
+   */
+  function avisoDeDatos(panel: HTMLElement): HTMLElement {
+    const entrada = within(panel).getByLabelText("Escribí tu pregunta");
+    const barra = entrada.closest("form");
+    expect(barra).not.toBeNull();
+    const parrafos = Array.from(barra!.querySelectorAll("p")).filter(
+      (parrafo) => parrafo.getAttribute("role") !== "alert",
+    );
+    expect(parrafos).toHaveLength(1);
+    return parrafos[0]!;
+  }
+
+  it("⭑ MITAD 1 — dice que LO QUE SE ESCRIBE sale a un tercero, y no sólo si adjuntás algo", async () => {
     const usuario = userEvent.setup();
     montar(() => Promise.resolve(respuestaConCita()));
     const panel = await abrirPanel(usuario);
 
     // Un solo gesto: abrir. Ningún `click` en un desplegable, ningún `hover`.
-    expect(within(panel).getByText(AVISO)).toBeVisible();
+    const aviso = avisoDeDatos(panel);
+    expect(aviso).toBeVisible();
+
+    const texto = aviso.textContent ?? "";
+    expect(texto).toMatch(LO_QUE_SE_ESCRIBE);
+    expect(texto).toMatch(SALE_DE_LA_EMPRESA);
+
+    // Y ESTA MITAD NO PUEDE COLGAR DE UN «SI»: un aviso condicionado le dice a quien sólo teclea
+    // que no va con él. Avisa siempre o no avisa. Por lo mismo va en la PRIMERA frase: empujarla
+    // al final es la otra manera de esconderla.
+    expect(texto.trimStart()).not.toMatch(/^si\b/i);
+    expect(texto.split(/[.!?]/)[0] ?? "").toMatch(LO_QUE_SE_ESCRIBE);
+  });
+
+  it("⭑ MITAD 2 — y dice que LAS IMÁGENES que adjuntás salen igual", async () => {
+    const usuario = userEvent.setup();
+    montar(() => Promise.resolve(respuestaConCita()));
+    const panel = await abrirPanel(usuario);
+
+    const texto = avisoDeDatos(panel).textContent ?? "";
+    expect(texto).toMatch(LO_QUE_SE_ADJUNTA);
+    expect(texto).toMatch(SALE_DE_LA_EMPRESA);
   });
 
   it("⭑ y NO cuelga de ningún desplegable: ni `<details>` ni nada oculto", async () => {
@@ -318,10 +369,11 @@ describe("436/R28 — el aviso de datos, siempre a la vista y sin abrir nada", (
     montar(() => Promise.resolve(respuestaConCita()));
     const panel = await abrirPanel(usuario);
 
-    const aviso = within(panel).getByText(AVISO);
+    const aviso = avisoDeDatos(panel);
     // La forma exacta en la que este aviso se perdería: alguien lo mete en un acordeón «para que
-    // no moleste». `getByText` ya fallaría con un Collapsible que desmonta; esto caza el
+    // no moleste». Un Collapsible que desmonta ya dejaría al localizador sin párrafo; esto caza el
     // `<details>`, que sí deja el texto en el DOM.
+    expect(aviso).toBeVisible();
     expect(aviso.closest("details")).toBeNull();
     expect(aviso.closest("[hidden]")).toBeNull();
     expect(aviso.closest('[aria-hidden="true"]')).toBeNull();
@@ -329,13 +381,10 @@ describe("436/R28 — el aviso de datos, siempre a la vista y sin abrir nada", (
     // Y vive BAJO LA BARRA DE ENTRADA, que es donde la maqueta lo pone: pegado al gesto que
     // manda los datos, no perdido arriba del todo.
     const entrada = within(panel).getByLabelText("Escribí tu pregunta");
-    const barra = entrada.closest("form");
-    expect(barra).not.toBeNull();
-    expect(barra!.contains(aviso)).toBe(true);
     expect(entrada.compareDocumentPosition(aviso)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
-  it("sigue estando después de conversar: no es un cartel de bienvenida que se va", async () => {
+  it("sigue estando después de conversar, y con las dos mitades: no es un cartel de bienvenida", async () => {
     const usuario = userEvent.setup();
     montar(() => Promise.resolve(respuestaConCita()));
     const panel = await abrirPanel(usuario);
@@ -343,7 +392,10 @@ describe("436/R28 — el aviso de datos, siempre a la vista y sin abrir nada", (
     await preguntar(usuario, "¿por qué?");
     await screen.findByText(/Está reservada para otro día/);
 
-    expect(within(panel).getByText(AVISO)).toBeVisible();
+    const aviso = avisoDeDatos(panel);
+    expect(aviso).toBeVisible();
+    expect(aviso.textContent ?? "").toMatch(LO_QUE_SE_ESCRIBE);
+    expect(aviso.textContent ?? "").toMatch(LO_QUE_SE_ADJUNTA);
   });
 });
 
