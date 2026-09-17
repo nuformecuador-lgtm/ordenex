@@ -17,9 +17,16 @@ import { cn } from "@/lib/utils";
  *
  * ⚠️ SI LA PANTALLA NO TIENE DOCUMENTO, ESTE COMPONENTE NO PINTA NADA. Nunca un «?» que
  * lleve a un vacío: un botón de ayuda que abre un 404 es peor que no tener botón, porque se
- * paga el clic y la decepción justo cuando alguien estaba perdido. Hoy hay seis rutas del
- * portal sin documento (`/`, `/configuracion/sinpe`, `/mi-bodega`, `/mis-asignaciones`,
- * `/ranking/historico`, `/recepcion-satelite`) y en las seis el encabezado queda como estaba.
+ * paga el clic y la decepción justo cuando alguien estaba perdido.
+ *
+ * EL RECUENTO, medido sobre `app/(app)` el 2026-09-16: 34 rutas, de las que 2
+ * (`/mis-asignaciones`, `/recepcion-satelite`) son redirecciones puras y no pintan encabezado.
+ * De las 32 que sí lo pintan, **3 se quedan sin «?» para todo el mundo**
+ * (`/configuracion/sinpe`, `/mi-bodega`, `/ranking/historico`): ahí el encabezado queda como
+ * estaba. Las otras 2 sin «?» son las del propio módulo (`/ayuda` y `/ayuda/[...slug]`), donde
+ * no hace falta porque ya estás dentro de la ayuda.
+ * (La landing `/` no cuenta: vive fuera de `app/(app)`, no monta este encabezado y no tiene
+ * proveedor, así que ahí no había «?» que perder.)
  *
  * ⚠️ EL MAPA YA VIENE ACOTADO POR ROL desde el servidor (`app/(app)/layout.tsx`), así que
  * este componente no decide acceso: sólo pregunta si la ruta actual tiene documento PARA

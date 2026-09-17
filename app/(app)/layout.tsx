@@ -1,3 +1,4 @@
+import type { RolValue } from "@prisma/client";
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { Sidebar } from "./_components/Sidebar";
@@ -97,7 +98,7 @@ export default async function AppLayout({
   // NO CUESTA UNA CONSULTA A LA BASE: son 31 archivos del repositorio, leídos una vez por
   // proceso y memorizados (`leerCatalogoAyuda`). Este layout se pinta en TODAS las páginas
   // del portal y por eso importa que el coste por carga sea cero.
-  const mapaAyuda = mapaRutaDocumento(await leerResumenesAyuda(), actor?.rol ?? null);
+  const mapaAyuda = await mapaAyudaDelActor(actor?.rol ?? null);
 
   return (
     <TemaProvider temaInicial={tema}>
@@ -158,4 +159,33 @@ export default async function AppLayout({
       </ToastProvider>
     </TemaProvider>
   );
+}
+
+/**
+ * ⭑ FICHA 433 — EL MAPA DEL «?», Y LA RAZÓN DE QUE ESTA FUNCIÓN EXISTA: **la ayuda puede
+ * fallar; el portal no.**
+ *
+ * Este layout se pinta en TODAS las páginas de la zona autenticada, así que lo que se rompa
+ * aquí no rompe el módulo de ayuda: rompe la aplicación entera. Y la lectura del catálogo es
+ * la única pieza de este layout que depende de que 31 archivos estén en el disco de la función
+ * —un trazado mal declarado, un archivo ilegible— en vez de de la base de datos.
+ *
+ * Sin este `catch`, un tropiezo de lectura daría un 500 en `/ordenes`, en `/monitoreo` y en
+ * todo lo demás. Con él, lo único que se pierde es el «?»: el mapa vacío hace que `AyudaBoton`
+ * no se pinte (su salida temprana), que es exactamente el fallo seguro que el módulo ya aplica
+ * en `useMapaAyuda`. Degradar la ayuda es aceptable; tumbar el portal, no —y es la condición
+ * que el humano puso a las cuatro funcionalidades de SF-001: no dañar lo que ya funciona—.
+ *
+ * El error NO se traga en silencio (`docs/conventions.md`): se vuelca a `console.error`, que es
+ * lo que se lee en los logs de Vercel cuando alguien pregunte por qué no hay «?». Y el catálogo
+ * NO se queda envenenado: `leerCatalogoAyuda` limpia su memoria al rechazar, así que la
+ * siguiente carga vuelve a intentarlo.
+ */
+async function mapaAyudaDelActor(rol: RolValue | null): Promise<Record<string, string>> {
+  try {
+    return mapaRutaDocumento(await leerResumenesAyuda(), rol);
+  } catch (error) {
+    console.error("[ayuda] no se pudo leer docs/ayuda; el portal sigue sin «?»", error);
+    return {};
+  }
 }

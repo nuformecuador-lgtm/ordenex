@@ -58,7 +58,10 @@ describe("R10 — se monta donde HAY documento", () => {
 });
 
 describe("R11 — NO se monta donde NO hay documento", () => {
-  // Las seis rutas del portal sin documento, hoy. Escritas a mano contra el árbol de `app/`.
+  // Las rutas sin «?», escritas a mano contra el árbol de `app/` (medido el 2026-09-16): las
+  // TRES pantallas del portal que hoy no tienen documento, las dos redirecciones puras —que ni
+  // siquiera pintan encabezado— y la landing `/`, que vive fuera de `app/(app)`. Las dos
+  // últimas no son «ayuda que falta»: son sitios donde no hay encabezado que llevarla.
   it.each([
     ["/mi-bodega", "maestro"],
     ["/configuracion/sinpe", "maestro"],

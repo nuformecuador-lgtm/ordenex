@@ -54,9 +54,23 @@ export const ARCHIVO_EXCLUIDO = "README.md";
  */
 let enCurso: Promise<DocumentoAyuda[]> | null = null;
 
-/** Todos los documentos de `docs/ayuda/**`, SIN acotar por rol. El acotamiento es de quien llama. */
+/**
+ * Todos los documentos de `docs/ayuda/**`, SIN acotar por rol. El acotamiento es de quien llama.
+ *
+ * ⚠️ SE MEMORIZA EL ÉXITO, NUNCA EL FALLO. Lo que se guarda es una PROMESA, y una promesa
+ * rechazada guardada aquí sería permanente: el primer tropiezo de lectura —un descriptor que no
+ * se pudo abrir, un archivo a medio subir— convertiría un fallo de un instante en uno que dura
+ * lo que viva el proceso, y con él todas las páginas del portal (este catálogo lo lee el layout
+ * de TODAS). Por eso el rechazo limpia la caché: el siguiente que pase lo reintenta.
+ *
+ * El rechazo se RELANZA, no se traga: quien llama decide qué hacer. El layout del portal lo
+ * degrada a «sin ayuda» y sigue en pie; el módulo de ayuda sí tiene que enterarse.
+ */
 export function leerCatalogoAyuda(): Promise<DocumentoAyuda[]> {
-  enCurso ??= leerTodos();
+  enCurso ??= leerTodos().catch((error: unknown) => {
+    enCurso = null;
+    throw error;
+  });
   return enCurso;
 }
 

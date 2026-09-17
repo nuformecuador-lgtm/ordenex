@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { partirFrontmatter } from "@/lib/ayuda/frontmatter";
 import {
+  documentoVisiblePara,
   ETIQUETAS_GRUPO,
   PSEUDO_ROLES_AYUDA,
   ROLES_AYUDA,
@@ -149,15 +150,17 @@ describe("ayuda · el frontmatter no puede apuntar al vacío", () => {
     // acotamiento por rol deja uno solo en pie para cada persona. Lo que no puede pasar es que
     // le queden dos al mismo rol — ahí el «?» elegiría por orden de lectura del disco, que es
     // una preferencia que nadie decidió.
+    //
+    // ⚠️ SE PREGUNTA CON `documentoVisiblePara`, EL PREDICADO DE VERDAD, y no con una copia de
+    // la regla escrita aquí. Antes esta guardia la re-implementaba: coincidía con la del módulo,
+    // sí, pero el día que alguien cambie el acotamiento —por ejemplo para que el maestro pueda
+    // leer la ayuda de los otros portales— la guardia seguiría midiendo la regla VIEJA y el
+    // choque de `/ordenes` que existe para impedir se colaría en silencio.
     const choques: string[] = [];
     for (const rol of ROLES_AYUDA) {
       const porRuta = new Map<string, string[]>();
       for (const doc of DOCUMENTOS) {
-        const roles = doc.datos.roles ?? [];
-        const loVe = roles.some(
-          (r) => r === rol || (PSEUDO_ROLES_AYUDA as readonly string[]).includes(r),
-        );
-        if (!loVe) continue;
+        if (!documentoVisiblePara({ roles: doc.datos.roles ?? [] }, rol)) continue;
         for (const ruta of doc.rutas) {
           porRuta.set(ruta, [...(porRuta.get(ruta) ?? []), doc.relativo]);
         }
