@@ -111,19 +111,33 @@ describe("R17 (mitad positiva) — el armazón pinta el índice YA ACOTADO y el 
   });
 
   it("⭑ el índice que cruza al cliente está RECORTADO por rol, no filtrado al pintar", async () => {
-    // El mensajero no recibe ni el enlace de la caja de la empresa; el maestro no recibe el
-    // de reparto (los documentos de mensajero no declaran `maestro`). Es el acotamiento de
-    // `documentosVisiblesPara` ocurriendo en el SERVIDOR, que es lo que este layout decide.
+    // El mensajero no recibe ni el enlace de la caja de la empresa: el acotamiento de
+    // `documentosQuePuedeLeer` ocurriendo en el SERVIDOR, que es lo que este layout decide.
+    //
+    // ⭑ FICHA 435 — LA CONTRAPRUEBA CAMBIÓ DE SIGNO, Y ES EL CAMBIO. Hasta hoy este caso
+    // afirmaba que el maestro NO recibía «Reparto»; ahora afirma que SÍ, porque la oficina es
+    // quien atiende las dudas de los 18 mensajeros. Lo que NO cambió es la otra dirección, que
+    // es la que protege dinero y gente ajena a la empresa: sigue siendo la línea de abajo.
     entra("mensajero");
     const { unmount } = await montar();
     expect(within(indice()).getByRole("link", { name: "Reparto" })).toBeInTheDocument();
     expect(within(indice()).queryByRole("link", { name: "Wallet · Caja" })).toBeNull();
     unmount();
 
+    // Y la tienda tampoco se mueve: ni la caja, ni la ayuda del reparto del mensajero.
+    entra("adminTienda");
+    const tienda = await montar();
+    expect(within(indice()).queryByRole("link", { name: "Wallet · Caja" })).toBeNull();
+    expect(within(indice()).queryByRole("link", { name: "Reparto" })).toBeNull();
+    tienda.unmount();
+
     entra("maestro");
     await montar();
     expect(within(indice()).getByRole("link", { name: "Wallet · Caja" })).toBeInTheDocument();
-    expect(within(indice()).queryByRole("link", { name: "Reparto" })).toBeNull();
+    expect(within(indice()).getByRole("link", { name: "Reparto" })).toHaveAttribute(
+      "href",
+      "/ayuda/mensajero/reparto",
+    );
   });
 
   it("cada rol recibe una cantidad distinta de documentos, y ninguno cero", async () => {
@@ -141,9 +155,15 @@ describe("R17 (mitad positiva) — el armazón pinta el índice YA ACOTADO y el 
     // (adminSatelite). `mensajero` y `adminTienda` no los declaran y no se mueven. La tercera
     // pantalla de la ficha, `/ranking/historico`, NO añade documento: se sumó a la `pantalla:`
     // de `mensajero/ranking.md`, que ya la explicaba, así que no cambia ninguna cuenta.
+    //
+    // ⭑ FICHA 435 — MAESTRO Y ADMIN PASAN A LOS 33, que es el catálogo entero: 23→33 y 22→33.
+    // **Y LOS OTROS TRES NO SE MUEVEN**, que es la otra mitad de la decisión y la que este caso
+    // vigila de verdad: si `adminSatelite`, `mensajero` o `adminTienda` cambiaran un solo
+    // número, el ensanche se fue por donde no debía y son cuentas de gente ajena a la empresa.
+    // Medido a mano el 2026-09-16 sobre el `roles:` de los 33 archivos.
     const esperado: Record<string, number> = {
-      maestro: 23,
-      admin: 22,
+      maestro: 33,
+      admin: 33,
       adminSatelite: 10,
       mensajero: 8,
       adminTienda: 7,
