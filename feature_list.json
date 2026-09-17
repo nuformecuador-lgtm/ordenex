@@ -5363,6 +5363,18 @@
       "branch": null,
       "depends_on": 443,
       "status_note": "Parte del diseno aprobado (design-analitica/Tienda.dc.html) que NO entro en la 443, con motivo. || ⚠️ TIENE UN PROBLEMA DE DATOS SIN RESOLVER: el diseno cuenta ORDENES (91) y ConteoDevolucionesRepository cuenta GESTIONES, y su propia cabecera declara que sus totales no tienen por que cuadrar con el anillo de arriba. Subirlo AL LADO del heroe —que cuenta ordenes— heredaria esa discrepancia en la misma fila. || Hay que decidir primero cual es la unidad correcta para esta pregunta, no implementar y ver. || EL VALOR: medido, 7 de cada 10 ordenes que no llegan se caen por no poder ubicar al cliente, y eso es lo UNICO que una tienda puede mover (revisar el telefono al cargar)."
+    },
+    {
+      "id": 449,
+      "title": "el fulfillment no aparece en el dinero de Analitica",
+      "description": "La tabla de productos esconde una cifra que el cierre si muestra.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "media",
+      "branch": null,
+      "depends_on": 442,
+      "status_note": "PEDIDO POR EL HUMANO el 2026-09-17 mirando la tabla de productos: «no esta puesto el fulfilment de las que si deben mostrar». || EL HUECO ES ESTRUCTURAL, no de pintura: DineroProductosRepository congela NUEVE columnas de tarifa y `tarifa_fulfillment` no es una de ellas; `tarifaDe` tampoco la devuelve. La misma orden ensena el fulfillment en el detalle del cierre (COLUMNA_FULFILLMENT) y lo esconde en Analitica. || MEDIDO EN PRODUCCION: 867 filas y ₡605.616 en los ultimos 7 dias; 2608 filas y ₡1.816.300 en toda la historia. Tarifas de ₡696 y ₡800, 4 cuentas con la marca. || ⚠️ VA COMO CIFRA PROPIA, NO SUMADA a «Cobro Ordenex»: ITarifaVigenteRepository prohibe por escrito que el fulfillment entre en TarifaVigente, «porque meterla la pondria al alcance de derivarIngresoOrden, y esa funcion decide dinero que se liquida». Viaja en un campo aparte desde el repositorio. || Se pinta solo donde el monto congelado es > 0. La descarga lleva su columna: una descarga que omite una cifra que la pantalla ensena es el mismo defecto una capa mas abajo."
     }
   ]
 }
