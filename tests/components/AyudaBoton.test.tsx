@@ -21,7 +21,9 @@ vi.mock("next/navigation", () => ({
 const resumenes = await leerResumenesAyuda();
 
 /** Monta el botón como lo monta la aplicación: con el mapa YA acotado al rol. */
-function montar(ruta: string, rol: "mensajero" | "maestro" | "adminTienda") {
+type RolDePrueba = "mensajero" | "maestro" | "adminTienda" | "adminSatelite";
+
+function montar(ruta: string, rol: RolDePrueba) {
   rutaActual = ruta;
   return render(
     <AyudaProvider mapa={mapaRutaDocumento(resumenes, rol)}>
@@ -47,6 +49,32 @@ describe("R10 — se monta donde HAY documento", () => {
     expect(boton()).toHaveAttribute("href", "/ayuda/oficina/wallet-caja");
   });
 
+  // ⭑ FICHA 434 — las tres pantallas que hasta ahora no tenían documento. Estaban escritas,
+  // una por una, en la lista de «aquí no hay ?» de R11: se MUEVEN aquí, no se borran de allá,
+  // porque lo que la ficha cambia es de qué lado de la raya están.
+  it("en /configuracion/sinpe lleva al documento de la oficina", () => {
+    montar("/configuracion/sinpe", "maestro");
+    expect(boton()).toHaveAttribute("href", "/ayuda/oficina/configuracion-sinpe");
+  });
+
+  it("en /mi-bodega lleva al del satélite, que es quien la abre", () => {
+    montar("/mi-bodega", "adminSatelite");
+    expect(boton()).toHaveAttribute("href", "/ayuda/satelite/mi-bodega");
+  });
+
+  it("en /ranking/historico lleva al MISMO documento que /ranking", () => {
+    // No hay un documento nuevo: `mensajero/ranking.md` ya tenía su sección «Histórico» y lo
+    // que se le añadió fue la segunda ruta en su `pantalla:`. Es el mapa de muchos a uno que
+    // `rutasDeDocumento` hace posible, y el precedente vivo es
+    // `publico/entrar-y-recuperar-contrasena.md` con `/login, /recuperar-contrasena`.
+    const { unmount } = montar("/ranking", "maestro");
+    expect(boton()).toHaveAttribute("href", "/ayuda/mensajero/ranking");
+    unmount();
+
+    montar("/ranking/historico", "maestro");
+    expect(boton()).toHaveAttribute("href", "/ayuda/mensajero/ranking");
+  });
+
   it("tiene texto además del icono a partir de `sm`, y nombre accesible propio", () => {
     montar("/recoleccion", "mensajero");
     const enlace = boton();
@@ -58,18 +86,18 @@ describe("R10 — se monta donde HAY documento", () => {
 });
 
 describe("R11 — NO se monta donde NO hay documento", () => {
-  // Las rutas sin «?», escritas a mano contra el árbol de `app/` (medido el 2026-09-16): las
-  // TRES pantallas del portal que hoy no tienen documento, las dos redirecciones puras —que ni
-  // siquiera pintan encabezado— y la landing `/`, que vive fuera de `app/(app)`. Las dos
-  // últimas no son «ayuda que falta»: son sitios donde no hay encabezado que llevarla.
+  // Las rutas sin «?», escritas a mano contra el árbol de `app/` (medido el 2026-09-16).
+  //
+  // ⭑ FICHA 434 — YA NO QUEDA NINGUNA PANTALLA DEL PORTAL EN ESTA LISTA, y eso es el cierre de
+  // la ficha. Las tres que había —`/mi-bodega`, `/configuracion/sinpe` y `/ranking/historico`—
+  // pasaron a R10. Lo que sobrevive son las dos redirecciones puras —que ni siquiera pintan
+  // encabezado— y la landing `/`, que vive fuera de `app/(app)`: no son «ayuda que falta», son
+  // sitios donde no hay encabezado que llevarla.
   it.each([
-    ["/mi-bodega", "maestro"],
-    ["/configuracion/sinpe", "maestro"],
     ["/mis-asignaciones", "mensajero"],
-    ["/ranking/historico", "maestro"],
     ["/recepcion-satelite", "maestro"],
     ["/", "maestro"],
-  ] as Array<[string, "mensajero" | "maestro"]>)(
+  ] as Array<[string, RolDePrueba]>)(
     "en %s no hay «?»",
     (ruta, rol) => {
       montar(ruta, rol);
@@ -90,6 +118,32 @@ describe("R12 — el «?» respeta el rol, no sólo la ruta", () => {
     unmount();
 
     montar("/wallet", "mensajero");
+    expect(boton()).toBeNull();
+  });
+
+  // ⭑ FICHA 434 — el caso de `/mi-bodega` + `maestro` estaba en R11 («no hay documento») y
+  // ahora vive aquí: el documento EXISTE, y lo que deja al maestro sin «?» es el rol.
+  it("/mi-bodega le da ayuda al adminSatelite y NADA al maestro", () => {
+    const { unmount } = montar("/mi-bodega", "adminSatelite");
+    expect(boton()).not.toBeNull();
+    unmount();
+
+    montar("/mi-bodega", "maestro");
+    expect(boton()).toBeNull();
+  });
+
+  it("/configuracion/sinpe le da ayuda al maestro y NADA al adminSatelite", () => {
+    // ⚠️ AQUÍ EL DOCUMENTO ES MÁS ESTRECHO QUE EL GATE DE LA PANTALLA, A PROPÓSITO.
+    // `puedeEditarAlgunSinpe` deja entrar TAMBIÉN al `adminSatelite` (`lib/types/sinpe-bodega.ts`),
+    // pero lo que ese rol ve ahí es UNA fila, la suya, mientras el documento describe la tabla de
+    // todas las bodegas y el distintivo «Central». Enseñárselo sería documentación que le miente,
+    // que es lo que el README de `docs/ayuda/` prohíbe antes que nada. Su pantalla es
+    // `/mi-bodega`, y ahí sí tiene la suya.
+    const { unmount } = montar("/configuracion/sinpe", "maestro");
+    expect(boton()).not.toBeNull();
+    unmount();
+
+    montar("/configuracion/sinpe", "adminSatelite");
     expect(boton()).toBeNull();
   });
 

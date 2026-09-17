@@ -130,11 +130,21 @@ describe("R17 (mitad positiva) — el armazón pinta el índice YA ACOTADO y el 
     // Medición del 2026-09-16 sobre `docs/ayuda/**`, escrita a mano: si un cambio en el
     // frontmatter mueve estos números, se ve aquí y se decide, en vez de enterarse en la
     // pantalla de alguien. El `> 0` solo no bastaría: un acotamiento roto hacia «enseñar
-    // todo» daría 22 para todos y pasaría.
+    // todo» daría 33 para todos y pasaría.
+    //
+    // ⚠️ ESTOS NÚMEROS SE MUEVEN A MANO Y SE QUEDAN LITERALES. Calcularlos desde el propio
+    // catálogo los dejaría verdes para siempre: el caso compara el índice YA ACOTADO contra
+    // una cuenta hecha fuera, y ése es justo el acotamiento que vigila.
+    //
+    // ⭑ FICHA 434 — +1 a `maestro`, `admin` y `adminSatelite` por los dos documentos nuevos:
+    // `oficina/configuracion-sinpe.md` (maestro, admin) y `satelite/mi-bodega.md`
+    // (adminSatelite). `mensajero` y `adminTienda` no los declaran y no se mueven. La tercera
+    // pantalla de la ficha, `/ranking/historico`, NO añade documento: se sumó a la `pantalla:`
+    // de `mensajero/ranking.md`, que ya la explicaba, así que no cambia ninguna cuenta.
     const esperado: Record<string, number> = {
-      maestro: 22,
-      admin: 21,
-      adminSatelite: 9,
+      maestro: 23,
+      admin: 22,
+      adminSatelite: 10,
       mensajero: 8,
       adminTienda: 7,
     };
