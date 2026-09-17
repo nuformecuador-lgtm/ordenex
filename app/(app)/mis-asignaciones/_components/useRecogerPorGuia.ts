@@ -93,6 +93,14 @@ export function useRecogerPorGuia(
           case "validation_error":
             toast.error("Código inválido.");
             break;
+          // FICHA 440: el tropiezo de base. Este `switch` NO tiene `default`, así que sin este
+          // caso el desenlace nuevo no pintaría NADA: el spinner se apagaría y la guía se
+          // quedaría sin recoger en silencio, que es exactamente el fallo mudo que la ficha vino
+          // a tapar. No se le dice qué falló —no es asunto suyo ni lo puede arreglar—, se le dice
+          // que puede volver a intentarlo, que aquí sí suele funcionar a la segunda.
+          case "error":
+            toast.error("No se pudo registrar la recogida. Intentá de nuevo.");
+            break;
         }
         return false;
       } finally {

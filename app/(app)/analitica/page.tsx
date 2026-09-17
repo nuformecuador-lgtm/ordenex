@@ -15,6 +15,7 @@ import { ContenedorSeccion } from "@/components/shared/ContenedorSeccion";
 
 import { AnaliticaShell } from "./_components/AnaliticaShell";
 import { ActualizarAnalitica } from "./_components/entregas/ActualizarAnalitica";
+import { AvisoPeriodoEnCurso } from "./_components/entregas/AvisoPeriodoEnCurso";
 import { ConteoEntregasAnillo } from "./_components/entregas/ConteoEntregasAnillo";
 import { ConteoPorStatusDona } from "./_components/entregas/ConteoPorStatusDona";
 import { CargadasPorDiaBarras } from "./_components/entregas/CargadasPorDiaBarras";
@@ -244,23 +245,58 @@ export default async function AnaliticaPage() {
           Funciona porque el layout eligio `overflow-x-clip` —y no `hidden`— en el `main`:
           `clip` no lo convierte en contenedor de scroll vertical, que es lo que dejaria a un
           `position: sticky` sin nada contra lo que pegarse. */}
-      <div className="sticky top-0 z-20 -mx-6 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 bg-background/70 px-6 py-3 backdrop-blur-md">
+      {/* ⭑ FICHA 446 — LA FILA SE APILA POR DEBAJO DE `lg`, Y ES LA MISMA GRAMÁTICA DE LA 437
+          (`components/shared/PageHeader.tsx`): `flex-col` de base y `lg:flex-row`. No es
+          cosmético: a 390×844, medido en Chromium el 2026-09-17 con sesión de maestro, el campo
+          «Nombre de la sección…» ocupaba x=24..274 y el botón «Actualizar» x=141..255 **en la
+          misma línea y a la misma altura** (y=217..249). Se solapaban 114 px de ancho por 32 de
+          alto: el botón se pintaba encima del buscador. Y no había scroll horizontal que lo
+          delatara (`scrollWidth - clientWidth = 0`), así que ningún test de ancho lo habría
+          visto tampoco.
+
+          LA CAUSA, y por qué `flex-wrap` no bastaba: la fila YA declaraba `flex-wrap`, pero la
+          celda del filtro llevaba `min-w-0 flex-1` (`flex: 1 1 0%`), así que podía encogerse
+          hasta CERO y la fila nunca tenía motivo para envolver. Lo que no encogía era su
+          contenido: el campo de `BuscadorFiltros` tiene `min-w-[250px]` y se desbordaba de su
+          propia celda por debajo del botón.
+
+          POR QUÉ `lg` Y NO `sm` NI `md`. En una línea la fila necesita el mínimo del buscador
+          (250 px, `min-w-[250px]`) + `gap-x-4` (16) + el grupo de «Actualizar» con su sello
+          (~223 px: botón 115 · `gap-2` 8 · sello ~100) + los dos `px-6` (24 + 24) = ~537 px de
+          CONTENEDOR. Y el contenedor no mide lo que el viewport: desde `md` aparece el sidebar
+          (`SIDEBAR_WIDTH` = 16rem = 256 px), así que a 768 de viewport quedan 464 — por debajo
+          de los 537. `lg` (1024) deja 1024 − 256 = 768, que sí cabe.
+
+          DE `lg` PARA ARRIBA NO CAMBIA NADA: las cuatro utilidades de siempre siguen ahí con su
+          prefijo (`lg:flex-row lg:flex-wrap lg:items-start lg:justify-between`), y la celda
+          recupera su `lg:min-w-0 lg:flex-1`. Medido caja por caja a 1440, antes y después.
+
+          ⚠️ Las variantes AÑADEN, nunca DESHACEN una utilidad base: el hallazgo de la 437 —que
+          un `flex-wrap md:flex-nowrap` computa `flex-wrap: wrap` a 1440— hace que
+          `lg:flex-nowrap` no sirva. Por eso lo apilado es la BASE y `lg:` es lo que lo deshace
+          cambiando de dirección, no lo contrario. */}
+      <div className="sticky top-0 z-20 -mx-6 flex flex-col gap-2 bg-background/70 px-6 py-3 backdrop-blur-md lg:flex-row lg:flex-wrap lg:items-start lg:justify-between lg:gap-x-4 lg:gap-y-2">
         {/* La barra crece y el control de actualización se queda a la derecha. Van en la MISMA
             fila pegajosa —y no en el encabezado de la sección— porque los dos hablan de la
             consulta que hay en pantalla: uno decide QUÉ se pide y el otro CUÁNDO se leyó. Al
             hacer scroll por las cuatro gráficas, el sello de frescura sigue a la vista con el
             filtro que lo produjo.
 
-            `min-w-0` en la celda del filtro: sin él, una celda de flex no encoge por debajo de
-            su contenido y el botón se saldría de la fila en una pantalla estrecha.
+            `lg:min-w-0` en la celda del filtro: sin él, una celda de flex no encoge por debajo
+            de su contenido y el botón se saldría de la fila. Por debajo de `lg` ya no hay una
+            fila que compartir, así que va con prefijo (ficha 446).
 
-            `items-start` y no `items-center` (2026-08-19): la barra de filtros CRECE hacia
+            `lg:items-start` y no `items-center` (2026-08-19): la barra de filtros CRECE hacia
             abajo —al poner filtros la fila envuelve, y debajo puede aparecer el aviso de «no
             hay secciones»—, y centrar sobre el bloque entero iría bajando el botón hasta
             dejarlo enfrente de la segunda fila. Anclado arriba queda a la altura del campo y
             del selector, que es la fila con la que tiene que alinearse. El centrado real lo
             hace el `h-8` del propio grupo. */}
-        <div className="min-w-0 flex-1">
+        {/* FICHA 446 — `min-w-0 flex-1` pasa a `lg:`, donde la fila vuelve a ser una línea. Sin
+            el prefijo, apilada, `flex-1` reparte ALTO (en columna el eje principal es el
+            vertical) y `min-w-0` deja que la celda vuelva a estrujarse por debajo del mínimo de
+            su propio buscador, que es justo lo que producía el solape. */}
+        <div className="w-full lg:min-w-0 lg:flex-1">
           <FiltrosEntregas facetas={recorte.facetas} />
         </div>
         <ActualizarAnalitica />
@@ -275,23 +311,36 @@ export default async function AnaliticaPage() {
               fuentes.
 
               LA REJILLA LA PONE AQUÍ LA PÁGINA y no cada componente: `KpisEfectividad` devuelve
-              sus tres tarjetas sueltas y el ciclo de vida es un cuarto componente, así que sólo
-              este nivel sabe cuántas tarjetas hay en la fila. Con una rejilla dentro de cada
+              el héroe y sus tres tarjetas sueltas, y el ciclo de vida es otro componente, así que
+              sólo este nivel sabe cuántas tarjetas hay en la fila. Con una rejilla dentro de cada
               uno serían dos filas pegadas, con dos `gap` y dos anchos de columna distintos.
+
+              CUATRO COLUMNAS Y NO CINCO (ficha 441): el héroe ocupa DOS —`lg:col-span-2` y dos
+              filas de alto, que es lo que pide el diseño aprobado— y las cuatro de apoyo se
+              reparten las otras dos columnas en 2x2. A `sm` el héroe ocupa la fila entera y las
+              de apoyo quedan 2x2 debajo, que es exactamente el artboard de teléfono.
 
               ⚠ SIN la caja de borde y sombra que llevan las celdas de las gráficas: `KpiCard`
               YA es una `Card` con su propio `ring` y su fondo, y envolverla dejaría una tarjeta
               dentro de otra. `items-start` para que una tarjeta de dos líneas no se estire al
               alto de la de al lado —el ciclo de vida lleva su denominador debajo— y deje la
               cifra flotando en medio del hueco. */}
-          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KpisEfectividad />
             {/* El ciclo de vida NO comparte petición con los otros tres: tiene su propia acción
                 y su propia clave. Comparte fila porque responde a la misma pregunta —cómo va la
                 operación— pero su cifra es un promedio de tiempo, no un reparto de órdenes, y
-                sólo cuenta las CERRADAS (ver `CicloVidaKpi`). */}
+                sólo cuenta las que llegaron a un estado TERMINAL, fechadas por su cierre (ver
+                `CicloVidaKpi`). Por eso dice «órdenes cerradas» y el héroe dice «órdenes con
+                desenlace»: son dos cifras distintas y no pueden compartir sustantivo. */}
             <CicloVidaKpi />
           </div>
+          {/* FICHA 441 — EL AVISO DE COHORTE JOVEN, a ancho completo y debajo de la fila, como
+              pide el diseño aprobado. Se pinta SOLO cuando quedan órdenes vivas, y por eso es un
+              hermano y no una línea dentro del héroe: una celda de la rejilla no puede ocupar
+              el ancho entero. Comparte la clave de SWR con `KpisEfectividad`, así que no cuesta
+              una petición y no puede contar otras órdenes que la barra de madurez. */}
+          <AvisoPeriodoEnCurso />
           {/* Los dos graficos, uno junto a otro y al 50 %.
 
               `sm` (640 px) y no `md` (768) porque el corte pedido es 600 y `sm` es el

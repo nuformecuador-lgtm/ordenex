@@ -377,6 +377,24 @@ const ARISTAS_ANALYTICS_AUTORIZADAS = [
       "autoriza por escrito porque ninguna prohibicion vigente la cubria, y una arista que " +
       "pasa por silencio es un rodeo tacito (D5).",
   },
+  {
+    feature: 441,
+    modulo: "@/lib/analytics/madurez-cohorte",
+    nombres: [
+      "evaluarMadurezDeCohorte",
+      "MadurezDeCohorte",
+      "PorcentajeDeEntrega",
+      "MINIMO_BASE_PORCENTAJE",
+    ],
+    motivo:
+      "LA REGLA de cuando un porcentaje de cohorte NO se puede afirmar (cero desenlaces, base " +
+      "por debajo del suelo) mas la madurez que va al lado del numero. Es un modulo PURO: " +
+      "recibe numeros y devuelve numeros, sin reloj, sin base y sin catalogo — su unica " +
+      "dependencia es `lib/config/efectividad-cohorte`, donde vive el umbral con su medicion. " +
+      "Vive en `lib/analytics/` y no en la ruta porque la comparten el KPI principal y las " +
+      "pantallas de tienda y satelite (ficha 443), y porque asi se prueba sin renderizar nada. " +
+      "No trae ni una fila ni un nombre de tabla al navegador: `metrics` sigue FUERA.",
+  },
 ] as const;
 
 /** Extrae del codigo las aristas hacia `@/lib/analytics/*`, con forma y nombres. */
@@ -456,8 +474,14 @@ describe("Feature 133 (R20, R29) — `lib/analytics/presentacion` es arista NOMI
   });
 
   it("la 133 añade EXACTAMENTE una arista, y es `presentacion`", () => {
+    // La lista ENTERA, con su literal: crecerla tiene que ser un diff visible en un archivo
+    // llamado «guardia de frontera», que es justo lo que este `toEqual` obliga a hacer.
     const modulos = ARISTAS_ANALYTICS_AUTORIZADAS.map((a) => a.modulo);
-    expect(modulos).toEqual(["@/lib/analytics/types", "@/lib/analytics/presentacion"]);
+    expect(modulos).toEqual([
+      "@/lib/analytics/types",
+      "@/lib/analytics/presentacion",
+      "@/lib/analytics/madurez-cohorte",
+    ]);
 
     const de133 = ARISTAS_ANALYTICS_AUTORIZADAS.filter((a) => a.feature === 133);
     expect(de133.map((a) => a.modulo)).toEqual(["@/lib/analytics/presentacion"]);

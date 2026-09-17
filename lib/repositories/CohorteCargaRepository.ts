@@ -45,6 +45,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 
+import { ventanaDeCarga } from "@/lib/repositories/ventana-de-carga";
 import {
   condicionesSinFecha,
   DIA_CR,
@@ -122,8 +123,11 @@ export function condicionesDeCohorte(consulta: ConsultaConteoEntregas): Prisma.S
     // un mensajero. Consecuencia declarada: con un mensajero seleccionado, esta seccion NO se
     // recorta y otras si, asi que la pantalla tiene que decirlo.
     ...condicionesSinFecha(consulta),
-    Prisma.sql`o."created_at" >= ${rango.desde}`,
-    Prisma.sql`o."created_at" <  ${rango.hasta}`,
+    // FICHA 441 — la ventana se IMPORTA (`ventanaDeCarga`) y ya no se escribe aqui. Es la
+    // MISMA que aplican la serie de cargadas por dia y el desglose por status desde que aquel
+    // dejo de preguntar por la fecha de la ultima gestion. El `rango` nunca es `null` en este
+    // punto (lo acaba de comprobar el guardia de arriba), asi que la lista nunca sale vacia.
+    ...ventanaDeCarga(rango),
   ];
 }
 

@@ -25,6 +25,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import { formatearValor } from "./formato";
+import {
+  CLASES_CIFRA,
+  CLASES_ROTULO,
+  CLASES_TARJETA,
+  JERARQUIA_POR_DEFECTO,
+} from "./jerarquia";
 import { KpiValor } from "./KpiValor";
 import type { KpiCardProps, VariacionKpi } from "./tipos";
 
@@ -48,6 +54,10 @@ export function KpiCard({
   cargando = false,
   error = null,
   className,
+  // FICHA 441 — el rango de la tarjeta dentro de su fila. El default es lo de siempre, asi que
+  // las pantallas que no lo pasan (tablero financiero, paneles operativos, ciclo de vida antes
+  // de esta ficha) se pintan exactamente igual que antes.
+  jerarquia = JERARQUIA_POR_DEFECTO,
 }: KpiCardProps) {
   return (
     // `h-full`: la tarjeta ocupa TODO el alto de su celda, no el de su contenido.
@@ -61,8 +71,8 @@ export function KpiCard({
     // Funciona porque una celda de grid se estira por defecto (`align-items: stretch`): la
     // celda ya tiene el alto de la fila y `h-full` hace que la tarjeta lo llene. Un
     // `self-start` en la celda lo anula — por eso no debe haber ninguno alrededor de un KPI.
-    <Card className={cn("h-full w-full gap-1 p-4", className)}>
-      <p className="text-sm text-muted-foreground">{etiqueta}</p>
+    <Card className={cn("h-full w-full gap-1 p-4", CLASES_TARJETA[jerarquia], className)}>
+      <p className={CLASES_ROTULO[jerarquia]}>{etiqueta}</p>
       {error ? (
         <p role="alert" className="text-sm text-danger-strong">
           {error}
@@ -76,7 +86,7 @@ export function KpiCard({
         </>
       ) : (
         <>
-          <p className="text-2xl font-semibold tabular-nums text-foreground">
+          <p className={cn(CLASES_CIFRA[jerarquia], "tabular-nums text-foreground")}>
             <KpiValor valor={valor} unidad={unidad} />
           </p>
           {variacion ? (

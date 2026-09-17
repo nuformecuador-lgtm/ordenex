@@ -94,9 +94,14 @@ describe("Cargadas por día — las barras", () => {
     expect(textos[1]).toMatch(/2026-08-16/);
   });
 
-  // Los días sin órdenes NO viajan (contrato del DTO), así que el componente no puede
-  // inventárselos: pinta lo que llegó y nada más.
-  it("no inventa los días que no llegaron", async () => {
+  // ⭑ FICHA 445 — AQUÍ VIVÍA «no inventa los días que no llegaron», que exigía lo contrario de
+  // esto: con el 15 y el 17 en la respuesta, afirmaba que el 16 NO debía aparecer. Era la
+  // codificación exacta del defecto. Los días sin órdenes siguen sin viajar en el DTO —eso no
+  // ha cambiado—, pero un día sin cargas no es un dato ausente: es una medida que vale CERO, y
+  // saltárselo hacía que el eje categórico dibujara seis semanas de hueco del mismo ancho que
+  // un día. Medido en `/analitica` el 2026-09-17: 2026-07-24 y 2026-09-04, 42 días de por
+  // medio, a la misma distancia que el 21 y el 22 de julio.
+  it("el día sin cargas del medio se pinta a CERO, no se salta", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
@@ -107,7 +112,28 @@ describe("Cargadas por día — las barras", () => {
     renderBarras();
 
     await screen.findByText(/2026-08-15: 12/);
-    expect(screen.queryByText(/2026-08-16/)).toBeNull();
+    expect(screen.getByText(/2026-08-16: 0/)).toBeInTheDocument();
+    expect(screen.getByText(/2026-08-17: 3/)).toBeInTheDocument();
+  });
+
+  // El caso que reportó la ficha, con sus números: la distancia entre dos puntos del eje tiene
+  // que ser la distancia EN DÍAS, y eso se lee en cuántas entradas hay entre ellos.
+  it("42 días de hueco ocupan 42 posiciones del eje, no una", async () => {
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([
+        { fecha: "2026-07-24", conteo: 22 },
+        { fecha: "2026-09-04", conteo: 2 },
+      ]),
+    });
+    renderBarras();
+
+    const lista = await screen.findByRole("list", { name: /cargadas por día/i });
+    const fechas = Array.from(lista.querySelectorAll("li")).map(
+      (li) => (li.textContent ?? "").match(/(\d{4}-\d{2}-\d{2})/)?.[1] ?? "",
+    );
+    expect(fechas).toHaveLength(43);
+    expect(fechas.indexOf("2026-09-04") - fechas.indexOf("2026-07-24")).toBe(42);
   });
 
   // Una gráfica de barras sin barras y con ejes dibujados se lee como una pantalla a medio

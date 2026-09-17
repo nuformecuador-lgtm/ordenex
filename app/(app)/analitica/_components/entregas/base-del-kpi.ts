@@ -6,9 +6,9 @@
 // Movimiento de las órdenes» y el mismo argumento que ya había obligado al KPI de ciclo de
 // vida a escribir su `n`.
 //
-// ⚠ POR QUÉ ESTE MÓDULO EXISTE Y NO ES UN `${}` EN CADA TARJETA. Las cuatro tarjetas con base
-// viven en la MISMA FILA de la misma pantalla, y las pintan dos componentes distintos
-// (`KpisEfectividad` las tres primeras, `CicloVidaKpi` la última). Con el texto escrito a mano
+// ⚠ POR QUÉ ESTE MÓDULO EXISTE Y NO ES UN `${}` EN CADA TARJETA. Las tarjetas con base viven en
+// la MISMA FILA de la misma pantalla, y las pintan tres componentes distintos (`EfectividadHeroe`
+// y la de gestión desde `KpisEfectividad`, y `CicloVidaKpi`). Con el texto escrito a mano
 // en cada archivo, la fila acabaría con dos convenciones para el mismo hecho —un paréntesis
 // aquí, una coma allá, «1 órdenes» en la que nadie releyó— y esa divergencia es invisible en
 // código: hay que tener las dos tarjetas delante para verla. Aquí hay UNA forma y se comparte.
@@ -21,12 +21,16 @@
 //     —que sí pasa por el formateador— y «(1234 órdenes)» en la de al lado.
 //  2. EL SUSTANTIVO CONCUERDA con su cifra. El rótulo de un KPI se lee entero como una frase, y
 //     «(1 órdenes cerradas)» delata que nadie la leyó.
-//  3. LA BASE VA DENTRO DEL RÓTULO, entre paréntesis y al final. El rótulo ya es la letra
-//     pequeña de `KpiCard` (`text-sm`, frente al `text-2xl` de la cifra), así que la base sale
-//     en fuente menor —que es lo que se pidió— sin inventar ningún hueco nuevo en la tarjeta.
-//     Fuera del rótulo no cabe: `KpiCard` no tiene ranura de subtítulo, y una línea suelta
-//     debajo ya se probó y se retiró (2026-08-19) porque quedaba flotando entre dos tarjetas
-//     sin decir de cuál de las dos hablaba.
+//  3. LA BASE VA JUNTO AL RÓTULO, en fuente menor. En un `KpiCard` eso significa DENTRO del
+//     rótulo y entre paréntesis, porque la tarjeta no tiene ranura de subtítulo: una línea
+//     suelta debajo ya se probó y se retiró (2026-08-19) porque quedaba flotando entre dos
+//     tarjetas sin decir de cuál de las dos hablaba.
+//
+//     ⚠ FICHA 441 — EL HÉROE ES LA EXCEPCIÓN, y sólo en la FORMA. Es una tarjeta del doble de
+//     ancho que sí tiene sitio, así que escribe su base en un `<span>` al lado del rótulo
+//     («Efectividad de entrega · de 790 órdenes cargadas») en vez de meterla entre paréntesis.
+//     La regla no cambia —la base se escribe SIEMPRE, sale de la misma cuenta que el porcentaje
+//     y no se escribe mientras la consulta está en vuelo—; lo que cambia es que ahí cabe.
 //
 // ⚠ LO QUE ESTE MÓDULO NO DECIDE, y es deliberado: CUÁNDO se escribe la base. Eso lo resuelve
 // cada tarjeta con su propio estado, porque solo ella sabe si su consulta está en vuelo o si
@@ -54,6 +58,66 @@ export const ORDENES_CERRADAS: SustantivoContado = {
   singular: "orden cerrada",
   plural: "órdenes cerradas",
 };
+
+/**
+ * FICHA 441 — el universo del héroe: las órdenes que ENTRARON en el período.
+ *
+ * Desde que la ventana cayó sobre la fecha de carga (`lib/repositories/ventana-de-carga.ts`),
+ * el recorte del KPI ya no es «las que se movieron»: es «las que se cargaron». El adjetivo lo
+ * dice, y sin él «790 órdenes» junto a un porcentaje de cohorte vuelve a ser ambiguo — que es
+ * exactamente el defecto que la ficha vino a reparar.
+ */
+export const ORDENES_CARGADAS: SustantivoContado = {
+  singular: "orden cargada",
+  plural: "órdenes cargadas",
+};
+
+/* -------------------------------------------------------------------------- */
+/* FICHA 441 — «CERRADA» SIGNIFICA TRES COSAS EN ESTA PANTALLA                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Las órdenes que YA TIENEN DESENLACE DE GESTIÓN: `entregada`, `rechazada`, `devuelta`,
+ * `reprogramada` o `incidente`. Es la definición del HÉROE, la que produce
+ * `calcularEfectividad` y sobre la que `evaluarMadurezDeCohorte` calcula su segunda cifra.
+ *
+ * ⚠ ESTE SUSTANTIVO EXISTE PARA NO DECIR «CERRADAS», y no es un capricho de estilo. Sobre
+ * `/analitica` conviven TRES lecturas distintas de «ya no está en curso», medidas al
+ * implementar la mitad de datos de esta ficha (`progress/impl_441.md` › «Deuda abierta»):
+ *
+ *   | lectura                         | qué cuenta                                   | sustantivo          |
+ *   | ------------------------------- | -------------------------------------------- | ------------------- |
+ *   | héroe (`calcularEfectividad`)   | tiene DESENLACE DE GESTIÓN                   | `órdenes con desenlace` |
+ *   | `CicloVidaKpi`                  | llegó a estado TERMINAL, fechado en el cierre| `órdenes cerradas`  |
+ *   | `CohorteCargaTabla`             | llegó a estado TERMINAL, dentro de la cohorte| `órdenes cerradas`  |
+ *
+ * Las tres son preguntas legítimas y **no se unifican**: el héroe necesita separar «rechazada»
+ * de «devuelta» (el motor de cohortes las cuenta a las dos como vivas) y el ciclo de vida
+ * necesita fechar por el cierre para no decir que el mes en curso es artificialmente rápido.
+ * Lo que no pueden es COMPARTIR LA PALABRA: las dos primeras se leen en la MISMA FILA de KPIs
+ * y sus `n` no coinciden, así que con un solo sustantivo la pantalla diría «de las 525 que ya
+ * cerraron» y, tres centímetros más allá, «(300 órdenes cerradas)».
+ *
+ * Que eso no vuelva a pasar no depende de que alguien lo recuerde: lo mide
+ * `tests/components/FilaKpisVocabulario.test.tsx`, que renderiza la fila entera y falla si un
+ * mismo sustantivo aparece pegado a dos cifras distintas.
+ */
+export const ORDENES_CON_DESENLACE: SustantivoContado = {
+  singular: "orden con desenlace",
+  plural: "órdenes con desenlace",
+};
+
+/**
+ * Todos los sustantivos contados de la fila de KPIs, para que el guardia de vocabulario pueda
+ * recorrerlos sin escribir una segunda lista. Un sustantivo nuevo entra aquí y el test lo
+ * vigila solo; escrito a mano en el test, el que se olvidara quedaría sin vigilar.
+ */
+export const SUSTANTIVOS_DE_LA_FILA: readonly SustantivoContado[] = [
+  ORDENES,
+  ORDENES_CERRADAS,
+  ORDENES_CARGADAS,
+  ORDENES_CON_DESENLACE,
+];
 
 /**
  * «877 órdenes», «1 orden cerrada». La cifra pasa por el formateador de la analítica, así que

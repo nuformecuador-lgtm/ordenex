@@ -74,13 +74,11 @@ export class ConteoEntregasRepository implements IConteoEntregasRepository {
   constructor(private readonly porStatus: IConteoPorStatusRepository) {}
 
   async contar(consulta: ConsultaConteoEntregas): Promise<ConteoCrudo> {
-    console.log('xyz query params', consulta);
-
+    // FICHA 441 — aqui vivian dos `console.log('xyz …')` de depuracion, commiteados el
+    // 2026-08-18 en `e3d15eba` y corriendo en PRODUCCION en cada carga de analitica: uno
+    // escupia la consulta entera —con su alcance y sus facetas— y el otro el reparto. Se
+    // borran. Lo que haga falta observar de este repositorio sale del anillo que pinta.
     const filas = await this.porStatus.contarPorStatus(consulta);
-    const porDesenlace = plegarEnDesenlaces(filas);
-
-    console.log('xyz query', porDesenlace);
-
-    return { porDesenlace };
+    return { porDesenlace: plegarEnDesenlaces(filas) };
   }
 }

@@ -450,6 +450,28 @@ export type GestionarActionInput = z.infer<typeof gestionarSchema>;
 
 // --- Resultados expuestos por la Server Action (agregan `unauthenticated`) ---
 
+// FICHA 440 — EL DESENLACE `error`, Y POR QUE EXISTE
+// El 2026-09-17 este portal devolvio 27 respuestas 500 en `/mis-asignaciones/reparto`. La cadena:
+// una lectura recibe de Postgres 25P02 («current transaction is aborted») desde una conexion que
+// volvio al pool sin rollback, `withErrorHandler` lo normaliza a INTERNAL y el borde —que solo
+// contemplaba VALIDATION_ERROR y UNAUTHORIZED— caia en su `default` y RELANZABA. Una Server Action
+// que lanza no tiene frontera de error que la recoja: el `await` del cliente REVIENTA sin que nadie
+// lo capture, el `finally` apaga el spinner y el mensajero ve un boton que no hace nada. Mudo.
+//
+// `error` es ese desenlace faltante: «no se pudo, no es culpa tuya, volve a intentar». NO es un
+// error de dominio (no dice nada del estado de la orden) y por eso no reusa `conflict` ni
+// `forbidden`, que SI afirman algo y mandarian al mensajero a buscar un problema que no existe.
+// El nombre no se inventa aqui: es el que ya usan `VehiculoActionError`, `PostularMensajeroResult`
+// y `PostulacionRecursoResult` para exactamente esto.
+//
+// ⚠️ NO CONFUNDIR con `AppErrorShape`, cuyo discriminante tambien es `status: "error"` pero que
+// ademas lleva `code` y `message` (por eso `isAppErrorShape` no confunde a uno con el otro). El de
+// aqui es el DESENLACE de dominio que cruza a la pantalla; aquel es la forma interna del error.
+//
+// Los tipos de SERVICIO (`*ServiceResult`, arriba) NO lo llevan a proposito: el service sigue sin
+// poder decir «error», sigue lanzando. Quien traduce excepcion -> desenlace es el borde, y ese
+// reparto es justamente lo que permitio arreglar esto sin tocar una sola linea de negocio.
+
 // Feature 167 (R34): lo que espera al mensajero EN LA TIENDA salio a su apartado propio
 // (`/recoleccion`) con su propio contrato (`ListarRecoleccionResult`).
 //
@@ -468,21 +490,24 @@ export type ListarMisAsignacionesResult =
       ruta: RutaResumenDTO; // Feature 92/R27/R28/R30
     }
   | { status: "unauthenticated" } // R12
-  | { status: "forbidden" }; // R12
+  | { status: "forbidden" } // R12
+  | { status: "error" }; // ficha 440: la base tropezo; la pantalla no se pudo cargar
 
 export type RecogerResult =
   | { status: "ok"; recogidas: string[] }
   | { status: "unauthenticated" }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  | { status: "conflict"; detalle: DetalleConflicto[] };
+  | { status: "conflict"; detalle: DetalleConflicto[] }
+  | { status: "error" }; // ficha 440
 
 export type EscogerResult =
   | { status: "ok"; ordenId: string }
   | { status: "unauthenticated" }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  | { status: "conflict"; motivo: string };
+  | { status: "conflict"; motivo: string }
+  | { status: "error" }; // ficha 440
 
 export type GestionarResult =
   // Feature 119 (R13): URLs firmadas de las N evidencias (antes una sola `evidenciaUrl`).
@@ -490,11 +515,13 @@ export type GestionarResult =
   | { status: "unauthenticated" }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  | { status: "conflict"; motivo: string };
+  | { status: "conflict"; motivo: string }
+  | { status: "error" }; // ficha 440
 
 // R35: resultado de la action que libera el puntero de bloqueo (idempotente).
 export type LiberarResult =
   | { status: "ok" }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  | { status: "unauthenticated" };
+  | { status: "unauthenticated" }
+  | { status: "error" }; // ficha 440

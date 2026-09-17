@@ -26,6 +26,30 @@
  * como un caso especial para «otros»: cualquier value futuro acabado en «s» queda cubierto.
  */
 export function etiquetaDeDesenlace(valor: string): string {
-  const plural = valor.endsWith("s") ? valor : `${valor}s`;
-  return plural.charAt(0).toUpperCase() + plural.slice(1);
+  return capitalizar(valor.endsWith("s") ? valor : `${valor}s`);
+}
+
+/**
+ * FICHA 442 — el MISMO nombre, concordando con su cantidad: «4 devueltas» y «1 devuelta».
+ *
+ * ⚠ EL SINGULAR NO SE CALCULA, YA EXISTE: es el `value` del catalogo tal cual. `order_status`
+ * guarda `devuelta`, `rechazada`, `reprogramada` — todos en singular—, y lo que `etiquetaDeDesenlace`
+ * hace es pluralizarlos. Con cantidad 1 basta con NO pluralizar.
+ *
+ * Por eso aqui no hay ninguna regla de morfologia del español: no se quita una «s», no se busca
+ * una terminacion y no hay tabla de excepciones. Un desenlace nuevo del catalogo —con la forma
+ * que tenga— entra solo por los dos caminos, exactamente igual que en la funcion de arriba.
+ *
+ * ⚠ SE USA EN LOS DOS SITIOS QUE NOMBRAN UN DESENLACE CON SU CANTIDAD: la frase de «En qué
+ * terminaron» (pantalla) y la composicion de «Otros resultados» (pantalla Y archivo descargable).
+ * Si solo lo usara uno, la misma fila diria «1 devuelta» en la tabla y «1 devueltas» en el
+ * `.xlsx` que se abre al lado.
+ */
+export function etiquetaDeDesenlaceContada(valor: string, conteo: number): string {
+  return conteo === 1 ? capitalizar(valor) : etiquetaDeDesenlace(valor);
+}
+
+/** La primera letra en mayuscula. Escrito una vez para las dos funciones de arriba. */
+function capitalizar(palabra: string): string {
+  return palabra.charAt(0).toUpperCase() + palabra.slice(1);
 }

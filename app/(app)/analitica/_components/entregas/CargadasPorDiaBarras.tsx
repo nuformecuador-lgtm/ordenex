@@ -1,6 +1,8 @@
 "use client";
 
-// La barra de ORDENES CARGADAS POR DIA: una barra por dia calendario CR con al menos una orden.
+// La serie de ORDENES CARGADAS POR DIA: un punto por dia calendario CR del periodo, los dias sin
+// ninguna carga a CERO (ficha 445 — antes solo venian los dias con cargas y el eje los pintaba
+// equidistantes, de modo que seis semanas de hueco median lo mismo que un dia).
 //
 // Es la tercera lectura de la seccion y comparte con las otras dos TODO lo que se puede
 // compartir: el mismo filtro (`FiltroEntregasProvider`), los mismos textos de error, el mismo
@@ -37,6 +39,7 @@ import {
   VACIO_PANEL,
 } from "../operativo/textos";
 import { CLAVE_TABLERO } from "../operativo/PanelOperativo";
+import { avisoDeEjeRecortado, ejeContinuoDeDias } from "./eje-de-dias";
 
 const TITULO = "Órdenes cargadas por día";
 
@@ -89,23 +92,29 @@ export function CargadasPorDiaBarras() {
   // una pantalla a medio cargar, no como una respuesta.
   const hayDato = datos !== null && datos.porDia.length > 0;
 
-  const series = hayDato
+  // ⭑ FICHA 445 — EL EJE SE CONSTRUYE AQUI, DIA A DIA. Hasta hoy los puntos se pasaban tal como
+  // llegaban del DTO, que solo trae los dias CON cargas; como el eje de `recharts` es
+  // CATEGORICO, la distancia entre dos puntos era «una posicion» y no «un dia». Medido el
+  // 2026-09-17: 2026-07-24 y 2026-09-04 —cuarenta y dos dias de hueco— se dibujaban a la misma
+  // distancia que el 21 y el 22 de julio, y la pendiente que se leia era falsa.
+  //
+  // El relleno se hace en este componente, y no en el DTO, porque es lo que su contrato manda:
+  // «Si la grafica necesita el eje continuo, lo construye a partir de la ventana que ELLA pidio,
+  // que es la unica que la conoce siempre». La ventana sale del MISMO `filtro` que ya se
+  // serializa para la clave de SWR, asi que no hay una segunda fuente que pueda discrepar.
+  //
+  // Lo que NO cambia: el orden sigue siendo el cronologico ascendente del repositorio, porque
+  // el eje se genera avanzando un dia cada vez desde el extremo mas antiguo.
+  const eje = hayDato
+    ? ejeContinuoDeDias(datos.porDia, { desde: filtro.desde, hasta: filtro.hasta })
+    : null;
+
+  const series = eje
     ? [
         {
           id: "cargadas_por_dia",
           etiqueta: TITULO,
-          // Ya vienen en orden CRONOLOGICO ASCENDENTE desde el repositorio, y eso es contrato
-          // suyo. NO se reordenan aqui: una serie temporal con dos criterios de orden —uno en
-          // la base y otro en el cliente— acaba pintandose distinto segun quien la toque al
-          // final.
-          //
-          // ⚠ LOS DIAS SIN ORDENES NO VIENEN, y el eje por tanto NO es continuo: entre el 3 y
-          // el 7 no habra huecos dibujados, se veran pegados. Es una consecuencia declarada
-          // del DTO (`ConteoCargadasPorDiaDTO`), que no rellena porque la consulta puede venir
-          // SIN ventana y entonces no existe el conjunto de dias que rellenar. Si algun dia se
-          // quiere el eje continuo, se construye aqui a partir de la ventana que pidio ESTA
-          // pantalla, que es la unica que la conoce siempre.
-          puntos: datos.porDia.map((fila) => ({ categoria: fila.fecha, valor: fila.conteo })),
+          puntos: eje.puntos,
         },
       ]
     : [];
@@ -113,20 +122,36 @@ export function CargadasPorDiaBarras() {
   return (
     // ⚠ LÍNEA Y NO BARRAS (decisión del 2026-08-18). En una serie diaria la pregunta es la
     // TENDENCIA —si sube o baja—, no comparar el martes contra el jueves; y con treinta días
-    // las barras se vuelven un peine ilegible mientras la línea sigue leyéndose. Un hueco en
-    // la línea es un día sin cargas: `GraficaLineas` no une los ausentes con una recta, así
-    // que no inventa un dato que no existe.
-    <GraficaLineas
-      titulo={TITULO}
-      series={series}
-      unidad={UNIDAD}
-      vacio={VACIO_PANEL}
-      cargando={isLoading}
-      error={mensaje}
-      // La MITAD de alto (32:9 en vez del 16:9 de siempre). A ancho completo un 16:9 son unos
-      // 675 px para una sola fila de barras: la gráfica se comía la pantalla y empujaba fuera
-      // de vista todo lo que va debajo.
-      proporcion="bajo"
-    />
+    // las barras se vuelven un peine ilegible mientras la línea sigue leyéndose.
+    //
+    // FICHA 445 — YA NO HAY HUECOS EN LA LÍNEA, y es lo correcto: un día sin cargas no es un
+    // dato ausente (R11 del paquete), es una medida que vale CERO. La consulta cubrió ese día y
+    // la respuesta fue «no entró ninguna». `connectNulls={false}` sigue en el lienzo y sigue
+    // haciendo falta para las gráficas que sí tienen ausencias reales.
+    <>
+      <GraficaLineas
+        titulo={TITULO}
+        series={series}
+        unidad={UNIDAD}
+        vacio={VACIO_PANEL}
+        cargando={isLoading}
+        error={mensaje}
+        // La MITAD de alto (32:9 en vez del 16:9 de siempre). A ancho completo un 16:9 son unos
+        // 675 px para una sola fila de barras: la gráfica se comía la pantalla y empujaba fuera
+        // de vista todo lo que va debajo.
+        proporcion="bajo"
+      />
+      {/* FICHA 445 — EL RECORTE DEL EJE, DICHO EN VOZ ALTA. Rellenar hace crecer la serie, y sin
+          filtro de fecha el eje abarca toda la historia: pasado el techo del paquete
+          (`MAX_PUNTOS_SERIE`) se conservan los días más recientes. Callarlo dejaría una
+          tendencia sobre un trozo del periodo que el usuario cree completo — y además el techo
+          del paquete LANZA fuera de producción, así que el recorte tiene que ocurrir antes de
+          entregarle la serie. `role="status"` lo anuncia sin robar el foco. */}
+      {eje?.recortado ? (
+        <p role="status" className="text-xs text-muted-foreground">
+          {avisoDeEjeRecortado(eje.diasMostrados, eje.diasDelPeriodo)}
+        </p>
+      ) : null}
+    </>
   );
 }
