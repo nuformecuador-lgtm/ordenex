@@ -111,6 +111,11 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
       // ficha 429 (2026-09-15): el SINPE de una bodega, que decide a que cuenta transfiere el
       // cliente. Su archivo: `historial-accion-zona-sinpe-migration.test.ts`.
       "zona_sinpe_cambiado",
+      // ficha 431 (2026-09-16): la MARCA DE CONCILIACION de una consolidacion de bodega y su
+      // reversion. Son DOS porque la guardia del censo mide por metodo. Su archivo:
+      // `historial-accion-conciliacion-bodega-migration.test.ts`.
+      "cierre_bodega_conciliado",
+      "cierre_bodega_conciliacion_revertida",
     ];
     expect([...HISTORIAL_ACCION_TIPOS].sort()).toEqual(
       [...previos, VALOR_NUEVO, ...POSTERIORES].sort(),

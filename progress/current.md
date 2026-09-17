@@ -1,34 +1,67 @@
-# Estado — sesión del 2026-09-10 / 12 / 14 / 15
+# Estado — sesión del 2026-09-10 / 12 / 14 / 15 / 16
 
-## 🔴 ROTO AHORA MISMO — los deploys de PREVIEW fallan desde el 2026-09-16 02:33 UTC
+## RESUELTO — los deploys de PREVIEW volvieron el 2026-09-16
 
-**Producción NO está afectada:** `prod` sigue en `efd06fb4` y no despliega desde la release del 15.
+Estuvieron caídos **unas 20 horas** (desde las 02:33 UTC). Producción nunca se vio afectada.
 
-```
-P3009: migrate found failed migrations in the target database
-La migracion `20260918120200_zona_sinpe_no_nulo` fallo el 2026-09-16 02:33:54 UTC
-```
+**El fallo tenía DOS causas encadenadas, y la segunda estaba escondida detrás de la primera.**
 
-**Qué pasó, y es un error del leader.** Al mergear la 429 se concluyó que mergear a `dev` era seguro
-porque `decidirMigracion` no migra en preview *salvo que `MIGRATE_ON_PREVIEW=true`*. **Se verificó el
-código y se dio por hecha la configuración sin medirla.** Está en `true`, así que migró: la migración
-del `NOT NULL` encontró las columnas vacías y abortó —lo diseñado—, y ese fallo queda registrado, así
-que **todo `migrate deploy` posterior se niega**.
+1. **P3009.** La migración `20260918120200_zona_sinpe_no_nulo` encontró las columnas vacías y abortó
+   —lo diseñado—, pero ese fallo queda registrado y desde entonces todo `migrate deploy` se negaba.
+   Se resolvió con `migrate resolve --rolled-back` + `seed-sinpe-inicial.ts` contra la base de preview.
+2. **P1000, autenticación.** Al levantar la primera, apareció la segunda: `DATABASE_URL` y
+   `DIRECT_URL` de preview en Vercel llevaban **51 y 58 días** sin tocarse y su contraseña ya se había
+   regenerado. Se reescribieron las dos. Redespliegue: `✓ Ready in 2m`.
 
-**Lo que hay que hacer, contra la base de PREVIEW y en este orden** (la primera sola no basta: sin
-sembrar, el siguiente build vuelve a morir igual):
+**Tres cosas que costaron tiempo y conviene no volver a aprender:**
 
-```
-prisma migrate resolve --rolled-back 20260918120200_zona_sinpe_no_nulo
-pnpm exec tsx scripts/seed-sinpe-inicial.ts
-```
+- El host directo de Supabase (`db.<ref>.supabase.co`) **sólo resuelve por IPv6** y esta red no lo
+  enruta (100 % de pérdida). La vía que funciona es el *session pooler*
+  (`aws-0-<region>.pooler.supabase.com:5432`), que sí tiene IPv4. Queda guardada en `.env` como
+  `DATABASE_URL_PREVIEW` — deliberadamente NO como `DATABASE_URL`, que apunta a la base local y es la
+  que usan todos los gates.
+- **Un error puede tapar a otro.** Dar por arreglado tras levantar el primero habría dejado el preview
+  igual de caído, y con la sensación de haberlo resuelto.
+- **En producción la que hay que mirar es `DIRECT_URL`, no `DATABASE_URL`.** La de ejecución está
+  probada sola: `ordenex.co` sirve a gente real cada día, así que es válida. Pero `DIRECT_URL` la usa
+  **sólo `migrate deploy`**, y la última release —la 428, del 2026-09-15— fue 100 % de presentación,
+  **sin una sola migración**: esa credencial lleva sin ejercitarse desde vaya a saber cuándo. La
+  release de SF-001 **sí trae migraciones** (429 y 431). Es exactamente la forma del fallo de preview:
+  una credencial que nadie tocó en meses y que sólo se descubre rota cuando hace falta. **Comprobarla
+  antes de abrir la release, no durante.**
 
-**No se puede hacer desde aquí:** el MCP de Supabase está fijado al proyecto de producción
-(`list_branches` devuelve vacío) y no hay forma de leer las variables de Vercel desde las herramientas
-disponibles.
+**El arreglo de fondo sigue pendiente: la ficha 432** — que la siembra corra DENTRO de
+`migrate-deploy.ts` en vez de depender de que alguien la ejecute a mano entre dos migraciones.
+Committeada en `fix/432-siembra-dentro-del-despliegue` (`c6467fe5`), **sin gate y sin mergear**.
 
-**El arreglo de fondo es la ficha 432** (abajo): que la siembra corra DENTRO de `migrate-deploy.ts`, en
-vez de depender de que alguien la ejecute a mano entre dos migraciones.
+---
+
+## HALLAZGO NUEVO (2026-09-16) — a PREVIEW no se puede entrar. Nadie puede.
+
+Medido hoy, intentando verificar el módulo de ayuda en el despliegue de preview:
+
+1. El muro SSO de Vercel se pasa con el token de compartición (`ssoProtection` está en
+   `all_except_custom_domains`). Hasta ahí, bien.
+2. **La aplicación acepta las credenciales de `maestro.qa@ordenex.test` y pide segundo factor**:
+   *«Se ha enviado un código de 6 dígitos a tu correo electrónico»*.
+3. Ese correo **no llega a ninguna parte**: `@ordenex.test` no es un dominio que reciba nada. Y el
+   código no se puede sacar de la base — `email_otp_challenge.code_hash` guarda el hash, nunca el
+   código en claro (que es lo correcto).
+
+**Conclusión: el entorno de preview no es verificable a mano por nadie, ni por mí ni por el humano.**
+Sólo sirve para comprobar que el build pasa.
+
+**Por qué pasa:** `lib/config/auth.ts:43` usa 50 por defecto para `AUTH_RISK_THRESHOLD`, y preview no
+lo declara. Producción sí lo tiene en 999 —es decir, con el segundo factor apagado a propósito,
+porque el envío de correo tampoco funciona allí—. **Preview es la anomalía, no producción.**
+
+**Lo que costaría arreglarlo: una variable de entorno** (`AUTH_RISK_THRESHOLD=999` sólo en preview,
+igual que ya está en producción). No debilita nada respecto de lo que hoy corre en producción. **No lo
+he hecho por mi cuenta**: es un control de autenticación y la decisión es del humano.
+
+**Por qué importa ahora:** la condición del humano para SF-001 es que nada salga *«hasta estar seguros
+de que no hace daño a lo que ya está funcionando»*. Ahora mismo el único escalón entre `dev` y
+producción sólo sabe decir «compila».
 
 ---
 
@@ -43,8 +76,9 @@ y escrito en `progress/design_sf001_p{1,2,3,4}_*.md`.
 | --- | --- | --- |
 | **2** · SINPE por bodega | 429 | ✅ **`done`**, en `dev`. PR #799. Revisión rechazada y levantada |
 | **3** · Contacto anticipado | 430 | ✅ **`done`**, en `dev`. PR #800. Revisión OK |
-| **1** · Cierres de satélite | 431 | 🔨 **backend hecho y verificado** (`82ffcc1e`, gate 2007/2007). Frontend en curso |
-| **4** · Documentación | — | 30 documentos en `dev`. Falta el módulo y el asistente |
+| **1** · Cierres de satélite | 431 | ✅ **`done`**, en `dev`. PR #801. Revisión OK tras relevo del frontend |
+| **4a** · Módulo de documentación | 433 | 🔨 **implementado y verificado con el navegador**. En revisión |
+| **4b** · Asistente | — | Diseño escrito (`design_sf001_p4_asistente.md`). **Bloqueado por la clave de API** |
 
 **Nada desplegado a producción**, como se acordó: las cuatro salen juntas.
 

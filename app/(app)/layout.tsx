@@ -1,3 +1,4 @@
+import type { RolValue } from "@prisma/client";
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { Sidebar } from "./_components/Sidebar";
@@ -6,6 +7,9 @@ import { AvisoVersionNueva } from "@/components/shared/AvisoVersionNueva";
 import { PushReactivacion } from "@/components/shared/PushReactivacion";
 import { RevisionSinpeBodega } from "@/components/shared/RevisionSinpeBodega";
 import { TemaProvider } from "@/providers/TemaProvider";
+import { AyudaProvider } from "@/providers/AyudaProvider";
+import { leerResumenesAyuda } from "@/lib/ayuda/catalogo";
+import { mapaRutaDocumento } from "@/lib/ayuda/documento";
 import { COOKIE_TEMA, normalizarTema } from "@/lib/tema/tema";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { resolverRevisionSinpePendiente } from "@/lib/auth/revision-sinpe-pendiente";
@@ -80,6 +84,22 @@ export default async function AppLayout({
       ? { nombre: nombreCompletoUsuario(usuarioRow), rolLabel: ROL_LABELS[actor.rol] }
       : null;
 
+  // ⭑ FICHA 433 — EL MAPA RUTA→DOCUMENTO DEL «?» DEL ENCABEZADO, acotado por rol.
+  //
+  // Se resuelve AQUÍ y baja por props (al proveedor) por la razón de `docs/architecture.md`:
+  // el dato depende de la sesión, y el único que la tiene resuelta es este layout. El botón
+  // vive en `PageHeader`, que es presentación pura y se monta desde páginas server Y client.
+  //
+  // ⚠️ `mapaRutaDocumento(..., actor.rol)` RECORTA ANTES DE CRUZAR AL CLIENTE. Lo que viaja
+  // son sólo las rutas cuyo documento esta persona puede leer, así que un mensajero no
+  // recibe ni el slug de la ayuda de Wallet. Si el acotamiento se hiciera en el botón, el
+  // mapa entero estaría en el HTML de cualquiera.
+  //
+  // NO CUESTA UNA CONSULTA A LA BASE: son 31 archivos del repositorio, leídos una vez por
+  // proceso y memorizados (`leerCatalogoAyuda`). Este layout se pinta en TODAS las páginas
+  // del portal y por eso importa que el coste por carga sea cero.
+  const mapaAyuda = await mapaAyudaDelActor(actor?.rol ?? null);
+
   return (
     <TemaProvider temaInicial={tema}>
       <ToastProvider>
@@ -102,7 +122,10 @@ export default async function AppLayout({
             className="group/app overflow-x-clip pb-12"
           >
             <SidebarTrigger className={"relative md:hidden"} />
-            {children}
+            {/* ⭑ Ficha 433 — el proveedor envuelve SÓLO a `{children}` porque es ahí donde
+                vive el `PageHeader` que consume el mapa, y así el cambio no re-indenta el
+                resto del layout. No pinta ninguna caja: es un proveedor de contexto. */}
+            <AyudaProvider mapa={mapaAyuda}>{children}</AyudaProvider>
           </SidebarInset>
         </SidebarProvider>
         {/* Feature 284 — aviso de version nueva del service worker. Va en el portal y no en el
@@ -136,4 +159,33 @@ export default async function AppLayout({
       </ToastProvider>
     </TemaProvider>
   );
+}
+
+/**
+ * ⭑ FICHA 433 — EL MAPA DEL «?», Y LA RAZÓN DE QUE ESTA FUNCIÓN EXISTA: **la ayuda puede
+ * fallar; el portal no.**
+ *
+ * Este layout se pinta en TODAS las páginas de la zona autenticada, así que lo que se rompa
+ * aquí no rompe el módulo de ayuda: rompe la aplicación entera. Y la lectura del catálogo es
+ * la única pieza de este layout que depende de que 31 archivos estén en el disco de la función
+ * —un trazado mal declarado, un archivo ilegible— en vez de de la base de datos.
+ *
+ * Sin este `catch`, un tropiezo de lectura daría un 500 en `/ordenes`, en `/monitoreo` y en
+ * todo lo demás. Con él, lo único que se pierde es el «?»: el mapa vacío hace que `AyudaBoton`
+ * no se pinte (su salida temprana), que es exactamente el fallo seguro que el módulo ya aplica
+ * en `useMapaAyuda`. Degradar la ayuda es aceptable; tumbar el portal, no —y es la condición
+ * que el humano puso a las cuatro funcionalidades de SF-001: no dañar lo que ya funciona—.
+ *
+ * El error NO se traga en silencio (`docs/conventions.md`): se vuelca a `console.error`, que es
+ * lo que se lee en los logs de Vercel cuando alguien pregunte por qué no hay «?». Y el catálogo
+ * NO se queda envenenado: `leerCatalogoAyuda` limpia su memoria al rechazar, así que la
+ * siguiente carga vuelve a intentarlo.
+ */
+async function mapaAyudaDelActor(rol: RolValue | null): Promise<Record<string, string>> {
+  try {
+    return mapaRutaDocumento(await leerResumenesAyuda(), rol);
+  } catch (error) {
+    console.error("[ayuda] no se pudo leer docs/ayuda; el portal sigue sin «?»", error);
+    return {};
+  }
 }

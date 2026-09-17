@@ -1,4 +1,5 @@
 import { LogoutButton } from "@/app/_components/LogoutButton";
+import { AyudaBoton } from "@/components/shared/AyudaBoton";
 import { InstalarPwaButton } from "@/components/shared/InstalarPwaButton";
 import { NotificationsBell } from "@/components/shared/NotificationsBell";
 import { TemaToggle } from "@/components/shared/TemaToggle";
@@ -83,6 +84,17 @@ export function PageHeader({
             estrechas se queda en icono, que es donde el hueco escasea. */}
         <InstalarPwaButton soloIcono className="sm:hidden" />
         <InstalarPwaButton className="hidden sm:inline-flex" />
+        {/* ⭑ Ficha 433: el «?» de la ayuda DE ESTA PANTALLA. Vive aquí, junto al interruptor
+            de tema, por la misma razón que él: es el único sitio presente en TODA página
+            autenticada. UN solo montaje cubre las 29 pantallas, porque las 29 pasan por
+            `AppPage` -> `PageHeader`; una tabla de botones pantalla a pantalla habría dejado
+            sin ayuda a la primera que alguien olvidara.
+            SE PINTA SOLO SI ESA PANTALLA TIENE DOCUMENTO — el componente devuelve `null`
+            cuando no lo hay, así que este montaje no promete un «?» en todas partes.
+            Va ANTES del tema y no después: el orden de lectura del encabezado es
+            contexto (fecha) → instalar → ayuda → preferencia → salir, de lo que sirve para la
+            tarea a lo que cierra la sesión. */}
+        <AyudaBoton />
         {/* Feature 211: el interruptor de tema. Vive aquí —y no en el sidebar ni en un
             menú de preferencias— porque es el único sitio presente en TODA página
             autenticada, que es donde el tema se nota. Estampa la clase a través del

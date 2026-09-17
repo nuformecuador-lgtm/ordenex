@@ -9,6 +9,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
 import { listarCierresBodegaPaginadoSchema } from "@/lib/types/cierre-bodega";
 
+import { marcaPorEstado } from "@/tests/fixtures/marca-conciliacion";
 // Feature 170 — FASE 2, T I.1 (R40/R41/R44/R51/R54) — «Cierres de bodega solicitados» paginado.
 //
 // PUNTO CALIENTE de la tanda: el alcance no lo fija el rol sino un DATO derivado del actor (la
@@ -60,6 +61,9 @@ function fila(
     // Feature 393: 300.00 - 30.00 - 0.00 = 270.00; el efectivo (300.00) cubre los descuentos.
     paraLaCentral: "270.00",
     efectivoCubreDescuentos: true,
+    // FICHA 431: la marca que le corresponde a ESTE estado. Un `aprobado` sin marca es una fila
+    // que el `CHECK` de la base rechaza, asi que el doble tampoco la produce.
+    ...marcaPorEstado(estado, "300.00"),
   };
 }
 
@@ -107,7 +111,7 @@ function repoEnMemoria(filas: CierreBodegaResumenRow[] = ALMACEN) {
       llamadas.push("contarCierresDiaSolicitados");
       return 0;
     }),
-    existeCierreBodegaSolicitado: vi.fn(async () => false),
+    // ⭑ FICHA 431: `existeCierreBodegaSolicitado` se retiro del contrato con su indice unico parcial.
     crearCierreBodega: vi.fn(async () => "cb-nuevo"),
   } as unknown as ICierreBodegaRepository;
 

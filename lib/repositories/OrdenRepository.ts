@@ -5112,8 +5112,36 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * `bloqueada` = SOLO la causa (ii): su propio CierreBodega hacia la central en `solicitado`. Es
-   * el cierre de la BODEGA, no el de un mensajero, y nadie lo ha tocado.
+   * ⭑ FICHA 431 — `bloqueada` ES `false` SIEMPRE. HOY NINGUNA CAUSA BLOQUEA A LA BODEGA.
+   *
+   * Hasta esta ficha, `bloqueada` era la causa (ii): mientras su propia consolidacion hacia la
+   * central estuviera `solicitado`, la bodega satelite NO PODIA ASIGNAR NI UNA ORDEN MAS. Esa era,
+   * medido, la unica consecuencia real de la aprobacion de nivel 2 —no mueve dinero ni notifica— y
+   * por tanto lo unico que desatascaba a una satelite era que la central mirara una pantalla:
+   * mediana 34 minutos, maximo 14,15 h, y 3 de 32 por encima de 12 h (produccion, 2026-09-15). La
+   * aprobacion pasa a ser una MARCA DE CONCILIACION que registra que el efectivo llego, y una marca
+   * que ocurre cuando el bulto viaja no puede ser ademas la puerta que deja trabajar.
+   *
+   * `porCierreBodega` SE SIGUE CALCULANDO Y VIAJA IGUAL, como AVISO —el mismo trato que
+   * `porMensajeros` desde la 241—, ahora con su NUMERO (`consolidacionesSinConciliar`) para que el
+   * aviso pueda contar (R2). No viaja dinero por este contrato: el importe vive en la pantalla
+   * propia de la satelite, y meter un `Decimal` en un DTO de bloqueo abriria una superficie de
+   * dinero donde no hace falta.
+   *
+   * ⚠️ `bloqueada` SE CONSERVA EN `BodegaBloqueoResult` aunque hoy sea constante, y con el la rama
+   * `bodega_bloqueada` de `AsignacionSateliteService.asignar`. Es la lectura literal de D4 —«se
+   * quita en UN solo sitio»— y deja el punto de entrada por si vuelve una causa. Para que un campo
+   * constante no se convierta en un mentiroso mudo, lo ancla un test que afirma que NINGUNA
+   * combinacion de causas produce hoy `bloqueada: true`
+   * (`tests/unit/repositories/orden-repository.bloqueo.test.ts`). El destino final de esa rama es
+   * la Q4 de la ficha.
+   *
+   * ⚠️ LO QUE **NO** SE TOCA, y es facil de confundir con lo de arriba: el gate de NIVEL 1 —una
+   * satelite no puede CONSOLIDAR mientras tenga cierres del dia de sus mensajeros sin resolver—
+   * sigue vivo en `CierreBodegaService.solicitarCierreBodega` (R5). Ese si es un cuadre, y sigue
+   * siendo puerta.
+   *
+   * --- historia previa del metodo, que sigue explicando la causa (i) ---
    *
    * La causa (i) —«algun mensajero de la zona tiene un cierre abierto»— SIGUE RETIRADA, y la
    * FEATURE 271 la deja retirada A PROPOSITO aunque revierta lo de recibir trabajo nuevo (R34):
@@ -5135,8 +5163,14 @@ export class OrdenRepository implements IOrdenRepository {
         where: { rol: { value: "mensajero" }, zonaId },
         select: { id: true },
       }),
-      // (ii) mismo criterio que la guardia de unicidad de la feature 40 (indice unico
-      // parcial WHERE estado='solicitado'): a lo sumo uno por zona.
+      // (ii) las consolidaciones de la zona PENDIENTES DE CONCILIAR.
+      //
+      // ⭑ FICHA 431 — YA NO ES «a lo sumo una». El indice unico parcial de la feature 40
+      // (`cierre_bodega_zona_solicitado_uq`) se BORRO en `20260919120100_cierre_bodega_conciliacion`
+      // precisamente para que la satelite pueda volver a consolidar sin esperar a que la central
+      // marque. Por eso esto es un `count` que ahora puede valer 2, 3 o 7, y por eso su numero
+      // VIAJA al borde: el aviso dice «tenes N consolidaciones que la central todavia no marco
+      // como recibidas» (R2), y N ya no es siempre 1.
       this.prisma.cierreBodega.count({
         where: { zonaId, estado: ESTADO_CIERRE_BODEGA_PENDIENTE },
       }),
@@ -5156,9 +5190,15 @@ export class OrdenRepository implements IOrdenRepository {
     return {
       // La causa (i) NO entra (R34). `porMensajeros` viaja al borde como AVISO, no como veto: la
       // bodega sigue asignando a sus companeros libres.
-      bloqueada: porCierreBodega,
+      //
+      // ⭑ FICHA 431 (D4/R1/R4) — Y LA CAUSA (ii) TAMPOCO ENTRA YA. `porCierreBodega` viaja igual,
+      // como AVISO, con el mismo trato que `porMensajeros`. El valor es CONSTANTE a proposito y lo
+      // ancla un test: ninguna combinacion de causas produce hoy `true`. Ver la cabecera.
+      bloqueada: false,
       porMensajeros,
       porCierreBodega,
+      // ⭑ FICHA 431 (R2/R3) — CUANTAS son, no solo «hay». Lo que el aviso necesita para contar.
+      consolidacionesSinConciliar: countCierreBodega,
       cierresAbiertos,
       totalMensajeros,
       mensajerosConCierreIds: conCierreAbierto,

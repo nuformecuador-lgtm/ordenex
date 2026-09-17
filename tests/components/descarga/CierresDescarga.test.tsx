@@ -164,6 +164,7 @@ import { DetalleSecciones } from "@/app/(app)/cierres-admin/_components/cierre-d
 import { CierreDiaModule } from "@/app/(app)/cierre-dia/_components/CierreDiaModule";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
+import { marcaPorEstado } from "@/tests/fixtures/marca-conciliacion";
 // --- Datos ---------------------------------------------------------------
 
 const TOTALES: CierreTotales = {
@@ -201,6 +202,11 @@ function cierreAdmin(
 function cierreBodega(
   over: Partial<CierreBodegaResumen> & { cierreBodegaId: string },
 ): CierreBodegaResumen {
+  // ⭑ FICHA 431: la marca la decide el ESTADO, y se aplica DESPUÉS de `over`. Desde el `CHECK`
+  // `cierre_bodega_conciliacion_coherente`, un `aprobado` SIN marca es una fila que Postgres
+  // rechaza: un doble así describiría un mundo que no existe, y los tests que corrieran contra
+  // él estarían midiendo otra cosa. `marcaPorEstado` la cuadra con el efectivo de este doble.
+  const estado = over.estado ?? "solicitado";
   return {
     zonaId: "z1",
     zonaNombre: "Limón",
@@ -219,6 +225,8 @@ function cierreBodega(
     paraLaCentral: "895.00",
     efectivoCubreDescuentos: true,
     ...over,
+    // La marca va la ÚLTIMA, y por eso: tiene que corresponder al estado FINAL de la fila.
+    ...marcaPorEstado(estado, TOTALES.efectivo),
   };
 }
 
@@ -845,7 +853,11 @@ describe("Cierres · descarga", () => {
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     const [, filas] = buildXlsxRowsMock.mock.calls[0];
-    expect(filas.map((f) => f.estado)).toEqual(["Rechazado", "Aprobado"]);
+    // ⭑ FICHA 431 (R28): los dos estados se leen ahora con el vocabulario de la CONCILIACIÓN.
+    // Siguen siendo DOS valores DISTINTOS —que es lo que hace que este caso mida el orden— pero
+    // ya no son los del enum: la `rechazado` no tiene marca y se lee «Pendiente de conciliar»
+    // (R16: se retira el rótulo, no la fila), y la `aprobado` llegó entera y se lee «Recibido».
+    expect(filas.map((f) => f.estado)).toEqual(["Pendiente de conciliar", "Recibido"]);
   });
 
   it("un fallo de la lectura del conjunto no produce archivo y el mensaje no lleva datos personales (R7)", async () => {

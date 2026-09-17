@@ -49,10 +49,16 @@ describe("429/T23 — el item «Mi bodega»", () => {
     expect(itemMiBodega()[0].label).toBe("Mi bodega");
   });
 
-  it("⭑ es EL ULTIMO de `SIDEBAR_ITEMS`, que es lo que protege el aterrizaje de todos", () => {
-    // Por indice y no por «esta despues de X»: si mañana entra otro item detras, este caso se
-    // pone rojo y alguien tiene que decidir a mano cual va al final y por que.
-    expect(SIDEBAR_ITEMS[SIDEBAR_ITEMS.length - 1].href).toBe("/mi-bodega");
+  it("⭑ va AL FINAL de `SIDEBAR_ITEMS`, que es lo que protege el aterrizaje de todos", () => {
+    // 2026-09-16 · ficha 433: ESTE LITERAL SE CAMBIO A MANO, que es para lo que el caso existe.
+    // Entro un item DETRAS —«Ayuda»—, asi que «Mi bodega» pasa a ser el PENULTIMO. La decision
+    // es que «Ayuda» vaya la ultima: es el unico item visible para los CINCO roles, y arriba
+    // habria pasado a ser el aterrizaje post-login de todos ellos, mientras que «Mi bodega» solo
+    // la ve el `adminSatelite`. Lo que este caso protegia —que detras de «Mi bodega» no entre
+    // nada que le robe el aterrizaje al `adminSatelite`— lo sigue cubriendo el caso de abajo
+    // («lo ve el ULTIMO de su barra») y el bloque de aterrizajes, que no se movio ni un valor.
+    expect(SIDEBAR_ITEMS[SIDEBAR_ITEMS.length - 1].href).toBe("/ayuda");
+    expect(SIDEBAR_ITEMS[SIDEBAR_ITEMS.length - 2].href).toBe("/mi-bodega");
   });
 
   it("⭑ apunta a LA CONSTANTE compartida con el gate de la pagina, no a un literal copiado", () => {
@@ -77,9 +83,14 @@ describe("429/T23 — el item «Mi bodega»", () => {
     }
   });
 
-  it("⭑ y lo ve EL ULTIMO de su barra, que es donde se decidio ponerlo", () => {
+  it("⭑ y lo ve AL FINAL de su barra, que es donde se decidio ponerlo", () => {
+    // 2026-09-16 · ficha 433: cambiado a mano. «Ayuda» la ven los cinco roles, asi que tambien
+    // aparece en la barra del `adminSatelite`, detras de «Mi bodega». Lo que importa —que «Mi
+    // bodega» NO sea el primero de su barra, porque entonces seria su aterrizaje— no cambia.
     const suyos = itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite"));
-    expect(suyos[suyos.length - 1].href).toBe("/mi-bodega");
+    expect(suyos[suyos.length - 1].href).toBe("/ayuda");
+    expect(suyos[suyos.length - 2].href).toBe("/mi-bodega");
+    expect(suyos[0].href).not.toBe("/mi-bodega");
   });
 });
 

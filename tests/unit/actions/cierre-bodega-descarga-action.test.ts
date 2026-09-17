@@ -9,6 +9,7 @@ import type {
   ICierreBodegaService,
 } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { marcaRecibida } from "@/tests/fixtures/marca-conciliacion";
 
 // Feature 184 — Tanda B (T B.1, R4/R6/R7/R17) — los BORDES de los dos conjuntos de la
 // consolidación.
@@ -39,6 +40,9 @@ const CIERRE: CierreBodegaResumen = {
   // Feature 393: 300.00 - 30.00 - 0.00 = 270.00; el efectivo (300.00) cubre los descuentos.
   paraLaCentral: "270.00",
   efectivoCubreDescuentos: true,
+  // FICHA 431: un cierre `aprobado` lleva SIEMPRE su marca (lo impone el `CHECK`). Llego
+  // completo: falta `0.00`.
+  ...marcaRecibida("300.00", "0.00"),
 };
 
 const CONSOLIDABLE: CierreBodegaResumenLite = {

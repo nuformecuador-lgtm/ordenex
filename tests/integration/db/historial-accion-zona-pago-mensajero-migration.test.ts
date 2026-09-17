@@ -386,6 +386,11 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (b) — el down recrea la lista PREV
       "cobro_tienda_registrado",
       "cierre_dia_gestion_corregida",
       "zona_sinpe_cambiado",
+      // ficha 431 (2026-09-16): la MARCA DE CONCILIACION de una consolidacion de bodega y su
+      // reversion. Son DOS porque la guardia del censo mide por metodo. Su archivo:
+      // `historial-accion-conciliacion-bodega-migration.test.ts`.
+      "cierre_bodega_conciliado",
+      "cierre_bodega_conciliacion_revertida",
     ];
     const catalogoPrevio = HISTORIAL_ACCION_TIPOS.filter(
       (t) => t !== VALOR_NUEVO && !POSTERIORES.includes(t),

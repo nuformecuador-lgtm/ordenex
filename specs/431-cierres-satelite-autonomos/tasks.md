@@ -15,7 +15,7 @@ escritas.
 
 ## Fase 0 — medir antes de tocar
 
-### [ ] T0 — La foto de producción, en solo lectura
+### [x] T0 — La foto de producción, en solo lectura
 Contra producción y **sin escribir**, medir y dejar los números en `progress/impl_431.md`:
 1. `SELECT estado, count(*), sum(total_general) FROM cierre_bodega GROUP BY estado;`
 2. lo mismo por `zona_id` (cuántas satélites y cuánto cada una);
@@ -30,7 +30,7 @@ día bajo cada respuesta a Q1** dicho en una línea (con Q1 = «sí», debe ser 
 
 ## Fase 1 — base de datos y catálogo
 
-### [ ] T1 — Migración A: los dos valores del enum
+### [x] T1 — Migración A: los dos valores del enum
 `db/migrations/20260916120000_historial_accion_conciliacion_bodega/` con `migration.sql`
 (`ALTER TYPE … ADD VALUE IF NOT EXISTS` ×2) y `down.sql` que **recrea** `historial_accion_tipo` con la
 lista previa y recastea `historial_accion.accion` (patrón de
@@ -39,7 +39,7 @@ lista previa y recastea `historial_accion.accion` (patrón de
 `down.sql` lleva escritas **las dos advertencias** de `design.md §1.4` (precondición ruidosa; la lista
 es una foto de esta rama). **Ningún `down.sql` anterior se toca.**
 
-### [ ] T2 `[P]` — El catálogo de acciones
+### [x] T2 `[P]` — El catálogo de acciones
 `lib/types/historial-accion.ts`: los dos tipos nuevos en la lista, en `CATEGORIA_POR_ACCION`
 (`mueve_dinero`) y en `ACCION_LABELS`, con el motivo de la categoría escrito al lado como hacen los 13
 precedentes.
@@ -47,20 +47,20 @@ precedentes.
 y el conteo del comentario de cabecera actualizado. **Depende de:** T1 (el cliente Prisma tiene que
 conocer los valores).
 
-### [ ] T3 `[P]` — La guardia del censo de historial
+### [x] T3 `[P]` — La guardia del censo de historial
 `tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts`: dos entradas nuevas
 (`marcarConciliado`, `revertirConciliacion`, forma `abre_tx`, mutación `/tx\.cierreBodega\.updateMany\(/`),
 con el comentario de por qué son **dos métodos y no uno** (la guardia mide por método).
 **Hecho:** la guardia **falla** ahora (los métodos aún no existen) y pasa al terminar T7. Se deja roja
 a propósito solo dentro de la fase; no se commitea roja.
 
-### [ ] T4 — `db/schema.prisma`
+### [x] T4 — `db/schema.prisma`
 Las cuatro columnas en `CierreBodega` con sus `@map`, la relación `conciliadoPorUsuario` en `Usuario`,
 y los dos índices nuevos. Comentario al lado de cada columna con su significado y su nulabilidad.
 **Hecho:** `pnpm exec prisma validate` y `prisma generate` verdes; el `schema` no introduce ningún
 cambio que la migración no haga (sin drift).
 
-### [ ] T5 — Migración B: columnas, backfill, `CHECK`, índices
+### [x] T5 — Migración B: columnas, backfill, `CHECK`, índices
 `db/migrations/20260916120100_cierre_bodega_conciliacion/` con el orden exacto de `design.md §1.4`:
 columnas + FK → **backfill** → los dos `CHECK` → `DROP INDEX cierre_bodega_zona_solicitado_uq` →
 los dos índices nuevos. `down.sql` inverso, **recreando el índice único**, con la advertencia de que
@@ -68,7 +68,7 @@ falla si alguna zona tiene dos `solicitado`.
 **Hecho:** aplica sobre una base con datos; el `CHECK` se añade **después** del backfill y por tanto lo
 valida; `prisma migrate status` limpio. **Depende de:** T0, T4 y la respuesta a **Q1**.
 
-### [ ] T6 — Integración: los dos `CHECK` existen y muerden
+### [x] T6 — Integración: los dos `CHECK` existen y muerden
 `tests/integration/db/cierre-bodega-conciliacion.int.test.ts` (nuevo): (a) `aprobado` sin marca →
 error; (b) marca sin `aprobado` → error; (c) `monto_recibido` negativo → error; (d) el camino viejo
 `resolverCierreBodega(nuevoEstado:'aprobado')` → **error de la base** (R15/§1.2).
@@ -79,7 +79,7 @@ mata primero con una mutación que quite un `CHECK` y se comprueba que el caso f
 
 ## Fase 2 — la escritura de la marca
 
-### [ ] T7 — `marcarConciliado` y `revertirConciliacion`
+### [x] T7 — `marcarConciliado` y `revertirConciliacion`
 En `lib/repositories/CierresBodegaAdminRepository.ts` + `lib/interfaces/repositories/ICierresBodegaAdminRepository.ts`,
 según `design.md §4.1`: `$transaction` propia, guarda por estado en el `WHERE`, `appendAccion(tx, …)`
 **dentro** del callback, espejo de `resuelto_at`/`resuelto_por`, y el `monto` de la reversión = el
@@ -87,7 +87,7 @@ monto que se borra.
 **Hecho:** T3 pasa a verde; unitarios de repositorio con el doble de Prisma que afirman el `where`
 exacto de las dos guardas y los tres desenlaces (`updated`/`conflict`/`fuera_de_alcance`).
 
-### [ ] T8 — Servicio, borde y acciones
+### [x] T8 — Servicio, borde y acciones
 `lib/services/ConciliacionSatelitesService.ts` + su interfaz + `lib/actions/conciliacion-satelites.ts`,
 con `esAccesoTotal` **antes** de tocar el repo y zod `.strict()` reutilizando `montoPositivoSchema`.
 **Hecho:** unitarios con dobles: `forbidden` sin llamar al repo, `validation_error` sin llamar al repo
@@ -99,7 +99,7 @@ es la escritura esperada (patrón `expect(llamadas).toEqual([...])` de
 
 ## Fase 3 — el saldo derivado
 
-### [ ] T9 — `SaldosSatelitesRepository` (solo lecturas)
+### [x] T9 — `SaldosSatelitesRepository` (solo lecturas)
 `lib/repositories/SaldosSatelitesRepository.ts` + interfaz: las dos `groupBy` de `design.md §2.2`, la
 resta con `Prisma.Decimal`, `toFixed(2)`, el desglose paginado por zona y el conjunto completo para la
 descarga.
@@ -108,7 +108,7 @@ con las cuatro poblaciones: sin marcar, marcada completa, marcada por menos (R18
 (excluida). El test se mata antes con una mutación del `where` (`estado: {not:'rechazado'}` → sin
 filtro) y debe ponerse rojo.
 
-### [ ] T10 `[P]` — DTOs y antigüedad
+### [x] T10 `[P]` — DTOs y antigüedad
 `lib/types/conciliacion-satelites.ts` con `SaldoSateliteDTO` y `ConsolidacionSateliteDTO` de
 `design.md §6.2`; `diasDeLaMasAntigua` derivado en el servidor con `lib/utils/fecha-cr`.
 **Hecho:** ningún campo de dinero es `number`; test de la derivación de días en el borde del cambio de
@@ -118,7 +118,7 @@ día de Costa Rica.
 
 ## Fase 4 — el bloqueo se levanta
 
-### [ ] T11 — Enumerar la red que fija el bloqueo **antes** de tocarla
+### [x] T11 — Enumerar la red que fija el bloqueo **antes** de tocarla
 Listar en `progress/impl_431.md` los archivos de test que hoy **afirman** `bloqueada: true` por
 `porCierreBodega` (conocidos: `tests/unit/repositories/orden-repository.bloqueo.test.ts` y
 `tests/unit/services/cierre-bloqueo-superficies.test.ts`; el diseño previo nombra además el caso
@@ -127,7 +127,7 @@ de los que solo lo mencionan.
 **Hecho:** la lista escrita. **Regla:** si durante la implementación cambia un archivo que no está en
 esa lista, se tocó lo que no era.
 
-### [ ] T12 — La línea (D4) y el ancla que impide el mentiroso mudo
+### [x] T12 — La línea (D4) y el ancla que impide el mentiroso mudo
 `OrdenRepository.existeBodegaSateliteBloqueada`: `bloqueada: false` con el comentario de
 `design.md §3.1`; `porCierreBodega` sigue viajando y ahora también su **número**
 (`consolidacionesSinConciliar`) en `BodegaBloqueoResult`.
@@ -135,7 +135,7 @@ esa lista, se tocó lo que no era.
 combinación de causas produce hoy `bloqueada: true` (R4); `AsignacionSateliteService.asignar` no
 devuelve `bodega_bloqueada` en ningún caso de su suite.
 
-### [ ] T13 `[P]` — El aviso que queda (R2)
+### [x] T13 `[P]` — El aviso que queda (R2)
 `app/(app)/recepcion-satelite/_components/asignacion-satelite-bloqueo.ts`: se retira
 `BODEGA_BLOQUEADA_POR_CIERRE_BODEGA` de la superficie del satélite y entra el aviso que **cuenta y no
 frena**, en el molde de `bodegaCierresAbiertosTitulo`.
@@ -147,14 +147,14 @@ superficie.
 
 ## Fase 5 — la satélite consolida sin esperar
 
-### [ ] T14 — El todo-o-nada de `crearCierreBodega`
+### [x] T14 — El todo-o-nada de `crearCierreBodega`
 `CierreBodegaRepository.crearCierreBodega`: `if (linkeados.count !== cierreDiaIds.length) throw` dentro
 de la `$transaction` (design §1.3), con el motivo escrito (los totales snapshot se calcularon sobre el
 conjunto entero).
 **Hecho:** integración con dos consolidaciones concurrentes: una gana, la otra **no deja fila**; y el
 servicio traduce a `conflict` con `MSG_VACIO`.
 
-### [ ] T15 — Retirar el gate de «ya hay una solicitada»
+### [x] T15 — Retirar el gate de «ya hay una solicitada»
 `CierreBodegaService.solicitarCierreBodega`: fuera `existeCierreBodegaSolicitado` y el `catch` de
 `P2002` que traducía el índice; el gate de **nivel 1** (`contarCierresDiaSolicitados > 0`,
 `MSG_PENDIENTES`) **se queda** y gana un test que lo ancla (R5). Retirar el método del repositorio y de
@@ -167,25 +167,25 @@ método retirado se revisan **uno a uno**: los que cubrían otra cosa se conserv
 
 ## Fase 6 — vocabulario en lo que ya existe
 
-### [ ] T16 — Los rótulos y su valor escrito a mano
+### [x] T16 — Los rótulos y su valor escrito a mano
 `app/(app)/cierres-admin/_components/cierre-labels.ts`: las cinco constantes de `design.md §7`.
 **Hecho:** entran en el bloque «el VALOR de los rótulos» de la guardia con su literal **a mano**.
 **Depende de:** respuesta a **Q5** (el humano decide el vocabulario).
 
-### [ ] T17 — Las siete superficies de `/cierres-admin`
+### [x] T17 — Las siete superficies de `/cierres-admin`
 Cuatro cambian solo de vocabulario; las tres restantes (`CierresBodegaAdminModule`,
 `ConsolidacionBodegaModule`, `cierres-bodega-descarga-columnas`) además: retiran la acción de
 rechazar y el estado «Rechazado» (R16), y muestran monto recibido y falta por recibir.
 **Hecho:** ninguna superficie monta el botón de aprobar/rechazar; los listados y la descarga usan el
 vocabulario nuevo; los tests de esas pantallas actualizados.
 
-### [ ] T18 — La guardia de vocabulario, ampliada
+### [x] T18 — La guardia de vocabulario, ampliada
 Según `design.md §7`: detector `APROBACION` con **canario y contraprueba**, `ROTULOS_NUEVOS`
 ampliado, y los cinco literales anclados a mano.
 **Hecho:** la guardia falla si se devuelve «Esperando aprobación» a cualquiera de las seis superficies,
 y falla también si el extractor deja de leer (autocomprobación).
 
-### [ ] T19 `[P]` — Lo que ve la satélite (R26)
+### [x] T19 `[P]` — Lo que ve la satélite (R26)
 La pestaña de cierres de bodega del `adminSatelite` enseña estado de conciliación, monto recibido y
 falta por recibir, **sin** acciones.
 **Hecho:** test de componente con rol `adminSatelite`: ve las columnas, no ve ningún botón de marcar ni
@@ -195,24 +195,24 @@ revertir; el `WHERE` sigue acotado a su zona.
 
 ## Fase 7 — la pantalla nueva
 
-### [ ] T20 — Puerta de `/design` (D8)
+### [x] T20 — Puerta de `/design` (D8)
 Llevar a `/design` **qué** tiene que hacer la pantalla (R23/R24/R25/R21/R22) y volver con el diseño.
 **Hecho:** diseño aprobado. **Bloquea:** T21.
 
-### [ ] T21 — `/wallet/satelites`
+### [x] T21 — `/wallet/satelites`
 Página Server Component con `esAccesoTotal` → `notFound()`, tabla de saldos, desglose por bodega y las
 dos acciones. Datos sensibles **por props**, ya serializados.
 **Hecho:** test al estilo `tests/integration/wallet-tiendas-pago.test.tsx`: `adminSatelite` →
 `NEXT_NOT_FOUND`; el permiso de marcar se pasa con `esAccesoTotal(actor.rol)` y **no** con `true`
 literal.
 
-### [ ] T22 `[P]` — La identidad del dinero en pantalla
+### [x] T22 `[P]` — La identidad del dinero en pantalla
 Añadir el par `total general − monto recibido = falta por recibir` a
 `tests/components/DineroIdentidadesEnPantalla.test.tsx`, **parseando lo que se pinta**, no comparando
 contra el `Decimal` de origen.
 **Hecho:** la identidad cierra sobre las cadenas; una mutación que reste en el cliente la rompe.
 
-### [ ] T23 `[P]` — Menú y censo de tablas
+### [x] T23 `[P]` — Menú y censo de tablas
 Ítem «Satélites» bajo Wallet en `lib/auth/menu-visibility.ts`; las dos tablas nuevas en
 `tests/unit/descarga/censo-tablas.ts` como `con_descarga`, con su motivo.
 **Hecho:** `cobertura-tablas.guardia` verde con los totales actualizados; el ítem solo lo ven
@@ -222,7 +222,7 @@ contra el `Decimal` de origen.
 
 ## Fase 8 — verificación y cierre
 
-### [ ] T24 — Las cinco mutaciones obligatorias
+### [x] T24 — Las cinco mutaciones obligatorias
 Cada una se ejecuta y **se pega la salida del test que la mata** (no el veredicto de un arnés):
 1. `bloqueada: false` → `bloqueada: porCierreBodega` ⇒ rojo en T12.
 2. Quitar el `CHECK` de coherencia ⇒ rojo en T6.
@@ -245,7 +245,7 @@ Con sesión real: (a) satélite con consolidación sin conciliar **asigna una or
 enseña la diferencia; (d) central revierte y el saldo vuelve.
 **Hecho:** los cuatro pasos descritos con lo que se vio, no con lo que debería pasar.
 
-### [ ] T27 — Informe y commit
+### [x] T27 — Informe y commit
 `progress/impl_431.md` con el mapa `R<n>` → test (los 30), la lista de T11, los números de T0/T25 y los
 límites que quedaron vivos. **Se commitea**: un informe sin commitear no existe.
 **Hecho:** commiteado en la rama de la ficha y verificado en el blob, no solo en el árbol.
@@ -254,10 +254,58 @@ límites que quedaron vivos. **Se commitea**: un informe sin commitear no existe
 
 ## Fase 9 — después del despliegue (no lo hace el implementer)
 
-### [ ] T28 — Medir el primer día real
+### [x] T28 — Medir el primer día real
 A las 24–48 h: cuántas consolidaciones se crearon sin conciliar, cuál es la antigüedad máxima y si
 alguna satélite acumuló más de una. Es el número que decide si Q6 (umbral) deja de ser una pregunta.
 
-### [ ] T29 — Revisar Q4
+### [x] T29 — Revisar Q4
 Con la rama ya en producción y sin incidencias, decidir si se retira el código muerto de
 aprobar/rechazar y el desenlace `bodega_bloqueada`.
+
+
+---
+
+## PUERTA DE DESPLIEGUE — lo que queda sin marcar, y por qué (2026-09-16)
+
+**T25 y T26 NO se marcan porque no están hechas.** Marcarlas sería mentir, y el `tasks.md` vacío estaba
+diciendo la verdad por accidente: la ficha se puede **mergear a `dev`**, pero no salir a `prod`.
+
+### T0 — hecho, medido contra producción el 2026-09-16 (en solo lectura)
+
+| | |
+| --- | --- |
+| Cierres de bodega | **35** |
+| Aprobadas | **34** |
+| **Aprobadas con `resuelto_por` NULL** | **0** |
+| `max(updated_at)` | `2026-09-16 20:57:20.759` |
+| `max(resuelto_at)` | `2026-09-16 17:10:15.51` |
+
+El cero de la tercera fila es el importante: `cierre_bodega_resuelto_por_fkey` es **`ON DELETE SET
+NULL`**, así que una fila cuyo aprobador hubiera sido borrado tendría `resuelto_por` NULL, el `CHECK` de
+coherencia la rechazaría y **la migración abortaría a mitad del despliegue de producción**. No hay
+ninguna.
+
+### ⚠️ La referencia CADUCA — capturarla otra vez justo antes de desplegar
+
+**Ayer eran 32 cierres; hoy son 35.** Producción sigue operando, así que el número de arriba **no sirve
+para T25 si pasa un día**. Antes de la release, volver a correr:
+
+```sql
+select count(*) filter (where estado = 'aprobado') as aprobadas,
+       count(*) filter (where estado = 'aprobado' and resuelto_por is null) as sin_aprobador,
+       max(updated_at) as referencia
+  from cierre_bodega;
+```
+
+Y **decir el número por adelantado**: el backfill tiene que rellenar exactamente esas `aprobadas`, y
+`updated_at` no debe moverse en ninguna otra fila. Sin capturar `max(updated_at)` ANTES, esa prueba no
+se puede hacer nunca — la evidencia se pierde en el momento del despliegue.
+
+### T26 (a)-(d) — la corrida compuesta, en preview y con datos
+
+Los cuatro pasos tienen medición propia en su capa, y las de dinero contra Postgres real. Lo que falta
+es la corrida entera en el navegador: **`cierre_bodega` está vacía en local**, y sembrar la cadena
+completa en una base compartida pondría rojo el gate de otro agente.
+
+Es la condición del humano para toda SF-001: *nada sale a producción hasta estar seguros de que no hace
+daño a lo que ya funciona.*

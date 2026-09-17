@@ -28,8 +28,15 @@ function bodegaDbRow(overrides: Record<string, unknown> = {}) {
     solicitadoAt: new Date("2026-07-12T10:00:00.000Z"),
     resueltoAt: null,
     motivoRechazo: null,
+    // FICHA 431: las cuatro columnas de la marca entran en `BODEGA_RESUMEN_SELECT`, asi que el
+    // doble de Prisma tiene que traerlas o el mapper lee `undefined`. Esta fila es `solicitado`,
+    // o sea SIN conciliar: la marca va vacia y `faltaPorRecibir` sale el efectivo entero.
+    montoRecibido: null,
+    conciliadoAt: null,
+    conciliadoNota: null,
     zona: { nombre: "Cartago" },
     solicitadoPorUsuario: { nombre: "Sara Satelite" },
+    conciliadoPorUsuario: null,
     _count: { cierresDia: 2 },
     ...overrides,
   };
@@ -175,6 +182,15 @@ describe("CierresBodegaAdminRepository.findCierresBodega (R15)", () => {
       // MISMO numero. 15.50 - 7.50 - 6.50 = 1.50; el efectivo (10.00) no cubre 14.00.
       paraLaCentral: "1.50",
       efectivoCubreDescuentos: false,
+      // ⭑ FICHA 431 (R26/R28): el maestro lee la marca del MISMO mapper que la satelite. Esta
+      // fila es `solicitado` —sin conciliar—, asi que falta por llegar el EFECTIVO ENTERO
+      // (10.00) y NO cero: ese es el numero que la pantalla de saldos suma.
+      conciliado: false,
+      montoRecibido: null,
+      faltaPorRecibir: "10.00",
+      conciliadoAt: null,
+      conciliadoPorNombre: null,
+      conciliadoNota: null,
     });
     expect(typeof rows[0].totales.general).toBe("string");
   });

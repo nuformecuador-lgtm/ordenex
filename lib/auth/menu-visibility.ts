@@ -6,6 +6,13 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 // esta arista no arrastra Prisma, `next/headers` ni nada de servidor al Sidebar
 // cliente, que importa este módulo.
 import { ROLES_ANALITICA, type RolAnalitica } from "@/lib/analytics/types";
+// ⭑ Ficha 433: quién ve el ítem «Ayuda». La constante vive en el módulo que OWNS el concepto
+// (`lib/ayuda/documento.ts`), donde la lee también el acotamiento por rol de los documentos y
+// el gate de `/ayuda`: una sola lista, tres consumidores, imposible divergir.
+// Import de VALOR, y no arrastra nada al Sidebar cliente: `lib/ayuda/documento.ts` sólo tiene
+// imports de TIPO (`RolValue`, `FrontmatterAyuda`), así que no lleva Prisma ni `node:fs` detrás
+// — el que toca `fs` es `lib/ayuda/catalogo.ts`, que este archivo no importa.
+import { ROLES_AYUDA } from "@/lib/ayuda/documento";
 
 /**
  * Clave string del icono de un item. El icono real (componente de lucide) NO
@@ -53,7 +60,12 @@ export type IconKey =
   // no reciclado: `IconKey` es una union cerrada y compartir icono con otra seccion invitaria a
   // leer «Mi bodega» como parte de esa seccion. Mismo criterio escrito para `shieldAlert` (158),
   // `chartColumn` (129), `store` (167), `gauge` (192) y `history` (321).
-  | "warehouse";
+  | "warehouse"
+  // ⭑ Ficha 433: «Ayuda», el índice del módulo de documentación. Icono PROPIO y no reciclado:
+  // `IconKey` es una unión cerrada y compartir icono con otra sección invitaría a leer la ayuda
+  // como parte de esa sección. Mismo criterio escrito para `shieldAlert` (158), `chartColumn`
+  // (129), `store` (167), `gauge` (192), `history` (321) y `warehouse` (429).
+  | "circleHelp";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -488,6 +500,15 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
       { label: "Caja principal", href: "/wallet" },
       { label: "Tiendas", href: "/wallet/tiendas" },
       { label: "Mensajeros", href: "/wallet/mensajeros" },
+      // ⭑ FICHA 431 (T23, R23): CUARTO hijo. Las tres de arriba cuentan lo que Ordenex DEBE
+      // —a su caja, a una tienda, a un mensajero—; esta cuenta lo que le DEBEN: el efectivo que
+      // una bodega satelite ya consolido y todavia no ha llegado fisicamente a la central.
+      //
+      // Hereda `roles: ["maestro", "admin"]` del padre y NO declara los suyos, a proposito: la
+      // pantalla resuelve el rol server-side y hace `notFound()` con el MISMO `esAccesoTotal`
+      // que el servicio usa para responder `forbidden` (R27). Este item solo decide que se
+      // MUESTRA; una lista de roles escrita aqui seria una segunda que puede divergir.
+      { label: "Satélites", href: "/wallet/satelites" },
     ],
   },
   {
@@ -640,6 +661,40 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     href: "/mi-bodega",
     iconKey: "warehouse",
     roles: ROLES_MI_BODEGA,
+  },
+  {
+    // ⭑ FICHA 433 — «Ayuda»: el índice del módulo de documentación (la carpeta `docs/ayuda`).
+    //
+    // ⚠️ NO SE ESCRIBE AQUÍ LA RUTA CON COMODÍN. Una barra-asterisco dentro de un comentario de
+    // LÍNEA abre un bloque de comentario, y el quitador único del repo lo cierra en el siguiente
+    // cierre de bloque del archivo: 150 líneas desaparecen del texto que leen TODAS las guardias
+    // que escanean este fuente. Pasó el 2026-08-24 y lo vigila R45 de
+    // `tests/unit/auth/menu-visibility.test.ts`, que es quien cazó esta línea al escribirla.
+    //
+    // ⚠️ VA EL ÚLTIMO DE LA BARRA, Y ESO NO ES DECORATIVO. Es el ÚNICO ítem visible para los
+    // CINCO roles a la vez, así que si estuviera arriba sería el primer ítem visible de todos
+    // ellos y `primerDestino(itemsVisibles(...))` mandaría a TODO EL MUNDO a `/ayuda` después
+    // de entrar — en silencio, y a leer documentación en vez de a trabajar. Puesto al final,
+    // ningún aterrizaje cambia: cada rol conserva el que ya tenía. Es el mismo incidente que
+    // ya documentan «Analítica» (133), «Monitoreo» (192), «Mi wallet» (335) y «Mi bodega» (429).
+    //
+    // ⚠️ Y POR ESO **NO** LLEVA `destinoInicial: false`: la posición ya protege el aterrizaje,
+    // y `tests/unit/auth/destino-post-login.test.ts` afirma con un `toEqual` LITERAL que los
+    // ítems marcados son EXACTAMENTE `["/analitica", "/monitoreo"]`. Marcarlo aquí pondría
+    // rojo ese caso sin que nadie hubiera decidido nada — y la marca es para el aterrizaje, no
+    // un sello de «esto no es importante». Ya mordió en la 429.
+    //
+    // `roles` apunta a LA CONSTANTE `ROLES_AYUDA`, no a un literal copiado: es la misma que
+    // acota el módulo (`documentoVisiblePara`) y la que lee el gate de `/ayuda`. Precedentes:
+    // R10 de la 129, R1 de la 321, R33 de la 335.
+    //
+    // ⚠️ `ROLES_AYUDA` NO INCLUYE `apiKey`, y ahí está la otra mitad del cuidado: una cuenta de
+    // máquina no ve ningún ítem hoy, así que éste habría sido el primero y el único suyo — y el
+    // mismo test afirma que `apiKey` NO tiene destino post-login (`toBeNull`).
+    label: "Ayuda",
+    href: "/ayuda",
+    iconKey: "circleHelp",
+    roles: ROLES_AYUDA,
   },
   // "Perfil" SALE del menú para todos los roles (pedido humano) y su página se ELIMINÓ:
   // era un placeholder sin contenido que solo ocupaba un sitio en la barra.

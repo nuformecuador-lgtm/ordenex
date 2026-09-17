@@ -4,8 +4,11 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CierreBodegaDetalleCierreRow,
   ICierresBodegaAdminRepository,
+  MarcaConciliacionResult,
+  MarcarConciliadoInput,
   ResolverCierreBodegaInput,
   ResolverCierreBodegaResult,
+  RevertirConciliacionInput,
 } from "@/lib/interfaces/repositories/ICierresBodegaAdminRepository";
 import type { CierreBodegaResumenRow } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
@@ -48,6 +51,9 @@ import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre
 
 // Solo el estado que la 40 puede transicionar (R18): la guardia del updateMany.
 const ESTADO_SOLICITADO = "solicitado";
+// FICHA 431: el otro lado de la marca. `aprobado` se LEE «Recibido» (D2/D3: el enum `cierre_estado`
+// NO se toca, lo comparten `cierre_dia` y `cierre_bodega`).
+const ESTADO_APROBADO = "aprobado";
 
 // Feature 69/T23: el detalle sale del SNAPSHOT -> el cliente necesita `cierreDetail`.
 type CierresBodegaAdminPrismaClient = Pick<
@@ -483,5 +489,148 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
     // count 0: distinguir "ya resuelto" (existe) de "no existe".
     const existe = await this.prisma.cierreBodega.count({ where: { id } });
     return existe > 0 ? "conflict" : "fuera_de_alcance"; // R18 vs R19
+  }
+
+  /**
+   * ⭑ FICHA 431 (R8/R9/R11/R13) — MARCAR RECIBIDA una consolidacion, con su monto.
+   *
+   * Mismo molde que `resolverCierreBodega` y a proposito: `$transaction` propia, guarda por estado
+   * en el `WHERE`, `appendAccion(tx, …)` DENTRO del callback y el trio de desenlaces.
+   *
+   * ⚠️ `appendAccion(tx, …)` Y NUNCA `appendAccion(this.prisma, …)`. Esa sustitucion NO la caza
+   * NINGUN test de integracion de este repo —ahi `this.prisma` ES el cliente de la transaccion del
+   * test— y solo la caza la guardia estatica del censo
+   * (`tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts`), que exige forma
+   * `abre_tx` y el `appendAccion` dentro del callback.
+   *
+   * EL ESPEJO `resuelto_at`/`resuelto_por` NO ES DUPLICACION POR DESCUIDO:
+   * el repositorio de analitica de conciliacion de cierres (`contarCierresPorEstado`, sin su nombre
+   * completo a proposito: la guardia de fuente de la 127 censa todo archivo que lo escriba, y este
+   * no es de analitica) selecciona los aprobados POR
+   * `resuelto_at`. Sin rellenarlo, los cierres de bodega saldrian de la analitica financiera en
+   * silencio. Las columnas NUEVAS son las que llevan el SIGNIFICADO y el monto; estas son el
+   * espejo heredado del acto.
+   *
+   * NO ESCRIBE EN NINGUN LIBRO DE DINERO (R14). La unica tabla que toca ademas de `cierre_bodega`
+   * es `historial_accion`, que no es un libro: es el rastro.
+   */
+  async marcarConciliado(input: MarcarConciliadoInput): Promise<MarcaConciliacionResult> {
+    const { id, montoRecibido, nota, actorUsuarioId } = input;
+    // Money-safe: el importe entra como STRING de escala 2 y se convierte AQUI, en el borde de la
+    // escritura. Ni `Number`, ni `parseFloat`, ni aritmetica.
+    const monto = new Prisma.Decimal(montoRecibido);
+    const ahora = new Date();
+
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      // R11: aplica SOLO si sigue pendiente de conciliar. Los DOS predicados, no uno: el estado es
+      // lo que las pantallas leen y `conciliado_at` es EL predicado de la marca.
+      const res = await tx.cierreBodega.updateMany({
+        where: { id, estado: ESTADO_SOLICITADO, conciliadoAt: null },
+        data: {
+          estado: ESTADO_APROBADO, // D2: `aprobado` se LEE «Recibido»
+          conciliadoAt: ahora,
+          conciliadoPor: actorUsuarioId,
+          montoRecibido: monto,
+          conciliadoNota: nota,
+          resueltoAt: ahora, // espejo (ver cabecera)
+          resueltoPor: actorUsuarioId, // espejo (ver cabecera)
+        },
+      });
+      if (res.count !== 1) return null;
+
+      const cierre = await tx.cierreBodega.findUnique({
+        where: { id },
+        select: { solicitadoAt: true, zona: { select: { nombre: true } } },
+      });
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: "cierre_bodega_conciliado",
+          entidadTipo: "cierre_bodega",
+          entidadId: id,
+          entidadEtiqueta: etiquetaDeEntidad("cierre_bodega", {
+            zonaNombre: cierre?.zona.nombre ?? null,
+            fecha: cierre?.solicitadoAt ?? ahora,
+          }),
+          // El monto RECIBIDO, no el consolidado: es lo que la persona afirma haber contado.
+          monto,
+          // La NOTA no entra (R5 de la 362): es texto libre tecleado por una persona.
+          ...actor,
+        },
+      ]);
+      return "updated" as const;
+    });
+    if (resultado === "updated") return "updated";
+
+    const existe = await this.prisma.cierreBodega.count({ where: { id } });
+    return existe > 0 ? "conflict" : "fuera_de_alcance"; // R11 vs no existe
+  }
+
+  /**
+   * ⭑ FICHA 431 (R12/R13) — REVERTIR la marca: vuelve a «Pendiente de conciliar» y BORRA los cuatro
+   * datos de la marca mas el espejo.
+   *
+   * ⚠️ METODO PROPIO Y NO UN BOOLEANO EN `marcarConciliado`: la guardia del censo mide POR METODO,
+   * no por escritura (medido en las fichas 376 y 380). Con las dos acciones en el mismo metodo,
+   * borrar uno de los dos `appendAccion` la dejaria VERDE.
+   *
+   * ⚠️ EL MONTO SE LEE ANTES DE BORRARLO, y va a la fila del historial. Despues de este UPDATE, esa
+   * fila es el UNICO sitio del sistema donde sobrevive cuanto se habia dado por recibido: sin el,
+   * el rastro diria «alguien deshizo algo» en vez de «alguien deshizo un recibido de ₡500.000».
+   *
+   * ⚠️ CONSECUENCIA DECLARADA: al vaciar `resuelto_at`, la analitica financiera deja de contar este
+   * cierre en su periodo. Es lo correcto —no se recibio— y esta escrito para que no sorprenda.
+   */
+  async revertirConciliacion(input: RevertirConciliacionInput): Promise<MarcaConciliacionResult> {
+    const { id, actorUsuarioId } = input;
+
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      // El monto ANTES del borrado: es lo que la fila del historial tiene que documentar.
+      const previo = await tx.cierreBodega.findUnique({
+        where: { id },
+        select: {
+          montoRecibido: true,
+          solicitadoAt: true,
+          zona: { select: { nombre: true } },
+        },
+      });
+
+      // R12: aplica SOLO si de verdad estaba marcada. Los DOS predicados, por el mismo motivo que
+      // en `marcarConciliado`.
+      const res = await tx.cierreBodega.updateMany({
+        where: { id, estado: ESTADO_APROBADO, conciliadoAt: { not: null } },
+        data: {
+          estado: ESTADO_SOLICITADO, // D2: `solicitado` se LEE «Pendiente de conciliar»
+          conciliadoAt: null,
+          conciliadoPor: null,
+          montoRecibido: null,
+          conciliadoNota: null,
+          resueltoAt: null, // espejo: se va con la marca (ver cabecera)
+          resueltoPor: null, // espejo
+        },
+      });
+      if (res.count !== 1) return null;
+
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: "cierre_bodega_conciliacion_revertida",
+          entidadTipo: "cierre_bodega",
+          entidadId: id,
+          entidadEtiqueta: etiquetaDeEntidad("cierre_bodega", {
+            zonaNombre: previo?.zona.nombre ?? null,
+            fecha: previo?.solicitadoAt ?? new Date(),
+          }),
+          // EL MONTO QUE SE BORRA. Leido arriba, dentro de la misma transaccion.
+          monto: previo?.montoRecibido ?? null,
+          ...actor,
+        },
+      ]);
+      return "updated" as const;
+    });
+    if (resultado === "updated") return "updated";
+
+    const existe = await this.prisma.cierreBodega.count({ where: { id } });
+    return existe > 0 ? "conflict" : "fuera_de_alcance"; // R12 vs no existe
   }
 }

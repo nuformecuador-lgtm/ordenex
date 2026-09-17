@@ -218,7 +218,7 @@ describe("pwa · los atajos del manifiesto", () => {
     ]);
   });
 
-  it("hoy no hay ni un destino que vean todos los roles: por eso son cero atajos", () => {
+  it("⭑ 433 — YA HAY un destino universal (`/ayuda`), y aun así siguen siendo cero atajos", () => {
     // LA MEDICION QUE SOSTIENE LA DECISION (humano, 2026-08-25), re-derivada aqui en vez de
     // copiada: si mañana entra una ruta universal, estos numeros cambian y la ficha del atajo
     // se puede abrir con datos. Si alguien mete un atajo antes, el caso de arriba lo caza.
@@ -264,18 +264,50 @@ describe("pwa · los atajos del manifiesto", () => {
     // pueden EDITAR un SINPE— este mismo `toEqual` lo diría.
     // La CONCLUSIÓN no cambia: cada destino nuevo lo ve UN rol de cinco, la intersección sigue
     // vacía y por tanto siguen siendo CERO atajos.
+    // ⭑ FICHA 431 — `maestro` 20 -> 21 y `admin` 12 -> 13, por UN destino nuevo y solo uno: el
+    // subítem «Satélites» (`/wallet/satelites`), CUARTO hijo de «Wallet». Suben los DOS a la vez
+    // —y es lo que hay que mirar— porque el ítem NO declara roles propios: hereda los del padre
+    // (`maestro` y `admin`), que es exactamente quien `esAccesoTotal` deja entrar en la página
+    // (R27). Si hubiera subido uno solo, o si se hubiera movido `adminSatelite`, este `toEqual`
+    // diría que el menú y el `notFound()` de la página discrepan sobre quién llega.
+    // `adminSatelite`, `mensajero` y `adminTienda` NO se mueven, y que sigan clavados es parte de
+    // lo que se afirma aquí: la vista enseña el dinero de TODAS las bodegas y R27 se la niega
+    // justamente a la satélite.
+    // La CONCLUSIÓN no cambia: el destino nuevo lo ven DOS roles de cinco, la intersección sigue
+    // vacía y por tanto siguen siendo CERO atajos.
+    // ⭑ FICHA 433 — SUBEN LOS CINCO A LA VEZ, +1 cada uno, y eso es EL HALLAZGO, no un ajuste
+    // de numeros. El item «Ayuda» (`/ayuda`) es el PRIMER destino de la historia de esta app
+    // que ven los cinco roles: por eso es el unico cambio de esta lista que mueve a TODOS en
+    // vez de a uno o a dos. Que suban los cinco es justamente lo que hay que mirar — si
+    // hubiera subido uno solo, el item se habria declarado con menos roles de los que dice su
+    // etiqueta («visible para todos los roles»), y si hubieran subido seis contando `apiKey`,
+    // una cuenta de maquina habria ganado menu (y con el un aterrizaje post-login, ver
+    // `ROLES_AYUDA`).
     expect(Object.fromEntries([...porRol].map(([rol, d]) => [rol, d.size]))).toEqual({
-      maestro: 20,
-      admin: 12,
-      adminSatelite: 7,
-      mensajero: 6,
-      adminTienda: 4,
+      maestro: 22,
+      admin: 14,
+      adminSatelite: 8,
+      mensajero: 7,
+      adminTienda: 5,
     });
 
     const interseccion = [...porRol.values()].reduce((acc, destinos) =>
       new Set([...acc].filter((url) => destinos.has(url))),
     );
-    expect([...interseccion]).toEqual([]);
+
+    // ⚠️ LA CONCLUSION DE ESTE ARCHIVO CAMBIA POR PRIMERA VEZ DESDE 2026-08-25. Hasta hoy la
+    // interseccion estaba VACIA y ese era el dato que sostenia la decision del humano de no
+    // publicar ningun atajo: un atajo del manifiesto es global a la app —lo ve quien instale
+    // la PWA, sea cual sea su rol—, asi que solo puede salir de la interseccion. Ahora hay UN
+    // candidato legitimo.
+    expect([...interseccion]).toEqual(["/ayuda"]);
+
+    // ⚠️ Y AUN ASI NO SE PUBLICA NINGUNO. Que un atajo sea POSIBLE no lo hace DECIDIDO: cuales
+    // son los atajos de la aplicacion instalada es una decision de producto del humano, y la
+    // ficha 433 no la tomo — solo creo el candidato. Esta linea se queda como estaba a
+    // proposito, para que anadir el atajo sea una edicion consciente y no un efecto colateral
+    // de haber puesto un item de menu. El caso «ningun atajo deja fuera a un rol con menu»
+    // (arriba) es el que vigilaria el atajo el dia que se añada.
     expect(MANIFIESTO.shortcuts).toBeUndefined();
   });
 });

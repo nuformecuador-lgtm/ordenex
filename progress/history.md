@@ -5446,3 +5446,106 @@ dejó de ser cierto. La revisión contrastó **las 11 afirmaciones nuevas contra
 cumplen**.
 
 **NO se desplegó.** Las cuatro de SF-001 salen juntas.
+
+---
+
+## 431 — los cierres de satélite, autónomos (2026-09-16) · SF-001 punto 1
+
+La bodega satélite deja de necesitar la aprobación de la central para seguir trabajando. **La
+aprobación no se elimina: se transforma en marca de conciliación.**
+
+**El documento firmado se equivocaba en su afirmación clave.** Decía que esa aprobación «no dispara
+ningún proceso: es un visto bueno y nada más». La mitad del dinero era cierta, pero «nada más» era
+falso: mientras estaba pendiente, **la satélite no podía asignar órdenes a sus mensajeros**. Medido:
+mediana de 34 minutos, pero **3 de 32 veces pasó de 12 horas**.
+
+### El hallazgo que salvó la ficha
+
+Existía un índice único que permitía **una sola consolidación pendiente por zona**. Quitar el bloqueo
+de asignación sin tocarlo habría entregado una satélite que puede asignar pero **no volver a
+consolidar**: el mismo freno mudado de sitio, con la ficha cerrada y nada resuelto. El reviewer
+verificó **en la base** que el índice ya no existe.
+
+### El saldo mide EFECTIVO, no el total — y lo destapó una pregunta del spec
+
+Solo el efectivo viaja en el bulto; el SINPE llega directo a una cuenta. De **₡4.196.897** consolidados,
+**₡1.105.790 (26,3 %) son SINPE**. Con el total, la pantalla habría enseñado más de un millón de deuda
+fantasma y el backfill habría dejado el saldo del primer día en **−₡1.105.790**.
+
+### Ningún bloqueante de la revisión estaba en el código
+
+Las cinco mutaciones del reviewer —**cuatro distintas** de las del implementador— murieron todas. Lo que
+falló fue la documentación: `docs/ayuda/satelite/en-bodega.md` afirmaba *«la app no te deja asignar…
+mientras la central no lo resuelva»*, **exactamente el control que la ficha quita**. Y el asistente del
+punto 4 solo responde sobre esa carpeta.
+
+### Lo medido contra producción, que podía tumbar el despliegue
+
+`resuelto_por` es `ON DELETE SET NULL`: una fila cuyo aprobador hubiera sido borrado tendría `NULL`, el
+`CHECK` la rechazaría y **la migración abortaría a mitad del despliegue**. **Cero filas así.** El
+`design.md` decía que esa columna llevaba `RESTRICT` «igual que sus hermanas» — esa frase es la que
+hacía invisible el riesgo.
+
+### Puerta de despliegue, no de merge
+
+**T25 y T26 quedan sin marcar a propósito**: la corrida compuesta necesita datos que la base local no
+tiene. Y **la referencia caduca** — ayer 32 cierres, hoy 35: hay que capturarla justo antes de
+desplegar o la prueba de que el backfill no tocó nada más no se puede hacer nunca.
+
+**NO se desplegó.** Las cuatro de SF-001 salen juntas.
+
+---
+
+## 433 — el módulo de ayuda dentro de la app (2026-09-16) · SF-001 punto 4, primera mitad
+
+Los 31 documentos de `docs/ayuda/**` dejan de ser archivos que nadie puede leer desde la aplicación:
+ítem «Ayuda» al final del menú, índice agrupado con buscador, y un **«?» en el encabezado que abre la
+ayuda DE ESA pantalla**. Los `.md` son la única fuente: el módulo los RENDERIZA, no guarda texto propio
+—sin artefacto generado, sin tabla, sin migración—, que es lo que sostiene la promesa del punto 4
+(«corregir un párrafo son minutos dentro del mismo cambio»).
+
+- Requisitos cubiertos: **R1–R20**, mapeados en `progress/impl_433.md`. La ficha es `sdd: false`: la
+  especificación es su `status_note`, y R1…R15 estaban numerados en los tests **sin que ningún
+  documento los definiera** hasta ese archivo.
+
+### El bloqueante de la revisión: el cableado no lo cubría nadie
+
+Tres mutaciones **sobrevivían a la suite entera** —el `notFound()` por rol del servidor (contra las 230
+guardias, 3346 tests), el gate del layout, y el montaje del «?» en `PageHeader` (contra 727 archivos y
+9375 tests)—. Traducido: se podía **borrar la defensa real del acotamiento por rol** y hacer desaparecer
+el «?» de las 29 pantallas, todo con el gate en verde. Las tres tienen ahora su test y **las tres se
+comprobaron en rojo con la mutación puesta**. La del «?» es la familia ya catalogada aquí: la guardia
+medía que alguien lo IMPORTARA, no que alguien lo MONTARA.
+
+### El arreglo que no era de tests: la ayuda podía tumbar el portal
+
+`app/(app)/layout.tsx` leía el catálogo **sin `try/catch`** y `leerCatalogoAyuda` **memoiza la promesa**.
+Encadenado: un solo fallo de lectura dejaba la promesa RECHAZADA en caché y **todas** las páginas del
+portal daban 500 para el resto de la vida del proceso — no sólo `/ayuda`. Dos arreglos: el rechazo ya no
+se memoriza (se limpia y se reintenta) y el layout degrada a «sin «?»» en vez de caerse. Los dos con su
+test y su mutación en rojo. Es la condición del humano para SF-001 aplicada al único punto donde esta
+ficha podía dañar algo ajeno.
+
+### La línea que separa «funciona» de «404 en producción» ya tiene red
+
+`outputFileTracingIncludes` (`next.config.ts`) es lo único que mete los `.md` en la función de Vercel:
+la ruta se arma en runtime y el trazado no tiene ningún `import` que seguir. **Borrar el bloque entero
+dejaba las 230 guardias en verde.** La guardia nueva ata el patrón a la carpeta que `catalogo.ts` lee
+de verdad, exige que cubra `/**` (el layout del portal lo necesita en las 29 pantallas) y que lleve
+`**`, porque los 31 documentos viven en subcarpetas.
+
+### Dos hallazgos que NO volvieron al implementador
+
+- **Que el maestro no vea la ayuda del mensajero** viene de los DATOS (`roles:` = «quién ve esa
+  pantalla», contrato del README de la carpeta), no del módulo. Decisión de producto, del humano.
+- **El encabezado a 390px** (`/monitoreo`: 8 líneas en 118px) es deuda pre-existente —`justify-between`
+  sin `flex-wrap`, botones con `shrink-0`— que esta ficha agrava en grado, no daño nuevo. Ficha aparte,
+  con medición antes/después.
+
+### Deuda menor, dicha en voz alta
+
+«Ayuda» ya significaba otra cosa en este repo (`orden-ayuda`, `rescate-ayuda`: el mensajero pidiendo
+auxilio con una orden). No hay colisión de símbolos, pero cualquier búsqueda futura por «ayuda»
+devuelve dos dominios sin relación.
+
+**NO se desplegó.** Las cuatro de SF-001 salen juntas.

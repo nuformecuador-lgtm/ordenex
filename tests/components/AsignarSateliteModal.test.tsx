@@ -209,7 +209,18 @@ describe("AsignarSateliteModal", () => {
     );
   });
 
-  it("R22 (41): resultado 'bodega_bloqueada' por cierre de bodega → toast con la causa (ii)", async () => {
+  it("⭑ 431/R16: la causa (ii) ya no tiene línea propia — y el toast NO dice «pendiente de aprobación»", async () => {
+    // ESTE CASO ESTABA INVERTIDO y se invierte a propósito, no se borra.
+    //
+    // Afirmaba que un `bodega_bloqueada` por consolidación pendiente sacaba el toast «Tu cierre
+    // de bodega hacia la central está pendiente de aprobación». Desde la ficha 431 ese texto no
+    // es cierto en ninguno de sus dos extremos: no hay aprobación —es una MARCA DE CONCILIACIÓN
+    // (D2)— y esa causa no frena (D4, `bloqueada: false` siempre).
+    //
+    // ⚠️ LA RAMA SIGUE VIVA a propósito (Q4): `AsignacionSateliteService.asignar` conserva su
+    // desenlace `bodega_bloqueada` por si vuelve una causa. Lo que este caso fija es que, SI
+    // llegara, el toast diría el título genérico y NUNCA el texto retirado — que es lo que
+    // impide que la línea vuelva por la puerta de atrás al reactivar la rama.
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "bodega_bloqueada",
@@ -227,11 +238,16 @@ describe("AsignarSateliteModal", () => {
     );
     await user.click(screen.getByRole("button", { name: "Asignar" }));
 
-    await vi.waitFor(() =>
-      expect(errorMock).toHaveBeenCalledWith(
-        expect.stringMatching(/cierre de bodega hacia la central está pendiente de aprobación/i),
-      ),
-    );
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    const mensaje = String(errorMock.mock.calls.at(-1)?.[0] ?? "");
+
+    // El texto RETIRADO no vuelve por aquí.
+    expect(mensaje).not.toMatch(/pendiente de aprobación/i);
+    expect(mensaje).not.toMatch(/cierre de bodega hacia la central/i);
+    // Queda el título, que sigue siendo cierto si algún día algo bloquea de verdad.
+    expect(mensaje).toMatch(/No puedes asignar órdenes/i);
+    // Y NO se cuela la línea de la OTRA causa, que no aplica en este caso.
+    expect(mensaje).not.toMatch(/cierres pendientes de tus mensajeros/i);
   });
 
   // ── Feature 92/R9 ───────────────────────────────────────────────────────────

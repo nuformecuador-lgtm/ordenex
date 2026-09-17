@@ -3,7 +3,7 @@ titulo: Cierres
 modulo: cierres-admin
 pantalla: /cierres-admin
 roles: [maestro, admin, adminSatelite]
-actualizado: 2026-09-15
+actualizado: 2026-09-16
 fuentes:
   - app/(app)/cierres-admin/_components/CierresAdminModule.tsx
   - app/(app)/cierres-admin/_components/CierresTabs.tsx
@@ -25,8 +25,12 @@ convierte en plata registrada.
 
 **Mensajero.** Los cierres que piden los mensajeros, uno por uno. Es la cola de trabajo diaria.
 
-**Bodega.** La consolidación: una satélite junta sus cierres ya aprobados y le pide el cierre a la
+**Bodega.** La consolidación: una satélite junta sus cierres ya aprobados y le manda el efectivo a la
 central. Si administrás una satélite, acá es donde consolidás y enviás.
+
+> **Esta mitad ya no se aprueba: se concilia.** Antes la central tenía que aprobar, y mientras tanto la
+> bodega no podía asignar trabajo nuevo. Ahora la satélite cierra sola y la central **marca si el
+> efectivo llegó**, en **Wallet · Satélites**. Es seguimiento, no permiso.
 
 ## Aprobar o rechazar
 

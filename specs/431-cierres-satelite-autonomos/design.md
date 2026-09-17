@@ -35,7 +35,7 @@ Cuatro columnas nuevas en `cierre_bodega` (`db/schema.prisma`, modelo `CierreBod
 | Columna (Postgres) | Campo Prisma | Tipo | Nulable | Por qué |
 | --- | --- | --- | --- | --- |
 | `conciliado_at` | `conciliadoAt` | `TIMESTAMP(3)` | **sí** | Es **el predicado**: `NULL` = sin conciliar. Un instante y no una fecha de calendario, porque el resto de marcas de tiempo de esta tabla (`solicitado_at`, `resuelto_at`) son instantes y compararlas contra una fecha suelta obligaría a convertir en dos sitios. |
-| `conciliado_por` | `conciliadoPor` | `TEXT` FK → `usuario(id)` | **sí** | Quién marcó. FK y no un nombre suelto: es el mismo patrón que `resuelto_por`/`solicitado_por` en esta misma tabla. `ON DELETE RESTRICT` (por defecto), igual que sus hermanas. **Nunca `NULL` cuando `conciliado_at` no lo es** (lo impone el `CHECK`): no hay camino de sistema, siempre marca una persona. |
+| `conciliado_por` | `conciliadoPor` | `TEXT` FK → `usuario(id)` | **sí** | Quién marcó. FK y no un nombre suelto: es el mismo patrón que `resuelto_por`/`solicitado_por` en esta misma tabla. `ON DELETE RESTRICT` (por defecto). ⚠️ **CORREGIDO 2026-09-16:** NO es «igual que sus hermanas» — `solicitado_por` sí lleva `RESTRICT`, pero **`resuelto_por` es `ON DELETE SET NULL`**. La elección de `RESTRICT` aquí es la correcta; lo que estaba mal era esta frase, y es la que hacía invisible el riesgo de que el backfill copiara un `resuelto_por` NULL y la migración abortara a mitad del despliegue. Medido contra producción: 0 filas así. **Nunca `NULL` cuando `conciliado_at` no lo es** (lo impone el `CHECK`): no hay camino de sistema, siempre marca una persona. |
 | `monto_recibido` | `montoRecibido` | `DECIMAL(12,2)` | **sí** | Cuánto llegó **de verdad**. Misma precisión y escala que los cinco importes que ya viven en la tabla: usar otra sería aritmética entre escalas distintas. Nulable **a propósito y no con `DEFAULT 0`**: `0` significaría «llegó cero», que no es lo mismo que «nadie lo ha mirado», y con un default la diferencia `total − recibido` mentiría en cada fila sin marcar. |
 | `conciliado_nota` | `conciliadoNota` | `TEXT` | **sí** | Texto libre corto («faltaron ₡15.000, entran el lunes»). Opcional siempre. **No entra en el registro de acciones** (R5 de la ficha 362: el texto tecleado por una persona no va al historial) y **no entra en las descargas** que ya censan columnas sensibles. |
 
@@ -154,7 +154,7 @@ ALTER TABLE "cierre_bodega" ADD CONSTRAINT "cierre_bodega_conciliado_por_fkey"
 UPDATE "cierre_bodega"
    SET "conciliado_at"   = "resuelto_at",
        "conciliado_por"  = "resuelto_por",
-       "monto_recibido"  = "total_general",
+       "monto_recibido"  = "total_efectivo",
        "conciliado_nota" = 'Conciliación retroactiva (ficha 431): aprobado bajo el régimen anterior.'
  WHERE "estado" = 'aprobado' AND "conciliado_at" IS NULL;
 
@@ -197,7 +197,7 @@ con la segunda.
 ### 2.1 La fórmula, una sola vez
 
 ```
-saldoSinConciliar(zona) = Σ ( total_general − COALESCE(monto_recibido, 0) )
+saldoSinConciliar(zona) = Σ ( total_efectivo − COALESCE(monto_recibido, 0) )
                           sobre cierre_bodega de esa zona con estado <> 'rechazado'
 ```
 
@@ -566,3 +566,25 @@ Además, y porque esto **quita un control de dinero**:
 `CuentasPorPagarAnaliticaRepository` y `RecaudoAnaliticaRepository` (medido: **no** referencian el
 nivel 2) · el gate de nivel 1 que impide consolidar con cierres de mensajero sin resolver · el CRUD de
 zonas · los `down.sql` anteriores.
+
+---
+
+## ⚠️ CORRECCIÓN Q2 (2026-09-16) — el saldo mide EFECTIVO, no `total_general`
+
+**Este documento se escribió con `total_general` y el humano decidió lo contrario.** El código hace lo
+correcto; las menciones de arriba están corregidas, pero si aparece alguna más en el cuerpo, **manda
+esta sección**.
+
+**Por qué.** Un consolidado incluye efectivo, SINPE y transferencias. **Solo el efectivo viaja en el
+bulto**: el SINPE llega directo a una cuenta. Medido en producción: de **₡4.196.897** consolidados,
+**₡1.105.790 (26,3 %) son SINPE**. Con `total_general` la pantalla enseñaría más de un millón de deuda
+fantasma, y el backfill dejaría el saldo del primer día en **−₡1.105.790** — la central debiéndole a
+sus propias bodegas.
+
+**Alcance:** `saldoDe` (fórmula única, 5 llamadores), el backfill de la migración B, `faltaPorRecibir`
+del desglose y las tres cifras de cabecera. `total_general` se sigue mostrando **como contexto**, pero
+no es lo pendiente de llegar.
+
+**Límite que esto destapa y que la ficha NO cubre:** cuando la 429 esté desplegada y cada bodega tenga
+su propio SINPE, **el SINPE que recaude una satélite dejará de llegar a la central** — entrará a su
+cuenta. Ese pendiente no viaja en el bulto ni está en `total_efectivo`. Es otra ficha.

@@ -117,6 +117,44 @@ vi.mock("@/components/shared/RevisionSinpeBodega", () => ({
   },
 }));
 
+// ⭑ FICHA 433 (R20) — el mapa ruta→documento del «?» y la lectura que lo alimenta.
+//
+//   · `AyudaProvider` se dobla para AFIRMAR QUE ALGUIEN LE PASA EL MAPA, no que se importa: el
+//     proveedor real no pinta ninguna caja, así que montarlo sin mapa —o no montarlo— dejaría el
+//     «?» muerto en las 29 pantallas con toda la suite en verde. Misma lección que los dos
+//     notificadores muertos.
+//   · `leerResumenesAyuda` se dobla para poder HACERLA FALLAR. Es la única lectura de este layout
+//     que depende del sistema de archivos de la función, y este layout se pinta en TODAS las
+//     páginas del portal: lo que se rompa aquí no rompe la ayuda, rompe la aplicación.
+const { propsDelProveedorAyuda, catalogo } = vi.hoisted(() => ({
+  propsDelProveedorAyuda: [] as { mapa: Record<string, string> }[],
+  catalogo: { falla: false },
+}));
+vi.mock("@/providers/AyudaProvider", () => ({
+  AyudaProvider: ({
+    mapa,
+    children,
+  }: {
+    mapa: Record<string, string>;
+    children: ReactNode;
+  }) => {
+    propsDelProveedorAyuda.push({ mapa });
+    return <>{children}</>;
+  },
+}));
+vi.mock("@/lib/ayuda/catalogo", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/ayuda/catalogo")>();
+  return {
+    ...real,
+    // Los documentos son los REALES mientras no se pida lo contrario: el mapa que se afirma
+    // abajo sale de `docs/ayuda/**`, no de un fixture que pueda declarar otras rutas.
+    leerResumenesAyuda: async () => {
+      if (catalogo.falla) throw new Error("EACCES: docs/ayuda ilegible");
+      return real.leerResumenesAyuda();
+    },
+  };
+});
+
 // Por defecto, alguien que no ha decidido nada: la preferencia «no puesta» (422/R2).
 avisosPushDeMock.mockResolvedValue(false);
 // Por defecto, nada que pedir: es la respuesta NORMAL del resolvedor.
@@ -451,5 +489,102 @@ describe("429/T19 — la revisión pendiente se resuelve en el servidor y se mon
     expect(resolverRevisionMock).not.toHaveBeenCalled();
     expect(zonaRepoConstruido.veces).toBe(0);
     expect(propsDelAvisoSinpe).toEqual([]);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 433 · R20 — EL MAPA DEL «?» SE BAJA DESDE AQUÍ, Y LA AYUDA NO PUEDE TUMBAR EL PORTAL
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Dos propiedades, y la segunda es la que la revisión pidió cerrar antes de desplegar:
+//
+//   · **el mapa llega RECORTADO POR ROL al proveedor**. Si dejara de bajar, el «?» no se pintaría
+//     en ninguna pantalla; si bajara sin recortar, el HTML de un mensajero llevaría los slugs de
+//     la ayuda de Wallet. Se afirma sobre el objeto que RECIBE el proveedor, no sobre el código.
+//   · **si el catálogo no se puede leer, el portal sigue en pie**. Esta es la única lectura del
+//     layout que depende de que 31 archivos estén en el disco de la función (un trazado mal
+//     declarado, un archivo ilegible), y el layout se pinta en TODAS las páginas: sin el `catch`
+//     un tropiezo de lectura sería un 500 en `/ordenes`, en `/monitoreo` y en todo lo demás.
+//     Con él se pierde el «?» y nada más. Es la condición del humano para SF-001: no dañar lo
+//     que ya funciona.
+
+describe("433/R20 — el mapa del «?» baja acotado, y la ayuda se degrada sin arrastrar al portal", () => {
+  beforeEach(() => {
+    propsDelProveedorAyuda.length = 0;
+    catalogo.falla = false;
+    cookieTemaMock.mockReturnValue(undefined);
+  });
+
+  it("⭑ ALGUIEN le pasa el mapa al proveedor, y viene recortado por el rol de la sesión", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
+
+    await renderLayout(<div data-testid="page-children">Contenido</div>);
+
+    expect(propsDelProveedorAyuda.length).toBe(1);
+    const mapa = propsDelProveedorAyuda[0].mapa;
+    // Rutas reales de `docs/ayuda/**`: el maestro tiene la ayuda de la caja de la empresa...
+    expect(mapa["/wallet"]).toBe("oficina/wallet-caja");
+    // ...y NO la del reparto del mensajero, que no le declara el rol.
+    expect(mapa["/mis-asignaciones/reparto"]).toBeUndefined();
+  });
+
+  it("⭑ y al mensajero no le cruza ni el slug de la ayuda de Wallet", async () => {
+    // La mitad que sostiene el acotamiento en el SERVIDOR: si se hiciera en el botón, el mapa
+    // entero viajaría en el HTML de cualquiera.
+    resolveActorMock.mockResolvedValue({ usuarioId: "u2", rol: "mensajero" });
+
+    await renderLayout(<div>Contenido</div>);
+
+    const mapa = propsDelProveedorAyuda[0].mapa;
+    expect(mapa["/mis-asignaciones/reparto"]).toBe("mensajero/reparto");
+    expect(mapa["/wallet"]).toBeUndefined();
+    expect(Object.values(mapa).some((slug) => slug.startsWith("oficina/"))).toBe(false);
+  });
+
+  it("sin sesión el mapa va VACÍO (no hay a quién acotarlo)", async () => {
+    resolveActorMock.mockResolvedValue(null);
+
+    await renderLayout(<div>Contenido</div>);
+
+    expect(propsDelProveedorAyuda[0].mapa).toEqual({});
+  });
+
+  it("⭑ con el catálogo ILEGIBLE, el portal se pinta igual: sidebar, contenido y mapa vacío", async () => {
+    const enLosLogs = vi.spyOn(console, "error").mockImplementation(() => {});
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
+    catalogo.falla = true;
+
+    // Lo primero que se afirma es que NO LANZA: sin el `catch`, esta línea sola pone el caso
+    // rojo, y en producción sería un 500 en cada página del portal.
+    await renderLayout(<div data-testid="page-children">Contenido</div>);
+
+    expect(screen.getByTestId("page-children")).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: /navegación principal/i }),
+    ).toBeInTheDocument();
+    // Lo único que se pierde es el «?»: el mapa vacío hace que el botón no se monte.
+    expect(propsDelProveedorAyuda[0].mapa).toEqual({});
+    // Y no se traga en silencio: queda dicho en los logs, que es donde se diagnostica prod.
+    expect(enLosLogs).toHaveBeenCalled();
+    enLosLogs.mockRestore();
+  });
+
+  it("y el fallo es de esa carga, no del layout: la siguiente vuelve a tener «?»", async () => {
+    // El control de que el `catch` no se queda con el mapa vacío para siempre: cada carga
+    // vuelve a pedir el catálogo. Que el CATÁLOGO no se envenene por dentro (la promesa
+    // rechazada memorizada) se mide donde sí se puede hacer fallar al sistema de archivos:
+    // `tests/unit/ayuda/catalogo-memoria.test.ts`.
+    const enLosLogs = vi.spyOn(console, "error").mockImplementation(() => {});
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
+
+    catalogo.falla = true;
+    const { unmount } = await renderLayout(<div>Contenido</div>);
+    expect(propsDelProveedorAyuda[0].mapa).toEqual({});
+    unmount();
+
+    catalogo.falla = false;
+    await renderLayout(<div>Contenido</div>);
+    expect(propsDelProveedorAyuda[1].mapa["/wallet"]).toBe("oficina/wallet-caja");
+    enLosLogs.mockRestore();
   });
 });

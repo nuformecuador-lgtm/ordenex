@@ -5153,7 +5153,7 @@
       "title": "la satelite no puede cerrar sin que la central apruebe, y eso la deja sin asignar trabajo",
       "description": "La satelite cierra sola; la aprobacion de la central pasa a ser marca de conciliacion.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "alta",
       "branch": "feat/431-cierres-satelite-autonomos",
@@ -5171,6 +5171,18 @@
       "branch": "fix/432-siembra-dentro-del-despliegue",
       "depends_on": null,
       "status_note": "INCIDENTE REAL, 2026-09-16 02:33 UTC: los deploys de PREVIEW llevan caidos desde que se mergeo la 429. `20260918120200_zona_sinpe_no_nulo` encontro las columnas vacias y aborto —lo disenado—, pero ese fallo queda registrado en `_prisma_migrations` y desde entonces TODO `migrate deploy` se niega con P3009. Produccion NO afectada (`prod` = efd06fb4, sin desplegar desde el 15). || LA CAUSA DE FONDO: hay una migracion disenada para abortar si las columnas estan vacias, y entre ella y la siembra NO CABE NINGUN PASO porque `migrate deploy` las aplica todas de un tiron. Eso funciona si alguien siembra a mano antes, y revienta en cuanto aparece un entorno nuevo — que es exactamente lo que paso con preview. || ERROR DE PROCESO QUE LO DEJO PASAR: se concluyo que mergear a `dev` era seguro porque `decidirMigracion` no migra en preview SALVO `MIGRATE_ON_PREVIEW=true`. Se verifico el CODIGO y se dio por hecha la CONFIGURACION sin medirla. Esta en true. || ARREGLO: la siembra (`scripts/seed-sinpe-inicial.ts`) pasa a correr DENTRO de `scripts/migrate-deploy.ts`, despues de aplicar las migraciones y antes de que la siguiente exija el NOT NULL. Y la migracion del NOT NULL sale de la tanda actual para que el orden sea: despliegue A crea columnas vacias + siembra sola; despliegue B aplica el NOT NULL sobre datos ya presentes. Ningun paso manual, en ningun entorno. || OJO: toca una migracion YA MERGEADA en `dev`, asi que hay que decidir si se edita en sitio (drift: lo anadido tras aplicarse no llega nunca a esa base) o si se anade una tercera. Casi seguro lo segundo. || DESBLOQUEO INMEDIATO, aparte de esta ficha y lo hace el humano contra la base de PREVIEW: `prisma migrate resolve --rolled-back 20260918120200_zona_sinpe_no_nulo` y despues `pnpm exec tsx scripts/seed-sinpe-inicial.ts`. La primera sola no basta."
+    },
+    {
+      "id": 433,
+      "title": "la ayuda vive en 31 archivos que nadie puede leer desde la aplicacion",
+      "description": "El modulo de ayuda dentro de la app, con acceso contextual desde cada pantalla.",
+      "zone": "fullstack",
+      "status": "done",
+      "sdd": false,
+      "complexity": "media",
+      "branch": "feat/433-modulo-de-ayuda",
+      "depends_on": null,
+      "status_note": "SF-001 PUNTO 4, PRIMERA MITAD. Mergeada en dev (PR #802, e7886043) y NO desplegada. Los 31 .md se renderizan desde el repositorio: no hay copia en base ni artefacto generado. || REVISION RECHAZADA Y LEVANTADA: el comportamiento estaba bien, faltaba la red. Tres mutaciones sobrevivian a la suite entera —borrar el notFound() del acotamiento por rol, neutralizar el gate del layout y quitar el «?» de las 29 pantallas— mas borrar outputFileTracingIncludes, sin el cual esto funciona en local y da 404 en Vercel. Las cuatro cerradas con su test en rojo. || Y un hallazgo de radio de dano: el catalogo memoizaba la promesa RECHAZADA, asi que un fallo de un instante al leer los .md dejaba TODO el portal en 500 para el resto del proceso. Ahora la ayuda se degrada y la aplicacion sigue en pie. || Verificado con navegador en los cuatro roles: acotamiento correcto, 404 por URL directa, y el «?» desempata bien en /ordenes (oficina para el maestro, tienda para la tienda). || PENDIENTE DEL HUMANO: si maestro/admin deben poder LEER la ayuda de los otros portales (hoy 404). || TRES PANTALLAS SIN «?» por falta de documento: /configuracion/sinpe, /mi-bodega, /ranking/historico. || NO SALE A PRODUCCION sin estar seguros de que no dana lo que ya funciona (condicion del humano)."
     }
   ]
 }

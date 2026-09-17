@@ -59,6 +59,30 @@ export interface CierreBodegaResumen {
    * que nadie pidio.
    */
   efectivoCubreDescuentos: boolean;
+  /**
+   * ⭑ FICHA 431 (R26/R28) — LA MARCA DE CONCILIACION de esta consolidacion.
+   *
+   * `conciliado` llega ya DERIVADO (`conciliado_at IS NOT NULL`): la pantalla no decide el
+   * estado comparando campos. El vocabulario aprobado lo pone la presentacion (R28): sin
+   * conciliar → «Pendiente de conciliar»; conciliada y sin faltante → «Recibido»; conciliada
+   * con `faltaPorRecibir` positivo → «Recibido incompleto».
+   *
+   * ⚠️ `estado` SIGUE SIENDO el enum compartido (`solicitado`/`aprobado`/`rechazado`) y NO se
+   * toca (D3): lo comparten `cierre_dia` y `cierre_bodega`. Lo que cambia es COMO SE LEE en las
+   * superficies del cierre de bodega, no lo que hay en la base.
+   *
+   * REQUERIDOS y no opcionales, a proposito: opcional dejaria que una superficie nueva naciera
+   * sin la marca y el compilador callase — el mismo motivo por el que `paraLaCentral` lo es.
+   */
+  conciliado: boolean;
+  /** `null` = sin conciliar. NUNCA `"0.00"` por ausencia. */
+  montoRecibido: string | null;
+  /** R17/R18/R20 — derivado en el SERVIDOR sobre el EFECTIVO. Puede ser NEGATIVO. */
+  faltaPorRecibir: string;
+  conciliadoAt: string | null; // ISO
+  conciliadoPorNombre: string | null;
+  /** Nota de quien marco. Se ENSENA (distingue el backfill retroactivo) y NO se descarga. */
+  conciliadoNota: string | null;
 }
 
 // Cabecera de un `cierre_dia` consolidable (aprobado, sin cierre de bodega): mensajero

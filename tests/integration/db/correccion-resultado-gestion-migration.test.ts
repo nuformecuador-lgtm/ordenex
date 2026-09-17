@@ -426,7 +426,14 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("398/T1.5 (b) — el down recrea las listas 
     const ORIGENES_POSTERIORES: string[] = [];
     // ficha 429 (2026-09-15): `zona_sinpe_cambiado`, con su archivo
     // `historial-accion-zona-sinpe-migration.test.ts`.
-    const ACCIONES_POSTERIORES: string[] = ["zona_sinpe_cambiado"];
+    const ACCIONES_POSTERIORES: string[] = [
+      "zona_sinpe_cambiado",
+      // ficha 431 (2026-09-16): la MARCA DE CONCILIACION de una consolidacion de bodega y su
+      // reversion. Son DOS porque la guardia del censo mide por metodo. Su archivo:
+      // `historial-accion-conciliacion-bodega-migration.test.ts`.
+      "cierre_bodega_conciliado",
+      "cierre_bodega_conciliacion_revertida",
+    ];
     expect([...origenAntes].sort()).toEqual(
       ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter(
         (t) => t !== VALOR_ORIGEN && !ORIGENES_POSTERIORES.includes(t),

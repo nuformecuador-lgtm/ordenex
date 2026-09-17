@@ -97,6 +97,7 @@ import {
 import { CierresBodegaAdminModule } from "@/app/(app)/cierres-admin/_components/CierresBodegaAdminModule";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 // ---------------------------------------------------------------------------
 // Lectura de lo PINTADO
 // ---------------------------------------------------------------------------
@@ -222,6 +223,8 @@ const CABECERA: CierreBodegaResumen = {
   motivoRechazo: null,
   paraLaCentral: "111838.37",
   efectivoCubreDescuentos: true,
+  // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+  ...marcaSinConciliar("100000.17"),
 };
 
 /**
@@ -321,6 +324,8 @@ const DIA_ANA: CierreBodegaDetalleCierre = {
   partesPorTienda: [ANA_NORTE, ANA_SUR],
   paraLaCentral: "70749.55",
   efectivoCubreDescuentos: true,
+  // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+  ...marcaSinConciliar("60000.10"),
 };
 
 /** El día SIN rechazo. */
@@ -351,6 +356,8 @@ const DIA_BETO: CierreBodegaDetalleCierre = {
   partesPorTienda: [BETO_NORTE, BETO_ESTE],
   paraLaCentral: "41088.82",
   efectivoCubreDescuentos: true,
+  // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+  ...marcaSinConciliar("40000.07"),
 };
 
 const DETALLE_OK = {
@@ -371,6 +378,8 @@ const DETALLE_OK = {
   partesPorTienda: [AGG_NORTE, AGG_SUR, AGG_ESTE],
   paraLaCentral: "111838.37",
   efectivoCubreDescuentos: true,
+  // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+  ...marcaSinConciliar("40000.07"),
 };
 
 type DetalleOk = typeof DETALLE_OK;
