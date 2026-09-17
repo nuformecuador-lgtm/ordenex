@@ -5189,12 +5189,36 @@
       "title": "tres pantallas no tienen boton de ayuda porque no tienen documento",
       "description": "Los documentos de ayuda que faltan para /configuracion/sinpe y /mi-bodega.",
       "zone": "fullstack",
+      "status": "done",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/434-pantallas-sin-ayuda",
+      "depends_on": null,
+      "status_note": "Mergeada en dev (PR #804, 170789f3) y NO desplegada. Documentos 31 -> 33. || /ranking/historico NO necesito documento: se anadio a la `pantalla:` del de Ranking, que admite varias separadas por coma. Cero codigo. || EL CODIGO GANO TRES VECES sobre el borrador: (1) la vista previa del mensaje NO existe en la pantalla de oficina —era texto de /mi-bodega colado—; (2) «Historico · Acciones» y «Configuracion · Plantillas» son maestro-only y el documento lo lee tambien el admin, asi que quedan dichos CON su limite; (3) el aviso del primer ingreso no navega a ningun sitio. || DOS literales de contrato movidos a mano: AyudaLayout (23/22/10/8/7) y AyudaBoton, que enumeraba las tres pantallas sin documento — sus casos se MOVIERON al bloque que afirma el href en vez de borrarse, y esa lista ya no contiene ninguna pantalla del portal. || Gate: 2022/2022 archivos, 29.477 tests, INIT_EXIT=0."
+    },
+    {
+      "id": 435,
+      "title": "la oficina no puede leer la ayuda de los mensajeros a los que atiende",
+      "description": "Maestro y admin pasan a leer los 33 documentos; el resto sigue acotado.",
+      "zone": "backend",
       "status": "pending",
       "sdd": false,
       "complexity": "baja",
       "branch": null,
       "depends_on": null,
-      "status_note": "Medido por la revision de la 433: de 32 pantallas con encabezado, TRES se quedan sin «?» para todo el mundo — /configuracion/sinpe, /mi-bodega y /ranking/historico — porque ningun .md declara esas rutas en su `pantalla:`. || /ranking/historico NO necesita documento nuevo: ya esta explicado dentro de docs/ayuda/mensajero/ranking.md (seccion «Historico»). Basta anadir la ruta a su `pantalla:`, que admite varias separadas por coma — el precedente vivo es publico/entrar-y-recuperar-contrasena.md. || Los otros dos SI llevan documento nuevo: oficina/configuracion-sinpe.md (roles maestro, admin) y satelite/mi-bodega.md (rol adminSatelite). Borradores ya escritos y verificados contra las cadenas reales de components/shared/sinpe-textos.ts. || ⚠️ AL ANADIRLOS HAY QUE MOVER UN LITERAL DE CONTRATO: tests/components/AyudaLayout.test.tsx afirma a mano los documentos por rol (maestro 22, admin 21, adminSatelite 9, mensajero 8, adminTienda 7). Pasan a 23 / 22 / 10 / 8 / 7. Ese literal ES el contrato —caza un acotamiento roto hacia «ensenar todo»—, asi que se mueve a proposito, no se afloja."
+      "status_note": "DECISION DEL HUMANO (2026-09-17), preguntada y respondida: «Si, la oficina lee todo». Hoy /ayuda/mensajero/reparto da 404 a maestro y admin; el acotamiento es simetrico y la oficina es quien atiende las dudas de los 18 mensajeros. || SE ENSANCHA SOLO LA LECTURA. Predicado NUEVO en lib/ayuda/documento.ts para el gate de la pagina y el indice; mapaRutaDocumento se queda ESTRICTO. Si no, el maestro tendria dos documentos candidatos para /ordenes (oficina y tienda) y ganaria el primero por orden alfabetico de slug — un desempate inventado. || ⚠️ VA JUNTO CON m3 DE LA REVISION DE LA 433: ayuda-pantalla-ruta-existe.guardia.test.ts REIMPLEMENTA la regla en vez de importarla, asi que hoy no se enteraria del cambio y el choque de /ordenes se colaria en silencio. || El literal de AyudaLayout pasa a maestro 33 y admin 33; los otros tres no se mueven."
+    },
+    {
+      "id": 436,
+      "title": "los 33 documentos no sirven de nada a quien no sabe que existen",
+      "description": "El asistente que responde sobre como usar la aplicacion, citando la documentacion.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "alta",
+      "branch": null,
+      "depends_on": 433,
+      "status_note": "SF-001 PUNTO 4, SEGUNDA MITAD. Diseno verificado en progress/design_sf001_p4_asistente.md. || RAG DESCARTADO CON MEDIDA: 33 documentos = ~21.000 tokens, caben enteros y cacheados (~$0,004/consulta contra ~$0,012 de RAG). El documento firmado acertaba en que mandarlo todo costaria 5-10 veces mas — SIN cache. Con cache se invierte y desaparece la pieza mas compleja. || LA DECISION QUE IMPORTA NO ES DE COSTE SINO DE SEGURIDAD: el contexto se acota por rol reutilizando documentosVisiblesPara() de la 433. Sin eso el acotamiento seria decorativo — puerta cerrada en /ayuda y ventana abierta en el chat. || NO consulta datos, NO ejecuta nada, NO inventa (dice «no lo se»), y cada respuesta CITA sus documentos enlazados a /ayuda/<slug>. Sin `tools` en la peticion. || SE CONSTRUYE CONTRA UN DOBLE (puerto en lib/interfaces/external + adaptador en lib/clients, como Google Routes y WhatsApp): no depende de la red ni gasta un centimo, y la clave se enchufa al final. ANTHROPIC_API_KEY pendiente del humano. || ⚠️ TRAMPA HEREDADA: la ruta nueva tambien tiene que entrar en outputFileTracingIncludes de next.config.ts o responde «no lo se» a todo en produccion y verde en local."
     }
   ]
 }
