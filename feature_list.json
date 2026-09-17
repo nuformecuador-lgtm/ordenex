@@ -5225,12 +5225,12 @@
       "title": "en el telefono el boton de Salir queda fuera de la pantalla",
       "description": "El encabezado compartido a 390px: las acciones desbordan y el titulo se estruja.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/437-encabezado-telefono",
       "depends_on": null,
-      "status_note": "REPORTADO POR EL HUMANO con captura, 2026-09-17, y MEDIDO en /mis-asignaciones/reparto a 390x844: «Salir» empieza en x=352 y mide 75px, o sea que termina en 427 sobre una pantalla de 390. Y `document.scrollWidth == clientWidth`, asi que NO hay scroll horizontal: el boton es INALCANZABLE, no solo feo. || La descripcion se estruja en 3 lineas dentro de una columna de 93px. Medido antes en otras pantallas: /monitoreo 8 lineas en 118px, /cierres-admin 8 en 83px. || CAUSA: PageHeader.tsx:61 es una fila flex con justify-between y SIN flex-wrap, y los botones traen shrink-0 en la base de buttonVariants, asi que toda la compresion la come la columna del titulo hasta que las acciones se salen. || ES PRE-EXISTENTE —no lo trajo ninguna ficha de SF-001— pero el «?» de la 433 le resta ~38px mas en toda pantalla con documento. Afecta a las 32 pantallas del portal y sobre todo a los 18 mensajeros, que trabajan en telefono. || PIDE MEDICION ANTES/DESPUES: el arreglo se juzga con las cajas, no a ojo."
+      "status_note": "Mergeada en dev (PR #807, 40899ebf) y NO desplegada. Lo encontro el HUMANO probando, con captura. || Y NO ERA SOLO EL TELEFONO: el encabezado NO mide lo que la pantalla — desde md el sidebar es fijo y le come 256px. Medido: a 768 de viewport «Salir» terminaba en 927 contra un limite de 748. El defecto vivia en toda la franja 768-947, donde nadie habia mirado. || ARREGLO: flex-col con lg:flex-row, y max-lg:flex-wrap en la fila de controles. El lg sale de la aritmetica: controles 521px + titulo minimo 83-118 => hacen falta 666-691px de ENCABEZADO; lg deja 1024-256 = 768. || DESCARTADO CON MEDIDA: «Salir» a solo-icono (el precedente de la 428) ahorra 37px y NO alcanza — en /cierres-admin la cuenta queda en 401 > 390. Ademas el ancho de la campana es DATO, no constante: crece con el numero de pendientes. Un arreglo que depende de eso no es un arreglo. Y flex-wrap a secas movia el escritorio. || MEDIDO: 28 rutas x 5 anchos x 2 roles = 140 medidas, 0 desbordes (antes los habia a 320, 390 y 768). A 1440 identico caja por caja. || EL TEST NO AFIRMA «existe el boton» —hoy existia y estaba fuera de la pantalla—: jsdom no calcula layout, asi que afirma LA ARITMETICA. Bajar el breakpoint a md o sm lo pone rojo POR EL NUMERO. || ⚠️ HALLAZGO QUE MUERDE EN OTRO SITIO: `flex-wrap md:flex-nowrap` NO funciona en esta app — con las dos clases en el DOM, el computado a 1440 seguia siendo `wrap`. Hay que usar `max-<bp>:flex-wrap`."
     },
     {
       "id": 438,
