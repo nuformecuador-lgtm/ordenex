@@ -5237,12 +5237,24 @@
       "title": "una ruta que tu rol no puede abrir enseña el 404 de Next en ingles",
       "description": "No existe not-found.tsx: cualquier notFound() cae en la pantalla por defecto.",
       "zone": "frontend",
+      "status": "done",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/438-pantalla-no-encontrada",
+      "depends_on": null,
+      "status_note": "Mergeada en dev (PR #808, ba21c765) y NO desplegada. Lo encontro el HUMANO probando. || EL TEXTO NO PUEDE DELATAR EL CASO y la garantia es ESTRUCTURAL, no una promesa: NoEncontradoState no tiene NINGUN parametro por el que entre el motivo —sus props son exactamente hrefInicio y etiquetaInicio, comparadas POR IGUALDAD en la guardia—. Anadir uno pone rojo aunque sea inocente. La 433 hace indistinguibles «no existe» y «no podes leerlo» a proposito. || La salida sale de SIDEBAR_ITEMS, la misma fuente que el aterrizaje post-login. Los tests de render siguen VERDES con una segunda lista escrita a mano —hoy la copia es fiel—; solo lo caza la guardia, que es el punto: la divergencia futura seria muda. || DEFECTO ENCONTRADO MIRANDO, que la suite no veia: «Ir al inicio» salia SIN BORDE (border-transparent de la base de buttonVariants ganandole a border-border de outline, fondo #f7f8fc sobre pagina #f7f8fc). La unica salida de la pantalla se leia como texto en negrita. Arreglado con cn() y re-medido. || LIMITE ACEPTADO, medido: /wallet/caja y /configuracion/usuarios NO SON RUTAS, no existen, asi que Next usa el not-found de la RAIZ sin entrar en el grupo: quedan en espanol y con salida, pero sin sidebar. Se probo una ruta comodin y se DESCARTO con la medicion: se sienta en la raiz del arbol y el middleware deja pasar lo publico, asi que /login/xyz pasaba a pintar el armazon del portal —sidebar y «Salir»— a alguien SIN SESION. Cambiar un defecto por otro no es cerrarlo. Escrito dentro del archivo."
+    },
+    {
+      "id": 439,
+      "title": "el boton de salida de ErrorState es invisible sobre el fondo de la pagina",
+      "description": "border-transparent de la base le gana a border-border de la variante outline.",
+      "zone": "frontend",
       "status": "pending",
       "sdd": false,
       "complexity": "baja",
       "branch": null,
       "depends_on": null,
-      "status_note": "REPORTADO POR EL HUMANO, 2026-09-17: «recarga, deja el sidebar pero el contenido en blanco, no me dice que es algo a lo que no tengo acceso». || MEDIDO: no existe not-found.tsx NI en app/ NI en app/(app)/, asi que todo notFound() cae en la pantalla por defecto de Next — «404. This page could not be found.», EN INGLES, en una aplicacion que usan mensajeros en Costa Rica. || Y ES INCONSISTENTE: /ayuda/oficina/wallet-caja conserva el sidebar y mete el 404 dentro del armazon; /wallet/caja y /configuracion/usuarios pierden el armazon entero. || ALCANCE: son TODOS los notFound() del portal (/mi-bodega, /mi-wallet, /historico/acciones, /ranking/historico, /wallet/satelites, /configuracion/sinpe, los 33 slugs de ayuda...). || ⚠️ EL TEXTO NO PUEDE DECIR «no tenes acceso» A SECAS. La ficha 433 hace que «no existe» y «no podes leerlo» sean INDISTINGUIBLES a proposito: si distinguieran, un mensajero sabria que un documento existe por el hecho de que se le niegue. La frase tiene que ser verdad en los dos casos y no filtrar cual es — p.ej. «Esta pagina no existe, o no es para tu cuenta»."
+      "status_note": "ENCONTRADO MIRANDO durante la 438, y confirmado en el archivo: components/shared/ErrorState.tsx compone las clases del enlace SIN pasar por cn(), asi que `border-transparent` de la base de buttonVariants y `border-border` de la variante outline SOBREVIVEN las dos y gana el transparente por cascada. Resultado medido en la 438: border-top-color rgba(0,0,0,0) y bg-background #f7f8fc sobre una pagina del mismo #f7f8fc — la unica salida de la pantalla se lee como texto en negrita. || <Button> no lo sufre porque pasa por cn (tailwind-merge). La 438 lo arreglo en SU pieza; ErrorState sigue igual. || Vale la pena barrer el arbol: cualquier otro sitio que componga buttonVariants a mano tiene el mismo defecto, y es invisible en una captura porque el boton SI esta ahi."
     }
   ]
 }
