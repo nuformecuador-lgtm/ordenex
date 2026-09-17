@@ -663,7 +663,13 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     roles: ROLES_MI_BODEGA,
   },
   {
-    // ⭑ FICHA 433 — «Ayuda»: el índice del módulo de documentación (`docs/ayuda/**`).
+    // ⭑ FICHA 433 — «Ayuda»: el índice del módulo de documentación (la carpeta `docs/ayuda`).
+    //
+    // ⚠️ NO SE ESCRIBE AQUÍ LA RUTA CON COMODÍN. Una barra-asterisco dentro de un comentario de
+    // LÍNEA abre un bloque de comentario, y el quitador único del repo lo cierra en el siguiente
+    // cierre de bloque del archivo: 150 líneas desaparecen del texto que leen TODAS las guardias
+    // que escanean este fuente. Pasó el 2026-08-24 y lo vigila R45 de
+    // `tests/unit/auth/menu-visibility.test.ts`, que es quien cazó esta línea al escribirla.
     //
     // ⚠️ VA EL ÚLTIMO DE LA BARRA, Y ESO NO ES DECORATIVO. Es el ÚNICO ítem visible para los
     // CINCO roles a la vez, así que si estuviera arriba sería el primer ítem visible de todos
