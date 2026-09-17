@@ -113,12 +113,22 @@ export function rutasDeDocumento(datos: FrontmatterAyuda): string[] {
 }
 
 /**
- * ⚠️ EL ACOTAMIENTO POR ROL. Un documento se le enseña a `rol` si lo declara, o si es de los
- * que valen para todos / son públicos.
+ * ⚠️ DE QUIÉN ES LA PANTALLA. Éste es el predicado ESTRICTO, y desde la ficha 435 **no es el
+ * que decide quién puede LEER**: decide de quién es la pantalla que el documento explica.
  *
- * Es una LISTA BLANCA: un documento cuyo frontmatter no declare `roles` no se le enseña a
- * nadie (y la guardia lo caza antes). El fallo seguro es esconder, no enseñar: lo que se
- * escapa por aquí es la ayuda de Wallet delante de un mensajero.
+ * Un documento «es» de `rol` si su `roles:` lo declara, o si vale para todos / es público.
+ * Es una LISTA BLANCA: un documento cuyo frontmatter no declare `roles` no es de nadie (y la
+ * guardia lo caza antes).
+ *
+ * ⭑ QUIÉN LO USA, Y POR QUÉ SIGUE ESTRICTO. Lo usa `mapaRutaDocumento` —el mapa del botón
+ * «?»—, y ahí el estrechamiento es lo que hace que la respuesta sea ÚNICA: `/ordenes` la
+ * declaran DOS documentos (`oficina/ordenes.md` y `tienda/ordenes.md`), y lo que deja uno
+ * solo en pie para cada persona es justamente esta regla. Si el «?» preguntara con el
+ * predicado ANCHO de lectura, el maestro tendría dos candidatos para esa ruta y ganaría el
+ * primero por orden alfabético de slug: un desempate que nadie decidió, en el botón que la
+ * gente sí usa. `candidatosRutaDocumento` + la guardia lo dejan escrito y ejecutable.
+ *
+ * Para «¿puede ABRIR este documento?» está `puedeLeerDocumento`.
  */
 export function documentoVisiblePara(
   doc: Pick<DocumentoAyuda, "roles">,
@@ -132,12 +142,62 @@ export function documentoVisiblePara(
   );
 }
 
-/** Los documentos que `rol` puede leer. */
+/** Los documentos cuya pantalla es de `rol`. Es la lista del «?», no la de lectura. */
 export function documentosVisiblesPara<T extends Pick<DocumentoAyuda, "roles">>(
   docs: readonly T[],
   rol: RolValue | null,
 ): T[] {
   return docs.filter((doc) => documentoVisiblePara(doc, rol));
+}
+
+/**
+ * ⭑ FICHA 435 — LOS DOS ROLES DE OFICINA LEEN EL CATÁLOGO ENTERO.
+ *
+ * Decisión de producto del humano, tomada el 2026-09-16. El porqué, medido: la oficina es
+ * quien atiende por teléfono las dudas de los 18 mensajeros y de las tiendas, y hasta hoy
+ * `/ayuda/mensajero/reparto` le daba 404 — quien contesta no tenía delante la misma pantalla
+ * que quien pregunta. El acotamiento por rol se diseñó simétrico y su razón sigue viva en la
+ * otra dirección: lo que no puede pasar es que un mensajero, una tienda o un satélite —gente
+ * ajena a la empresa— lean cómo funciona la caja. **Esta lista NO se ensancha a esos tres**;
+ * si alguien lo intenta, los recuentos por rol de `AyudaLayout.test.tsx` se ponen rojos.
+ *
+ * ⚠️ NO CAMBIA EL SIGNIFICADO DE `roles:` EN EL FRONTMATTER. Ese campo sigue diciendo «de
+ * quién es esta pantalla» (contrato escrito en `docs/ayuda/README.md`) y es lo que alimenta
+ * la agrupación del índice y el «?». Lo que cambia es quién puede LEER, que es otra pregunta.
+ *
+ * Mismo patrón que `ROLES_AYUDA`: `as const satisfies` para que cada nombre se compruebe
+ * contra `RolValue` sin ensanchar el tipo ni perder la identidad de la tupla.
+ */
+export const ROLES_LECTURA_TOTAL_AYUDA = [
+  "maestro",
+  "admin",
+] as const satisfies readonly RolValue[];
+
+/**
+ * ⚠️ EL ACOTAMIENTO DE LECTURA — el predicado que decide si `/ayuda/<slug>` se abre o da 404,
+ * y qué entra en el índice. Es el ANCHO: el estricto, MÁS el catálogo entero para la oficina.
+ *
+ * Las dos puertas duras se mantienen y son las de siempre: sin sesión no se lee nada, y
+ * `apiKey` tampoco (no está en `ROLES_AYUDA`; es una cuenta de máquina que no navega la UI).
+ * El fallo seguro sigue siendo esconder: para los tres roles que no son de oficina esto
+ * devuelve exactamente lo mismo que `documentoVisiblePara`.
+ */
+export function puedeLeerDocumento(
+  doc: Pick<DocumentoAyuda, "roles">,
+  rol: RolValue | null,
+): boolean {
+  if (rol === null) return false;
+  if (!(ROLES_AYUDA as readonly string[]).includes(rol)) return false;
+  if ((ROLES_LECTURA_TOTAL_AYUDA as readonly string[]).includes(rol)) return true;
+  return documentoVisiblePara(doc, rol);
+}
+
+/** Los documentos que `rol` puede LEER: el índice del módulo y el gate de la página. */
+export function documentosQuePuedeLeer<T extends Pick<DocumentoAyuda, "roles">>(
+  docs: readonly T[],
+  rol: RolValue | null,
+): T[] {
+  return docs.filter((doc) => puedeLeerDocumento(doc, rol));
 }
 
 /**
@@ -156,18 +216,48 @@ export function documentosVisiblesPara<T extends Pick<DocumentoAyuda, "roles">>(
  * de tienda—, el acotamiento por rol ya ha dejado uno solo en pie para cada persona. Si aun
  * así quedaran dos, gana el primero y la guardia lo dice: es un documento mal declarado, no
  * un empate que haya que resolver con una preferencia inventada.
+ *
+ * ⭑ FICHA 435 — PREGUNTA CON `documentoVisiblePara`, EL ESTRICTO, Y NO CON EL DE LECTURA. Es
+ * el punto entero de la ficha: la oficina pasa a LEER el catálogo entero, pero su «?» sigue
+ * llevando a la ayuda de SU pantalla. Con el predicado ancho aquí, `/ordenes` le daría al
+ * maestro dos candidatos y el empate lo resolvería el orden alfabético del slug.
  */
 export function mapaRutaDocumento(
   docs: readonly ResumenDocumento[],
   rol: RolValue | null,
 ): Record<string, string> {
   const mapa: Record<string, string> = {};
-  for (const doc of documentosVisiblesPara(docs, rol)) {
-    for (const ruta of doc.rutas) {
-      if (mapa[ruta] === undefined) mapa[ruta] = doc.slug;
-    }
+  for (const [ruta, slugs] of candidatosRutaDocumento(docs, rol)) {
+    // `slugs` nunca está vacío: la ruta existe en el mapa porque un documento la declaró.
+    mapa[ruta] = slugs[0];
   }
   return mapa;
+}
+
+/**
+ * ⭑ FICHA 435 — LO MISMO QUE `mapaRutaDocumento`, PERO SIN TIRAR LOS EMPATES. Devuelve TODOS
+ * los documentos que se disputan cada ruta, y de aquí sale el mapa de arriba quedándose con
+ * el primero.
+ *
+ * ⚠️ EXISTE PARA QUE EL EMPATE SEA OBSERVABLE, que es lo único que un test puede vigilar. El
+ * mapa se come el segundo candidato en silencio: si alguien ensanchara el «?» al predicado de
+ * lectura, `mapaRutaDocumento(docs, "maestro")["/ordenes"]` seguiría devolviendo
+ * `oficina/ordenes` —gana por alfabético— y ni un test se enteraría. La guardia
+ * `ayuda-pantalla-ruta-existe.guardia.test.ts` pregunta por AQUÍ justamente por eso, y así
+ * mide la regla que el mapa usa DE VERDAD en vez de re-implementarla al lado (hallazgo m3 de
+ * `progress/review_433.md`).
+ */
+export function candidatosRutaDocumento(
+  docs: readonly Pick<ResumenDocumento, "slug" | "rutas" | "roles">[],
+  rol: RolValue | null,
+): Map<string, string[]> {
+  const porRuta = new Map<string, string[]>();
+  for (const doc of documentosVisiblesPara(docs, rol)) {
+    for (const ruta of doc.rutas) {
+      porRuta.set(ruta, [...(porRuta.get(ruta) ?? []), doc.slug]);
+    }
+  }
+  return porRuta;
 }
 
 /** Un grupo del índice, con su etiqueta ya resuelta. */

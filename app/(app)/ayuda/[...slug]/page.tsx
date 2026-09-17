@@ -5,8 +5,8 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { leerDocumentoAyuda, leerResumenesAyuda } from "@/lib/ayuda/catalogo";
 import {
   agruparDocumentos,
-  documentosVisiblesPara,
-  documentoVisiblePara,
+  documentosQuePuedeLeer,
+  puedeLeerDocumento,
 } from "@/lib/ayuda/documento";
 import type { ResumenDocumento } from "@/lib/ayuda/documento";
 import { renderizarMarkdown } from "@/lib/ayuda/markdown";
@@ -20,6 +20,11 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
  * que escriba `/ayuda/oficina/wallet-caja` leería cómo funciona la caja de la empresa —el
  * índice no se lo ofrece, pero la URL es adivinable—. Es el mismo patrón que el `notFound()`
  * por rol de cualquier ruta del portal (`/mi-bodega`, `/mi-wallet`, `/historico/acciones`).
+ *
+ * ⭑ FICHA 435 — LA PREGUNTA ES `puedeLeerDocumento`, EL PREDICADO DE LECTURA, no el estricto
+ * de «de quién es esta pantalla». La oficina (maestro y admin) lee el catálogo entero porque
+ * es quien atiende las dudas de los mensajeros y las tiendas; los otros tres roles no se
+ * mueven ni un documento. El «?» del encabezado sigue con el estricto: ver `documento.ts`.
  *
  * ⚠️ EL FRONTMATTER `fuentes` NO SE MUESTRA. Es el campo que hace auditable cada afirmación
  * del documento (regla del README de la carpeta), y su público somos nosotros: a quien está
@@ -36,12 +41,12 @@ export default async function AyudaDocumentoPage({
   // Un documento inexistente y uno que esta persona no puede leer dan la MISMA respuesta, a
   // propósito: si el 404 y el 403 se distinguieran, la diferencia diría qué documentos
   // existen a quien no debería saberlo.
-  if (doc === null || !documentoVisiblePara(doc, actor?.rol ?? null)) {
+  if (doc === null || !puedeLeerDocumento(doc, actor?.rol ?? null)) {
     notFound();
   }
 
-  const visibles = documentosVisiblesPara(await leerResumenesAyuda(), actor?.rol ?? null);
-  const siguiente = documentoSiguiente(visibles, doc.slug);
+  const legibles = documentosQuePuedeLeer(await leerResumenesAyuda(), actor?.rol ?? null);
+  const siguiente = documentoSiguiente(legibles, doc.slug);
 
   return (
     <article className="min-w-0">
@@ -90,14 +95,14 @@ export default async function AyudaDocumentoPage({
 /**
  * El «siguiente» es el que viene DESPUÉS EN EL ÍNDICE de esta persona — mismo orden que la
  * columna de la izquierda, así que el enlace lleva a donde el ojo ya esperaba. Se calcula
- * sobre los documentos VISIBLES: nunca ofrece uno que su rol no puede abrir.
+ * sobre los documentos que esa persona PUEDE LEER: nunca ofrece uno que le daría 404.
  * `null` en el último, que no tiene siguiente.
  */
 function documentoSiguiente(
-  visibles: readonly ResumenDocumento[],
+  legibles: readonly ResumenDocumento[],
   slug: string,
 ): ResumenDocumento | null {
-  const enOrden = agruparDocumentos(visibles).flatMap((grupo) => grupo.documentos);
+  const enOrden = agruparDocumentos(legibles).flatMap((grupo) => grupo.documentos);
   const i = enOrden.findIndex((doc) => doc.slug === slug);
   if (i === -1) return null;
   return enOrden[i + 1] ?? null;
