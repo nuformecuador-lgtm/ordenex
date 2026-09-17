@@ -101,6 +101,19 @@ del menú: quien está atascado no va a ir a buscarlo.
 
 ---
 
+### Cómo encaja con lo que el repo ya hace
+
+El repo ya tiene forma para esto y no hay que inventarla: un **puerto neutral** en
+`lib/interfaces/external/` (sin Next, sin Prisma, sin `process.env`), un **adaptador de producción**
+en `lib/clients/` y un **doble** para los tests. Es lo que hacen Google Routes, el geocodificador y
+WhatsApp.
+
+Para el asistente: `lib/interfaces/external/IAsistenteProvider.ts` +
+`lib/clients/anthropic-asistente.ts` + un doble. **De ahí sale que se pueda construir entero antes de
+que llegue la credencial**, y que la suite no dependa nunca de la red ni gaste un céntimo.
+
+---
+
 ## LO ÚNICO QUE BLOQUEA: la credencial
 
 Hace falta una **clave de API de Anthropic** (`ANTHROPIC_API_KEY`). No la puedo crear yo: nace de una
