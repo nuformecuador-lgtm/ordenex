@@ -5153,7 +5153,7 @@
       "title": "la satelite no puede cerrar sin que la central apruebe, y eso la deja sin asignar trabajo",
       "description": "La satelite cierra sola; la aprobacion de la central pasa a ser marca de conciliacion.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "alta",
       "branch": "feat/431-cierres-satelite-autonomos",

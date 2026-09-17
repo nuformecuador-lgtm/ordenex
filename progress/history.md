@@ -5446,3 +5446,50 @@ dejó de ser cierto. La revisión contrastó **las 11 afirmaciones nuevas contra
 cumplen**.
 
 **NO se desplegó.** Las cuatro de SF-001 salen juntas.
+
+---
+
+## 431 — los cierres de satélite, autónomos (2026-09-16) · SF-001 punto 1
+
+La bodega satélite deja de necesitar la aprobación de la central para seguir trabajando. **La
+aprobación no se elimina: se transforma en marca de conciliación.**
+
+**El documento firmado se equivocaba en su afirmación clave.** Decía que esa aprobación «no dispara
+ningún proceso: es un visto bueno y nada más». La mitad del dinero era cierta, pero «nada más» era
+falso: mientras estaba pendiente, **la satélite no podía asignar órdenes a sus mensajeros**. Medido:
+mediana de 34 minutos, pero **3 de 32 veces pasó de 12 horas**.
+
+### El hallazgo que salvó la ficha
+
+Existía un índice único que permitía **una sola consolidación pendiente por zona**. Quitar el bloqueo
+de asignación sin tocarlo habría entregado una satélite que puede asignar pero **no volver a
+consolidar**: el mismo freno mudado de sitio, con la ficha cerrada y nada resuelto. El reviewer
+verificó **en la base** que el índice ya no existe.
+
+### El saldo mide EFECTIVO, no el total — y lo destapó una pregunta del spec
+
+Solo el efectivo viaja en el bulto; el SINPE llega directo a una cuenta. De **₡4.196.897** consolidados,
+**₡1.105.790 (26,3 %) son SINPE**. Con el total, la pantalla habría enseñado más de un millón de deuda
+fantasma y el backfill habría dejado el saldo del primer día en **−₡1.105.790**.
+
+### Ningún bloqueante de la revisión estaba en el código
+
+Las cinco mutaciones del reviewer —**cuatro distintas** de las del implementador— murieron todas. Lo que
+falló fue la documentación: `docs/ayuda/satelite/en-bodega.md` afirmaba *«la app no te deja asignar…
+mientras la central no lo resuelva»*, **exactamente el control que la ficha quita**. Y el asistente del
+punto 4 solo responde sobre esa carpeta.
+
+### Lo medido contra producción, que podía tumbar el despliegue
+
+`resuelto_por` es `ON DELETE SET NULL`: una fila cuyo aprobador hubiera sido borrado tendría `NULL`, el
+`CHECK` la rechazaría y **la migración abortaría a mitad del despliegue**. **Cero filas así.** El
+`design.md` decía que esa columna llevaba `RESTRICT` «igual que sus hermanas» — esa frase es la que
+hacía invisible el riesgo.
+
+### Puerta de despliegue, no de merge
+
+**T25 y T26 quedan sin marcar a propósito**: la corrida compuesta necesita datos que la base local no
+tiene. Y **la referencia caduca** — ayer 32 cierres, hoy 35: hay que capturarla justo antes de
+desplegar o la prueba de que el backfill no tocó nada más no se puede hacer nunca.
+
+**NO se desplegó.** Las cuatro de SF-001 salen juntas.
