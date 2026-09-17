@@ -36,32 +36,48 @@ Committeada en `fix/432-siembra-dentro-del-despliegue` (`c6467fe5`), **sin gate 
 
 ---
 
-## HALLAZGO NUEVO (2026-09-16) — a PREVIEW no se puede entrar. Nadie puede.
+## PREVIEW: entra, funciona, y de paso destapó un fallo mío (2026-09-17)
 
-Medido hoy, intentando verificar el módulo de ayuda en el despliegue de preview:
+**Entrar ya se puede.** Faltaba `AUTH_RISK_THRESHOLD=999` en el entorno Preview de Vercel —producción
+sí lo tenía— y sin él pedía un código de 6 dígitos que se manda a `@ordenex.test`, un dominio que no
+recibe nada. Puesta con autorización del humano.
 
-1. El muro SSO de Vercel se pasa con el token de compartición (`ssoProtection` está en
-   `all_except_custom_domains`). Hasta ahí, bien.
-2. **La aplicación acepta las credenciales de `maestro.qa@ordenex.test` y pide segundo factor**:
-   *«Se ha enviado un código de 6 dígitos a tu correo electrónico»*.
-3. Ese correo **no llega a ninguna parte**: `@ordenex.test` no es un dominio que reciba nada. Y el
-   código no se puede sacar de la base — `email_otp_challenge.code_hash` guarda el hash, nunca el
-   código en claro (que es lo correcto).
+**Y al entrar apareció esto**, que llevaba horas ahí sin que nadie lo viera:
 
-**Conclusión: el entorno de preview no es verificable a mano por nadie, ni por mí ni por el humano.**
-Sólo sirve para comprobar que el build pasa.
+```
+DriverAdapterError: (EMAXCONNSESSION) max clients reached in session mode
+— max clients are limited to pool_size: 15
+```
 
-**Por qué pasa:** `lib/config/auth.ts:43` usa 50 por defecto para `AUTH_RISK_THRESHOLD`, y preview no
-lo declara. Producción sí lo tiene en 999 —es decir, con el segundo factor apagado a propósito,
-porque el envío de correo tampoco funciona allí—. **Preview es la anomalía, no producción.**
+**Es un fallo que introduje yo el 2026-09-16** al reparar las credenciales de preview: le puse el
+*session pooler* (**5432**) como `DATABASE_URL`. Ese modo tiene **15 plazas** y en serverless se
+agotan. La app en Vercel va por el de **transacción (6543)**; el de sesión es SOLO para
+`DIRECT_URL`/migraciones.
 
-**Lo que costaría arreglarlo: una variable de entorno** (`AUTH_RISK_THRESHOLD=999` sólo en preview,
-igual que ya está en producción). No debilita nada respecto de lo que hoy corre en producción. **No lo
-he hecho por mi cuenta**: es un control de autenticación y la decisión es del humano.
+**Lo que se veía, y por qué engaña:** 500 intermitentes en rutas cualesquiera y **el botón «?»
+desaparecido** —su `try/catch` se tragaba el fallo y devolvía un mapa vacío—. Parecía un defecto de la
+ficha recién mergeada. No lo era.
 
-**Por qué importa ahora:** la condición del humano para SF-001 es que nada salga *«hasta estar seguros
-de que no hace daño a lo que ya está funcionando»*. Ahora mismo el único escalón entre `dev` y
-producción sólo sabe decir «compila».
+**Dos cosas que lo hacen peor de lo que suena:**
+
+1. **Se realimenta.** Las funciones del despliegue malo siguen ocupando las 15 plazas, y como el build
+   migra por el MISMO pooler de sesión, **ningún despliegue nuevo puede entrar** hasta que drenen.
+   Un despliegue no arregla el despliegue: hay que esperar.
+2. **`pg_stat_activity` no lo ve.** El tope es de Supavisor, no de Postgres: por SQL se ven 5 o 6
+   conexiones y todo parece en calma.
+
+**Arreglado y verificado:** `DATABASE_URL` de preview → 6543; `DIRECT_URL` se queda en 5432.
+Redesplegado. Comprobado con sesión real sobre Vercel: `/ayuda` con sus 33 enlaces, tres documentos
+rindiendo con los mismos tamaños exactos que en local (3937 / 3033 / 2091 caracteres), el «?»
+resolviendo en dos pantallas distintas, y **cero errores de consola**.
+
+**Con eso queda cerrada por medida la única duda que el gate no puede responder:** leer los `.md` con
+`fs` **funciona en serverless**. Era el fallo mudo clásico —verde en local, 404 en producción— y no
+ocurre.
+
+**Comprobar antes de la release:** que la `DATABASE_URL` de producción NO sea el pooler de sesión.
+Lleva 51 días sin tocarse y sirve tráfico real, así que casi seguro es la de transacción — pero
+«casi seguro» no es medido.
 
 ---
 
