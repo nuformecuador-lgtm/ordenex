@@ -7,6 +7,7 @@ import {
   ChartColumn,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   ClipboardCheck,
   Gauge,
   History,
@@ -183,6 +184,10 @@ export const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   // distinto del `store` de "Recoleccion" —la tienda a la que va el mensajero no es la bodega
   // en la que se cobra— y del `package` de las ordenes.
   warehouse: Warehouse,
+  // Ficha 433: «Ayuda», el índice del módulo de documentación. Icono PROPIO — es además el
+  // MISMO signo que el botón «?» del `PageHeader`, para que las dos puertas a la ayuda se
+  // reconozcan como la misma cosa.
+  circleHelp: CircleHelp,
 };
 
 // Entrada escalonada de los items al cargar (solo la primera vez). Cada item

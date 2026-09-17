@@ -6,6 +6,9 @@ import { AvisoVersionNueva } from "@/components/shared/AvisoVersionNueva";
 import { PushReactivacion } from "@/components/shared/PushReactivacion";
 import { RevisionSinpeBodega } from "@/components/shared/RevisionSinpeBodega";
 import { TemaProvider } from "@/providers/TemaProvider";
+import { AyudaProvider } from "@/providers/AyudaProvider";
+import { leerResumenesAyuda } from "@/lib/ayuda/catalogo";
+import { mapaRutaDocumento } from "@/lib/ayuda/documento";
 import { COOKIE_TEMA, normalizarTema } from "@/lib/tema/tema";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { resolverRevisionSinpePendiente } from "@/lib/auth/revision-sinpe-pendiente";
@@ -80,6 +83,22 @@ export default async function AppLayout({
       ? { nombre: nombreCompletoUsuario(usuarioRow), rolLabel: ROL_LABELS[actor.rol] }
       : null;
 
+  // ⭑ FICHA 433 — EL MAPA RUTA→DOCUMENTO DEL «?» DEL ENCABEZADO, acotado por rol.
+  //
+  // Se resuelve AQUÍ y baja por props (al proveedor) por la razón de `docs/architecture.md`:
+  // el dato depende de la sesión, y el único que la tiene resuelta es este layout. El botón
+  // vive en `PageHeader`, que es presentación pura y se monta desde páginas server Y client.
+  //
+  // ⚠️ `mapaRutaDocumento(..., actor.rol)` RECORTA ANTES DE CRUZAR AL CLIENTE. Lo que viaja
+  // son sólo las rutas cuyo documento esta persona puede leer, así que un mensajero no
+  // recibe ni el slug de la ayuda de Wallet. Si el acotamiento se hiciera en el botón, el
+  // mapa entero estaría en el HTML de cualquiera.
+  //
+  // NO CUESTA UNA CONSULTA A LA BASE: son 31 archivos del repositorio, leídos una vez por
+  // proceso y memorizados (`leerCatalogoAyuda`). Este layout se pinta en TODAS las páginas
+  // del portal y por eso importa que el coste por carga sea cero.
+  const mapaAyuda = mapaRutaDocumento(await leerResumenesAyuda(), actor?.rol ?? null);
+
   return (
     <TemaProvider temaInicial={tema}>
       <ToastProvider>
@@ -102,7 +121,10 @@ export default async function AppLayout({
             className="group/app overflow-x-clip pb-12"
           >
             <SidebarTrigger className={"relative md:hidden"} />
-            {children}
+            {/* ⭑ Ficha 433 — el proveedor envuelve SÓLO a `{children}` porque es ahí donde
+                vive el `PageHeader` que consume el mapa, y así el cambio no re-indenta el
+                resto del layout. No pinta ninguna caja: es un proveedor de contexto. */}
+            <AyudaProvider mapa={mapaAyuda}>{children}</AyudaProvider>
           </SidebarInset>
         </SidebarProvider>
         {/* Feature 284 — aviso de version nueva del service worker. Va en el portal y no en el
