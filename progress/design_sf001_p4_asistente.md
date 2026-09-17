@@ -124,7 +124,12 @@ que llegue la credencial**, y que la suite no dependa nunca de la red ni gaste u
 Hace falta una **clave de API de Anthropic** (`ANTHROPIC_API_KEY`). No la puedo crear yo: nace de una
 cuenta con forma de pago asociada.
 
-**Lo que tiene que hacer el humano, una vez:**
+**HECHO el 2026-09-17.** La clave está en `.env` y **está probada**: una llamada real mínima a
+`claude-sonnet-5` respondió (14 tokens de entrada, 4 de salida), así que la credencial vale, el modelo
+existe y la cuenta tiene saldo. **NO está en Vercel todavía** —el asistente no se ha desplegado y allí
+solo hace falta para T25/T26—: es puerta de despliegue, no de merge.
+
+**Lo que hizo falta, para cuando haya que repetirlo:**
 
 1. Entrar a `console.anthropic.com` con la cuenta de la empresa.
 2. *Billing* → cargar saldo. Con **$20 sobra para meses** (el uso estimado es ≈ $11/mes con los 37

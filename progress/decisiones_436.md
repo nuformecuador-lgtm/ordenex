@@ -26,7 +26,19 @@ triple es tope y no freno. Configurable por entorno con ese valor por defecto.
 preguntas de hoy. Mañana volvés a tener.»* Un tope que se explica no es un fallo; uno que no se
 explica se lee como que la aplicación está rota.
 
-## Q3 — el «?» → **abre el panel**, y va por `/design`
+## Q3 — el «?» → **abre el panel**. CERRADA por el humano el 2026-09-17: **opción A**
+
+**El mensajero NO lleva burbuja flotante.** El único acceso es el «?» del encabezado, que ya está en
+las 32 pantallas. La esquina de abajo a la derecha sigue siendo del chat con el cliente, intacta.
+
+Descartadas con su motivo, para no reabrirlas:
+
+- **B — segunda burbuja abajo-izquierda.** Se descubre sola, pero deja el color como única diferencia
+  entre dos botones redondos, con el teléfono al sol y una mano ocupada.
+- **C — una burbuja que pregunta a cuál vas.** No añade nada en pantalla, pero **escribirle al cliente
+  pasaría de un toque a dos**, y eso se hace decenas de veces al día mientras preguntar es excepcional.
+
+Coste aceptado de la A: el asistente se descubre menos. Vive donde uno ya va a buscar ayuda.
 
 Adopto la propuesta del spec: el «?» del encabezado abre el asistente, y el panel lleva como primera
 acción visible **«Leer la ayuda de esta pantalla»** → `/ayuda/<slug>`. No se pierde nada de la 433 y
