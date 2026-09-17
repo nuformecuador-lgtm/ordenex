@@ -17,8 +17,11 @@ import {
   PRODUCTOS_COLUMNAS,
   PRODUCTOS_TEXTOS,
   hayVariasTiendas,
+  textoTiendaUnica,
+  tiendaUnicaDe,
 } from "@/app/(app)/analitica/_components/entregas/ProductosTabla";
 import { calcularEfectividad } from "@/app/(app)/analitica/_components/entregas/efectividad";
+import { textoDesenlacesDeFila } from "@/app/(app)/analitica/_components/entregas/desenlaces-de-fila";
 import {
   TEXTO_ERROR_PANEL,
   TEXTO_PROHIBIDO,
@@ -116,6 +119,20 @@ function cifraDeCelda(td: HTMLTableCellElement): string {
 }
 
 /**
+ * Los encabezados de DATOS de la tabla de productos, en su orden.
+ *
+ * El `<th>` del control de desglose NO es uno: su rótulo es `sr-only` y lo antepone `DataTable`
+ * cuando el consumidor pasa `renderExpanded` — desde la ficha 442 eso es SIEMPRE, porque la fila
+ * que se abre lleva las cifras que salieron de la cabecera.
+ */
+function encabezadosDeDatos(): string[] {
+  const tabla = screen.getAllByRole("table")[0];
+  return [...tabla.querySelectorAll<HTMLTableCellElement>("thead th")]
+    .filter((th) => th.querySelector(".sr-only") === null)
+    .map((th) => th.textContent ?? "");
+}
+
+/**
  * `matchMedia` REAL del entorno, guardada antes de que ningún caso la sustituya: el caso de la
  * vista de teléfono la reemplaza para forzar `useIsMobile`, y sin reponerla los casos siguientes
  * heredarían la vista de móvil sin pedirla.
@@ -173,9 +190,12 @@ describe("FICHA 345 · los estados de la lectura (R43/R44/R32)", () => {
     consultarMock.mockImplementation(() => new Promise(() => {}));
     renderTabla();
 
-    // El aviso de multiproducto SÍ está desde el primer render: no es un dato, es una
-    // advertencia sobre cómo se lee la columna.
-    expect(screen.getByText(PRODUCTOS_TEXTOS.aviso)).toBeInTheDocument();
+    // FICHA 442 — el control de las reglas de lectura SÍ está desde el primer render: no es un
+    // dato, es la puerta a las advertencias. Lo que ya no está es el párrafo abierto: las seis
+    // líneas en gris se pliegan bajo «Cómo se cuenta» (ver el bloque de la 442 más abajo).
+    expect(
+      screen.getByRole("button", { name: new RegExp(PRODUCTOS_TEXTOS.comoSeCuenta) }),
+    ).toBeInTheDocument();
     // Y el universo NO: sin respuesta, «0 órdenes en el rango» sería una cifra inventada.
     expect(screen.queryByText(/órdenes en el rango/)).toBeNull();
     // Tampoco el estado vacío: «no hubo productos» todavía no se sabe.
@@ -232,7 +252,7 @@ describe("FICHA 345 · los estados de la lectura (R43/R44/R32)", () => {
 /* ========================================================================== */
 
 describe("FICHA 345 · las columnas (R46)", () => {
-  it("pinta producto, unidades, órdenes, entregadas, rechazadas, otros resultados, en proceso y los dos porcentajes", async () => {
+  it("FICHA 442 — pinta CUATRO columnas de datos sin dinero, y «Efectividad» es la última", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([fila({ producto: "Dr Melaxin", unidades: 19, ordenes: 16 })]),
@@ -240,34 +260,131 @@ describe("FICHA 345 · las columnas (R46)", () => {
     renderTabla();
 
     await screen.findByText("Dr Melaxin");
-    for (const encabezado of [
+    // ⚠ EL ORDEN SE ATA ENTERO, no columna a columna: el defecto de la 442 no era que faltara un
+    // encabezado, era que había CATORCE y «Efectividad de entrega» caía en la 13.ª posición,
+    // fuera de la ventana. Un caso que solo comprobara «cada encabezado está» pasaba en verde
+    // con la tabla rota, que es exactamente lo que pasó.
+    expect(encabezadosDeDatos()).toEqual([
       PRODUCTOS_COLUMNAS.producto,
-      PRODUCTOS_COLUMNAS.unidades,
       PRODUCTOS_COLUMNAS.ordenes,
-      PRODUCTOS_COLUMNAS.entregadas,
-      PRODUCTOS_COLUMNAS.rechazadas,
-      // FICHA 346 — el cubo que faltaba: sin él el desglose no sumaba la columna «Órdenes».
-      PRODUCTOS_COLUMNAS.otrosResultados,
-      PRODUCTOS_COLUMNAS.enProceso,
+      PRODUCTOS_COLUMNAS.desenlaces,
       PRODUCTOS_COLUMNAS.efectividad,
-      PRODUCTOS_COLUMNAS.rechazo,
-    ]) {
-      expect(screen.getByRole("columnheader", { name: encabezado })).toBeInTheDocument();
-    }
+    ]);
+    // Y la posición de «Efectividad» dicha con un número: dentro de las cuatro primeras, que es
+    // lo que cabe sin desplazar. MUTACIÓN: devolverla al final de catorce pone esto en rojo.
+    expect(encabezadosDeDatos().indexOf(PRODUCTOS_COLUMNAS.efectividad)).toBeLessThan(4);
   });
 
-  it("con UNA sola tienda en la respuesta la columna Tienda NO se pinta", async () => {
+  it("FICHA 442 — las cifras que bajaron al detalle NO son columnas, y siguen estando", async () => {
+    const usuario = userEvent.setup();
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([fila({ producto: "Dr Melaxin", unidades: 19, ordenes: 16 })]),
+    });
+    renderTabla();
+
+    await screen.findByText("Dr Melaxin");
+    // Las tres que dejaron de ser columna…
+    for (const rotulo of [
+      PRODUCTOS_COLUMNAS.unidades,
+      PRODUCTOS_COLUMNAS.otrosResultados,
+      PRODUCTOS_COLUMNAS.rechazo,
+    ]) {
+      expect(encabezadosDeDatos(), rotulo).not.toContain(rotulo);
+    }
+
+    // …se leen enteras al abrir la fila. ⚠ ESTA ES LA MITAD QUE HACE QUE LA DE ARRIBA VALGA
+    // ALGO: sin ella, «quitar columnas» y «perder datos» pasarían el mismo caso.
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Dr Melaxin", "Tienda Uno"),
+      }),
+    );
+    for (const rotulo of [
+      PRODUCTOS_COLUMNAS.unidades,
+      PRODUCTOS_COLUMNAS.otrosResultados,
+      PRODUCTOS_COLUMNAS.rechazo,
+    ]) {
+      expect(screen.getByText(rotulo), rotulo).toBeInTheDocument();
+    }
+    // Las unidades, con su cifra: 19.
+    expect(screen.getByText("19")).toBeInTheDocument();
+  });
+
+  it("con UNA sola tienda en la respuesta la columna Tienda NO se pinta, y su nombre se dice UNA vez", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
-        fila({ producto: "Dr Melaxin", tiendaId: "t1" }),
-        fila({ producto: "BASE C", tiendaId: "t1" }),
+        fila({ producto: "Dr Melaxin", tiendaId: "t1", tienda: "Nuform" }),
+        fila({ producto: "BASE C", tiendaId: "t1", tienda: "Nuform" }),
       ]),
     });
     renderTabla();
 
     await screen.findByText("Dr Melaxin");
     expect(screen.queryByRole("columnheader", { name: PRODUCTOS_COLUMNAS.tienda })).toBeNull();
+
+    // ⚠ FICHA 442 — LA OTRA MITAD, Y ES LA QUE FALTABA. Hasta esta ficha la columna se escondía
+    // y con ella desaparecía el NOMBRE de la tienda: la pantalla dejaba de decir de quién eran
+    // esas filas. Ahora se dice una vez, en el chip, y por eso el número de apariciones es una
+    // aserción y no una impresión: 1, no 0 y no 25.
+    const apariciones = screen.getAllByText(textoTiendaUnica("Nuform"));
+    expect(apariciones).toHaveLength(1);
+    // Y el nombre suelto no se repite fila a fila.
+    expect(screen.queryAllByRole("cell", { name: "Nuform" })).toHaveLength(0);
+  });
+
+  it("FICHA 442 — con VARIAS tiendas no hay chip: ahí la columna sí distingue", async () => {
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([
+        fila({ producto: "Crema Especial MLX", tiendaId: "t1", tienda: "Nuform" }),
+        fila({ producto: "Crema Especial MLX", tiendaId: "t2", tienda: "Distribuidora Karla" }),
+      ]),
+    });
+    renderTabla();
+
+    await screen.findAllByText("Crema Especial MLX");
+    // No puede haber chip Y columna: un nombre de tienda dicho dos veces en la misma pantalla,
+    // una como filtro y otra como dato, invita a leer uno por el otro.
+    expect(screen.queryByText(textoTiendaUnica("Nuform"))).toBeNull();
+    expect(
+      screen.getByRole("columnheader", { name: PRODUCTOS_COLUMNAS.tienda }),
+    ).toBeInTheDocument();
+  });
+
+  it("FICHA 442 — la decisión chip/columna es UNA sola, y `tiendaUnicaDe` es su otra cara", () => {
+    const unaTienda = [
+      fila({ producto: "X", tiendaId: "t1", tienda: "Nuform" }),
+      fila({ producto: "Y", tiendaId: "t1", tienda: "Nuform" }),
+    ];
+    const dosTiendas = [
+      fila({ producto: "X", tiendaId: "t1", tienda: "Nuform" }),
+      fila({ producto: "X", tiendaId: "t2", tienda: "Otra" }),
+    ];
+
+    // Las dos funciones son EXCLUYENTES por construcción: exactamente una de ellas «habla».
+    expect(hayVariasTiendas(unaTienda)).toBe(false);
+    expect(tiendaUnicaDe(unaTienda)).toBe("Nuform");
+    expect(hayVariasTiendas(dosTiendas)).toBe(true);
+    expect(tiendaUnicaDe(dosTiendas)).toBeNull();
+    // Y sin filas no hay ninguna tienda que decir: ni chip, ni columna.
+    expect(tiendaUnicaDe([])).toBeNull();
+    expect(hayVariasTiendas([])).toBe(false);
+  });
+
+  it("FICHA 442 — para un `adminTienda` la columna NO PUEDE existir, y no por una regla de rol", () => {
+    // ⚠ ESTO NO SE SUPONE, SE DERIVA DEL ALCANCE. `lib/analytics/alcance.ts` resuelve el
+    // `adminTienda` como `{ tipo: "tienda", tiendaId: actor.usuarioId }` y
+    // `lib/analytics/alcance-columnas.ts` lo traduce a `where { tiendaId }`: el servidor no le
+    // puede devolver filas de dos tiendas. Sea cual sea el número de filas, el `Set` de
+    // `tiendaId` tiene tamaño 1, así que `hayVariasTiendas` es falso SIEMPRE — sin que el
+    // cliente escriba ni un `if (rol === …)`, que es lo que R37/R46 prohíben.
+    const comoLasSirveElServidorAUnaTienda = Array.from({ length: 25 }, (_, i) =>
+      fila({ producto: `Producto ${i}`, tiendaId: "la-unica", tienda: "Nuform" }),
+    );
+    expect(hayVariasTiendas(comoLasSirveElServidorAUnaTienda)).toBe(false);
+    expect(tiendaUnicaDe(comoLasSirveElServidorAUnaTienda)).toBe("Nuform");
   });
 
   it("con DOS tiendas en la respuesta la columna Tienda aparece, con su nombre", async () => {
@@ -319,24 +436,26 @@ describe("FICHA 345 · las columnas (R46)", () => {
 
     await screen.findByText("Spray Protector");
     const esperado = calcularEfectividad(porStatus);
-    const celdas = celdasDeFila("Spray Protector");
+    // La primera celda es la del control de desglose, que `DataTable` antepone: se descarta.
+    const celdas = celdasDeFila("Spray Protector").slice(1);
 
-    // producto, unidades, órdenes, entregadas, rechazadas, otros resultados, en proceso,
-    // efectividad, rechazo.
+    // FICHA 442 — producto, órdenes, en qué terminaron, efectividad. Cuatro celdas, no nueve.
     expect(celdas).toEqual([
       "Spray Protector",
-      "19",
       "16",
-      String(esperado.entregadas),
-      String(esperado.rechazadas),
-      // FICHA 346 — `Spray Protector` no tiene ningún otro desenlace: un CERO legítimo.
-      String(esperado.otrosDesenlaces),
-      String(esperado.enProceso),
+      // La celda de desenlaces es la BARRA (sin texto) y la frase que la dice con números. La
+      // frase sale de la MISMA función pura que la tabla usa, así que este caso afirma que la
+      // celda la pinta — no que el test sepa redactarla.
+      textoDesenlacesDeFila(porStatus),
       // FRACCIÓN por cien, con un decimal como máximo. 0,5 => «50%»; 0,375 => «37,5%». El
       // locale es el del repo (`MONEDA_LOCALE`, es-CR), que no pone espacio antes del signo.
       "50%",
-      "37,5%",
     ]);
+    // R28 — y lo que la frase enumera son los cubos de `calcularEfectividad`, no un recuento
+    // propio: 8 entregadas, 6 rechazadas, 2 en proceso.
+    expect(textoDesenlacesDeFila(porStatus)).toContain(String(esperado.entregadas));
+    expect(textoDesenlacesDeFila(porStatus)).toContain(String(esperado.rechazadas));
+    expect(textoDesenlacesDeFila(porStatus)).toContain(String(esperado.enProceso));
     // Y las dos cifras que se pintan son las de la función, no unas recalculadas aquí.
     expect(esperado.efectividad).toBe(0.5);
     expect(esperado.tasaRechazo).toBe(0.375);
@@ -366,73 +485,105 @@ describe("FICHA 345 · las columnas (R46)", () => {
 });
 
 /* ========================================================================== */
-/* FICHA 346 — el desglose de la fila SUMA la columna «Órdenes»               */
+/* FICHA 346 / 442 — la FRASE del desenlace SUMA la columna «Órdenes»         */
 /* ========================================================================== */
 
-describe("FICHA 346 · las columnas de conteo suman la columna «Órdenes»", () => {
+describe("FICHA 346/442 · «En qué terminaron» suma la columna «Órdenes»", () => {
   /**
-   * Los índices de las columnas se BUSCAN por su encabezado, no se escriben: si mañana alguien
-   * reordena las cifras, este caso sigue midiendo lo mismo en vez de sumar celdas ajenas.
+   * LOS NÚMEROS QUE LA CELDA PINTA, leídos del DOM y sumados aquí.
+   *
+   * ⚠ SE LEE EL TEXTO PINTADO Y NO LA FUNCIÓN QUE LO PRODUCE. Comparar la frase contra
+   * `textoDesenlacesDeFila` sería compararla consigo misma y estaría verde pase lo que pase
+   * (`asercion-contra-su-propia-fuente`). Lo que este helper mide es lo que el humano suma con
+   * el dedo: «3 entregadas · 2 rechazadas · 4 devueltas · 2 reprogramadas · 13 en proceso».
    */
-  function celdaPorEncabezado(nombreFila: string, encabezado: string): number {
-    const encabezados = screen
-      .getAllByRole("columnheader")
-      .map((th) => th.textContent ?? "");
-    const i = encabezados.indexOf(encabezado);
+  function numerosDelDesenlace(nombreFila: string): number[] {
+    const i = encabezadosDeDatos().indexOf(PRODUCTOS_COLUMNAS.desenlaces);
     expect(i).toBeGreaterThanOrEqual(0);
-    // FICHA 347 — la celda de «Otros resultados» lleva ahora DOS líneas: el conteo y, debajo,
-    // su composición («4 devueltas · 2 reprogramadas»). Se lee la CIFRA de la celda y no su
-    // `textContent` entero, que arrastraría la segunda línea. Sigue midiendo exactamente lo
-    // mismo: si el número pintado cambia, este caso cae.
-    // La tabla es-CR separa los miles con un punto: se quita antes de convertir.
-    const td = tdsDeFila(nombreFila)[i];
-    return Number(cifraDeCelda(td).replace(/\./g, ""));
+    // +1: `DataTable` antepone la celda del control de desglose a cada fila.
+    const td = tdsDeFila(nombreFila)[i + 1];
+    const texto = td.textContent ?? "";
+    return [...texto.matchAll(/(\d+)\s/g)].map((m) => Number(m[1]));
   }
 
-  it("`Crema Especial MLX`: 3 + 2 + otros + 13 = 24, la captura del 2026-08-29", async () => {
-    // LA CAPTURA que abrió la ficha: la pantalla decía «Órdenes 24» y debajo 3 entregadas, 2
+  /** La cifra de la columna «Órdenes» de una fila. */
+  function ordenesDeFila(nombreFila: string): number {
+    const i = encabezadosDeDatos().indexOf(PRODUCTOS_COLUMNAS.ordenes);
+    expect(i).toBeGreaterThanOrEqual(0);
+    return Number(cifraDeCelda(tdsDeFila(nombreFila)[i + 1]).replace(/\./g, ""));
+  }
+
+  const CREMA = fila({
+    producto: "Crema Especial MLX",
+    unidades: 29,
+    ordenes: 24,
+    porStatus: [
+      { status: "entregada", conteo: 3 },
+      { status: "rechazada", conteo: 2 },
+      { status: "devuelta", conteo: 4 },
+      { status: "reprogramada", conteo: 2 },
+      { status: EN_CURSO, conteo: 13 },
+    ],
+  });
+
+  it("`Crema Especial MLX`: 3 + 2 + 4 + 2 + 13 = 24, la captura del 2026-08-29", async () => {
+    // LA CAPTURA que abrió la ficha 346: la pantalla decía «Órdenes 24» y debajo 3 entregadas, 2
     // rechazadas y 13 en proceso. 3 + 2 + 13 = 18, y faltaban seis órdenes que no aparecían en
-    // ninguna columna: las que tienen un desenlace que no es entrega ni rechazo.
+    // ninguna columna.
     //
-    // El reparto de esas seis entre `devuelta` y `reprogramada` NO es dato medido —la captura
-    // solo dice que faltan seis— y ninguna aserción depende de él.
-    consultarMock.mockResolvedValue({
-      status: "ok",
-      datos: datos([
-        fila({
-          producto: "Crema Especial MLX",
-          unidades: 29,
-          ordenes: 24,
-          porStatus: [
-            { status: "entregada", conteo: 3 },
-            { status: "rechazada", conteo: 2 },
-            { status: "devuelta", conteo: 4 },
-            { status: "reprogramada", conteo: 2 },
-            { status: EN_CURSO, conteo: 13 },
-          ],
-        }),
-      ]),
-    });
+    // ⚠ LA FICHA 442 NO DEROGA ESE ARREGLO, LE CAMBIA LA FORMA: las cuatro columnas de cubos se
+    // convierten en UNA frase que los enumera. La igualdad que la 346 compró sigue siendo
+    // comprobable a simple vista y sigue teniendo su caso — ahora sobre la frase, que es lo que
+    // se lee. Volver a dejar fuera «otros resultados» (el defecto original) pone esto en rojo
+    // exactamente igual: la suma daría 18 y la columna dice 24.
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos([CREMA]) });
     renderTabla();
 
     await screen.findByText("Crema Especial MLX");
-    const cifra = (encabezado: string) => celdaPorEncabezado("Crema Especial MLX", encabezado);
 
-    expect(cifra(PRODUCTOS_COLUMNAS.entregadas)).toBe(3);
-    expect(cifra(PRODUCTOS_COLUMNAS.rechazadas)).toBe(2);
-    expect(cifra(PRODUCTOS_COLUMNAS.enProceso)).toBe(13);
-    expect(cifra(PRODUCTOS_COLUMNAS.otrosResultados)).toBe(6);
-    // La aserción de la ficha, sobre las CELDAS PINTADAS y no sobre la función: es lo que el
-    // humano suma con el dedo. Antes del arreglo daba 18.
-    expect(
-      cifra(PRODUCTOS_COLUMNAS.entregadas) +
-        cifra(PRODUCTOS_COLUMNAS.rechazadas) +
-        cifra(PRODUCTOS_COLUMNAS.otrosResultados) +
-        cifra(PRODUCTOS_COLUMNAS.enProceso),
-    ).toBe(cifra(PRODUCTOS_COLUMNAS.ordenes));
-    // Y los dos porcentajes de la captura, intactos: 3/24 y 2/24.
+    const numeros = numerosDelDesenlace("Crema Especial MLX");
+    expect(numeros).toEqual([3, 2, 4, 2, 13]);
+    expect(numeros.reduce((a, b) => a + b, 0)).toBe(ordenesDeFila("Crema Especial MLX"));
+    expect(ordenesDeFila("Crema Especial MLX")).toBe(24);
+
+    // Y el porcentaje de la captura, intacto y ahora VISIBLE sin desplazar: 3/24.
     expect(screen.getByText("12,5%")).toBeInTheDocument();
-    expect(screen.getByText("8,3%")).toBeInTheDocument();
+  });
+
+  it("los cinco cubos se nombran por su nombre, sin enumerarlos en ningún rótulo", async () => {
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos([CREMA]) });
+    renderTabla();
+
+    await screen.findByText("Crema Especial MLX");
+    // La frase DERIVA las etiquetas del catálogo (`etiquetaDeDesenlace`): un sexto desenlace
+    // entra solo. El rótulo de la columna, en cambio, NO enumera nada — mentiría el día que el
+    // catálogo crezca, que es el defecto que la 346 reparó.
+    const texto = tdsDeFila("Crema Especial MLX")
+      .map((td) => td.textContent ?? "")
+      .join(" ");
+    for (const trozo of ["3 entregadas", "2 rechazadas", "4 devueltas", "2 reprogramadas", "13 en proceso"]) {
+      expect(texto, trozo).toContain(trozo);
+    }
+    expect(PRODUCTOS_COLUMNAS.desenlaces).toBe("En qué terminaron");
+  });
+
+  it("el % de rechazo de la captura sigue ahí: se lee al abrir la fila", async () => {
+    const usuario = userEvent.setup();
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos([CREMA]) });
+    renderTabla();
+
+    await screen.findByText("Crema Especial MLX");
+    // 2/24 = 8,3 %. Ya no es una columna —la 442 lo bajó al detalle— pero NO se perdió.
+    expect(screen.queryByText("8,3%")).toBeNull();
+
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Crema Especial MLX", "Tienda Uno"),
+      }),
+    );
+    expect(await screen.findByText("8,3%")).toBeInTheDocument();
+    // Y el cubo «Otros resultados» con su composición, que la 347 puso y esta ficha no pierde.
+    expect(screen.getByText("4 devueltas · 2 reprogramadas")).toBeInTheDocument();
   });
 
   it("y también en la vista de TELÉFONO, donde las cifras van apiladas", async () => {
@@ -455,56 +606,28 @@ describe("FICHA 346 · las columnas de conteo suman la columna «Órdenes»", ()
         dispatchEvent: () => false,
       }) as unknown as MediaQueryList) as typeof window.matchMedia;
 
-    consultarMock.mockResolvedValue({
-      status: "ok",
-      datos: datos([
-        fila({
-          producto: "Crema Especial MLX",
-          unidades: 29,
-          ordenes: 24,
-          porStatus: [
-            { status: "entregada", conteo: 3 },
-            { status: "rechazada", conteo: 2 },
-            { status: "devuelta", conteo: 4 },
-            { status: "reprogramada", conteo: 2 },
-            { status: EN_CURSO, conteo: 13 },
-          ],
-        }),
-      ]),
-    });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos([CREMA]) });
     renderTabla();
 
     await screen.findByText("Crema Especial MLX");
 
-    // La prueba de que ESTAMOS en la vista de teléfono y no en la de escritorio: dos columnas,
-    // producto y la celda que apila las cifras. Sin esto el caso pasaría también en escritorio.
-    const encabezados = screen.getAllByRole("columnheader").map((th) => th.textContent);
-    expect(encabezados).toEqual([PRODUCTOS_COLUMNAS.producto, PRODUCTOS_COLUMNAS.cifras]);
+    // La prueba de que ESTAMOS en la vista de teléfono y no en la de escritorio: dos columnas de
+    // datos, producto y la celda que apila las cifras.
+    expect(encabezadosDeDatos()).toEqual([
+      PRODUCTOS_COLUMNAS.producto,
+      PRODUCTOS_COLUMNAS.cifras,
+    ]);
 
-    // Cada cifra vive en una línea «etiqueta + valor». Se leen las ocho de la pila.
+    // Cada cifra vive en una línea «etiqueta + valor». Se leen las dos de la pila.
     const linea = (etiqueta: string) => {
       const rotulo = screen.getByText(etiqueta);
       return (rotulo.parentElement?.textContent ?? "").replace(etiqueta, "");
     };
 
     expect(linea(PRODUCTOS_COLUMNAS.ordenes)).toBe("24");
-    expect(linea(PRODUCTOS_COLUMNAS.entregadas)).toBe("3");
-    expect(linea(PRODUCTOS_COLUMNAS.rechazadas)).toBe("2");
-    expect(linea(PRODUCTOS_COLUMNAS.otrosResultados)).toBe("6");
-    expect(linea(PRODUCTOS_COLUMNAS.enProceso)).toBe("13");
-    // Y las ocho etiquetas siguen ahí: el teléfono no enseña menos que el portátil.
-    for (const etiqueta of [
-      PRODUCTOS_COLUMNAS.unidades,
-      PRODUCTOS_COLUMNAS.ordenes,
-      PRODUCTOS_COLUMNAS.entregadas,
-      PRODUCTOS_COLUMNAS.rechazadas,
-      PRODUCTOS_COLUMNAS.otrosResultados,
-      PRODUCTOS_COLUMNAS.enProceso,
-      PRODUCTOS_COLUMNAS.efectividad,
-      PRODUCTOS_COLUMNAS.rechazo,
-    ]) {
-      expect(screen.getByText(etiqueta)).toBeInTheDocument();
-    }
+    expect(linea(PRODUCTOS_COLUMNAS.efectividad)).toBe("12,5%");
+    // Y la MISMA frase de desenlaces que en el portátil, entera.
+    expect(screen.getByText(textoDesenlacesDeFila(CREMA.porStatus))).toBeInTheDocument();
   });
 });
 
@@ -532,7 +655,9 @@ describe("FICHA 345 · el cliente NO reordena las filas (R33)", () => {
 
     await screen.findByText("Zeta");
     const filasDom = screen.getAllByRole("row").slice(1); // la primera es la cabecera
-    expect(filasDom.map((tr) => within(tr).getAllByRole("cell")[0]?.textContent)).toEqual(orden);
+    // `[1]` y no `[0]`: desde la ficha 442 la fila se abre SIEMPRE, así que `DataTable` antepone
+    // la celda del control de desglose y el nombre del producto es la segunda.
+    expect(filasDom.map((tr) => within(tr).getAllByRole("cell")[1]?.textContent)).toEqual(orden);
   });
 });
 
@@ -582,12 +707,25 @@ describe("FICHA 345 · la tabla pagina (R45)", () => {
 /* ========================================================================== */
 
 describe("FICHA 345 · el rótulo de multiproducto (R36) y el universo (R35)", () => {
-  it("pinta el aviso de que una orden con varios productos cuenta en cada uno", async () => {
+  it("FICHA 442 — el aviso NO ocupa una línea en gris: se abre con «Cómo se cuenta»", async () => {
+    const usuario = userEvent.setup();
     consultarMock.mockResolvedValue({ status: "ok", datos: datos([fila({ producto: "Dr Melaxin" })]) });
     renderTabla();
 
     await screen.findByText("Dr Melaxin");
-    expect(screen.getByText(PRODUCTOS_TEXTOS.aviso)).toBeInTheDocument();
+
+    // ⚠ LA MITAD QUE MIDE EL ARREGLO: cerrado, el aviso NO está en el DOM. Antes de la 442 eran
+    // SEIS párrafos siempre visibles por encima de la tabla, y empujaban la primera fila fuera
+    // de la primera pantalla. No se escondieron con CSS: no se montan.
+    expect(screen.queryByText(PRODUCTOS_TEXTOS.aviso)).toBeNull();
+    expect(screen.queryByText(PRODUCTOS_TEXTOS.avisoDesglose)).toBeNull();
+
+    // ⚠ Y LA MITAD QUE IMPIDE QUE «ARREGLAR» SEA «BORRAR»: R36 sigue vivo, a un clic.
+    await usuario.click(
+      screen.getByRole("button", { name: new RegExp(PRODUCTOS_TEXTOS.comoSeCuenta) }),
+    );
+    expect(await screen.findByText(PRODUCTOS_TEXTOS.aviso)).toBeInTheDocument();
+    expect(screen.getByText(PRODUCTOS_TEXTOS.avisoDesglose)).toBeInTheDocument();
   });
 
   it("pinta el total del recorte y las órdenes sin producto interpretable", async () => {

@@ -185,7 +185,16 @@ describe("FICHA 345 · la descarga de productos", () => {
 
     await screen.findByText("Spray Protector");
     // Lo que la PANTALLA muestra, para que el contraste sea explícito y no de memoria.
-    expect(screen.getByText("37,5%")).toBeInTheDocument();
+    //
+    // ⚠ FICHA 442 — «% de rechazo» dejó de ser una columna y se lee al abrir la fila. El
+    // contraste que este caso mide —pantalla con signo y coma, archivo con punto y sin signo—
+    // no cambia; lo que cambia es dónde está la mitad de pantalla.
+    await user.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Spray Protector", "Tienda Uno"),
+      }),
+    );
+    expect(await screen.findByText("37,5%")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: `Descargar ${PRODUCTOS_TEXTOS.descarga}` }),

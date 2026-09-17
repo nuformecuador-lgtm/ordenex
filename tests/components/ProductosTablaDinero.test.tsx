@@ -149,6 +149,31 @@ function cifra(td: HTMLTableCellElement): string {
   return td.querySelector(".tabular-nums")?.textContent ?? td.textContent ?? "";
 }
 
+/**
+ * FICHA 442 — el VALOR de un dato de la fila desplegable, buscado por su rótulo.
+ *
+ * El detalle es una rejilla de bloques «rótulo arriba, cifra debajo», así que el valor es el
+ * hermano siguiente del rótulo. Se busca por el rótulo y no por posición: si mañana el orden de
+ * los bloques cambia, este helper sigue midiendo lo mismo.
+ *
+ * ⚠ La fila tiene que estar ABIERTA: `DataTable` no mete el contenido en el DOM hasta entonces,
+ * que es justamente lo que hace que la tabla cerrada cueste cero lecturas (R33).
+ */
+async function valorDeDetalle(rotulo: string): Promise<string> {
+  // ⚠ SE BUSCA DENTRO DE `[data-slot="detalle-producto"]` Y NO EN TODO EL DOCUMENTO. El panel de
+  // órdenes de la 347 repite los mismos rótulos a propósito —sus totales están ahí «para
+  // cotejar» (R38)—, así que un `screen.getByText("Cobró Ordenex")` encuentra DOS y falla. Lo
+  // que estos casos miden es la cifra de la FILA, que sale del DTO ya en pantalla y no de una
+  // segunda consulta: es la que mata la mutación M6.
+  const bloque = await waitFor(() => {
+    const el = document.querySelector<HTMLElement>('[data-slot="detalle-producto"]');
+    expect(el, "la fila no está abierta: no hay bloque de detalle").not.toBeNull();
+    return el as HTMLElement;
+  });
+  const etiqueta = within(bloque).getByText(rotulo);
+  return etiqueta.nextElementSibling?.textContent ?? "";
+}
+
 const MATCH_MEDIA_REAL = window.matchMedia;
 
 beforeEach(() => {
@@ -162,7 +187,8 @@ afterEach(cleanup);
 /* ========================================================================== */
 
 describe("FICHA 347 · R6 — sin la concesión no hay NADA de dinero en la pantalla", () => {
-  it("sin la prop, la tabla queda exactamente como la dejó la 346", async () => {
+  it("sin la prop, la tabla no lleva ni una cifra de dinero, ni en la fila ni en su detalle", async () => {
+    const usuario = userEvent.setup();
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([fila({ producto: "Base Dr" })], { dinero: { estado: "denegado" } }),
@@ -171,30 +197,41 @@ describe("FICHA 347 · R6 — sin la concesión no hay NADA de dinero en la pant
 
     await screen.findByText("Base Dr");
 
-    // Ni una de las tres columnas…
-    for (const columna of [
-      PRODUCTOS_COLUMNAS.recaudado,
-      PRODUCTOS_COLUMNAS.ordenex,
-      PRODUCTOS_COLUMNAS.paraTienda,
-    ]) {
-      expect(encabezados()).not.toContain(columna);
-    }
-    // …ni el aviso del dinero…
+    // Ni la columna…
+    expect(encabezados()).not.toContain(PRODUCTOS_COLUMNAS.recaudado);
+    // …ni el aviso del dinero, ni siquiera dentro de «Cómo se cuenta»…
+    await usuario.click(
+      screen.getByRole("button", { name: new RegExp(PRODUCTOS_TEXTOS.comoSeCuenta) }),
+    );
     expect(screen.queryByText(PRODUCTOS_TEXTOS.avisoDinero)).toBeNull();
     expect(screen.queryByText(PRODUCTOS_TEXTOS.avisoLiquidado)).toBeNull();
-    // …ni el control que abre el panel. `DataTable` sólo antepone esa columna cuando el
-    // consumidor pasa `renderExpanded`, así que su ausencia se comprueba por el botón.
-    expect(
-      screen.queryByRole("button", { name: PRODUCTOS_TEXTOS.abrirDetalle("Base Dr", "Tienda Uno") }),
-    ).toBeNull();
+
+    // ⚠ FICHA 442 — EL CONTROL DE ABRIR SÍ EXISTE AHORA, Y NO ES UNA FUGA. Hasta esta ficha la
+    // fila solo se abría para el dinero; ahora lleva también el volumen que bajó de la cabecera
+    // (unidades, otros resultados, % de rechazo), que existe para todo el mundo. Lo que este
+    // caso afirma es que al abrirla no aparece ni un importe y NO se consulta el detalle.
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Base Dr", "Tienda Uno"),
+      }),
+    );
+    for (const rotulo of [PRODUCTOS_COLUMNAS.ordenex, PRODUCTOS_COLUMNAS.paraTienda]) {
+      expect(screen.queryByText(rotulo), rotulo).toBeNull();
+    }
+    expect(screen.queryByText(PRODUCTOS_TEXTOS.avisoDinero)).toBeNull();
+    expect(document.body.textContent).not.toContain(money("45000.00"));
     // Y el detalle NO se consulta jamás.
     expect(detalleMock).not.toHaveBeenCalled();
+
+    // Pero el volumen SÍ está: la fila abierta no está vacía.
+    expect(screen.getByText(PRODUCTOS_COLUMNAS.unidades)).toBeInTheDocument();
+    expect(screen.getByText(PRODUCTOS_COLUMNAS.rechazo)).toBeInTheDocument();
   });
 
   it("con la prop pero con la respuesta DENEGADA, tampoco: el servidor manda", async () => {
     // Los dos hechos son distintos: la prop dice «qué se dibuja» y el estado de la respuesta
-    // dice «qué se sirvió». Si el borde denegara, pintar las columnas con «—» en cada fila se
-    // leería como «este producto no movió dinero», que es una afirmación falsa.
+    // dice «qué se sirvió». Si el borde denegara, pintar las cifras con «—» se leería como
+    // «este producto no movió dinero», que es una afirmación falsa.
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([fila({ producto: "Base Dr", dinero: null })], {
@@ -205,10 +242,9 @@ describe("FICHA 347 · R6 — sin la concesión no hay NADA de dinero en la pant
 
     await screen.findByText("Base Dr");
     expect(encabezados()).not.toContain(PRODUCTOS_COLUMNAS.recaudado);
-    expect(screen.queryByText(PRODUCTOS_TEXTOS.avisoDinero)).toBeNull();
   });
 
-  it("las columnas de VOLUMEN siguen ahí en los dos casos", async () => {
+  it("las cifras de VOLUMEN siguen ahí en los dos casos", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([fila({ producto: "Base Dr" })], { dinero: { estado: "denegado" } }),
@@ -217,10 +253,9 @@ describe("FICHA 347 · R6 — sin la concesión no hay NADA de dinero en la pant
 
     await screen.findByText("Base Dr");
     for (const columna of [
-      PRODUCTOS_COLUMNAS.unidades,
       PRODUCTOS_COLUMNAS.ordenes,
-      PRODUCTOS_COLUMNAS.entregadas,
-      PRODUCTOS_COLUMNAS.otrosResultados,
+      PRODUCTOS_COLUMNAS.desenlaces,
+      PRODUCTOS_COLUMNAS.efectividad,
     ]) {
       expect(encabezados()).toContain(columna);
     }
@@ -228,118 +263,201 @@ describe("FICHA 347 · R6 — sin la concesión no hay NADA de dinero en la pant
 });
 
 /* ========================================================================== */
-/* Las tres columnas, sus marcas y sus líneas de contexto                     */
+/* FICHA 442 — el dinero deja de ocupar el sitio de honor                     */
 /* ========================================================================== */
 
-describe("FICHA 347 · las tres columnas de dinero (R45/R63)", () => {
+describe("FICHA 442 · las cinco columnas, y el dinero al final", () => {
   beforeEach(() => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos([fila({ producto: "Base Dr" })]) });
   });
 
-  it("el ORDEN de escritorio pone el dinero JUSTO detrás del producto (R63)", async () => {
+  it("el ORDEN de escritorio con dinero: cinco columnas y «Recaudado» la última", async () => {
     renderTabla(true);
     await screen.findByText("Base Dr");
 
-    // ⚠ ANTES DE ESTA FICHA NINGÚN TEST FIJABA EL ORDEN DE LAS COLUMNAS DE ESCRITORIO: los
-    // casos de la 345 comprueban que cada encabezado ESTÁ, y el índice de una columna se busca
-    // por su rótulo, así que una permutación pasaba entera en verde. Ahora el orden es una
-    // DECISIÓN con un número detrás y por eso se ata a mano.
+    // ⚠ EL DEFECTO QUE ESTE CASO CIERRA, medido a 1440 px el 2026-09-17: catorce columnas, siete
+    // visibles sin desplazar y «Efectividad de entrega» en la 13.ª posición — fuera de pantalla.
+    // Y lo primero que se veía eran las TRES columnas de dinero, las tres en «—» en las 25 filas.
     //
-    // POR QUÉ EL DINERO VA EL SEGUNDO Y NO EL ÚLTIMO, que sería el orden natural: a 1440 px la
-    // tabla pide 1416 y su contenedor da 1102 (ficha 348, con la columna «Tienda» montada y los
-    // trece mínimos declarados), así que 314 px se quedan fuera pase lo que pase — y crecieron a
-    // propósito desde los 200 de la 347: es lo que cuesta que ninguna palabra se parta. Las
-    // cuatro formas de llegar a cero destrozan las cabeceras o parten los nombres de producto,
-    // que es justo el defecto reparado. Si alguien tiene que arrastrar para leer una columna, que sea
-    // «% de rechazo» —derivada de dos columnas que están a la vista— y no el dinero, que es el
-    // dato que se pidió.
+    // La 347 puso el dinero el segundo a propósito: con trece columnas algo se quedaba fuera
+    // pase lo que pase, y prefirió que lo arrastrado fuera «% de rechazo». Con cinco columnas esa
+    // disyuntiva ya no existe —no se queda fuera nada— así que el orden vuelve a ser el de las
+    // preguntas: qué producto, cuántas órdenes, cómo acabaron, cuánto llegó, cuánto se recaudó.
     expect(encabezados()).toEqual([
       // La columna del control de desglose: sin texto visible, con nombre accesible.
       "Desglose",
       PRODUCTOS_COLUMNAS.producto,
-      PRODUCTOS_COLUMNAS.recaudado,
-      PRODUCTOS_COLUMNAS.ordenex,
-      PRODUCTOS_COLUMNAS.paraTienda,
-      PRODUCTOS_COLUMNAS.unidades,
       PRODUCTOS_COLUMNAS.ordenes,
-      PRODUCTOS_COLUMNAS.entregadas,
-      PRODUCTOS_COLUMNAS.rechazadas,
-      PRODUCTOS_COLUMNAS.otrosResultados,
-      PRODUCTOS_COLUMNAS.enProceso,
+      PRODUCTOS_COLUMNAS.desenlaces,
       PRODUCTOS_COLUMNAS.efectividad,
-      PRODUCTOS_COLUMNAS.rechazo,
+      PRODUCTOS_COLUMNAS.recaudado,
     ]);
   });
 
-  it("y los cuatro cubos del desglose siguen CONTIGUOS y en su orden (ficha 346)", async () => {
+  it("«Efectividad» se lee entre las cinco primeras, no en la posición 13", async () => {
     renderTabla(true);
     await screen.findByText("Base Dr");
 
-    // Lo que el dinero NO puede romper: los cuatro cubos que suman la columna «Órdenes» se leen
-    // seguidos, que es lo que permite comprobar la igualdad de un vistazo. El dinero se mete
-    // ANTES del bloque de volumen, nunca EN MEDIO de él.
-    const h = encabezados();
-    const cubos = [
-      PRODUCTOS_COLUMNAS.entregadas,
-      PRODUCTOS_COLUMNAS.rechazadas,
-      PRODUCTOS_COLUMNAS.otrosResultados,
-      PRODUCTOS_COLUMNAS.enProceso,
-    ];
-    const i = h.indexOf(cubos[0]);
-    expect(h.slice(i, i + 4)).toEqual(cubos);
-    // Y «Órdenes», el total que esos cuatro suman, va justo antes de ellos.
-    expect(h[i - 1]).toBe(PRODUCTOS_COLUMNAS.ordenes);
+    // La cifra del defecto, invertida y con su número: la posición. MUTACIÓN M1 — devolver
+    // «Efectividad» detrás de las tres de dinero y los cuatro cubos la saca de aquí.
+    const i = encabezados().indexOf(PRODUCTOS_COLUMNAS.efectividad);
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(i).toBeLessThanOrEqual(4);
   });
 
-  it("pinta los tres importes con `money`, COMPLETOS y sin abreviar", async () => {
+  it("las dos cifras del reparto YA NO son columna: se leen al abrir la fila", async () => {
+    const usuario = userEvent.setup();
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    for (const rotulo of [PRODUCTOS_COLUMNAS.ordenex, PRODUCTOS_COLUMNAS.paraTienda]) {
+      expect(encabezados(), rotulo).not.toContain(rotulo);
+    }
+    // Cerradas, sus importes no están en el DOM: eso es lo que devuelve el alto de cada fila.
+    expect(document.body.textContent).not.toContain(money("6215.00"));
+
+    // ⚠ MUTACIÓN M2 — «la fila desplegable deja de traer el dinero». Si el detalle se quedara
+    // solo con el volumen, estas cuatro aserciones caen: las dos cifras del reparto estarían
+    // escondidas de verdad, que es perder un dato y no reordenarlo.
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Base Dr", "Tienda Uno"),
+      }),
+    );
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.ordenex)).toBe(money("6215.00"));
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.paraTienda)).toBe(money("28785.00"));
+  });
+
+  it("y la fila CERRADA vuelve a ser de un renglón: ninguna línea de apoyo bajo «Recaudado»", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // ⚠ EL OTRO DEFECTO MEDIDO: cada una de las tres columnas de dinero arrastraba una línea
+    // secundaria («Con otro producto: 0 de 6») que doblaba el alto de CADA fila, y la 354 tuvo
+    // que declarar 17rem de mínimo para que esas frases cupieran en un renglón. Sacadas de la
+    // celda, la columna es una cifra y el mínimo vuelve al del rótulo.
+    const td = celda("Base Dr", PRODUCTOS_COLUMNAS.recaudado);
+    expect(td.querySelectorAll("span.text-xs")).toHaveLength(0);
+    expect(td.textContent).toBe(money("45000.00"));
+    expect(td.textContent).not.toContain("Con otro producto");
+    expect(td.textContent).not.toContain("Pendiente de cierre");
+  });
+
+  it("las dos frases de apoyo NO se pierden: se leen enteras en el detalle", async () => {
+    const usuario = userEvent.setup();
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Base Dr", "Tienda Uno"),
+      }),
+    );
+
+    // R13 — en cuántas de sus órdenes hay otro producto, que es lo que calibra el aviso.
+    const acompanadas = await screen.findByText(textoAcompanadas(3, 5));
+    // R28/R29 — y lo pendiente de cierre, con su importe y sus órdenes.
+    const pendiente = screen.getByText(textoPendiente("10000.00", 1));
+
+    // R63 en su forma de esta ficha: enteras, sin abreviar y sin recortar.
+    for (const linea of [acompanadas, pendiente]) {
+      expect(linea.className).not.toMatch(/\btruncate\b/);
+      expect(linea.className).not.toMatch(/\bline-clamp-/);
+      expect(linea.className).not.toMatch(/\boverflow-hidden\b/);
+    }
+  });
+
+  it("sin nada pendiente, la línea de pendiente NO se pinta", async () => {
+    const usuario = userEvent.setup();
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([
+        fila({
+          producto: "Todo Liquidado",
+          dinero: {
+            ...DINERO,
+            recaudado: "35000.00",
+            pendiente: { recaudado: "0.00", ordenes: 0 },
+          },
+        }),
+      ]),
+    });
+    renderTabla(true);
+    await screen.findByText("Todo Liquidado");
+
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Todo Liquidado", "Tienda Uno"),
+      }),
+    );
+    await screen.findByText(textoAcompanadas(3, 5));
+    // Un «Pendiente de cierre: ₡0 (0 órdenes)» en cada fila sería ruido justo en el caso bueno.
+    // ⚠ La expresión ancla el DOS PUNTOS: «Pendiente de cierre» a secas es también el rótulo de
+    // uno de los totales del panel de la 347, que sí se pinta y tiene que seguir haciéndolo.
+    expect(screen.queryByText(/^Pendiente de cierre: /)).toBeNull();
+  });
+
+  it("R45 — LA ADVERTENCIA VIAJA CON EL DINERO: vive dentro del detalle", async () => {
+    const usuario = userEvent.setup();
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // Cerrada, la advertencia no ocupa una línea en gris sobre la tabla…
+    expect(screen.queryByText(PRODUCTOS_TEXTOS.avisoDinero)).toBeNull();
+
+    // …y abierta está pegada a las cifras, que es «donde alguien podría sumarlo por error»
+    // (pedido del humano, 2026-09-17). MUTACIÓN M3: quitarla del detalle pone esto en rojo.
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Base Dr", "Tienda Uno"),
+      }),
+    );
+    const aviso = await screen.findByText(PRODUCTOS_TEXTOS.avisoDinero);
+    // Las dos cosas que el aviso TIENE que decir, y no una versión suave de ellas.
+    expect(aviso.textContent).toMatch(/ORDEN completa/);
+    expect(aviso.textContent).toMatch(/no se pueden sumar/);
+
+    // Y está DENTRO de la fila desplegable, no en cualquier sitio: el `<tr>` del detalle.
+    const filaDetalle = aviso.closest("tr");
+    expect(filaDetalle).not.toBeNull();
+    expect(filaDetalle?.textContent).toContain(PRODUCTOS_COLUMNAS.ordenex);
+  });
+
+  it("pinta el importe de la columna con `money`, COMPLETO y sin abreviar", async () => {
     renderTabla(true);
     await screen.findByText("Base Dr");
 
     // R63 — el importe COMPLETO. Es el defecto exacto que midieron la 343 (`₡1.70` donde el
     // DOM decía `₡1.700`) y la 344: dinero cortado no se ve roto, se ve como OTRO número.
     expect(cifra(celda("Base Dr", PRODUCTOS_COLUMNAS.recaudado))).toBe(money("45000.00"));
-    expect(cifra(celda("Base Dr", PRODUCTOS_COLUMNAS.ordenex))).toBe(money("6215.00"));
-    expect(cifra(celda("Base Dr", PRODUCTOS_COLUMNAS.paraTienda))).toBe(money("28785.00"));
   });
 
-  it("R63 — ninguna celda de dinero lleva `truncate`, `line-clamp` ni `overflow-hidden`", async () => {
+  it("R63 — la celda de dinero no lleva `truncate`, `line-clamp` ni `overflow-hidden`", async () => {
     renderTabla(true);
     await screen.findByText("Base Dr");
 
-    for (const columna of [
-      PRODUCTOS_COLUMNAS.recaudado,
-      PRODUCTOS_COLUMNAS.ordenex,
-      PRODUCTOS_COLUMNAS.paraTienda,
-    ]) {
-      const html = celda("Base Dr", columna).outerHTML;
-      expect(html, columna).not.toMatch(/\btruncate\b/);
-      expect(html, columna).not.toMatch(/\bline-clamp-/);
-      expect(html, columna).not.toMatch(/\boverflow-hidden\b/);
-      // Y la cifra no se puede partir por la mitad.
-      expect(html, columna).toMatch(/whitespace-nowrap/);
-    }
+    const html = celda("Base Dr", PRODUCTOS_COLUMNAS.recaudado).outerHTML;
+    expect(html).not.toMatch(/\btruncate\b/);
+    expect(html).not.toMatch(/\bline-clamp-/);
+    expect(html).not.toMatch(/\boverflow-hidden\b/);
+    // Y la cifra no se puede partir por la mitad.
+    expect(html).toMatch(/whitespace-nowrap/);
   });
 
   // ─── FICHA 348 · el aviso de «no sumable» se MUDÓ del encabezado a una leyenda ────────────
   //
-  // La 347 lo escribía dentro de los tres rótulos («Recaudado (no sumable)») y el caso de aquí
-  // afirmaba justo eso. Medido en Chromium a 1440 px con la columna «Tienda» montada: en dos de
-  // esas tres columnas la palabra MÁS ANCHA del encabezado era literalmente `sumable)` (61 px),
-  // así que el aviso decidía el ancho de una columna de dinero y dejaba el rótulo en 3 y 4
-  // líneas. El aviso NO se pierde: se muda a una leyenda que además dice algo que la marca no
-  // decía — CUÁLES son, todas juntas y en su orden.
-  //
-  // ⚠ Y EL CASO NUEVO AFIRMA MÁS QUE EL VIEJO, que es la condición para cambiarlo: las columnas
-  // de dinero se DEDUCEN DEL DOM (las que aparecen al conceder el dinero y no están sin él), no
-  // de una lista escrita en el test. El día que exista una cuarta, este caso la exige en la
-  // leyenda sin que nadie lo edite. El viejo se habría quedado verde con una marca de menos.
+  // La 347 lo escribía dentro de los tres rótulos («Recaudado (no sumable)») y medido en
+  // Chromium a 1440 px la palabra MÁS ANCHA del encabezado era literalmente `sumable)` (61 px).
+  // El aviso NO se pierde: es una leyenda que además dice CUÁLES son, derivándolas de las
+  // columnas realmente pintadas. Desde la 442 la leyenda vive dentro de «Cómo se cuenta».
   it("R45 (348) — la leyenda nombra EXACTAMENTE las columnas que llevan un importe", async () => {
+    const usuario = userEvent.setup();
     renderTabla(true);
     await screen.findByText("Base Dr");
 
     // QUÉ ES UNA COLUMNA DE DINERO, leído del DOM y no de una lista escrita aquí: aquella cuya
     // celda pinta un importe, o sea el símbolo de la moneda de la app. Así el caso no depende
-    // de cuántas columnas de dinero haya hoy.
+    // de cuántas columnas de dinero haya hoy — el día que vuelva a haber tres, las exige.
     const simbolo = money("1.00").replace(/[\d.,\s]/g, "");
     expect(simbolo, "el símbolo de la moneda").not.toBe("");
     const h = encabezados();
@@ -348,7 +466,10 @@ describe("FICHA 347 · las tres columnas de dinero (R45/R63)", () => {
     );
     expect(conImporte.length).toBeGreaterThan(0);
 
-    const leyenda = screen.getByText(textoColumnasNoSumables(conImporte));
+    await usuario.click(
+      screen.getByRole("button", { name: new RegExp(PRODUCTOS_TEXTOS.comoSeCuenta) }),
+    );
+    const leyenda = await screen.findByText(textoColumnasNoSumables(conImporte));
     expect(leyenda).toBeInTheDocument();
 
     // …y la otra mitad: ninguna columna SIN importe se cuela en la leyenda. Las de conteo SÍ son
@@ -368,64 +489,18 @@ describe("FICHA 347 · las tres columnas de dinero (R45/R63)", () => {
     for (const h of encabezados()) expect(h).not.toMatch(/sumable/i);
   });
 
-  it("R45 — y el aviso está escrito arriba, con todas las letras", async () => {
+  it("R29/R45 — las reglas del dinero siguen escritas, en «Cómo se cuenta»", async () => {
+    const usuario = userEvent.setup();
     renderTabla(true);
     await screen.findByText("Base Dr");
 
-    const aviso = screen.getByText(PRODUCTOS_TEXTOS.avisoDinero);
-    expect(aviso).toBeInTheDocument();
-    // Las dos cosas que el aviso TIENE que decir, y no una versión suave de ellas.
-    expect(aviso.textContent).toMatch(/ORDEN completa/);
-    expect(aviso.textContent).toMatch(/no se pueden sumar/);
-  });
-
-  it("R29 — dice que el reparto es SÓLO de lo ya liquidado", async () => {
-    renderTabla(true);
-    await screen.findByText("Base Dr");
-
+    await usuario.click(
+      screen.getByRole("button", { name: new RegExp(PRODUCTOS_TEXTOS.comoSeCuenta) }),
+    );
+    // R45 pide que la advertencia se diga TRES veces: aquí, en el detalle y en el archivo.
+    expect(await screen.findByText(PRODUCTOS_TEXTOS.avisoDinero)).toBeInTheDocument();
+    // R29 — el reparto es SÓLO de lo ya liquidado.
     expect(screen.getByText(PRODUCTOS_TEXTOS.avisoLiquidado)).toBeInTheDocument();
-  });
-
-  it("R13 — la celda de Recaudado dice en cuántas de sus órdenes hay otro producto", async () => {
-    renderTabla(true);
-    await screen.findByText("Base Dr");
-
-    // Es lo que permite calibrar el aviso EN ESTA FILA: con 3 de 5, ese importe está también
-    // en otras filas de la tabla.
-    expect(celda("Base Dr", PRODUCTOS_COLUMNAS.recaudado).textContent).toContain(
-      textoAcompanadas(3, 5),
-    );
-  });
-
-  it("R28/R29 — y lo pendiente de cierre, con su importe y sus órdenes", async () => {
-    renderTabla(true);
-    await screen.findByText("Base Dr");
-
-    expect(celda("Base Dr", PRODUCTOS_COLUMNAS.recaudado).textContent).toContain(
-      textoPendiente("10000.00", 1),
-    );
-  });
-
-  it("sin nada pendiente, esa segunda línea NO se pinta", async () => {
-    consultarMock.mockResolvedValue({
-      status: "ok",
-      datos: datos([
-        fila({
-          producto: "Todo Liquidado",
-          dinero: {
-            ...DINERO,
-            recaudado: "35000.00",
-            pendiente: { recaudado: "0.00", ordenes: 0 },
-          },
-        }),
-      ]),
-    });
-    renderTabla(true);
-    await screen.findByText("Todo Liquidado");
-
-    expect(celda("Todo Liquidado", PRODUCTOS_COLUMNAS.recaudado).textContent).not.toContain(
-      "Pendiente de cierre",
-    );
   });
 
   it("R46 — no hay ningún `<tfoot>` ni total al pie", async () => {
@@ -441,7 +516,8 @@ describe("FICHA 347 · las tres columnas de dinero (R45/R63)", () => {
 /* ========================================================================== */
 
 describe("FICHA 347 · R30 — sin nada liquidado se pinta «—», nunca `0,00`", () => {
-  it("las dos celdas del reparto son el marcador de dato ausente", async () => {
+  it("las dos cifras del reparto son el marcador de dato ausente", async () => {
+    const usuario = userEvent.setup();
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([fila({ producto: "Sin Cierre", dinero: DINERO_SIN_LIQUIDAR })]),
@@ -449,36 +525,28 @@ describe("FICHA 347 · R30 — sin nada liquidado se pinta «—», nunca `0,00`
     renderTabla(true);
     await screen.findByText("Sin Cierre");
 
+    // Lo que SÍ es un hecho se pinta en la columna: lo recaudado existe desde que se registró la
+    // gestión.
+    expect(cifra(celda("Sin Cierre", PRODUCTOS_COLUMNAS.recaudado))).toBe(money("10000.00"));
+
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Sin Cierre", "Tienda Uno"),
+      }),
+    );
+
     // ⚠ ÉSTE ES EL CASO QUE MATA LA MUTACIÓN M6. «Todavía no se sabe lo que cobró Ordenex» y
     // «Ordenex no cobró nada» son dos hechos distintos, y en una pantalla de dinero la
     // diferencia decide si alguien reclama una liquidación o no.
-    expect(cifra(celda("Sin Cierre", PRODUCTOS_COLUMNAS.ordenex))).toBe(money(null));
-    expect(cifra(celda("Sin Cierre", PRODUCTOS_COLUMNAS.paraTienda))).toBe(money(null));
-    expect(cifra(celda("Sin Cierre", PRODUCTOS_COLUMNAS.ordenex))).not.toBe(money("0.00"));
-    expect(cifra(celda("Sin Cierre", PRODUCTOS_COLUMNAS.paraTienda))).not.toBe(money("0.00"));
-
-    // Y lo que SÍ es un hecho se pinta: lo recaudado existe desde que se registró la gestión.
-    expect(cifra(celda("Sin Cierre", PRODUCTOS_COLUMNAS.recaudado))).toBe(money("10000.00"));
-  });
-
-  it("una fila SIN ninguna orden que aporte pinta «—» en las tres", async () => {
-    consultarMock.mockResolvedValue({
-      status: "ok",
-      datos: datos([fila({ producto: "Sin Ventas", dinero: null })]),
-    });
-    renderTabla(true);
-    await screen.findByText("Sin Ventas");
-
-    for (const columna of [
-      PRODUCTOS_COLUMNAS.recaudado,
-      PRODUCTOS_COLUMNAS.ordenex,
-      PRODUCTOS_COLUMNAS.paraTienda,
-    ]) {
-      expect(cifra(celda("Sin Ventas", columna)), columna).toBe(money(null));
+    for (const rotulo of [PRODUCTOS_COLUMNAS.ordenex, PRODUCTOS_COLUMNAS.paraTienda]) {
+      const valor = await valorDeDetalle(rotulo);
+      expect(valor, rotulo).toBe(money(null));
+      expect(valor, rotulo).not.toBe(money("0.00"));
     }
   });
 
-  it("y esa fila NO ofrece el control de abrir: no hay detalle que enseñar", async () => {
+  it("una fila SIN ninguna orden que aporte pinta «—» en las tres", async () => {
+    const usuario = userEvent.setup();
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([fila({ producto: "Sin Ventas", dinero: null })]),
@@ -486,11 +554,44 @@ describe("FICHA 347 · R30 — sin nada liquidado se pinta «—», nunca `0,00`
     renderTabla(true);
     await screen.findByText("Sin Ventas");
 
-    expect(
-      screen.queryByRole("button", {
+    expect(cifra(celda("Sin Ventas", PRODUCTOS_COLUMNAS.recaudado))).toBe(money(null));
+
+    // Y la concesión se respeta aunque la fila no tenga dato: las dos cifras del reparto SE
+    // DECLARAN y dicen «—». No pintarlas sería callar que no se sabe.
+    await usuario.click(
+      screen.getByRole("button", {
         name: PRODUCTOS_TEXTOS.abrirDetalle("Sin Ventas", "Tienda Uno"),
       }),
+    );
+    for (const rotulo of [PRODUCTOS_COLUMNAS.ordenex, PRODUCTOS_COLUMNAS.paraTienda]) {
+      expect(await valorDeDetalle(rotulo), rotulo).toBe(money(null));
+    }
+  });
+
+  it("y esa fila NO monta el panel de órdenes: no hay ninguna que enseñar", async () => {
+    const usuario = userEvent.setup();
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([fila({ producto: "Sin Ventas", dinero: null })]),
+    });
+    renderTabla(true);
+    await screen.findByText("Sin Ventas");
+
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Sin Ventas", "Tienda Uno"),
+      }),
+    );
+    await screen.findByText(PRODUCTOS_COLUMNAS.unidades);
+
+    // El panel de la 347 lee órdenes; sin ninguna que aporte, montarlo sería una consulta para
+    // enseñar un vacío. El resto del detalle —el volumen— sí está.
+    expect(
+      screen.queryByRole("region", {
+        name: DETALLE_DINERO_TEXTOS.region("Sin Ventas", "Tienda Uno"),
+      }),
     ).toBeNull();
+    expect(detalleMock).not.toHaveBeenCalled();
   });
 });
 
@@ -519,7 +620,7 @@ describe("FICHA 347 · los estados de la lectura con dinero", () => {
     expect(screen.getByText(textoSello("2026-09-01T18:30:00.000Z"))).toBeInTheDocument();
   });
 
-  it("R76 — con el tope superado lo dice, y NO pinta columnas de dinero vacías", async () => {
+  it("R76 — con el tope superado lo dice, y NO pinta cifras de dinero vacías", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([fila({ producto: "Base Dr", dinero: null })], {
@@ -529,12 +630,13 @@ describe("FICHA 347 · los estados de la lectura con dinero", () => {
     renderTabla(true);
     await screen.findByText("Base Dr");
 
+    // ⚠ Y NO SE PLIEGA bajo «Cómo se cuenta»: no es una regla de lectura, es el estado de ESTA
+    // consulta. Quien no lo lea creerá que estos productos no movieron dinero.
     expect(screen.getByText(PRODUCTOS_TEXTOS.dineroLimiteExcedido(5000))).toBeInTheDocument();
-    // Pintar las columnas con «—» en todas las filas se leería como «este producto no movió
-    // dinero», que es falso: lo que pasa es que no se pudo calcular.
     expect(encabezados()).not.toContain(PRODUCTOS_COLUMNAS.recaudado);
     // Y el VOLUMEN sigue intacto: el tope es de la lectura de dinero, no de la de productos.
-    expect(encabezados()).toContain(PRODUCTOS_COLUMNAS.unidades);
+    expect(encabezados()).toContain(PRODUCTOS_COLUMNAS.ordenes);
+    expect(encabezados()).toContain(PRODUCTOS_COLUMNAS.efectividad);
     expect(screen.getByText("Base Dr")).toBeInTheDocument();
   });
 
@@ -668,11 +770,6 @@ describe("FICHA 347 · el detalle orden por orden (R32/R33/R34)", () => {
 
     // Los `totales` en la cabecera son las MISMAS cifras de la fila (R38): sirven para cotejar
     // la suma sin salir de la pantalla.
-    //
-    // `getAllByText` y no `getByText`: con UNA sola orden en la página, el total de la
-    // cabecera y el aporte de esa orden son el MISMO importe y aparecen dos veces. Que
-    // coincidan es justamente lo que R38 promete, así que exigir una sola aparición sería
-    // exigir que el cuadre NO se vea.
     expect(within(panel).getAllByText(money("45000.00")).length).toBeGreaterThan(0);
     expect(within(panel).getAllByText(money("6215.00")).length).toBeGreaterThan(0);
     expect(within(panel).getAllByText(money("28785.00")).length).toBeGreaterThan(0);
@@ -720,7 +817,7 @@ describe("FICHA 347 · el detalle orden por orden (R32/R33/R34)", () => {
 });
 
 /* ========================================================================== */
-/* Entrega B — la composición de «Otros resultados» en la pantalla            */
+/* Entrega B — la composición de «Otros resultados», ahora en el detalle      */
 /* ========================================================================== */
 
 describe("FICHA 347 · la composición de «Otros resultados» (R50/R54/R57)", () => {
@@ -737,34 +834,46 @@ describe("FICHA 347 · la composición de «Otros resultados» (R50/R54/R57)", (
     ],
   });
 
-  it("R50 — la celda dice CUÁNTAS arriba y DE QUÉ debajo, sin tocar la etiqueta", async () => {
+  it("R50 — el detalle dice CUÁNTAS arriba y DE QUÉ debajo, sin tocar la etiqueta", async () => {
+    const usuario = userEvent.setup();
     consultarMock.mockResolvedValue({ status: "ok", datos: datos([CREMA]) });
     renderTabla(true);
     await screen.findByText("Crema Especial MLX");
 
-    const td = celda("Crema Especial MLX", PRODUCTOS_COLUMNAS.otrosResultados);
-    expect(cifra(td)).toBe("6");
-    expect(td.textContent).toContain("4 devueltas · 2 reprogramadas");
-    // Y la ETIQUETA de la columna NO enumera: mentiría el día que el catálogo gane un
-    // desenlace, que es el defecto que la 346 acaba de reparar.
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Crema Especial MLX", "Tienda Uno"),
+      }),
+    );
+
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.otrosResultados)).toBe("6");
+    expect(screen.getByText("4 devueltas · 2 reprogramadas")).toBeInTheDocument();
+    // Y la ETIQUETA NO enumera: mentiría el día que el catálogo gane un desenlace, que es el
+    // defecto que la 346 acaba de reparar.
     expect(PRODUCTOS_COLUMNAS.otrosResultados).toBe("Otros resultados");
   });
 
   it("R57 — es legible SIN apuntar: es texto en el DOM, no un `title` ni un tooltip", async () => {
+    const usuario = userEvent.setup();
     consultarMock.mockResolvedValue({ status: "ok", datos: datos([CREMA]) });
     renderTabla(true);
     await screen.findByText("Crema Especial MLX");
 
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Crema Especial MLX", "Tienda Uno"),
+      }),
+    );
+
     // Un tooltip no existe en táctil, no se copia y los lectores de pantalla lo tratan
-    // distinto. Esta tabla ya tuvo DOS arreglos de ancho medidos a 390 px: el teléfono no es
-    // un borde aquí, es el caso que rompe.
-    const linea = screen.getByText("4 devueltas · 2 reprogramadas");
-    expect(linea).toBeInTheDocument();
+    // distinto. Esta tabla ya tuvo DOS arreglos de ancho medidos a 390 px.
+    const linea = await screen.findByText("4 devueltas · 2 reprogramadas");
     expect(linea.getAttribute("title")).toBeNull();
     expect(linea.closest("[role='tooltip']")).toBeNull();
   });
 
   it("R54 — con el conteo en cero, no se pinta ninguna composición", async () => {
+    const usuario = userEvent.setup();
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
@@ -780,10 +889,16 @@ describe("FICHA 347 · la composición de «Otros resultados» (R50/R54/R57)", (
     renderTabla(true);
     await screen.findByText("Spray Protector");
 
-    const td = celda("Spray Protector", PRODUCTOS_COLUMNAS.otrosResultados);
-    expect(cifra(td)).toBe("0");
-    // La celda es EXACTAMENTE el conteo: ni una línea en blanco que haga la fila más alta.
-    expect(td.textContent).toBe("0");
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Spray Protector", "Tienda Uno"),
+      }),
+    );
+
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.otrosResultados)).toBe("0");
+    // El dato es EXACTAMENTE el conteo: ni una línea en blanco que haga el detalle más alto.
+    const bloque = screen.getByText(PRODUCTOS_COLUMNAS.otrosResultados).parentElement;
+    expect(bloque?.textContent).toBe(`${PRODUCTOS_COLUMNAS.otrosResultados}0`);
   });
 });
 
@@ -791,7 +906,7 @@ describe("FICHA 347 · la composición de «Otros resultados» (R50/R54/R57)", (
 /* R64 / R57 — el teléfono no enseña menos                                    */
 /* ========================================================================== */
 
-describe("FICHA 347 · la vista de TELÉFONO lleva el mismo dinero (R64)", () => {
+describe("FICHA 347/442 · la vista de TELÉFONO lleva lo mismo (R64)", () => {
   beforeEach(() => {
     // `useIsMobile` lee `matchMedia`. Se fuerza la vista de teléfono, y `beforeEach` global la
     // repone después para que ningún caso la herede sin pedirla.
@@ -807,7 +922,8 @@ describe("FICHA 347 · la vista de TELÉFONO lleva el mismo dinero (R64)", () =>
     })) as unknown as typeof window.matchMedia;
   });
 
-  it("las tres cifras de dinero y sus dos líneas de contexto están en la pila", async () => {
+  it("la pila lleva las mismas cifras que las columnas del portátil, y el resto en el detalle", async () => {
+    const usuario = userEvent.setup();
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
@@ -825,42 +941,47 @@ describe("FICHA 347 · la vista de TELÉFONO lleva el mismo dinero (R64)", () =>
     await screen.findByText("Crema Especial MLX");
 
     // La prueba de que ESTAMOS en la vista de teléfono: las DOS columnas de datos y ni una
-    // más. La primera es la del control que abre el detalle, que `DataTable` antepone cuando
-    // el consumidor pasa `renderExpanded` —y que aquí existe justamente porque el dinero está
-    // concedido también en el teléfono—.
+    // más, más la del control que abre el detalle.
     expect(encabezados().slice(-2)).toEqual([
       PRODUCTOS_COLUMNAS.producto,
       PRODUCTOS_COLUMNAS.cifras,
     ]);
     expect(encabezados()).toHaveLength(3);
 
-    // Ni un dato menos que en el portátil: las tres etiquetas, los tres importes…
+    // Lo que el portátil pone en columna, el teléfono lo apila: las mismas tres cifras.
     for (const etiqueta of [
+      PRODUCTOS_COLUMNAS.ordenes,
+      PRODUCTOS_COLUMNAS.efectividad,
       PRODUCTOS_COLUMNAS.recaudado,
-      PRODUCTOS_COLUMNAS.ordenex,
-      PRODUCTOS_COLUMNAS.paraTienda,
+      PRODUCTOS_COLUMNAS.desenlaces,
     ]) {
       expect(screen.getByText(etiqueta), etiqueta).toBeInTheDocument();
     }
     expect(screen.getByText(money("45000.00"))).toBeInTheDocument();
-    expect(screen.getByText(money("6215.00"))).toBeInTheDocument();
-    expect(screen.getByText(money("28785.00"))).toBeInTheDocument();
-    // …las dos líneas de contexto…
+    // …y la frase de desenlaces, entera (R57).
+    expect(screen.getByText(/3 entregadas/)).toBeInTheDocument();
+
+    // Y el resto vive en la MISMA fila desplegable que en escritorio: ni un dato menos (R64).
+    await usuario.click(
+      screen.getByRole("button", {
+        name: PRODUCTOS_TEXTOS.abrirDetalle("Crema Especial MLX", "Tienda Uno"),
+      }),
+    );
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.ordenex)).toBe(money("6215.00"));
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.paraTienda)).toBe(money("28785.00"));
     expect(screen.getByText(textoAcompanadas(3, 5))).toBeInTheDocument();
     expect(screen.getByText(textoPendiente("10000.00", 1))).toBeInTheDocument();
-    // …y la composición de «Otros resultados» (R57).
-    expect(screen.getByText("4 devueltas")).toBeInTheDocument();
   });
 });
 
 /* ========================================================================== */
-/* FICHA 348 — que ninguna palabra se parta: los trece mínimos y el no-partido */
+/* FICHA 348 / 442 — el ancho de las columnas es una DECISIÓN                 */
 /* ========================================================================== */
 
-describe("FICHA 348 · el ancho de las columnas es una DECISIÓN, no el resto del reparto", () => {
-  // Dos tiendas distintas: es lo que monta la columna «Tienda», y es el caso que la 347 NO
-  // midió —la base local tiene una sola tienda, así que la columna no se montaba y el reparto
-  // de ancho se midió sin ella—. Con ella montada, en producción, `Nuform` salía partido.
+describe("FICHA 348/442 · el ancho de las columnas es una DECISIÓN, no el resto del reparto", () => {
+  // Dos tiendas distintas: es lo que monta la columna «Tienda», y es el caso de producción que
+  // la 347 NO midió —la base local tiene una sola tienda—. Con ella montada, `Nuform` salía
+  // partido.
   beforeEach(() => {
     consultarMock.mockResolvedValue({
       status: "ok",
@@ -879,19 +1000,18 @@ describe("FICHA 348 · el ancho de las columnas es una DECISIÓN, no el resto de
     );
   }
 
-  it("las TRECE columnas declaran un ancho mínimo, y ninguna se queda sin él", async () => {
+  it("las SEIS columnas declaran un ancho mínimo, y ninguna se queda sin él", async () => {
     renderTabla(true);
     await screen.findByText("Base Dr");
 
     const ths = encabezadosDeDatos();
-    // Trece: tienda + producto + tres de dinero + ocho de conteo. Si mañana hay una más, este
-    // número cambia a mano y con ello se relee la tabla de mínimos del componente.
-    expect(ths.map((th) => th.textContent)).toHaveLength(13);
+    // ⚠ SEIS, Y ANTES ERAN TRECE. El número se escribe a mano a propósito: es la cifra del
+    // defecto de la 442 y cambiarlo obliga a releer la tabla de mínimos del componente.
+    expect(ths.map((th) => th.textContent)).toHaveLength(6);
 
     // ⚠ SIN ESTE CASO NADA ATABA LOS ANCHOS. Antes de la 348, la tabla declaraba TRES mínimos
     // para trece columnas y quitarlos no ponía nada en rojo: el navegador estrujaba las otras
-    // diez hasta partir palabras y la suite entera seguía verde. Se comprobó quitando el
-    // mínimo de «Tienda» — ningún test cayó.
+    // hasta partir palabras y la suite entera seguía verde.
     for (const th of ths) {
       expect(th.style.minWidth, `la columna «${th.textContent}» no declara mínimo`).not.toBe("");
     }
@@ -911,16 +1031,31 @@ describe("FICHA 348 · el ancho de las columnas es una DECISIÓN, no el resto de
     }
   });
 
+  it("FICHA 442 — la suma de los mínimos CABE en el contenedor de 1440 px", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // ⚠ ES LA CIFRA DEL DEFECTO, en su forma comprobable sin navegador: a 1440 px el contenedor
+    // de esta sección mide 1102 px y con los trece mínimos de la 348 la tabla pedía 1416 — 314
+    // px fuera, y «Efectividad» entre ellos. jsdom no hace layout, así que lo que se puede
+    // afirmar aquí es la SUMA DE LOS MÍNIMOS DECLARADOS, que es lo que la gobierna.
+    //
+    // 68 px es la columna del control de desglose medida en Chromium (24 de relleno + 20 del
+    // botón + 24). El margen sobra: lo que este caso impide es volver a declarar mínimos que no
+    // caben. MUTACIÓN: devolver las trece columnas lo pone en rojo.
+    const suma = encabezadosDeDatos()
+      .map((th) => Number.parseFloat(th.style.minWidth) * 16)
+      .reduce((a, b) => a + b, 0);
+    expect(suma + 68).toBeLessThanOrEqual(1102);
+  });
+
   it("ningún nombre —de producto o de tienda— puede partirse por dentro", async () => {
     renderTabla(true);
     await screen.findByText("Base Dr");
 
-    // El defecto reportado por el humano, en su forma comprobable sin navegador: `wrap-anywhere`
-    // reduce el `min-content` de la columna a UN carácter y autoriza al navegador a dejarla más
-    // estrecha que su palabra más larga. Medido a 1440 px con la columna «Tienda» montada: 66 px
-    // de columna para un dato que pedía 114, y `Nuform` partido en dos líneas (`Nufor` + `m`).
-    // `break-all` e `hyphens-auto` parten igual; `break-words` no reduce el `min-content`, pero
-    // aquí tampoco hace falta y se prefiere no tener ninguna.
+    // El defecto reportado por el humano en la 348, en su forma comprobable sin navegador:
+    // `wrap-anywhere` reduce el `min-content` de la columna a UN carácter y autoriza al
+    // navegador a dejarla más estrecha que su palabra más larga.
     for (const nombre of [PRODUCTOS_COLUMNAS.producto, PRODUCTOS_COLUMNAS.tienda]) {
       const html = celda("Base Dr", nombre).outerHTML;
       expect(html, nombre).not.toMatch(/\bwrap-anywhere\b/);
@@ -941,6 +1076,9 @@ describe("FICHA 348 · `textoColumnasNoSumables` deriva la leyenda, no la escrib
     // Lo que este caso protege: que la leyenda siga siendo legible el día que el catálogo de
     // columnas de dinero cambie. Escribir los tres nombres a mano pasaría el caso de arriba y
     // se rompería aquí en silencio — que es exactamente el fallo mudo que la ficha evita.
+    //
+    // ⚠ Y LA RAMA SINGULAR ES LA VIVA DESDE LA 442: de las tres cifras de dinero sólo
+    // «Recaudado» es columna, así que la leyenda que se pinta es literalmente ésta.
     expect(textoColumnasNoSumables(["A", "B"])).toBe(
       "Las columnas de dinero que no se pueden sumar hacia abajo: A y B.",
     );
@@ -953,131 +1091,5 @@ describe("FICHA 348 · `textoColumnasNoSumables` deriva la leyenda, no la escrib
     expect(textoColumnasNoSumables(["A", "B", "C", "D"])).toBe(
       "Las columnas de dinero que no se pueden sumar hacia abajo: A, B, C y D.",
     );
-  });
-});
-
-/* ========================================================================== */
-/* FICHA 354 — un dato, un renglón: la celda de «Recaudado» se lee de un vistazo */
-/* ========================================================================== */
-
-describe("FICHA 354 · las líneas de apoyo de «Recaudado» son FRASES, no palabras sueltas", () => {
-  // El caso EXACTO de la captura del humano: una fila con importe, con órdenes acompañadas y
-  // con algo pendiente de cierre. Es la única forma de la celda que lleva sus TRES datos.
-  const CON_PENDIENTE = fila({ producto: "Base Dr", ordenes: 33, ordenesAcompanadas: 4 });
-
-  beforeEach(() => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos([CON_PENDIENTE]) });
-  });
-
-  /** Las líneas de apoyo de la celda: los `text-xs` que cuelgan bajo la cifra. */
-  function lineasDeApoyo(): HTMLElement[] {
-    const td = celda("Base Dr", PRODUCTOS_COLUMNAS.recaudado);
-    return [...td.querySelectorAll<HTMLElement>("span.text-xs")];
-  }
-
-  /** El `<th>` de una columna, por su rótulo. */
-  function encabezadoDe(rotulo: string): HTMLTableCellElement {
-    const tabla = screen.getAllByRole("table")[0];
-    const th = [...tabla.querySelectorAll<HTMLTableCellElement>("thead th")].find(
-      (c) => c.textContent === rotulo,
-    );
-    expect(th, `no existe el encabezado «${rotulo}»`).toBeDefined();
-    return th as HTMLTableCellElement;
-  }
-
-  /** El mínimo declarado de una columna, en `rem`. */
-  function minimoRem(rotulo: string): number {
-    const valor = encabezadoDe(rotulo).style.minWidth;
-    expect(valor, `«${rotulo}» → ${valor}`).toMatch(/^[\d.]+rem$/);
-    return Number.parseFloat(valor);
-  }
-
-  it("cada línea de apoyo va en UN renglón: las dos declaran `whitespace-nowrap`", async () => {
-    renderTabla(true);
-    await screen.findByText("Base Dr");
-
-    // EL DEFECTO QUE ESTE CASO CIERRA, medido en Chromium a 1440 px con la columna «Tienda»
-    // montada: la celda ocupaba OCHO renglones para TRES datos —«Con otro / producto: 4 / de
-    // 33 / Pendiente de / cierre: / ₡23.798 (2 / órdenes)»—. Ninguna PALABRA se partía (eso lo
-    // arregló la 348 y era cierto), pero la columna medía 104 px y las líneas de apoyo son
-    // FRASES: piden 161 y 244 px. `whitespace-nowrap` sube el `min-content` de la columna de
-    // la palabra a la frase, así que la columna no puede volver a ser más estrecha que ellas.
-    //
-    // ⚠ ES UNA GUARDIA DE FUENTE Y SE SABE: jsdom no hace layout y ninguna suite puede contar
-    // renglones. Los ocho de antes y los tres de después están medidos en el navegador y
-    // anotados en `progress/impl_354.md`. Lo que este caso impide es que la clase desaparezca
-    // sin que nada avise, que es cómo se perdería el arreglo.
-    const lineas = lineasDeApoyo();
-    expect(lineas).toHaveLength(2);
-    for (const linea of lineas) {
-      expect(linea.className, linea.textContent ?? "").toContain("whitespace-nowrap");
-    }
-  });
-
-  it("y siguen diciéndolo TODO: la frase entera, sin abreviar ni recortar", async () => {
-    renderTabla(true);
-    await screen.findByText("Base Dr");
-
-    // R63 en su forma de esta ficha: la columna se ensancha, el texto NO se acorta. Los dos
-    // textos se comparan contra las funciones que los producen porque son las mismas que usa
-    // la vista de teléfono; lo que este caso afirma es que están LOS DOS y ENTEROS.
-    const textos = lineasDeApoyo().map((l) => l.textContent);
-    expect(textos).toEqual([
-      textoAcompanadas(4, 33),
-      textoPendiente(DINERO.pendiente.recaudado, DINERO.pendiente.ordenes),
-    ]);
-    // Y ninguna se esconde tras un recorte: es la prohibición de R63 aplicada a la línea de
-    // apoyo y no sólo a la cifra — un «Pendiente de cierre: ₡23.79…» sería peor que no ponerlo.
-    for (const linea of lineasDeApoyo()) {
-      expect(linea.className).not.toMatch(/\btruncate\b/);
-      expect(linea.className).not.toMatch(/\bline-clamp-/);
-      expect(linea.className).not.toMatch(/\boverflow-hidden\b/);
-    }
-  });
-
-  it("el mínimo de «Recaudado» sale de la FRASE, no de su palabra más larga", async () => {
-    renderTabla(true);
-    await screen.findByText("Base Dr");
-
-    // DE DÓNDE SALE EL 16,75. Medido en Chromium clonando cada pieza de la celda con su propia
-    // fuente: la frase más larga («Pendiente de cierre: ₡23.798 (2 órdenes)») pide 244 px y el
-    // `<th>` añade 24 de relleno → 268 px = 16,75rem. El mínimo de la 348 era 6,5rem (104 px)
-    // porque se calculó sobre la PALABRA más ancha de la columna, que aquí es la cifra (65 px):
-    // correcto para once columnas de palabras sueltas, corto para la única que lleva frases.
-    expect(minimoRem(PRODUCTOS_COLUMNAS.recaudado)).toBeGreaterThanOrEqual(16.75);
-
-    // Y es el mayor de los tres: las otras dos columnas de dinero llevan UNA cifra por celda y
-    // su renglón ya era uno solo —medido: 1 renglón antes y después—, así que no se tocan. Si
-    // algún día una de ellas gana una línea de apoyo, este caso deja de valer y hay que
-    // remedirla, que es exactamente lo que se quiere que pase.
-    for (const otra of [PRODUCTOS_COLUMNAS.ordenex, PRODUCTOS_COLUMNAS.paraTienda]) {
-      expect(minimoRem(otra), otra).toBeLessThan(minimoRem(PRODUCTOS_COLUMNAS.recaudado));
-    }
-  });
-
-  it("pero la composición de «Otros resultados» NO se fuerza a un renglón", async () => {
-    consultarMock.mockResolvedValue({
-      status: "ok",
-      datos: datos([
-        fila({
-          producto: "Base Dr",
-          porStatus: [
-            { status: "entregada", conteo: 3 },
-            { status: "devuelta", conteo: 4 },
-            { status: "reprogramada", conteo: 2 },
-          ],
-        }),
-      ]),
-    });
-    renderTabla(true);
-    await screen.findByText("Base Dr");
-
-    // LA MUTACIÓN FÁCIL Y EQUIVOCADA: poner `whitespace-nowrap` dentro de `Contexto` en vez de
-    // en las dos líneas que lo piden. La composición de «Otros resultados» también es un
-    // `Contexto` y CRECE con el catálogo de desenlaces («4 devueltas · 2 reprogramadas · …»):
-    // forzarla a una línea convertiría esa columna en una de 300 px que nadie ha pedido. La
-    // decisión es por línea, no por componente.
-    const linea = screen.getByText("4 devueltas · 2 reprogramadas");
-    expect(linea.className).not.toContain("whitespace-nowrap");
   });
 });
