@@ -5297,12 +5297,12 @@
       "title": "la tienda y el satelite no tienen ningun numero de efectividad",
       "description": "El mismo KPI con su alcance, y lo que cada rol puede accionar al lado.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "media",
-      "branch": null,
+      "branch": "fix/443-efectividad-por-rol",
       "depends_on": 441,
-      "status_note": "DECISION DEL HUMANO (2026-09-17), preguntada y respondida: «si, la tienda y el satelite deberian ver el suyo». DISENO APROBADO por el humano el 2026-09-17: artboards en design-analitica/ (analitica-el-numero-que-importa). || MEDIDO: la pantalla del satelite tiene 1457px contra los 3467 del maestro, 5 paneles contra 8, y NI fila de KPIs NI tabla de productos. No tienen ningun numero de efectividad. || MISMO HEROE, DISTINTO ALCANCE. Lo que cambia es lo que va al lado: a la TIENDA «por que no llegaron» (medido: 7 de cada 10 por no ubicar al cliente — lo unico que ella puede mover); al SATELITE cuanto se CIERRA y como va el resto de bodegas. || ⚠️ EL CASO QUE OBLIGA A DISENAR CON CUIDADO, con datos reales: zona Puntarenas 0 de 27 cerradas en 3,8 dias de media; El Coco 3 de 64; y GAM 389 de 637 (61%) en el MISMO tiempo. Si el tablero dijera «0,0% de efectividad», el encargado lee que lo hace todo mal. Tiene que decir «0 de 27 cerradas» y ensenar al lado como va el resto: no es un reproche, es un diagnostico — en esa bodega no se mueve nada. || Depende de la 441: los estados de base-cero y base-chica salen de alli."
+      "status_note": "Mergeada en dev (PR #812, b9e68542) y NO desplegada. || ⚠️ EL HUECO YA ESTABA CERRADO, y no por esta ficha: lo cerro la 441. El componente SIEMPRE estuvo montado para los tres roles, pero antes hacia `hayDato = datos !== null && total > 0`, asi que con la base chica del satelite no pintaba NADA — por eso mi medicion no encontro ni la fila ni su encabezado. La 441 metio los estados que ESCRIBEN UNA FRASE en vez de callarse, y con eso aparecio. Medido ahora: tienda 17,6% sobre 68, satelite «1 entregada de 8», maestro 17,4% sobre 69 — el 68 contra 69 ES el alcance a la vista. || ASI QUE LO QUE FALTABA NO ERA EL NUMERO SINO QUE NADA IMPIDIERA PERDERLO. Entran dos archivos de test y NI UNA LINEA de produccion: 6 casos contra Postgres real con FILAS AJENAS sembradas, afirmando sobre ordenes identificables y no sobre conteos. || UNA MUTACION SALIO VERDE y es el hallazgo: romper condicionDeAlcance no lo caza nadie por comportamiento, porque el recorte viaja por DOS capas y con una rota la otra sigue recortando. Las pruebas van al resolutor, que es la decision unica de la que salen ambas. || LA COMPARACION ENTRE BODEGAS SE RETIRA del diseno, con censo: de 38 archivos que nombran adminSatelite, NINGUNO le da dato de otra zona; el repo se niega hasta a revelarle que una orden ajena EXISTE, y no le llegan ni los nombres de las otras bodegas — «la lista es el directorio de sus competidores»."
     },
     {
       "id": 444,
@@ -5351,6 +5351,18 @@
       "branch": null,
       "depends_on": null,
       "status_note": "NO ES UN FALLO DE PRODUCCION, y esto es lo importante de la ficha: medido con get_runtime_errors sobre /analitica en produccion, ventana de 7 dias -> CERO errores. || En DESARROLLO si aparece: «Error: useToast debe usarse dentro de un ToastProvider» en app/_components/LogoutButton.tsx:43, montado por PageHeader.tsx:141, durante el render de servidor. La pagina se recupera al hidratar, asi que no se ve rota. Un agente lo midio 7 veces en ~15 cargas con su propio dev server; otro concluyo que era cache de Turbopack corrompida por dos dev servers compartiendo .next y midio 3 vueltas sin y 3 con sus cambios, 0 errores. || YA LE COSTO TIEMPO A DOS AGENTES perseguirlo. El valor de arreglarlo no es el usuario final —no lo ve— sino que deja de contaminar toda verificacion local de esa pantalla."
+    },
+    {
+      "id": 448,
+      "title": "la tienda no ve por que no llegaron sus ordenes junto a su numero",
+      "description": "El panel del diseno, pendiente de resolver que unidad cuenta.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "media",
+      "branch": null,
+      "depends_on": 443,
+      "status_note": "Parte del diseno aprobado (design-analitica/Tienda.dc.html) que NO entro en la 443, con motivo. || ⚠️ TIENE UN PROBLEMA DE DATOS SIN RESOLVER: el diseno cuenta ORDENES (91) y ConteoDevolucionesRepository cuenta GESTIONES, y su propia cabecera declara que sus totales no tienen por que cuadrar con el anillo de arriba. Subirlo AL LADO del heroe —que cuenta ordenes— heredaria esa discrepancia en la misma fila. || Hay que decidir primero cual es la unidad correcta para esta pregunta, no implementar y ver. || EL VALOR: medido, 7 de cada 10 ordenes que no llegan se caen por no poder ubicar al cliente, y eso es lo UNICO que una tienda puede mover (revisar el telefono al cargar)."
     }
   ]
 }
