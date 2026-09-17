@@ -211,3 +211,117 @@ de migraciones de otra ficha; aquí no hay migración.
 El KPI ya cuenta las órdenes cargadas en el período y no las que se movieron ese día; la regla de
 los dos estados vive en una función pura con su umbral derivado; falta la mitad de pantalla, que va
 en otra pasada.
+
+---
+
+# 441 — la mitad de PANTALLA (frontend)
+
+Misma rama, sobre `4fa3257a`. El dato ya estaba listo (`evaluarMadurezDeCohorte`); esto es lo que
+se ve.
+
+## Archivos
+
+### Creados
+
+| archivo | qué es |
+| --- | --- |
+| `components/private/analytics/jerarquia.ts` | El RANGO de un KPI como catálogo único: `heroe` / `normal` / `apoyo`, con sus clases. Lo comparten `KpiCard` y el héroe, que no es un `KpiCard`. |
+| `app/(app)/analitica/_components/entregas/EfectividadHeroe.tsx` | La tarjeta héroe: cifra a 68 px (52 en teléfono), barra de madurez con leyenda, y el % sobre las que ya tienen desenlace. Recibe la madurez por props: se prueba sin SWR. |
+| `app/(app)/analitica/_components/entregas/madurez-textos.ts` | Módulo PURO con lo que se escribe, incluido **lo que se escribe cuando no hay cifra**. El umbral y la tolerancia se importan de `lib/config/efectividad-cohorte`. |
+| `app/(app)/analitica/_components/entregas/AvisoPeriodoEnCurso.tsx` | El aviso de cohorte joven, a ancho completo bajo la fila. Misma clave de SWR: cero peticiones extra y no puede contar otras órdenes que la barra. |
+| `tests/components/EfectividadHeroe.test.tsx` | 14 casos: los cinco estados del héroe y el énfasis. |
+| `tests/components/AvisoPeriodoEnCurso.test.tsx` | 6 casos: cuándo se pinta y cuándo no. |
+| `tests/components/FilaKpisVocabulario.test.tsx` | 3 casos: **ningún sustantivo pegado a dos cifras distintas** en la fila. |
+
+### Modificados
+
+| archivo | cambio |
+| --- | --- |
+| `components/private/analytics/tipos.ts` · `KpiCard.tsx` | `jerarquia?: JerarquiaKpi` en el contrato, default `"normal"`. Las otras cuatro pantallas que montan `KpiCard` no la pasan y se pintan exactamente igual (caso propio en `AnalyticsKpiCard.test.tsx`). |
+| `.../entregas/base-del-kpi.ts` | `ORDENES_CARGADAS`, `ORDENES_CON_DESENLACE` y `SUSTANTIVOS_DE_LA_FILA`, con la tabla de las tres definiciones de «cerrada». |
+| `.../entregas/KpisEfectividad.tsx` | Monta el héroe; sus tres tarjetas pasan a `apoyo`. La de gestión **comparte el veto** del héroe: mismo universo y mismo denominador. |
+| `.../entregas/CicloVidaKpi.tsx` | `jerarquia="apoyo"`. «Cerradas» sigue siendo SU palabra, ahora dicho por escrito. |
+| `app/(app)/analitica/page.tsx` | La rejilla pasa de 5 a 4 columnas y monta el aviso bajo la fila. |
+| `lib/repositories/ConteoEntregasRepository.ts` | **Borrados los dos `console.log('xyz …')`** de `e3d15eba` (2026-08-18), que corrían en producción en cada carga de analítica. |
+| `tests/unit/analytics/tablero-operativo-frontera.guardia.test.ts` | Autorizada por escrito la arista `@/lib/analytics/madurez-cohorte` (allowlist NOMINAL, con motivo). |
+| `tests/components/KpisEfectividad.test.tsx` | Los casos de la ficha 360 siguen midiendo su regla —la base se escribe, sale de la misma cuenta, no se escribe en vuelo— con la forma nueva del héroe. |
+
+## «Cerrada» significa tres cosas: las palabras elegidas
+
+| lectura | qué cuenta | sustantivo |
+| --- | --- | --- |
+| héroe (`calcularEfectividad`) | tiene DESENLACE DE GESTIÓN | **`órdenes con desenlace`** |
+| `CicloVidaKpi` | estado TERMINAL, fechado en el cierre | **`órdenes cerradas`** (se queda con la suya) |
+| `CohorteCargaTabla` | estado TERMINAL, dentro de la cohorte | `órdenes cerradas` (otra sección) |
+
+Y el universo del héroe se nombra **`órdenes cargadas`**, que es lo que la ventana nueva mide.
+Lo vigila `FilaKpisVocabulario.test.tsx`: renderiza la fila con los dos `n` distintos a propósito
+(525 y 300), extrae los pares «cifra + sustantivo» y falla si un sustantivo apunta a dos cifras.
+Los sustantivos salen de `SUSTANTIVOS_DE_LA_FILA`, no de una lista escrita en el test.
+
+## Mutaciones ejecutadas
+
+| # | mutación | resultado | mensaje real |
+| --- | --- | --- | --- |
+| M1 | el héroe pide `normal` en vez de `heroe` | **ROJO** 2 casos | `AssertionError: falta text-[68px]: expected false to be true` · `expected 'group/card flex flex-col overflow-hid…' to contain 'ring-brand'` |
+| M2 | `sin_cerradas` vuelve a pintar el porcentaje | **ROJO** 1 caso | `AssertionError: se pintó «0 %» sobre 27 órdenes que nadie ha fallado: expected <span …> to be null` |
+| M3 | el aviso de período abierto no se pinta nunca | **ROJO** 1 caso | `TestingLibraryElementError: Unable to find role="status"` |
+| M4 | el héroe vuelve a decir «órdenes cerradas» | **ROJO** 3 casos | `AssertionError: «órdenes cerradas» se usa para 525 y 300: dos cifras, un sustantivo` |
+| M5 | `apoyo` pesa lo mismo que `normal` | **ROJO** 2 casos | `AssertionError: expected 2 to be 3` (los tres rangos ya no son tres tamaños) |
+
+Tras revertir cada una, verde de nuevo.
+
+## Visto en el navegador (maestro, base local, 2026-09-17)
+
+Cuatro estados reales, no simulados:
+
+- **69 cargadas / 32 con desenlace / 37 vivas** — héroe «17,4 %», barra 12 · 20 · 37, y debajo
+  «37,5 % de las 32 órdenes con desenlace terminaron entregadas». El aviso: «37 de sus 69 órdenes
+  siguen vivas». El anillo de abajo suma 12+6+5+8+1 = **32**, así que el denominador del héroe se
+  comprueba de un vistazo.
+- **cohorte ya cerrada (32, un mensajero)** — «Todavía en proceso 0» y **el aviso desaparece**.
+- **cohorte de 8** — NO se pinta porcentaje: «6 entregadas de 8 órdenes» + «Son muy pocas para un
+  porcentaje: con menos de 20, una sola orden movería la cifra más de 5 %», y la de gestión en
+  guion con su base. Aquí se encontró y arregló un texto: decía «Sólo 8 de 8 órdenes tienen
+  desenlace».
+- **recorte vacío** — «No entró ninguna orden», con «de 0 órdenes cargadas». Ni un «0 %».
+
+Medido en el DOM: cifra del héroe **68 px** a 1440 y **52 px** a 390; borde `rgb(242, 100, 25)` a
+2 px (el token de marca); tarjetas de apoyo a 22 px; sin desbordamiento horizontal a 390.
+
+**Dos totales distintos con la misma palabra: ya no hay.** En la misma fila conviven «32 órdenes
+con desenlace» y «9 órdenes cerradas», cada una con su sustantivo.
+
+## Encontrado y NO tocado (es de otras fichas)
+
+- «Cargadas hoy (2026-09-17) · Sin datos en el rango» con 69 órdenes en el período → **444**.
+- El eje de «Órdenes cargadas por día» pinta `07-21 · 07-22 · 07-23 · 09-04` equiespaciados → **445**.
+- A 390 px el buscador de secciones y el botón «Actualizar» **se solapan** en la barra de filtros.
+  Es anterior a esta ficha y no tiene ficha propia.
+- El diseño aprobado pone en la fila de apoyo «Rechazadas» y «Devueltas» en lugar de «Efectividad
+  de la gestión» y «Entregadas». **No se cambió**: borra un KPI existente y el encargo sólo pedía
+  que los otros cuatro bajaran de rango. Decisión del humano.
+
+## Verificación
+
+Gate COMPLETO, log en `progress/gate_441_frontend.log`:
+
+```
+✓ feature_list.json: sin ids duplicados (440 fichas), cupo por zona respetado (in_progress=0)
+✓ typecheck paso
+✓ lint paso
+Test Files  2047 passed (2047)
+     Tests  29815 passed | 26 skipped (29841)
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 2047 ejecutado(s))
+! migraciones sin down.sql: … (preexistente, de otra ficha)
+✓ .env presente
+INIT_EXIT=0
+```
+
+Los 26 `skipped` son los mismos `describe.skip` deliberados de `AnaliticaPage` (17) y
+`AnaliticaShell` (9) que ya documentó la mitad de datos. `.env` presente: la integración corrió.
+
+## Veredicto
+
+El número que importa ya se distingue de los demás, lleva su madurez dentro, y en los dos estados
+en que no se puede afirmar escribe una frase en vez de un cero.

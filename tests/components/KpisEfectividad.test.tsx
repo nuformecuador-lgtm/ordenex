@@ -147,23 +147,27 @@ describe("Las tarjetas de efectividad", () => {
     });
     renderKpis();
 
-    // DOS tarjetas dicen «60 %»: sin rechazos, la efectividad de entrega y la de la gestión
-    // coinciden. Por eso se busca en plural — `findByText` falla cuando hay más de una.
+    // DOS sitios dicen «60 %»: el héroe y la tarjeta de gestión, que sin rechazos coinciden.
+    // Por eso se busca en plural — `findByText` falla cuando hay más de una.
     expect((await screen.findAllByText(/60\s?%/)).length).toBe(2);
-    // FICHA 360 — los dos rótulos de porcentaje llevan DENTRO su base. Se asertan enteros y no
-    // por subcadena a propósito: `getByText("Efectividad de entrega")` con match exacto es lo
-    // que puso este caso en rojo cuando la base entró, y así tenía que ser.
-    expect(screen.getByText("Efectividad de entrega (100 órdenes)")).toBeInTheDocument();
+    // FICHA 441 — el rótulo del héroe y su base ya no comparten paréntesis: la tarjeta tiene
+    // sitio para escribir el universo al lado, con el adjetivo que dice de qué cohorte habla.
+    // La regla de la 360 no cambia —la base se escribe SIEMPRE junto a la cifra— y sigue
+    // saliendo de la misma cuenta que el porcentaje.
+    expect(screen.getByText("Efectividad de entrega")).toBeInTheDocument();
+    expect(screen.getByText("de 100 órdenes cargadas")).toBeInTheDocument();
     expect(
       screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 100 órdenes)"),
     ).toBeInTheDocument();
     // Las dos tarjetas de CONTEO no llevan base: su cifra ya ES un conteo de órdenes, y un
     // «(100 órdenes)» junto a un «60» sería el denominador de nada.
-    expect(screen.getByText("Entregadas")).toBeInTheDocument();
+    // En plural: el rótulo de la tarjeta y la entrada de la leyenda del héroe dicen lo mismo.
+    expect(screen.getAllByText("Entregadas").length).toBeGreaterThan(0);
     expect(screen.getByText("En proceso")).toBeInTheDocument();
-    // 60 entregadas y 20 en proceso, cada una en su tarjeta.
-    expect(screen.getByText("60")).toBeInTheDocument();
-    expect(screen.getByText("20")).toBeInTheDocument();
+    // 60 entregadas y 20 en proceso. En plural: la barra de madurez del héroe repite las dos
+    // cifras en su leyenda, a propósito — es la misma partición vista dos veces.
+    expect(screen.getAllByText("60").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("20").length).toBeGreaterThan(0);
   });
 
   // ⚠ EL ENGANCHE CON EL DESGLOSE: la clave de SWR es la misma que la de la dona, así que las
@@ -171,7 +175,7 @@ describe("Las tarjetas de efectividad", () => {
   it("consulta el desglose por status una sola vez y sin filtro", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
-      datos: datos([{ status: "entregada", conteo: 1 }]),
+      datos: datos([{ status: "entregada", conteo: 40 }]),
     });
     renderKpis();
 
@@ -241,7 +245,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
     });
     renderKpis();
 
-    expect(await screen.findByText("Efectividad de entrega (100 órdenes)")).toBeInTheDocument();
+    expect(await screen.findByText("de 100 órdenes cargadas")).toBeInTheDocument();
     expect(
       screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 100 órdenes)"),
     ).toBeInTheDocument();
@@ -254,7 +258,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos(CASO_REPORTADO) });
     renderKpis();
 
-    expect(await screen.findByText("Efectividad de entrega (877 órdenes)")).toBeInTheDocument();
+    expect(await screen.findByText("de 877 órdenes cargadas")).toBeInTheDocument();
     expect(screen.getByText(/29,5\s?%/)).toBeInTheDocument();
   });
 
@@ -270,12 +274,14 @@ describe("La base de los porcentajes — de dónde sale", () => {
       await screen.findByText("Efectividad de la gestión (entregadas y rechazadas de 877 órdenes)"),
     ).toBeInTheDocument();
     expect(screen.getByText(/38,7\s?%/)).toBeInTheDocument();
-    // Las dos bases son la MISMA cifra: si alguien le cambiara el denominador a una, su
-    // diferencia dejaría de ser el peso de los rechazos y las dos tarjetas no se podrían
-    // comparar — que es la razón de que compartan `total` en `efectividad.ts`.
-    expect(screen.getAllByText(/\(.*877 órdenes\)/).length).toBe(2);
-    // Y el numerador es comprobable de un vistazo contra la tarjeta de al lado: 29,5 % de 877.
-    expect(screen.getByText("259")).toBeInTheDocument();
+    // Las dos bases son la MISMA cifra —877 aquí y 877 en el héroe— aunque desde la ficha 441
+    // se escriban con distinta forma: si alguien le cambiara el denominador a una, su diferencia
+    // dejaría de ser el peso de los rechazos y las dos cifras no se podrían comparar, que es la
+    // razón de que compartan `total` en `efectividad.ts`.
+    expect(screen.getByText("de 877 órdenes cargadas")).toBeInTheDocument();
+    // Y el numerador es comprobable de un vistazo contra el héroe: 29,5 % de 877 son 259, la
+    // misma cifra que escriben su titular, su leyenda y la tarjeta «Entregadas».
+    expect(screen.getAllByText("259").length).toBeGreaterThan(0);
   });
 
   // La misma fila escribe «1 000» en la tarjeta «Entregadas» (pasa por `formatearValor`), así
@@ -290,8 +296,8 @@ describe("La base de los porcentajes — de dónde sale", () => {
     });
     renderKpis();
 
-    expect(await screen.findByText("Efectividad de entrega (1 234 órdenes)")).toBeInTheDocument();
-    expect(screen.getByText("1 000")).toBeInTheDocument();
+    expect(await screen.findByText("de 1 234 órdenes cargadas")).toBeInTheDocument();
+    expect(screen.getAllByText("1 000").length).toBeGreaterThan(0);
   });
 
   // Se lee entero como una frase, y «1 órdenes» delata que nadie la leyó.
@@ -302,10 +308,18 @@ describe("La base de los porcentajes — de dónde sale", () => {
     });
     renderKpis();
 
-    expect(await screen.findByText("Efectividad de entrega (1 orden)")).toBeInTheDocument();
+    expect(await screen.findByText("de 1 orden cargada")).toBeInTheDocument();
     expect(
       screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 1 orden)"),
     ).toBeInTheDocument();
+    // ⚠ Y CON UNA SOLA ORDEN NO HAY PORCENTAJE (ficha 441): una orden vale 100 puntos. El héroe
+    // enseña las órdenes —«1 entregada de 1 orden»— y la tarjeta de gestión comparte el veto
+    // porque comparte denominador. Sin esto, la fila diría «100 % de efectividad» sobre una
+    // única entrega.
+    // «100 %» es la cifra que NO puede aparecer. (Se busca esa y no un «%» cualquiera: la
+    // propia frase que explica el veto nombra la tolerancia, que se escribe en por ciento.)
+    expect(screen.queryByText(/100\s?%/)).toBeNull();
+    expect(screen.getByText("1 entregada de 1 orden")).toBeInTheDocument();
   });
 });
 
@@ -357,11 +371,14 @@ describe("La base de los porcentajes — cuándo NO se escribe", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos([]) });
     renderKpis();
 
-    expect(await screen.findByText("Efectividad de entrega (0 órdenes)")).toBeInTheDocument();
+    expect(await screen.findByText("de 0 órdenes cargadas")).toBeInTheDocument();
     expect(
       screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 0 órdenes)"),
     ).toBeInTheDocument();
-    // La CIFRA sigue siendo un guion: un «0 %» afirmaría que se falló cada entrega.
+    // La CIFRA no se escribe: un «0 %» afirmaría que se falló cada entrega. En el héroe, además,
+    // tampoco es un guion — es una frase (ficha 441), porque un `null` mudo se lee como «no se
+    // pudo medir» y lo que pasa es que no entró ninguna orden.
     expect(screen.queryByText(/0\s?%/)).toBeNull();
+    expect(screen.getByText("No entró ninguna orden")).toBeInTheDocument();
   });
 });

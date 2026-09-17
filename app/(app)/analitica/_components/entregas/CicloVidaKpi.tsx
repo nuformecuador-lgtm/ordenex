@@ -48,7 +48,16 @@ import { CLAVE_TABLERO } from "../operativo/PanelOperativo";
 
 import { contarOrdenes, ORDENES_CERRADAS, rotuloConBase } from "./base-del-kpi";
 
-/** Rotulo sin denominador: mientras carga o cuando hay error, el `n` no se conoce. */
+/**
+ * Rotulo sin denominador: mientras carga o cuando hay error, el `n` no se conoce.
+ *
+ * ⚠ FICHA 441 — «CERRADAS» ES LA PALABRA DE ESTA TARJETA, y solo de esta en su fila. El heroe
+ * de al lado cuenta las ordenes CON DESENLACE DE GESTION —otra definicion y otra cifra— y por
+ * eso dice «órdenes con desenlace» y no «cerradas». Las dos lecturas se conservan porque son dos
+ * preguntas distintas; lo que no pueden es compartir sustantivo, o la fila enseñaria dos totales
+ * que se leen como el mismo. El reparto esta en `base-del-kpi.ts` y lo mide
+ * `tests/components/FilaKpisVocabulario.test.tsx`.
+ */
 const ETIQUETA = "Ciclo de vida promedio (órdenes cerradas)";
 
 /** El rotulo a secas, sin el parentesis, para volver a componerlo con la base dentro. */
@@ -124,6 +133,10 @@ export function CicloVidaKpi() {
       unidad={UNIDAD}
       cargando={isLoading}
       error={mensaje}
+      // FICHA 441 — TARJETA DE APOYO. Comparte fila con el heroe de efectividad, que es EL
+      // numero de la pantalla; esta baja de rango a proposito para que no compitan. No es letra
+      // pequena: sigue siendo un KPI legible con su denominador dentro.
+      jerarquia="apoyo"
     />
   );
 }
