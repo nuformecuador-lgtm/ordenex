@@ -1,7 +1,7 @@
 // FICHA 345 (T8.1, design §7.4) — LAS COLUMNAS DEL ARCHIVO del analisis de productos y la
 // proyeccion de UNA fila.
 // FICHA 347 (G1) — mas la composicion de «Otros resultados» y, CONDICIONADAS a la concesion,
-// las nueve celdas de dinero.
+// las nueve celdas de dinero (DIEZ desde la ficha 449: entra el fulfillment).
 //
 // POR QUE ESTE ARCHIVO SE LLAMA ASI, y no es decorativo: la guardia perenne de la 170
 // (`tests/unit/descarga/columnas-sensibles.guardia.test.ts`) descubre POR CONVENCION DE NOMBRE
@@ -93,8 +93,8 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS: DescargaColumna[] = [
 ];
 
 /**
- * FICHA 347 (R66/R68) — las MISMAS once, mas las NUEVE de dinero, para el actor que lo tiene
- * concedido.
+ * FICHA 347 (R66/R68) — las MISMAS once, mas las DIEZ de dinero (NUEVE hasta la ficha 449),
+ * para el actor que lo tiene concedido.
  *
  * Se declara como una constante PROPIA y no se compone con un `if` dentro de la funcion, y no
  * es un capricho: `columnas-asercion-de-orden.guardia` exige que toda `COLUMNAS_DESCARGA_*`
@@ -102,7 +102,7 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS: DescargaColumna[] = [
  * contratos afirmados a mano; uno construido al vuelo no se puede afirmar sin compararlo
  * consigo mismo, que es la asercion que siempre esta verde.
  *
- * LAS NUEVE, y por que cada una:
+ * LAS DIEZ, y por que cada una:
  *  - `recaudado`: la cifra del pedido. Marcada como NO SUMABLE.
  *  - `ordenes_con_otro_producto`: cuantas de sus ordenes llevan otro producto (R13). Es el
  *    numero que hace legible la marca anterior — y este SI es aditivo.
@@ -117,6 +117,25 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS: DescargaColumna[] = [
  *    solo un RECHAZO lo cobra, y lo vigila una guardia de censo. Va en el
  *    archivo —y no como columna de la pantalla— justamente porque FUERA del reparto: como
  *    columna de la tabla se sumaria mentalmente al reparto de al lado.
+ *  - `fulfillment` (FICHA 449): el servicio de bodega de sus ordenes liquidadas, UNA vez por
+ *    orden. Tambien FUERA del reparto, y por eso va detras de `retorno` y no entre `ordenex` y
+ *    `para_la_tienda`: ahi se leeria como un tercer trozo de lo recaudado. Se llama
+ *    «Fulfillment» porque ya se llama asi en el detalle del cierre y en las cinco descargas de
+ *    gestiones (`FULFILLMENT_COL`); esta ficha nace de que la misma orden enseñaba la cifra
+ *    alli y la escondia aqui, y bautizarla otra vez dejaria el defecto en pie con otra cara.
+ *
+ * ⚠ SE AÑADE AL FINAL, Y ESO ES PARTE DEL CONTRATO. Meterla en medio correria de sitio a todas
+ * las que van detras, y este archivo lo tiene escrito arriba: una hoja o una macro que consuma
+ * el fichero por posicion se rompe en silencio. Al final, quien lea por posicion sigue leyendo
+ * lo mismo y quien lea por encabezado gana una columna.
+ *
+ * ⚠ LA PANTALLA SE CALLA EL `"0.00"` Y EL ARCHIVO NO, y es una asimetria DECIDIDA, no un olvido.
+ * En pantalla el fulfillment aparece solo cuando hay monto, porque una celda de ceros entre
+ * cinco importes con dato no informa y sugiere un concepto que a esa tienda no le aplica. En el
+ * archivo la columna es fija para todas las filas —no se puede «quitar» en una—, y ahi el cero
+ * es la unica forma honesta de decir «hubo ordenes liquidadas y ninguna cobro bodega»: la celda
+ * VACIA ya significa otra cosa (R70), que es «no se sabe». Escribir el `"0.00"` tal cual es lo
+ * que mantiene los dos hechos distinguibles seis meses despues, que es cuando se abre el .xlsx.
  */
 export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO: DescargaColumna[] = [
   ...COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS,
@@ -135,6 +154,8 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO: DescargaColumna[] = [
   },
   { clave: "pendiente_ordenes", encabezado: "Órdenes pendientes de cierre" },
   { clave: "retorno", encabezado: `Flete por rechazo ${MARCA_NO_SUMABLE_ARCHIVO}` },
+  // FICHA 449 — el servicio de bodega, LA DECIMA y la ULTIMA. Ver el bloque de arriba.
+  { clave: "fulfillment", encabezado: `Fulfillment ${MARCA_NO_SUMABLE_ARCHIVO}` },
 ];
 
 /**
@@ -146,7 +167,7 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO: DescargaColumna[] = [
  * corresponda a una columna publicada (R29 de la 314). Con UN solo ambito para los dos juegos,
  * el primer clic del selector estando SIN dinero reescribiria la preferencia ya saneada contra
  * las once columnas base y se llevaria por delante, en silencio, lo que el usuario hubiera
- * ocultado de las nueve de dinero: al recuperar la concesion esas columnas REAPARECERIAN.
+ * ocultado de las diez de dinero: al recuperar la concesion esas columnas REAPARECERIAN.
  *
  * Y no es un caso hipotetico de «le quitaron el permiso»: `conDinero` tambien es `false` cuando
  * la respuesta llega con `limite_excedido` (R76), que es un estado TRANSITORIO del servidor. El
@@ -159,7 +180,7 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO: DescargaColumna[] = [
  * Son dos archivos distintos y cada uno recuerda lo suyo. A cambio, ninguna preferencia puede
  * hacer reaparecer una columna que el otro juego habia ocultado, y ninguna puede colar una
  * columna de dinero en el archivo de quien no lo tiene concedido: el control comun solo emite
- * columnas PUBLICADAS, y sin concesion las nueve no se publican.
+ * columnas PUBLICADAS, y sin concesion las diez no se publican.
  *
  * Los identificadores se escriben como `export const … = "…"` porque `ambito-columnas.guardia`
  * lee el arbol COMO TEXTO: solo resuelve literales e identificadores, y lo que no resuelve no
@@ -231,10 +252,15 @@ function puntosPorcentuales(fraccion: number | null): number | null {
  * id, ni un correo, ni un telefono, ni una ruta.
  *
  * ⚠ R70 — UN IMPORTE AUSENTE ES UNA CELDA VACIA, NUNCA `0`. `fila.dinero` puede ser `null` (esa
- * fila no tiene ninguna orden que aporte) y, aun teniendolo, `ordenex`, `tienda` y `retorno`
- * pueden ser `null` (no hay nada liquidado, R30). Los dos casos salen como `null` y ninguno se
- * rellena con un cero: un `0,00` en la columna «Cobró Ordenex» afirma que Ordenex no cobro
- * nada, cuando lo cierto es que todavia no se sabe.
+ * fila no tiene ninguna orden que aporte) y, aun teniendolo, `ordenex`, `tienda`, `retorno` y
+ * —desde la ficha 449— `fulfillment` pueden ser `null` (no hay nada liquidado, R30). Los dos
+ * casos salen como `null` y ninguno se rellena con un cero: un `0,00` en la columna «Cobró
+ * Ordenex» afirma que Ordenex no cobro nada, cuando lo cierto es que todavia no se sabe.
+ *
+ * ⚠ Y AL REVES: un `"0.00"` que SI llego se escribe. Es el caso del `fulfillment` de una tienda
+ * que no hace bodega —hay ordenes liquidadas y ninguna cobro— y es un hecho distinto del vacio.
+ * La pantalla se lo calla porque ahi la celda es prescindible; aqui la columna existe igual para
+ * todas las filas, asi que callarselo seria escribir «no se sabe» sobre algo que se sabe.
  */
 export function filaDescargaAnaliticaProductos(
   fila: FilaProductoDTO,
@@ -275,5 +301,11 @@ export function filaDescargaAnaliticaProductos(
     pendiente_recaudado: dinero?.pendiente.recaudado ?? null,
     pendiente_ordenes: dinero?.pendiente.ordenes ?? null,
     retorno: dinero?.retorno ?? null,
+    // FICHA 449 — el STRING tal cual, incluido el `"0.00"`. Sale de la RAIZ del DTO y no de
+    // `dinero.liquidado`, y el sitio del que se lee es la afirmacion: no forma parte del
+    // reparto. Aqui NO hay un `hayMonto` como en la pantalla: ver la nota de la asimetria en el
+    // bloque de las columnas. `?? null` cubre los dos `null` del contrato —fila sin dinero y
+    // fila sin nada liquidado— y los dos salen como celda VACIA, que es «no se sabe».
+    fulfillment: dinero?.fulfillment ?? null,
   };
 }

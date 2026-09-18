@@ -60,6 +60,32 @@ const CLAVE_MELAXIN = "dr melaxin";
  *                        tienda  =  4.000 - 3.390 - 226   =   384,00
  *   rechazo           -> retorno = 2.000 + 260            = 2.260,00
  */
+/**
+ * FICHA 449 — LOS MONTOS DE BODEGA SEMBRADOS. Escritos a mano, no derivados de nada.
+ *
+ * ₡696 y ₡800 son las DOS tarifas de fulfillment que hay en produccion (medidas el 2026-09-17:
+ * 867 filas y ₡605.616 en 7 dias). `FF_AJENO` es de la OTRA tienda y vale un numero que no
+ * aparece en ninguna otra siembra: si se colara en las cifras de la tienda A, se ve de lejos.
+ */
+const FF_696 = "696.00";
+const FF_800 = "800.00";
+// ⚠ `4321` NO es un numero bonito, y por eso vale: no es SUBCADENA de ninguna otra cifra de la
+// siembra (`35000.00` contiene `5000`, que es la trampa en la que cayo la primera version de
+// este marcador). Asi la comprobacion «no aparece en ninguna cifra de la tienda A» mide de
+// verdad en vez de fallar por un solapamiento de texto.
+const FF_AJENO = "4321.00";
+
+/**
+ * La cifra de bodega que tiene que salir para `(tienda A, base c)`, SUMADA A MANO:
+ *
+ *   696 (liquidada) + 696 (rechazada) + 696 (dos cierres, UNA vez) + 800 (acompanada) = 2.888,00
+ *
+ * ⚠ SI LA ORDEN DE DOS CIERRES CONTARA SUS DOS SNAPSHOTS serian 3.584,00. Ese es el numero que
+ * el caso de abajo prohibe explicitamente.
+ */
+const FF_ESPERADO_BASE_C = "2888.00";
+const FF_SI_CONTARA_DOS_VECES = "3584.00";
+
 const TARIFA = {
   valorFlete: "3000.00",
   valorFleteGam: "2500.00",
@@ -80,6 +106,10 @@ interface Medicion {
   guiaDosCierres: string;
   guiaAnulada: string;
   guiaAcompanada: string;
+  /** FICHA 449 — la orden SIN snapshot: su fila cruda tiene que traer `fulfillment: null`. */
+  guiaSinSnapshot: string;
+  /** FICHA 449 — la orden CON snapshot y columna NULL: su fila tiene que traer `"0.00"`. */
+  guiaSnapshotSinMonto: string;
   global: readonly FilaDineroCruda[];
   soloA: readonly FilaDineroCruda[];
   soloB: readonly FilaDineroCruda[];
@@ -87,6 +117,14 @@ interface Medicion {
   detalleA: Awaited<ReturnType<DetalleDineroProductoService["consultar"]>>;
   /** las MISMAS cifras, derivadas por un SQL escrito a mano, y su variante no-tautologica */
   cuadreSql: { aMano: CifrasSql; variante: CifrasSql };
+  /**
+   * FICHA 449 — la bodega, derivada por un SQL escrito a mano.
+   *
+   * `unaPorOrden` aplica la MISMA regla que el codigo (un snapshot por orden, el primero por
+   * `g.id`); `todasLasFilas` la afloja y suma los dos snapshots de la orden de dos cierres. Si
+   * las dos dieran lo mismo, la comparacion no estaria midiendo nada.
+   */
+  cuadreFulfillment: { unaPorOrden: string; todasLasFilas: string };
 }
 
 interface CifrasSql {
@@ -134,8 +172,9 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
     const cierreSolicitado = await crearCierre(tx, mensajero, "solicitado");
 
     // (1) LIQUIDADA: entrega de 10.000 dentro de un cierre APROBADO con tarifa congelada.
+    //     FICHA 449: con ₡696 de bodega congelados, una de las dos tarifas de produccion.
     const liquidada = await crearOrden(tx, tiendaA, TEXTO_COMPARTIDO);
-    await congelar(tx, cierreAprobado, liquidada, tarifaId, "10000.00");
+    await congelar(tx, cierreAprobado, liquidada, tarifaId, "10000.00", { fulfillment: FF_696 });
     await crearGestion(tx, liquidada, mensajero, "entregada", "10000.00", cierreAprobado);
 
     // (2) PENDIENTE: entrega de 7.000 SIN cierre. Su recaudo es un hecho; su reparto, no.
@@ -143,15 +182,21 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
     await crearGestion(tx, pendiente, mensajero, "entregada", "7000.00", null);
 
     // (3) RECHAZADA liquidada: no recauda, y su retorno va FUERA del reparto (R19).
+    //     FICHA 449: SI cobra bodega. El contrato publico lo dice con todas las letras —
+    //     «preparar y despachar el paquete ya costo, lo reciba el destinatario o no».
     const rechazada = await crearOrden(tx, tiendaA, TEXTO_COMPARTIDO);
-    await congelar(tx, cierreAprobado, rechazada, tarifaId, "0.00");
+    await congelar(tx, cierreAprobado, rechazada, tarifaId, "0.00", { fulfillment: FF_696 });
     await crearGestion(tx, rechazada, mensajero, "rechazada", null, cierreAprobado);
 
     // (4) LA MISMA ORDEN EN DOS CIERRES (R18): dos gestiones, dos snapshots, dos derivaciones
     //     que se SUMAN, y UNA sola orden en los cardinales.
+    //     FICHA 449: los DOS snapshots congelan ₡696, y la cifra de bodega tiene que contarlo
+    //     UNA vez (696), no dos (1.392). Los dos con el MISMO monto a proposito: cual de las
+    //     dos gestiones es la «primera» depende de un uuid, asi que con montos distintos la
+    //     asercion literal dependeria del azar.
     const dosCierres = await crearOrden(tx, tiendaA, TEXTO_COMPARTIDO);
-    await congelar(tx, cierreAprobado, dosCierres, tarifaId, "10000.00");
-    await congelar(tx, cierreAprobado2, dosCierres, tarifaId, "4000.00");
+    await congelar(tx, cierreAprobado, dosCierres, tarifaId, "10000.00", { fulfillment: FF_696 });
+    await congelar(tx, cierreAprobado2, dosCierres, tarifaId, "4000.00", { fulfillment: FF_696 });
     await crearGestion(tx, dosCierres, mensajero, "entregada", "10000.00", cierreAprobado);
     await crearGestion(tx, dosCierres, mensajero, "entregada", "4000.00", cierreAprobado2);
 
@@ -161,13 +206,17 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
     await crearGestion(tx, anulada, mensajero, "entregada", "33564.00", null, { anulada: true });
 
     // (6) MULTIPRODUCTO: su importe ENTERO cuenta en `base c` y en `dr melaxin` (R12).
+    //     FICHA 449: con ₡800, la OTRA tarifa de produccion. Su bodega tambien cuenta ENTERA en
+    //     los dos productos: no se reparte, se repite.
     const acompanada = await crearOrden(tx, tiendaA, TEXTO_ACOMPANADO);
-    await congelar(tx, cierreAprobado, acompanada, tarifaId, "4000.00");
+    await congelar(tx, cierreAprobado, acompanada, tarifaId, "4000.00", { fulfillment: FF_800 });
     await crearGestion(tx, acompanada, mensajero, "entregada", "4000.00", cierreAprobado);
 
     // (7) CIERRE SOLICITADO (⟨Q2⟩): snapshot congelado, dinero SIN salir -> PENDIENTE.
+    //     FICHA 449: su snapshot SI trae bodega congelada, y AUN ASI no cuenta. Un cierre
+    //     solicitado se ha llegado a BORRAR en este repo, y con el su snapshot.
     const solicitada = await crearOrden(tx, tiendaA, "1 * Producto Solicitado");
-    await congelar(tx, cierreSolicitado, solicitada, tarifaId, "5000.00");
+    await congelar(tx, cierreSolicitado, solicitada, tarifaId, "5000.00", { fulfillment: FF_696 });
     await crearGestion(tx, solicitada, mensajero, "entregada", "5000.00", cierreSolicitado);
 
     // (8) SIN TARIFA CONGELADA (R23): cierre aprobado, `tarifa_id` NULL -> no deriva nada.
@@ -181,8 +230,13 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
     await tx.orden.update({ where: { id: borrada }, data: { deletedAt: new Date() } });
 
     // (10) LA OTRA TIENDA, con el MISMO producto y dinero propio: lo que el aislamiento protege.
+    //      FICHA 449: su bodega es ₡5.000 —un numero que no aparece en ninguna otra siembra—
+    //      justo para que, si se colara en las cifras de A, se vea de lejos.
     const deB = await crearOrden(tx, tiendaB, TEXTO_COMPARTIDO);
-    await congelar(tx, cierreAprobado, deB, tarifaId, "10000.00", tiendaB);
+    await congelar(tx, cierreAprobado, deB, tarifaId, "10000.00", {
+      tiendaId: tiendaB,
+      fulfillment: FF_AJENO,
+    });
     await crearGestion(tx, deB, mensajero, "entregada", "10000.00", cierreAprobado);
 
     const repo = new DineroProductosRepository(tx as unknown as PrismaClient);
@@ -197,6 +251,10 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
       guiaDosCierres: await guiaDe(tx, dosCierres),
       guiaAnulada: await guiaDe(tx, anulada),
       guiaAcompanada: await guiaDe(tx, acompanada),
+      // FICHA 449 — los dos casos que NO son el mismo hecho: la (2) no tiene fila de snapshot;
+      // la (8) la tiene, con `tarifa_fulfillment` NULL (como las filas de antes del 2026-08-19).
+      guiaSinSnapshot: await guiaDe(tx, pendiente),
+      guiaSnapshotSinMonto: await guiaDe(tx, sinTarifa),
       global: filasDe(await repo.leerDineroPorOrden(consultaDe("maestro", "quien-sea"))),
       soloA: filasDe(await repo.leerDineroPorOrden(consultaDe("adminTienda", tiendaA))),
       soloB: filasDe(await repo.leerDineroPorOrden(consultaDe("adminTienda", tiendaB))),
@@ -208,7 +266,48 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
         aMano: await cifrasEnSql(tx, tiendaA, true),
         variante: await cifrasEnSql(tx, tiendaA, false),
       },
+      cuadreFulfillment: {
+        unaPorOrden: await fulfillmentEnSql(tx, tiendaA, true),
+        todasLasFilas: await fulfillmentEnSql(tx, tiendaA, false),
+      },
     };
+  }
+
+  /**
+   * FICHA 449 — LA BODEGA, SUMADA EN SQL Y FUERA DEL CODIGO DE LA FICHA.
+   *
+   * No llama a `cifrasDelGrupo`, ni a `fundirDinero`, ni a `fulfillmentDeOrden`: suma la COLUMNA
+   * congelada directamente, que es lo unico que las dos mitades comparten. `unaPorOrden = false`
+   * es la VARIANTE no-tautologica: afloja la regla de «una vez por orden» y deja que la orden de
+   * dos cierres aporte sus DOS snapshots, con lo que da otro numero.
+   */
+  async function fulfillmentEnSql(
+    tx: Tx,
+    tiendaId: string,
+    unaPorOrden: boolean,
+  ): Promise<string> {
+    const filtroFila = unaPorOrden ? Prisma.sql`WHERE rn = 1` : Prisma.empty;
+    const filas = await tx.$queryRaw<{ fulfillment: string }[]>`
+      WITH liq AS (
+        SELECT COALESCE(d."tarifa_fulfillment", 0) AS ff,
+               ROW_NUMBER() OVER (PARTITION BY o."id" ORDER BY g."id") AS rn
+        FROM "orden" o
+        JOIN "gestion_orden" g ON g."orden_id" = o."id"
+        JOIN "cierre_dia"    c ON c."id" = g."cierre_id"
+        JOIN "cierre_detail" d ON d."cierre_id" = g."cierre_id" AND d."orden_id" = o."id"
+        WHERE o."deleted_at" IS NULL
+          AND o."tienda_id" = ${tiendaId}
+          AND o."producto" IN (${TEXTO_COMPARTIDO}, ${TEXTO_ACOMPANADO})
+          AND g."anulada_at" IS NULL
+          AND c."estado" = 'aprobado'
+          AND d."tarifa_id" IS NOT NULL
+      )
+      SELECT TO_CHAR(SUM(ff), 'FM999999999990.00') AS fulfillment FROM liq ${filtroFila}`;
+    const f = filas[0];
+    if (f === undefined || f.fulfillment === null) {
+      throw new Error("el SQL a mano no sumo bodega: el test FALLA, no se abstiene");
+    }
+    return f.fulfillment;
   }
 
   /**
@@ -520,9 +619,128 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
     expect(new Prisma.Decimal(variante.ordenex).gt(aMano.ordenex)).toBe(true);
   });
 
+  // ==========================================================================================
+  // FICHA 449 — EL FULFILLMENT VIAJA HASTA EL DTO, Y VIAJA APARTE.
+  //
+  // Medido en produccion el 2026-09-17: 867 filas y ₡605.616 en 7 dias, 2608 y ₡1.816.300 en
+  // toda la historia, con tarifas de ₡696 y ₡800 y 4 cuentas marcadas. Hasta esa fecha la MISMA
+  // orden ensenaba la cifra en el detalle del cierre y la escondia aqui.
+  // ==========================================================================================
+
+  it("(449-a) la cifra de bodega llega a la fila, y es la SUMA escrita a mano", () => {
+    const c = cifras(m.soloA, m.tiendaA, CLAVE_BASE_C);
+
+    // 696 + 696 + 696 (una vez, no dos) + 800.
+    expect(c.fulfillment).toBe(FF_ESPERADO_BASE_C);
+    // ⚠ Y NO es la suma que saldria contando los DOS snapshots de la orden de dos cierres.
+    expect(c.fulfillment).not.toBe(FF_SI_CONTARA_DOS_VECES);
+    // ANTI-VACIO: no es un cero ni un ausente disfrazados de acierto.
+    expect(c.fulfillment).not.toBeNull();
+    expect(c.fulfillment).not.toBe("0.00");
+  });
+
+  it("(449-b) EL CUADRE CONTRA LA BASE, con un SQL escrito A MANO y su variante", () => {
+    const c = cifras(m.soloA, m.tiendaA, CLAVE_BASE_C);
+    const { unaPorOrden, todasLasFilas } = m.cuadreFulfillment;
+
+    // Dos caminos independientes: el codigo de la ficha y una suma escrita en SQL.
+    expect(unaPorOrden).toBe(c.fulfillment);
+    // LA DEMOSTRACION DE QUE NO ES TAUTOLOGICO: aflojar «una vez por orden» da OTRO numero, y
+    // es mayor. Si las dos consultas coincidieran, este cuadre no mediria la regla que importa.
+    expect(todasLasFilas).not.toBe(unaPorOrden);
+    expect(new Prisma.Decimal(todasLasFilas).gt(unaPorOrden)).toBe(true);
+    expect(todasLasFilas).toBe(FF_SI_CONTARA_DOS_VECES);
+  });
+
+  it("(449-c) ⚠ NO se suma a «Cobró Ordenex»: R20 sigue siendo EXACTA", () => {
+    const c = cifras(m.soloA, m.tiendaA, CLAVE_BASE_C);
+
+    // `ordenex` sigue valiendo lo mismo que antes de esta ficha: 15.142,00.
+    expect(c.liquidado.ordenex).toBe("15142.00");
+    // ⚠ SI SE SUMARA (la mutacion que esta ficha prohibe), valdria 18.030,00 —15.142 + 2.888— y
+    // la igualdad de abajo se romperia sin que ninguna pantalla se enterara.
+    expect(c.liquidado.ordenex).not.toBe("18030.00");
+    expect(new Prisma.Decimal(c.liquidado.ordenex!).plus(c.liquidado.tienda!).toFixed(2)).toBe(
+      c.liquidado.recaudado,
+    );
+    // Y tampoco se colo en `retorno`, que es la otra cifra que vive fuera del reparto.
+    expect(c.retorno).toBe("2260.00");
+  });
+
+  it("(449-d) R7/R43 · la bodega de la OTRA tienda no se cuela en las cifras de A", () => {
+    const deA = cifras(m.soloA, m.tiendaA, CLAVE_BASE_C);
+    const deB = cifras(m.soloB, m.tiendaB, CLAVE_BASE_C);
+
+    expect(deB.fulfillment).toBe(FF_AJENO);
+    expect(deA.fulfillment).not.toBe(FF_AJENO);
+    // Ni sumada por dentro: el numero ajeno no aparece en NINGUNA cifra de A.
+    expect(JSON.stringify(deA)).not.toContain("4321");
+    // Y lo que ve A del dinero es EXACTAMENTE lo que ve el maestro sobre el grupo de A.
+    expect(deA.fulfillment).toBe(cifras(m.global, m.tiendaA, CLAVE_BASE_C).fulfillment);
+  });
+
+  it("(449-e) R12 · la bodega de una orden multiproducto cuenta ENTERA en cada producto", () => {
+    // La acompanada congelo ₡800 y es el UNICO aporte de `dr melaxin`.
+    expect(cifras(m.soloA, m.tiendaA, CLAVE_MELAXIN).fulfillment).toBe(FF_800);
+    // Y esos MISMOS 800 estan tambien dentro de `base c`: no se reparten, se repiten.
+    expect(
+      new Prisma.Decimal(cifras(m.soloA, m.tiendaA, CLAVE_BASE_C).fulfillment!).gte(FF_800),
+    ).toBe(true);
+  });
+
+  it("(449-f) R30 · un cierre SOLICITADO no aporta bodega, aunque su snapshot la traiga", () => {
+    // La orden (7) congelo ₡696 y su cierre NO esta aprobado: la cifra se emite AUSENTE, no en
+    // cero. Un cierre solicitado se ha llegado a BORRAR en este repo, y con el su snapshot.
+    const c = cifras(m.soloA, m.tiendaA, "producto solicitado");
+    expect(c.fulfillment).toBeNull();
+    expect(c.liquidado.ordenex).toBeNull();
+    // ANTI-VACIO: la fila existe y tiene dinero; lo que no tiene es nada liquidado.
+    expect(c.recaudado).toBe("5000.00");
+  });
+
+  it("(449-g) ⚠ `null` y `\"0.00\"` NO son el mismo hecho, medido contra Postgres", () => {
+    // Los dos casos, sobre filas REALES de la base y no sobre un doble:
+    //   - SIN fila de `cierre_detail` -> `null`: no hay nada que leer.
+    //   - CON fila y `tarifa_fulfillment` NULL (como las de antes del 2026-08-19) -> `"0.00"`:
+    //     hay dato, y dice que no se cobro bodega.
+    const sinSnapshot = m.soloA.filter((f) => f.guia === m.guiaSinSnapshot);
+    const snapshotSinMonto = m.soloA.filter((f) => f.guia === m.guiaSnapshotSinMonto);
+    expect(sinSnapshot.length, "la siembra no produjo la orden sin snapshot").toBeGreaterThan(0);
+    expect(
+      snapshotSinMonto.length,
+      "la siembra no produjo la orden con snapshot y columna NULL",
+    ).toBeGreaterThan(0);
+
+    for (const f of sinSnapshot) {
+      expect(f.congelada, f.guia).toBeNull();
+      expect(f.fulfillment, f.guia).toBeNull();
+    }
+    for (const f of snapshotSinMonto) {
+      expect(f.congelada, f.guia).not.toBeNull();
+      expect(f.fulfillment, f.guia).toBe("0.00");
+    }
+    // Y la diferencia se afirma JUNTA: mata la mutacion «mapealo todo a 0.00» y la contraria.
+    expect(sinSnapshot[0].fulfillment).not.toBe(snapshotSinMonto[0].fulfillment);
+  });
+
+  it("(449-h) ⚠ el fulfillment NO entra en la tarifa congelada de ninguna fila", () => {
+    // `tarifaDe` reconstruye las ENTRADAS DE LA FORMULA, y meterlo ahi lo pondria al alcance de
+    // `derivarIngresoOrden`. Se comprueba sobre las filas REALES, no sobre un fixture.
+    const conTarifa = m.global.filter((f) => f.congelada?.tarifa != null);
+    expect(conTarifa.length, "ninguna fila trajo tarifa congelada").toBeGreaterThan(0);
+    for (const f of conTarifa) {
+      const claves = Object.keys(f.congelada!.tarifa as object);
+      expect(claves.filter((k) => /fulfillment/i.test(k)), f.guia).toEqual([]);
+    }
+    // ANTI-VACIO: alguna de esas filas SI trae la bodega, en su campo propio.
+    expect(conTarifa.some((f) => f.fulfillment === FF_696)).toBe(true);
+  });
+
   it("(k) R22 · todo importe que sale del repositorio es STRING escala 2", () => {
     for (const f of m.global) {
       if (f.montoRecibido !== null) expect(f.montoRecibido).toMatch(/^-?\d+\.\d{2}$/);
+      // FICHA 449 — la bodega cruza la frontera con la MISMA regla: STRING escala 2 o `null`.
+      if (f.fulfillment !== null) expect(f.fulfillment).toMatch(/^-?\d+\.\d{2}$/);
       const tarifa = f.congelada?.tarifa;
       if (tarifa) {
         for (const [k, v] of Object.entries(tarifa)) {
@@ -618,14 +836,20 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
     return o.numGuia === null ? o.numRemision : String(o.numGuia);
   }
 
-  /** La fila de `cierre_detail`: las ENTRADAS congeladas de esa orden en ese cierre. */
+  /**
+   * La fila de `cierre_detail`: las ENTRADAS congeladas de esa orden en ese cierre.
+   *
+   * FICHA 449 — `opts.fulfillment` es el monto de BODEGA congelado. Sin pasarlo, la columna
+   * queda `NULL`, que es exactamente como estan las filas ANTERIORES al 2026-08-19: no tienen
+   * backfill posible, y ese caso se siembra a proposito para medirlo.
+   */
   async function congelar(
     tx: Tx,
     cierreId: string,
     ordenId: string,
     tarifaId: string | null,
     montoCobrar: string,
-    tiendaId?: string,
+    opts: { tiendaId?: string; fulfillment?: string } = {},
   ): Promise<void> {
     const orden = await tx.orden.findUniqueOrThrow({
       where: { id: ordenId },
@@ -644,10 +868,13 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
         montoCobrar,
         cobraComision: true,
         zonaId: orden.zonaId,
-        tiendaId: tiendaId ?? orden.tiendaId,
+        tiendaId: opts.tiendaId ?? orden.tiendaId,
         esCentral: false,
         esZonaEspecial: false,
         tarifaId,
+        // FICHA 449 — se congela con las demas, pero NO es una entrada de la formula: sin
+        // `fulfillment` la columna queda NULL, que es el caso de las filas viejas.
+        ...(opts.fulfillment === undefined ? {} : { tarifaFulfillment: opts.fulfillment }),
         // Las columnas de tarifa se congelan TODAS o NINGUNA (R8 de la feature 69).
         ...(tarifaId === null
           ? {}

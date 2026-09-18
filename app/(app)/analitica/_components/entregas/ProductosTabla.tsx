@@ -39,7 +39,8 @@
 //
 // ⚠ NO SE ESCONDE NI UN DATO, y esa es la condicion de todo lo anterior. Lo que sale de la
 // pantalla entra en la fila desplegable, y **el archivo descargable no pierde ni una columna**
-// (`analitica-productos-descarga-columnas.ts`, intacto: once columnas base y veinte con dinero).
+// (`analitica-productos-descarga-columnas.ts`: once columnas base y VEINTIUNA con dinero — la
+// vigesimoprimera la anade la ficha 449, y va al FINAL para no correr de sitio a las otras).
 // Esconder una columna en pantalla no es quitarla del dato.
 //
 // ─── LAS CUATRO COSAS QUE ESTE COMPONENTE NO HACE, Y CADA UNA POR SU MOTIVO ────────────────
@@ -121,7 +122,7 @@ import {
 } from "../operativo/textos";
 
 import { textoSello, textoSelloCompleto } from "./ActualizarAnalitica";
-import { DineroProductoDetalle } from "./DineroProductoDetalle";
+import { DineroProductoDetalle, hayMonto } from "./DineroProductoDetalle";
 import { calcularEfectividad } from "./efectividad";
 import {
   textoDesenlacesDeFila,
@@ -241,6 +242,19 @@ export const PRODUCTOS_COLUMNAS = {
   recaudado: "Recaudado",
   ordenex: "Cobró Ordenex",
   paraTienda: "Para la tienda",
+  /**
+   * FICHA 449 — EL SERVICIO DE BODEGA, con el nombre que YA tiene en el resto de la app.
+   *
+   * Es `FULFILLMENT_COL` (`cierres-admin/_components/cierre-labels.ts`), el rótulo con el que
+   * esta misma cifra se lee en el detalle del cierre y en las cinco descargas de gestiones. La
+   * ficha existe porque la MISMA orden enseñaba la cifra allí y la escondía aquí; bautizarla de
+   * nuevo en esta pantalla dejaría el defecto en pie con otra cara — dos nombres para una cifra
+   * se leen como dos cifras. Lo fija un caso que compara este texto contra esa constante.
+   *
+   * ⚠ NO ES COLUMNA y no puede serlo: vive en el detalle de la fila, con las otras dos cifras
+   * que la 442 bajó de la cabecera. Ver `DINERO`.
+   */
+  fulfillment: "Fulfillment",
   /** Las cifras que bajan al detalle de la fila. */
   unidades: "Unidades",
   otrosResultados: "Otros resultados",
@@ -448,22 +462,43 @@ function cifrasDeFila(fila: FilaProductoDTO): Readonly<Record<IdCifra, string>> 
 }
 
 /**
- * FICHA 347 — LAS TRES CIFRAS DE DINERO de una fila, declaradas igual que sus hermanas de
+ * FICHA 347 — LAS CIFRAS DE DINERO de una fila, declaradas igual que sus hermanas de
  * conteo y con el mismo campo `enColumna`: las consumen las DOS vistas y las dos las reparten
  * igual, asi que el telefono no puede quedarse con menos dinero que el escritorio (R64).
+ *
+ * FICHA 449 — son CUATRO: entra el servicio de bodega, en el detalle y solo cuando hay monto.
  */
-type IdDinero = "recaudado" | "ordenex" | "paraTienda";
+type IdDinero = "recaudado" | "ordenex" | "paraTienda" | "fulfillment";
 
 interface DeclaracionDinero {
   readonly id: IdDinero;
   readonly etiqueta: string;
   readonly enColumna: boolean;
+  /**
+   * FICHA 449 — `true` cuando la cifra SOLO se pinta si su monto es mayor que cero.
+   *
+   * ⚠ ES LA EXCEPCION Y NO LA REGLA, por eso es opcional y no una bandera que cada cifra tenga
+   * que contestar. Las tres primeras se pintan SIEMPRE, con «—» cuando no las hay: su ausencia
+   * contesta la pregunta que el usuario vino a hacer. El fulfillment no lo tienen contratado la
+   * mayoria de las tiendas, asi que para ellas la cifra es un `"0.00"` cierto que se leeria como
+   * un concepto que les aplica y les salio en cero. Ver `hayMonto`.
+   */
+  readonly soloSiHayMonto?: boolean;
 }
 
 const DINERO: readonly DeclaracionDinero[] = [
   { id: "recaudado", etiqueta: PRODUCTOS_COLUMNAS.recaudado, enColumna: true },
   { id: "ordenex", etiqueta: PRODUCTOS_COLUMNAS.ordenex, enColumna: false },
   { id: "paraTienda", etiqueta: PRODUCTOS_COLUMNAS.paraTienda, enColumna: false },
+  // FICHA 449 — DETRAS del reparto y nunca dentro de el. `ordenex + paraTienda` es exactamente
+  // lo recaudado liquidado (R20) y esa igualdad es cierta POR CONSTRUCCION; una cuarta cifra
+  // entre las dos se leeria como un tercer trozo del mismo reparto, que es justo lo que NO es.
+  {
+    id: "fulfillment",
+    etiqueta: PRODUCTOS_COLUMNAS.fulfillment,
+    enColumna: false,
+    soloSiHayMonto: true,
+  },
 ];
 
 /** La unica cifra de dinero que es COLUMNA. Derivada de la lista de arriba. */
@@ -515,7 +550,22 @@ function importeDeFila(fila: FilaProductoDTO, id: IdDinero): string | null {
   if (dinero === null) return null;
   if (id === "recaudado") return dinero.recaudado;
   if (id === "ordenex") return dinero.liquidado.ordenex;
+  // FICHA 449 — SALE DE LA RAIZ DEL DTO, no de `liquidado`, y el sitio del que se lee es la
+  // afirmacion: `liquidado` es el reparto de lo recaudado y el fulfillment no forma parte de el.
+  if (id === "fulfillment") return dinero.fulfillment;
   return dinero.liquidado.tienda;
+}
+
+/**
+ * FICHA 449 — ¿SE DECLARA esta cifra en el detalle de ESTA fila?
+ *
+ * Todas menos una: siempre. La excepcion tiene su motivo escrito en `DeclaracionDinero
+ * .soloSiHayMonto`, y el predicado que decide es `hayMonto`, compartido con el panel de la 347
+ * para que las dos mitades del detalle no puedan discrepar sobre cuando la cifra existe.
+ */
+function seDeclara(cifra: DeclaracionDinero, fila: FilaProductoDTO): boolean {
+  if (cifra.soloSiHayMonto !== true) return true;
+  return hayMonto(importeDeFila(fila, cifra.id));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -728,8 +778,11 @@ function DetalleDeFila({
         ))}
         {/* R6 — sin la concesion no se declara ni una cifra de dinero. No se pinta vacia, no se
             pinta en cero y no se pinta deshabilitada: no existe. */}
+        {/* FICHA 449 — el `.filter` NO es una optimizacion: es la unica cifra de este bloque
+            que se calla cuando vale cero, y el motivo esta en `seDeclara`. Las demas siguen
+            pintandose siempre, con «—» cuando no las hay (R30). */}
         {conDinero
-          ? DINERO_EN_DETALLE.map((cifra) => (
+          ? DINERO_EN_DETALLE.filter((cifra) => seDeclara(cifra, fila)).map((cifra) => (
               <DatoDeDetalle
                 key={cifra.id}
                 rotulo={cifra.etiqueta}
@@ -822,6 +875,16 @@ const MIN_DINERO: Readonly<Record<IdDinero, string>> = {
   recaudado: "6.5rem",
   ordenex: "6rem",
   paraTienda: "6rem",
+  // FICHA 449 — declarado aunque hoy NO sea columna, igual que `ordenex` y `paraTienda`: el
+  // `Record` exige una entrada por cifra. Se le da el MISMO 6rem que a esos dos, y no un numero
+  // propio, porque ese numero no esta medido contra la tipografia de la app y aqui no se
+  // inventa: hoy nadie lo lee. Lo que SI esta medido (Chromium, tipografia del sistema, mismo
+  // `text-xs font-bold` del `<th>` para los cuatro rotulos) es la comparacion RELATIVA, que es
+  // la que sobrevive a un cambio de fuente: `Fulfillment` mide 57 px, lo mismo que `Recaudado`
+  // y MENOS que `Cobró Ordenex` (80) y `Para la tienda` (72). O sea: el minimo que ya sostiene
+  // a esos dos sostiene tambien a este. Si algun dia vuelve a ser columna, hay que remedirlo
+  // contra la fuente real, que es lo que la 348 dejo escrito.
+  fulfillment: "6rem",
 };
 
 /**
@@ -1047,7 +1110,7 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
    * la pagina: la paginacion es un asunto de la pantalla y nadie descarga «la pagina 2».
    *
    * ⚠ FICHA 442 — EL ARCHIVO NO PIERDE NI UNA COLUMNA. La pantalla enseña cinco y el `.xlsx`
-   * sigue llevando las once base (o las veinte con dinero), porque la proyeccion es la MISMA
+   * sigue llevando las once base (o las veintiuna con dinero), porque la proyeccion es la MISMA
    * funcion de siempre (`filaDescargaAnaliticaProductos`) y este componente no la filtra.
    * Esconder una columna en pantalla no es quitarla del dato — y lo vigila
    * `tests/unit/descarga/analitica-productos-descarga-columnas.test.ts` con su asercion de

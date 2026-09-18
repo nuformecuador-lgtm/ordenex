@@ -54,6 +54,22 @@
 // El `where` es el de una consulta que ya corre; `gestion_orden(orden_id)`,
 // `cierre_detail(orden_id)` y `cierre_detail(cierre_id, orden_id)` ya existen. Esta ficha SOLO
 // LEE: ni tabla, ni columna, ni indice, ni migracion, ni RLS.
+//
+// ─── FICHA 449 — LA DECIMA COLUMNA DE TARIFA, Y POR QUE VIAJA POR FUERA ───────────────────────
+//
+// Hasta el 2026-09-17 este `SELECT` congelaba NUEVE columnas de tarifa y `tarifa_fulfillment`
+// no era una de ellas, asi que la MISMA orden ensenaba el fulfillment en el detalle del cierre
+// (`COLUMNA_FULFILLMENT`) y lo escondia en Analitica. MEDIDO en produccion el 2026-09-17: 867
+// filas y ₡605.616 en los ultimos 7 dias; 2608 filas y ₡1.816.300 en toda la historia.
+//
+// ⚠ NO SE ARREGLA METIENDOLA EN `tarifaDe`, y esa es la parte que importa. `tarifaDe`
+// reconstruye la `TarifaVigente` —las ENTRADAS DE LA FORMULA— y `ITarifaVigenteRepository`
+// prohibe por escrito que el fulfillment entre ahi, «porque meterla la pondria al alcance de
+// `derivarIngresoOrden`, y esa funcion decide dinero que se liquida». El monto se proyecta, se
+// serializa en `fulfillmentDe` y sube por un CAMPO PROPIO de `FilaDineroCruda` hasta el DTO. La
+// guardia que lo vigila vive en `tests/unit/analytics/fulfillment-fuera-de-la-formula.guardia.test.ts`.
+//
+// Sigue sin haber migracion: la columna existe desde el 2026-08-19 y esta ficha SOLO LEE.
 
 import { Prisma } from "@prisma/client";
 import type { GestionResultado, PrismaClient } from "@prisma/client";
@@ -118,6 +134,12 @@ interface FilaCruda {
   readonly tarifa_iva_comision_cod: Prisma.Decimal | null;
   readonly tarifa_especial: Prisma.Decimal | null;
   readonly tarifa_especial_devuelta: Prisma.Decimal | null;
+  /**
+   * FICHA 449 — la DECIMA columna de tarifa que se proyecta, y la unica que NO pasa por
+   * `tarifaDe`. Ver `fulfillmentDe` mas abajo: no es una entrada de la formula y no puede
+   * entrar en `TarifaVigente`.
+   */
+  readonly tarifa_fulfillment: Prisma.Decimal | null;
 }
 
 /** Los resultados que aportan, como parametros. DERIVADOS del criterio (R24), nunca escritos. */
@@ -152,6 +174,33 @@ function congeladaDe(f: FilaCruda): OrdenCongelada | null {
       tarifaEspecialDevuelta: f.tarifa_especial_devuelta,
     }),
   };
+}
+
+/**
+ * FICHA 449 — EL FULFILLMENT CONGELADO, LEIDO DE SU COLUMNA Y NO DE LA TARIFA.
+ *
+ * ⚠ ESTA FUNCION EXISTE PARA NO PODER METERLO EN `tarifaDe`. `congeladaDe` (justo arriba)
+ * reconstruye la `TarifaVigente` que consume `derivarIngresoOrden`, la funcion que decide dinero
+ * que se liquida; `ITarifaVigenteRepository` prohibe por escrito que el fulfillment llegue ahi.
+ * Asi que el monto se lee APARTE, de `cierre_detail.tarifa_fulfillment`, y sube por un campo
+ * propio de `FilaDineroCruda`. Mismo criterio que ya aplica `CierresAdminRepository`.
+ *
+ * ⚠ LOS DOS `null` QUE NO SON EL MISMO (contrato completo en `IDineroProductosRepository`):
+ *
+ *   - SIN FILA DE SNAPSHOT (`detalle_id IS NULL`) -> `null`. No se sabe: no se afirma un cero.
+ *   - CON FILA y columna `NULL` o `0` -> `"0.00"`. Las dos significan «no hay fulfillment»: la
+ *     columna nacio el 2026-08-19 y las filas anteriores no tienen backfill posible, porque no
+ *     existe un monto correcto que inventar hacia atras. Para un SUMANDO las dos valen cero.
+ *
+ * Money-safe: `Decimal -> STRING escala 2`, igual que `montoRecibido`. Nunca `number`.
+ */
+function fulfillmentDe(f: FilaCruda): string | null {
+  if (f.detalle_id === null) return null;
+  // `== null` y NO `=== null`, por el mismo motivo escrito en `tarifaDe` para `tarifa_especial`:
+  // una fila que no proyecte la columna llega como `undefined`, significa lo mismo que `NULL`
+  // —no hay fulfillment— y ninguno de los dos puede REVENTAR en un camino de dinero. Con
+  // `=== null` un `undefined` se iba a `.toFixed` y tiraba la lectura entera.
+  return f.tarifa_fulfillment == null ? "0.00" : f.tarifa_fulfillment.toFixed(2);
 }
 
 export class DineroProductosRepository implements IDineroProductosRepository {
@@ -196,7 +245,9 @@ export class DineroProductosRepository implements IDineroProductosRepository {
              d."tarifa_iva_flete"                AS tarifa_iva_flete,
              d."tarifa_iva_comision_cod"         AS tarifa_iva_comision_cod,
              d."tarifa_especial"                 AS tarifa_especial,
-             d."tarifa_especial_devuelta"        AS tarifa_especial_devuelta
+             d."tarifa_especial_devuelta"        AS tarifa_especial_devuelta,
+             -- FICHA 449: se proyecta, pero NO entra en tarifaDe. Ver fulfillmentDe.
+             d."tarifa_fulfillment"              AS tarifa_fulfillment
       FROM "orden" o
       JOIN "order_status" s ON s."id" = o."estatus_id"
       JOIN "usuario"      t ON t."id" = o."tienda_id"
@@ -231,6 +282,9 @@ export class DineroProductosRepository implements IDineroProductosRepository {
           montoRecibido: f.monto_recibido === null ? null : f.monto_recibido.toFixed(2),
           cierreEstado: f.cierre_estado,
           congelada: congeladaDe(f),
+          // FICHA 449 — APARTE de `congelada`, y a proposito: el fulfillment no es una entrada
+          // de la formula y no puede viajar dentro de la `TarifaVigente` que va ahi dentro.
+          fulfillment: fulfillmentDe(f),
         }),
       ),
     };

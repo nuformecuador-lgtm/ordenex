@@ -445,3 +445,124 @@ describe("R76 · el tope: o van todas las ordenes, o no va ninguna", () => {
     expect(datos.filas[0].unidades).toBe(9);
   });
 });
+
+// ============================================================================================
+// FICHA 449 — EL FULFILLMENT LLEGA AL DTO, AGREGADO POR LA MISMA UNIDAD QUE LAS OTRAS TRES.
+//
+// La tabla de productos ensena tres columnas de dinero —Recaudado, Cobro Ordenex y Para la
+// tienda— agregadas por `(tienda, producto)`. La cifra de bodega tiene que llegar por esa MISMA
+// unidad, y como cifra PROPIA: `ITarifaVigenteRepository` prohibe que entre en la formula.
+//
+// LOS NUMEROS, A MANO: ₡696 y ₡800 son las dos tarifas que hay en produccion.
+// ============================================================================================
+
+describe("FICHA 449 · el fulfillment agregado por `(tienda, producto)`", () => {
+  it("una entrega liquidada con bodega: la cifra llega, y llega APARTE", () => {
+    const c = grupo([filaDinero({ fulfillment: "696.00" })], "base c");
+
+    expect(c.fulfillment).toBe("696.00");
+    // ⚠ FUERA del reparto: `ordenex` sigue siendo 3.955,00 (3000 + 390 + 500 + 65). Si se
+    // sumara, valdria 4.651,00 y R20 se romperia sin que nada se pusiera rojo.
+    expect(c.liquidado.ordenex).toBe("3955.00");
+    expect(c.liquidado.tienda).toBe("6045.00");
+    expect(new Prisma.Decimal(c.liquidado.ordenex!).plus(c.liquidado.tienda!).toFixed(2)).toBe(
+      c.liquidado.recaudado,
+    );
+  });
+
+  it("se SUMA entre las ordenes del grupo: 696 + 800 + 696 = 2.192,00", () => {
+    const c = grupo(
+      [
+        filaDinero({ ordenId: "o1", fulfillment: "696.00" }),
+        filaDinero({ ordenId: "o2", fulfillment: "800.00" }),
+        filaDinero({ ordenId: "o3", fulfillment: "696.00" }),
+      ],
+      "base c",
+    );
+
+    expect(c.fulfillment).toBe("2192.00");
+    expect(c.liquidado.ordenes).toBe(3);
+  });
+
+  it("⚠ UNA VEZ POR ORDEN · dos gestiones de la MISMA orden no cobran dos bodegas", () => {
+    // El paquete se preparo UNA vez. El contrato publico lo dice: el escenario devuelto cobra
+    // «el MISMO monto que en el escenario entregado», porque preparar y despachar ya costo.
+    // ⚠ SI ESTO SE ACUMULARA POR GESTION valdria 1.392,00, con aspecto de cifra firme.
+    const c = grupo(
+      [
+        filaDinero({ ordenId: "o1", gestionId: "g1", fulfillment: "696.00" }),
+        filaDinero({
+          ordenId: "o1",
+          gestionId: "g2",
+          montoRecibido: "5000.00",
+          fulfillment: "696.00",
+        }),
+      ],
+      "base c",
+    );
+
+    expect(c.fulfillment).toBe("696.00");
+    expect(c.fulfillment).not.toBe("1392.00");
+    expect(c.liquidado.ordenes).toBe(1);
+  });
+
+  it("y tampoco dos veces cuando la orden esta en DOS cierres (R18)", () => {
+    // Mismo caso con snapshots distintos: cada cierre congelo SU fulfillment. Gana el PRIMERO
+    // —determinista, porque las filas llegan `ORDER BY o.id, g.id`— y no la suma.
+    const c = grupo(
+      [
+        filaDinero({ ordenId: "o1", gestionId: "g1", fulfillment: "696.00" }),
+        filaDinero({
+          ordenId: "o1",
+          gestionId: "g2",
+          montoRecibido: "4000.00",
+          congelada: congelada({ montoCobrar: "4000.00" }),
+          fulfillment: "800.00",
+        }),
+      ],
+      "base c",
+    );
+
+    expect(c.fulfillment).toBe("696.00");
+    expect(c.fulfillment).not.toBe("1496.00");
+  });
+
+  it("R30 · sin NINGUNA orden liquidada la cifra es `null`, jamas un cero", () => {
+    // Mismo criterio que `ordenex`, `tienda` y `retorno`: «no hubo» y «salio cero» son hechos
+    // distintos. Y el umbral es el mismo —cierre APROBADO— porque un cierre solicitado se ha
+    // llegado a BORRAR en este repo, y con el su snapshot.
+    const c = grupo([filaDinero({ cierreEstado: "solicitado", fulfillment: "696.00" })], "base c");
+
+    expect(c.fulfillment).toBeNull();
+    expect(c.liquidado.ordenex).toBeNull();
+    // ANTI-VACIO: la fila SI tiene dinero, lo que no tiene es nada liquidado.
+    expect(c.recaudado).toBe("10000.00");
+  });
+
+  it("y el cero SI es una cifra real: hay liquidado y ninguna orden cobro bodega", () => {
+    // La tienda no hace fulfillment, o su snapshot es anterior al 2026-08-19. El repositorio lo
+    // emite como `"0.00"` y aqui NO se convierte en `null`: son dos hechos distintos y la
+    // pantalla los va a pintar distinto.
+    const c = grupo([filaDinero({ fulfillment: "0.00" })], "base c");
+
+    expect(c.fulfillment).toBe("0.00");
+    expect(c.fulfillment).not.toBeNull();
+  });
+
+  it("el importe ENTERO cuenta en CADA producto de una orden multiproducto (R12)", () => {
+    const filas = [filaDinero({ producto: "1 * Base C. 1 * Dr Melaxin.", fulfillment: "696.00" })];
+
+    expect(grupo(filas, "base c").fulfillment).toBe("696.00");
+    expect(grupo(filas, "dr melaxin").fulfillment).toBe("696.00");
+  });
+
+  it("y NO se mezcla entre tiendas: cada `(tienda, producto)` trae el suyo", () => {
+    const filas = [
+      filaDinero({ ordenId: "o1", tiendaId: "t1", fulfillment: "696.00" }),
+      filaDinero({ ordenId: "o2", tiendaId: "t2", fulfillment: "800.00" }),
+    ];
+
+    expect(grupo(filas, "base c", "t1").fulfillment).toBe("696.00");
+    expect(grupo(filas, "base c", "t2").fulfillment).toBe("800.00");
+  });
+});

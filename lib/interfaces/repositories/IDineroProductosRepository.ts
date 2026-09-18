@@ -37,6 +37,36 @@ export interface FilaDineroCruda extends GestionDeDinero {
   readonly destinatario: string;
   /** Id de la gestion. Solo sirve para desempatar y para probar el grano; no viaja al cliente. */
   readonly gestionId: string;
+  /**
+   * FICHA 449 — EL FULFILLMENT CONGELADO DE ESA ORDEN EN ESE CIERRE, Y POR QUE VIAJA SOLO.
+   *
+   * ⚠ NO ESTA DENTRO DE `congelada.tarifa`, Y NO PUEDE ESTARLO. `TarifaVigente` —lo que
+   * `tarifaDe` reconstruye— es el conjunto de ENTRADAS DE LA FORMULA, y meter el fulfillment
+   * ahi lo pondria al alcance de `derivarIngresoOrden`, que decide dinero que se liquida. La
+   * prohibicion esta escrita en `ITarifaVigenteRepository` desde el 2026-08-19 y esta ficha NO
+   * la levanta: la cifra sale de la COLUMNA `cierre_detail.tarifa_fulfillment` y sube por este
+   * campo propio hasta el DTO, sin tocar `TarifaVigente`, `tarifaDe` ni `congeladaDe`.
+   *
+   * ⚠ LOS TRES ESTADOS, Y QUE SIGNIFICA CADA UNO (los dos primeros NO son el mismo hecho):
+   *
+   *   - `null`      — NO HAY NADA QUE LEER: esta gestion no tiene fila de snapshot
+   *                   (`cierre_detail` ausente, o sea `detalle_id IS NULL`). No se afirma que
+   *                   el fulfillment sea cero; se afirma que no se sabe.
+   *   - `"0.00"`    — HAY snapshot y NO HAY FULFILLMENT. Cubre los DOS casos que significan lo
+   *                   mismo en colones: la columna vale 0 (la tienda no hace fulfillment) y la
+   *                   columna es `NULL` porque la fila es ANTERIOR al 2026-08-19, cuando la
+   *                   columna nacio — filas sin backfill posible, porque no hay monto correcto
+   *                   que inventar hacia atras. En las dos, lo que se cobro de bodega fue nada.
+   *   - `"696.00"`  — el monto congelado, tal cual, STRING escala 2.
+   *
+   * ⚠ POR QUE AQUI SI SE COLAPSA `NULL` A `"0.00"` Y EN `TarifaSnapshotDTO` NO. Aquel DTO
+   * MUESTRA LA TARIFA de una fila del cierre y alli `null` significa «este cierre es anterior a
+   * la columna», que es informacion util para quien la lee. Este campo es un SUMANDO: se va a
+   * acumular con los de otras ordenes, y para una suma «no se cobro bodega» y «se cobraron 0
+   * colones» son el mismo numero. Lo que NO se colapsa es el `null` de arriba, que es el unico
+   * que de verdad significa «no se pudo leer».
+   */
+  readonly fulfillment: string | null;
 }
 
 /** Lo que devuelve la lectura: las filas, o el aviso de que el recorte supera el tope (R76). */

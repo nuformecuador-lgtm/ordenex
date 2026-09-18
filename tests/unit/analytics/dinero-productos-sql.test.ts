@@ -296,6 +296,9 @@ describe("R22 · lo que sale del repositorio ya es money-safe", () => {
         tarifa_iva_comision_cod: new Prisma.Decimal("13"),
         tarifa_especial: null,
         tarifa_especial_devuelta: null,
+        // FICHA 449: la decima columna congelada. Va aqui porque el `SELECT` real la proyecta;
+        // una fila de prueba a la que le falte una columna del `SELECT` no es la fila real.
+        tarifa_fulfillment: new Prisma.Decimal("696"),
       },
     ]);
     const lectura = await new DineroProductosRepository(prisma as never).leerDineroPorOrden(
@@ -342,5 +345,130 @@ describe("R22 · lo que sale del repositorio ya es money-safe", () => {
     expect(lectura.filas[0].montoRecibido).toBeNull();
     // Sin guia, el numero visible es la REMISION (R36).
     expect(lectura.filas[0].guia).toBe("r-9");
+  });
+});
+
+// ============================================================================================
+// FICHA 449 — EL FULFILLMENT CONGELADO VIAJA, Y VIAJA APARTE.
+//
+// Hasta el 2026-09-17 este `SELECT` congelaba NUEVE columnas de tarifa y `tarifa_fulfillment` no
+// era una de ellas, asi que la misma orden lo ensenaba en el detalle del cierre y lo escondia en
+// Analitica. MEDIDO en produccion: 867 filas y ₡605.616 en 7 dias; 2608 y ₡1.816.300 en toda la
+// historia, con tarifas de ₡696 y ₡800.
+// ============================================================================================
+
+/** Una fila cruda COMPLETA, con snapshot, para variar solo lo que cada caso quiere medir. */
+function filaCrudaConSnapshot(fulfillment: Prisma.Decimal | null) {
+  return {
+    orden_id: "o1",
+    tienda_id: "t1",
+    tienda_nombre: "Tienda Uno",
+    producto: "1 * Base C",
+    num_guia: 1234,
+    num_remision: "r1",
+    destinatario: "D",
+    gestion_id: "g1",
+    resultado: "entregada",
+    monto_recibido: new Prisma.Decimal("10000"),
+    cierre_estado: "aprobado",
+    detalle_id: "d1",
+    monto_cobrar: new Prisma.Decimal("10000"),
+    cobra_comision: true,
+    es_central: false,
+    es_zona_especial: false,
+    tarifa_id: "tar1",
+    tarifa_valor_flete: new Prisma.Decimal("3000"),
+    tarifa_valor_flete_gam: new Prisma.Decimal("2500"),
+    tarifa_valor_flete_devuelto: new Prisma.Decimal("2000"),
+    tarifa_valor_flete_devuelto_gam: new Prisma.Decimal("1800"),
+    tarifa_comision_cod: new Prisma.Decimal("5"),
+    tarifa_iva_flete: new Prisma.Decimal("13"),
+    tarifa_iva_comision_cod: new Prisma.Decimal("13"),
+    tarifa_especial: null,
+    tarifa_especial_devuelta: null,
+    tarifa_fulfillment: fulfillment,
+  };
+}
+
+async function unaFila(cruda: object) {
+  const { prisma } = prismaFalso([cruda]);
+  const lectura = await new DineroProductosRepository(prisma as never).leerDineroPorOrden(
+    consultaDe({}, "maestro"),
+  );
+  if (lectura.estado !== "ok") throw new Error("la lectura no salio ok: el test FALLA");
+  return lectura.filas[0];
+}
+
+describe("FICHA 449 · `tarifa_fulfillment` se proyecta y sube en un campo propio", () => {
+  it("la columna esta en el `SELECT`, con su alias", async () => {
+    const { sql } = await sqlDe(consultaDe({}, "maestro"));
+    expect(sql).toContain('d."tarifa_fulfillment"');
+    expect(sql).toContain("AS tarifa_fulfillment");
+  });
+
+  it("money-safe · `Decimal(696)` sale como `\"696.00\"`, STRING escala 2 y nunca number", async () => {
+    const f = await unaFila(filaCrudaConSnapshot(new Prisma.Decimal("696")));
+    expect(f.fulfillment).toBe("696.00");
+    expect(typeof f.fulfillment).toBe("string");
+    // El otro monto de produccion, por si alguien creyera que "696" es un caso especial.
+    const otra = await unaFila(filaCrudaConSnapshot(new Prisma.Decimal("800")));
+    expect(otra.fulfillment).toBe("800.00");
+  });
+
+  it("⚠ NO entra en la tarifa congelada: `congelada.tarifa` no gana ninguna clave", async () => {
+    const f = await unaFila(filaCrudaConSnapshot(new Prisma.Decimal("696")));
+    const tarifa = f.congelada?.tarifa;
+    expect(tarifa, "la fila de prueba tenia que traer tarifa congelada").toBeTruthy();
+    expect(Object.keys(tarifa as object).filter((k) => /fulfillment/i.test(k))).toEqual([]);
+    // ANTI-VACIO: la tarifa se reconstruyo de verdad.
+    expect((tarifa as { valorFlete: string }).valorFlete).toBe("3000.00");
+  });
+
+  it("CON snapshot y columna `NULL` -> `\"0.00\"`: es «no hay fulfillment», no «no se sabe»", async () => {
+    // Las filas ANTERIORES al 2026-08-19 no tienen backfill posible: no existe un monto correcto
+    // que inventar hacia atras. Para una SUMA, «no se cobro bodega» son cero colones.
+    const f = await unaFila(filaCrudaConSnapshot(null));
+    expect(f.fulfillment).toBe("0.00");
+  });
+
+  it("SIN snapshot -> `null`: ESE es «no se pudo leer», y NO es lo mismo que el cero", async () => {
+    const f = await unaFila({
+      orden_id: "o1",
+      tienda_id: "t1",
+      tienda_nombre: "T",
+      producto: "1 * X",
+      num_guia: null,
+      num_remision: "r-9",
+      destinatario: "D",
+      gestion_id: "g1",
+      resultado: "entregada",
+      monto_recibido: null,
+      cierre_estado: null,
+      detalle_id: null,
+    });
+    expect(f.fulfillment).toBeNull();
+    expect(f.congelada).toBeNull();
+  });
+
+  it("y los dos estados son DISTINGUIBLES sobre las mismas dos filas", async () => {
+    // La asercion que mata la mutacion «da igual, mapealo todo a 0.00» y tambien la contraria
+    // «mapealo todo a null»: los dos casos se miden JUNTOS, no cada uno por su lado.
+    const conSnapshotSinMonto = await unaFila(filaCrudaConSnapshot(null));
+    const sinSnapshot = await unaFila({
+      orden_id: "o2",
+      tienda_id: "t1",
+      tienda_nombre: "T",
+      producto: "1 * X",
+      num_guia: null,
+      num_remision: "r-8",
+      destinatario: "D",
+      gestion_id: "g2",
+      resultado: "entregada",
+      monto_recibido: null,
+      cierre_estado: null,
+      detalle_id: null,
+    });
+    expect(conSnapshotSinMonto.fulfillment).not.toBe(sinSnapshot.fulfillment);
+    expect([conSnapshotSinMonto.fulfillment, sinSnapshot.fulfillment]).toEqual(["0.00", null]);
   });
 });
