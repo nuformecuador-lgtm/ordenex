@@ -245,6 +245,9 @@ const DINERO: DineroProductoDTO = {
   },
   pendiente: { recaudado: "10000.00", ordenes: 1 },
   retorno: "2260.00",
+  // FICHA 449 — el servicio de bodega de sus 4 ordenes liquidadas (4 x 696). Cifra PROPIA: NO
+  // entra en `liquidado.ordenex`, asi que los dos cuadres de arriba no la incluyen.
+  fulfillment: "2784.00",
 };
 
 const FILA_CON_DINERO: FilaProductoDTO = {
@@ -465,6 +468,8 @@ describe("FICHA 347 · la proyección con dinero", () => {
           liquidado: { recaudado: "0.00", ordenex: null, tienda: null, ordenes: 0 },
           pendiente: { recaudado: "10000.00", ordenes: 1 },
           retorno: null,
+          // FICHA 449 — `null` por el mismo motivo: nada liquidado, nada que afirmar.
+          fulfillment: null,
         },
       },
       true,
