@@ -5369,12 +5369,12 @@
       "title": "el fulfillment no aparece en el dinero de Analitica",
       "description": "La tabla de productos esconde una cifra que el cierre si muestra.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "media",
-      "branch": null,
+      "branch": "fix/449-frontend",
       "depends_on": 442,
-      "status_note": "PEDIDO POR EL HUMANO el 2026-09-17 mirando la tabla de productos: «no esta puesto el fulfilment de las que si deben mostrar». || EL HUECO ES ESTRUCTURAL, no de pintura: DineroProductosRepository congela NUEVE columnas de tarifa y `tarifa_fulfillment` no es una de ellas; `tarifaDe` tampoco la devuelve. La misma orden ensena el fulfillment en el detalle del cierre (COLUMNA_FULFILLMENT) y lo esconde en Analitica. || MEDIDO EN PRODUCCION: 867 filas y ₡605.616 en los ultimos 7 dias; 2608 filas y ₡1.816.300 en toda la historia. Tarifas de ₡696 y ₡800, 4 cuentas con la marca. || ⚠️ VA COMO CIFRA PROPIA, NO SUMADA a «Cobro Ordenex»: ITarifaVigenteRepository prohibe por escrito que el fulfillment entre en TarifaVigente, «porque meterla la pondria al alcance de derivarIngresoOrden, y esa funcion decide dinero que se liquida». Viaja en un campo aparte desde el repositorio. || Se pinta solo donde el monto congelado es > 0. La descarga lleva su columna: una descarga que omite una cifra que la pantalla ensena es el mismo defecto una capa mas abajo."
+      "status_note": "Mergeada en dev (PR #815: backend 3e69ee10, frontend b7f4aa89). || EL HUECO ERA ESTRUCTURAL: DineroProductosRepository congelaba NUEVE columnas de tarifa y `tarifa_fulfillment` no era una de ellas. Medido en produccion: 867 filas y ₡605.616 en 7 dias; 2608 y ₡1.816.300 en toda la historia. || LA CIFRA VIAJA POR UN CARRIL PROPIO y NO se suma a «Cobro Ordenex», porque ITarifaVigenteRepository prohibe por escrito que el fulfillment entre en TarifaVigente. `lib/utils/cierre-detalle.ts` quedo intacto —comprobado sobre el BLOB commiteado, no sobre el disco— y una guardia nueva lo vigila por cuatro vias: ejecucion, contrato, camino y cifra. || DOS DECISIONES DE NEGOCIO: se cuenta UNA VEZ POR ORDEN y no por gestion (dos gestiones cobrarian dos bodegas, y el contrato ya dice que la devolucion cobra lo mismo que la entrega porque preparar el paquete ya costo); y solo cuenta lo LIQUIDADO, el mismo umbral que las otras tres cifras. || 15 mutaciones, todas muertas. Medido a 1440 y 390 con el peor caso realista (₡1.816.300): margen minimo de 86 px y cero desborde; lo que crece es el alto. || DEUDA CONSCIENTE: `aporteEsCero` no se toco, asi que una orden cuyo UNICO aporte fuera el fulfillment se seguiria descartando. Hoy es inalcanzable; cambiarlo moveria los cardinales de `ordenes`."
     }
   ]
 }
