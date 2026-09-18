@@ -10,7 +10,8 @@
 //
 // ─── MONEY-SAFE (R22), Y NO ES UNA PRECAUCION TEORICA ───────────────────────────────────────
 //
-// Los nueve importes de este archivo llegan como STRING escala 2 y se pintan con `money()`, que
+// Los DIEZ importes de este archivo (seis en la cabecera desde la ficha 449, cuatro en las
+// columnas) llegan como STRING escala 2 y se pintan con `money()`, que
 // formatea SIN convertir a numero. Prohibidos aqui `Number(`, `parseFloat(`, `parseInt(` y
 // `.toFixed(`: este repo ya perdio un centimo por una conversion (feature 204) y hay tres
 // guardias vivas persiguiendo esas cuatro llamadas.
@@ -25,6 +26,12 @@
 // pintan «—» (R30). `money(null)` ya devuelve la raya larga, asi que no hace falta —ni se debe—
 // escribir un `?? "0.00"` en ningun sitio: «todavia no es un hecho» y «fue cero» son dos cosas
 // distintas y esta pantalla las distingue.
+//
+// ⚠ FICHA 449 — EL `fulfillment` ES LA EXCEPCION, Y NO CONTRADICE LO ANTERIOR. No se pinta «—»
+// cuando no lo hay: NO SE PINTA. Los otros cuatro importes contestan una pregunta que el usuario
+// vino a hacer, asi que su ausencia informa; el servicio de bodega no lo tiene contratado la
+// mayoria de las tiendas, y para ellas la cifra es un `"0.00"` cierto que se leeria como un
+// concepto que les aplica. Lo decide `hayMonto`, sin convertir el string a numero.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -91,6 +98,29 @@ export const DETALLE_DINERO_TEXTOS = {
      */
     retorno: "Flete por rechazo",
     retornoPista: "Flete por rechazo + IVA de las rechazadas. Fuera del reparto",
+    /**
+     * FICHA 449 — EL SERVICIO DE BODEGA, y se llama «Fulfillment» PORQUE YA SE LLAMA ASÍ.
+     *
+     * Es el MISMO rótulo con el que la cifra se lee en el detalle del cierre
+     * (`FULFILLMENT_COL` de `cierres-admin/_components/cierre-labels.ts`) y en las cinco
+     * descargas de gestiones. La ficha 449 nace justamente de que la MISMA orden enseñaba esta
+     * cifra en una pantalla y la escondía en otra; darle aquí un nombre propio —«servicio de
+     * bodega», «preparación»— repetiría el defecto con otra cara: dos nombres para una cifra se
+     * leen como dos cifras. Lo fija un caso de `ProductosTablaDinero.test.tsx` que compara este
+     * texto contra esa constante, que es OTRA fuente y no ésta.
+     *
+     * ⚠ NO SE SUMA A «Cobró Ordenex» y la pista lo dice de la única forma que sirve: diciendo
+     * lo que la cifra ES. `ordenex` es exactamente flete + IVA y comisión + IVA, y «Para la
+     * tienda» se calcula como la resta de eso contra lo recaudado; el fulfillment vive fuera de
+     * esa igualdad, igual que el flete por rechazo de al lado.
+     *
+     * ⚠ «UNA VEZ POR ORDEN» va en la pista porque es lo único que un lector no puede deducir
+     * mirando la cifra: preparar y despachar un paquete pasa una sola vez, lo reciba el
+     * destinatario o no, así que el monto no se multiplica por los intentos de entrega.
+     */
+    fulfillment: "Fulfillment",
+    fulfillmentPista:
+      "Preparar y despachar, una vez por orden y solo de lo ya liquidado. Fuera del reparto",
   },
   columnas: {
     guia: "Guía",
@@ -137,6 +167,35 @@ function ImporteCabecera({
 /** Un importe de una fila del detalle. Ver la cabecera del archivo sobre lo prohibido aqui. */
 function Importe({ valor }: { readonly valor: string | null }) {
   return <span className="tabular-nums whitespace-nowrap">{money(valor)}</span>;
+}
+
+/**
+ * FICHA 449 — ¿ESTE IMPORTE TIENE MONTO? `true` solo si es una cifra MAYOR QUE CERO.
+ *
+ * ⚠ PARA QUE SIRVE, Y POR QUE NO ES LO MISMO QUE `!== null`. Las otras cifras de este panel se
+ * pintan SIEMPRE, con «—» cuando no las hay, porque su ausencia es en si misma una respuesta a
+ * la pregunta que el usuario vino a hacer («¿cuanto cobro Ordenex?» → «todavia no se sabe»). El
+ * fulfillment no: la mayoria de las tiendas NO lo tiene contratado, y para ellas la cifra es un
+ * `"0.00"` perfectamente cierto que se leeria como un concepto que les aplica y les salio en
+ * cero. Una fila de ceros entre cinco importes con dato no informa: estorba. Por eso esta cifra
+ * —y solo esta— aparece cuando hay algo que decir.
+ *
+ * LOS TRES ESTADOS DEL CONTRATO, y como caen aqui (`lib/types/conteo-productos.ts`):
+ *   - `null`    → NINGUNA orden liquidada: no hay snapshot que leer. NO se pinta.
+ *   - `"0.00"`  → hay ordenes liquidadas y ninguna cobro bodega. NO se pinta.
+ *   - `"696.00"`→ el monto. SI se pinta.
+ *
+ * ⚠ MONEY-SAFE (R22): mira los DIGITOS del string, sin convertirlo. Un importe de escala 2 es
+ * mayor que cero exactamente cuando alguno de sus digitos no es `'0'`, asi que `[1-9]` lo
+ * decide sin `Number(`, sin `parseFloat(` y sin aritmetica. Es la misma tecnica con la que
+ * `lib/config/moneda` decide si emitir la cola de centimos.
+ *
+ * ⚠ ES PARA IMPORTES NO NEGATIVOS, que es lo que el fulfillment es por construccion (el precio
+ * de un servicio). Un `"-0.01"` daria `true` aqui, y esta bien: tambien es «hay algo que
+ * decir», aunque lo que diga sea que algo va mal aguas arriba.
+ */
+export function hayMonto(valor: string | null): boolean {
+  return valor !== null && /[1-9]/.test(valor);
 }
 
 /**
@@ -264,6 +323,40 @@ export function DineroProductoDetalle({
   const payload = data?.status === "ok" ? data.datos : null;
   const totales: DineroProductoDTO | null = payload?.totales ?? null;
 
+  /**
+   * FICHA 449 — la cabecera pasa de CINCO a SEIS importes cuando hay bodega que cobrar.
+   *
+   * ⚠ LAS DOS CLASES DE COLUMNAS SE ESCRIBEN ENTERAS Y SE ELIGEN, en vez de concatenar
+   * `xl:grid-cols-5` con un `xl:grid-cols-6` condicional. Dos utilidades del MISMO grupo y el
+   * MISMO prefijo no se pueden acumular —gana la ultima que el navegador lea, no la que uno
+   * quiera— y este arbol ya tiene medido el caso hermano: `flex-wrap md:flex-nowrap` NO
+   * funciona aqui. Con la clase completa en cada rama no hay nada que fusionar, y las dos
+   * cadenas aparecen LITERALES en el fuente, que es lo que el rastreador de Tailwind necesita
+   * para generarlas.
+   *
+   * ─── R63, MEDIDO EN CHROMIUM (no «se ve bien») ─────────────────────────────────────────────
+   *
+   * El importe que se prueba es `₡1.816.300`, el fulfillment de TODA la historia medido en
+   * produccion el 2026-09-17: el peor caso realista, no uno inventado.
+   *
+   * | contenedor           | celdas ANTES (5) | celdas DESPUES (6) | importe | cortado |
+   * |----------------------|------------------|--------------------|---------|---------|
+   * | 1102 px (a 1440)     | 208 px           | **170 px**         | 84 px   | **no**  |
+   * | 1440 px (a sangre)   | 275 px           | 227 px             | 84 px   | no      |
+   * | 358 px (a 390)       | 358 px (1 col)   | 358 px (1 col)     | 84 px   | no      |
+   *
+   * La celda mas estrecha que produce el cambio es 170 px y el importe mas ancho ocupa 84: el
+   * margen es de 86 px, o sea que la cifra cabe dos veces. `scrollWidth > clientWidth` da
+   * `false` en las seis celdas de los cuatro anchos, que es la forma de medir un corte sin
+   * mirarlo. Lo que SI crece es el alto: la cabecera pasa de 84 a 100 px a 1102 (una pista mas
+   * se pliega a dos renglones) y de 404 a 504 px a 390, donde la rejilla es de una columna y la
+   * celda nueva es un renglon entero. Cero desbordamiento horizontal en los cuatro casos.
+   */
+  const conFulfillment = hayMonto(totales?.fulfillment ?? null);
+  const clasesCabecera = conFulfillment
+    ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6"
+    : "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5";
+
   // R62 — cada estado tiene SU texto y ninguno se degrada a una tabla vacia: «no puedes»,
   // «no cabe» y «se rompio» piden cosas distintas del usuario, y «no hubo» es un hecho.
   const mensaje = mensajeDelPanel(data, error !== undefined);
@@ -278,7 +371,7 @@ export function DineroProductoDetalle({
           pantalla. Son las MISMAS cifras de la fila, y lo son por construccion: salen de la
           misma funcion sobre el mismo conjunto. Mientras no hay respuesta van todas «—», no
           en cero: pendiente de cargar NO es lo mismo que cero (R61). */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className={clasesCabecera}>
         <ImporteCabecera
           rotulo={DETALLE_DINERO_TEXTOS.totales.recaudado}
           valor={totales?.recaudado ?? null}
@@ -306,8 +399,26 @@ export function DineroProductoDetalle({
           valor={totales?.retorno ?? null}
           pista={DETALLE_DINERO_TEXTOS.totales.retornoPista}
         />
+        {/* FICHA 449 — el servicio de bodega, la sexta y la ULTIMA, pegada al flete por rechazo
+            porque las dos estan FUERA del reparto y por el mismo tipo de motivo: ninguna sale
+            de la plata que el mensajero recogio. Va detras y no en medio del reparto a
+            proposito: entre «Cobró Ordenex» y «Para la tienda» se leeria como un tercer trozo
+            de lo recaudado, que es exactamente lo que NO es.
+
+            ⚠ SOLO CUANDO HAY MONTO (ver `hayMonto`). Aparece y desaparece la SEXTA celda, no un
+            hueco: sin ella la rejilla vuelve a cinco columnas y queda como estaba. */}
+        {conFulfillment ? (
+          <ImporteCabecera
+            rotulo={DETALLE_DINERO_TEXTOS.totales.fulfillment}
+            valor={totales?.fulfillment ?? null}
+            pista={DETALLE_DINERO_TEXTOS.totales.fulfillmentPista}
+          />
+        ) : null}
       </div>
 
+      {/* R45 — EL AVISO, y cubre TAMBIEN al fulfillment: esta debajo de la rejilla entera, asi
+          que la cifra nueva nace dentro de su alcance sin repetir la frase. Lo afirma un caso
+          que compara la posicion de los dos nodos en el DOM, no la vista de nadie. */}
       <p className="text-xs text-muted-foreground">{DETALLE_DINERO_TEXTOS.avisoOrden}</p>
 
       <DataTable

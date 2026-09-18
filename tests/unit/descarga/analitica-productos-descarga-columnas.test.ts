@@ -30,6 +30,9 @@ import {
   filaDescargaAnaliticaProductos,
   MARCA_NO_SUMABLE_ARCHIVO,
 } from "@/app/(app)/analitica/_components/entregas/analitica-productos-descarga-columnas";
+// FICHA 449 — LA OTRA FUENTE del nombre de la cifra de bodega: los rótulos del cierre. Se
+// importa a propósito, para que el encabezado del archivo no pueda bautizarla de nuevo.
+import { FULFILLMENT_COL } from "@/app/(app)/cierres-admin/_components/cierre-labels";
 import type { DineroProductoDTO } from "@/lib/types/conteo-productos";
 import type { FilaProductoDTO } from "@/lib/types/conteo-productos";
 
@@ -257,12 +260,17 @@ const FILA_CON_DINERO: FilaProductoDTO = {
 };
 
 describe("FICHA 347 · columnas del archivo con dinero concedido (R66/R68)", () => {
-  it("las VEINTE claves salen en este orden y no en otro", () => {
+  it("las VEINTIUNA claves salen en este orden y no en otro", () => {
     // Las once primeras son EXACTAMENTE las de arriba, y en el mismo orden: el archivo de un
     // maestro y el de un rol sin dinero tienen que poder abrirse uno al lado del otro. Las
-    // nueve de dinero van al final, en el orden en que se leen: lo recaudado, con cuántas de
-    // sus órdenes llevan otro producto; lo liquidado y su reparto; lo pendiente; y el retorno,
-    // que va el último porque está FUERA del reparto (R19).
+    // diez de dinero van al final, en el orden en que se leen: lo recaudado, con cuántas de
+    // sus órdenes llevan otro producto; lo liquidado y su reparto; lo pendiente; y las dos que
+    // están FUERA del reparto (R19 y la ficha 449), que van las últimas.
+    //
+    // ⚠ FICHA 449 — `fulfillment` SE AÑADE AL FINAL Y ESO ES EL CONTRATO. Meterla en medio
+    // correría de sitio a todas las que van detrás, y una hoja o una macro que lea el fichero
+    // por POSICIÓN se rompería en silencio — el mismo motivo por el que la 347 descartó una
+    // columna por desenlace. Este `toEqual` es lo que pone en rojo una inserción intermedia.
     expect(COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO.map((c) => c.clave)).toEqual([
       "tienda",
       "producto",
@@ -284,10 +292,11 @@ describe("FICHA 347 · columnas del archivo con dinero concedido (R66/R68)", () 
       "pendiente_recaudado",
       "pendiente_ordenes",
       "retorno",
+      "fulfillment",
     ]);
   });
 
-  it("los VEINTE encabezados salen en este orden, con la marca de no-sumable donde toca", () => {
+  it("los VEINTIUN encabezados salen en este orden, con la marca de no-sumable donde toca", () => {
     expect(COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO.map((c) => c.encabezado)).toEqual([
       "Tienda",
       "Producto",
@@ -312,10 +321,14 @@ describe("FICHA 347 · columnas del archivo con dinero concedido (R66/R68)", () 
       "Pendiente de cierre (no sumar: importe de la orden completa)",
       "Órdenes pendientes de cierre",
       "Flete por rechazo (no sumar: importe de la orden completa)",
+      // FICHA 449 — el MISMO rótulo que en el detalle del cierre y en las cinco descargas de
+      // gestiones (`FULFILLMENT_COL`). Un segundo nombre para la misma cifra se lee como una
+      // segunda cifra, y de eso va precisamente esta ficha.
+      "Fulfillment (no sumar: importe de la orden completa)",
     ]);
   });
 
-  it("R49 — las SEIS columnas de importe llevan la marca; las de conteo, no", () => {
+  it("R49 — las SIETE columnas de importe llevan la marca; las de conteo, no", () => {
     // El barrido, para que añadir una columna de dinero sin marca duela aunque el `toEqual` de
     // arriba se hubiera reescrito a la ligera. Las de conteo NO la llevan a propósito: ésas
     // SÍ son aditivas, y marcarlas diría lo contrario de lo que se quiere decir.
@@ -332,6 +345,10 @@ describe("FICHA 347 · columnas del archivo con dinero concedido (R66/R68)", () 
       // El retorno tambien: es un importe, y ademas uno que esta FUERA del reparto (R19), asi
       // que sumarlo con los otros seria peor todavia.
       "retorno",
+      // FICHA 449 — y el fulfillment, por el mismo motivo doble: es un importe, y uno que
+      // tampoco sale de la plata recogida. Ademas NO SUMABLE en el otro sentido que esta tabla
+      // tiene (R12): una orden de tres productos aporta su bodega entera a las tres filas.
+      "fulfillment",
     ]);
     expect(conMarca).not.toContain("ordenes_con_otro_producto");
     expect(conMarca).not.toContain("liquidado_ordenes");
@@ -416,7 +433,7 @@ describe("FICHA 388 · los ámbitos de preferencia de columnas", () => {
 });
 
 describe("FICHA 347 · la proyección con dinero", () => {
-  it("escribe las nueve celdas de dinero con los STRING del servidor, TAL CUAL", () => {
+  it("escribe las DIEZ celdas de dinero con los STRING del servidor, TAL CUAL", () => {
     const fila = filaDescargaAnaliticaProductos(FILA_CON_DINERO, true);
 
     // Money-safe (R22): el archivo lleva el mismo STRING que cruzó la frontera. Sin `Number`,
@@ -428,6 +445,9 @@ describe("FICHA 347 · la proyección con dinero", () => {
     expect(fila.para_la_tienda).toBe("28785.00");
     expect(fila.pendiente_recaudado).toBe("10000.00");
     expect(fila.retorno).toBe("2260.00");
+    // FICHA 449 — la cifra de bodega, tambien TAL CUAL y desde la RAIZ del DTO (no de
+    // `liquidado`): el sitio del que se lee es la afirmacion de que no es parte del reparto.
+    expect(fila.fulfillment).toBe("2784.00");
     // Y los conteos son NÚMEROS: una hoja con la columna en texto no suma ni ordena, y éstos
     // sí se pueden sumar.
     expect(fila.ordenes_con_otro_producto).toBe(3);
@@ -449,7 +469,7 @@ describe("FICHA 347 · la proyección con dinero", () => {
     const fila = filaDescargaAnaliticaProductos(FILA_CON_DINERO, false);
 
     expect(Object.keys(fila)).toEqual(COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS.map((c) => c.clave));
-    for (const clave of ["recaudado", "ordenex", "para_la_tienda", "retorno"]) {
+    for (const clave of ["recaudado", "ordenex", "para_la_tienda", "retorno", "fulfillment"]) {
       expect(Object.keys(fila)).not.toContain(clave);
     }
     // Ni siquiera en cero: R5 prohíbe emitir la cifra «ni recortada, ni agregada, ni en cero».
@@ -478,10 +498,46 @@ describe("FICHA 347 · la proyección con dinero", () => {
     expect(sinLiquidar.ordenex).toBeNull();
     expect(sinLiquidar.para_la_tienda).toBeNull();
     expect(sinLiquidar.retorno).toBeNull();
+    // FICHA 449 — el `null` del fulfillment es el de «no hay snapshot que leer», y sale VACIO
+    // por el mismo motivo que los tres de arriba.
+    expect(sinLiquidar.fulfillment).toBeNull();
     expect(sinLiquidar.ordenex).not.toBe(0);
     expect(sinLiquidar.ordenex).not.toBe("0.00");
     // Lo que SÍ es un hecho se escribe: lo recaudado existe desde que se registró la gestión.
     expect(sinLiquidar.recaudado).toBe("10000.00");
+  });
+
+  it("FICHA 449 — un `0.00` que SÍ llegó se ESCRIBE: el archivo no se lo calla", () => {
+    // ⚠ LA ASIMETRÍA CON LA PANTALLA, Y ES DELIBERADA. En pantalla el fulfillment aparece sólo
+    // cuando hay monto: una celda de ceros entre cinco importes con dato no informa y sugiere
+    // un concepto que a esa tienda no le aplica. Aquí la columna existe igual para TODAS las
+    // filas —no se puede «quitar» en una—, y la celda vacía ya significa otra cosa (R70): «no
+    // se sabe». Escribir el `"0.00"` es lo único que mantiene distinguibles «hubo órdenes
+    // liquidadas y ninguna cobró bodega» y «no hay snapshot que leer» seis meses después, que
+    // es cuando se abre el `.xlsx`.
+    //
+    // Sin este caso, copiar el `hayMonto` de la pantalla a la proyección pasaría inadvertido: el
+    // archivo saldría con una celda vacía donde hay un hecho, y nada se vería roto.
+    const sinBodega = filaDescargaAnaliticaProductos(
+      { ...FILA_CON_DINERO, dinero: { ...DINERO, fulfillment: "0.00" } },
+      true,
+    );
+
+    expect(sinBodega.fulfillment).toBe("0.00");
+    expect(sinBodega.fulfillment).not.toBeNull();
+    // Y el resto de la fila no se entera: es una celda, no un modo.
+    expect(sinBodega.ordenex).toBe("6215.00");
+  });
+
+  it("FICHA 449 — el encabezado lleva el nombre que la cifra YA tiene en el resto de la app", () => {
+    // Contra OTRA fuente (`FULFILLMENT_COL`, los rótulos del cierre) y no contra sí misma: la
+    // ficha nace de que la misma orden enseñaba esta cifra allí y la escondía aquí, así que un
+    // nombre propio para el archivo dejaría el defecto en pie con otra cara.
+    const columna = COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO.find(
+      (c) => c.clave === "fulfillment",
+    );
+    expect(columna, "no existe la columna `fulfillment`").toBeDefined();
+    expect(columna!.encabezado).toBe(`${FULFILLMENT_COL} ${MARCA_NO_SUMABLE_ARCHIVO}`);
   });
 
   it("R70 — una fila SIN ninguna orden que aporte deja las ocho celdas de dinero vacías", () => {
@@ -498,6 +554,7 @@ describe("FICHA 347 · la proyección con dinero", () => {
       "pendiente_recaudado",
       "pendiente_ordenes",
       "retorno",
+      "fulfillment",
     ]) {
       expect(sinDinero[clave], clave).toBeNull();
     }

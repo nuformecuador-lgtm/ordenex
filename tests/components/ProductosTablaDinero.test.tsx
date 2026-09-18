@@ -29,6 +29,10 @@ import {
   textoPendiente,
 } from "@/app/(app)/analitica/_components/entregas/ProductosTabla";
 import { DETALLE_DINERO_TEXTOS } from "@/app/(app)/analitica/_components/entregas/DineroProductoDetalle";
+// FICHA 449 — LA OTRA FUENTE del nombre de la cifra de bodega. Se importa a propósito desde el
+// módulo de rótulos del cierre: comparar el texto de esta pantalla contra el de aquélla es lo
+// único que garantiza que sigan siendo UNO, y no dos nombres para una misma cifra (ficha 338).
+import { FULFILLMENT_COL } from "@/app/(app)/cierres-admin/_components/cierre-labels";
 import { textoSello } from "@/app/(app)/analitica/_components/entregas/ActualizarAnalitica";
 import {
   FiltroEntregasProvider,
@@ -221,7 +225,13 @@ describe("FICHA 347 · R6 — sin la concesión no hay NADA de dinero en la pant
         name: PRODUCTOS_TEXTOS.abrirDetalle("Base Dr", "Tienda Uno"),
       }),
     );
-    for (const rotulo of [PRODUCTOS_COLUMNAS.ordenex, PRODUCTOS_COLUMNAS.paraTienda]) {
+    // FICHA 449 — y el servicio de bodega entra en la misma lista: una cifra de dinero más es
+    // una filtración más si la concesión no la tapa.
+    for (const rotulo of [
+      PRODUCTOS_COLUMNAS.ordenex,
+      PRODUCTOS_COLUMNAS.paraTienda,
+      PRODUCTOS_COLUMNAS.fulfillment,
+    ]) {
       expect(screen.queryByText(rotulo), rotulo).toBeNull();
     }
     expect(screen.queryByText(PRODUCTOS_TEXTOS.avisoDinero)).toBeNull();
@@ -1097,5 +1107,218 @@ describe("FICHA 348 · `textoColumnasNoSumables` deriva la leyenda, no la escrib
     expect(textoColumnasNoSumables(["A", "B", "C", "D"])).toBe(
       "Las columnas de dinero que no se pueden sumar hacia abajo: A, B, C y D.",
     );
+  });
+});
+
+/* ========================================================================== */
+/* FICHA 449 — el SERVICIO DE BODEGA, en el detalle y sólo cuando hay monto   */
+/* ========================================================================== */
+
+/**
+ * FICHA 449 — la cifra de bodega llega hasta la pantalla, y llega FUERA de la fórmula.
+ *
+ * ─── EL DEFECTO QUE CIERRA, MEDIDO ──────────────────────────────────────────────────────────
+ *
+ * La MISMA orden enseñaba el fulfillment en el detalle del cierre y lo escondía en esta tabla:
+ * el `SELECT` del dinero por producto congelaba nueve columnas de tarifa y ésa no era una de
+ * ellas. En producción, el 2026-09-17: 867 filas y 605.616 colones en siete días. La mitad de
+ * backend ya la sube hasta el DTO; esto es lo que la pone delante de alguien.
+ *
+ * ─── LAS TRES COSAS QUE ESTOS CASOS AFIRMAN, Y POR QUÉ CADA UNA ─────────────────────────────
+ *
+ *  1. QUE SE PINTA CON SU MONTO, y en los DOS sitios del detalle: el bloque de la fila —que
+ *     sale del DTO ya en pantalla, sin una segunda consulta— y la cabecera del panel de la 347,
+ *     que repite los mismos rótulos «para cotejar» (R38).
+ *  2. QUE NO SE PINTA CUANDO NO HAY NADA QUE DECIR. Y aquí la regla es distinta de la de sus
+ *     cuatro hermanas a propósito: `ordenex`, `tienda`, `retorno` y lo pendiente se pintan
+ *     SIEMPRE, con «—» cuando faltan, porque su ausencia contesta la pregunta que el usuario
+ *     vino a hacer. El fulfillment no lo tiene contratado la mayoría de las tiendas, así que
+ *     para ellas la cifra es un `"0.00"` CIERTO que se leería como un concepto que les aplica y
+ *     les salió en cero. Los dos estados sin monto —`"0.00"` y `null`— se callan.
+ *  3. QUE NO ES UN SUMANDO DE «Cobró Ordenex». Es la afirmación cara: dentro de `ordenex` vive
+ *     la igualdad `ordenex + tienda === liquidado.recaudado`, cierta POR CONSTRUCCIÓN, y un
+ *     sumando nuevo la rompería en silencio. El caso lo mide por comportamiento —la celda sigue
+ *     diciendo lo mismo Y la suma de las dos NO aparece en el DOM—, no leyendo el código.
+ */
+describe("FICHA 449 · el fulfillment en el detalle de la fila", () => {
+  /** El mismo dinero de arriba con OTRO fulfillment: los tres estados del contrato. */
+  function conFulfillment(valor: string | null): DineroProductoDTO {
+    return { ...DINERO, fulfillment: valor };
+  }
+
+  /** El payload del panel de la 347 con los totales que se le pasen. */
+  function payload(totales: DineroProductoDTO) {
+    return {
+      status: "ok" as const,
+      datos: {
+        producto: "Base Dr",
+        tiendaNombre: "Tienda Uno",
+        totales,
+        total: 1,
+        page: 1,
+        pageSize: 25,
+        ordenes: [
+          {
+            ordenId: "o1",
+            guia: "77001",
+            destinatario: "Ana Pérez",
+            resultados: ["entregada" as const],
+            estado: "liquidada" as const,
+            recaudado: "35000.00",
+            ordenex: "6215.00",
+            tienda: "28785.00",
+            retorno: null,
+          },
+        ],
+      },
+    };
+  }
+
+  /** El bloque de la FILA desplegada (el que no depende de la segunda consulta). */
+  async function bloqueDeFila(): Promise<HTMLElement> {
+    return waitFor(() => {
+      const el = document.querySelector<HTMLElement>('[data-slot="detalle-producto"]');
+      expect(el, "la fila no está abierta: no hay bloque de detalle").not.toBeNull();
+      return el as HTMLElement;
+    });
+  }
+
+  /**
+   * Abre la fila de `Base Dr` con ese dinero y devuelve el PANEL, ya asentado.
+   *
+   * ⚠ EL ANCLA ES UN CONTENIDO —el enlace de la guía— y no un conteo ni la llamada al mock.
+   * Mientras el panel carga, `totales` es `null` y NINGUNA cifra está pintada: un caso de los
+   * que dicen «esto no aparece» se cumpliría a media carga y pasaría sin haber medido nada.
+   */
+  async function abrir(dinero: DineroProductoDTO): Promise<HTMLElement> {
+    const usuario = userEvent.setup();
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([fila({ producto: "Base Dr", dinero })]),
+    });
+    detalleMock.mockResolvedValue(payload(dinero));
+    renderTabla(true);
+
+    await screen.findByText("Base Dr");
+    await usuario.click(
+      screen.getByRole("button", { name: PRODUCTOS_TEXTOS.abrirDetalle("Base Dr", "Tienda Uno") }),
+    );
+    const panel = await screen.findByRole("region", {
+      name: DETALLE_DINERO_TEXTOS.region("Base Dr", "Tienda Uno"),
+    });
+    await within(panel).findByRole("link", { name: DETALLE_DINERO_TEXTOS.verOrden("77001") });
+    return panel;
+  }
+
+  it("con monto, la cifra se pinta en los DOS sitios del detalle", async () => {
+    const panel = await abrir(conFulfillment("2784.00"));
+
+    // (1) el bloque de la fila: sale del DTO que ya estaba en pantalla.
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.fulfillment)).toBe(money("2784.00"));
+    // (2) la cabecera del panel, con su pista al lado.
+    expect(
+      within(panel).getByText(DETALLE_DINERO_TEXTOS.totales.fulfillment),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByText(DETALLE_DINERO_TEXTOS.totales.fulfillmentPista),
+    ).toBeInTheDocument();
+    expect(within(panel).getAllByText(money("2784.00")).length).toBeGreaterThan(0);
+  });
+
+  it("con `0.00` NO se pinta: una tienda sin bodega no ve una fila de ceros", async () => {
+    const panel = await abrir(conFulfillment("0.00"));
+    const bloque = await bloqueDeFila();
+
+    // Ni el rótulo, ni la pista, ni un cero colgando de ellos.
+    expect(within(bloque).queryByText(PRODUCTOS_COLUMNAS.fulfillment)).toBeNull();
+    expect(within(panel).queryByText(DETALLE_DINERO_TEXTOS.totales.fulfillment)).toBeNull();
+    expect(within(panel).queryByText(DETALLE_DINERO_TEXTOS.totales.fulfillmentPista)).toBeNull();
+
+    // ⚠ Y EL CASO NO ES VACÍO: el resto del detalle SÍ está pintado. Sin esto, «no aparece»
+    // también sería cierto de una pantalla en blanco.
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.ordenex)).toBe(money("6215.00"));
+    expect(within(panel).getAllByText(money("2260.00")).length).toBeGreaterThan(0);
+  });
+
+  it("con `null` tampoco se pinta —y sus cuatro hermanas SÍ, en «—»", async () => {
+    // El contraste es el caso: `DINERO_SIN_LIQUIDAR` no tiene ni una orden liquidada, así que
+    // `ordenex`, `tienda` y `retorno` llegan `null` y se pintan con la raya larga (R30). El
+    // fulfillment llega `null` por el MISMO motivo y NO se pinta en absoluto. Son dos
+    // tratamientos distintos del mismo `null`, y esta ficha los decidió a sabiendas.
+    const panel = await abrir(DINERO_SIN_LIQUIDAR);
+    const bloque = await bloqueDeFila();
+
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.ordenex)).toBe(money(null));
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.paraTienda)).toBe(money(null));
+    expect(within(bloque).queryByText(PRODUCTOS_COLUMNAS.fulfillment)).toBeNull();
+    expect(within(panel).queryByText(DETALLE_DINERO_TEXTOS.totales.fulfillment)).toBeNull();
+  });
+
+  it("NO es un sumando de «Cobró Ordenex»: el reparto dice exactamente lo mismo", async () => {
+    // ⚠ LA AFIRMACIÓN CARA DE LA FICHA. `ordenex` es flete + IVA y comisión + IVA, y «Para la
+    // tienda» se calcula como la RESTA de eso contra lo recaudado: meter el fulfillment dentro
+    // rompería `ordenex + tienda === liquidado.recaudado` sin que nada se viera roto.
+    await abrir(conFulfillment("2784.00"));
+
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.ordenex)).toBe(money("6215.00"));
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.paraTienda)).toBe(money("28785.00"));
+    expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.fulfillment)).toBe(money("2784.00"));
+
+    // Y la suma de los dos —6215 + 2784 = 8999— NO está en ninguna parte del documento: nadie
+    // puede leer que el total cambió. El número no aparece por ningún otro camino.
+    expect(document.body.textContent).not.toContain(money("8999.00"));
+  });
+
+  it("el aviso de no-sumable CUBRE la cifra nueva, en los dos sitios", async () => {
+    // ⚠ COMPROBADO, NO SUPUESTO. R45 pide que la advertencia viaje con el dinero; lo que la
+    // hace cierta para una cifra nueva es que el párrafo esté DESPUÉS de ella y dentro del
+    // mismo contenedor, que es lo que estas dos comparaciones de posición miden.
+    const panel = await abrir(conFulfillment("2784.00"));
+    const bloque = await bloqueDeFila();
+    const detalleDeLaFila = bloque.parentElement as HTMLElement;
+
+    const enLaFila = within(bloque).getByText(PRODUCTOS_COLUMNAS.fulfillment);
+    const avisoDeLaFila = within(detalleDeLaFila).getByText(PRODUCTOS_TEXTOS.avisoDinero);
+    expect(
+      enLaFila.compareDocumentPosition(avisoDeLaFila) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeGreaterThan(0);
+
+    const enElPanel = within(panel).getByText(DETALLE_DINERO_TEXTOS.totales.fulfillment);
+    const avisoDelPanel = within(panel).getByText(DETALLE_DINERO_TEXTOS.avisoOrden);
+    expect(
+      enElPanel.compareDocumentPosition(avisoDelPanel) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeGreaterThan(0);
+  });
+
+  it("un solo nombre para una sola cifra: el que ya tiene en el detalle del cierre", () => {
+    // ⚠ CONTRA OTRA FUENTE, no contra sí misma. `FULFILLMENT_COL` es la constante con la que
+    // esta cifra se lee en el cierre y en las cinco descargas de gestiones; la ficha nace de
+    // que la misma orden la enseñaba allí y la escondía aquí, así que bautizarla de nuevo
+    // dejaría el defecto en pie con otra cara. Es la lección de la 338 con «Flete por rechazo».
+    expect(PRODUCTOS_COLUMNAS.fulfillment).toBe(FULFILLMENT_COL);
+    expect(DETALLE_DINERO_TEXTOS.totales.fulfillment).toBe(FULFILLMENT_COL);
+  });
+
+  it("R6 — sin la concesión la cifra no existe, aunque el DTO la traiga", async () => {
+    const usuario = userEvent.setup();
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([fila({ producto: "Base Dr", dinero: conFulfillment("2784.00") })], {
+        dinero: { estado: "denegado" },
+      }),
+    });
+    renderTabla(false);
+
+    await screen.findByText("Base Dr");
+    await usuario.click(
+      screen.getByRole("button", { name: PRODUCTOS_TEXTOS.abrirDetalle("Base Dr", "Tienda Uno") }),
+    );
+    const bloque = await bloqueDeFila();
+
+    // El volumen SÍ está —la fila abierta no está vacía—, y ni el rótulo ni el importe.
+    expect(within(bloque).getByText(PRODUCTOS_COLUMNAS.unidades)).toBeInTheDocument();
+    expect(within(bloque).queryByText(PRODUCTOS_COLUMNAS.fulfillment)).toBeNull();
+    expect(document.body.textContent).not.toContain(money("2784.00"));
+    expect(detalleMock).not.toHaveBeenCalled();
   });
 });
