@@ -205,6 +205,32 @@ sino «por qué seguimos esperando».
 
 ---
 
+## Release del 2026-09-17 (2.ª) — la 449, el fulfillment en Analítica
+
+**`prod` = `9d3d67b5`** · PR #816 · deployment **success**.
+
+Segunda del día por la misma vía, y ya sin sorpresas: una ficha sola, dos commits (`a1a216cd` backend,
+`c8f9b29d` frontend) traídos por `cherry-pick` a una rama nacida de `origin/prod` (`9a1b40be`). Cero
+conflictos. **Los 20 ficheros que aportaba salieron byte a byte idénticos a `dev`** — los 20, no 19.
+
+Lo verificado:
+
+- **Gate completo en verde** sobre la rama: `Test Files 1990 passed`, `Tests 29097 passed | 26 skipped`,
+  `INIT_EXIT=0`, con 378 ficheros de integración corridos y `DATABASE_URL resuelta`. La base de
+  verificación se montó con la receta de arriba (copia con `TEMPLATE`, cirugía de columnas y del enum):
+  199 migraciones, enum en 52.
+- **Sin migraciones**: 199 antes y 199 después.
+- **Errores de runtime** tras el despliegue: **uno**, y no es de esta release — `prisma.distrito.count()`
+  P2028 al revalidar la caché de los contadores públicos, grupo que existe desde el **2026-08-28**, una
+  sola ocurrencia y **sobre el deployment anterior**. Queda como deuda conocida, no como regresión.
+- **La app responde**: `/` y `/login` en 200.
+- **La cifra que la ficha vino a enseñar, medida en producción**: 867 filas y **₡605.616** en los
+  últimos 7 días. Eso es lo que Analítica tiene que mostrar ahora y antes escondía.
+
+**Lo que NO salió:** SF-001, otra vez intacto.
+
+---
+
 ## Release del 2026-09-17 — todo lo que esperaba en `dev` MENOS SF-001
 
 **`prod` = `9a1b40be`** · PR #814 · deployment `783LDc7yrDfog6npD1ZnSoHwoPqH`, **success**.
