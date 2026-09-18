@@ -148,6 +148,33 @@ export interface DineroProductoDTO {
    * de la plata que el mensajero trajo salio un cobro que nadie recaudo.
    */
   readonly retorno: string | null;
+  /**
+   * FICHA 449 — EL SERVICIO DE BODEGA de las ordenes LIQUIDADAS de esta fila. CIFRA PROPIA.
+   *
+   * ⚠ NO SE SUMA A `liquidado.ordenex`, y no es un matiz contable. `ordenex` es exactamente
+   * `fleteConIva + comisionConIva`, y `liquidado.tienda` se calcula como la RESTA de eso contra
+   * `liquidado.recaudado`: es lo que hace cierta R20 POR CONSTRUCCION. Meter el fulfillment
+   * dentro de `ordenex` romperia esa igualdad en silencio. Y no se puede meter «bien» tampoco:
+   * el fulfillment NO es una entrada de `derivarIngresoOrden` —`ITarifaVigenteRepository` lo
+   * prohibe desde el 2026-08-19— asi que no participa del reparto de lo recogido. Vive al lado
+   * de `retorno`, que esta fuera por el mismo tipo de motivo.
+   *
+   * ⚠ SE CUENTA UNA VEZ POR ORDEN, no por gestion ni por cierre. Es un monto FIJO por el
+   * servicio de preparar y despachar el paquete, y preparar un paquete pasa una sola vez: el
+   * contrato publico lo dice con todas las letras («preparar y despachar el paquete ya costo,
+   * lo reciba el destinatario o no» — el MISMO monto en el escenario entregado y en el
+   * devuelto). Acumularlo por gestion multiplicaria una sola preparacion por el numero de
+   * intentos de entrega registrados.
+   *
+   * ⚠ `null` = NINGUNA orden de esta fila esta liquidada, el mismo caso en que `ordenex`,
+   * `tienda` y `retorno` tambien son `null` (R30). Nunca es un `0.00` disfrazado. Y `"0.00"` SI
+   * es una cifra real: hay ordenes liquidadas y ninguna cobro bodega (la tienda no hace
+   * fulfillment, o su snapshot es anterior al 2026-08-19).
+   *
+   * ⚠ NO SUMABLE HACIA ABAJO, igual que las otras cuatro: el importe de una orden cuenta ENTERO
+   * en cada uno de sus productos.
+   */
+  readonly fulfillment: string | null;
 }
 
 /**

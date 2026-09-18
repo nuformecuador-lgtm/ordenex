@@ -85,6 +85,9 @@ const DINERO: DineroProductoDTO = {
   liquidado: { recaudado: "35000.00", ordenex: "6215.00", tienda: "28785.00", ordenes: 4 },
   pendiente: { recaudado: "10000.00", ordenes: 1 },
   retorno: "2260.00",
+  // FICHA 449 — el servicio de bodega de sus 4 ordenes liquidadas (4 x 696). Cifra PROPIA: NO
+  // esta dentro de `liquidado.ordenex`, y por eso el cuadre de arriba no la menciona.
+  fulfillment: "2784.00",
 };
 
 const FILAS: FilaProductoDTO[] = [

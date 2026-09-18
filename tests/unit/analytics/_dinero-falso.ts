@@ -65,11 +65,21 @@ export interface OpcionesFilaDinero {
   /** `"aprobado"` = liquidada (si ademas hay tarifa congelada); `null` = sin cierre. */
   cierreEstado?: string | null;
   congelada?: OrdenCongelada | null;
+  /**
+   * FICHA 449 — el fulfillment CONGELADO de esa orden en ese cierre, STRING escala 2.
+   *
+   * Sin pasarlo, el fixture imita lo que hace el repositorio: `null` cuando NO hay fila de
+   * snapshot (no se sabe) y `"0.00"` cuando la hay (hay dato, y dice que no se cobro bodega).
+   * Escribirlo asi —y no un `"0.00"` constante— es lo que hace que un test que quita la
+   * congelada siga contando la historia correcta.
+   */
+  fulfillment?: string | null;
 }
 
 /** Una fila cruda del dinero: el grano `(orden, gestion)` que devuelve el repositorio. */
 export function filaDinero(opts: OpcionesFilaDinero = {}): FilaDineroCruda {
   const ordenId = opts.ordenId ?? "o1";
+  const laCongelada = opts.congelada === undefined ? congelada() : opts.congelada;
   return {
     ordenId,
     tiendaId: opts.tiendaId ?? "t1",
@@ -82,7 +92,9 @@ export function filaDinero(opts: OpcionesFilaDinero = {}): FilaDineroCruda {
     resultado: opts.resultado ?? "entregada",
     montoRecibido: opts.montoRecibido === undefined ? "10000.00" : opts.montoRecibido,
     cierreEstado: opts.cierreEstado === undefined ? "aprobado" : opts.cierreEstado,
-    congelada: opts.congelada === undefined ? congelada() : opts.congelada,
+    congelada: laCongelada,
+    fulfillment:
+      opts.fulfillment === undefined ? (laCongelada === null ? null : "0.00") : opts.fulfillment,
   };
 }
 

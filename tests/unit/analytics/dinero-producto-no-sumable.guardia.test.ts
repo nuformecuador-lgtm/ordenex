@@ -180,6 +180,10 @@ function fila(i: number): FilaProductoDTO {
       },
       pendiente: { recaudado: "0.00", ordenes: 0 },
       retorno: null,
+      // FICHA 449 — un cero REAL (hay orden liquidada y no cobro bodega), no un `null`. Se deja
+      // en cero a proposito: esta guardia elige sus importes para que ninguna suma prohibida sea
+      // subcadena de otra cosa, y un sumando nuevo con valor podria enturbiar esa eleccion.
+      fulfillment: "0.00",
     },
   };
 }
