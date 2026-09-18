@@ -27,6 +27,11 @@
 // dinero: la unica aritmetica monetaria vive en `repartoDeOrden`, que a su vez solo LLAMA a
 // `derivarIngresoOrden` y a `pagoTiendaOrdenex`.
 
+// FICHA 449 — `Prisma.Decimal` entra aqui SOLO como ARITMETICA (es lo mismo que hace
+// `lib/utils/dinero-por-producto.ts`, que lo importa por el mismo motivo). No es una formula de
+// dinero nueva: es el acumulador del fulfillment, que se suma ya a escala 2 y nunca se calcula.
+import { Prisma } from "@prisma/client";
+
 import { parsearProducto } from "@/lib/analytics/producto-parse";
 import type { ItemProducto } from "@/lib/analytics/producto-parse";
 import {
@@ -297,8 +302,16 @@ export interface OrdenQueAporta {
   readonly ordenId: string;
   /** La primera fila cruda de esa orden: de ahi sale todo lo descriptivo (guia, tienda, texto). */
   readonly fila: FilaDineroCruda;
-  /** TODAS sus gestiones aportantes, en el orden en que las devolvio la base (`g.id` asc). */
-  readonly gestiones: readonly GestionDeDinero[];
+  /**
+   * TODAS sus gestiones aportantes, en el orden en que las devolvio la base (`g.id` asc).
+   *
+   * ⚠ FICHA 449 — el tipo es `FilaDineroCruda` y no `GestionDeDinero`, que es lo que era. La
+   * diferencia no es cosmetica: el fulfillment congelado viaja en la fila CRUDA y no en
+   * `GestionDeDinero`, justamente para que `repartoDeOrden` —que solo ve `GestionDeDinero`— no
+   * pueda alcanzarlo ni sumarlo dentro del reparto. Estrechar el tipo aqui es lo que permite
+   * leerlo en `cifrasDelGrupo` sin ensanchar el contrato del modulo puro del dinero.
+   */
+  readonly gestiones: readonly FilaDineroCruda[];
   /** Las claves de producto de su texto, ya deduplicadas. Una orden puede estar en varias filas. */
   readonly claves: readonly string[];
   readonly reparto: RepartoDeOrden;
@@ -380,11 +393,14 @@ export function cifrasDelGrupo(ordenes: readonly OrdenQueAporta[]): DineroProduc
   const gestiones: GestionDeDinero[] = [];
   const liquidadas = new Set<string>();
   const pendientes = new Set<string>();
+  let fulfillment = new Prisma.Decimal(0);
   for (const o of ordenes) {
     for (const g of o.gestiones) gestiones.push(g);
     // `Set`: una orden con dos gestiones o en dos cierres cuenta UNA vez (R18). Y los dos
     // conjuntos son DISJUNTOS, que es lo que hace que su suma sea el cardinal del detalle.
     (o.liquidada ? liquidadas : pendientes).add(o.ordenId);
+    // FICHA 449 — UNA VEZ POR ORDEN. Ver `fulfillmentDeOrden`.
+    if (o.liquidada) fulfillment = fulfillment.plus(fulfillmentDeOrden(o));
   }
   const r = repartoDeOrden(gestiones);
   return {
@@ -397,7 +413,40 @@ export function cifrasDelGrupo(ordenes: readonly OrdenQueAporta[]): DineroProduc
     },
     pendiente: { recaudado: r.pendienteRecaudado, ordenes: pendientes.size },
     retorno: r.retorno,
+    // `null` cuando NINGUNA orden del grupo esta liquidada, exactamente igual que `ordenex`,
+    // `tienda` y `retorno` (R30): «no hubo» y «salio cero» son hechos distintos.
+    fulfillment: liquidadas.size === 0 ? null : fulfillment.toFixed(2),
   };
+}
+
+/**
+ * FICHA 449 — EL FULFILLMENT DE UNA ORDEN LIQUIDADA: UNO, no uno por gestion.
+ *
+ * ⚠ POR QUE NO SE SUMAN SUS GESTIONES, que es lo que hacen las otras cifras. `ordenex`, `tienda`
+ * y `retorno` se DERIVAN por gestion porque cada gestion tiene su propio `resultado` y la
+ * formula depende de el. El fulfillment no depende del resultado: es un monto FIJO por el
+ * servicio de preparar y despachar el paquete, y el contrato publico lo dice con todas las
+ * letras — el escenario devuelto cobra «el MISMO monto que en el escenario entregado: preparar y
+ * despachar el paquete ya costo, lo reciba el destinatario o no». Una orden con dos gestiones
+ * —o en dos cierres, que es el caso R18— se preparo UNA vez; acumular por gestion multiplicaria
+ * esa unica preparacion por el numero de intentos de entrega registrados, y el resultado tendria
+ * aspecto de cifra firme.
+ *
+ * ⚠ CUANDO DOS SNAPSHOTS DISCREPAN gana el PRIMERO, y el primero es determinista: las filas
+ * llegan `ORDER BY o."id", g."id"`, asi que dos lecturas iguales eligen el mismo. Elegir es
+ * preferible a sumar: sumar seria cobrar dos bodegas por un paquete; elegir, como mucho, usar el
+ * monto congelado del primero de dos cierres que casi siempre traen el mismo numero.
+ *
+ * Solo se miran las gestiones LIQUIDADAS: es el mismo umbral que `ordenex`/`tienda`/`retorno`, y
+ * esta puesto por el motivo ya escrito en `ESTADO_CIERRE_LIQUIDADO` — un cierre solicitado se ha
+ * llegado a BORRAR en este repo, y con el su snapshot. Ademas `esLiquidada` implica que hay fila
+ * de `cierre_detail`, asi que su `fulfillment` no puede ser el `null` de «no se pudo leer».
+ */
+function fulfillmentDeOrden(orden: OrdenQueAporta): Prisma.Decimal {
+  for (const g of orden.gestiones) {
+    if (esLiquidada(g) && g.fulfillment !== null) return new Prisma.Decimal(g.fulfillment);
+  }
+  return new Prisma.Decimal(0);
 }
 
 /**
