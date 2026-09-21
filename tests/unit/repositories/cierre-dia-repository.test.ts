@@ -1605,6 +1605,17 @@ const FILA_T1_Z2: FilaTarifaDoble = {
 };
 
 // Gestion vinculada, tal como la lee `SNAPSHOT_SELECT` DENTRO de la tx.
+//
+// ⚠️ FICHA 450 (T2.7) — DE DONDE SALEN AHORA LOS CINCO NOMBRES. Hasta esta ficha, `SNAPSHOT_SELECT`
+// traia `zona`, `tienda`, `provincia`, `canton` y `distrito` como relaciones ANIDADAS, y este
+// fixture las devolvia dentro de `orden`. Prisma no resolvia esas cinco con un JOIN: las lanzaba
+// A LA VEZ sobre la UNICA conexion de la transaccion de `crearCierre` —medido: 5 consultas en
+// vuelo, 4 solapes y el aviso de `pg`—, y ese era el emisor que la 450 salio a buscar.
+//
+// Ahora el `select` proyecta los FK y los cinco catalogos se leen EN SERIE
+// (`leerDescriptivosDeOrdenes`). El fixture cambia de FORMA por eso, y por nada mas: los valores
+// congelados que estos tests afirman —"Cartago", "Tienda X", "Central", "Oriental",
+// `esCentral: false`— son EXACTAMENTE los mismos, y ninguna asercion se toco.
 function snapshotRow(overrides: { ordenId?: string; orden?: Record<string, unknown> } = {}) {
   return {
     ordenId: overrides.ordenId ?? "o1",
@@ -1618,13 +1629,29 @@ function snapshotRow(overrides: { ordenId?: string; orden?: Record<string, unkno
       destinatario: "Ana",
       direccion: "Av 1",
       producto: "Caja",
-      zona: { nombre: "Cartago", esCentral: false },
-      tienda: { nombre: "Tienda X" },
-      provincia: { nombre: "Cartago" },
-      canton: { nombre: "Central" },
-      distrito: { nombre: "Oriental" },
+      // FICHA 450: los FK de las tres geografias, que antes llegaban de rebote por la relacion.
+      provinciaId: "p1",
+      cantonId: "ct1",
+      distritoId: "d1",
       ...(overrides.orden ?? {}),
     },
+  };
+}
+
+/**
+ * FICHA 450 (T2.7) — los cinco catalogos que `crearCierre` lee en serie, como DOBLES DE TABLA.
+ *
+ * Responden a CUALQUIER id que se les pida (`where: { id: { in: [...] } }`) en vez de devolver una
+ * fila fija: los casos de la cascada de tarifas piden `z2`, `t2`, `t9`, `z9`… y un doble de fila
+ * unica los dejaria sin resolver. Un catalogo que no resuelve un id hace que `crearCierre` lance
+ * —a proposito, R7: en codigo de dinero un nombre ausente no se congela como `null` en silencio—,
+ * asi que el doble tiene que modelar la TABLA, no una fila.
+ */
+function catalogoDoble(fila: (id: string) => Record<string, unknown>) {
+  return {
+    findMany: vi.fn(async (args: { where: { id: { in: string[] } } }) =>
+      args.where.id.in.map((id) => ({ id, ...fila(id) })),
+    ),
   };
 }
 
@@ -1645,6 +1672,12 @@ function buildSnapshotTx(
       ),
     },
     cierreDetail: { createMany: vi.fn(async () => ({ count: rows.length })) },
+    // FICHA 450: mismos valores que antes traia la relacion anidada.
+    zona: catalogoDoble(() => ({ nombre: "Cartago", esCentral: false })),
+    usuario: catalogoDoble(() => ({ nombre: "Tienda X" })),
+    provincia: catalogoDoble(() => ({ nombre: "Cartago" })),
+    canton: catalogoDoble(() => ({ nombre: "Central" })),
+    distrito: catalogoDoble(() => ({ nombre: "Oriental", zonaEspecial: null })),
     ...overrides,
   };
 }
@@ -1803,7 +1836,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
   });
 
   it("R7: distrito nulo (unico FK nullable de la orden) => distritoNombre null", async () => {
-    const tx = buildSnapshotTx([snapshotRow({ orden: { distrito: null } })]);
+    const tx = buildSnapshotTx([snapshotRow({ orden: { distritoId: null } })]);
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });

@@ -5,6 +5,7 @@ import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
 import type { WalletTiendaFeedTxClient } from "@/lib/interfaces/services/IWalletTiendaFeedService";
 import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { agregarIngresosPorConcepto, type OrdenIngresoInput } from "@/lib/utils/ingreso-ordenex";
+import { txVigilado } from "@/tests/fixtures/tx-una-consulta-a-la-vez";
 
 // Feature 43/T9 — tests unit del WalletTiendaFeedService (CORAZON). Cubre R8/R9/R10/R11/R14/
 // R15/R28/R29. Reutiliza `derivarIngresoOrden` (42) para los debitos + montoRecibido para el
@@ -445,5 +446,65 @@ describe("WalletTiendaFeedService — reversion historica por ajuste compensator
     // no se deduplica). Aqui verificamos que la categoria de ajuste existe y es usable.
     const ajusteCategoria: import("@/lib/types/wallet-tienda").WalletTiendaMovimientoCategoria = "ajuste_credito";
     expect(ajusteCategoria).toBe("ajuste_credito");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 450 (T4.4, R3) — UNA CONSULTA A LA VEZ SOBRE EL CLIENTE DE LA TRANSACCION
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Mismo motivo que en la suite de la 42: el `buildTx` de arriba resuelve al instante y no
+// distingue «las dos a la vez» de «una detras de otra». `txVigilado` si, y su propio control
+// positivo/negativo vive en `tests/unit/fixtures/tx-una-consulta-a-la-vez.test.ts`. Comprobado
+// revirtiendo T3.2: el primer caso se pone ROJO con `maximoEnVuelo` = 2.
+describe("FICHA 450/R3 · el feed del ledger por tienda no lanza dos consultas a la vez", () => {
+  const RESPUESTAS = {
+    "cierreDetail.findMany": [
+      {
+        ordenId: "o0",
+        tiendaId: "t1",
+        montoCobrar: new Prisma.Decimal("10000.00"),
+        cobraComision: true,
+        esCentral: false,
+        ...TARIFA_CONGELADA,
+      },
+    ],
+    "gestionOrden.findMany": [
+      { ordenId: "o0", resultado: "entregada", montoRecibido: new Prisma.Decimal("10000.00") },
+    ],
+  };
+
+  it("no hay ningun solape sobre el cliente de la transaccion", async () => {
+    const vigilado = txVigilado<WalletTiendaFeedTxClient>(RESPUESTAS);
+
+    const movs = await new WalletTiendaFeedService(FLAG_ON).construirMovimientosPorTienda(
+      "c1",
+      vigilado.tx,
+    );
+
+    // ANTI-VACIO: las DOS lecturas salieron y el feed produjo movimientos.
+    expect(vigilado.llamadas.sort()).toEqual(["cierreDetail.findMany", "gestionOrden.findMany"]);
+    expect(movs.length).toBeGreaterThan(0);
+
+    expect(vigilado.maximoEnVuelo()).toBe(1);
+    expect(vigilado.solapes).toEqual([]);
+  });
+
+  it("R5: el doble vigilado emite EXACTAMENTE los mismos movimientos que el doble normal", async () => {
+    const vigilado = txVigilado<WalletTiendaFeedTxClient>(RESPUESTAS);
+    const svc = new WalletTiendaFeedService(FLAG_ON);
+
+    const conVigilado = await svc.construirMovimientosPorTienda("c1", vigilado.tx);
+    const conNormal = await svc.construirMovimientosPorTienda("c1", buildTx([gestion("entregada")]));
+
+    expect(conVigilado).toEqual(conNormal);
+  });
+
+  it("R4: las dos lecturas siguen saliendo POR EL `tx`", async () => {
+    const vigilado = txVigilado<WalletTiendaFeedTxClient>(RESPUESTAS);
+
+    await new WalletTiendaFeedService(FLAG_ON).construirMovimientosPorTienda("c1", vigilado.tx);
+
+    expect(vigilado.llamadas).toHaveLength(2);
   });
 });

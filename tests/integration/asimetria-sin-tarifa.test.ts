@@ -251,12 +251,30 @@ function snapshotRow() {
       destinatario: "Ana",
       direccion: "Av 1",
       producto: "Caja",
+      // FICHA 450: los FK de las tres geografias; los nombres los resuelven los catalogos.
+      provinciaId: "p1",
+      cantonId: "c1",
+      distritoId: null,
       zona: { nombre: "Limón", esCentral: false },
       tienda: { nombre: "Tienda X" },
       provincia: { nombre: "Limón" },
       canton: { nombre: "Central" },
       distrito: null,
     },
+  };
+}
+
+/**
+ * FICHA 450 (T2.7) — doble de TABLA de catalogo: responde a cualquier id que se le pida. Desde que
+ * `SNAPSHOT_SELECT` dejo de anidar las cinco relaciones descriptivas —Prisma las lanzaba A LA VEZ
+ * sobre la unica conexion de la transaccion: 5 consultas en vuelo y el aviso de `pg`—,
+ * `crearCierre` lee los catalogos EN SERIE. Mismos valores; ninguna asercion cambia.
+ */
+function catalogoDoble450(fila: (id: string) => Record<string, unknown>) {
+  return {
+    findMany: vi.fn(async (args: { where: { id: { in: string[] } } }) =>
+      args.where.id.in.map((id) => ({ id, ...fila(id) })),
+    ),
   };
 }
 
@@ -283,6 +301,12 @@ async function porElCierre(filas: readonly FilaTarifa[]) {
       ),
     },
     cierreDetail: { createMany: vi.fn(async () => ({ count: 1 })) },
+    // FICHA 450: los catalogos del snapshot, leidos en serie dentro de esta misma tx.
+    zona: catalogoDoble450(() => ({ nombre: "Limón", esCentral: false })),
+    usuario: catalogoDoble450(() => ({ nombre: "Tienda X" })),
+    provincia: catalogoDoble450(() => ({ nombre: "Limón" })),
+    canton: catalogoDoble450(() => ({ nombre: "Central" })),
+    distrito: catalogoDoble450(() => ({ nombre: "Oriental", zonaEspecial: null })),
     ...prismaTarifas(filas),
   };
   const prisma = {
