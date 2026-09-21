@@ -70,8 +70,15 @@ import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
 //   3. OTRAS FORMAS DE CONCURRENCIA. Se reconocen `Promise.all`, `allSettled`, `race` y `any`. Un
 //      `for` que acumula promesas sin `await` y las resuelve luego, o un `Array.map` cuyo
 //      resultado se espera mas tarde, no los ve ningun brazo.
+//   4. EL CENSO MIRA SOLO `lib/`, y el hueco esta MEDIDO (revision de la 450, 2026-09-21): en
+//      `app/` hay UN cuerpo de `$transaction` y CERO menciones de `*TxClient`, y ese cuerpo no
+//      lanza nada en paralelo; en `scripts/` hay DOS, los dos benignos. O sea que hoy el hueco
+//      vale cero. Se declara igualmente —y con el numero— porque el dia que alguien abra una
+//      transaccion en un route handler esta guardia no lo vera, y un limite mudo es peor que un
+//      limite conocido. Ampliar el censo a `app/` y `scripts/` es cambiar `CARPETA_LIB` por las
+//      raices de `tests/fixtures/raices-de-codigo.ts`.
 //
-// Los tres limites son reales y quedan escritos aqui —y no tapados— porque una guardia que
+// Los cuatro limites son reales y quedan escritos aqui —y no tapados— porque una guardia que
 // pretende ver mas de lo que ve es peor que una que declara su alcance.
 //
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -97,6 +104,9 @@ interface Violacion {
   linea: number;
   cliente: string;
   fragmento: string;
+  /** Solo el brazo C: cuantas relaciones HERMANAS pide la lectura. Es el numero que se traduce
+   *  en consultas simultaneas sobre la conexion de la transaccion. */
+  hermanas?: number;
 }
 
 function archivosTs(dir: string): string[] {
@@ -240,15 +250,61 @@ function cuerposDeTransaccion(archivo: string, fuente: string): CuerpoDeTransacc
 const LECTURAS = String.raw`(?:findMany|findFirst|findFirstOrThrow|findUnique|findUniqueOrThrow)`;
 
 /**
- * ¿El objeto de opciones de una lectura anida relaciones? Anida si trae un `include:` (a cualquier
- * profundidad) o si dentro de su `select:` hay OTRO `select:`/`include:`.
+ * Cuantas relaciones HERMANAS cuelgan del primer nivel de un bloque `select`/`include`.
+ *
+ * ⚠️ POR QUE «HERMANAS» Y NO «ANIDADAS A SECAS», que es lo que este detector miraba al nacer.
+ * Lo que Prisma lanza A LA VEZ son las relaciones que comparten NIVEL. Una relacion sola se
+ * expande en una CADENA —`gestion_orden` -> `orden`— y la segunda consulta no puede salir hasta
+ * que vuelve la primera: maximo 1 en vuelo, medido. Dos o mas hermanas SI salen juntas, y a
+ * partir de tres consultas en la cola `pg` ademas avisa.
+ *
+ * La version «anidadas a secas» daba 20 hallazgos en 10 archivos, casi todos cadenas inofensivas,
+ * y sobre todo habria seguido senalando el `SNAPSHOT_SELECT` YA ARREGLADO —que conserva su unica
+ * relacion `orden`—: o sea que no sabia distinguir el antes del despues. Un detector que no
+ * distingue el arreglo no sirve de guardia.
  */
-function anidaRelaciones(opciones: string): boolean {
-  if (/\binclude\s*:/.test(opciones)) return true;
-  const primero = opciones.indexOf("select:");
-  if (primero < 0) return false;
-  const resto = opciones.slice(primero + "select:".length);
-  return /\bselect\s*:/.test(resto);
+function contarHermanasDeRelacion(bloque: string, esInclude: boolean): number {
+  let profundidad = 0;
+  let hermanas = 0;
+  for (let i = 0; i < bloque.length; i += 1) {
+    const c = bloque[i];
+    if (c === "{") {
+      profundidad += 1;
+      continue;
+    }
+    if (c === "}") {
+      profundidad -= 1;
+      continue;
+    }
+    if (profundidad !== 1) continue;
+    // Solo al principio de un identificador, para no casar a mitad de `zona`.
+    if (i > 0 && /[\w$]/.test(bloque[i - 1])) continue;
+    const m = /^([A-Za-z_$][\w$]*)\s*:\s*/.exec(bloque.slice(i));
+    if (m === null) continue;
+    const resto = bloque.slice(i + m[0].length);
+    // En un `select`, una relacion es la clave cuyo valor es OTRO objeto (`{ select: … }`).
+    // En un `include`, ademas cuenta `clave: true`.
+    if (resto.startsWith("{") || (esInclude && /^true\b/.test(resto))) hermanas += 1;
+    i += m[0].length - 1;
+  }
+  return hermanas;
+}
+
+/**
+ * El MAYOR numero de relaciones hermanas que pide una lectura en cualquiera de sus niveles. Ese
+ * numero es, literalmente, cuantas consultas manda Prisma a la vez por esa lectura.
+ */
+function hermanasMaximas(opciones: string): number {
+  let max = 0;
+  const re = /\b(select|include)\s*:\s*\{/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(opciones)) !== null) {
+    const abre = opciones.indexOf("{", m.index + m[0].length - 1);
+    const bloque = bloqueBalanceado(opciones, abre, "{", "}");
+    const n = contarHermanasDeRelacion(bloque, m[1] === "include");
+    if (n > max) max = n;
+  }
+  return max;
 }
 
 /**
@@ -273,14 +329,19 @@ function lecturasConRelacionesAnidadas(
     let opciones = bloqueBalanceado(cuerpo, abre, "(", ")");
     const porConstante = /select\s*:\s*([A-Z][A-Z0-9_]*)/.exec(opciones);
     if (porConstante !== null) {
-      opciones += "\n" + (constantes.get(porConstante[1]) ?? "");
+      // Se etiqueta como bloque `select` para que el conteo de hermanas lo mire igual que a un
+      // literal en linea: en este repo los `select` grandes viven en una constante de modulo.
+      const cuerpo = constantes.get(porConstante[1]);
+      if (cuerpo !== undefined) opciones += "\nselect: " + cuerpo;
     }
-    if (!anidaRelaciones(opciones)) continue;
+    const hermanas = hermanasMaximas(opciones);
+    if (hermanas < 2) continue;
     violaciones.push({
       archivo,
       linea: numeroDeLinea(fuente, desplazamiento + m.index),
       cliente,
       fragmento: `${m[0]}…`,
+      hermanas,
     });
   }
   return violaciones;
@@ -364,58 +425,62 @@ function censar(carpeta: string): Censo {
 const CENSO = censar(CARPETA_LIB);
 
 /**
- * CENSO CONGELADO del brazo C: los archivos que HOY contienen una lectura con relaciones anidadas
- * sobre un cliente de transaccion.
+ * CENSO CONGELADO del brazo C: los archivos que HOY emiten, sobre un cliente de transaccion, una
+ * lectura con DOS relaciones hermanas.
  *
- * POR QUE UNA LISTA DE ARCHIVOS Y NO UN INVENTARIO DE 18 ENTRADAS MEDIDAS UNA A UNA. Porque seria
- * mentir: la ficha 450 midio UNO (el de `CierreDiaRepository`, ver abajo) y de los demas solo sabe
- * que comparten la forma. Un inventario con 18 «medido: …» copiados del primero es exactamente la
- * clase de documento que parece evidencia y no lo es. Lo que esta lista SI garantiza, y es lo que
- * la ficha necesita, es que **no aparezca un sitio nuevo sin que alguien lo mire**: cualquier
- * archivo fuera de la lista pone el gate rojo, y cualquiera de la lista que deje de tener la forma
- * obliga a borrarlo de aqui.
+ * QUE SIGNIFICA ESTAR AQUI, con el numero delante. Prisma lanza las relaciones hermanas A LA VEZ:
+ * dos hermanas son dos consultas simultaneas sobre la unica conexion de la transaccion. Eso NO
+ * dispara el aviso de `pg` —para eso hacen falta tres en la cola— pero SI es la condicion del
+ * `25P02` que la ficha 440 midio: si la primera falla y aborta la transaccion, la segunda ya esta
+ * encolada y nadie puede cancelarla (design §2.4: «el aviso necesita tres; el defecto necesita
+ * dos»).
  *
- * ⚠️ NO SON 18 DEFECTOS. La forma solo hace dano sobre un cliente de TRANSACCION y cuando el
- * numero de relaciones hermanas llega a tres; con una o dos relaciones no hay aviso, aunque si
- * haya consultas compartiendo conexion. Esta lista es el punto de partida para medirlas, no un
- * veredicto sobre ellas.
+ * O sea: esta lista **no es de sitios inocentes**, es de sitios medidos y acotados. Ninguno llega
+ * al umbral del aviso, y por eso ninguno es el emisor; pero cada uno es un candidato a la misma
+ * secuenciacion que la ficha 450 le hizo al snapshot. La 450 arreglo el que SI llegaba (cinco
+ * hermanas). Estos quedan nombrados aqui para que el siguiente que pase sepa que existen.
  *
- * Sin `.ts` duplicados y en orden alfabetico, para que el diff de una alta sea de una sola linea.
+ * Lo que esta lista garantiza: **no aparece un sitio nuevo sin que alguien lo mire**. Un archivo
+ * fuera de la lista pone el gate rojo; uno de la lista que deje de tener la forma obliga a
+ * borrarlo de aqui.
  */
-const ARCHIVOS_CON_RELACIONES_ANIDADAS_EN_TX: readonly string[] = [
+const ARCHIVOS_CON_RELACIONES_HERMANAS_EN_TX: readonly string[] = [
+  // `crearCierre`: el pre-SELECT del barrido `sin_gestionar` y la lectura de los rechazos de
+  // tienda a incorporar. Dos hermanas cada uno (`tienda`, `zona`). El de CINCO —el snapshot— es
+  // justo el que esta ficha secuencio, y por eso ya no aparece.
   "lib/repositories/CierreDiaRepository.ts",
   "lib/repositories/CierresAdminRepository.ts",
-  "lib/repositories/CierresBodegaAdminRepository.ts",
-  "lib/repositories/IncidenteAdminRepository.ts",
   "lib/repositories/LiquidacionPagoRepository.ts",
-  "lib/repositories/LiquidacionRepartoRepository.ts",
-  "lib/repositories/OrdenRepository.ts",
-  "lib/repositories/RechazoTiendaCobroRepository.ts",
   "lib/repositories/UserRepository.ts",
-  "lib/repositories/registrar-accion.ts",
 ];
 
 /**
- * EL SITIO MEDIDO: el emisor que la caza de la ficha 450 (T2) nombro, con su medicion y con el
- * test que la reproduce. Es la unica entrada de la que esta guardia afirma un numero.
+ * EL EMISOR QUE LA CAZA DE LA 450 NOMBRO, Y LO QUE SE LE HIZO.
+ *
+ * Se conserva aqui —no en una bitacora, que es donde estas cosas mueren— porque es el unico sitio
+ * del que esta guardia afirma un numero medido, y porque el test que lo reproduce tiene que
+ * seguir existiendo.
  */
 const EMISOR_MEDIDO = {
   archivo: "lib/repositories/CierreDiaRepository.ts",
   que:
-    "`crearCierre` congela el snapshot con `SNAPSHOT_SELECT`, que anida 5 relaciones (zona, " +
-    "tienda, provincia, canton, distrito). Prisma lo expande a 1+5 consultas y lanza las 5 " +
-    "hermanas A LA VEZ sobre la UNICA conexion de la transaccion.",
+    "`crearCierre` congelaba el snapshot con un `SNAPSHOT_SELECT` que anidaba CINCO relaciones " +
+    "hermanas (zona, tienda, provincia, canton, distrito). Prisma lo expandia a 1+5 consultas y " +
+    "lanzaba las cinco A LA VEZ sobre la UNICA conexion de la transaccion.",
   medido:
     "2026-09-21, contador de consultas en vuelo contra Postgres real: 5 en vuelo sobre una sola " +
     "conexion, 4 solapes y el aviso de `pg` capturado en un proceso limpio. Cuadra con donde " +
     "produccion lo lee: `crearCierre` es el unico punto por el que pasan /cierre-dia " +
     "(`solicitarCierre`) y /api/cron/corte-diario (`ejecutarCorte`).",
   estado:
-    "NOMBRADO y reproducido; la secuenciacion (T2.7) queda pendiente de una decision que la " +
-    "implementacion no puede tomar sola — las dos vias posibles, con su coste, estan escritas " +
-    "en progress/impl_450.md.",
+    "SECUENCIADO (ficha 450, T2.7): el `select` proyecta los FK y los cinco catalogos se leen de " +
+    "uno en uno en `leerDescriptivosDeOrdenes`. Mismas tablas, mismos ids, mismos valores " +
+    "congelados; medido despues: 1 consulta en vuelo, 0 solapes, 0 avisos.",
   medidoPor: "tests/integration/db/emisor-relaciones-anidadas.test.ts",
 } as const;
+
+/** El umbral del aviso de `pg`: tres consultas en la cola de una misma conexion (design §2.2). */
+const UMBRAL_DEL_AVISO = 3;
 
 describe("FICHA 450 · guardia: una consulta a la vez sobre un cliente de transaccion", () => {
   describe("anti-vacio del censo (T5.2) — la guardia se sabe LLENA", () => {
@@ -453,50 +518,75 @@ describe("FICHA 450 · guardia: una consulta a la vez sobre un cliente de transa
     });
   });
 
-  describe("BRAZO C (R11) — lecturas con relaciones anidadas sobre un cliente de transaccion", () => {
+  describe("BRAZO C (R11) — relaciones HERMANAS sobre un cliente de transaccion", () => {
     it("el censo NO esta vacio: el detector sigue viendo la forma en el arbol", () => {
-      // Anti-vacio del propio brazo C. Si esto cae a cero, el detector se rompio y las dos
-      // aserciones de abajo pasarian solas.
-      expect(CENSO.violacionesC.length).toBeGreaterThanOrEqual(10);
+      // Anti-vacio del propio brazo C. Si esto cae a cero, el detector se rompio y las tres
+      // aserciones de abajo pasarian solas, que es el modo de fallo que esta guardia existe para
+      // no tener.
+      expect(CENSO.violacionesC.length).toBeGreaterThanOrEqual(4);
+      const porArchivo = new Set(CENSO.violacionesC.map((v) => v.archivo));
       console.log(
-        `[450] brazo C: ${CENSO.violacionesC.length} lecturas con relaciones anidadas sobre un ` +
-          `cliente de transaccion, en ${new Set(CENSO.violacionesC.map((v) => v.archivo)).size} archivos`,
+        `[450] brazo C: ${CENSO.violacionesC.length} lecturas con >=2 relaciones hermanas sobre ` +
+          `un cliente de transaccion, en ${porArchivo.size} archivos · maximo de hermanas: ` +
+          `${Math.max(...CENSO.violacionesC.map((v) => v.hermanas ?? 0))}`,
       );
     });
 
-    it("ningun archivo NUEVO con lecturas de relaciones anidadas sobre un `tx`", () => {
-      const declarados = new Set(ARCHIVOS_CON_RELACIONES_ANIDADAS_EN_TX);
+    it("NINGUNA lectura sobre un `tx` llega al umbral del aviso de `pg` (3 hermanas)", () => {
+      // ═══ ESTA ES LA ASERCION QUE CIERRA EL ENTREGABLE 2 ═══
+      // El emisor que la caza nombro pedia CINCO hermanas; medido, eso ponia 5 consultas en vuelo
+      // sobre una conexion y disparaba el aviso. Secuenciado el snapshot, el maximo del arbol baja
+      // a 2, que esta por debajo del umbral. Si alguien vuelve a escribir un `select` de tres o
+      // mas relaciones hermanas dentro de una transaccion, el aviso vuelve — y esto se pone rojo
+      // antes.
+      const alUmbral = CENSO.violacionesC
+        .filter((v) => (v.hermanas ?? 0) >= UMBRAL_DEL_AVISO)
+        .map((v) => `${v.archivo}:${v.linea} (${v.hermanas} hermanas) ${v.fragmento}`);
+      expect(
+        alUmbral,
+        `lectura con ${UMBRAL_DEL_AVISO} o mas relaciones hermanas sobre un cliente de ` +
+          "transaccion. Prisma las lanza A LA VEZ sobre la UNICA conexion de la tx, y con tres en " +
+          "la cola `pg` emite `Calling client.query() when the client is already executing a " +
+          "query` — la advertencia que la ficha 450 fue a cerrar. Proyecta los FK y lee los " +
+          "catalogos en serie, como `leerDescriptivosDeOrdenes` en `CierreDiaRepository`.",
+      ).toEqual([]);
+    });
+
+    it("ningun archivo NUEVO con dos relaciones hermanas sobre un `tx`", () => {
+      const declarados = new Set(ARCHIVOS_CON_RELACIONES_HERMANAS_EN_TX);
       const sinDeclarar = [
         ...new Set(
           CENSO.violacionesC
             .filter((v) => !declarados.has(v.archivo))
-            .map((v) => `${v.archivo}:${v.linea} (${v.fragmento})`),
+            .map((v) => `${v.archivo}:${v.linea} (${v.hermanas} hermanas)`),
         ),
       ];
       expect(
         sinDeclarar,
-        "lectura con relaciones anidadas sobre un `tx` en un archivo que no estaba en el censo. " +
-          "Prisma expande la lectura en 1+N consultas y lanza las N hermanas A LA VEZ sobre la " +
-          "UNICA conexion de la transaccion (ficha 450, medido: 5 en vuelo y el aviso de `pg`). " +
-          "Miralo antes de darlo por bueno: o lo aplanas, o lo anades al censo sabiendo lo que " +
-          "anades.",
+        "lectura con relaciones hermanas sobre un `tx` en un archivo que no estaba en el censo. " +
+          "Dos hermanas son dos consultas a la vez sobre la conexion de la transaccion: no " +
+          "disparan el aviso, pero si son la condicion del `25P02` de la ficha 440. Miralo antes " +
+          "de darlo por bueno: o lo secuencias, o lo anades al censo sabiendo lo que anades.",
       ).toEqual([]);
     });
 
     it("ningun archivo del censo sobra (el censo no envejece solo)", () => {
       const vistos = new Set(CENSO.violacionesC.map((v) => v.archivo));
-      const fantasmas = ARCHIVOS_CON_RELACIONES_ANIDADAS_EN_TX.filter((a) => !vistos.has(a));
+      const fantasmas = ARCHIVOS_CON_RELACIONES_HERMANAS_EN_TX.filter((a) => !vistos.has(a));
       expect(
         fantasmas,
-        "estos archivos estan en el censo pero el detector ya no les ve la forma: o se aplanaron " +
-          "(entonces borralos de la lista) o el detector se rompio.",
+        "estos archivos estan en el censo pero el detector ya no les ve la forma: o se " +
+          "secuenciaron (entonces borralos de la lista) o el detector se rompio.",
       ).toEqual([]);
     });
 
-    it("el emisor medido esta en el censo, con su medicion y con el test que la reproduce", () => {
-      expect(ARCHIVOS_CON_RELACIONES_ANIDADAS_EN_TX).toContain(EMISOR_MEDIDO.archivo);
-      expect(CENSO.violacionesC.some((v) => v.archivo === EMISOR_MEDIDO.archivo)).toBe(true);
-      expect(EMISOR_MEDIDO.medido).toMatch(/5 en vuelo/);
+    it("el emisor que la caza nombro quedo SECUENCIADO, y su test sigue midiendolo", () => {
+      // El archivo sigue en el censo —le quedan dos lecturas de DOS hermanas— pero ninguna de sus
+      // lecturas llega ya al umbral del aviso: eso es lo que cambio la 450.
+      const suyas = CENSO.violacionesC.filter((v) => v.archivo === EMISOR_MEDIDO.archivo);
+      expect(Math.max(0, ...suyas.map((v) => v.hermanas ?? 0))).toBeLessThan(UMBRAL_DEL_AVISO);
+      expect(EMISOR_MEDIDO.estado).toMatch(/SECUENCIADO/);
+      expect(EMISOR_MEDIDO.medido).toMatch(/5 en vuelo/); // lo que HABIA, no se borra
       expect(fs.existsSync(path.join(RAIZ, EMISOR_MEDIDO.medidoPor))).toBe(true);
     });
   });
@@ -649,7 +739,7 @@ describe("FICHA 450 · guardia: una consulta a la vez sobre un cliente de transa
       expect(r.a).toEqual([]);
     });
 
-    it("BRAZO C rojo: el `select` LITERAL con relaciones anidadas dentro de un `$transaction`", () => {
+    it("BRAZO C rojo: DOS relaciones hermanas en un `select` literal dentro de un `$transaction`", () => {
       const fuente = `
         async function congelar(prisma: PrismaClient) {
           return prisma.$transaction(async (tx) => {
@@ -657,7 +747,12 @@ describe("FICHA 450 · guardia: una consulta a la vez sobre un cliente de transa
               where: { cierreId: "c1" },
               select: {
                 ordenId: true,
-                orden: { select: { zona: { select: { nombre: true } } } },
+                orden: {
+                  select: {
+                    zona: { select: { nombre: true } },
+                    tienda: { select: { nombre: true } },
+                  },
+                },
               },
             });
           });
@@ -665,12 +760,45 @@ describe("FICHA 450 · guardia: una consulta a la vez sobre un cliente de transa
       expect(censarFuente(fuente).c).toHaveLength(1);
     });
 
-    it("BRAZO C rojo tambien cuando el `select` vive en una CONSTANTE del modulo", () => {
-      // Es la forma real del emisor: el `select` grande no se escribe en linea.
+    it("BRAZO C VERDE con UNA sola relacion: una cadena no es concurrencia", () => {
+      // Es la forma del `SNAPSHOT_SELECT` DESPUES del arreglo de la 450: `gestion_orden` ->
+      // `orden`, y se acabo. Prisma no puede pedir `orden` antes de tener la fila de
+      // `gestion_orden`, asi que maximo 1 en vuelo — medido.
+      const fuente = `
+        async function congelar(prisma: PrismaClient) {
+          return prisma.$transaction(async (tx) => {
+            return tx.gestionOrden.findMany({
+              where: { cierreId: "c1" },
+              select: {
+                ordenId: true,
+                orden: { select: { zonaId: true, tiendaId: true, provinciaId: true } },
+              },
+            });
+          });
+        }`;
+      expect(censarFuente(fuente).c).toEqual([]);
+    });
+
+    it("BRAZO C rojo ante el `SNAPSHOT_SELECT` LITERAL de antes de la 450, que vive en una CONSTANTE", () => {
+      // Es la forma exacta del emisor que esta ficha retiro, copiada tal cual: cinco relaciones
+      // hermanas colgando de `orden`, y el `select` en una constante de modulo (un detector que
+      // solo mirase literales en linea devolveria cero justo aqui).
       const fuente = `
         const SNAPSHOT_SELECT = {
           ordenId: true,
-          orden: { select: { zona: { select: { nombre: true, esCentral: true } } } },
+          orden: {
+            select: {
+              montoCobrar: true,
+              cobraComision: true,
+              zonaId: true,
+              tiendaId: true,
+              zona: { select: { nombre: true, esCentral: true } },
+              tienda: { select: { nombre: true } },
+              provincia: { select: { nombre: true } },
+              canton: { select: { nombre: true } },
+              distrito: { select: { nombre: true, zonaEspecial: true } },
+            },
+          },
         };
         async function congelar(prisma: PrismaClient) {
           return prisma.$transaction(async (tx) => {
@@ -680,12 +808,20 @@ describe("FICHA 450 · guardia: una consulta a la vez sobre un cliente de transa
       expect(censarFuente(fuente).c).toHaveLength(1);
     });
 
-    it("BRAZO C rojo ante un `include` dentro de una funcion con parametro de transaccion", () => {
+    it("BRAZO C rojo ante un `include` de DOS relaciones en una funcion con parametro de transaccion", () => {
+      const fuente = `
+        async function leer(tx: Prisma.TransactionClient) {
+          return tx.orden.findMany({ where: { id: "o1" }, include: { zona: true, tienda: true } });
+        }`;
+      expect(censarFuente(fuente).c).toHaveLength(1);
+    });
+
+    it("BRAZO C VERDE ante un `include` de UNA sola relacion", () => {
       const fuente = `
         async function leer(tx: Prisma.TransactionClient) {
           return tx.orden.findMany({ where: { id: "o1" }, include: { zona: true } });
         }`;
-      expect(censarFuente(fuente).c).toHaveLength(1);
+      expect(censarFuente(fuente).c).toEqual([]);
     });
 
     it("BRAZO C VERDE: una lectura PLANA sobre el `tx` (ninguna relacion anidada)", () => {
@@ -711,7 +847,16 @@ describe("FICHA 450 · guardia: una consulta a la vez sobre un cliente de transa
         class Repo {
           async listar() {
             return this.prisma.gestionOrden.findMany({
-              select: { ordenId: true, orden: { select: { zona: { select: { nombre: true } } } } },
+              select: {
+                ordenId: true,
+                orden: {
+                  select: {
+                    zona: { select: { nombre: true } },
+                    tienda: { select: { nombre: true } },
+                    provincia: { select: { nombre: true } },
+                  },
+                },
+              },
             });
           }
         }`;
