@@ -5375,6 +5375,27 @@
       "branch": "fix/449-frontend",
       "depends_on": 442,
       "status_note": "Mergeada en dev (PR #815) y DESPLEGADA a produccion el 2026-09-17 en la release #816 (prod 9d3d67b5): backend 3e69ee10, frontend b7f4aa89. || EL HUECO ERA ESTRUCTURAL: DineroProductosRepository congelaba NUEVE columnas de tarifa y `tarifa_fulfillment` no era una de ellas. Medido en produccion: 867 filas y ₡605.616 en 7 dias; 2608 y ₡1.816.300 en toda la historia. || LA CIFRA VIAJA POR UN CARRIL PROPIO y NO se suma a «Cobro Ordenex», porque ITarifaVigenteRepository prohibe por escrito que el fulfillment entre en TarifaVigente. `lib/utils/cierre-detalle.ts` quedo intacto —comprobado sobre el BLOB commiteado, no sobre el disco— y una guardia nueva lo vigila por cuatro vias: ejecucion, contrato, camino y cifra. || DOS DECISIONES DE NEGOCIO: se cuenta UNA VEZ POR ORDEN y no por gestion (dos gestiones cobrarian dos bodegas, y el contrato ya dice que la devolucion cobra lo mismo que la entrega porque preparar el paquete ya costo); y solo cuenta lo LIQUIDADO, el mismo umbral que las otras tres cifras. || 15 mutaciones, todas muertas. Medido a 1440 y 390 con el peor caso realista (₡1.816.300): margen minimo de 86 px y cero desborde; lo que crece es el alto. || DEUDA CONSCIENTE: `aporteEsCero` no se toco, asi que una orden cuyo UNICO aporte fuera el fulfillment se seguiria descartando. Hoy es inalcanzable; cambiarlo moveria los cardinales de `ordenes`."
+    },
+    {
+      "id": 451,
+      "title": "las ordenes sin gestionar de un cierre vencido no se piden escanear para recibirlo",
+      "description": "Los paquetes sin gestionar de un cierre vencido se reciben sin confirmar que estan delante.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": 238,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-09-21. La ventana de confirmacion fisica de un cierre se construye desde GESTIONES, filtrando por RESULTADOS_QUE_VUELVEN (reprogramada, devuelta, rechazada). Una orden SIN GESTIONAR no tiene resultado, asi que no existe en esa lista y nadie la escanea —aunque al aprobar, la liberacion de la feature 109 SI la manda a bodega en la misma transaccion: el sistema la da por recibida sin pedir prueba. || MEDIDO CONTRA PRODUCCION el 2026-09-21: 185 filas en cierre_sin_gestion, en 14 cierres, 174 ordenes distintas, del 2026-08-27 al 2026-09-19. Los 14 cierres estan TODOS aprobados. En ellos se escanearon 50 paquetes y NO se escanearon 185: el 78,7% del bulto que volvia a bodega se aprobo sin que nadie confirmara tenerlo delante. Y num_guia nulo: CERO, o sea que hoy todas son escaneables. || DECISION DEL HUMANO (2026-09-21): se escanean igual que reprogramadas, devueltas y rechazadas, y mientras falte uno el cierre NO se aprueba. Misma regla, sin salida de emergencia. || DOS PUNTOS DELICADOS PARA EL SPEC. (1) El punto unico de 'que vuelve a bodega' es hoy un Record<GestionResultado, boolean> exhaustivo a proposito (si el enum crece, el repo no compila). Una orden sin gestionar NO es un GestionResultado, asi que no cabe dentro: hay que extender el concepto a dos origenes —gestiones y barridas— SIN crear una segunda lista suelta, porque ya existe una guardia que persigue esas copias. (2) cierre_sin_gestion.num_guia admite NULL: hoy hay cero, pero si aparece uno ese cierre seria imposible de aprobar. Reusar el criterio ya resuelto para las gestiones sin guia: avisar ANTES de empezar a escanear, no dejar que bodega descubra el bloqueo al final. || La tabla ya guarda num_guia, num_remision, destinatario, producto y tienda congelados, y la pantalla ya las muestra en la factura del cierre: el dato para escanear esta, falta exigirlo."
+    },
+    {
+      "id": 452,
+      "title": "el test del borrado de api keys falla una de cada tres corridas",
+      "description": "Un test de api keys cae 1 de cada 3 corridas, aislado y sin carga.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "status_note": "MEDIDO el 2026-09-21 durante el gate de la 450. tests/unit/components/api-keys-module.eliminar.test.tsx > 'R35 - un borrado que FALLA no mueve la pagina' cae con TestingLibraryElementError: Unable to find an element with the text: integracion-11. || NO ES CONTENCION DEL GATE: corrido AISLADO y sin carga falla 1 de cada 3 veces (3 corridas: rojo, verde, verde). Y el gate completo repetido sobre el MISMO SHA, sin tocar una linea, paso en verde: 2057 archivos / 29.990 tests / INIT_EXIT=0. || ES AJENO A LA 450: esa rama no toca ni un archivo de api-keys (verificado contra el diff completo). Y no estaba registrado: cero apariciones como FAIL en los gates guardados del repo y no figura en tests/baseline-rojos.json. || SOSPECHOSO, sin confirmar: el await screen.findByText('integracion-11') de la linea 81 compitiendo con el re-render de la paginacion; el mismo identificador se usa en las lineas 112 y 138. Empezar por ahi, pero medirlo antes de creerselo. || POR QUE MERECE FICHA y no solo una nota: un rojo que aparece 1 de cada 3 veces reaparecera en el gate de otra persona sin contexto, y el coste de re-diagnosticarlo es el mismo cada vez."
     }
   ]
 }
