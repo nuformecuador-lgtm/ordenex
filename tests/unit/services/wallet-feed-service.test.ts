@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
 import type { WalletFeedTxClient } from "@/lib/interfaces/services/IWalletFeedService";
+import { txVigilado } from "@/tests/fixtures/tx-una-consulta-a-la-vez";
 
 // Feature 42 — tests unit del WalletFeedService (R5/R8/R9/R10). Construye hasta 6 movimientos
 // por concepto y omite los conceptos en 0.00.
@@ -233,5 +234,64 @@ describe("Feature 69/R14 — falta la fila congelada: aborta, sin fallback", () 
       cierreId: "c1",
       ordenId: "o-huerfana",
     });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 450 (T4.3, R3) — UNA CONSULTA A LA VEZ SOBRE EL CLIENTE DE LA TRANSACCION
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// POR QUE ESTE BLOQUE USA OTRO DOBLE. El `buildTx` de arriba son `vi.fn().mockResolvedValue(...)`:
+// resuelven al instante, asi que para el «las dos lecturas a la vez» y «una detras de otra» son la
+// MISMA cosa. Esa ceguera es la razon exacta de que el `Promise.all` que esta ficha retira llevara
+// meses aqui con los 14 casos de arriba en verde.
+//
+// `txVigilado` cuenta llamadas EN VUELO y anota los solapes; su propio control positivo y negativo
+// vive en `tests/unit/fixtures/tx-una-consulta-a-la-vez.test.ts`, sin el cual esto seria un verde
+// vacio. Comprobado revirtiendo T3.1 (volviendo al `Promise.all`): el primer caso se pone ROJO con
+// `maximoEnVuelo` = 2 y un solape `cierreDetail.findMany || gestionOrden.findMany`.
+describe("FICHA 450/R3 · el feed de ingreso no lanza dos consultas a la vez", () => {
+  const RESPUESTAS = {
+    "cierreDetail.findMany": [detalle({ ordenId: "o1" })],
+    "gestionOrden.findMany": [gestion("entregada", "o1")],
+  };
+
+  it("no hay ningun solape sobre el cliente de la transaccion", async () => {
+    const vigilado = txVigilado<WalletFeedTxClient>(RESPUESTAS);
+
+    const movs = await new WalletFeedService().construirMovimientosDeIngreso("c1", vigilado.tx);
+
+    // ANTI-VACIO: las DOS lecturas se emitieron de verdad y el feed produjo movimientos. Sin
+    // esto, un feed que no leyera nada pasaria este caso sin despeinarse.
+    expect(vigilado.llamadas.sort()).toEqual(["cierreDetail.findMany", "gestionOrden.findMany"]);
+    expect(movs.length).toBeGreaterThan(0);
+
+    expect(vigilado.maximoEnVuelo()).toBe(1);
+    expect(vigilado.solapes).toEqual([]);
+  });
+
+  it("R5: con el doble vigilado emite EXACTAMENTE los mismos movimientos que con el doble normal", async () => {
+    const vigilado = txVigilado<WalletFeedTxClient>(RESPUESTAS);
+    const svc = new WalletFeedService();
+
+    const conVigilado = await svc.construirMovimientosDeIngreso("c1", vigilado.tx);
+    const conNormal = await svc.construirMovimientosDeIngreso(
+      "c1",
+      buildTx([gestion("entregada", "o1")], [detalle({ ordenId: "o1" })]),
+    );
+
+    // Mismos conceptos, mismos montos y MISMO ORDEN de emision: secuenciar las lecturas no
+    // puede mover ni un centimo ni una posicion.
+    expect(conVigilado).toEqual(conNormal);
+  });
+
+  it("R4: las dos lecturas siguen saliendo POR EL `tx`, no por un cliente suelto", async () => {
+    const vigilado = txVigilado<WalletFeedTxClient>(RESPUESTAS);
+
+    await new WalletFeedService().construirMovimientosDeIngreso("c1", vigilado.tx);
+
+    // El doble no expone ningun otro cliente: si el feed hubiera leido fuera de la tx, no
+    // habria registrado estas dos llamadas.
+    expect(vigilado.llamadas).toHaveLength(2);
   });
 });

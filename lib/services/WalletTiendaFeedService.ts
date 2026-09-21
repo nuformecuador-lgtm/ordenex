@@ -72,13 +72,20 @@ export class WalletTiendaFeedService implements IWalletTiendaFeedService {
     // Feature 69/R13: el SNAPSHOT aporta lo de la ORDEN (congelado) y `gestion_orden` lo de
     // la GESTION: el `resultado` y el COD REALMENTE recaudado (`montoRecibido`). Money-safe:
     // los Decimal se leen como STRING/Decimal, nunca number.
-    const [byOrden, gestiones] = await Promise.all([
-      leerDetallePorOrden(cierreId, tx),
-      tx.gestionOrden.findMany({
-        where: { cierreId },
-        select: { ordenId: true, resultado: true, montoRecibido: true },
-      }),
-    ]);
+    //
+    // ⚠️ FICHA 450 (R3) — LAS DOS LECTURAS VAN EN SERIE, Y NO PUEDEN VOLVER A UN `Promise.all`.
+    // `tx` es el cliente de la transaccion de aprobacion: `@prisma/adapter-pg` le da UNA sola
+    // conexion (`pg.PoolClient`) para toda la transaccion, asi que dos consultas lanzadas a la
+    // vez sobre el van al MISMO `pg.Client`. Y el dano no necesita que `pg` avise: el aviso
+    // exige tres consultas encoladas, pero para que una consulta ya encolada corra contra una
+    // transaccion ABORTADA —el `25P02` que la ficha 440 midio como 27 respuestas 500 en una
+    // hora— bastan DOS. Vigilado por
+    // `tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts`.
+    const byOrden = await leerDetallePorOrden(cierreId, tx);
+    const gestiones = await tx.gestionOrden.findMany({
+      where: { cierreId },
+      select: { ordenId: true, resultado: true, montoRecibido: true },
+    });
 
     // R28: se lee el interruptor UNA sola vez, aqui.
     const debitaFleteDevolucion = this.config.TIENDA_DEBITA_FLETE_DEVOLUCION;
