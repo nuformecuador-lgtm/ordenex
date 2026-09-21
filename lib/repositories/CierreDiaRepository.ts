@@ -128,7 +128,38 @@ type CierrePrismaClient = Pick<
 // Feature 69 (design §3, paso 5) — proyeccion del snapshot: TODO lo que `cierre_detail`
 // congela de la orden. Se lee DENTRO de la tx, de las gestiones que el `updateMany`
 // REALMENTE vinculo (no de la lista que el service leyo antes).
-const SNAPSHOT_SELECT = {
+// ⚠️ FICHA 450 (T2.7, R3/R11) — AQUI VIVIA EL EMISOR DEL AVISO DE `pg`, Y POR ESO ESTE SELECT YA
+// NO ANIDA LAS CINCO RELACIONES DESCRIPTIVAS.
+//
+// LO MEDIDO (2026-09-21, contador de consultas en vuelo contra Postgres real). Este `select`
+// llevaba CINCO relaciones hermanas colgando de `orden` (`zona`, `tienda`, `provincia`, `canton`,
+// `distrito`). Prisma no las resuelve con un JOIN: expande la lectura en 1 + 5 consultas y **lanza
+// las cinco hermanas A LA VEZ**. Sobre el cliente AGRUPADO eso es inofensivo —cada una coge su
+// propia conexion del pool: medido, 3 conexiones y maximo 1 en vuelo—. Pero esta lectura corre
+// DENTRO del `$transaction` de `crearCierre`, y una transaccion tiene UNA sola conexion: medido,
+// **5 consultas en vuelo sobre la misma conexion, 4 solapes y el aviso
+// `Calling client.query() when the client is already executing a query` capturado en un proceso
+// limpio**. Esa era la tercera consulta que la ficha 450 salio a buscar.
+//
+// Y CUADRA CON DONDE SE OBSERVA. `crearCierre` es el unico punto por el que pasan las DOS rutas en
+// las que produccion lee el aviso: `/api/cron/corte-diario` (`CorteDiarioService.ejecutarCorte`) y
+// `/cierre-dia` (`solicitarCierre`). El aviso no nacia en el codigo de la ruta: nacia en la
+// transaccion que las dos comparten. Por eso la atribucion por ruta parecia debil.
+//
+// EL ARREGLO CAMBIA «COMO SE ESPERAN», NO «QUE SE CONSULTA». Se leen las MISMAS cinco tablas, por
+// los MISMOS ids, y se congelan los MISMOS valores; lo unico que cambia es que ahora salen de una
+// en una (`leerDescriptivosDeOrdenes`), cada una con su `await`. Mismo numero de consultas y unas
+// pocas idas y vueltas mas en una operacion que ocurre una vez por cierre.
+//
+// LA RELACION `orden` SE QUEDA, y no es una excepcion olvidada: una sola relacion se expande en
+// una CADENA (`gestion_orden` -> `orden`), no en hermanas concurrentes. Lo que hace dano son DOS O
+// MAS hermanas en el mismo nivel, que es justo lo que vigila el brazo C de
+// `tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts`.
+//
+// Se EXPORTA —junto con `leerDescriptivosDeOrdenes`— para que
+// `tests/integration/db/emisor-relaciones-anidadas.test.ts` mida el codigo REAL y no una copia
+// suya: una asercion contra su propia fuente se queda verde para siempre.
+export const SNAPSHOT_SELECT = {
   ordenId: true,
   orden: {
     select: {
@@ -143,21 +174,107 @@ const SNAPSHOT_SELECT = {
       destinatario: true,
       direccion: true,
       producto: true,
-      // `esCentral` (R6) + los 5 nombres (R7): se congelan como VALOR, no como FK, porque
-      // son mutables (design §2.1).
-      zona: { select: { nombre: true, esCentral: true } },
-      tienda: { select: { nombre: true } },
-      provincia: { select: { nombre: true } },
-      canton: { select: { nombre: true } },
-      // `zonaEspecial` (R6, 2026-08-25) viaja junto al nombre: es una entrada de la formula
-      // desde que el pacto por distrito especial cobra. La columna de origen es NULLABLE
-      // (`null` = nadie lo decidio); se normaliza a dos valores AL CONGELAR, abajo.
-      distrito: { select: { nombre: true, zonaEspecial: true } },
+      // FICHA 450: los FK de las tres geografias. Antes no hacia falta nombrarlos porque la
+      // relacion anidada los traia de rebote; ahora son la clave con la que se leen los nombres
+      // en consultas propias. `distritoId` es el UNICO FK nullable de `orden`.
+      provinciaId: true,
+      cantonId: true,
+      distritoId: true,
     },
   },
 } as const;
 
 type SnapshotRow = Prisma.GestionOrdenGetPayload<{ select: typeof SNAPSHOT_SELECT }>;
+
+/**
+ * FICHA 450 (T2.7) — los descriptivos que el snapshot CONGELA COMO VALOR, leidos de uno en uno.
+ *
+ * `esCentral` (R6) y los cinco nombres (R7) se congelan como VALOR y no como FK porque son
+ * MUTABLES (design §2.1 de la feature 69): guardar solo el FK dejaria abierto el vector «cambiar
+ * la zona entre solicitar y aprobar» que aquella feature cerro. Eso no cambia ni un apice: lo que
+ * cambia es que las cinco lecturas van en SERIE sobre la conexion de la transaccion en vez de
+ * salir las cinco a la vez.
+ *
+ * Los `in` van deduplicados: un cierre de 40 ordenes de la misma tienda no manda 40 ids.
+ */
+export interface DescriptivosDeOrden {
+  zonas: Map<string, { nombre: string; esCentral: boolean }>;
+  tiendas: Map<string, { nombre: string }>;
+  provincias: Map<string, { nombre: string }>;
+  cantones: Map<string, { nombre: string }>;
+  distritos: Map<string, { nombre: string; zonaEspecial: boolean | null }>;
+}
+
+/** Lo minimo que `leerDescriptivosDeOrdenes` necesita del cliente de la transaccion. */
+export type DescriptivosTxClient = Pick<
+  PrismaClient,
+  "zona" | "usuario" | "provincia" | "canton" | "distrito"
+>;
+
+export async function leerDescriptivosDeOrdenes(
+  filas: readonly SnapshotRow[],
+  tx: DescriptivosTxClient,
+): Promise<DescriptivosDeOrden> {
+  const unicos = (ids: (string | null)[]): string[] => [
+    ...new Set(ids.filter((id): id is string => id !== null)),
+  ];
+  const zonaIds = unicos(filas.map((f) => f.orden.zonaId));
+  const tiendaIds = unicos(filas.map((f) => f.orden.tiendaId));
+  const provinciaIds = unicos(filas.map((f) => f.orden.provinciaId));
+  const cantonIds = unicos(filas.map((f) => f.orden.cantonId));
+  const distritoIds = unicos(filas.map((f) => f.orden.distritoId));
+
+  // ⚠️ UNA CONSULTA A LA VEZ (R3). Un `Promise.all` aqui reproduciria EXACTAMENTE el defecto que
+  // esta ficha vino a cerrar: cinco consultas de golpe sobre la UNICA conexion de la transaccion.
+  const zonas = await tx.zona.findMany({
+    where: { id: { in: zonaIds } },
+    select: { id: true, nombre: true, esCentral: true },
+  });
+  const tiendas = await tx.usuario.findMany({
+    where: { id: { in: tiendaIds } },
+    select: { id: true, nombre: true },
+  });
+  const provincias = await tx.provincia.findMany({
+    where: { id: { in: provinciaIds } },
+    select: { id: true, nombre: true },
+  });
+  const cantones = await tx.canton.findMany({
+    where: { id: { in: cantonIds } },
+    select: { id: true, nombre: true },
+  });
+  const distritos = await tx.distrito.findMany({
+    where: { id: { in: distritoIds } },
+    select: { id: true, nombre: true, zonaEspecial: true },
+  });
+
+  return {
+    zonas: new Map(zonas.map((z) => [z.id, { nombre: z.nombre, esCentral: z.esCentral }])),
+    tiendas: new Map(tiendas.map((t) => [t.id, { nombre: t.nombre }])),
+    provincias: new Map(provincias.map((p) => [p.id, { nombre: p.nombre }])),
+    cantones: new Map(cantones.map((c) => [c.id, { nombre: c.nombre }])),
+    distritos: new Map(
+      distritos.map((d) => [d.id, { nombre: d.nombre, zonaEspecial: d.zonaEspecial }]),
+    ),
+  };
+}
+
+/**
+ * FICHA 450 — el descriptivo de un FK NOT NULL, o error duro.
+ *
+ * Con la relacion anidada, una fila ausente era imposible: Prisma devolvia el objeto o el tipo no
+ * compilaba. Con las lecturas por `in` deja de serlo, y en codigo de dinero un `?? null` silencioso
+ * congelaria un nombre vacio sin que nadie se enterara — el fallo mudo que este repo persigue. Asi
+ * que se lanza, y la transaccion entera se revierte.
+ */
+function descriptivoDe<T>(mapa: Map<string, T>, id: string, tabla: string): T {
+  const fila = mapa.get(id);
+  if (fila === undefined) {
+    throw new Error(
+      `snapshot del cierre: falta la fila de \`${tabla}\` con id ${id} dentro de la transaccion`,
+    );
+  }
+  return fila;
+}
 
 // Money-safe: STRING escala 2 -> Decimal (nunca number/parseFloat), R11. `null` = la tienda
 // no tenia tarifa vigente al solicitar (gap R9): las 9 columnas quedan NULL, todas o ninguna.
@@ -1069,6 +1186,9 @@ export class CierreDiaRepository implements ICierreDiaRepository {
             zonaId: f.orden.zonaId,
           }));
           const tarifas = await this.tarifaRepo.resolveTarifas(pares, tx);
+          // FICHA 450 (T2.7): los descriptivos que antes traia la relacion anidada, leidos en
+          // SERIE sobre la conexion de esta transaccion. Mismas tablas, mismos ids, mismos valores.
+          const descriptivos = await leerDescriptivosDeOrdenes(filas, tx);
           await tx.cierreDetail.createMany({
             data: filas.map((f) => ({
               cierreId: cierre.id,
@@ -1079,11 +1199,15 @@ export class CierreDiaRepository implements ICierreDiaRepository {
               cobraComision: f.orden.cobraComision,
               zonaId: f.orden.zonaId,
               tiendaId: f.orden.tiendaId,
-              esCentral: f.orden.zona.esCentral,
+              esCentral: descriptivoDe(descriptivos.zonas, f.orden.zonaId, "zona").esCentral,
               // `=== true` y no `!!`: la columna es tri-valuada y `null` ("nadie lo decidio")
               // NO es especial. Una orden sin distrito (el unico FK nullable de `orden`)
               // congela `false`: sin distrito no hay marca que aplicar.
-              esZonaEspecial: f.orden.distrito?.zonaEspecial === true,
+              esZonaEspecial:
+                (f.orden.distritoId === null
+                  ? null
+                  : descriptivoDe(descriptivos.distritos, f.orden.distritoId, "distrito")
+                      .zonaEspecial) === true,
               ...tarifaColumnas(
                 tarifas.get(
                   clavePar({ tiendaId: f.orden.tiendaId, zonaId: f.orden.zonaId }),
@@ -1095,11 +1219,18 @@ export class CierreDiaRepository implements ICierreDiaRepository {
               destinatario: f.orden.destinatario,
               direccion: f.orden.direccion,
               producto: f.orden.producto,
-              tiendaNombre: f.orden.tienda.nombre,
-              zonaNombre: f.orden.zona.nombre,
-              provinciaNombre: f.orden.provincia.nombre,
-              cantonNombre: f.orden.canton.nombre,
-              distritoNombre: f.orden.distrito?.nombre ?? null,
+              tiendaNombre: descriptivoDe(descriptivos.tiendas, f.orden.tiendaId, "usuario").nombre,
+              zonaNombre: descriptivoDe(descriptivos.zonas, f.orden.zonaId, "zona").nombre,
+              provinciaNombre: descriptivoDe(
+                descriptivos.provincias,
+                f.orden.provinciaId,
+                "provincia",
+              ).nombre,
+              cantonNombre: descriptivoDe(descriptivos.cantones, f.orden.cantonId, "canton").nombre,
+              distritoNombre:
+                f.orden.distritoId === null
+                  ? null
+                  : descriptivoDe(descriptivos.distritos, f.orden.distritoId, "distrito").nombre,
             })),
           });
         }

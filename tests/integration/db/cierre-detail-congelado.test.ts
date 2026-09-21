@@ -151,11 +151,31 @@ function makeDb() {
   // Este es el nucleo del test: si un lector mira aqui en vez del snapshot, ve lo MUTADO.
   const joinOrden = (o: OrdenRow) => ({
     ...o,
+    // FICHA 450 (T2.7): los FK de las tres geografias. Desde que `SNAPSHOT_SELECT` dejo de anidar
+    // las cinco relaciones, `crearCierre` los proyecta y lee los catalogos en serie.
+    provinciaId: "p1",
+    cantonId: "ct1",
+    distritoId: "d1",
     zona: { nombre: zonas[o.zonaId].nombre, esCentral: zonas[o.zonaId].esCentral },
     tienda: { nombre: usuarios[o.tiendaId].nombre },
     provincia: { nombre: "Cartago" },
     canton: { nombre: "Central" },
     distrito: { nombre: "Oriental" },
+  });
+
+  /**
+   * FICHA 450 (T2.7) — los cinco catalogos que `crearCierre` lee EN SERIE dentro de la tx.
+   *
+   * ⚠️ `zona` y `usuario` resuelven contra las filas VIVAS (`zonas` / `usuarios`), EXACTAMENTE
+   * igual que hacia `joinOrden`. Eso es lo que mantiene intacto el nucleo de este archivo: si un
+   * lector mirase aqui en vez del snapshot, seguiria viendo lo MUTADO y los dos casos
+   * money-critical seguirian poniendose rojos. El cambio es de FORMA —de relacion anidada a
+   * lectura por `in`—, no de fuente.
+   */
+  const catalogoVivo = <T,>(fila: (id: string) => T) => ({
+    findMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
+      where.id.in.map((id) => ({ id, ...fila(id) })),
+    ),
   });
 
   const client = {
@@ -192,7 +212,17 @@ function makeDb() {
         primerApellido: "Uno",
         rol: { value: "admin" },
       })),
+      // FICHA 450: la tienda, por su FK y contra la fila VIVA (ver `catalogoVivo`).
+      ...catalogoVivo((id: string) => ({ nombre: usuarios[id].nombre })),
     },
+    // FICHA 450: los otros cuatro catalogos del snapshot, leidos en serie.
+    zona: catalogoVivo((id: string) => ({
+      nombre: zonas[id].nombre,
+      esCentral: zonas[id].esCentral,
+    })),
+    provincia: catalogoVivo(() => ({ nombre: "Cartago" })),
+    canton: catalogoVivo(() => ({ nombre: "Central" })),
+    distrito: catalogoVivo(() => ({ nombre: "Oriental", zonaEspecial: null })),
     gestionOrden: {
       updateMany: vi.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         let count = 0;

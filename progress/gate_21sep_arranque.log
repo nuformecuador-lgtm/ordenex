@@ -1,0 +1,766 @@
+== Arnes SDD :: init (modo: rapido) ==
+[0;32m✓ node v24.13.0[0m
+[0;32m✓ dependencias: 58 declaradas, todas presentes[0m
+[0;32m✓ feature_list.json: sin ids duplicados (444 fichas), cupo por zona respetado (in_progress=0) y specs en su sitio[0m
+[0;32m✓ el cambio no toca esquema, tipos compartidos, config ni dinero: el modo rapido basta[0m
+-> pnpm run typecheck
+
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex
+> tsc --noEmit
+
+[0;32m✓ typecheck paso[0m
+-> pnpm run lint
+
+> ordenex@0.1.0 lint R:\job\singularis\projects\ordenex
+> eslint
+
+
+R:\job\singularis\projects\ordenex\app\(app)\_components\Sidebar.tsx
+  308:9  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+R:\job\singularis\projects\ordenex\app\(app)\analitica\_components\AnaliticaShell.tsx
+   2:10  warning  'ChartColumn' is defined but never used  @typescript-eslint/no-unused-vars
+   5:10  warning  'EmptyState' is defined but never used   @typescript-eslint/no-unused-vars
+  61:3   warning  'filtros' is defined but never used      @typescript-eslint/no-unused-vars
+  62:3   warning  'operativo' is defined but never used    @typescript-eslint/no-unused-vars
+  63:3   warning  'financiero' is defined but never used   @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\cierres-admin\_components\CierresAdminModule.tsx
+  72:10  warning  'money' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\configuracion\tarifas\_components\CobroVehiculoTarifas.tsx
+  230:6  warning  React Hook useEffect has a missing dependency: 'onChange'. Either include it or remove the dependency array. If 'onChange' changes too often, find the parent component that defines it and wrap that definition in useCallback  react-hooks/exhaustive-deps
+
+R:\job\singularis\projects\ordenex\app\(app)\mis-asignaciones\_components\GestionarOrdenPanel.tsx
+  75:10  warning  'EnviarPlantillaWhatsappButton' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\mis-asignaciones\_components\UbicacionMapaInner.tsx
+  31:7  warning  'CENTRO_FALLBACK' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\novedades\_components\novedad-a-orden-card.ts
+  107:10  warning  '_causa' is defined but never used            @typescript-eslint/no-unused-vars
+  108:20  warning  '_mensajeroNombre' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\recoleccion\_components\RecoleccionModule.tsx
+  3:23  warning  'useMemo' is defined but never used          @typescript-eslint/no-unused-vars
+  7:10  warning  'ContactoButtons' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\lib\cache\cache-nula.ts
+  25:19  warning  '_origen' is defined but never used  @typescript-eslint/no-unused-vars
+  25:48  warning  '_tags' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\lib\repositories\WebhookSuscripcionRepository.ts
+  172:5  warning  '_ahora' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\lib\repositories\ZonaRepository.ts
+  10:10  warning  'normalizeName' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\AnalyticsGraficaReparto.test.tsx
+  49:7  warning  'SERIE' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\AnalyticsPesoBajoUnPunto.test.tsx
+  80:7  warning  'SERIE' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\CierreMensajeroDetalleCascadas.test.tsx
+  16:15  warning  'CierreEstado' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\DineroIdentidadesEnPantalla.test.tsx
+  508:1  warning  Unused eslint-disable directive (no problems were reported from 'import/first')
+
+R:\job\singularis\projects\ordenex\tests\components\RepartoModule.test.tsx
+  154:10  warning  'ordenCardsEnReparto' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\WebhookAccionCell.test.tsx
+  7:3  warning  'within' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\descarga\DescargarGestionesDialog.test.tsx
+  137:23  warning  '_recorte' is defined but never used  @typescript-eslint/no-unused-vars
+  150:23  warning  '_recorte' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\integration\db\detalle-movimiento-cierre-postgres.test.ts
+  407:3  warning  'pageSize' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\integration\db\geografia-alta.test.ts
+  95:32  warning  's' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\integration\repositories\deshacer-asignacion.historial.test.ts
+  40:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\corregir-datos-cliente.action.test.ts
+  21:33  warning  '_input' is defined but never used    @typescript-eslint/no-unused-vars
+  21:68  warning  '_actor' is defined but never used    @typescript-eslint/no-unused-vars
+  25:41  warning  '_ordenId' is defined but never used  @typescript-eslint/no-unused-vars
+  25:59  warning  '_actor' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\deshacer-asignacion.action.test.ts
+   17:33  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+   17:66  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+  122:35  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  122:68  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\eliminar-orden.action.test.ts
+  17:33  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  17:61  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\geografia.composition-root.test.ts
+  23:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\rastreo-publico-action.test.ts
+  27:34  warning  '_numGuia' is defined but never used  @typescript-eslint/no-unused-vars
+  27:52  warning  '_factor' is defined but never used   @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\recuperar-orden.action.test.ts
+  17:34  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  17:63  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\traspasar-mensajero.test.ts
+  35:20  warning  '_args' is defined but never used   @typescript-eslint/no-unused-vars
+  65:12  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  65:45  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\_fake-prisma-dinero.ts
+  571:33  warning  '_id' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\alcance-bordes.guardia.test.ts
+  2:10  warning  'quitarComentarios' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\cache-invalidacion-backfill.test.ts
+  64:37  warning  '_opts' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\ciclo-vida.test.ts
+  298:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\cohorte-carga-action.test.ts
+  45:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-cargadas-action.test.ts
+  23:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-devoluciones.test.ts
+  320:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-entregas-action.test.ts
+  16:45  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-hoy-gestion-action.test.ts
+  21:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-por-status-servicio.test.ts
+  157:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-productos-action.test.ts
+  35:45  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\operativa-sumabilidad.guardia.test.ts
+  2:10  warning  'quitarComentarios' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\productos-dinero-alcance.test.ts
+  7:3  warning  'resolverAlcanceProductos' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\auth\google-adc-token.test.ts
+  25:38  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\components\analytics-topes.test.ts
+  25:7  warning  'serie' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\components\etiquetas-pdf.test.ts
+   31:3   warning  'MAQUETA_BASE' is defined but never used     @typescript-eslint/no-unused-vars
+   32:14  warning  'PT_A_MM_MAQUETA' is defined but never used  @typescript-eslint/no-unused-vars
+  174:10  warning  'lineasDe' is defined but never used         @typescript-eslint/no-unused-vars
+  306:10  warning  'textosConY' is defined but never used       @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\components\recuperar-orden.ui.test.tsx
+  273:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+R:\job\singularis\projects\ordenex\tests\unit\guards\dinero-centimos-cuando-existen.guardia.test.ts
+  239:10  warning  'salidasQueCasan' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\guards\quitador-comentarios.guardia.test.ts
+  123:20  warning  '_fuente' is defined but never used  @typescript-eslint/no-unused-vars
+  244:20  warning  '_fuente' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\pdf\etiquetas-pdf-lote.test.ts
+  132:10  warning  'textosConY' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\api-key-repository.test.ts
+  180:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierre-aporte-repository.test.ts
+  53:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  54:30  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  55:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-admin-gestiones-where.test.ts
+  45:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  48:27  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  50:49  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-bodega-admin-marca.test.ts
+  63:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  75:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-bodega-gestiones-where.test.ts
+  32:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  34:27  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  36:49  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-filtros-where.test.ts
+  41:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  42:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-gestiones-descarga-dto.test.ts
+  122:29  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\colas-paginadas-where.test.ts
+  44:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  45:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cuentas-por-pagar-paginado-where.test.ts
+  42:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  43:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\desglose-mensajero-cierre-derivado.test.ts
+  53:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\gasto-fijo-plantilla-eliminar.test.ts
+  50:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\historicos-paginados-where.test.ts
+  42:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  43:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\orden-repository.listado-filtros-257.test.ts
+  36:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  37:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\premio-ranking-lecturas.test.ts
+   23:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  115:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  210:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  211:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  212:36  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  301:36  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\ranking-snapshot-repository.test.ts
+   52:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   59:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   62:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   68:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  224:54  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\satelite-paginado-where.test.ts
+  103:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\tarifa-repository.test.ts
+  316:23  warning  '_omitida' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\scripts\backfill-marcador-config-geocode-cli.test.ts
+  6:8  warning  'InformeBackfillMarcador' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\_dobles-analitica-financiera.ts
+  201:12  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+  201:42  warning  '_cubos' is defined but never used     @typescript-eslint/no-unused-vars
+  249:12  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+  249:42  warning  '_cubos' is defined but never used     @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\api-pdf-etiqueta-service.test.ts
+   84:14  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+   84:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+   87:14  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+   87:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+   89:47  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+   89:65  warning  '_path' is defined but never used      @typescript-eslint/no-unused-vars
+   91:14  warning  '_cargaId' is defined but never used   @typescript-eslint/no-unused-vars
+   91:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+   93:47  warning  '_cargaId' is defined but never used   @typescript-eslint/no-unused-vars
+   93:65  warning  '_path' is defined but never used      @typescript-eslint/no-unused-vars
+  102:45  warning  '_ordenIds' is defined but never used  @typescript-eslint/no-unused-vars
+  102:66  warning  '_actor' is defined but never used     @typescript-eslint/no-unused-vars
+  106:37  warning  '_ordenIds' is defined but never used  @typescript-eslint/no-unused-vars
+  106:58  warning  '_actor' is defined but never used     @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\caja-premio-ranking-feed.test.ts
+  26:12  warning  '_tx' is defined but never used    @typescript-eslint/no-unused-vars
+  26:26  warning  '_movs' is defined but never used  @typescript-eslint/no-unused-vars
+  88:43  warning  '_tx' is defined but never used    @typescript-eslint/no-unused-vars
+  88:57  warning  '_movs' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\chat-whatsapp-sinpe-del-servidor.test.ts
+  47:40  warning  '_entrada' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\cierre-dia-pasados-paginado.test.ts
+  72:24  warning  '_mensajeroId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\cierres-admin-filtro-estado.test.ts
+  53:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  53:31  warning  '_rango' is defined but never used    @typescript-eslint/no-unused-vars
+  53:52  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+  59:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  59:31  warning  '_rango' is defined but never used    @typescript-eslint/no-unused-vars
+  59:52  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+  65:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  65:31  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+  68:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  68:31  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corregir-datos-cliente-bodega-satelite.test.ts
+  112:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  113:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  114:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corregir-datos-cliente-geo-retirada.test.ts
+  94:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  95:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  96:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corregir-datos-cliente-service.test.ts
+  118:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  119:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  120:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corregir-datos-cliente-texto-etiqueta.test.ts
+   99:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  100:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  101:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corte-diario-seleccion.test.ts
+  118:36  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\deshacer-asignacion-service.test.ts
+  75:7   warning  '_origenes' is defined but never used   @typescript-eslint/no-unused-vars
+  76:7   warning  '_historial' is defined but never used  @typescript-eslint/no-unused-vars
+  77:7   warning  '_zonaId' is defined but never used     @typescript-eslint/no-unused-vars
+  90:12  warning  '_items' is defined but never used      @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\geocodificacion-service.test.ts
+  346:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\habilitar-novedad-service.test.ts
+  64:37  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\premio-ranking-devengo-service.test.ts
+  135:40  warning  '_m' is defined but never used     @typescript-eslint/no-unused-vars
+  135:52  warning  '_dias' is defined but never used  @typescript-eslint/no-unused-vars
+  135:67  warning  '_tx' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\rastreo-publico-service.test.ts
+  42:38  warning  '_numGuia' is defined but never used  @typescript-eslint/no-unused-vars
+  43:43  warning  '_ordenId' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\rescate-ayuda-service.test.ts
+  64:37  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\solicitud-ayuda-service.test.ts
+  70:37  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\tope-intentos-dto-derivado.test.ts
+  1:36  warning  'afterEach' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\traspaso-mensajero-service.test.ts
+  502:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  503:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  559:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  560:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  574:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  577:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  594:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  595:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  616:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  619:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  629:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  630:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\wallet-detalle-movimiento.test.ts
+  77:37  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  78:45  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  78:58  warning  '_tiendaId' is defined but never used  @typescript-eslint/no-unused-vars
+  79:48  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  83:47  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  84:48  warning  '_cierreId' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\wallet-tienda-detalle-movimiento.test.ts
+  79:37  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  80:45  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  80:58  warning  '_tiendaId' is defined but never used  @typescript-eslint/no-unused-vars
+  83:48  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  87:47  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  88:48  warning  '_cierreId' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\webhook-estado-service.test.ts
+  160:43  warning  '_owner' is defined but never used  @typescript-eslint/no-unused-vars
+  160:59  warning  '_ahora' is defined but never used  @typescript-eslint/no-unused-vars
+  161:46  warning  '_owner' is defined but never used  @typescript-eslint/no-unused-vars
+  161:62  warning  '_ahora' is defined but never used  @typescript-eslint/no-unused-vars
+  178:39  warning  '_ctx' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\utils\capturar-ubicacion.test.ts
+  37:9  warning  '_err' is defined but never used       @typescript-eslint/no-unused-vars
+  38:9  warning  '_opciones' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 202 problems (0 errors, 202 warnings)
+  0 errors and 2 warnings potentially fixable with the `--fix` option.
+
+[0;32m✓ lint paso[0m
+[0;32m✓ DATABASE_URL resuelta: los 195 archivos de tests contra Postgres SI se ejecutan[0m
+-> pnpm run test:cambiados (con reporte JSON)
+
+> ordenex@0.1.0 test:cambiados R:\job\singularis\projects\ordenex
+> vitest run --changed origin/dev --passWithNoTests "--reporter=default" "--reporter=json" "--outputFile.json=.vitest/rojos-cambiados.json"
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex
+
+No test files found, exiting with code 0
+
+include: tests/**/*.test.ts, tests/**/*.test.tsx
+exclude:  **/node_modules/**, **/.git/**
+
+JSON report written to R:/job/singularis/projects/ordenex/.vitest/rojos-cambiados.json
+-> pnpm run test:guardias (con reporte JSON)
+
+> ordenex@0.1.0 test:guardias R:\job\singularis\projects\ordenex
+> vitest run guard "--reporter=default" "--reporter=json" "--outputFile.json=.vitest/rojos-guardias.json"
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex
+
+ ✓ tests/unit/guards/revision-sinpe-no-bloquea.guardia.test.ts (7 tests) 1288ms
+     ✓ el censo encuentra el resolvedor (anti-vacuidad: si no, no vigila nada)  378ms
+     ✓ ⭑ NINGUN archivo que nombre la revision decide un `redirect`/`notFound`/403 con ella  313ms
+     ✓ ⭑ CONTRAPRUEBA — un `redirect` inyectado en el resolvedor pone la guardia roja  591ms
+ ✓ tests/integration/db/analytics-daily-guards.test.ts (26 tests) 1519ms
+     ✓ no hay repositorio, servicio ni interfaz con el nombre de la TABLA  480ms
+ ✓ tests/unit/guards/catalogo-postgres-acota-esquema.guardia.test.ts (7 tests) 1785ms
+     ✓ el barrido encuentra archivos y consultas: si midiera cero, el verde no valdria nada  1003ms
+     ✓ ⭑ NINGUNA consulta del arbol lee un catalogo sin decir de que esquema habla  776ms
+ ✓ tests/guards/tarifa-status-retirado.guard.test.ts (8 tests) 2040ms
+     ✓ ningun archivo de lib/, app/ ni db/schema.prisma los nombra fuera de un comentario  369ms
+     ✓ ningun archivo de lib/, app/ ni tests/ menciona `TarifaVigentePorTienda`  850ms
+     ✓ `db/migrations/` queda FUERA del censo, y la cita historica sigue ahi intacta  772ms
+ ✓ tests/unit/analytics/modulo-puro.guardia.test.ts (30 tests) 2912ms
+     ✓ importa los diez modulos sin DATABASE_URL y ninguno lanza  2097ms
+     ✓ metrics.ts es el unico archivo del repo que declara metricas  353ms
+ ✓ tests/unit/guards/anclaje-vs-intentos.guardia.test.ts (19 tests) 1224ms
+     ✓ `whereIntentosVigentes` se declara UNA sola vez, y en el modulo del conteo  403ms
+     ✓ el filtro por la familia del ANCLAJE vive en UN solo modulo de lectura  402ms
+     ✓ no existe ningun helper COMPARTIDO de «cierre aprobado»  355ms
+ ✓ tests/unit/guards/dependencias-declaradas-presentes.guardia.test.ts (15 tests) 1542ms
+     ✓ R2/R6 — con una dependencia ausente el paso CORTA en rojo y NO da el visto bueno  364ms
+     ✓ R4 — con el arbol completo el paso pasa y da el visto bueno con la cifra  358ms
+ ✓ tests/unit/descarga/columnas-asercion-de-orden.guardia.test.ts (3 tests) 1302ms
+     ✓ AUTOCOMPROBACIÓN: el detector encuentra los casos conocidos y rechaza el que no cuenta  713ms
+     ✓ ninguna constante COLUMNAS_DESCARGA_* del árbol se queda sin aserción de orden  586ms
+ ✓ tests/unit/guards/no-embalaje.test.ts (1 test) 3901ms
+     ✓ no queda ninguna referencia a 'embalaje' fuera del whitelist  3899ms
+ ✓ tests/unit/descarga/adaptador-conjunto.guardia.test.ts (11 tests) 1141ms
+     ✓ CONTROL POSITIVO: las lecturas DEDICADAS que las sustituyeron sí se llaman  365ms
+ ✓ tests/unit/guards/censo-order-status-rename.test.ts (8 tests) 1005ms
+     ✓ no hay coincidencias case-sensitive de los 7 values retirados en app/, lib/, components/, hooks/, scripts/, tests/, e2e/  582ms
+     ✓ no hay ninguna aparicion del literal exacto en app/, lib/, components/, hooks/, scripts/, tests/, e2e/  415ms
+ ✓ tests/unit/analytics/backfill-guards.test.ts (21 tests) 1129ms
+ ✓ tests/unit/guards/ayuda-columna-retirada.guardia.test.ts (14 tests) 902ms
+     ✓ ningun modulo de codigo la usa (censo sobre fuente sin comentarios)  822ms
+ ✓ tests/unit/guards/sinpe-en-toda-superficie.guardia.test.ts (9 tests) 863ms
+     ✓ ⭑ la cadena `negocioDesdeEnv` no aparece en ningun archivo censado  312ms
+ ✓ tests/integration/db/zona-central-guarda-y-rastro.test.ts (17 tests) 1400ms
+ ✓ tests/unit/guards/monto-cobrar-entero.guardia.test.ts (13 tests) 5665ms
+     ✓ todo schema zod que declare `monto_cobrar` esta censado  1578ms
+     ✓ todo fuente que arma un `CreateOrdenData` con monto esta censado  3793ms
+ ✓ tests/unit/guards/regla-241-caducada.guardia.test.ts (7 tests) 5765ms
+     ✓ ninguna línea de `lib/` ni de `app/` dice «NUNCA se bloquea»  5068ms
+ ✓ tests/unit/guards/sinpe-sin-variables-de-entorno.guardia.test.ts (6 tests) 4549ms
+     ✓ ⭑ no aparece en ningun archivo de codigo censado ni en `.env.example`  4008ms
+     ✓ ⭑ CONTRAPRUEBA — un infractor INYECTADO en memoria pone la guardia roja  351ms
+ ✓ tests/unit/guards/caja-173-alcance.guardia.test.ts (29 tests) 4460ms
+     ✓ el unico modulo del arbol que escribe en `wallet_tienda_movimiento` sigue siendo su repositorio  3639ms
+ ✓ tests/unit/guards/premio-ranking-alcance.guardia.test.ts (14 tests) 971ms
+ ✓ tests/unit/analytics/export-csv-frontera.guardia.test.ts (17 tests) 446ms
+ ✓ tests/unit/guards/gasto-fijo-decision-rol.guardia.test.ts (16 tests) 511ms
+ ✓ tests/unit/guards/dinero-centimos-cuando-existen.guardia.test.ts (28 tests) 457ms
+ ✓ tests/unit/guards/marcador-fallo-config-declaracion-unica.guardia.test.ts (14 tests) 12309ms
+     ✓ y en `tests/` solo lo escribe a mano el test de R14  12088ms
+ ✓ tests/unit/guards/impresion-flujo.guardia.test.ts (58 tests) 9146ms
+     ✓ ningun otro archivo de `tests/` define una segunda copia del parser  9121ms
+ ✓ tests/unit/guards/gestion-aprobada-retirada.guardia.test.ts (8 tests) 18577ms
+     ✓ ningun modulo de codigo la menciona (censo sobre fuente sin comentarios)  18497ms
+ ✓ tests/unit/guards/asistente-sin-datos.guardia.test.ts (13 tests) 12727ms
+     ✓ CONTROL DE NO-VACUIDAD: se encuentran los archivos que llaman al borde  12399ms
+     ✓ ⭑⭑ todas las invocaciones llevan `service:` (o `fetchImpl:`)  309ms
+ ✓ tests/unit/guards/factura-contraste.guardia.test.ts (50 tests) 13028ms
+     ✓ ningún otro archivo de `tests/` tiene una segunda copia de la fórmula de contraste  12660ms
+     ✓ ninguna verificación de `tests/` se apoya en el detector de `.claude/skills`  342ms
+ ✓ tests/unit/guards/geografia-renombrado-punto-unico.guardia.test.ts (12 tests) 466ms
+ ✓ tests/unit/guards/ranking-snapshot-cron.guardia.test.ts (10 tests) 390ms
+ ✓ tests/unit/analytics/financiera-fuente.guardia.test.ts (13 tests) 419ms
+ ✓ tests/unit/descarga/contadores-cabecera.guardia.test.ts (5 tests) 475ms
+ ✓ tests/unit/tablero-dia/buckets-estatus.guardia.test.ts (31 tests) 428ms
+     ✓ ningun otro archivo del arbol declara buckets junto a values de estatus  417ms
+ ✓ tests/unit/analytics/cache-tags.guardia.test.ts (3 tests) 480ms
+     ✓ solo el catalogo de la 135 (y su test) contienen las cadenas de `ANALITICA_TAGS`  471ms
+ ✓ tests/unit/analytics/rollup-guards.test.ts (21 tests) 479ms
+ ✓ tests/unit/guards/censo-simpe.test.ts (1 test) 421ms
+     ✓ no hay coincidencias case-sensitive de 'SIMPE' en app/, lib/, tests/, e2e/  419ms
+ ✓ tests/unit/guards/correccion-fecha-reprogramacion.guardia.test.ts (16 tests) 452ms
+ ✓ tests/unit/descarga/cobertura-tablas.guardia.test.ts (4 tests) 379ms
+ ✓ tests/unit/guards/geografia-sin-borrado-fisico.guardia.test.ts (8 tests) 424ms
+ ✓ tests/unit/analytics/operativa-frontera.guardia.test.ts (11 tests) 375ms
+ ✓ tests/unit/analytics/catalogo-produccion.guardia.test.ts (5 tests) 462ms
+     ✓ nadie fuera del catalogo decide datos por `estadoProduccion`, `universo` ni `derivadaDe`  377ms
+ ✓ tests/unit/analytics/alcance-fuente-unica.guardia.test.ts (13 tests) 356ms
+     ✓ ningun archivo del repo fuera de metrics.ts declara una tabla de alcance por rol  312ms
+ ✓ tests/unit/guards/push-cableado-unico.guardia.test.ts (22 tests) 2046ms
+     ✓ ⭑ el repositorio que sale de `notificadores.ts` es un `NotificacionRepositoryConPush`  2023ms
+ ✓ tests/unit/guards/historial-accion-punto-unico.guardia.test.ts (7 tests) 365ms
+     ✓ ningun OTRO archivo del arbol escribe en la tabla  354ms
+ ✓ tests/unit/analytics/cache-financiera.guardia.test.ts (3 tests) 386ms
+     ✓ el dominio `financiera` no se cachea  376ms
+ ✓ tests/unit/guards/clave-remision-solo-lectura.guardia.test.ts (12 tests) 386ms
+     ✓ ninguna mencion esta dentro de un `data:` de create/update/createMany  376ms
+ ✓ tests/unit/guards/pagos-proyeccion.guardia.test.ts (10 tests) 396ms
+ ✓ tests/unit/guards/busqueda-texto-solo-lectura.test.ts (9 tests) 340ms
+     ✓ ninguna mencion esta dentro de un `data:` de create/update/createMany  329ms
+ ✓ tests/unit/components/analytics-paquete-guard.test.ts (15 tests) 351ms
+ ✓ tests/integration/db/zona-guardado-conserva-inactivos.test.ts (2 tests) 864ms
+     ✓ las filas de `zona_distrito` son EXACTAMENTE las mismas antes y después del guardado  325ms
+ ✓ tests/unit/analytics/export-financiero-frontera.guardia.test.ts (32 tests) 382ms
+ ✓ tests/unit/guards/p2003-detector-unico.guardia.test.ts (8 tests) 326ms
+     ✓ ningun OTRO archivo del arbol lo nombra  315ms
+ ✓ tests/unit/guards/geografia-predicado-unico.guardia.test.ts (10 tests) 321ms
+ ✓ tests/unit/analytics/alcance-bordes.guardia.test.ts (11 tests) 268ms
+ ✓ tests/unit/guards/umbral-origen-declarado.guardia.test.ts (7 tests) 259ms
+ ✓ tests/unit/guards/sin-mensajero-sugerido.test.ts (3 tests) 283ms
+ ✓ tests/unit/guards/flete-por-rechazo-censo.guardia.test.ts (4 tests) 276ms
+ ✓ tests/unit/guards/egreso-indemnizacion-emisores.test.ts (9 tests) 300ms
+ ✓ tests/unit/guards/api-keys-tabla-una-linea.guardia.test.tsx (6 tests) 356ms
+ ✓ tests/unit/descarga/columnas-sensibles.guardia.test.ts (5 tests) 282ms
+stderr | tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts > pwa · el aviso de version nueva > con trabajo declarado el aviso espera, y aparece cuando el usuario termina
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/unit/guards/censo-catalogo-estados-v2.test.ts (8 tests) 205ms
+stderr | tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts > pwa · el aviso de version nueva > G2: si el usuario empieza algo entre el aviso y el clic, no se pide el relevo
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts (22 tests) 1508ms
+     ✓ con la rama de entrega abierta y el monto tecleado, hay trabajo en curso  371ms
+ ✓ tests/unit/guards/contrasena-generada-superficie.guardia.test.ts (14 tests) 236ms
+ ✓ tests/unit/guards/costo-orden-forma-unica.guardia.test.ts (11 tests) 250ms
+ ✓ tests/unit/tablero-dia/color-contador.guardia.test.tsx (15 tests) 218ms
+ ✓ tests/unit/guards/impresion-sin-dark.guardia.test.ts (14 tests) 166ms
+ ✓ tests/unit/guards/tope-indemnizacion-emisores.test.ts (7 tests) 172ms
+ ✓ tests/unit/guards/pagos-frontera.guardia.test.ts (16 tests) 188ms
+ ✓ tests/unit/guards/etiqueta-fuente-diferida.guardia.test.ts (15 tests) 177ms
+ ✓ tests/unit/tablero-dia/asignado-at-solo-lectura.guardia.test.ts (7 tests) 162ms
+ ✓ tests/unit/guards/nota-privada-retirada.guardia.test.ts (9 tests) 234ms
+ ✓ tests/unit/guards/contrasena-maqueta-unica.guardia.test.ts (4 tests) 147ms
+ ✓ tests/unit/guards/push-intencion-de-baja.guardia.test.ts (39 tests) 152ms
+ ✓ tests/unit/guards/pwa-manifiesto-atajos.guardia.test.ts (11 tests) 1890ms
+     ✓ y la diferencia se ve en el pixel de la esquina, no solo en el texto del purpose  1811ms
+ ✓ tests/unit/analytics/cache-config.guardia.test.ts (6 tests) 133ms
+ ✓ tests/unit/guards/gestiones-detalle-lista-blanca.guardia.test.ts (10 tests) 151ms
+ ✓ tests/unit/guards/push-alta-punto-unico.guardia.test.ts (24 tests) 121ms
+ ✓ tests/unit/analytics/alcance-obligatorio.guardia.test.ts (20 tests) 126ms
+ ✓ tests/unit/analytics/tablero-operativo-frontera.guardia.test.ts (21 tests) 115ms
+ ✓ tests/unit/guards/quitador-comentarios.guardia.test.ts (47 tests) 106ms
+ ✓ tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts (25 tests) 115ms
+ ✓ tests/unit/analytics/cache-aislamiento.guardia.test.ts (4 tests) 97ms
+ ✓ tests/unit/guards/pagos-captura.guardia.test.ts (31 tests) 83ms
+ ✓ tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts (61 tests) 71ms
+ ✓ tests/unit/repositories/criterio-unico.guardia.test.ts (22 tests) 75ms
+ ✓ tests/unit/guards/cascada-central-en-las-dos-pantallas.guardia.test.ts (11 tests) 81ms
+ ✓ tests/unit/guards/historial-accion-sin-datos-cliente.guardia.test.ts (28 tests) 50ms
+ ✓ tests/unit/guards/carga-del-mensajero.guardia.test.ts (18 tests) 54ms
+ ✓ tests/unit/guards/rutas-336-retiradas.guardia.test.ts (16 tests) 83ms
+ ✓ tests/unit/domain/order-status-transiciones.guardia.test.ts (176 tests) 49ms
+ ✓ tests/unit/guards/liquidacion-reparto-bloqueos.guardia.test.ts (25 tests) 68ms
+ ✓ tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts (10 tests) 61ms
+ ✓ tests/unit/guards/superficie-de-uso.guardia.test.ts (18 tests) 83ms
+ ✓ tests/unit/guards/historial-accion-forma-tabla.guardia.test.ts (12 tests) 70ms
+ ✓ tests/unit/guards/liquidacion-money-safe.test.ts (7 tests) 58ms
+ ✓ tests/unit/guards/plantilla-gasto-fijo-borrado.guardia.test.ts (37 tests) 96ms
+ ✓ tests/unit/tablero-dia/recorte-por-alcance.guardia.test.ts (11 tests) 66ms
+ ✓ tests/unit/guards/decision5-revertida.guardia.test.ts (19 tests) 54ms
+ ✓ tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts (7 tests) 44ms
+ ✓ tests/unit/analytics/tablero-agregado-frontera.guardia.test.ts (7 tests) 38ms
+ ✓ tests/unit/guards/satelite-sin-boton-aceptar.guardia.test.ts (44 tests) 32ms
+ ✓ tests/unit/analytics/definiciones-catalogo.guardia.test.ts (12 tests) 41ms
+ ✓ tests/unit/tablero-dia/primitivas.guardia.test.ts (33 tests) 38ms
+ ✓ tests/unit/guards/liquidacion-alcance.test.ts (4 tests) 36ms
+ ✓ tests/unit/analytics/financiera-borde.guardia.test.ts (32 tests) 38ms
+ ✓ tests/unit/tablero-dia/cache-sin-invalidacion.guardia.test.ts (6 tests) 46ms
+ ✓ tests/unit/analytics/agregado-alcance.guardia.test.ts (13 tests) 34ms
+ ✓ tests/unit/repositories/registrar-cambio-estado.guardia.test.ts (88 tests) 39ms
+ ✓ tests/unit/guards/rastreo-dto-lista-blanca.guardia.test.ts (6 tests) 41ms
+ ✓ tests/unit/guards/d5-revertida.guardia.test.ts (19 tests) 38ms
+ ✓ tests/unit/guards/mi-wallet-335.guardia.test.ts (18 tests) 31ms
+ ✓ tests/unit/tablero-dia/frontera.guardia.test.ts (34 tests) 36ms
+ ✓ tests/unit/guards/novedad-acciones-sin-maqueta.guardia.test.ts (19 tests) 35ms
+ ✓ tests/unit/guards/corregir-datos-sin-rastro.guardia.test.ts (22 tests) 35ms
+ ✓ tests/unit/guards/rastreo-sin-ruta-nueva.guardia.test.ts (14 tests) 30ms
+ ✓ tests/unit/guards/asistente-sin-frontmatter.guardia.test.ts (7 tests) 23ms
+ ✓ tests/unit/analytics/alcance-columnas.guardia.test.ts (9 tests) 25ms
+ ✓ tests/unit/guards/tablero-financiero.guardia.test.ts (29 tests) 28ms
+ ✓ tests/unit/guards/landing-sin-maqueta.guardia.test.ts (23 tests) 26ms
+ ✓ tests/unit/guards/impresion-tokens.guardia.test.ts (47 tests) 27ms
+ ✓ tests/unit/guards/asistente-panel-hermano.guardia.test.ts (12 tests) 21ms
+ ✓ tests/unit/guards/incidente-admin-aislamiento.test.ts (24 tests) 30ms
+ ✓ tests/unit/guards/historial-acciones-solo-lectura.guardia.test.ts (19 tests) 27ms
+ ✓ tests/unit/guards/api-key-dependencias-usuario.guardia.test.ts (12 tests) 28ms
+ ✓ tests/unit/analytics/ranges-reuso.guardia.test.ts (6 tests) 32ms
+ ✓ tests/unit/guards/test-citado-desaparecido.guardia.test.ts (13 tests) 99ms
+ ✓ tests/unit/guards/contraste-tokens.guardia.test.ts (47 tests) 25ms
+ ✓ tests/unit/guards/pwa-relevo-y-purga.guardia.test.ts (25 tests) 27ms
+ ✓ tests/unit/guards/gasto-fijo-cobro-money-safe.guardia.test.ts (12 tests) 28ms
+ ✓ tests/unit/guards/hilo-ventana-alcanzable.guardia.test.ts (18 tests) 25ms
+ ✓ tests/unit/guards/confirmacion-sin-lectores.guardia.test.ts (8 tests) 32ms
+ ✓ tests/unit/analytics/financiera-unidad-de-vistas.guardia.test.ts (13 tests) 23ms
+ ✓ tests/unit/guards/379-maestro-sin-bloqueo.guardia.test.ts (11 tests) 19ms
+ ✓ tests/unit/analytics/financiera-forma-importe.guardia.test.ts (4 tests) 24ms
+ ✓ tests/unit/guards/cierre-sin-gestion-sin-dinero.guardia.test.ts (8 tests) 19ms
+ ✓ tests/unit/analytics/financiera-repositorios.guardia.test.ts (25 tests) 27ms
+ ✓ tests/unit/guards/entregas-sin-recoleccion.test.ts (21 tests) 23ms
+ ✓ tests/unit/services/tablero-dia-cache-aislamiento.guardia.test.ts (5 tests) 22ms
+ ✓ tests/unit/guards/api-sin-redirect-sin-sesion.guardia.test.ts (5 tests) 21ms
+ ✓ tests/unit/guards/historial-accion-money-safe.guardia.test.ts (18 tests) 23ms
+ ✓ tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts (16 tests) 23ms
+ ✓ tests/unit/analytics/operativa-solo-lectura.guardia.test.ts (7 tests) 16ms
+ ✓ tests/unit/analytics/financiera-desglose-ids.guardia.test.ts (11 tests) 21ms
+ ✓ tests/unit/guards/filtros-cierres-alcance.guardia.test.ts (7 tests) 14ms
+ ✓ tests/unit/guards/pwa-push.guardia.test.ts (20 tests) 27ms
+ ✓ tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts (21 tests) 20ms
+ ✓ tests/unit/guards/ranking-ventana-dia.guardia.test.ts (12 tests) 18ms
+ ✓ tests/unit/repositories/gestion-ubicacion-solo-escritura.guardia.test.ts (3 tests) 25ms
+ ✓ tests/unit/guards/cierre-bodega-vocabulario.guardia.test.ts (33 tests) 23ms
+ ✓ tests/unit/db/orden-clave-remision.guardia.test.ts (16 tests) 15ms
+ ✓ tests/unit/guards/ayuda-md-viajan-a-produccion.guardia.test.ts (10 tests) 10ms
+ ✓ tests/unit/guards/aprobacion-escrituras-cubiertas.guardia.test.ts (7 tests) 19ms
+ ✓ tests/unit/guards/pagos-aritmetica-decimal.guardia.test.ts (15 tests) 18ms
+ ✓ tests/unit/guards/etiquetas-maqueta-unica.guardia.test.ts (10 tests) 18ms
+ ✓ tests/unit/guards/geocode-salud-sin-prosa.guardia.test.ts (25 tests) 21ms
+ ✓ tests/unit/guards/tema-encendido.guardia.test.ts (17 tests) 21ms
+ ✓ tests/unit/guards/premisa-saltos-caducada.guardia.test.ts (10 tests) 21ms
+ ✓ tests/unit/guards/cierres-descarga-detallada-frontera.guardia.test.ts (5 tests) 19ms
+ ✓ tests/unit/guards/mensajero-forma-unica.guardia.test.ts (6 tests) 14ms
+ ✓ tests/unit/analytics/financiera-alcance.guardia.test.ts (12 tests) 22ms
+ ✓ tests/unit/guards/rastreo-frontera.guardia.test.ts (29 tests) 16ms
+ ✓ tests/unit/analytics/alcance-dinero.guardia.test.ts (13 tests) 20ms
+ ✓ tests/unit/analytics/operativa-fuente.guardia.test.ts (5 tests) 14ms
+ ✓ tests/unit/analytics/financiera-correspondencia.guardia.test.ts (12 tests) 22ms
+ ✓ tests/unit/guards/zona-reconciliacion-no-retarifa.guardia.test.ts (6 tests) 19ms
+ ✓ tests/unit/guards/deriva-primer-intento.guardia.test.ts (22 tests) 20ms
+ ✓ tests/unit/guards/buttonvariants-pasa-por-cn.guardia.test.ts (16 tests) 15ms
+ ✓ tests/unit/guards/autorizacion-texto-no-miente.guardia.test.ts (18 tests) 12ms
+ ✓ tests/unit/analytics/fulfillment-fuera-de-la-formula.guardia.test.ts (10 tests) 14ms
+ ✓ tests/unit/analytics/operativa-sumabilidad.guardia.test.ts (5 tests) 13ms
+ ✓ tests/unit/guards/caja-derivaciones.guardia.test.ts (9 tests) 15ms
+ ✓ tests/unit/guards/geocodificacion-motivo-por-orden-mismo-modulo.guardia.test.ts (20 tests) 15ms
+ ✓ tests/unit/guards/no-encontrado-no-delata.guardia.test.ts (20 tests) 14ms
+ ✓ tests/unit/guards/eliminar-por-estado.guardia.test.ts (23 tests) 15ms
+ ✓ tests/unit/analytics/catalogo-universo.guardia.test.ts (16 tests) 12ms
+ ✓ tests/unit/guards/jobs-handler-por-tipo.guardia.test.ts (5 tests) 46ms
+ ✓ tests/unit/guards/orden-nota-frontera.guardia.test.ts (10 tests) 20ms
+ ✓ tests/unit/analytics/export-financiero-alcance.guardia.test.ts (12 tests) 20ms
+ ✓ tests/unit/guards/recoleccion-no-contamina.test.ts (5 tests) 13ms
+ ✓ tests/unit/guards/fecha-reparto-acompana-asignado-at.guardia.test.ts (19 tests) 15ms
+ ✓ tests/unit/analytics/financiera-180-trazabilidad.guardia.test.ts (7 tests) 14ms
+ ✓ tests/unit/guards/cierre-detalle-superficies.guardia.test.ts (4 tests) 21ms
+ ✓ tests/unit/analytics/cohorte-frontera.guardia.test.ts (12 tests) 14ms
+ ✓ tests/unit/guards/orden-remision-alcance.guardia.test.ts (9 tests) 17ms
+ ✓ tests/unit/guards/historial-correccion-dia.guardia.test.ts (24 tests) 12ms
+ ✓ tests/unit/guards/incidente-exhaustividad.test.ts (8 tests) 11ms
+ ✓ tests/unit/analytics/metrics-dinero.guardia.test.ts (10 tests) 11ms
+ ✓ tests/unit/guards/jobs-recurrentes-con-siembra.guardia.test.ts (21 tests) 18ms
+ ✓ tests/unit/guards/ayuda-pantalla-ruta-existe.guardia.test.ts (10 tests) 7ms
+ ✓ tests/unit/guards/openapi-canal-rutas-reales.guardia.test.ts (16 tests) 13ms
+ ✓ tests/unit/tablero-dia/d10-revertida.guardia.test.ts (12 tests) 11ms
+ ✓ tests/unit/guards/notifications-bell-tokens.guardia.test.ts (7 tests) 10ms
+ ✓ tests/unit/tablero-dia/reversion-r49.guardia.test.ts (12 tests) 19ms
+ ✓ tests/unit/analytics/aislamiento.guardia.test.ts (8 tests) 14ms
+ ✓ tests/unit/guards/estados-reparto-mensajero-unica-fuente.guardia.test.ts (6 tests) 11ms
+ ✓ tests/unit/guards/tablero-lineas-trazabilidad.guardia.test.ts (7 tests) 17ms
+ ✓ tests/unit/guards/red-de-errores.guardia.test.ts (13 tests) 14ms
+ ✓ tests/unit/analytics/financiera-trazabilidad.guardia.test.ts (5 tests) 12ms
+ ✓ tests/unit/guards/atajo-aviso-ruta-visible.guardia.test.ts (10 tests) 12ms
+ ✓ tests/unit/descarga/ambito-columnas.guardia.test.ts (4 tests) 10ms
+ ✓ tests/unit/guards/asistente-sin-persistencia.guardia.test.ts (7 tests) 13ms
+ ✓ tests/unit/guards/ayuda-render-sin-filtracion.guardia.test.ts (8 tests) 18ms
+ ✓ tests/unit/guards/tope-intentos-pii.guardia.test.ts (5 tests) 7ms
+ ✓ tests/unit/guards/pago-mensajero-money-safe.guardia.test.ts (8 tests) 10ms
+ ✓ tests/unit/guards/analitica-barra-filtros-sin-solape.guardia.test.ts (10 tests) 8ms
+ ✓ tests/unit/guards/rastreo-hitos-exhaustivo.guardia.test.ts (8 tests) 10ms
+ ✓ tests/unit/guards/tope-intentos-invariante.guardia.test.ts (9 tests) 11ms
+ ✓ tests/unit/guards/encabezado-acciones-dentro-del-ancho.guardia.test.ts (12 tests) 11ms
+ ✓ tests/unit/guards/cron-hora-cr.guardia.test.ts (10 tests) 13ms
+ ✓ tests/unit/guards/historial-acciones-roles-una-sola-fuente.guardia.test.ts (13 tests) 13ms
+ ✓ tests/unit/guards/rastreo-modal-tema.guardia.test.ts (6 tests) 11ms
+ ✓ tests/unit/guards/satelite-proyeccion-compartida.guardia.test.ts (3 tests) 9ms
+ ✓ tests/unit/guards/geografia-terminales-una-sola-fuente.guardia.test.ts (8 tests) 10ms
+ ✓ tests/unit/guards/notifications-bell-ancho.guardia.test.ts (4 tests) 9ms
+ ✓ tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts (10 tests) 10ms
+ ✓ tests/unit/guards/historico-sin-migracion.guardia.test.ts (10 tests) 10ms
+ ✓ tests/unit/guards/html-lang.guardia.test.ts (3 tests) 8ms
+ ✓ tests/unit/guards/origenes-admitidos-en-cierre.guardia.test.ts (8 tests) 6ms
+ ✓ tests/unit/guards/credenciales-sin-consola-cruda.guardia.test.ts (7 tests) 9ms
+ ✓ tests/unit/guards/novedad-acciones-una-tabla.guardia.test.ts (8 tests) 11ms
+ ✓ tests/unit/analytics/cubo-temporal-tope.guardia.test.ts (6 tests) 10ms
+ ✓ tests/unit/guards/historico-roles-una-sola-fuente.guardia.test.ts (10 tests) 8ms
+ ✓ tests/unit/guards/notifications-bell-sin-reloj.guardia.test.ts (4 tests) 8ms
+ ✓ tests/unit/analytics/cohorte-terminales.guardia.test.ts (8 tests) 8ms
+ ✓ tests/unit/descarga/cierre-gestiones-cabecera.guardia.test.ts (2 tests) 8ms
+ ✓ tests/unit/guards/pwa-servida-sin-sesion.guardia.test.ts (11 tests) 8ms
+ ✓ tests/unit/guards/filtros-url-r25-propiedad.test.tsx (1 test) 232ms
+ ✓ tests/unit/guards/dia-reparto-tokens.guardia.test.ts (3 tests) 7ms
+ ✓ tests/unit/guards/confirmacion-incidentes-excluidos.guardia.test.ts (7 tests) 7ms
+ ✓ tests/unit/analytics/etiquetas-visibles.guardia.test.ts (4 tests) 7ms
+ ✓ tests/unit/scripts/migrate-deploy-guardas.test.ts (15 tests) 9ms
+ ✓ tests/unit/services/tablero-dia-metrica.guardia.test.ts (5 tests) 8ms
+ ✓ tests/unit/analytics/dinero-producto-no-sumable.guardia.test.ts (11 tests) 320ms
+ ✓ tests/unit/analytics/cache-clave-alcance.guardia.test.ts (4 tests) 6ms
+ ✓ tests/unit/descarga/cierres-descarga-detallada-money.guardia.test.ts (2 tests) 5ms
+ ✓ tests/unit/analytics/financiera-produccion.guardia.test.ts (5 tests) 6ms
+ ✓ tests/unit/components/calendario-ancho-de-celda.guardia.test.ts (4 tests) 4ms
+ ✓ tests/unit/guards/motivo-automatico-sin-jerga.guardia.test.ts (7 tests) 6ms
+ ✓ tests/unit/guards/ancla-de-carga.guardia.test.ts (7 tests) 7ms
+ ✓ tests/unit/guards/filtros-url-r25.test.ts (3 tests) 37837ms
+
+ Test Files  240 passed (240)
+      Tests  3466 passed (3466)
+   Start at  11:47:47
+   Duration  64.78s (transform 11.61s, setup 12.19s, import 142.89s, tests 175.59s, environment 57.45s)
+
+JSON report written to R:/job/singularis/projects/ordenex/.vitest/rojos-guardias.json
+[0;32m✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 240 ejecutado(s), todos en el baseline conocido)[0m
+[1;33m! modo rapido: solo los tests relacionados con tus cambios + las guardias.[0m
+[1;33m! El completo NO es opcional antes de una release a prod: ahi se corre './init.sh' a secas.[0m
+[1;33m! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at[0m
+[0;32m✓ .env presente[0m
+[0;32m== init OK ==[0m
+Siguiente: abre AGENTS.md y sigue el flujo desde ahi.
+INIT_EXIT=0
