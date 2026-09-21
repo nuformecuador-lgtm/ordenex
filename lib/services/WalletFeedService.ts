@@ -36,13 +36,23 @@ export class WalletFeedService implements IWalletFeedService {
     // El GRANO se respeta: `cierre_detail` aporta lo de la ORDEN (congelado) y `gestion_orden`
     // el `resultado`, que es de la GESTION. Una orden con 2 gestiones vigentes en el cierre
     // aporta 2 entradas que comparten la misma fila congelada (design §4.1).
-    const [byOrden, gestiones] = await Promise.all([
-      leerDetallePorOrden(cierreId, tx),
-      tx.gestionOrden.findMany({
-        where: { cierreId },
-        select: { ordenId: true, resultado: true },
-      }),
-    ]);
+    //
+    // ⚠️ FICHA 450 (R3) — LAS DOS LECTURAS VAN EN SERIE, Y NO PUEDEN VOLVER A UN `Promise.all`.
+    // `tx` es el cliente de la transaccion de aprobacion: `@prisma/adapter-pg` le da UNA sola
+    // conexion (`pg.PoolClient`) para toda la transaccion, asi que dos consultas lanzadas a la
+    // vez sobre el van al MISMO `pg.Client`. Y el dano no necesita que `pg` avise: el aviso
+    // exige tres consultas encoladas, pero para que una consulta ya encolada corra contra una
+    // transaccion ABORTADA —el `25P02` que la ficha 440 midio como 27 respuestas 500 en una
+    // hora— bastan DOS. Vigilado por
+    // `tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts`.
+    //
+    // El orden se conserva (snapshot primero, gestiones despues) para que el diff sea minimo:
+    // las dos leen dentro del mismo snapshot transaccional, asi que es indiferente.
+    const byOrden = await leerDetallePorOrden(cierreId, tx);
+    const gestiones = await tx.gestionOrden.findMany({
+      where: { cierreId },
+      select: { ordenId: true, resultado: true },
+    });
 
     const entradas: Array<{ input: OrdenIngresoInput; tarifa: TarifaVigente | null }> = [];
     for (const g of gestiones) {
