@@ -205,6 +205,65 @@ sino «por qué seguimos esperando».
 
 ---
 
+## Release del 2026-09-21 — la 450, y SF-001 sigue esperando
+
+**`prod` = `97822ca2`** (PR #817, merge commit con 2 padres) · `dpl_4wxxh16Y6G8ehjWfC3hSKi58arYq`
+**READY** en 76 s · alias `ordenex.co` con `aliasError: null`.
+
+La tercera que usa la vía de §2 bis: rama nacida de `origin/prod` (`9d3d67b5`) con los **8 commits de
+la 450** traídos por `cherry-pick`. **Cero conflictos de código.** Los dos únicos fueron
+`feature_list.json` y `progress/current.md`, resueltos dejando la versión de `prod`: el estado del
+arnés vive en `dev`, y llevarlo habría metido en producción las fichas de SF-001 marcadas `done`
+—que allí sería mentira—.
+
+**La comprobación que lo hace creíble:** de los 25 ficheros que la rama aporta, **24 son byte a byte
+idénticos a `dev`**. El único distinto es este mismo archivo, y por un desfase **preexistente**:
+`prod` arrastra 262 líneas de menos porque las recorridas de las dos releases del 17 y la sección
+§2 bis se escribieron en `dev` **después** de mergear, y nunca llegaron.
+
+### Lo verificado, con su evidencia
+
+- **Gate completo en verde sobre la rama**: `INIT_EXIT=0`, `Test Files 1994 passed`,
+  `Tests 29146 passed | 26 skipped`, 675 s (`progress/gate_release_450_c.log`). De
+  `tests/integration/db` corrieron **286 ficheros, ninguno saltado**: la sonda de la ficha se
+  ejecutó de verdad. Los 26 saltados son la referencia de `dev` (17 de `AnaliticaPage`, 9 de
+  `AnaliticaShell`).
+- **Sin migraciones**: 199 antes y 199 después, **0 revertidas**, última
+  `20260917120200_cierre_rechazo_tienda`.
+- **La app responde**: `/` y `/login` en **200**. Y la receta de la PWA, los cuatro:
+  `/manifest.json`, `/sw.js` y `/offline.html` en **200**; `/ordenes` en **307** (sigue protegido).
+- **Errores de runtime** en la hora siguiente al despliegue: **cero**.
+
+### Cómo se consiguió el gate contra el esquema de `prod`
+
+Segunda aplicación de la receta de «✅ Pero SÍ se puede tener el gate entero en verde», y confirma
+que funciona. Sobre la copia `ordenex_rel` (`TEMPLATE ordenex`, con 0 conexiones vivas medidas antes
+del `pg_terminate_backend`): drop de las 3 columnas `sinpe_*` de `zona` y sus 2 CHECK; drop de las 4
+de conciliación de `cierre_bodega` con su FK, su índice y sus 2 CHECK, **recreando** el parcial
+`cierre_bodega_zona_solicitado_uq`; `DROP TABLE asistente_uso_diario`; recreación del enum
+`historial_accion_tipo` de **55 a 52** valores —1 sola columna dependiente y **0 filas** usando los
+que se iban—; y `DELETE 6` en `_prisma_migrations`. **La base compartida no se tocó**: comprobado
+después, sigue con sus 55 valores, sus columnas `sinpe_*` y sus 205 filas.
+
+> ⚠️ `prisma generate` es global al árbol. Hubo que regenerarlo **dos veces**: una con el esquema de
+> la rama (sin ella, el typecheck cae con `ZonaCreateInput` exigiendo `sinpeNumero`) y otra al volver
+> a `dev`. Si se olvida la segunda, el siguiente typecheck de `dev` sale rojo sin motivo aparente.
+
+### Lo que NO salió
+
+**SF-001 entero** (429, 430, 431, 432, 433, 434, 435, 436), con sus 6 migraciones. Sale cuando lo
+diga el humano.
+
+### Un rojo que NO era de la release
+
+Una corrida del gate sobre la rama de la ficha cayó por
+`tests/unit/components/api-keys-module.eliminar.test.tsx`. Medido: falla **1 de cada 3 veces
+corriendo solo y sin carga**, la rama no toca ni un archivo de api-keys, y el gate repetido sobre el
+**mismo SHA** pasó en verde sin tocar una línea. Queda registrado como ficha **452** en vez de como
+folclore.
+
+---
+
 ## Release del 2026-09-17 (2.ª) — la 449, el fulfillment en Analítica
 
 **`prod` = `9d3d67b5`** · PR #816 · deployment **success**.
@@ -362,9 +421,8 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
       ⚠️ **Eso cuenta INSTANCIAS, no eventos.** `pg` construye el aviso con `util.deprecate`, que
       emite **una sola vez por proceso**: 32 ocurrencias significan ≥32 instancias que tocaron el
       camino al menos una vez, no 32 veces que ocurrió.
-- [ ] **Cuándo toca mirarla.** **7 días después** del despliegue del entregable 1 de la 450. Si la
-      release sale el 2026-09-22, se mira el **2026-09-29**; si sale otro día, se cuentan 7 desde
-      ese.
+- [ ] **Cuándo toca mirarla.** **7 días después** del despliegue del entregable 1 de la 450. La release salió el **2026-09-21**, así que
+      **se mira el 2026-09-28**.
 - [ ] **Cómo se lee el resultado.** La 450 midió en laboratorio quién lo emite, lo dejó **nombrado
       y SECUENCIADO**: `lib/repositories/CierreDiaRepository.ts`, la lectura del snapshot con
       `SNAPSHOT_SELECT` dentro del `$transaction` de `crearCierre`. Eran 5 relaciones anidadas que
