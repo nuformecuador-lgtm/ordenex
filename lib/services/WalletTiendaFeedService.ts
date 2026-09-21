@@ -74,13 +74,30 @@ export class WalletTiendaFeedService implements IWalletTiendaFeedService {
     // los Decimal se leen como STRING/Decimal, nunca number.
     //
     // ⚠️ FICHA 450 (R3) — LAS DOS LECTURAS VAN EN SERIE, Y NO PUEDEN VOLVER A UN `Promise.all`.
-    // `tx` es el cliente de la transaccion de aprobacion: `@prisma/adapter-pg` le da UNA sola
-    // conexion (`pg.PoolClient`) para toda la transaccion, asi que dos consultas lanzadas a la
-    // vez sobre el van al MISMO `pg.Client`. Y el dano no necesita que `pg` avise: el aviso
-    // exige tres consultas encoladas, pero para que una consulta ya encolada corra contra una
-    // transaccion ABORTADA —el `25P02` que la ficha 440 midio como 27 respuestas 500 en una
-    // hora— bastan DOS. Vigilado por
-    // `tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts`.
+    //
+    // `tx` es el cliente de la transaccion de aprobacion, y una transaccion tiene UNA sola
+    // conexion (`pg.PoolClient`) durante toda su vida. Escribir `Promise.all` sobre el dice «estas
+    // dos pueden ir a la vez», y sobre una conexion unica eso es falso.
+    //
+    // ⚠️ LO QUE ESTE COMENTARIO **NO** DICE, porque se midio y no es verdad: con
+    // `@prisma/client@7.8.0` estas dos consultas NO llegaban a estar en vuelo a la vez. Prisma
+    // serializa por su cuenta las peticiones de una transaccion interactiva —medido contra
+    // Postgres real en `tests/integration/db/aprobacion-consultas-en-serie.test.ts`: 1 consulta
+    // simultanea, 0 solapes, antes y despues de este cambio—. O sea que el `Promise.all` de aqui
+    // no era el emisor del aviso de `pg`; ese vivia en otro sitio y esta nombrado en
+    // `progress/impl_450.md`.
+    //
+    // ENTONCES, ¿POR QUE SE ARREGLA? Por tres razones que no dependen de la version de turno:
+    //   1. la serializacion es un detalle interno de Prisma, no un contrato — el dia que cambie,
+    //      este codigo vuelve a pedir dos consultas a la vez sobre una conexion unica;
+    //   2. el propio aviso de `pg` dice «will be removed in pg@9.0», o sea que el salto de version
+    //      convierte esto en error en vez de en advertencia;
+    //   3. y lo que el patron afirma —«son independientes»— es lo contrario de lo que la
+    //      transaccion garantiza, asi que quien lo lea manana lo copiara a un sitio donde si haga
+    //      dano: para el `25P02` que la ficha 440 midio como 27 respuestas 500 en una hora bastan
+    //      DOS consultas compartiendo conexion.
+    //
+    // Vigilado por `tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts`.
     const byOrden = await leerDetallePorOrden(cierreId, tx);
     const gestiones = await tx.gestionOrden.findMany({
       where: { cierreId },

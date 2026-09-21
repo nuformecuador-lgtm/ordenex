@@ -40,6 +40,16 @@ import {
  *   2. R2 — control negativo: los puntos de concurrencia de `/cierre-dia` y
  *      `/api/cron/corte-diario`, que van sobre el cliente AGRUPADO (una conexion por consulta).
  *
+ * ⚠️ ESTE `1` YA ERA `1` ANTES DEL ARREGLO, Y HAY QUE LEERLO SABIENDOLO. La medicion previa
+ * (T1.1, 2026-09-21, sobre el arbol con el `Promise.all` todavia puesto) dio exactamente los
+ * mismos numeros: 1 consulta simultanea, 0 solapes, 0 avisos. Prisma 7.8 serializa por su cuenta
+ * las peticiones de una transaccion interactiva, asi que el patron que la ficha retira no llegaba
+ * a la conexion como dos consultas a la vez. O sea que **este archivo NO es la prueba de que el
+ * arreglo funcione**: es la prueba de que la conexion de la aprobacion esta limpia, y la linea
+ * base contra la que se detectara el dia que Prisma deje de serializar (o el dia que `pg@9.0`
+ * convierta el aviso en error). Quien busque el rojo→verde del arreglo lo tiene en los bloques
+ * «FICHA 450/R3» de las dos suites de feed, que miden la FORMA con un doble vigilado.
+ *
  * ⚠️ EL AVISO DE `pg` ES SECUNDARIO Y DE UN SOLO DISPARO. `util.deprecate` lo emite una vez por
  * PROCESO, y solo salta si la cola de la conexion YA tenia algo al encolar: hace falta una
  * TERCERA consulta (design §2.2). O sea que su ausencia NO prueba nada y su presencia solo

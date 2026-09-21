@@ -10,7 +10,7 @@
 | bloque | estado |
 | --- | --- |
 | T1 — medir antes de tocar nada | **cerrado**, con los números escritos abajo |
-| T2 — la caza del emisor | **cerrado con emisor NOMBRADO** (`CierreDiaRepository.ts:1046`), reproducido con el contador y con el aviso capturado. **T2.7 (secuenciarlo) NO se aplicó**: ver T2.7, abajo |
+| T2 — la caza del emisor | **cerrado: emisor NOMBRADO y SECUENCIADO** (`CierreDiaRepository.ts`, el snapshot de `crearCierre`). Reproducido con el contador (**5 en vuelo + aviso**) y arreglado (**1 en vuelo, 0 solapes**) |
 | T3 — el arreglo de los dos feeds | **cerrado** |
 | T4 — tests de los feeds | **cerrado**, con la mutación comprobada |
 | T5 — la guardia | **cerrado**, tres brazos |
@@ -219,39 +219,70 @@ capturado en un proceso limpio — `tests/integration/db/emisor-relaciones-anida
 código de la ruta: nacía en la transacción que las dos comparten. Eso explica también por qué la
 atribución por ruta parecía débil.
 
-### T2.7 — La secuenciación del emisor: **NO se aplicó**, y por qué
+### T2.7 — La secuenciación del emisor: **hecha**, por la vía «leer en serie»
 
-> Esto es lo único de la ficha que queda abierto, y queda abierto **a propósito y por escrito**, no
-> por olvido.
+Autorizada por el humano el 2026-09-21, tras la revisión, **levantando** la exigencia de `tasks.md`
+de que las suites del archivo del emisor pasaran *sin editarse* —con el coste delante: se podían
+**ampliar los dobles**—. Lo que siguió prohibido, y se respetó, es **relajar una aserción**.
 
-Se intentó la vía que pide el design («esperar cada consulta»): retirar las cinco relaciones
-anidadas de `SNAPSHOT_SELECT`, proyectar en su lugar los FK (`provinciaId`, `cantonId`,
-`distritoId`) y leer los cinco catálogos con cinco `findMany` **en serie**, cruzándolos en memoria.
-Se escribió entera, **pasó `pnpm run typecheck`**… y rompió **25 tests** de
-`tests/unit/repositories/cierre-dia-repository.test.ts` y `tests/integration/db/cierre-detail-congelado.test.ts`:
-sus dobles de `tx` no exponen `zona`, `usuario`, `provincia`, `canton` ni `distrito`, porque hasta
-hoy esas tablas se leían a través de la relación anidada.
+**El cambio, en `lib/repositories/CierreDiaRepository.ts`:**
 
-`tasks.md` T2.7 exige literalmente que «la suite existente de ese archivo pasa **sin editarse**», y
-ese criterio existe para que un cambio en código de dinero no se cuele extendiendo los dobles hasta
-que el verde vuelva. **Así que se revirtió**, y el árbol quedó con los 123 casos de esas dos suites
-en verde y sin tocar. Las dos vías reales, con su coste:
+- `SNAPSHOT_SELECT` deja de anidar las cinco relaciones descriptivas y proyecta en su lugar los FK
+  que le faltaban (`provinciaId`, `cantonId`, `distritoId`; `zonaId` y `tiendaId` ya estaban).
+- `leerDescriptivosDeOrdenes(filas, tx)` (nueva, exportada) lee los cinco catálogos **de uno en
+  uno**, cada uno con su `await`, por `id IN (…)` deduplicado.
+- `descriptivoDe(mapa, id, tabla)` **lanza** si un FK NOT NULL no resuelve. Con la relación anidada
+  eso era imposible por construcción; con lecturas por `in` deja de serlo, y en código de dinero un
+  `?? null` silencioso congelaría un nombre vacío sin que nadie se enterara.
+- `SNAPSHOT_SELECT` y `leerDescriptivosDeOrdenes` se **exportan** para que el test de integración
+  mida el código REAL y no una copia suya.
 
-| vía | qué hace | coste / riesgo |
+**El número, antes → después** (`tests/integration/db/emisor-relaciones-anidadas.test.ts`, la misma
+fila y la misma transacción):
+
+| | consultas | conexiones | máx. en vuelo | solapes | aviso de `pg` |
+| --- | --- | --- | --- | --- | --- |
+| **antes** (`SNAPSHOT_SELECT_DE_ANTES`, 5 hermanas) | 8 | 1 | **5** | **4** (2, 3, 4 y 5) | **sí** |
+| **después** (el código real importado) | 7 | 1 | **1** | **0** | no |
+
+El bloque «antes» **no se borró**: conserva el `select` literal que se retiró, así que el número
+viejo sigue siendo comprobable y se ve que el arreglo arregló algo.
+
+**Los datos que salen son idénticos, y se mide** (caso «R5/R7: los DOS caminos congelan
+EXACTAMENTE los mismos valores»): se lee la misma fila por los dos caminos, en la misma
+transacción, y se comparan los siete valores que `cierre_detail` guarda de la geografía y la tienda
+(`esCentral`, los cinco nombres y `esZonaEspecial`). `toEqual`, con anti-vacío para que no pase con
+cadenas vacías.
+
+#### Los cinco archivos de test tocados, y qué se les cambió exactamente
+
+Todos por la **misma** razón —al doble le faltaban tablas— y con el **mismo** tipo de cambio:
+delegados añadidos y, donde el fixture traía los nombres dentro de la relación, los FK que ahora los
+resuelven. **Ninguna aserción se tocó, ningún valor esperado cambió.**
+
+| archivo | qué se le añadió | aserciones tocadas |
 | --- | --- | --- |
-| **A — lecturas en serie** (la escrita y revertida) | 5 `findMany` por `in`, cruce en memoria, mismos valores congelados | obliga a **extender los dobles de 2 suites** (25 casos). Es una decisión sobre código de dinero, no un detalle de test |
-| **B — `relationLoadStrategy: "join"`** en esa lectura | una sola consulta con LATERAL JOIN en vez de 1+5; **los dobles no se tocan** y la suite pasa sin editarse | exige activar el preview `relationJoins` en el generador de `db/schema.prisma` y regenerar el cliente. Es un archivo de cimientos y una preview feature activada para todo el repo — el design de la 450 no autoriza ninguna de las dos cosas |
+| `tests/unit/repositories/cierre-dia-repository.test.ts` | `catalogoDoble450` + los 5 delegados en `buildSnapshotTx`; `snapshotRow` cambia las 5 relaciones por los 3 FK; un caso pasa `distrito: null` → `distritoId: null` | **0** |
+| `tests/integration/db/cierre-detail-congelado.test.ts` | `catalogoVivo` + los 5 delegados; `joinOrden` gana los 3 FK. `zona` y `usuario` **siguen resolviendo contra las filas VIVAS**, igual que hacía `joinOrden`: eso es lo que mantiene intacto el núcleo del archivo (si un lector mirase ahí en vez del snapshot, seguiría viendo lo mutado) | **0** |
+| `tests/unit/repositories/gestion-desde-ayuda-cierre.test.ts` | `catalogoDoble450` + los 5 delegados (`usuario` se fusiona con el `update` que ya tenía); los 3 FK en el fixture | **0** |
+| `tests/unit/repositories/convergencia-tarifa-listado-cierre.test.ts` | ídem | **0** |
+| `tests/integration/asimetria-sin-tarifa.test.ts` | ídem | **0** |
 
-Ninguna cabe en lo que el design de esta ficha autorizó (§8: «Modelo de datos: sin cambios»), y las
-dos tocan la transacción que congela el snapshot del dinero. **La elección es del humano.**
+Los dobles de catálogo modelan la **tabla**, no una fila: responden a cualquier id del
+`where.id.in`. Un doble de fila única dejaría sin resolver los ids de la cascada de tarifas (`z2`,
+`t2`, `t9`, `z9`) y `crearCierre` lanzaría — a propósito.
 
-Mientras tanto el hallazgo **no se queda solo en esta bitácora**, que es donde muere:
+**Medido después del cambio:** las 46 suites que ejercitan `crearCierre` en verde,
+**822 tests**, con las aserciones originales.
 
-- lo mide un test (`emisor-relaciones-anidadas.test.ts`, caso «EL EMISOR») que fija el número: si
-  alguien lo arregla, o si Prisma cambia, el test se pone rojo y obliga a volver;
-- lo vigila el **brazo C** de la guardia, con el censo congelado de los 10 archivos que hoy tienen
-  esa forma: uno nuevo pone el gate rojo;
-- la comprobación en campo queda **fechada** en `docs/release.md`.
+#### Lo que el arreglo NO cubre, dicho con su número
+
+Quedan en el árbol **6 lecturas con DOS relaciones hermanas** sobre un cliente de transacción, en
+**4 archivos** (`CierreDiaRepository`, `CierresAdminRepository`, `LiquidacionPagoRepository`,
+`UserRepository`). Dos hermanas son dos consultas a la vez sobre la conexión de la transacción: no
+disparan el aviso —hacen falta tres— pero sí son la condición del `25P02` de la 440. **Ninguna llega
+al umbral del aviso: el máximo del árbol es 2**, y eso es exactamente lo que el brazo C afirma y
+vigila. No entran en esta ficha; quedan censadas para que el siguiente que pase sepa que existen.
 
 ---
 
@@ -297,15 +328,23 @@ tocar un solo número**, incluido el bloque «INVARIANTE R15 — cuadre con la 4
 `tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts`. Censo medido sobre `lib/`:
 
 ```
-[450] censo: 964 archivos · 51 funciones con parametro de transaccion · 70 cuerpos de `$transaction`
-[450] brazo C: 20 lecturas con relaciones anidadas sobre un cliente de transaccion, en 10 archivos
+[450] censo: 964 archivos · 52 funciones con parametro de transaccion · 70 cuerpos de `$transaction`
+[450] brazo C: 6 lecturas con >=2 relaciones hermanas sobre un cliente de transaccion, en 4 archivos · maximo de hermanas: 2
 ```
 
 - **Brazo A (R8)** — por el tipo del parámetro (`*TxClient` / `Prisma.TransactionClient`): **cero
   violaciones**.
 - **Brazo B (R9)** — por el `tx` inferido de un `$transaction`: **cero violaciones**.
-- **Brazo C (R11)** — por la expansión de relaciones: 20 lecturas en 10 archivos, censo congelado por archivo; un archivo
-  nuevo con esa forma pone el gate rojo, y uno que desaparezca obliga a borrarlo de la lista.
+- **Brazo C (R11)** — por las relaciones **hermanas** (las que Prisma lanza a la vez): **6 lecturas
+  en 4 archivos, máximo 2 hermanas**. Afirma que **ninguna llega al umbral del aviso (3)**, que es
+  lo que cierra el entregable 2, y congela el censo por archivo.
+
+  > El detector se afinó tras la revisión. La primera versión marcaba «relaciones anidadas» a secas
+  > —20 hallazgos en 10 archivos, casi todos cadenas inofensivas— y habría seguido señalando el
+  > `SNAPSHOT_SELECT` **ya arreglado**, que conserva su única relación `orden`. Un detector que no
+  > distingue el arreglo no sirve de guardia. Ahora cuenta **hermanas del mismo nivel**, que es lo
+  > que de verdad sale junto: una relación sola es una CADENA (`gestion_orden` → `orden`) y da
+  > máximo 1 en vuelo, medido.
 
 > **El detector cambió por culpa de su propia autocomprobación, y merece contarse.** La primera
 > versión contaba usos del cliente **como emisor** (`tx.algo`) y se negó a ponerse roja ante el
@@ -315,23 +354,28 @@ tocar un solo número**, incluido el bloque «INVARIANTE R15 — cuadre con la 4
 > que es lo que de verdad llega a la conexión. La consulta escondida detrás de un helper es la razón
 > de que nadie viera estos dos sitios leyendo el código.
 
-Autocomprobación (R10), 10 casos: rojo ante el cuerpo literal retirado, ante las cuatro formas de
+Autocomprobación (R10), 12 casos: rojo ante el cuerpo literal retirado, ante las cuatro formas de
 `Promise` y ante el `select` anidado (en línea **y** en constante de módulo); verde ante el
 `Promise.all` sobre el cliente **agrupado** copiado literalmente de `CorteDiarioService.ts:164` y
 `CierreDiaRepository.ts:1226`, ante la mención del patrón en un comentario, ante una lectura plana
 sobre el `tx` y ante el mismo `select` anidado fuera de una transacción.
 
-Los tres **límites** del detector (closure que captura el `tx`, helper con el tipo escrito en línea,
-otras formas de concurrencia) van nombrados en la cabecera del archivo.
+Los **cuatro** límites del detector van nombrados en la cabecera: closure que captura el `tx`, helper
+con el tipo escrito en línea, otras formas de concurrencia y —añadido tras la revisión— **que el
+censo mira sólo `lib/`**, con el hueco medido: en `app/` hay 1 cuerpo de `$transaction` (sin
+concurrencia) y 0 menciones de `*TxClient`; en `scripts/`, 2 benignos. Hoy el hueco vale cero, y
+queda escrito para el día que deje de valerlo.
 
 ---
 
 ## Archivos creados / modificados
 
-**Producción (2 archivos):**
+**Producción (3 archivos):**
 
 - `lib/services/WalletFeedService.ts` — T3.1 + T3.3
 - `lib/services/WalletTiendaFeedService.ts` — T3.2 + T3.3
+- `lib/repositories/CierreDiaRepository.ts` — T2.7: `SNAPSHOT_SELECT` sin relaciones hermanas +
+  `leerDescriptivosDeOrdenes` + `descriptivoDe`
 
 **Tests (6 archivos):**
 
@@ -342,11 +386,19 @@ otras formas de concurrencia) van nombrados en la cabecera del archivo.
 - `tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts` (nuevo) — T5
 - `tests/integration/db/_consultas-en-vuelo.ts` (nuevo, no es test: vitest no lo recoge) — la sonda
 - `tests/integration/db/aprobacion-consultas-en-serie.test.ts` (nuevo) — T1.1 + T1.2
-- `tests/integration/db/emisor-relaciones-anidadas.test.ts` (nuevo) — T2.2 + T2.4 + T2.6
+- `tests/integration/db/emisor-relaciones-anidadas.test.ts` (nuevo) — T2.2 + T2.4 + T2.6 + T2.7
+  (el antes, el después y la equivalencia de lo congelado)
+- `tests/unit/repositories/cierre-dia-repository.test.ts` — dobles ampliados (T2.7)
+- `tests/integration/db/cierre-detail-congelado.test.ts` — dobles ampliados (T2.7)
+- `tests/unit/repositories/gestion-desde-ayuda-cierre.test.ts` — dobles ampliados (T2.7)
+- `tests/unit/repositories/convergencia-tarifa-listado-cierre.test.ts` — dobles ampliados (T2.7)
+- `tests/integration/asimetria-sin-tarifa.test.ts` — dobles ampliados (T2.7)
 
-**Documentación (2 archivos):**
+**Documentación (4 archivos):**
 
 - `docs/release.md` — entrada «De la 450», T7.1 + T7.2
+- `specs/450-…/requirements.md` — nota del desmentido (se **añade**, no se reescribe el contexto)
+- `specs/450-…/tasks.md` — las 28 tareas marcadas, cada una con su resultado
 - `progress/impl_450.md` — este archivo
 
 **Sin cambios, y es deliberado:** modelo de datos, migraciones, `down.sql`, rutas, contratos
@@ -367,21 +419,31 @@ escrituras de `resolverCierre`, `lib/utils/cierre-detalle.ts`, `feature_list.jso
 | R5 | el dinero no cambia | las dos suites completas (36 casos) **sin editar un solo valor**, incluido «INVARIANTE R15 — cuadre con la 42»; más los casos «R5: … EXACTAMENTE los mismos movimientos» que comparan doble vigilado contra doble normal | verde |
 | R6 | el orden de las escrituras no cambia | `tests/unit/repositories/cierres-admin-caja-cod.test.ts` (la `traza` del orden real) y `cierres-admin-repository.test.ts` | verde, sin editar |
 | R7 | sin snapshot, aborta | `wallet-feed-service.test.ts` («R14: lanza CierreDetalleFaltanteError…», 2 casos) y el equivalente de la suite de tienda | verde, sin editar |
-| R8 | guardia por el tipo del parámetro | `consultas-concurrentes-en-transaccion.guardia.test.ts` — brazo A | verde · 0 violaciones sobre 51 funciones censadas |
+| R8 | guardia por el tipo del parámetro | `consultas-concurrentes-en-transaccion.guardia.test.ts` — brazo A | verde · 0 violaciones sobre 52 funciones censadas |
 | R9 | guardia por el `tx` inferido | ídem — brazo B | verde · 0 violaciones sobre 70 cuerpos de `$transaction` |
 | R10 | la guardia se sabe romper y se sabe llena | ídem — bloques «anti-vacío del censo» (3 casos) y «autocomprobación» (10 casos) + `tests/unit/fixtures/tx-una-consulta-a-la-vez.test.ts` (5 casos) | verde |
-| R11 | emisor nombrado o agotamiento declarado | **NOMBRADO**: `emisor-relaciones-anidadas.test.ts`, caso «EL EMISOR» (5 en vuelo, 4 solapes, aviso capturado) + brazo C de la guardia + T2.6 arriba. **Sin secuenciar**: ver T2.7 | verde · abierto sólo el arreglo, no la identificación |
-| R12 | los entregables no se bloquean | `./init.sh` completo en verde con **sólo** el entregable 1 aplicado; ningún test del entregable 1 cita un hallazgo del 2 (los bloques «450» de los feeds, el fixture y los brazos A/B no mencionan `CierreDiaRepository`) | verde |
+| R11 | emisor nombrado o agotamiento declarado | **NOMBRADO y SECUENCIADO**: `emisor-relaciones-anidadas.test.ts` mide los dos lados —«EL ANTES» (5 en vuelo, 4 solapes, aviso capturado) y «EL DESPUES» (1 en vuelo, 0 solapes), este último sobre el código REAL importado del repositorio— más el caso de equivalencia de los valores congelados; vigilado por el brazo C, que afirma que **ninguna lectura del árbol llega al umbral del aviso** | verde |
+| R12 | los entregables no se bloquean | **Lo que de verdad se comprobó, y no es un gate «sólo con el entregable 1»:** (a) el entregable 1 se implementó, se midió y se commiteó (`f50c89d2`) **antes** de que el entregable 2 existiera, y su gate de entonces salió `INIT_EXIT=0`; (b) ningún test ni guardia del entregable 1 cita un hallazgo del 2 — comprobado por lectura: los bloques «450» de los dos feeds, el fixture `tx-una-consulta-a-la-vez` y los brazos A y B no mencionan `CierreDiaRepository` ni el emisor. El gate final corre con los dos entregables, y eso **no** demuestra la independencia: lo que la demuestra es (a) + (b) | verde, con la afirmación acotada |
 
 ---
 
 ## T6.2 — El gate
 
-`./init.sh` **completo** (el rápido se niega por diseño: el diff toca `lib/services/Wallet*FeedService.ts`,
-nombres de dinero). Log íntegro en `progress/gate_450.log`, con el código de salida **escrito dentro
-del fichero**.
+`./init.sh` **completo** (el rápido se niega por diseño: el diff toca `lib/services/Wallet*FeedService.ts`
+y `lib/repositories/CierreDiaRepository.ts`, nombres de dinero). Dos corridas, las dos con el código
+de salida **escrito dentro del fichero**:
 
-### Salida real del gate
+| corrida | log | qué llevaba | resultado |
+| --- | --- | --- | --- |
+| 1.ª | `progress/gate_450.log` | entregable 1 + la caza medida (sin T2.7) | `INIT_EXIT=0` · 2057 archivos · 29.985 tests · 26 saltados |
+| 2.ª | `progress/gate_450_b.log` | **lo anterior + T2.7 + las correcciones de la revisión** | `INIT_EXIT=0` · 2057 archivos · **29.990 tests** · 26 saltados |
+
+Los **26 saltados** de las dos son los mismos y se miraron uno a uno: 17 de `AnaliticaPage.test.tsx`
+y 9 de `AnaliticaShell.test.tsx`, ajenos a esta ficha. De `tests/integration/db/` se ejecutaron
+**284 archivos y cero saltados** en las dos corridas, así que la sonda de R1/R2 y la del emisor
+—que sin `DATABASE_URL` se saltarían dejando el gate en «OK» igual— corrieron de verdad.
+
+### Salida real del gate (2.ª corrida, `progress/gate_450_b.log`)
 
 ```
 == Arnes SDD :: init (modo: completo) ==
@@ -395,7 +457,7 @@ del fichero**.
 -> pnpm test
 
  Test Files  2057 passed (2057)
-      Tests  29985 passed | 26 skipped (30011)
+      Tests  29990 passed | 26 skipped (30016)
 
 INIT_EXIT=0
 ```
@@ -407,11 +469,16 @@ SALTA y el gate diría «OK» igual). Los 26 saltados son **todos** de dos archi
 aparecen ejecutados con su número de casos:
 
 ```
-✓ tests/integration/db/emisor-relaciones-anidadas.test.ts (4 tests) 974ms
-✓ tests/integration/db/aprobacion-consultas-en-serie.test.ts (9 tests) 583ms
-✓ tests/unit/services/wallet-tienda-feed-service.test.ts (22 tests) 30ms
+✓ tests/integration/db/aprobacion-consultas-en-serie.test.ts (9 tests) 803ms
+✓ tests/integration/db/emisor-relaciones-anidadas.test.ts (6 tests) 1104ms
+✓ tests/integration/db/cierre-detail-congelado.test.ts (7 tests) 34ms
+✓ tests/integration/asimetria-sin-tarifa.test.ts (8 tests) 60ms
+✓ tests/unit/repositories/cierre-dia-repository.test.ts (116 tests) 170ms
+✓ tests/unit/repositories/gestion-desde-ayuda-cierre.test.ts (17 tests) 39ms
+✓ tests/unit/repositories/convergencia-tarifa-listado-cierre.test.ts (6 tests) 27ms
+✓ tests/unit/services/wallet-tienda-feed-service.test.ts (22 tests) 36ms
 ✓ tests/unit/services/wallet-feed-service.test.ts (14 tests) 24ms
-✓ tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts (20 tests) 23ms
+✓ tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts (23 tests) 26ms
 ✓ tests/unit/fixtures/tx-una-consulta-a-la-vez.test.ts (5 tests) 10ms
 ```
 
@@ -441,28 +508,38 @@ se mueve —de 2 a 1 y de 1 solape a 0— es el contador del doble vigilado de T
 [450] paso 2 · conteos publicos (3 en array):   5 consultas · 1 conexion  · maximo 1 · solapes 0 · avisos 0
 [450] paso 2 · dos `contar()` concurrentes:    10 consultas · 2 conexiones · maximo 1 · solapes 0 · avisos 0
 [450] paso 4 · snapshot sobre el POOL:          7 consultas · 3 conexiones · maximo 1 · solapes 0 · avisos 0
+
 [450] EMISOR · snapshot dentro de la tx:        8 consultas · 1 conexion  · maximo 5 · solapes 4 · avisos 1
 [450] solapes: 2 en vuelo, 3 en vuelo, 4 en vuelo, 5 en vuelo
-
-(node:31584) DeprecationWarning: Calling client.query() when the client is already executing a query
+(node:…) DeprecationWarning: Calling client.query() when the client is already executing a query
 is deprecated and will be removed in pg@9.0.
+
+[450] DESPUES · snapshot secuenciado dentro de la tx:
+                                                8 consultas · 1 conexion  · maximo 1 · solapes 0
+
+[450] brazo C: 6 lecturas con >=2 relaciones hermanas sobre un cliente de transaccion,
+               en 4 archivos · maximo de hermanas: 2
 ```
 
-Esa última línea, en el log del gate, es **la advertencia de producción reproducida en el banco**.
+El `DeprecationWarning` de ahí arriba, en el log del gate, es **la advertencia de producción
+reproducida en el banco** — y la línea siguiente es la misma lectura después de secuenciarla.
+(El contador de avisos del bloque «DESPUES» sigue diciendo 1 porque `util.deprecate` avisa **una vez
+por proceso** y el bloque «EL ANTES» ya lo gastó; por eso ese bloque no asevera sobre el aviso y sí
+sobre el contador.)
 
 ### Los tres comandos, por separado
 
 | comando | resultado |
 | --- | --- |
 | `pnpm run typecheck` | verde, sin salida (`tsc --noEmit`) |
-| `pnpm run lint` | **0 errores**, 202 avisos preexistentes; ninguno en los 8 archivos de esta ficha (comprobado filtrando la salida por sus nombres) |
-| `pnpm test` (dentro de `./init.sh`) | `2057 passed (2057)` · `29985 passed | 26 skipped (30011)` |
+| `pnpm run lint` | **0 errores**, 202 avisos preexistentes; ninguno en los archivos de esta ficha (comprobado filtrando la salida por sus nombres) |
+| `pnpm test` (dentro de `./init.sh`) | `2057 passed (2057)` · `29990 passed | 26 skipped (30016)` |
 
 
 ---
 
 ## Veredicto
 
-Entregable 1 cerrado, medido y vigilado; el emisor del aviso de producción queda **nombrado con
-archivo y línea y reproducido con el contador**, y su secuenciación es la única pieza abierta,
-esperando una decisión que la implementación no podía tomar sola.
+Los dos entregables cerrados: el patrón de los feeds arreglado y vigilado, y el emisor del aviso de
+producción **nombrado, reproducido (5 en vuelo + aviso) y secuenciado (1 en vuelo, 0 solapes)** sin
+mover un solo valor del dinero.

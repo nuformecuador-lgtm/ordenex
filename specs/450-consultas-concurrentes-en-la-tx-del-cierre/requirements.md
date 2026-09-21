@@ -23,6 +23,31 @@
 La atribución de esa advertencia a estos dos sitios es **hipótesis, no medición**, y por eso es lo
 primero que esta feature tiene que resolver (R1 y R2).
 
+> ### ⚠️ Nota añadida el 2026-09-21, DESPUÉS de medir (no se reescribe lo de arriba)
+>
+> El contexto de arriba queda **tal y como se escribió**, porque el valor del spec incluye lo que se
+> creía. Esto es lo que dijo Postgres:
+>
+> - **«lanzan dos consultas a la vez» no se sostiene en la conexión.** Con
+>   `@prisma/client@7.8.0` + `@prisma/adapter-pg@7.8.0`, un `Promise.all` sobre un cliente de
+>   transacción llega a la conexión **en serie**: Prisma serializa por su cuenta las peticiones de
+>   una transacción interactiva. Medido con el contador de consultas en vuelo —**1 simultánea, 0
+>   solapes, 0 advertencias**, antes y después del arreglo— y confirmado con las dos lecturas en
+>   ticks distintos, con tres, y con `$transaction([…])` en forma de array
+>   (`tests/integration/db/aprobacion-consultas-en-serie.test.ts`).
+> - **Lo que sí lanza N consultas a la vez** es la **expansión de relaciones** de Prisma dentro de
+>   una transacción: un `select` con N relaciones hermanas se resuelve con 1+N consultas y las N
+>   salen juntas. Ese era el emisor del aviso de producción, y vivía en
+>   `lib/repositories/CierreDiaRepository.ts` (el snapshot de `crearCierre`, 5 relaciones
+>   hermanas): medido, **5 en vuelo, 4 solapes y el aviso capturado en un proceso limpio**.
+>   Secuenciado en T2.7 — medido después: **1 en vuelo, 0 solapes**.
+> - **El arreglo de los dos feeds sigue siendo correcto y necesario**, pero por lo que dice el
+>   código y no por lo que hace el driver de esta versión: §2.4 del design (el daño necesita dos
+>   consultas, no el aviso) y §5.4 (`pg@9.0` convierte el aviso en error). Su prueba de cierre es
+>   el doble vigilado de T4, que mide la **forma**, no el contador de la conexión.
+>
+> El detalle, con los números de cada paso, está en `progress/impl_450.md`.
+
 ---
 
 ## Requisitos
