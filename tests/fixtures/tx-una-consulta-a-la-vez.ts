@@ -21,8 +21,19 @@
  * delegado), las dos llamadas coinciden y el solape queda anotado.
  *
  * Con la forma secuencial (`await f(); await g();`) la continuacion de `f` corre antes de que se
- * emita `g`, el contador ya ha bajado y no hay solape. Es la misma distincion que hace la conexion
- * de Postgres, medida sin Postgres.
+ * emita `g`, el contador ya ha bajado y no hay solape.
+ *
+ * ⚠️ QUE MIDE EXACTAMENTE, Y QUE NO. Mide **la forma del codigo**: si las dos lecturas se EMITEN
+ * juntas o una despues de otra. NO mide lo que hace la conexion de Postgres, y conviene decirlo
+ * porque la medicion de la 450 lo desmintio: con `@prisma/client@7.8.0` un `Promise.all` sobre un
+ * `tx` acaba llegando a la conexion EN SERIE de todos modos, porque Prisma serializa por su cuenta
+ * las peticiones de una transaccion interactiva (medido en
+ * `tests/integration/db/aprobacion-consultas-en-serie.test.ts`: 1 consulta en vuelo, 0 solapes,
+ * antes y despues del arreglo).
+ *
+ * Por eso este doble es la prueba de cierre de R3 y el contador de la conexion NO lo es: lo que la
+ * ficha prohibe es el patron —afirmar que dos consultas de una transaccion son independientes—, y
+ * eso es una propiedad del codigo, no del driver de esta semana.
  *
  * ⚠️ AUTOCOMPROBACION OBLIGATORIA. Un contador que no cuenta deja verde cualquier test que lo use.
  * `tests/unit/fixtures/tx-una-consulta-a-la-vez.test.ts` demuestra que este doble marca solape ante
