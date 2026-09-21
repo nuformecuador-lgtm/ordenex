@@ -5375,6 +5375,18 @@
       "branch": "fix/449-frontend",
       "depends_on": 442,
       "status_note": "Mergeada en dev (PR #815) y DESPLEGADA a produccion el 2026-09-17 en la release #816 (prod 9d3d67b5): backend 3e69ee10, frontend b7f4aa89. || EL HUECO ERA ESTRUCTURAL: DineroProductosRepository congelaba NUEVE columnas de tarifa y `tarifa_fulfillment` no era una de ellas. Medido en produccion: 867 filas y ₡605.616 en 7 dias; 2608 y ₡1.816.300 en toda la historia. || LA CIFRA VIAJA POR UN CARRIL PROPIO y NO se suma a «Cobro Ordenex», porque ITarifaVigenteRepository prohibe por escrito que el fulfillment entre en TarifaVigente. `lib/utils/cierre-detalle.ts` quedo intacto —comprobado sobre el BLOB commiteado, no sobre el disco— y una guardia nueva lo vigila por cuatro vias: ejecucion, contrato, camino y cifra. || DOS DECISIONES DE NEGOCIO: se cuenta UNA VEZ POR ORDEN y no por gestion (dos gestiones cobrarian dos bodegas, y el contrato ya dice que la devolucion cobra lo mismo que la entrega porque preparar el paquete ya costo); y solo cuenta lo LIQUIDADO, el mismo umbral que las otras tres cifras. || 15 mutaciones, todas muertas. Medido a 1440 y 390 con el peor caso realista (₡1.816.300): margen minimo de 86 px y cero desborde; lo que crece es el alto. || DEUDA CONSCIENTE: `aporteEsCero` no se toco, asi que una orden cuyo UNICO aporte fuera el fulfillment se seguiria descartando. Hoy es inalcanzable; cambiarlo moveria los cardinales de `ordenes`."
+    },
+    {
+      "id": 450,
+      "title": "dos consultas a la vez sobre la conexion de la transaccion que aprueba el cierre",
+      "description": "Dos consultas concurrentes sobre la misma conexion dejan la transaccion del cierre a medias.",
+      "zone": "backend",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "fix/450-tx-una-consulta-a-la-vez",
+      "depends_on": 440,
+      "status_note": "Nace de la 440, que dejo dicho que la causa raiz merece ficha propia y spec por tocar codigo de dinero. || MEDIDO el 2026-09-21: lib/services/WalletFeedService.ts:39 y lib/services/WalletTiendaFeedService.ts:75 reciben el cliente de transaccion (tx) y le lanzan DOS consultas A LA VEZ con Promise.all; leerDetallePorOrden (lib/utils/cierre-detalle.ts:137) hace la suya sobre el MISMO tx. Son los UNICOS dos sitios del repo con ese patron (dos barridos independientes) y corren dentro del $transaction que abre CierresAdminRepository.resolverCierre (linea 1780; llamadas en 1823 y 1827): la aprobacion del cierre, la que mueve los dos ledgers y la caja. || NO SE VEN LEYENDO EL CODIGO: el Promise.all no esta escrito dentro del $transaction sino en otro archivo que recibe el tx por parametro. Un detector textual sobre el cuerpo del $transaction devuelve CERO; hay que perseguir el TIPO del parametro (*TxClient). || HIPOTESIS SIN MEDIR, y es lo PRIMERO que debe resolver el spec: que estos dos sean la fuente del warning que se OBSERVA en /cierre-dia y /api/cron/corte-diario, que son de OTRO camino (CorteDiarioRepository y CierreDiaRepository). Un DeprecationWarning de Node va al stderr del PROCESO, no del request. No confundir la ruta donde se LEE un warning con la que lo PRODUCE. || El parche de la 440 sigue funcionando: cero 25P02 en /mis-asignaciones/reparto desde que salio (2026-09-17, 10:14 UTC). Esto ataca la causa, no el sintoma. || Detalle y evidencia en progress/current.md, seccion del 2026-09-21."
     }
   ]
 }

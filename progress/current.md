@@ -1,4 +1,129 @@
-# Estado — sesión del 2026-09-10 / 12 / 14 / 15 / 16
+# Estado — sesión del 2026-09-21
+
+## Dónde está todo
+
+`prod` = **`9d3d67b5`** (PR #816, la 449 — el fulfillment en el dinero de Analítica).
+`dev` = `prod` **+ SF-001 entero** (429–436) con sus 6 migraciones, sin desplegar y a la espera de
+que lo pida el humano. **`in_progress` = 0**, 44 fichas `pending`.
+
+Cuatro días sin commits: el último es del 2026-09-17.
+
+## DOS de las cuatro comprobaciones previas a la release de SF-001, CERRADAS POR MEDIDA
+
+### 1. `DIRECT_URL` de producción FUNCIONA — y la premisa que la ponía en duda era falsa
+
+Lo anotado decía que esa credencial «lleva sin ejercitarse desde vaya a saber cuándo» porque la
+última release no llevó migraciones. **No es así: cada build de producción la usa, haya migraciones
+pendientes o no.** Leído en el log de build del despliegue de `9d3d67b5` (2026-09-17):
+
+```
+[migrate] aplicando migraciones (URL de DIRECT_URL)…
+Datasource "db": PostgreSQL database "postgres" at "aws-1-us-east-2.pooler.supabase.com:5432"
+199 migrations found in prisma/migrations
+```
+
+Conectó, autenticó y leyó el historial completo. Y el host es el pooler en modo **SESIÓN (5432)**,
+que es justo el que `migrate deploy` necesita por el advisory lock.
+
+**Lo que esto NO prueba**: el permiso de DDL para crear tablas. Es el mismo usuario que aplicó las
+199 anteriores, así que el riesgo es bajo, pero no está medido.
+
+### 2. La `DATABASE_URL` de producción NO es el pooler de sesión
+
+`get_runtime_errors` a 7 días: el `EMAXCONNSESSION` aparece **3 veces, todas sobre
+`dpl_5jNe4aYgAdW9tHvKBHMpF6JYRn9a`**, que se comprobó que es un **PREVIEW** de la rama `dev`
+(`target: null`, alias `ordenex-git-dev-…`) — el incidente del 17-sep, ya resuelto.
+**Cero sobre un despliegue de producción.**
+
+> La lección que deja: `get_runtime_errors` agrupa **todo el proyecto**, preview incluido. Un error
+> con pinta de producción puede ser de un preview; hay que mirar el `lastDeployment` y resolver su
+> `target` antes de atribuirlo.
+
+### 3. `ANTHROPIC_API_KEY`: NO EXISTE en ninguno de los dos entornos
+
+Medido en Vercel (proyecto `ordenex`, `prj_Bv8QDM5HfGPZH8LJYSxeaUWCj6XU`). La pone el humano, como
+**dos entradas separadas** (una Production, otra Preview), tipo Sensitive. La de Production no hará
+nada hasta que SF-001 salga; **la de Preview sirve ya** para cerrar T25/T26/T27 de la 436 sobre un
+preview redesplegado.
+
+### 4. Sigue pendiente: recapturar los números de la 431
+
+`max(updated_at)` y el conteo de `aprobado` en `cierre_bodega`. Caduca sola: se hace justo antes de
+abrir la release, no antes.
+
+## La 440: el parche funciona, la causa raíz sigue viva y CRECIÓ
+
+- **El parche, medido:** desde que salió (2026-09-17, 10:14 UTC) hay **cero** apariciones del 25P02
+  y del 500 mudo en `/mis-asignaciones/reparto`. Las 27+27 registradas son todas anteriores
+  (03:26–04:34 UTC del 17). El taponamiento hizo su trabajo.
+- **La causa raíz, medida:** el warning que es su pista —`Calling client.query() when the client is
+  already executing a query`— va por **32 ocurrencias y 22 usuarios**, en `/cierre-dia` y
+  `/api/cron/corte-diario`, y el último es del **2026-09-20**. Consultas concurrentes sobre la misma
+  conexión: el mecanismo que deja una transacción a medias y devuelve la conexión envenenada al pool.
+
+### EL CULPABLE, LOCALIZADO EL 2026-09-21 — dos consultas concurrentes sobre la MISMA conexión
+
+Son **dos sitios, y son los únicos del repo**:
+
+| Archivo | Línea | Qué hace |
+| --- | --- | --- |
+| `lib/services/WalletFeedService.ts` | 39 | `Promise.all([leerDetallePorOrden(cierreId, tx), tx.gestionOrden.findMany(…)])` |
+| `lib/services/WalletTiendaFeedService.ts` | 75 | el mismo `Promise.all`, con `montoRecibido` |
+
+Los dos reciben un **cliente de transacción** (`tx`) y le lanzan **dos consultas a la vez**.
+`leerDetallePorOrden` (`lib/utils/cierre-detalle.ts:137`) hace su propio `tx.cierreDetail.findMany`,
+así que son dos `client.query()` simultáneos sobre la conexión dedicada de la transacción — que es
+**literalmente** lo que el warning de `pg` describe.
+
+Y no es una transacción cualquiera: los llama `CierresAdminRepository.resolverCierre`
+(líneas 1823 y 1827) **dentro del `$transaction` abierto en la 1780** — la aprobación del cierre,
+la que mueve el dinero de los dos ledgers y la caja.
+
+**Por qué nadie los vio leyendo el código:** el `Promise.all` no está escrito dentro del
+`$transaction`, sino en otro archivo que recibe el `tx` por parámetro. Un detector textual que
+busque `Promise.all` dentro del cuerpo de un `$transaction` devuelve **cero**; hay que perseguir el
+TIPO del parámetro (`*TxClient`). Los dos barridos están en el historial de esta sesión.
+
+**LO QUE SÍ ESTÁ MEDIDO:** que esos dos sitios existen, que son los únicos, y que corren dentro de
+la transacción de la aprobación.
+
+**LO QUE ES HIPÓTESIS Y HAY QUE MEDIR:** que sean la fuente del warning que se OBSERVA en
+`/cierre-dia` y `/api/cron/corte-diario`, que son rutas de OTRO camino (`CorteDiarioRepository` y
+`CierreDiaRepository`, no `CierresAdminRepository`). La explicación candidata es que un
+`DeprecationWarning` de Node se emite al stderr del PROCESO, no del request, y con instancias
+reutilizadas queda atribuido a la petición que estuviera activa. **No confundir la ruta donde se
+LEE un warning con la ruta que lo PRODUCE.** Es lo primero que tiene que resolver el spec.
+
+**Borrador pasado al humano el 2026-09-21, sin registrar todavía** (la propia 440 exige ficha
+propia y spec porque toca código de dinero):
+
+> **450** · backend · «El camino de lectura recibe 25P02 sin abrir transacción: alguien devuelve al
+> pool una conexión con la transacción a medias.»
+
+## La 448 está bloqueada por una decisión, no por trabajo
+
+El diseño cuenta **órdenes** (91) y `ConteoDevolucionesRepository` cuenta **gestiones**, y su propia
+cabecera declara que sus totales no tienen por qué cuadrar con el anillo de arriba. Subirlo al lado
+del héroe heredaría esa discrepancia en la misma fila.
+
+Recomendación pasada al humano: **órdenes** — la pregunta que responde el panel es «de las que no
+llegaron, ¿cuántas fue por no ubicar al cliente?», y una orden con tres intentos fallidos es un
+problema, no tres. **Pendiente de su decisión.**
+
+## Sin commitear en el árbol
+
+7 carpetas `design-*` (analitica, asistente, ayuda, etiquetas, filtros, satelites, sinpe) y ~35 logs
+de `progress/`. `design-notificaciones` sí está trackeado, así que el precedente es que se commitean.
+
+## Gate de arranque de esta sesión
+
+`./init.sh --rapido` sobre `dev` limpio: **`INIT_EXIT=0`**, 240 archivos / 3466 tests, cero fallos,
+`DATABASE_URL resuelta` — los 195 archivos contra Postgres SÍ se ejecutan
+(`progress/gate_21sep_arranque.log`).
+
+---
+
+## Estado anterior — sesiones del 2026-09-10 al 17
 
 ## RESUELTO — los deploys de PREVIEW volvieron el 2026-09-16
 
