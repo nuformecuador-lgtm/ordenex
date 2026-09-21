@@ -92,12 +92,30 @@ function proyectar(f: FilaGestion) {
       cobraComision: true,
       zonaId: "z1",
       tiendaId: "t1",
+      // FICHA 450: los FK de las tres geografias; los nombres los resuelven los catalogos.
+      provinciaId: "p1",
+      cantonId: "ct1",
+      distritoId: "d1",
       tienda: { nombre: "Tienda" },
       zona: { nombre: "Zona", esCentral: true },
       provincia: { nombre: "Provincia" },
       canton: { nombre: "Canton" },
       distrito: { nombre: "Distrito" },
     },
+  };
+}
+
+/**
+ * FICHA 450 (T2.7) — doble de TABLA de catalogo: responde a cualquier id que se le pida
+ * (`where: { id: { in: [...] } }`). Un doble de fila unica dejaria ids sin resolver, y un id sin
+ * resolver hace que `crearCierre` lance a proposito (R7: en codigo de dinero un nombre ausente no
+ * se congela como `null` en silencio).
+ */
+function catalogoDoble450(fila: (id: string) => Record<string, unknown>) {
+  return {
+    findMany: vi.fn(async (args: { where: { id: { in: string[] } } }) =>
+      args.where.id.in.map((id) => ({ id, ...fila(id) })),
+    ),
   };
 }
 
@@ -171,7 +189,9 @@ function buildStore(filas: FilaGestion[]) {
     gestionOrden,
     gestionOrdenEvidencia: { createMany: vi.fn(async () => ({ count: 0 })) },
     gestionOrdenPago: { createMany: vi.fn(async () => ({ count: 0 })) },
-    usuario: { update: vi.fn() },
+    // FICHA 450: `update` es lo que ya usaba este doble; `findMany` lo anade la lectura en serie
+    // de los catalogos del snapshot (la tienda sale de `usuario`).
+    usuario: { update: vi.fn(), ...catalogoDoble450(() => ({ nombre: "Tienda" })) },
     orden: {
       count: vi.fn(),
       findMany: vi.fn(async () => []),
@@ -209,6 +229,14 @@ function buildStore(filas: FilaGestion[]) {
         return { id };
       }),
     },
+    // FICHA 450 (T2.7): los cinco catalogos que `crearCierre` lee EN SERIE desde que
+    // `SNAPSHOT_SELECT` dejo de anidar las relaciones (Prisma lanzaba las cinco hermanas a la vez
+    // sobre la unica conexion de la transaccion: 5 consultas en vuelo y el aviso de `pg`). Mismos
+    // valores que traia la relacion anidada; ninguna asercion de este archivo cambia.
+    zona: catalogoDoble450(() => ({ nombre: "Zona", esCentral: true })),
+    provincia: catalogoDoble450(() => ({ nombre: "Provincia" })),
+    canton: catalogoDoble450(() => ({ nombre: "Canton" })),
+    distrito: catalogoDoble450(() => ({ nombre: "Distrito", zonaEspecial: null })),
     cierreDetail: {
       createMany: vi.fn(async (args: { data: Record<string, unknown>[] }) => {
         detalles.push(...args.data);

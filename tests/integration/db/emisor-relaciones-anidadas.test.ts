@@ -4,6 +4,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 
 import { ConteosPublicosRepository } from "@/lib/repositories/ConteosPublicosRepository";
+import {
+  SNAPSHOT_SELECT,
+  leerDescriptivosDeOrdenes,
+} from "@/lib/repositories/CierreDiaRepository";
 
 import {
   HAY_BASE_DE_DATOS,
@@ -15,7 +19,7 @@ import {
 import { crearPrismaContado, resumenDeLaSonda, type PrismaContado } from "./_consultas-en-vuelo";
 
 /**
- * FICHA 450 — LA CAZA DEL EMISOR (T2), MEDIDA. PASOS 2, 4 Y 5 DEL ITINERARIO (design §3.5).
+ * FICHA 450 — EL EMISOR: COMO SE CAZO (T2) Y LA PRUEBA DE QUE SE ARREGLO (T2.7).
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════════════
  * QUE SE BUSCABA Y QUE SE ENCONTRO
@@ -39,15 +43,21 @@ import { crearPrismaContado, resumenDeLaSonda, type PrismaContado } from "./_con
  * la transaccion que las dos comparten.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════════════
- * ESTE ARCHIVO MIDE EL ESTADO DE HOY, NO AFIRMA QUE ESTE BIEN
+ * EL ANTES Y EL DESPUES, LOS DOS MEDIDOS AQUI
  * ═══════════════════════════════════════════════════════════════════════════════════════════════
  *
- * La secuenciacion del emisor (T2.7) no se aplico en esta tanda: las dos vias posibles chocan con
- * restricciones que la implementacion no puede levantar sola, y estan escritas con su coste en
- * `progress/impl_450.md`. Mientras tanto estas aserciones son una CARACTERIZACION: fijan el numero
- * medido para que el dia que alguien lo arregle —o el dia que Prisma cambie— el test se ponga rojo
- * y obligue a volver aqui. Lo que NO se hace es dejar el hallazgo escrito solo en una bitacora,
- * donde nadie vuelve a leerlo.
+ * El bloque «EL ANTES» conserva el `select` LITERAL que la ficha retiro —las cinco relaciones
+ * hermanas, copiadas tal cual— y mide lo que hacia: **5 consultas en vuelo sobre una conexion, 4
+ * solapes y el aviso de `pg`**. No se borra al arreglarlo: es la unica forma de que el numero
+ * viejo siga siendo comprobable y de que se vea que el arreglo arreglo algo.
+ *
+ * El bloque «EL DESPUES» ejercita el **codigo REAL** —`SNAPSHOT_SELECT` y
+ * `leerDescriptivosDeOrdenes`, importados de `CierreDiaRepository`, no copiados— y mide **1 en
+ * vuelo, 0 solapes**. Se importan a proposito: una asercion contra una copia del codigo se queda
+ * verde para siempre aunque el original cambie.
+ *
+ * Y el tercer bloque compara lo que los dos caminos CONGELAN. Es codigo de dinero: que la lectura
+ * sea mas lenta o mas rapida da igual si los valores no son EXACTAMENTE los mismos.
  *
  * ⚠️ EL AVISO ES DE UN SOLO DISPARO POR PROCESO (`util.deprecate`). Por eso este archivo es propio:
  * vitest aisla por archivo, asi que aqui la captura llega virgen.
@@ -55,8 +65,12 @@ import { crearPrismaContado, resumenDeLaSonda, type PrismaContado } from "./_con
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
 
-/** El `select` del snapshot, copiado de `CierreDiaRepository.ts` (`SNAPSHOT_SELECT`). */
-const SNAPSHOT_SELECT = {
+/**
+ * El `select` del snapshot TAL Y COMO ERA ANTES de la ficha 450, copiado literalmente. Se
+ * conserva —y se marca como historico— para poder seguir midiendo lo que hacia. El de HOY se
+ * importa del repositorio, unas lineas mas arriba.
+ */
+const SNAPSHOT_SELECT_DE_ANTES = {
   ordenId: true,
   orden: {
     select: {
@@ -176,7 +190,7 @@ describeSiHayBase("FICHA 450 · el emisor de la tercera consulta", () => {
     });
   });
 
-  describe("pasos 4 y 5 · la expansion de relaciones, que SI reproduce", () => {
+  describe("EL ANTES · pasos 4 y 5: la expansion de relaciones, que SI reproduce", () => {
     it("el mismo `select` sobre el cliente AGRUPADO reparte entre conexiones y no solapa", async () => {
       contado.sonda.bloque = "paso4-pool";
       contado.sonda.limpiar();
@@ -185,7 +199,7 @@ describeSiHayBase("FICHA 450 · el emisor de la tercera consulta", () => {
       // aqui se usa el universo entero acotado a 1 fila, que si existe (lo garantiza `fksDeOrden`).
       const filas = await contado.prisma.gestionOrden.findMany({
         take: 1,
-        select: SNAPSHOT_SELECT,
+        select: SNAPSHOT_SELECT_DE_ANTES,
       });
 
       console.log(resumenDeLaSonda("paso 4 · snapshot sobre el POOL", contado.sonda));
@@ -199,14 +213,14 @@ describeSiHayBase("FICHA 450 · el emisor de la tercera consulta", () => {
       expect(contado.sonda.solapes).toEqual([]);
     });
 
-    it("EL EMISOR: el mismo `select` DENTRO de una transaccion pone 5 consultas en vuelo y dispara el aviso", async () => {
+    it("EL EMISOR (lo que HABIA): el select de antes, dentro de una tx, pone 5 en vuelo y dispara el aviso", async () => {
       contado.sonda.bloque = "emisor";
       contado.sonda.limpiar();
 
       const filas = await enTransaccionRevertida(contado.prisma, async (tx) => {
         const gestionId = await sembrarGestion(tx);
         contado.sonda.limpiar(); // la siembra no es lo que se mide
-        return tx.gestionOrden.findMany({ where: { id: gestionId }, select: SNAPSHOT_SELECT });
+        return tx.gestionOrden.findMany({ where: { id: gestionId }, select: SNAPSHOT_SELECT_DE_ANTES });
       });
 
       console.log(resumenDeLaSonda("EMISOR · snapshot dentro de la tx", contado.sonda));
@@ -231,6 +245,96 @@ describeSiHayBase("FICHA 450 · el emisor de la tercera consulta", () => {
       // en un proceso limpio: la asercion que cierra la atribucion del entregable 2.
       expect(contado.sonda.avisos.length).toBe(1);
       expect(contado.sonda.avisos[0].bloque).toBe("emisor");
+    });
+  });
+
+  describe("EL DESPUES · el codigo REAL, importado del repositorio", () => {
+    it("`SNAPSHOT_SELECT` + `leerDescriptivosDeOrdenes` ponen 1 consulta en vuelo, y ninguna se solapa", async () => {
+      contado.sonda.bloque = "despues";
+      contado.sonda.limpiar();
+
+      const medido = await enTransaccionRevertida(contado.prisma, async (tx) => {
+        const gestionId = await sembrarGestion(tx);
+        contado.sonda.limpiar(); // la siembra no es lo que se mide
+        const filas = await tx.gestionOrden.findMany({
+          where: { id: gestionId },
+          select: SNAPSHOT_SELECT,
+        });
+        const descriptivos = await leerDescriptivosDeOrdenes(filas, tx);
+        return { filas, descriptivos };
+      });
+
+      console.log(resumenDeLaSonda("DESPUES · snapshot secuenciado dentro de la tx", contado.sonda));
+
+      // ANTI-VACIO, y no es decorativo: si `filas` viniera vacio, `leerDescriptivosDeOrdenes`
+      // pediria cinco `in` vacios y el contador seguiria diciendo 1 sin haber medido nada.
+      expect(medido.filas).toHaveLength(1);
+      expect(medido.descriptivos.zonas.size).toBe(1);
+      expect(medido.descriptivos.tiendas.size).toBe(1);
+      expect(medido.descriptivos.provincias.size).toBe(1);
+      expect(medido.descriptivos.cantones.size).toBe(1);
+      // Y las SEIS consultas salieron por la MISMA conexion: la de la transaccion.
+      expect(contado.sonda.conexionesUsadas()).toBe(1);
+      expect(contado.sonda.cuantasConteniendo("gestion_orden")).toBe(1);
+      expect(contado.sonda.cuantasConteniendo("FROM \"public\".\"zona\"")).toBe(1);
+      expect(contado.sonda.cuantasConteniendo("FROM \"public\".\"provincia\"")).toBe(1);
+
+      // ═══ EL NUMERO QUE CAMBIA: 5 -> 1 ═══
+      expect(contado.sonda.maximoEnVuelo()).toBe(1);
+      expect(contado.sonda.solapes).toEqual([]);
+    });
+
+    it("R5/R7: los DOS caminos congelan EXACTAMENTE los mismos valores", async () => {
+      // Es codigo de dinero: que la lectura sea mas lenta o mas rapida da igual si lo congelado
+      // no es identico. Se lee la MISMA fila por los dos caminos, en la misma transaccion, y se
+      // comparan los siete valores que `cierre_detail` guarda de la geografia y la tienda.
+      contado.sonda.bloque = "equivalencia";
+
+      const { viejo, nuevo } = await enTransaccionRevertida(contado.prisma, async (tx) => {
+        const gestionId = await sembrarGestion(tx);
+
+        const [antes] = await tx.gestionOrden.findMany({
+          where: { id: gestionId },
+          select: SNAPSHOT_SELECT_DE_ANTES,
+        });
+        const [fila] = await tx.gestionOrden.findMany({
+          where: { id: gestionId },
+          select: SNAPSHOT_SELECT,
+        });
+        const d = await leerDescriptivosDeOrdenes([fila], tx);
+
+        return {
+          viejo: {
+            esCentral: antes.orden.zona.esCentral,
+            zonaNombre: antes.orden.zona.nombre,
+            tiendaNombre: antes.orden.tienda.nombre,
+            provinciaNombre: antes.orden.provincia.nombre,
+            cantonNombre: antes.orden.canton.nombre,
+            distritoNombre: antes.orden.distrito?.nombre ?? null,
+            esZonaEspecial: antes.orden.distrito?.zonaEspecial === true,
+          },
+          nuevo: {
+            esCentral: d.zonas.get(fila.orden.zonaId)!.esCentral,
+            zonaNombre: d.zonas.get(fila.orden.zonaId)!.nombre,
+            tiendaNombre: d.tiendas.get(fila.orden.tiendaId)!.nombre,
+            provinciaNombre: d.provincias.get(fila.orden.provinciaId)!.nombre,
+            cantonNombre: d.cantones.get(fila.orden.cantonId)!.nombre,
+            distritoNombre:
+              fila.orden.distritoId === null
+                ? null
+                : d.distritos.get(fila.orden.distritoId)!.nombre,
+            esZonaEspecial:
+              (fila.orden.distritoId === null
+                ? null
+                : d.distritos.get(fila.orden.distritoId)!.zonaEspecial) === true,
+          },
+        };
+      });
+
+      // ANTI-VACIO: los nombres son de una fila real de la base, no cadenas vacias.
+      expect(viejo.zonaNombre.length).toBeGreaterThan(0);
+      expect(viejo.tiendaNombre.length).toBeGreaterThan(0);
+      expect(nuevo).toEqual(viejo);
     });
   });
 });
