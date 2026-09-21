@@ -365,17 +365,21 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 - [ ] **Cuándo toca mirarla.** **7 días después** del despliegue del entregable 1 de la 450. Si la
       release sale el 2026-09-22, se mira el **2026-09-29**; si sale otro día, se cuentan 7 desde
       ese.
-- [ ] **Cómo se lee el resultado.** La 450 midió en laboratorio quién lo emite y lo dejó
-      **nombrado**: `lib/repositories/CierreDiaRepository.ts`, la lectura del snapshot con
-      `SNAPSHOT_SELECT` dentro del `$transaction` de `crearCierre` — 5 relaciones anidadas que
-      Prisma expande a 1+5 consultas y lanza **a la vez** sobre la única conexión de la
-      transacción (medido: **5 en vuelo, 4 solapes y el aviso capturado en un proceso limpio**,
-      `tests/integration/db/emisor-relaciones-anidadas.test.ts`). Ese sitio **sigue sin
-      secuenciar** (T2.7, ver `progress/impl_450.md`). Por tanto:
-      - **>0 es lo ESPERADO** mientras el snapshot siga como está. Confirma la atribución y es el
-        argumento para priorizar T2.7.
-      - **0 obligaría a volver a medir**: significaría que el emisor real era otro, y el itinerario
-        de la caza se reabre con esa evidencia nueva.
+- [ ] **Cómo se lee el resultado.** La 450 midió en laboratorio quién lo emite, lo dejó **nombrado
+      y SECUENCIADO**: `lib/repositories/CierreDiaRepository.ts`, la lectura del snapshot con
+      `SNAPSHOT_SELECT` dentro del `$transaction` de `crearCierre`. Eran 5 relaciones anidadas que
+      Prisma expandía a 1+5 consultas y lanzaba a la vez sobre la única conexión de la transacción;
+      ahora proyecta los FK y lee los cinco catálogos de uno en uno. Medido a los dos lados en
+      `tests/integration/db/emisor-relaciones-anidadas.test.ts`: **5 en vuelo y 4 solapes con el
+      aviso capturado → 1 en vuelo y 0 solapes**. Por tanto:
+      - **0 es lo ESPERADO.** Confirma en campo lo que el laboratorio ya midió.
+      - **>0 NO significa que el arreglo falló**, sino que hay **otro emisor** que no es éste. Lo
+        que encontramos es *un* emisor verificado, nunca probado único. Antes de tocar nada, mirar
+        el censo del brazo C de `tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts`:
+        hoy declara **6 lecturas con 2 relaciones hermanas en 4 archivos** (`CierreDiaRepository`,
+        `CierresAdminRepository`, `LiquidacionPagoRepository`, `UserRepository`), que **no** llegan
+        al umbral del aviso —hacen falta tres— pero son el primer sitio donde mirar. Y recordar que
+        ese censo mira sólo `lib/`.
 - [ ] **Y el 25P02 sigue en cero.** Comprobar que `/mis-asignaciones/reparto` sigue **sin** errores
       `current transaction is aborted` (`25P02`) en la misma ventana de 7 días. El parche de la
       440 lleva en cero desde el **2026-09-17 10:14 UTC** y la 450 no lo toca: si apareciera uno,

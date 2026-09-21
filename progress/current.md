@@ -94,11 +94,84 @@ la transacción de la aprobación.
 reutilizadas queda atribuido a la petición que estuviera activa. **No confundir la ruta donde se
 LEE un warning con la ruta que lo PRODUCE.** Es lo primero que tiene que resolver el spec.
 
-**Borrador pasado al humano el 2026-09-21, sin registrar todavía** (la propia 440 exige ficha
-propia y spec porque toca código de dinero):
+### La 450: REGISTRADA, IMPLEMENTADA Y REVISADA el mismo día — y la premisa original cayó
 
-> **450** · backend · «El camino de lectura recibe 25P02 sin abrir transacción: alguien devuelve al
-> pool una conexión con la transacción a medias.»
+Rama `fix/450-tx-una-consulta-a-la-vez`, 7 commits, **sin push y sin PR**. `dev` intacto.
+
+**Lo primero que hay que saber es que la premisa de la ficha se cayó, y eso es un buen resultado.**
+El `Promise.all` de los dos feeds **no** ponía dos consultas en vuelo: Prisma 7.8 serializa las
+peticiones de una transacción interactiva. Medido: **1 → 1 consultas simultáneas, 0 → 0 avisos**.
+El arreglo se aplicó igual por forma (`pg@9` convertirá el aviso en error) y su prueba pasó a ser un
+doble vigilado que sí se mueve: revertido el arreglo, 2 en vuelo y 1 solape.
+
+> **El corolario, por si alguien lo lee al revés:** en `pg@8.22.0` el aviso salta sólo si la cola ya
+> tiene una consulta esperando (`lib/client.js:714-717`, con el `shift()` de `_pulseQueryQueue` en
+> 603-624). La 1.ª pasa a activa y deja la cola en 0; la 2.ª encuentra 0 y **no avisa**; la 3.ª sí.
+> **El aviso necesita tres consultas; el defecto del `25P02` necesita dos.**
+
+**El emisor real quedó NOMBRADO y SECUENCIADO:** `lib/repositories/CierreDiaRepository.ts`, la
+lectura del snapshot con `SNAPSHOT_SELECT` dentro del `$transaction` de `crearCierre`. Eran 5
+relaciones anidadas que Prisma expandía a 1+5 consultas lanzadas a la vez; ahora proyecta los FK y
+lee los cinco catálogos en serie. **5 en vuelo y 4 solapes con el aviso capturado → 1 y 0.** Y cuadra
+con dónde se leía: `crearCierre` es el único punto por el que pasan `/cierre-dia` y
+`/api/cron/corte-diario`.
+
+El candidato que yo daba por fuerte —`ConteosPublicosRepository.ts:22`, tres consultas en la
+landing— **no reproduce**: 1 en vuelo. Se midió antes de tocarlo.
+
+**Gate completo, dos veces en verde.** El último: `INIT_EXIT=0`, 2057 archivos, **29.990 tests**, 26
+saltados (los 17 de `AnaliticaPage` y los 9 de `AnaliticaShell`, ajenos) y **284 archivos de
+`integration/db` con cero saltados** — las sondas se ejecutaron de verdad.
+
+**Revisión: OK tras dos rechazos**, los dos de papeleo. Detalle y lo verificado ejecutando en
+`progress/review_450.md`. El segundo bloqueante merece recordarse: la nota de `docs/release.md`
+quedó **invertida** tras secuenciar («>0 es lo ESPERADO» cuando ya era al revés), y quien mirase los
+logs el día 7 habría leído el resultado del lado contrario.
+
+**Autorizaciones del humano, para no reabrirlas:** alcance «todo dentro de la 450» (no se parte);
+cierre por contador determinista + gate completo, con la observación de producción **fechada** y no
+bloqueante; y vía «leer en serie» para T2.7, con permiso para ampliar los dobles. Ese permiso se
+aplicó a **cinco** suites y no a las dos nombradas, porque las cinco fallaban por la causa idéntica
+(`TypeError: reading 'findMany'`); se respetó la línea roja: **cero aserciones tocadas**.
+
+**LO QUE QUEDA VIVO Y ES EL SIGUIENTE ESCALÓN:** 6 lecturas que lanzan **dos** consultas hermanas
+sobre un `tx`, en `CierreDiaRepository`, `CierresAdminRepository`, `LiquidacionPagoRepository` y
+`UserRepository`. No disparan el aviso, pero **dos consultas compartiendo conexión son la condición
+del `25P02` de la 440**. Censadas por el brazo C de la guardia; fuera del alcance de la 450.
+
+## La 451 — los paquetes sin gestionar no se piden escanear (BORRADOR, sin registrar)
+
+Pedida por el humano el 2026-09-21. La ventana de confirmación física de un cierre se construye
+desde **gestiones**, filtrando por `RESULTADOS_QUE_VUELVEN`. Una orden **sin gestionar** no tiene
+resultado, así que no existe en esa lista y nadie la escanea — aunque al aprobar, la liberación de
+la feature 109 **sí** la manda a bodega en la misma transacción. El sistema da esos paquetes por
+recibidos sin pedir prueba.
+
+**Medido contra producción el 2026-09-21:**
+
+| | |
+| --- | --- |
+| Filas en `cierre_sin_gestion` | **185**, en **14 cierres** (174 órdenes distintas) |
+| Sin `num_guia` | **0** — todas escaneables hoy |
+| Ventana | 2026-08-27 → **2026-09-19** |
+| Esos 14 cierres | **todos aprobados** |
+| Escaneados / NO escaneados en ellos | **50** / **185** |
+
+**El 78,7 % del bulto que volvía a bodega en esos cierres se aprobó sin que nadie lo confirmara.**
+
+**Decisión del humano (2026-09-21):** se escanean igual que reprogramadas, devueltas y rechazadas, y
+**mientras falte uno el cierre no se aprueba** — misma regla, sin salida de emergencia.
+
+**Los dos puntos delicados del diseño, para el spec:**
+
+1. El punto único de «qué vuelve a bodega» es hoy un `Record<GestionResultado, boolean>` exhaustivo
+   a propósito (si el enum crece, el repo no compila). Una orden sin gestionar **no es** un
+   `GestionResultado`, así que no cabe dentro. Hay que extender el concepto a dos orígenes
+   —gestiones y barridas— **sin** crear una segunda lista suelta: ya existe una guardia que
+   persigue esas copias.
+2. `cierre_sin_gestion.num_guia` admite NULL. Hoy hay **cero** en producción, pero si aparece uno
+   ese cierre sería imposible de aprobar. Reutilizar el criterio ya resuelto para las gestiones sin
+   guía: avisar **antes** de empezar a escanear, no dejar que bodega descubra el bloqueo al final.
 
 ## La 448 está bloqueada por una decisión, no por trabajo
 
