@@ -348,6 +348,39 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 > vacía al ejecutarla. Si esta sección tiene entradas, **la release no está terminada** aunque el
 > despliegue esté verde.
 
+### De la 450 — la advertencia de `pg` en los logs de Vercel
+
+> **Esta entrada NO bloquea el `done` de la 450** (decisión 2 del humano, 2026-09-21). La prueba de
+> cierre de esa ficha es el contador determinista de consultas en vuelo + `./init.sh` completo en
+> verde, y las dos están hechas. Esto es la comprobación en campo de una atribución que ya está
+> medida en laboratorio.
+
+- [ ] **Qué mirar.** Ocurrencias de `Calling client.query() when the client is already executing a
+      query` en los logs de Vercel (`get_runtime_errors`, ventana de **7 días**).
+- [ ] **Con qué comparar.** El número de antes: **32 ocurrencias, 22 usuarios, última el
+      2026-09-20**, observadas en `/cierre-dia` y `/api/cron/corte-diario`.
+      ⚠️ **Eso cuenta INSTANCIAS, no eventos.** `pg` construye el aviso con `util.deprecate`, que
+      emite **una sola vez por proceso**: 32 ocurrencias significan ≥32 instancias que tocaron el
+      camino al menos una vez, no 32 veces que ocurrió.
+- [ ] **Cuándo toca mirarla.** **7 días después** del despliegue del entregable 1 de la 450. Si la
+      release sale el 2026-09-22, se mira el **2026-09-29**; si sale otro día, se cuentan 7 desde
+      ese.
+- [ ] **Cómo se lee el resultado.** La 450 midió en laboratorio quién lo emite y lo dejó
+      **nombrado**: `lib/repositories/CierreDiaRepository.ts`, la lectura del snapshot con
+      `SNAPSHOT_SELECT` dentro del `$transaction` de `crearCierre` — 5 relaciones anidadas que
+      Prisma expande a 1+5 consultas y lanza **a la vez** sobre la única conexión de la
+      transacción (medido: **5 en vuelo, 4 solapes y el aviso capturado en un proceso limpio**,
+      `tests/integration/db/emisor-relaciones-anidadas.test.ts`). Ese sitio **sigue sin
+      secuenciar** (T2.7, ver `progress/impl_450.md`). Por tanto:
+      - **>0 es lo ESPERADO** mientras el snapshot siga como está. Confirma la atribución y es el
+        argumento para priorizar T2.7.
+      - **0 obligaría a volver a medir**: significaría que el emisor real era otro, y el itinerario
+        de la caza se reabre con esa evidencia nueva.
+- [ ] **Y el 25P02 sigue en cero.** Comprobar que `/mis-asignaciones/reparto` sigue **sin** errores
+      `current transaction is aborted` (`25P02`) en la misma ventana de 7 días. El parche de la
+      440 lleva en cero desde el **2026-09-17 10:14 UTC** y la 450 no lo toca: si apareciera uno,
+      la causa está en esta release y no en el tráfico.
+
 ### De la 284 — la PWA: el relevo, la purga y el manifiesto
 
 > **Un service worker NO se puede medir en local**: el de producción se autodestruye en
