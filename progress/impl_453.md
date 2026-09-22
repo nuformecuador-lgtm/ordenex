@@ -272,3 +272,169 @@ Backend de la 453 completo y verificado contra Postgres real: tabla con su migra
 y el dueño en el `WHERE`; formato propio versionado que dice qué hace ante una versión desconocida; y
 la distinción «catálogo caído ≠ valor desaparecido» sostenida por dos cierres y por seis casos que
 mueren si alguien los colapsa. `./init.sh` completo en **`INIT_EXIT=0`**.
+---
+
+# Ficha 453 — Bitácora de implementación (FRONTEND)
+
+> Alcance: **T3.1, T3.2, T4.2, T4.3, T5.1, T5.2 y T6.1**. El backend (T0.1, T1.x, T2.x, T4.1, T6.2)
+> está arriba y no se tocó. Rama `feat/453-vistas-de-filtros-guardadas`, desde `9f7036f9`.
+
+## Archivos creados y modificados
+
+### Creados
+
+| Archivo | Qué es |
+| --- | --- |
+| `components/shared/VistasFiltro.tsx` | El control: disparador + panel (aplicar / renombrar / borrar), «Guardar filtros actuales…» y «Guardar cambios en esta vista». Consume las cinco acciones y el módulo de aplicabilidad. |
+| `components/shared/VistaIncompletaAviso.tsx` | El `Modal` de §8.2: enumera lo perdido y ofrece exactamente dos salidas. |
+| `tests/unit/components/buscador-filtros-siembra.test.tsx` | 11 casos (T3.1). |
+| `tests/unit/components/filter-component-siembra.test.tsx` | 9 casos (T3.2). |
+| `tests/unit/components/buscador-filtros-vistas.test.tsx` | 17 casos (T4.2). |
+| `tests/unit/components/vistas-filtro-aviso-incompleta.test.tsx` | 7 casos (T4.3). |
+| `tests/unit/components/ordenes-listado-vistas.test.tsx` | 10 casos (T5.1). |
+| `tests/unit/guards/vistas-superficies-declaradas.guardia.test.tsx` | 8 casos (T6.1 + la red anti-global). |
+
+### Modificados
+
+| Archivo | Por qué |
+| --- | --- |
+| `components/shared/BuscadorFiltros.tsx` | Props `siembra` y `vistas`, las dos opcionales; el control al principio de la fila; y la retirada de los params propios al aplicar (R21). |
+| `components/shared/FilterComponent.tsx` | Prop `siembra`, el rekey de los controles no controlados, y el montaje ya sembrado. |
+| `app/(app)/ordenes/_components/OrdenesListado.tsx` | Declara la superficie `"ordenes"` y cablea las dos props. |
+| `lib/actions/vistas-filtro.ts` | **Retiradas las cinco anotaciones `@sin-superficie`**: las acciones ya son alcanzables. |
+
+## Las decisiones de esta mitad, y por qué
+
+**1. Las dos props nuevas son opt-in y están apagadas.** La barra la montan **16 consumidores en 12
+pantallas**; hoy solo `/ordenes` pasa `vistas`. Sin la prop no hay control, ni petición, ni emisión
+(R31).
+
+**2. La lista se pide AL ABRIR el panel, no al montar.** Con la clave de SWR a `null` hasta la
+primera apertura, entrar a `/ordenes` no cuesta ninguna consulta nueva. Efecto lateral medido: los
+cuatro archivos de test que ya renderizaban `OrdenesListado` siguen verdes **sin mockear** las
+acciones nuevas, porque nadie las llama.
+
+**3. R21 lo cumple la barra, no la pantalla.** La lista de «params propios» (el del término más las
+claves ofrecidas) es de la barra y ya existía para «Limpiar todo»: se escribió **una vez** y la usan
+los dos caminos. Que la pantalla armara su propia lista era la forma de que las dos divergieran.
+
+**4. `FilterComponent` tenía que saber montarse YA sembrado, y no es un borde.** En `/ordenes` el
+orquestador solo se monta cuando hay algún filtro pedido, así que aplicar una vista con controles
+desde una barra vacía lo monta **por primera vez**. Sin eso arrancaba leyendo la URL: los controles
+vacíos con el filtro ya aplicado, o sea la pantalla mintiendo. Esa selección **no se emite** y nace
+con la siembra de la URL cerrada.
+
+**5. La vista recién guardada queda marcada como puesta** (`onGuardada`). Lo que se acaba de guardar
+ES lo que está en pantalla; sin esto habría que aplicarla para poder ofrecer «Guardar cambios».
+
+**6. Lo que NO se hizo, a propósito:** no se migró ninguna de las cinco pantallas que hoy remontan
+con `key` (eso es la 328), no se tocó `vista-filtro-aplicabilidad.ts` (se consume), y el **orden del
+listado no entra en la vista** (P1): aplicar no reordena la tabla, y hay un caso que lo afirma.
+
+## Mapa `R<n> → test` (la mitad de pantalla)
+
+| R | Qué afirma | Archivo · caso |
+| --- | --- | --- |
+| R14 | renombrar con las reglas de nombre (y el duplicado lo nombra la pantalla) | `buscador-filtros-vistas` · bloque «renombrar» (3 casos) |
+| R16 | aplicar no escribe NADA | `vistas-filtro-aviso-incompleta` · «Aplicar sin eso…» · `buscador-filtros-vistas` · «…y no llama a ninguna escritura» |
+| R17 | borrar pide confirmación NOMBRANDO la vista | `buscador-filtros-vistas` · bloque «borrar» (2 casos) |
+| R18 | aplicar repone las tres piezas | `ordenes-listado-vistas` · «deja el campo, el control montado y su valor» |
+| R19 | reemplaza, no acumula | `ordenes-listado-vistas` · «una parte del filtro anterior… DESAPARECE» · `filter-component-siembra` · «REEMPLAZA la selección vigente» |
+| R20 | vuelve a la página 1, medido desde la 2 | `ordenes-listado-vistas` · «medido desde la página 2» |
+| R21 | retira los params propios y no añade ninguno | `ordenes-listado-vistas` · «saca los suyos, no añade ninguno y respeta los ajenos» |
+| R22 | tocar el filtro deja de presentarla como puesta | `ordenes-listado-vistas` · «la marca vive mientras… y se apaga al primer cambio» |
+| R23 | aplicar cierra la siembra de la URL | `filter-component-siembra` · «un catálogo que llega DESPUÉS no repone» + su CONTRASTE |
+| R25 | no se aplica nada y lo perdido se enumera sin ids | `vistas-filtro-aviso-incompleta` · 2 casos |
+| R26 | exactamente dos salidas | `vistas-filtro-aviso-incompleta` · «ofrece EXACTAMENTE dos salidas» |
+| R27 | «Aplicar sin eso» aplica solo lo aplicable | `vistas-filtro-aviso-incompleta` · «aplica SOLO lo aplicable» |
+| R28 | la vista queda marcada incompleta, con su motivo | `vistas-filtro-aviso-incompleta` · 2 casos (la marca y su ausencia) |
+| R29 | catálogo no disponible: ni clasificar ni aplicar, y se dice | `ordenes-listado-vistas` · 2 casos (geográfico caído / estados vacío) · `buscador-filtros-vistas` · R29 |
+| R30 | nunca aplicar parte sin nombrarlo antes | `vistas-filtro-aviso-incompleta` · «NO cambia ni una parte del filtro vigente» |
+| R31 | sin la prop, la barra no cambia en nada | `buscador-filtros-vistas` · R31 · `buscador-filtros-siembra` · R31 · `filter-component-siembra` · R31 · la guardia (comportamiento) |
+| R32 | encender una superficie no pide migración | `vistas-superficies-declaradas.guardia` (la lista es un `as const`) |
+| R34 | superficie declarada = superficie montada | `vistas-superficies-declaradas.guardia` · dirección A |
+| R36 | sitio fijo en la barra | `buscador-filtros-vistas` · 2 casos (antes del campo; no se mueve con «Limpiar todo») |
+| R37 | todo se alcanza sin salir del listado | `ordenes-listado-vistas` · 2 casos |
+| R38 | sin vistas se ofrece guardar y no es un error | `buscador-filtros-vistas` · R38 |
+| R39 | sin jerga en los textos visibles | `buscador-filtros-vistas` · R39 |
+| P1 | el orden no entra en la vista | `ordenes-listado-vistas` · «aplicar una vista no reordena la tabla» |
+
+## Las mutaciones que se corrieron antes de creerse el verde
+
+| Mutación | Resultado |
+| --- | --- |
+| **el control montado SIEMPRE** (default encendido en la barra) | **3 rojos** en 2 archivos: los dos de la guardia (la barra pelada y la barra REAL de `/novedades`) y el R31 del control |
+| **otra pantalla enciende la prop** (`vistas={{…}}` en `NovedadesFiltrosBarra`) | **2 rojos**: el censo literal de archivos y la barra real de `/novedades` |
+| **superficie declarada y no montada** (`"cierres-bodega"` en `SUPERFICIES_VISTA`) | **1 rojo**: dirección A de la guardia (R34) |
+| `emitido.current` no se pone al día en la siembra | **1 rojo**: «vaciar el campo después de sembrar SÍ avisa» |
+| no cerrar la siembra de la URL (`siembraCerradaRef`) | **1 rojo**: R23, el catálogo tardío repone |
+| quitar el rekey de los controles no controlados | **2 rojos**: el `dateRange` y el `text` dejan de mostrar lo sembrado |
+| una siembra que SÍ emite (montaje sembrado) | **1 rojo** en T3.2 y **1 rojo** en R22 — este último solo después de endurecer el caso |
+| aplicar acumula en vez de reemplazar | **1 rojo**: R19 |
+| no retirar los params al aplicar | **1 rojo**: R21 |
+| clasificar con el catálogo caído | **1 rojo**: R29 con el catálogo de ESTADOS vacío |
+
+Dos hallazgos de la batería, y los dos cambiaron algo:
+
+1. **El caso de R22 estaba flojo y se arregló.** `findByText` resuelve en cuanto encuentra, así que
+   una emisión tardía —la que produciría una siembra que sí emitiera— apagaba la marca medio segundo
+   después y el caso seguía verde. Ahora se espera 700 ms (más que el debounce de 500) antes de
+   mirar.
+2. **El par de R29 no es redundante.** Con el catálogo geográfico en `null`, clasificar a la fuerza
+   NO pone rojo nada: el módulo de aplicabilidad lo frena igual por su segundo cierre (filtros
+   `disabled`). El caso que sí muere es el del **catálogo de estados vacío**, que solo protege la
+   pantalla. Sin él, esa mitad de R29 no la afirmaría nadie.
+
+## T5.2 — visto en el navegador (2026-09-21)
+
+`rm -rf .next`, cero procesos `node` vivos antes de arrancar, un solo `pnpm dev` con la salida a
+`progress/dev_453_frontend.log`, y sesión como `admin.qa@ordenex.test` (rol `admin`, acceso total).
+Se rotó `QA_PASSWORD` en la base **local** para poder entrar.
+
+> ⚠️ El aviso «Confirmá el SINPE de GAM» (ficha 429) sale en TODAS las pantallas de este rol y su
+> fondo tapa la barra entera: hay que despacharlo con «Ahora no» antes de poder tocar nada. No es de
+> esta ficha, pero cuesta una vuelta a quien venga detrás.
+
+Las cinco acciones, con **la respuesta de la Server Action capturada** (no el toast a los 20 s):
+
+| Acción | Lo que se vio |
+| --- | --- |
+| El control | `PRIMER CONTROL DE LA FILA: Vistas` — el disparador abre la fila, antes de los conmutadores de orden, de los filtros y del campo. |
+| Panel vacío | «Todavía no has guardado ninguna vista en esta pantalla.» + «Guardar filtros actuales…», sin error. |
+| **Guardar** «San José arriba» (término `guia` + 13 zonas + 494 distritos) | `{"status":"ok","vista":{"id":"00993572-…","nombre":"San José arriba","superficie":"ordenes","filtro":{"v":1,"termino":"guia",…` · toast «Vista «San José arriba» guardada.» |
+| **Limpiar** | el campo queda en `""` y la barra sin controles. |
+| **Aplicar** | campo `guia`; fila: `Vistas | Zona: 13 seleccionados | Distrito: 494 seleccionados | Filtros (2) | Limpiar todo`; URL `…/ordenes` (sin un solo param); el panel dice «Puesta ahora». |
+| **Renombrar** a «San José abajo» | `{"status":"ok","vista":{…,"nombre":"San José abajo",…}}` |
+| **Borrar** | la confirmación dice «Se va a borrar «San José abajo». No hay forma de recuperarla.» → `{"status":"ok"}` y el panel vuelve a estar vacío. |
+
+En el log del servidor, las llamadas salen nombradas
+(`ƒ guardarVistaFiltro(...)`, `ƒ eliminarVistaFiltro(...)`, todas `200`). Los dos `Error: aborted`
+(`ECONNRESET`) del log ocurren en la navegación `/dashboard → /ordenes` y aparecen igual en la sonda
+de diagnóstico previa: **no son de esta ficha**.
+
+## `./init.sh` COMPLETO (`progress/gate_453_frontend.log`)
+
+```
+ Test Files  2070 passed (2070)
+      Tests  30144 passed | 26 skipped (30170)
+   Duration  655.37s
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 2070 ejecutado(s), todos en el baseline conocido)
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+- **26 `skipped`**, la referencia exacta: 17 de `tests/components/AnaliticaPage.test.tsx` y 9 de
+  `tests/components/AnaliticaShell.test.tsx`. **Ninguno de `integration/db`**, y el propio gate lo
+  dice antes de arrancar: «✓ DATABASE_URL resuelta: los 199 archivos de tests contra Postgres SI se
+  ejecutan». Sin eso, el verde de la capa de datos no valdría nada.
+- Seis archivos y 62 casos más que la corrida del backend (2064 → 2070, 30082 → 30144).
+- El aviso de «migraciones sin down.sql» es de tres migraciones de agosto ajenas a esta ficha.
+
+## Veredicto
+
+Frontend de la 453 completo: la costura que faltaba desde la 328, el control en la barra
+compartida, el aviso que convierte la pérdida en reconocida en vez de anunciada, `/ordenes`
+encendida y recorrida en el navegador, y una red en las dos direcciones para que encender esto en
+las otras once pantallas no pueda pasar en silencio. `./init.sh` completo en **`INIT_EXIT=0`**.
