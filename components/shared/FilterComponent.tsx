@@ -457,11 +457,30 @@ export function FilterComponent({
    * ref durante el render, y ese efecto corre ANTES que el de poda y siembra, que es el
    * unico que consulta el conjunto.
    */
-  const [seleccion, setSeleccion] = useState<FilterSelection>(() =>
-    leerDeUrl
+  /**
+   * FICHA 453 — ¿LA SIEMBRA YA TRAE ALGO EN EL PRIMER RENDER? `null` si no.
+   *
+   * El caso es real y es el normal, no un borde: en `/ordenes` este orquestador **solo se
+   * monta cuando hay algún filtro pedido**, así que aplicar una vista con controles desde
+   * una barra vacía lo MONTA por primera vez con la siembra ya puesta. Ahí no hay ningún
+   * cambio de señal que detectar —es el render inicial—, y sin esto el componente
+   * arrancaría leyendo la URL: los controles se pintarían vacíos con el filtro ya aplicado,
+   * o sea la pantalla mintiendo sobre lo que está puesto.
+   *
+   * Se exige que la siembra traiga ALGO: montar con `{}` (lo normal al entrar a la página)
+   * deja intacta la precarga de la URL de la ficha 339.
+   */
+  const siembraInicial =
+    siembra !== undefined && Object.keys(siembra.seleccion).length > 0
+      ? siembra.seleccion
+      : null;
+
+  const [seleccion, setSeleccion] = useState<FilterSelection>(() => {
+    if (siembraInicial !== null) return podarSeleccion(montados, siembraInicial);
+    return leerDeUrl
       ? podarSeleccion(montados, seleccionDesdeUrl(paramsIniciales, montados))
-      : {},
-  );
+      : {};
+  });
 
   /**
    * La siembra se CIERRA con el primer cambio originado por el usuario (R7). Sin ese
@@ -472,9 +491,13 @@ export function FilterComponent({
    * controlados deciden ahi con que valor arrancan) y la ref la necesita el efecto de
    * abajo, que no vuelve a correr por un cambio de estado y debe leer el valor de AHORA.
    * Los dos se escriben en el mismo sitio, asi que no pueden divergir.
+   *
+   * FICHA 453 — y nace CERRADA si se monta ya sembrado (R23): ese montaje viene de aplicar
+   * una vista, así que lo que traiga la dirección no tiene ningún derecho a reponerse
+   * encima.
    */
-  const [siembraCerrada, setSiembraCerrada] = useState(false);
-  const siembraCerradaRef = useRef(false);
+  const [siembraCerrada, setSiembraCerrada] = useState(siembraInicial !== null);
+  const siembraCerradaRef = useRef(siembraInicial !== null);
 
   // Contador de "Limpiar todo": los controles con estado interno (fechas) lo miran
   // para vaciarse sin que el orquestador tenga que controlarlos.
@@ -622,7 +645,10 @@ export function FilterComponent({
    * componente no avisa al montar y decenas de tests del repo dependen de ese silencio;
    * emitir `{}` al entrar ademas dispararia una consulta extra por pantalla.
    */
-  const precargaInicial = useRef(seleccion);
+  // FICHA 453 — una seleccion que llego POR SIEMBRA no se emite, ni siquiera en el montaje:
+  // quien la impuso es el consumidor y ya la tiene. Emitirla le devolveria su propio estado
+  // por otro camino y, en `/ordenes`, borraria la marca de «vista puesta» en el acto (R22).
+  const precargaInicial = useRef<FilterSelection>(siembraInicial === null ? seleccion : {});
   useEffect(() => {
     // Se apuntan como sembradas SOLO las claves que la foto de entrada llego a llenar, no
     // todas las declaradas: una clave declarada sin catalogo —o sin param— no ha tenido su
