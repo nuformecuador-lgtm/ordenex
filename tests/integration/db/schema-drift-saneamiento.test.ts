@@ -100,7 +100,7 @@ function tablasConDefaultEnUpdatedAt(): string[] {
 }
 
 describe("updated_at · el modelo declara el DEFAULT que el SQL creo", () => {
-  it("el censo encuentra las DIEZ tablas cuyo CREATE TABLE le puso default a updated_at", () => {
+  it("el censo encuentra las ONCE tablas cuyo CREATE TABLE le puso default a updated_at", () => {
     // Contrapeso: si el parser se rompiera y devolviera [], el caso de abajo pasaria por vacio
     // en vez de por limpio. Esta lista es la que devuelve la BASE viva consultando
     // `information_schema.columns` (evidencia en progress/chore_saneamiento-deudas.md).
@@ -144,6 +144,13 @@ describe("updated_at · el modelo declara el DEFAULT que el SQL creo", () => {
       // `@default(now()) @updatedAt` y por eso el caso de abajo sigue en verde y `migrate dev` no
       // propondra un `DROP DEFAULT` sobre ella.
       "usuario_preferencia",
+      // FICHA 453 (2026-09-21) - las vistas de filtros guardadas. Su `CREATE TABLE`
+      // (`20260921120000_vista_filtro/migration.sql`) escribe
+      // `"updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP` -- copiado del molde de la
+      // 422--, asi que cae sola en el censo; el modelo `VistaFiltro` lo declara con
+      // `@default(now()) @updatedAt` y por eso el caso de abajo sigue en verde y `migrate dev` no
+      // propondra un `DROP DEFAULT` sobre ella.
+      "vista_filtro",
       "webhook_suscripcion",
     ]);
   });

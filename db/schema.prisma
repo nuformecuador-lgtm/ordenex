@@ -164,6 +164,7 @@ model Usuario {
   pushSuscripciones                   PushSuscripcion[]                  @relation("PushSuscripcionUsuario") // ficha 410/R16/R22: suscripciones push de los DISPOSITIVOS de este usuario. La FK es CASCADE: una credencial de entrega no es evidencia, y dejarla huerfana seria mandar push a nombre de nadie
   pushEnviosDia                       PushEnvioDia[]                     @relation("PushEnvioDiaUsuario") // ficha 410/R6/R22: cupo diario de push consumido por este usuario. CASCADE por el mismo motivo: es un contador del canal, no historia
   preferencia                         UsuarioPreferencia?                @relation("UsuarioPreferenciaUsuario") // ficha 422/R1/R4: LA DECISION DE ESTA PERSONA sobre los avisos, aparte de sus dispositivos. 1:1. La FK es CASCADE: una preferencia no es evidencia (criterio de `push_suscripcion`, no el de `historial_accion`). Tabla propia y no columna aqui a proposito: ver el comentario del modelo `UsuarioPreferencia`.
+  vistasFiltro                        VistaFiltro[]                      @relation("VistaFiltroUsuario") // ficha 453/R2/R4: las combinaciones de filtros que ESTA persona guardo con nombre. N filas por persona (no 1:1, por eso no cabe en `usuario_preferencia`). La FK es CASCADE: una vista no es evidencia —es un atajo de trabajo— y se va con la persona, mismo criterio que `push_suscripcion`
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -3833,6 +3834,67 @@ model PushEnvioDia {
 
   @@unique([usuarioId, evento, diaCr], map: "push_envio_dia_cupo")
   @@map("push_envio_dia")
+}
+
+/// FICHA 453 (design §3.1, R1/R2/R4/R11/R32/R35) — UNA COMBINACION DE FILTROS GUARDADA CON NOMBRE.
+///
+/// GRANO: una fila por VISTA (dueño × superficie × nombre). Cada persona puede tener varias en la
+/// misma pantalla —«San José arriba», «San José abajo»—, y eso es lo que hace esta tabla.
+///
+/// ⚠️ POR QUE NO CABE EN `usuario_preferencia`. Aquella es 1:1 CON LA PERSONA y de COLUMNAS
+/// TIPADAS por decision explicita (ficha 422, ver su modelo justo debajo). Aqui el grano es N
+/// filas por persona y con nombre libre: meterlo alli exigiria convertirla en el cajon clave/valor
+/// contra el que ese mismo modelo argumenta. Son dos formas distintas de «ajuste del usuario» y no
+/// comparten tabla.
+///
+/// ⚠️ POR QUE `superficie` ES TEXT Y NO UN ENUM DE POSTGRES. La decision 3 del humano exige que
+/// sumar una superficie sea ENCENDERLA, no rehacer nada (R32): con un enum, cada pantalla nueva
+/// costaria una migracion —y la trampa conocida del `down.sql` que recrea el tipo con lista, que
+/// en este repo ya borro valores en silencio—. La lista cerrada vive en `lib/types/vista-filtro.ts`
+/// (`SUPERFICIES_VISTA`) y la valida el borde con `z.enum`: una superficie desconocida da
+/// `validation_error` RUIDOSO, nunca una lista vacia (R33). El precio —la base admite cualquier
+/// texto— esta acotado porque nada escribe aqui salvo la Server Action, que valida antes.
+model VistaFiltro {
+  id        String @id @default(uuid())
+  usuarioId String @map("usuario_id")
+
+  /// El JUEGO DE FILTROS de una pantalla, no su ruta (design §10): `/cierres-admin` monta la misma
+  /// barra con TRES juegos distintos y seran tres superficies, no una.
+  superficie String
+
+  /// Nombre visible. Obligatorio, 1..60 tras recortar los extremos (R9/R10). El limite vive
+  /// tambien en `NOMBRE_VISTA_MAX`, y la columna es el cinturon: nada puede meter uno mas largo.
+  nombre String @db.VarChar(60)
+
+  /// El filtro en el formato PROPIO Y VERSIONADO de `lib/types/vista-filtro.ts` (design §4), que
+  /// NO es la clave de cache del listado (R6). JSONB validado con zod al ESCRIBIR y al LEER: una
+  /// fila que no parsea se reporta ILEGIBLE (R8) y no se aplica ni a medias.
+  filtro Json
+
+  /// R7 — version del formato de `filtro`. Columna propia ADEMAS de ir dentro del documento: asi
+  /// se puede contar y filtrar por version, sin abrir el JSON, el dia que exista una v2.
+  version Int @default(1)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  /// R4 — CASCADE: una vista no es evidencia (es un atajo de trabajo), asi que se va con la
+  /// persona. Criterio de `usuario_preferencia` / `push_suscripcion`, no el de `historial_accion`.
+  usuario Usuario @relation("VistaFiltroUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  /// R11 + R35 — el nombre es unico DENTRO del dueño y la superficie, no globalmente: dos personas
+  /// pueden tener «San José arriba» a la vez, que es la propiedad que mantiene posible publicar una
+  /// vista algun dia (design §11) sin cambiar el grano ni las claves.
+  ///
+  /// Y es ADEMAS el indice de la unica consulta caliente —`WHERE usuario_id = ? AND superficie = ?
+  /// ORDER BY nombre`, prefijo exacto del indice, con el orden gratis—, por lo que no hace falta
+  /// ningun indice mas: el conjunto esta acotado por el tope de 20 por superficie.
+  ///
+  /// `name` es como se llama en el cliente de Prisma y `map` es el nombre REAL en Postgres: los
+  /// dos iguales y escritos a mano, para que el `migration.sql` pueda crear el indice con ese
+  /// nombre y el datamodel y la base no difieran nunca en un `migrate diff`.
+  @@unique([usuarioId, superficie, nombre], name: "vista_filtro_dueno_superficie_nombre_key", map: "vista_filtro_dueno_superficie_nombre_key")
+  @@map("vista_filtro")
 }
 
 /// FICHA 422 (design §2.1, R1/R2/R4) — LA DECISION DE LA PERSONA, APARTE DEL DISPOSITIVO.

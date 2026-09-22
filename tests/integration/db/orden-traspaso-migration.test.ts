@@ -116,6 +116,11 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       // Ficha 425 (2026-09-14): la tabla del vinculo de revision `cierre_rechazo_tienda`. Nace
       // despues de toda migracion aplicada y no toca `orden_traspaso_mensajero`.
       "20260917120200_cierre_rechazo_tienda",
+      // Ficha 453 (2026-09-21): `vista_filtro`, las combinaciones de filtros guardadas con nombre.
+      // ADITIVA PURA: crea una tabla nueva, su unico `(usuario_id, superficie, nombre)` y su FK a
+      // `usuario`; no toca `orden_traspaso_mensajero` ni ningun otro objeto preexistente, no lleva
+      // backfill y no crea ningun enum.
+      "20260921120000_vista_filtro",
     ]);
   });
 });
