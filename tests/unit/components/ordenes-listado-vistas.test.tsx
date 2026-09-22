@@ -244,6 +244,11 @@ describe("/ordenes — tocar el filtro deja de presentar la vista como puesta (R
     await waitFor(() => expect(listarOrdenesMock).toHaveBeenCalled());
 
     await aplicarLaVista(user);
+    // Se espera MÁS que el debounce de los dos canónicos (500 ms) antes de mirar la marca: una
+    // emisión tardía —la que produciría una siembra que sí emitiera— la apagaría medio segundo
+    // después de aplicar, con la persona mirando. Sin esta espera el caso quedaría verde porque
+    // `findByText` resuelve en cuanto encuentra, antes de que la emisión aterrice.
+    await new Promise((listo) => setTimeout(listo, 700));
     await abrirVistas(user);
     expect(await screen.findByText("Puesta ahora")).toBeInTheDocument();
 
