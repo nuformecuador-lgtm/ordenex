@@ -1,0 +1,23 @@
+-- DOWN (ficha 453, T1.3) -- revierte EXACTAMENTE `migration.sql`.
+--
+-- Una sola sentencia, y arrastra TODO lo que el `up` creo: la tabla, su clave primaria, su indice
+-- unico `vista_filtro_dueno_superficie_nombre_key`, su FK a `usuario` y su configuracion de RLS. No
+-- hace falta soltarlos uno a uno y no se debe: un `DROP INDEX` suelto delante seria ruido que puede
+-- desincronizarse del `up`.
+--
+-- NO HAY `DROP TYPE`, Y NO ES UN OLVIDO. Esta migracion NO CREA NINGUN ENUM ni ningun tipo: solo
+-- usa `TEXT`, `VARCHAR`, `JSONB`, `INTEGER` y `TIMESTAMP`. Por eso aqui NO aplica la leccion de los
+-- enums recreados con lista -no hay ninguna lista que recrear, asi que tampoco hay ninguna columna
+-- que retipar ni ningun valor posterior que se pueda borrar en silencio-. Y por el mismo motivo NO
+-- SE TOCA NINGUN `down.sql` ANTERIOR: cada uno es una foto de SU rama y todos siguen siendo ciertos.
+--
+-- NO TOCA `usuario` NI NINGUNA OTRA TABLA. Ni un `UPDATE`, ni un `DELETE`, ni un `INSERT` sobre
+-- nada que existiera antes: revertir esta ficha no da de baja a nadie y no cambia ni una orden.
+--
+-- QUE SE PIERDE AL REVERTIR, DICHO EN VOZ ALTA: TODAS LAS VISTAS DE TODO EL MUNDO, y no hay forma
+-- de recuperarlas -no existe ninguna otra copia, ni en la URL, ni en el navegador, ni en otra
+-- tabla-. Nadie deja de poder filtrar por esto: la barra se queda exactamente como esta hoy y
+-- todos los filtros siguen ahi. Lo que vuelve es el estado que esta ficha vino a cambiar: cada
+-- persona rearmando su combinacion cada mañana. Volver a aplicar el `up` recrea la tabla VACIA; los
+-- nombres que alguien habia guardado no vuelven solos.
+DROP TABLE IF EXISTS "vista_filtro";
