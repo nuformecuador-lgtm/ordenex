@@ -205,6 +205,60 @@ sino «por qué seguimos esperando».
 
 ---
 
+## Release del 2026-09-21 (2.ª) — la 453, y SF-001 sigue esperando
+
+**`prod` = `3965b568`** (PR #818, merge commit con 2 padres) · `dpl_HjyBpMcrngoc5LvQpZ1hm4P8GGzh`
+**READY en 86 s** · alias `ordenex.co` con `aliasError: null`.
+
+La primera release por la vía de §2 bis que **lleva migración**: `20260921120000_vista_filtro`,
+aditiva, sin backfill y sin enum.
+
+### Lo verificado DESPUÉS de desplegar
+
+- **La migración aplicó**: **200** migraciones (199 + la suya), **0 revertidas**, y la última es
+  `20260921120000_vista_filtro`. La tabla existe con sus **8 columnas** y **0 filas**.
+- **La app responde**: `/` y `/login` en 200, `/manifest.json` en 200, `/ordenes` en 307 (protegido).
+- **Errores de runtime** en la hora siguiente: **cero**.
+- **Gate completo en verde sobre la rama**: `INIT_EXIT=0`, `Test Files 2007 passed`,
+  `Tests 29306 passed | 26 skipped`, con **274 ficheros de `integration/db` y ninguno saltado**
+  (`progress/gate_release_453.log`).
+
+### El cherry-pick NO aplicó limpio, y esa es la lección de esta release
+
+A diferencia de las tres anteriores, aquí hubo **cuatro** resoluciones a mano, y tomar «la versión
+de ellos» en cualquiera de las tres primeras habría roto la release:
+
+1. **`db/schema.prisma`**: el bloque en conflicto traía **dos** líneas nuevas para el modelo
+   `Usuario`, y sólo una era de la 453. La otra era la relación con `AsistenteUsoDiario`, **una tabla
+   de SF-001 que en `prod` no existe**. Aceptar el bloque entero deja el esquema apuntando a una
+   tabla inexistente.
+2. **Dos censos** (`api-key-dependencias-usuario.ts`, `orden-traspaso-migration.test.ts`) traían las
+   entradas de SF-001 mezcladas con las de la 453. Se quedaron sólo las de la 453.
+3. **El contador de `schema-drift-saneamiento.test.ts`**, y éste es el silencioso: en `prod` son
+   **DIEZ** tablas, en `dev` **DOCE**, y en esta rama la respuesta correcta es **ONCE**. Ni uno ni
+   otro. Se calculó contando la lista real, y el gate lo confirmó en verde.
+
+> **Regla que deja esta release:** cuando el cherry-pick de una ficha choca con `dev`, el conflicto
+> casi nunca es entre «la ficha» y `prod` — es que **SF-001 viaja pegado al diff**. Mirar línea por
+> línea qué parte del bloque es de la ficha y cuál es del vecino. Y desconfiar especialmente de los
+> **números**: un contador copiado de cualquiera de los dos lados queda mintiendo sin que nada falle.
+
+**El diff de vuelta**: de los 39 ficheros que aportaba la rama, **35 byte a byte idénticos a `dev`**.
+Los 4 distintos son exactamente los resueltos a mano.
+
+### Y el paso de vuelta también chocó
+
+Al mergear `prod` → `dev`, los mismos cuatro ficheros volvieron a dar conflicto, y ahí la respuesta
+correcta es **la contraria**: en `dev` el contador es **DOCE** y los censos SÍ llevan SF-001. Se
+resolvió con la versión de `dev`, comprobando que el esquema conserva **las dos cosas**
+(`VistaFiltro` y `AsistenteUsoDiario`) y que `prisma validate` pasa.
+
+### Lo que NO salió
+
+**SF-001 entero** (429–436), con sus 6 migraciones. Sale cuando lo diga el humano.
+
+---
+
 ## Release del 2026-09-21 — la 450, y SF-001 sigue esperando
 
 **`prod` = `97822ca2`** (PR #817, merge commit con 2 padres) · `dpl_4wxxh16Y6G8ehjWfC3hSKi58arYq`

@@ -2,7 +2,7 @@
 
 ## CIERRE DE LA SESIÓN — lee esto primero
 
-`prod` = **`97822ca2`** (la 450, desplegada y verificada) · `dev` = **`fa6ec8ef`**, **pusheado**.
+`prod` = **`3965b568`** (la 450 y la 453, desplegadas y verificadas) · `dev` = **`fa6ec8ef`**, **pusheado**.
 **SF-001 sigue fuera de producción**, como se acordó: comprobado que `prod` no contiene `dev`.
 
 | Ficha | Estado |
@@ -10,7 +10,7 @@
 | **450** · consultas concurrentes en la tx del cierre | ✅ `done`, **en producción** y verificada |
 | **451** · escanear las órdenes sin gestionar | spec escrito (39 requisitos), **sin implementar** |
 | **452** · el flake de api-keys | registrada, sin empezar |
-| **453** · vistas de filtros guardadas | ✅ `done`, en `dev`. **Trae migración: sin desplegar** |
+| **453** · vistas de filtros guardadas | ✅ `done`, **en producción** y verificada |
 
 `in_progress` = 0 · gate completo de `dev` en verde: **30.150 tests, cero saltados de
 `integration/db`** (`progress/gate_dev_tras_453.log`).
@@ -27,7 +27,8 @@
    comportamiento es el querido.**
 3. **La 451**: antes de desplegarla hay que medir cuántos cierres `vencido` esperan en cola y decidir
    si se drena. Al exigir el escaneo, esos 14 cierres pasan de 50 a **235** paquetes.
-4. **La 453 no está desplegada** y trae migración (`20260921120000_vista_filtro`, aditiva).
+4. **Probar los filtros con datos reales** en `ordenex.co/ordenes`: el control es el primero de la
+   barra. Es lo que la 453 vino a resolver y solo se puede valorar con las órdenes de verdad.
 
 ### Hallazgos de esta sesión que muerden a otros
 
