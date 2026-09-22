@@ -218,32 +218,48 @@ control DEBE ofrecer **guardar** y NO DEBE presentar la ausencia de vistas como 
 
 ---
 
-## Preguntas abiertas
+## Decisiones cerradas (P1–P5) — confirmadas el 2026-09-21
 
-**P1 — ¿El ORDEN del listado entra en la vista?** Este spec decide que **no**, y lo deja escrito en
-`design.md §4`: el orden no esconde filas —las mismas órdenes, en otra secuencia— y por eso
+> Estas cinco nacieron como preguntas abiertas y **las cinco están decididas e implementadas**. Se
+> dejan escritas con su respuesta y su motivo, y no con su signo de interrogación: una pregunta que
+> sigue redactada como pregunta después de estar implementada hace dudar de si el código la respetó
+> o la resolvió por su cuenta.
+
+**P1 — ¿El ORDEN del listado entra en la vista? → NO. Confirmado por el humano el 2026-09-21.**
+El orden no esconde filas —las mismas órdenes, en otra secuencia—, y por eso
 `OrdenesListado.limpiarFiltros` ya lo excluye hoy de «Limpiar todo», con su motivo escrito. La
-decisión 4 del humano dice «el filtro completo tal cual está en pantalla», y los dos conmutadores de
-orden **están** en esa misma barra, así que la lectura contraria es razonable. El formato lleva
-versión (R7) y añadirlo después no rompe nada guardado. **¿Se confirma que no entra?**
+decisión 4 («el filtro completo tal cual está en pantalla») se refiere a los filtros, no a los dos
+conmutadores de orden que viven en esa misma barra. Implementado: el payload es `.strict()`, así que
+un `sortBy` colado **no parsea** (`tests/unit/utils/vista-filtro-payload.test.ts` lo afirma), y
+aplicar una vista **no reordena** la tabla (caso propio en
+`tests/unit/components/ordenes-listado-vistas.test.tsx`). El campo `v` (R7) deja añadirlo más
+adelante sin romper nada de lo guardado.
 
-**P2 — El tope por usuario.** La decisión 6 dice «tope», no dice cuánto. Este spec propone **20 por
-superficie** (`design.md §3.4`), elegido por la forma del control: una lista de más de ~20 nombres
-deja de poder recorrerse de un vistazo y pide su propio buscador, que es un control nuevo que esta
-ficha no quiere. **¿Se confirma el 20?**
+**P2 — El tope por usuario. → 20 por superficie. Confirmado el 2026-09-21.**
+Elegido por la forma del control: una lista de más de ~20 nombres deja de poder recorrerse de un
+vistazo y pide su propio buscador, que es un control nuevo que esta ficha no quiere. Vive en
+`MAX_VISTAS_POR_SUPERFICIE` (`lib/types/vista-filtro.ts`), lo impone el **servicio** —no la base— y
+el rechazo dice **cuál es el tope y cuántas hay** (R13).
 
-**P3 — Nombres que solo se diferencian en mayúsculas.** «San José arriba» y «san josé arriba» se
-guardarían como dos vistas distintas (R11 compara el texto tal cual). Es un límite asumido y
-documentado; hacerlo insensible a mayúsculas exige un índice funcional que Prisma no expresa en el
-datamodel y que dejaría deriva permanente contra `prisma migrate diff`. **¿Se acepta el límite?**
+**P3 — Nombres que solo se diferencian en mayúsculas. → CONVIVEN. Límite aceptado el 2026-09-21.**
+«San José arriba» y «san josé arriba» son dos vistas distintas: el único es exacto. Hacerlo
+insensible a mayúsculas exigiría un índice funcional que Prisma no expresa en el datamodel y que
+dejaría deriva permanente contra `prisma migrate diff`. Queda medido contra Postgres, no supuesto:
+hay un caso que inserta las dos y comprueba que la base admite ambas
+(`tests/integration/db/vista-filtro-migration.test.ts`, «P3 (limite asumido)»). El día que se quiera
+cambiar, ese es el caso que hay que dar la vuelta.
 
-**P4 — Granularidad de «superficie» en `/cierres-admin`.** Tres módulos montan la MISMA barra con
-tres juegos distintos de filtros declarados (`sinMensajero`, `conEstado`). Este spec decide que la
-superficie es **el juego de filtros**, no la ruta —si no, una vista guardada en Bodega saldría
-«incompleta» en Mensajero cada vez—. No afecta a esta entrega (solo se enciende `/ordenes`); **hay
-que confirmarlo el día que se encienda cierres**.
+**P4 — Granularidad de «superficie» en `/cierres-admin`. → LA SUPERFICIE ES EL JUEGO DE FILTROS, no
+la ruta. Confirmado el 2026-09-21.**
+Tres módulos montan la MISMA barra con tres juegos distintos de filtros declarados (`sinMensajero`,
+`conEstado`): si la superficie fuera la ruta, una vista guardada en Bodega saldría «incompleta» en
+Mensajero cada vez. **No afecta a esta entrega** —solo se enciende `/ordenes`—, y el día que se
+encienda cierres serán **tres** superficies, no una; encenderlas es añadir tres cadenas a
+`SUPERFICIES_VISTA` y montar el control, sin migración (R32).
 
-**P5 — Tras «Aplicar el resto», ¿ofrecer arreglar la vista?** Este spec decide que **no** en v1:
-aplicar nunca escribe (R16), y una vista incompleta se arregla con «Actualizar» cuando la persona
+**P5 — Tras «Aplicar el resto», ¿ofrecer arreglar la vista? → NO en v1. Aceptado el 2026-09-21.**
+Aplicar nunca escribe (R16), y una vista incompleta se arregla con «Actualizar» cuando la persona
 quiera. Ofrecer «quitar lo que ya no existe» en el mismo aviso convertiría una aplicación en una
-escritura, y un catálogo caído (R29) podría destruir vistas buenas. **¿Se acepta?**
+escritura, y con ello un catálogo caído (R29) podría destruir vistas buenas. El aviso ofrece
+**exactamente dos** salidas (R26), y hay un caso que afirma que «Aplicar sin eso» **no llama a
+ninguna acción de escritura**.
