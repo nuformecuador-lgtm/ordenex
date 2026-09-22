@@ -186,7 +186,11 @@ describe("FilterComponent — la siembra repone lo guardado en los controles (T3
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("al MONTAR no siembra: la siembra es un CAMBIO de señal", async () => {
+  it("MONTARSE ya sembrado tambien repone: es el caso real de aplicar una vista con la barra vacia", async () => {
+    // En `/ordenes` este orquestador solo se monta cuando hay algun filtro pedido, asi que
+    // aplicar una vista con controles desde una barra vacia lo monta POR PRIMERA VEZ con la
+    // siembra puesta. Sin esto arrancaria leyendo la URL y los controles se pintarian vacios
+    // con el filtro ya aplicado.
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
@@ -198,8 +202,26 @@ describe("FilterComponent — la siembra repone lo guardado en los controles (T3
       />,
     );
 
-    expect(await marcada(user, "Color", "Rojo")).toBe("false");
+    expect(await marcada(user, "Color", "Rojo")).toBe("true");
+    // Y sigue sin emitir: quien la impuso ya la tiene.
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("montarse con una siembra VACIA no toca la precarga de la URL (la ficha 339 intacta)", async () => {
+    const user = userEvent.setup();
+    parametros = new URLSearchParams("color=azul");
+    const onChange = vi.fn();
+    render(
+      <FilterComponent
+        filters={[COLOR]}
+        onChange={onChange}
+        debounceMs={0}
+        siembra={{ senal: 0, seleccion: {} }}
+      />,
+    );
+
+    expect(await marcada(user, "Color", "Azul")).toBe("true");
+    expect(ultima(onChange)).toEqual({ color: ["azul"] });
   });
 });
 

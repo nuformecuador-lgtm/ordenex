@@ -22,6 +22,18 @@ import { EscanerModal } from "@/components/shared/EscanerModal";
 import { BUSQUEDA_MIN_CHARS, type OrdenListItemDTO } from "@/lib/types/orden";
 import type { FechasDiaReparto } from "@/lib/utils/dia-reparto-textos";
 import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
+// FICHA 453: esta pantalla es la PRIMERA superficie con vistas de filtros guardadas. Encender la
+// siguiente es pasar estas dos props y añadir su nombre a `SUPERFICIES_VISTA`: sin migración, sin
+// columna nueva y sin tocar nada de esto (R32).
+import {
+  VISTA_FILTRO_VERSION,
+  type VistaFiltroPayload,
+} from "@/lib/types/vista-filtro";
+import {
+  catalogoCargado,
+  catalogoNoDisponible,
+  type CatalogoVistas,
+} from "@/lib/utils/vista-filtro-aplicabilidad";
 
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
@@ -843,6 +855,23 @@ export function OrdenesListado({
   const [resetFiltros, setResetFiltros] = useState(0);
 
   /**
+   * FICHA 453 — LAS VISTAS GUARDADAS, en los tres estados que hacen falta y ni uno más.
+   *
+   * `senalSiembra` sube UNA vez por aplicación y es lo que mueve a la vez el campo de búsqueda
+   * y los controles: los dos canónicos reemplazan su estado interno cuando la señal cambia, sin
+   * remontarse y sin emitir. `vistaPuestaId` es quién está puesta, y se apaga al primer cambio
+   * posterior del filtro (R22).
+   *
+   * El ORDEN del listado NO entra en la vista (`requirements.md > P1`, confirmado por el
+   * humano): aplicar una vista no reordena la tabla. Es la misma razón por la que «Limpiar
+   * todo» tampoco lo toca —el orden no esconde filas—, y está escrita ahí abajo.
+   */
+  const [senalSiembra, setSenalSiembra] = useState(0);
+  const [siembraTermino, setSiembraTermino] = useState("");
+  const [siembraSeleccion, setSiembraSeleccion] = useState<FilterSelection>({});
+  const [vistaPuestaId, setVistaPuestaId] = useState<string | null>(null);
+
+  /**
    * FICHA 356 + FICHA 423 — el orden del listado, en sus DOS dimensiones: por qué campo y en
    * qué sentido. Arrancan donde arranca el contrato (`created_at` + «Más recientes»), así que
    * entrar a la pantalla enseña exactamente el listado de siempre, con el control ya puesto en
@@ -869,12 +898,68 @@ export function OrdenesListado({
     // partida, y una barra que se queda con cuatro controles vacíos no lo es.
     setFiltrosActivos([]);
     setResetFiltros((n) => n + 1);
+    // FICHA 453 (R22) — limpiar es cambiar el filtro, así que la vista deja de estar puesta.
+    setVistaPuestaId(null);
     // EL ORDEN NO SE TOCA, y es deliberado (ficha 356). "Limpiar todo" existe para deshacer
     // lo que ESCONDE filas: un filtro o una búsqueda. El orden no oculta ninguna —las mismas
     // órdenes, en otra secuencia—, así que devolverlo a «Más recientes» sería mover algo que
     // el usuario no pidió mover. Además el botón sólo aparece cuando hay filtros o búsqueda
     // puestos: si resetear el orden fuera parte de "limpiar", quien sólo cambió el orden no
     // tendría forma de deshacerlo — el control, que sigue a la vista, ya es esa forma.
+  }
+
+  /**
+   * FICHA 453 (R22) — LOS TRES CAMBIOS DEL FILTRO PASAN POR AQUÍ, y cada uno apaga la vista
+   * puesta. No es cosmética: una vista que sigue presentándose como puesta después de que la
+   * persona tocó un control es la pantalla afirmando algo falso sobre lo que se está viendo.
+   *
+   * Aplicar una vista NO pasa por estas tres —pone los tres estados de golpe, más abajo—, y por
+   * eso reponer no se apaga a sí mismo. La siembra de los dos canónicos tampoco emite, así que
+   * no hay vuelta por detrás.
+   */
+  function cambiarTermino(termino: string) {
+    setTerminoBuscador(termino);
+    setVistaPuestaId(null);
+  }
+
+  function cambiarActivos(claves: string[]) {
+    setFiltrosActivos(claves);
+    setVistaPuestaId(null);
+  }
+
+  function cambiarSeleccion(seleccion: FilterSelection) {
+    setSeleccionFiltros(seleccion);
+    setVistaPuestaId(null);
+  }
+
+  /**
+   * FICHA 453 (R18, R19) — REPONER UNA VISTA es poner los tres estados de la barra a la vez y
+   * subir la señal de las dos siembras. Lo que llega ya viene decidido por el módulo de
+   * aplicabilidad: entero si la vista se podía reponer entera, recortado si la persona eligió
+   * «Aplicar sin eso».
+   *
+   * REEMPLAZA: los tres estados se sustituyen, así que ninguna parte del filtro anterior que la
+   * vista no traiga sobrevive. Y NO se toca `resetFiltros`: remontar el orquestador aquí lo
+   * dejaría leyendo la URL otra vez, que es justo lo contrario de aplicar una vista.
+   *
+   * La página vuelve sola a la 1 (R20): el filtro cambia, cambia su clave, y `OrdenesModule` ya
+   * resetea la página con ese disparador desde la feature 63.
+   */
+  function aplicarVista(vistaId: string, filtro: VistaFiltroPayload) {
+    // Un valor puesto sin su control montado sería un filtro invisible y aplicado, que es la
+    // forma de fallo que este árbol persigue desde hace fichas. Se garantiza aquí, y no se
+    // confía en que lo guardado venga coherente.
+    const activos = [
+      ...filtro.activos,
+      ...Object.keys(filtro.seleccion).filter((clave) => !filtro.activos.includes(clave)),
+    ];
+    setFiltrosActivos(activos);
+    setSeleccionFiltros(filtro.seleccion);
+    setTerminoBuscador(filtro.termino);
+    setSiembraTermino(filtro.termino);
+    setSiembraSeleccion(filtro.seleccion);
+    setSenalSiembra((n) => n + 1);
+    setVistaPuestaId(vistaId);
   }
 
   // Ids marcados en el filtro de estado. Vacío = sin filtro (todas las órdenes). Ya no
@@ -954,6 +1039,44 @@ export function OrdenesListado({
   const filtrosOfrecidos = useMemo(
     () => filtrosBarra.map((f) => ({ key: f.key, label: f.label })),
     [filtrosBarra],
+  );
+
+  /**
+   * FICHA 453 (R29) — ¿SE PUEDE COMPROBAR UNA VISTA AHORA MISMO? Aquí se dice en voz alta, y es
+   * la mitad de pantalla del hallazgo que sostiene esta ficha: **«el catálogo no está» no es «el
+   * valor desapareció»**.
+   *
+   * Los dos catálogos de esta pantalla fallan en silencio y de la misma forma: `page.tsx`
+   * devuelve `catalogoFiltros = null` y los filtros se montan deshabilitados y sin opciones, y
+   * `catalogoFetcher` devuelve `[]` cuando la lectura de estados falla. Si en ese instante se
+   * clasificaran las vistas, TODAS saldrían «incompletas» a la vez —con su aviso de partes
+   * perdidas por delante— por una lectura que falló medio segundo antes; al recargar volverían a
+   * estar bien y nadie sabría por qué.
+   *
+   * Con 22 estados en producción, un catálogo de estados vacío solo puede ser un fallo de
+   * lectura: tratarlo como «no cargado» es la dirección conservadora, y es la que se toma.
+   */
+  const catalogoVistas = useMemo<CatalogoVistas>(
+    () =>
+      catalogoFiltros !== null && estadosDisponibles.length > 0
+        ? catalogoCargado(filtrosBarra)
+        : catalogoNoDisponible(),
+    [catalogoFiltros, estadosDisponibles, filtrosBarra],
+  );
+
+  /**
+   * FICHA 453 (R5) — LO QUE HAY PUESTO AHORA, en el formato que se guarda: las TRES piezas de la
+   * barra. `activos` no se puede derivar de la selección —un control montado y vacío no aporta
+   * ninguna clave—, así que viaja aparte.
+   */
+  const filtroActual = useMemo<VistaFiltroPayload>(
+    () => ({
+      v: VISTA_FILTRO_VERSION,
+      termino: terminoBuscador,
+      activos: filtrosActivos,
+      seleccion: seleccionFiltros,
+    }),
+    [terminoBuscador, filtrosActivos, seleccionFiltros],
   );
 
   // Solo se montan los filtros PEDIDOS, en el orden en que se declararon (no en el de
@@ -1207,10 +1330,23 @@ export function OrdenesListado({
             label="Buscar"
             placeholder={PLACEHOLDER_BUSQUEDA}
             minChars={BUSQUEDA_MIN_CHARS}
-            onChange={setTerminoBuscador}
+            onChange={cambiarTermino}
             filtros={filtrosOfrecidos}
             activos={filtrosActivos}
-            onActivosChange={setFiltrosActivos}
+            onActivosChange={cambiarActivos}
+            // FICHA 453 — la costura: reponer el término de una vista sin remontar la barra y
+            // sin tirar el foco. Con la señal a 0 (lo normal al entrar) no hace nada.
+            siembra={{ senal: senalSiembra, termino: siembraTermino }}
+            // FICHA 453 — y el control, que la barra pinta al principio de la fila. Esta es la
+            // ÚNICA pantalla que hoy lo enciende.
+            vistas={{
+              superficie: "ordenes",
+              filtroActual,
+              catalogo: catalogoVistas,
+              vistaPuestaId,
+              onAplicar: aplicarVista,
+              onGuardada: setVistaPuestaId,
+            }}
             // "Limpiar todo" lo pone la barra al final de la fila, no `FilterComponent`
             // en medio: así una sola acción se lleva por delante la búsqueda Y los
             // filtros, que es lo que el usuario espera de ese botón.
@@ -1274,7 +1410,11 @@ export function OrdenesListado({
               <FilterComponent
                 key={resetFiltros}
                 filters={filtrosMontados}
-                onChange={setSeleccionFiltros}
+                onChange={cambiarSeleccion}
+                // FICHA 453 — la misma señal que el buscador: los dos se mueven a la vez o la
+                // barra quedaría a medio reponer. Ojo con la `key` de arriba: se queda como
+                // está, porque remontar aquí devolvería el orquestador a leer la URL.
+                siembra={{ senal: senalSiembra, seleccion: siembraSeleccion }}
               />
             ) : null}
           </BuscadorFiltros>
