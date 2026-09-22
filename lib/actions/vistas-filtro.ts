@@ -56,9 +56,11 @@ async function actorRequerido(deps: VistasFiltroActionDeps): Promise<Actor> {
  * vacia. Es la diferencia entre un error que se ve y una pantalla que parece normal: «no tienes
  * vistas aqui» es un estado legitimo (R38), asi que confundirlos haria invisible el fallo.
  *
- * Su superficie de uso es el control de vistas de la barra compartida (tanda 4 de la ficha), que la
- * lee con SWR bajo la clave `["vistas-filtro", superficie]`. Esta accion NO revalida cache de
- * servidor: la lista la mantiene el cliente.
+ * Su superficie de uso sera el control de vistas de la barra compartida, que la leera con SWR bajo
+ * la clave `["vistas-filtro", superficie]`. Esta accion NO revalida cache de servidor: la lista la
+ * mantiene el cliente.
+ *
+ * @sin-superficie FICHA 453: el control de vistas (`VistasFiltro` dentro de `BuscadorFiltros`) es la tanda 4 de ESTA MISMA ficha y todavia no esta montado. El backend va por delante a proposito: la zona es `fullstack` y `AGENTS.md` la secuencia backend -> frontend. Esta anotacion CADUCA en el commit que monte el control, y la guardia exige quitarla entonces.
  */
 export async function listarVistasFiltro(
   input: unknown,
@@ -72,7 +74,11 @@ export async function listarVistasFiltro(
   return isAppErrorShape(r) ? toActionError(r) : r;
 }
 
-/** R9–R13 — guarda la combinacion que la persona tiene puesta, con un nombre suyo. */
+/**
+ * R9–R13 — guarda la combinacion que la persona tiene puesta, con un nombre suyo.
+ *
+ * @sin-superficie FICHA 453: el control de vistas (`VistasFiltro` dentro de `BuscadorFiltros`) es la tanda 4 de ESTA MISMA ficha y todavia no esta montado. El backend va por delante a proposito: la zona es `fullstack` y `AGENTS.md` la secuencia backend -> frontend. Esta anotacion CADUCA en el commit que monte el control, y la guardia exige quitarla entonces.
+ */
 export async function guardarVistaFiltro(
   input: unknown,
   deps: VistasFiltroActionDeps = {},
@@ -85,7 +91,11 @@ export async function guardarVistaFiltro(
   return isAppErrorShape(r) ? toActionError(r) : r;
 }
 
-/** R14 — renombrar, con las mismas reglas de nombre que guardar. */
+/**
+ * R14 — renombrar, con las mismas reglas de nombre que guardar.
+ *
+ * @sin-superficie FICHA 453: el control de vistas (`VistasFiltro` dentro de `BuscadorFiltros`) es la tanda 4 de ESTA MISMA ficha y todavia no esta montado. El backend va por delante a proposito: la zona es `fullstack` y `AGENTS.md` la secuencia backend -> frontend. Esta anotacion CADUCA en el commit que monte el control, y la guardia exige quitarla entonces.
+ */
 export async function renombrarVistaFiltro(
   input: unknown,
   deps: VistasFiltroActionDeps = {},
@@ -102,6 +112,8 @@ export async function renombrarVistaFiltro(
  * R15 — reemplaza el filtro guardado de una vista con el que hay en pantalla, conservando su
  * nombre. Es ademas la unica forma de que una vista marcada INCOMPLETA (R28) deje de estarlo sin
  * borrarla: la persona la actualiza cuando quiere, y aplicar sigue sin escribir (R16).
+ *
+ * @sin-superficie FICHA 453: el control de vistas (`VistasFiltro` dentro de `BuscadorFiltros`) es la tanda 4 de ESTA MISMA ficha y todavia no esta montado. El backend va por delante a proposito: la zona es `fullstack` y `AGENTS.md` la secuencia backend -> frontend. Esta anotacion CADUCA en el commit que monte el control, y la guardia exige quitarla entonces.
  */
 export async function actualizarVistaFiltro(
   input: unknown,
@@ -121,6 +133,8 @@ export async function actualizarVistaFiltro(
  * Una vista ajena responde `not_found` y no `forbidden` (design §5): `forbidden` confirmaria que
  * ese id existe y es de otra persona, que sobre un recurso estrictamente personal es una filtracion
  * gratuita. La confirmacion que NOMBRA la vista (R17) es de la pantalla; aqui no hay vuelta atras.
+ *
+ * @sin-superficie FICHA 453: el control de vistas (`VistasFiltro` dentro de `BuscadorFiltros`) es la tanda 4 de ESTA MISMA ficha y todavia no esta montado. El backend va por delante a proposito: la zona es `fullstack` y `AGENTS.md` la secuencia backend -> frontend. Esta anotacion CADUCA en el commit que monte el control, y la guardia exige quitarla entonces.
  */
 export async function eliminarVistaFiltro(
   input: unknown,
