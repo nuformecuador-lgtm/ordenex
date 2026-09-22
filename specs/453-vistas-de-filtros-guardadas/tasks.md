@@ -14,7 +14,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
 
 ## Tanda 0 — Pre-vuelo
 
-- [ ] **T0.1 — Punto de partida medido.** Anotar en `progress/impl_453.md` el SHA de `origin/dev`
+- [x] **T0.1 — Punto de partida medido.** Anotar en `progress/impl_453.md` el SHA de `origin/dev`
   del que sale la rama y si el árbol tiene `DATABASE_URL` resoluble.
   *Hecho:* el archivo existe con el SHA y con el número de archivos de test contra Postgres que el
   gate dice que se van a **saltar** si no hay base. Sin eso, un verde de la capa de datos no
@@ -24,7 +24,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
 
 ## Tanda 1 — El lugar de la vista (backend · datos)
 
-- [ ] **T1.1 — Tipos y formato, en un módulo PURO.** `lib/types/vista-filtro.ts` (design §3.1, §4):
+- [x] **T1.1 — Tipos y formato, en un módulo PURO.** `lib/types/vista-filtro.ts` (design §3.1, §4):
   `SUPERFICIES_VISTA` (`as const`, con `"ordenes"` de único miembro), `SuperficieVista`,
   `VISTA_FILTRO_VERSION`, `vistaFiltroPayloadSchema` (`.strict()`), `MAX_VISTAS_POR_SUPERFICIE = 20`,
   `NOMBRE_VISTA_MAX = 60`. Sin React, sin Prisma, sin `next/`.
@@ -32,14 +32,14 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
   clave de más **falla** (`.strict()`); `v` distinto de 1 **falla**; una `seleccion` con un valor que
   no es `string[]` **falla**. `pnpm run typecheck` verde.
 
-- [ ] **T1.2 — Modelo en `db/schema.prisma`.** Añadir `VistaFiltro` (design §3.1) y la relación
+- [x] **T1.2 — Modelo en `db/schema.prisma`.** Añadir `VistaFiltro` (design §3.1) y la relación
   `vistasFiltro` en `Usuario`, con el comentario `///` que diga **por qué es tabla nueva y no cabe en
   `usuario_preferencia`** (grano distinto: N filas por persona, no 1:1) y **por qué `superficie` es
   TEXT y no enum**. Depende de T1.1.
   *Hecho:* `prisma generate` + `pnpm run typecheck` en verde, y `prisma migrate diff` no reporta más
   deriva que la migración de T1.3.
 
-- [ ] **T1.3 — Migración + `down.sql`.** `db/migrations/20260921120000_vista_filtro/` (design §3.3):
+- [x] **T1.3 — Migración + `down.sql`.** `db/migrations/20260921120000_vista_filtro/` (design §3.3):
   `CREATE TABLE`, FK CASCADE, índice **único** `(usuario_id, superficie, nombre)` con el nombre que
   Prisma espera, y `ENABLE ROW LEVEL SECURITY`. **Sin backfill** (no hay nada que migrar) y **sin
   enum**. `down.sql` = `DROP TABLE IF EXISTS`, escribiendo en voz alta **qué se pierde**. Depende de
@@ -49,7 +49,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
   fotos de su rama— y que la lección del enum recreado-con-lista **no aplica** porque aquí no hay
   ningún tipo.
 
-- [ ] **T1.4 — Test de integración de la migración.** `tests/integration/db/vista-filtro-migration.test.ts`,
+- [x] **T1.4 — Test de integración de la migración.** `tests/integration/db/vista-filtro-migration.test.ts`,
   molde de `usuario-preferencia-migration.test.ts`: las dos mitades (lo que se lee del `.sql` y lo que
   **solo** sabe el motor). Depende de T1.3.
   *Hecho:* con `DATABASE_URL` los casos **se ejecutan** (no `skipped`): la tabla existe con su forma,
@@ -58,7 +58,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
   por su **autocomprobación** (si el `.sql` no se leyera, todo quedaría verde y mudo). Cubre R1, R4,
   R11, R35 y la RLS.
 
-- [ ] **T1.5 [P] — Repositorio e interfaz.** `lib/interfaces/repositories/IVistaFiltroRepository.ts`
+- [x] **T1.5 [P] — Repositorio e interfaz.** `lib/interfaces/repositories/IVistaFiltroRepository.ts`
   + `lib/repositories/VistaFiltroRepository.ts` (design §6). **`usuarioId` en TODAS las firmas**,
   incluidas las que ya llevan `id`. Depende de T1.3.
   *Hecho:* `tests/integration/db/vista-filtro.test.ts` **contra Postgres real** —el `WHERE` se prueba
@@ -72,7 +72,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
 
 ## Tanda 2 — Reglas y borde (backend). Depende de T1.5
 
-- [ ] **T2.1 — `VistaFiltroService`.** `lib/services/VistaFiltroService.ts`: propiedad, tope, nombre
+- [x] **T2.1 — `VistaFiltroService`.** `lib/services/VistaFiltroService.ts`: propiedad, tope, nombre
   (no vacío tras recortar, máximo, duplicado), «no hay nada que guardar», y la **lectura defensiva**
   del payload (una fila que no parsea sale con `filtro: null`, nunca a medias). Repositorio inyectado
   por constructor.
@@ -80,7 +80,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
   R9, R10, R11, R12, R13, R15 y R16 (*actualizar* escribe; *aplicar* no existe aquí: el servicio no
   tiene ninguna operación de aplicar, y eso es lo que hace que aplicar no pueda escribir).
 
-- [ ] **T2.2 — Las cinco Server Actions.** `lib/actions/vistas-filtro.ts` (design §5), patrón exacto
+- [x] **T2.2 — Las cinco Server Actions.** `lib/actions/vistas-filtro.ts` (design §5), patrón exacto
   de `lib/actions/push.ts`: actor de la sesión, zod `.strict()`, `withErrorHandler` +
   `toActionError`, `deps` inyectables. Depende de T2.1.
   *Hecho:* `tests/unit/actions/vistas-filtro-action.test.ts`: sin sesión → error de autenticación y
@@ -95,7 +95,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
 > Es la pieza que esta ficha **arrastra de la 328** (hueco 1). Va sola en su tanda porque toca dos
 > componentes que montan 16 consumidores: cualquier regresión aquí sale en 12 pantallas.
 
-- [ ] **T3.1 — `siembra` en `BuscadorFiltros`** (design §7). Prop opcional
+- [x] **T3.1 — `siembra` en `BuscadorFiltros`** (design §7). Prop opcional
   `{ senal: number; termino: string }`; patrón «ajustar estado durante el render»; **sin remontar** y
   poniendo al día `emitido.current`; **cierra la siembra de la URL** (`sembrado.current = true`).
   *Hecho:* `tests/unit/components/buscador-filtros-siembra.test.tsx`: cambiar `senal` cambia el texto
@@ -104,7 +104,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
   guarda de «sin cambio» no se quedó desalineada); **sin la prop, el componente se comporta
   exactamente como antes** y los tests existentes de `BuscadorFiltros` siguen en verde.
 
-- [ ] **T3.2 — `siembra` en `FilterComponent`** (design §7). Prop opcional
+- [x] **T3.2 — `siembra` en `FilterComponent`** (design §7). Prop opcional
   `{ senal: number; seleccion: FilterSelection }`; reemplaza la selección, **no emite**, llama a
   `cerrarSiembra()`, y **rekeya los controles no controlados** (`` `${filtro.key}:${senal}` ``) para
   que `TextFilter` y `DateRangeFilter` muestren el valor sembrado. Depende de T3.1 solo por orden de
@@ -118,14 +118,14 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
 
 ## Tanda 4 — Aplicabilidad y el control. Depende de T3.2
 
-- [ ] **T4.1 [P] — Aplicabilidad, módulo puro.** `lib/utils/vista-filtro-aplicabilidad.ts` (design
+- [x] **T4.1 [P] — Aplicabilidad, módulo puro.** `lib/utils/vista-filtro-aplicabilidad.ts` (design
   §8.1): `(filtros: FilterDef[], payload) => { aplicables, perdidas }`, con la etiqueta visible de
   cada parte perdida.
   *Hecho:* `tests/unit/utils/vista-filtro-aplicabilidad.test.ts` cubre las cinco filas de la tabla de
   §8.1 + la clave que la pantalla ya no declara; y afirma que **`boolean` y `text` nunca se pierden**.
   Ninguna parte perdida sale con un id crudo.
 
-- [ ] **T4.2 — El control `VistasFiltro` dentro de `BuscadorFiltros`** (design §9). Prop `vistas` en
+- [x] **T4.2 — El control `VistasFiltro` dentro de `BuscadorFiltros`** (design §9). Prop `vistas` en
   la barra; **ausente, no se monta nada**. Disparador al principio de la fila, `Popover` con la lista
   (aplicar / renombrar / borrar) + «Guardar filtros actuales…» + «Guardar cambios en esta vista». El
   nombre y las confirmaciones, en `Modal`. Depende de T4.1.
@@ -136,7 +136,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
   renombrar aplica las mismas reglas de nombre (R14); ningún texto visible dice «selección»,
   «payload», «clave» ni «superficie» (R39).
 
-- [ ] **T4.3 — El aviso de la vista incompleta.** El `Modal` de §8.2: enumera lo perdido con nombre
+- [x] **T4.3 — El aviso de la vista incompleta.** El `Modal` de §8.2: enumera lo perdido con nombre
   visible y motivo, y ofrece **exactamente dos** salidas. Depende de T4.1.
   *Hecho:* `tests/unit/components/vistas-filtro-aviso-incompleta.test.tsx`: al elegir una vista con
   partes perdidas **no cambia ni una parte del filtro vigente** antes de la decisión (R25/R30 — se
@@ -148,7 +148,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
 
 ## Tanda 5 — Encender `/ordenes`. Depende de T4.3
 
-- [ ] **T5.1 — Cablear `OrdenesListado`.** Declarar la superficie `"ordenes"`; capturar el filtro
+- [x] **T5.1 — Cablear `OrdenesListado`.** Declarar la superficie `"ordenes"`; capturar el filtro
   (los tres estados: `terminoBuscador`, `filtrosActivos`, `seleccionFiltros`); aplicar una vista
   reemplazando los tres y subiendo la `senal` de las dos siembras; **retirar de la URL los params
   propios** al aplicar, con `borrarParams` (que solo resta); marcar «ya no es esa vista» al primer
@@ -162,7 +162,7 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
   presentarla como puesta (R22); con `catalogoFiltros = null` no se clasifica, no se aplica y se dice
   (R29).
 
-- [ ] **T5.2 — Verlo en el navegador.** `rm -rf .next`, comprobar que **no hay otro dev server vivo**
+- [x] **T5.2 — Verlo en el navegador.** `rm -rf .next`, comprobar que **no hay otro dev server vivo**
   (`Get-Process node`), entrar a `/ordenes` como maestro y recorrer: guardar «San José arriba» con
   zona + distritos + término, limpiar, aplicar la vista, renombrarla, borrarla. Depende de T5.1.
   *Hecho:* captura o transcripción en `progress/impl_453.md` de las cinco acciones, **con la respuesta
@@ -172,32 +172,40 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
 
 ## Tanda 6 — Guardias, trazabilidad y gate. Depende de T5.2
 
-- [ ] **T6.1 [P] — Guardia de superficies montadas.**
-  `tests/unit/guards/vistas-superficies-declaradas.guardia.test.ts` (R34): toda superficie de
+- [x] **T6.1 [P] — Guardia de superficies montadas.**
+  `tests/unit/guards/vistas-superficies-declaradas.guardia.test.tsx` (R34): toda superficie de
   `SUPERFICIES_VISTA` tiene un control montado en el árbol de producción.
   *Hecho:* la guardia **se auto-comprueba** (detecta una superficie inventada como no montada, y
   reconoce `"ordenes"` como montada) y se selecciona sola con `pnpm exec vitest run guard`.
+  *Estado real (2026-09-21):* hecha, y **creció en la dirección contraria**: además de R34 lleva la
+  red de R31 —la barra sin la prop, y una barra REAL de otra pantalla (`/novedades`), no pintan
+  ningún control ni piden ninguna lista—, que es la mitad que se pondría roja si alguien encendiera
+  las vistas en global. Es `.tsx` porque esa mitad renderiza.
 
-- [ ] **T6.2 [P] — Guardia de formato propio.**
+- [x] **T6.2 [P] — Guardia de formato propio.**
   `tests/unit/guards/vista-filtro-formato-propio.guardia.test.ts` (R6): ningún módulo de persistencia
   de vistas importa `app/(app)/ordenes/_components/serializar-filtro`, y el payload no se usa como key
   de SWR.
   *Hecho:* se pone roja si se añade ese import; con su autocomprobación (encuentra el import en un
   fixture conocido).
 
-- [ ] **T6.3 — Mapa `R<n> → test` en `progress/impl_453.md`.** La tabla de abajo, ya rellena con la
+- [x] **T6.3 — Mapa `R<n> → test` en `progress/impl_453.md`.** La tabla de abajo, ya rellena con la
   salida **real** de cada archivo. Depende de T6.2.
   *Hecho:* los 39 requisitos tienen su archivo y su caso, y la salida pegada es la de la corrida, no
   un resumen escrito a mano.
 
-- [ ] **T6.4 — `./init.sh` completo, en verde según el baseline.** Depende de T6.3.
-  *Hecho:* `INIT_EXIT=0` **escrito dentro del log** (`progress/gate_453.log`); ningún archivo rojo que
-  no estuviera ya en `tests/baseline-rojos.json`; y si alguno del baseline volvió a verde, **podado en
-  este mismo PR**. Revisar los `skipped`: sin `DATABASE_URL` la capa de datos **no se ejecuta**, y el
-  verde no valdría.
+- [x] **T6.4 — `./init.sh` completo, en verde según el baseline.** Depende de T6.3.
+  *Hecho:* `INIT_EXIT=0` **escrito dentro del log**; ningún archivo rojo que no estuviera ya en
+  `tests/baseline-rojos.json`; y si alguno del baseline volvió a verde, **podado en este mismo PR**.
+  Revisar los `skipped`: sin `DATABASE_URL` la capa de datos **no se ejecuta**, y el verde no valdría.
+  *Estado real (2026-09-21):* **tres** corridas completas, una por entrega —
+  `progress/gate_453_backend.log`, `progress/gate_453_frontend.log` y `progress/gate_453_c.log` (la
+  de la revisión)—, las tres en `INIT_EXIT=0` y las tres con **26 `skipped`**: 17 de `AnaliticaPage`
+  y 9 de `AnaliticaShell`, **ninguno de `integration/db`**.
 
-- [ ] **T6.5 — Commitear el informe.** El informe describe el disco, no un commit.
-  *Hecho:* `progress/impl_453.md` y `progress/gate_453.log` **commiteados** en la rama, verificado
+- [x] **T6.5 — Commitear el informe.** El informe describe el disco, no un commit.
+  *Hecho:* `progress/impl_453.md` y los logs del gate (`gate_453_backend.log`,
+  `gate_453_frontend.log`, `gate_453_c.log`) **commiteados** en la rama, verificado
   contra el blob (no contra el árbol de trabajo).
 
 ---
@@ -237,9 +245,9 @@ Zona `fullstack`: se secuencia **backend → frontend**. `[P]` = puede ir en par
 | R29 | catálogo no disponible: ni clasificar ni aplicar | `tests/unit/components/ordenes-listado-vistas.test.tsx` |
 | R30 | nunca aplicar parte sin nombrarlo antes | `tests/unit/components/vistas-filtro-aviso-incompleta.test.tsx` |
 | R31 | sin la prop, la barra no cambia en nada | `tests/unit/components/buscador-filtros-vistas.test.tsx` · `tests/unit/components/buscador-filtros-siembra.test.tsx` |
-| R32 | encender una superficie no pide migración | `tests/unit/guards/vistas-superficies-declaradas.guardia.test.ts` |
+| R32 | encender una superficie no pide migración: `superficie` es TEXT en el motor, sin CHECK, y la base acepta una superficie no declarada (la única fuente es `SUPERFICIES_VISTA`) | `tests/integration/db/vista-filtro-migration.test.ts` · los dos bloques «453/R32» |
 | R33 | superficie no declarada → error, no lista vacía | `tests/unit/actions/vistas-filtro-action.test.ts` |
-| R34 | superficie declarada = superficie montada | `tests/unit/guards/vistas-superficies-declaradas.guardia.test.ts` |
+| R34 | superficie declarada = superficie montada | `tests/unit/guards/vistas-superficies-declaradas.guardia.test.tsx` |
 | R35 | dos personas, el mismo nombre | `tests/integration/db/vista-filtro-migration.test.ts` |
 | R36 | sitio fijo en la barra | `tests/unit/components/buscador-filtros-vistas.test.tsx` |
 | R37 | todo se alcanza sin salir del listado | `tests/unit/components/ordenes-listado-vistas.test.tsx` |

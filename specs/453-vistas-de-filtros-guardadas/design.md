@@ -266,7 +266,7 @@ enterarse.
 | Acción | Entrada (`.strict()`) | Salida `ok` | Errores |
 | --- | --- | --- | --- |
 | `listarVistasFiltro` | `{ superficie }` | `{ vistas: VistaFiltroDTO[] }` (orden: nombre asc) | `validation_error` (superficie no declarada), `unauthenticated` |
-| `guardarVistaFiltro` | `{ superficie, nombre, filtro }` | `{ vista: VistaFiltroDTO }` | `validation_error`, `conflict` (nombre duplicado), `limit_reached` (tope), `unauthenticated` |
+| `guardarVistaFiltro` | `{ superficie, nombre, filtro }` | `{ vista: VistaFiltroDTO }` | `validation_error`, `conflict` (nombre duplicado), `limite_excedido` (tope, con `maximo` y `actuales`), `unauthenticated` |
 | `renombrarVistaFiltro` | `{ id, nombre }` | `{ vista }` | `validation_error`, `conflict`, `not_found`, `unauthenticated` |
 | `actualizarVistaFiltro` | `{ id, filtro }` | `{ vista }` | `validation_error`, `not_found`, `unauthenticated` |
 | `eliminarVistaFiltro` | `{ id }` | `{}` | `not_found`, `unauthenticated` |
@@ -281,6 +281,14 @@ export interface VistaFiltroDTO {
   actualizadaEn: string; // ISO
 }
 ```
+
+**El error del tope se llama `limite_excedido`, y no `limit_reached`** (corregido el 2026-09-21, tras
+la implementación). Esta tabla decía `limit_reached` y el código usa `limite_excedido`: **manda el
+código**, por dos razones. Una, es el término que ya usan **diez módulos de `lib/types/`** para
+exactamente esto (`descarga-listado`, `historial-accion`, `cierre-bodega`, `conteo-productos`…), y un
+sinónimo en inglés para el mismo concepto es la clase de deriva que obliga a mirar el archivo antes
+de escribir un `switch`. Y dos, **no cabe en `ActionError`**: R13 exige decir cuál es el tope y
+cuántas hay, así que la rama viaja con `maximo` y `actuales`, igual que las otras diez.
 
 **`usuarioId` NO existe en ninguna entrada.** Los schemas son `.strict()`, así que uno inyectado da
 `validation_error` en vez de ignorarse — la misma regla, y por el mismo motivo, que `push.ts:9-12`.
@@ -545,9 +553,20 @@ Piezas de verificación que el diseño exige (el mapa `R<n> → test` completo e
   **autocomprobación** al principio: si los archivos no se leyeran, todas las aserciones quedarían
   verdes y mudas.
 - **Dos guardias nuevas**, que se seleccionan solas por nombre (`vitest run guard`):
-  - `vistas-superficies-declaradas.guardia.test.ts` — toda superficie de `SUPERFICIES_VISTA` tiene
+  - `vistas-superficies-declaradas.guardia.test.tsx` — toda superficie de `SUPERFICIES_VISTA` tiene
     control montado en el árbol (R34). Es la lección de `superficie-de-uso`: un mecanismo que nadie
-    puede disparar no rompe ningún test.
+    puede disparar no rompe ningún test. **Es `.tsx`** porque acabó llevando también la dirección
+    contraria (R31): renderiza la barra sin la prop y una barra real de otra pantalla, y afirma que
+    ninguna de las dos pinta el control ni pide la lista.
+  - **R32 no lo verifica esa guardia, y hace falta decirlo** (revisión del 2026-09-21): que encender
+    una superficie no pida migración se mide **en el motor**, no en el árbol de archivos —que
+    `vista_filtro.superficie` sea `text` (no un enum ni un dominio), que no haya ningún `CHECK` que
+    ate sus valores, y que la base ACEPTE una superficie que el código no declara, de modo que la
+    única fuente sea `SUPERFICIES_VISTA`—. Vive en `tests/integration/db/vista-filtro-migration.test.ts`
+    (los dos bloques «453/R32»), con su contraprueba: el mismo detector, contra una columna que SÍ es
+    enum, devuelve `USER-DEFINED`/`e`. El caso «no crea ningún tipo» que lee el `.sql` de esta
+    migración es una **foto** y no cubre una migración futura; por eso además se barren TODAS las
+    carpetas de `db/migrations` buscando un `CREATE TYPE` de superficies o un retipado de la columna.
   - `vista-filtro-formato-propio.guardia.test.ts` — el módulo de persistencia **no** importa
     `serializar-filtro.ts`, y el payload no se usa como key de SWR (R6).
 - **Sin `DATABASE_URL` la capa de datos se SALTA**, no falla. Mirar los `skipped` del gate, no solo el

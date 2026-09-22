@@ -133,6 +133,11 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       // ayuda. ADITIVA PURA: crea una tabla nueva y su FK a `usuario`; no toca
       // `orden_traspaso_mensajero` ni ningun otro objeto preexistente, y no crea ningun enum.
       "20260920120000_asistente_uso_diario",
+      // Ficha 453 (2026-09-21): `vista_filtro`, las combinaciones de filtros guardadas con nombre.
+      // ADITIVA PURA: crea una tabla nueva, su unico `(usuario_id, superficie, nombre)` y su FK a
+      // `usuario`; no toca `orden_traspaso_mensajero` ni ningun otro objeto preexistente, no lleva
+      // backfill y no crea ningun enum.
+      "20260921120000_vista_filtro",
     ]);
   });
 });

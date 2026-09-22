@@ -263,4 +263,19 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
       "y que el repositorio del contador no se llamo ni una vez. Ademas el asistente vive detras " +
       `del guard de SESION: sin cookie, /api/asistente responde 401 con JSON. ${SOLO_OPERADOR}`,
   },
+  // ── FICHA 453 (2026-09-21): las vistas de filtros guardadas ───────────────────────────────────
+  // CASCADE, mismo criterio que sus cuatro vecinas de arriba: una vista es un ATAJO DE TRABAJO de
+  // una persona, no evidencia, y se va con ella. Tampoco es `se_borra_con_ella` —esa categoria es
+  // para lo que desaparece DENTRO de la transaccion del borrado de la key— porque para una cuenta
+  // dedicada la fila no llega a existir nunca.
+  "VistaFiltro.usuario": {
+    categoria: "no_alcanzable",
+    motivo:
+      "Las CINCO escrituras posibles son Server Actions (`lib/actions/vistas-filtro.ts`) y las " +
+      "cinco fijan al dueno con `resolveActorFromSession` antes de validar nada: no hay ruta de " +
+      "API, ni webhook, ni cron que cree una vista, y el `usuarioId` NO existe en ninguna entrada " +
+      "(los schemas son `.strict()`, asi que inyectarlo es `validation_error`). Guardar una vista " +
+      "es ademas un gesto de PANTALLA —el control vive en la barra de filtros—, y una cuenta " +
+      `dedicada no entra por el formulario de login. ${SOLO_OPERADOR}`,
+  },
 };
