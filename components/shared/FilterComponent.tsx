@@ -105,6 +105,21 @@ export interface FilterComponentProps {
    * al «Limpiar todo» es `BuscadorFiltros`, que es la duena de esa accion.
    */
   leerDeUrl?: boolean;
+  /**
+   * FICHA 453 (design §7) — IMPONER LA SELECCIÓN DESDE FUERA. El gemelo de la `siembra` de
+   * `BuscadorFiltros`, y hace falta por lo mismo: este orquestador es DUEÑO de su
+   * selección (la inicializa desde la URL y solo la cambian `fijar` y `limpiarTodo`), así
+   * que hasta hoy la única vía desde fuera era remontarlo entero con `key` — el truco que
+   * `FiltrosCierresBarra` y `OrdenesListado` tienen escrito como bloqueo.
+   *
+   * **Semántica:** cuando `senal` CAMBIA, la selección se REEMPLAZA por la recibida y
+   * **no se emite** (quien la impuso ya la conoce). Además CIERRA la siembra de la URL
+   * (R23): sin eso, un catálogo que llegara tarde repondría sobre lo recién impuesto un
+   * valor de la query, medio segundo después y sin que nadie lo hubiera pedido.
+   *
+   * **Ausente, el orquestador se comporta exactamente como antes** (R31).
+   */
+  siembra?: { senal: number; seleccion: FilterSelection };
   className?: string;
 }
 
@@ -369,6 +384,7 @@ export function FilterComponent({
   disabled = false,
   debounceMs = DEBOUNCE_MS_DEFAULT,
   leerDeUrl = true,
+  siembra,
   className,
 }: FilterComponentProps) {
   // R13: un `kind` no soportado no se renderiza ni entra en la salida, y el resto de
@@ -465,6 +481,25 @@ export function FilterComponent({
   const [resetSignal, setResetSignal] = useState(0);
 
   /**
+   * FICHA 453 (design §7) — LA SIEMBRA, ajustando el estado DURANTE EL RENDER, igual que
+   * el `resetSignal` de `TextFilter` un poco más arriba: sin efecto y sin parpadeo.
+   *
+   * REEMPLAZA, no mezcla (R19): lo que no venga en la siembra deja de estar puesto. Se
+   * pasa por `podarSeleccion` por la misma razón que la precarga de la URL —el orquestador
+   * nunca sostiene una combinación incoherente con `dependsOn`—, y contra los filtros
+   * MONTADOS AHORA, que en la misma pasada ya son los que el consumidor acaba de declarar.
+   *
+   * `setSiembraCerrada(true)` es R23 y no es opcional: cierra la siembra de la URL para que
+   * un catálogo tardío no reponga encima lo que traía la query.
+   */
+  const [senalSembrada, setSenalSembrada] = useState(siembra?.senal ?? 0);
+  if (siembra !== undefined && siembra.senal !== senalSembrada) {
+    setSenalSembrada(siembra.senal);
+    setSeleccion(podarSeleccion(montados, siembra.seleccion));
+    setSiembraCerrada(true);
+  }
+
+  /**
    * Lo que la URL traia AL ENTRAR para las claves declaradas ahora mismo. Solo lo leen los
    * controles NO controlados (`text`, `dateRange`) para saber con que valor montarse: cuando
    * una clave se siembra al crecer `filters`, el control se monta en el render ANTERIOR al
@@ -553,6 +588,29 @@ export function FilterComponent({
   useEffect(() => {
     seleccionRef.current = seleccion;
     montadosRef.current = montados;
+  });
+
+  /**
+   * FICHA 453 — LAS DOS CUENTAS DE LA SIEMBRA QUE NO SON ESTADO. Van en un efecto porque
+   * son `ref`s y el render no puede tocarlas (regla `react-hooks/refs`), y va declarado
+   * AQUÍ —antes del efecto de poda y siembra de abajo— porque ese lee
+   * `siembraCerradaRef.current` y los efectos corren en orden de declaración: al revés, la
+   * pasada siguiente a una siembra todavía vería la siembra de la URL abierta y
+   * reintentaría reponer lo que traía la query encima de lo recién impuesto (R23).
+   *
+   * Y se cancela el debounce en vuelo: una emisión anterior aterrizando después de la
+   * siembra le devolvería al consumidor la selección VIEJA, medio segundo tarde y sin que
+   * nada lo delatara.
+   */
+  const senalAnotada = useRef(siembra?.senal ?? 0);
+  useEffect(() => {
+    if (siembra === undefined || siembra.senal === senalAnotada.current) return;
+    senalAnotada.current = siembra.senal;
+    siembraCerradaRef.current = true;
+    if (temporizador.current) {
+      clearTimeout(temporizador.current);
+      temporizador.current = null;
+    }
   });
 
   /**
@@ -657,6 +715,22 @@ export function FilterComponent({
     emitir({}); // R22: una sola emision, vacia
   }
 
+  /**
+   * FICHA 453 (design §7, detalle 2) — LA `key` DE LOS CONTROLES NO CONTROLADOS.
+   *
+   * `TextFilter` (inicializador perezoso) y `DateRangeFilter` (`defaultRange`) son dueños
+   * de lo que muestran: un `setSeleccion` no los mueve, así que una vista con un rango de
+   * fechas se aplicaria al listado y el disparador seguiria diciendo «Cualquier fecha» —el
+   * fallo mudo de que la pantalla mienta sobre lo que esta aplicado—. Cambiarles la `key`
+   * los remonta SOLO A ELLOS: leen su valor inicial de la nueva seleccion y el resto de la
+   * barra —incluido el campo de busqueda, que vive en `BuscadorFiltros`— no se mueve.
+   *
+   * Sin la prop la clave es la de siempre, literalmente la misma cadena: los quince
+   * consumidores que no siembran no remontan nada, ni una vez.
+   */
+  const claveDeControl = (key: string) =>
+    siembra === undefined ? key : `${key}:${siembra.senal}`;
+
   return (
     <div className={cn("flex flex-wrap items-end gap-3", className)}>
       {montados.map((filtro) => {
@@ -680,7 +754,7 @@ export function FilterComponent({
         if (filtro.kind === "text") {
           return (
             <TextFilter
-              key={filtro.key}
+              key={claveDeControl(filtro.key)}
               label={filtro.label}
               placeholder={filtro.placeholder}
               // Sin minimo declarado, cualquier texto viaja: el minimo es una decision
@@ -774,7 +848,7 @@ export function FilterComponent({
 
         return (
           <DateRangeFilter
-            key={filtro.key}
+            key={claveDeControl(filtro.key)}
             label={filtro.label}
             // Solo son atajos ofrecibles los que declaran QUE rango representan.
             shortcuts={visibles.flatMap((o) =>

@@ -16,6 +16,10 @@ import {
   avisoMinimoCaracteres,
   DEBOUNCE_MS_DEFAULT,
 } from "@/components/shared/FilterComponent";
+import {
+  VistasFiltro,
+  type VistasFiltroBarra,
+} from "@/components/shared/VistasFiltro";
 import { useFiltrosUrl } from "@/hooks/useFiltrosUrl";
 import {
   activosDesdeUrl,
@@ -116,6 +120,33 @@ export interface BuscadorFiltrosProps {
    * a eso de otra forma y quiera que el enlace hable el idioma del endpoint.
    */
   terminoKey?: string;
+  /**
+   * FICHA 453 (design §7) — IMPONER EL TÉRMINO DESDE FUERA, sin remontar y sin tirar el
+   * foco. Es el hueco 1 de la ficha 328: hasta hoy el campo nacía de un `useState` con lo
+   * que traía la URL y la única vía para ponerle otra cosa era remontar la barra con
+   * `key`, que relee la query y no sirve para reponer un filtro guardado.
+   *
+   * **Semántica:** cuando `senal` CAMBIA, el campo pasa a mostrar `termino` y la barra
+   * **no emite** —quien impuso el valor es el consumidor, que ya lo sabe—. El mismo
+   * número dos veces no hace nada: es una señal, no un valor.
+   *
+   * **Ausente, la barra se comporta exactamente como antes** (R31): los otros quince
+   * consumidores no cambian ni un píxel.
+   */
+  siembra?: { senal: number; termino: string };
+  /**
+   * FICHA 453 (design §9) — enciende el control de VISTAS GUARDADAS al principio de la
+   * fila, antes del campo y antes de los `children`.
+   *
+   * **Ausente, no se monta nada** —ni un control, ni una petición, ni una emisión—, que es
+   * exactamente la regla que ya siguen `filtros` y `onLimpiarTodo` (R31). Hoy solo la
+   * declara `/ordenes`; encender otra superficie es pasar esta prop y añadir su nombre a
+   * `SUPERFICIES_VISTA`, sin migración ninguna (R32).
+   *
+   * Tiene que renderizarlo la barra y no la pantalla: el sitio pedido está ANTES de los
+   * `children`, y una pantalla solo puede inyectar `children`, que se pintan después.
+   */
+  vistas?: VistasFiltroBarra;
   className?: string;
 }
 
@@ -161,6 +192,17 @@ export interface BuscadorFiltrosProps {
  * Filtrar, marcar opciones o escribir un término NO tocan la query (R18), así que un
  * término escrito después de haber vaciado el campo tampoco vuelve a aparecer en la URL:
  * la barra desactiva enlaces obsoletos, no los genera.
+ *
+ * FICHA 453 añade el TERCER caso en que la URL se resta: aplicar una vista guardada retira
+ * los params propios (R21), por el mismo `borrarParams` y con la misma lista.
+ *
+ * ## Las dos props de la ficha 453, las dos OPCIONALES y las dos apagadas por defecto
+ * - `siembra`: imponer el término desde fuera sin remontar (el hueco 1 de la 328).
+ * - `vistas`: encender el control de vistas guardadas al principio de la fila.
+ *
+ * Sin ellas esta barra es EXACTAMENTE la de antes: ni un control nuevo, ni una petición
+ * nueva, ni una emisión nueva (R31). Es lo que permite que de los dieciséis consumidores
+ * solo `/ordenes` cambie.
  */
 export function BuscadorFiltros({
   label = "Buscar",
@@ -178,6 +220,8 @@ export function BuscadorFiltros({
   hayFiltrosAplicados = false,
   leerDeUrl = true,
   terminoKey = PARAM_TERMINO_DEFAULT,
+  siembra,
+  vistas,
   className,
 }: BuscadorFiltrosProps) {
   const idBase = useId();
@@ -207,6 +251,21 @@ export function BuscadorFiltros({
 
   const [texto, setTexto] = useState(precarga.termino);
   const [abierto, setAbierto] = useState(false);
+
+  /**
+   * FICHA 453 (design §7) — LA SIEMBRA, ajustando el estado DURANTE EL RENDER.
+   *
+   * Es el patrón que este árbol ya usa en cuatro sitios (`resetSignal` de
+   * `FilterComponent`, `filterKeyPrevio` y `claveOrdenPrevia` de `OrdenesModule`): sin
+   * efecto, sin parpadeo intermedio y —lo que esta ficha necesitaba— **sin remontar**, así
+   * que el campo conserva el foco y el cursor. Remontarlo con `key` era la única vía hasta
+   * hoy, y es justo la queja de la 328.
+   */
+  const [senalSembrada, setSenalSembrada] = useState(siembra?.senal ?? 0);
+  if (siembra !== undefined && siembra.senal !== senalSembrada) {
+    setSenalSembrada(siembra.senal);
+    setTexto(siembra.termino);
+  }
 
   const hayFiltros = filtros.length > 0;
   const puestos = new Set(activos);
@@ -264,6 +323,37 @@ export function BuscadorFiltros({
     if (precarga.activos.length > 0) onActivosChangeRef.current?.(precarga.activos);
     if (precarga.termino !== "") onChangeRef.current(precarga.termino);
   }, [precarga]);
+
+  /**
+   * FICHA 453 — LAS TRES CUENTAS DE LA SIEMBRA QUE NO SON ESTADO. Van en un efecto porque
+   * son `ref`s y el render no puede tocarlas (regla `react-hooks/refs`); sin lista de
+   * dependencias, como `ColumnasPopover`: corre tras cada render y sale en la primera
+   * línea cuando no hay siembra nueva.
+   *
+   * 1. **`emitido.current` se pone al día**, y no es cosmético: es la memoria de «qué tiene
+   *    aplicado el consumidor». Si se quedara con el término viejo, la guarda de «sin
+   *    cambio» mentiría y el siguiente tecleo real se lo tragaría — un fallo mudo: el
+   *    usuario escribe y el listado no se entera.
+   * 2. **Se cancela el debounce en vuelo.** Sembrar mientras viaja una emisión anterior
+   *    dejaría que esa emisión pisara medio segundo después el término recién impuesto.
+   * 3. **Se cierra la siembra de la URL.** Aquí ya la cierra el efecto de montaje de
+   *    arriba, así que hoy es redundante y se escribe igual: es la MISMA regla que
+   *    `FilterComponent` necesita de verdad (R23), y dejarla dicha en los dos sitios evita
+   *    que el día que este montaje cambie la barra empiece a reponer sobre una vista.
+   */
+  const senalAnotada = useRef(siembra?.senal ?? 0);
+  useEffect(() => {
+    if (siembra === undefined || siembra.senal === senalAnotada.current) return;
+    senalAnotada.current = siembra.senal;
+    // Lo que el consumidor ACABA de aplicar, que es contra lo que tiene que comparar la
+    // guarda. No se le aplica el mínimo de caracteres: quien impuso el término decide.
+    emitido.current = siembra.termino.trim();
+    if (temporizador.current) {
+      clearTimeout(temporizador.current);
+      temporizador.current = null;
+    }
+    sembrado.current = true;
+  });
 
   /**
    * La EMISIÓN del término, con lo único que la barra escribe en la URL colgado de ella.
@@ -342,10 +432,19 @@ export function BuscadorFiltros({
     // término queda apuntada en la memoria del hook y la de R26 se topa con la guarda de
     // "sin cambio" — o sea, UNA sola navegación en vez de dos (una sin `q` y otra sin los
     // filtros) cuando `debounceMs` es 0.
-    borrarParams([terminoKey, ...filtros.map((f) => f.key)]);
+    borrarParams(paramsPropios);
     escribir("");
     onLimpiarTodo?.();
   }
+
+  /**
+   * Los params que esta barra considera SUYOS: el del término y los de las claves que
+   * ofrece. Es la lista que se retira de la dirección en los dos —desde la 453, tres—
+   * únicos casos en que la barra toca la URL, y está escrita UNA vez para que «Limpiar
+   * todo» y «aplicar una vista» no puedan divergir. Los ajenos (`?cierre=`, `?mensajero=`)
+   * no entran y sobreviven.
+   */
+  const paramsPropios = [terminoKey, ...filtros.map((f) => f.key)];
 
   const resumen = activos.length > 0 ? `${filtrosLabel} (${activos.length})` : filtrosLabel;
 
@@ -358,6 +457,30 @@ export function BuscadorFiltros({
       {/* `flex-wrap`: con varios filtros puestos la línea salta antes que estrujar el
           campo por debajo de su mínimo. */}
       <div className="flex w-full flex-wrap items-center gap-2">
+        {/* FICHA 453 (design §9) — LAS VISTAS GUARDADAS ABREN LA FILA, antes del campo y
+            antes de los `children`. La lectura de la barra es «qué estoy mirando → afinarlo
+            → limpiarlo», y el extremo derecho ya lo ocupa «Limpiar todo», que aparece y
+            desaparece: un control al lado de otro que baila es un control que hay que
+            buscar (R36). Sin la prop no se monta nada. */}
+        {vistas ? (
+          <VistasFiltro
+            {...vistas}
+            onAplicar={(vistaId, filtro) => {
+              // R21 — aplicar una vista RETIRA de la dirección los params propios de la
+              // barra (los mismos que «Limpiar todo»: el del término y los de las claves
+              // ofrecidas) y no añade ninguno. Sin esto, recargar la página repondría el
+              // filtro que la vista acaba de reemplazar, que es un fallo mudo: la pantalla
+              // volvería sola a otro filtro sin que nadie lo pidiera.
+              //
+              // Lo hace la barra y no la pantalla porque esta lista es SUYA —la misma que
+              // usa `limpiarTodo`— y porque `borrarParams` solo RESTA: la barra sigue sin
+              // escribir la query nunca.
+              borrarParams(paramsPropios);
+              vistas.onAplicar(vistaId, filtro);
+            }}
+          />
+        ) : null}
+
         {/* Los controles de los filtros puestos van DELANTE del campo. */}
         {children}
 
