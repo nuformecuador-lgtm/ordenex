@@ -3,7 +3,13 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida } from "./_postgres-real";
+import {
+  HAY_BASE_DE_DATOS,
+  crearPrismaDeTest,
+  enTransaccionRevertida,
+  serializarEscriturasReales,
+} from "./_postgres-real";
+import { SUPERFICIES_VISTA, superficieVistaSchema } from "@/lib/types/vista-filtro";
 
 // FICHA 453 (T1.4 — R1, R4, R11, R35 y la RLS) — LA MIGRACION DE `vista_filtro` Y SU `down.sql`.
 //
@@ -421,5 +427,222 @@ describeSiHayBase("453 · el grano y el CASCADE, contra el motor", () => {
     });
     expect(r.choco).toBe(true);
     expect(r.filas).toBe(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// R32 — ENCENDER UNA SUPERFICIE NUEVA NO PIDE MIGRACION, Y ESO SE MIDE EN EL MOTOR
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ POR QUE ESTO NO ESTABA Y HACIA FALTA (revision del 2026-09-21). El caso «NO crea ningun tipo»
+// de mas arriba lee el `.sql` de ESTA migracion: es una FOTO de esta rama y no dice nada del
+// futuro. Si mañana alguien convierte `superficie` en un enum de Postgres —con otra migracion—
+// aquel caso seguiria verde, y sin embargo la decision 3 del humano quedaria rota: encender una
+// pantalla nueva volveria a costar una migracion, y con ella la trampa del `down.sql` que recrea el
+// tipo con lista, que en este repo ya borro valores en silencio.
+//
+// Lo que se afirma aqui se le pregunta AL MOTOR, que es lo unico que refleja TODAS las migraciones
+// aplicadas y no solo la de esta carpeta.
+
+/** El tipo real de una columna, preguntado al catalogo: `data_type`, `udt_name` y su `typtype`. */
+interface TipoDeColumna {
+  dataType: string;
+  udtName: string;
+  /** `b` = tipo base (text, int4...), `e` = ENUM, `d` = dominio, `c` = compuesto. */
+  typtype: string;
+}
+
+async function tipoDeColumna(
+  cliente: { $queryRawUnsafe: <T = unknown>(sql: string, ...a: unknown[]) => Promise<T> },
+  esquema: string,
+  tabla: string,
+  columna: string,
+): Promise<TipoDeColumna | null> {
+  const filas = await cliente.$queryRawUnsafe<
+    { data_type: string; udt_name: string; typtype: string }[]
+  >(
+    // `typtype` es un `"char"` de Postgres y el cliente no sabe deserializarlo: se pide como texto.
+    `SELECT c.data_type, c.udt_name, t.typtype::text AS typtype
+       FROM information_schema.columns c
+       JOIN pg_type t ON t.typname = c.udt_name
+       JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE c.table_schema = $1 AND c.table_name = $2 AND c.column_name = $3
+        AND n.nspname IN ('pg_catalog', $1)`,
+    esquema,
+    tabla,
+    columna,
+  );
+  if (filas.length === 0) return null;
+  return { dataType: filas[0].data_type, udtName: filas[0].udt_name, typtype: filas[0].typtype };
+}
+
+describeSiHayBase("453/R32 · `superficie` es TEXT en la base, y la lista vive SOLO en el codigo", () => {
+  let prisma: PrismaClient;
+  beforeAll(() => {
+    prisma = crearPrismaDeTest();
+  });
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  it("⭑ AUTOCOMPROBACION: el detector distingue un TEXT de un ENUM (si no, todo esto seria mudo)", async () => {
+    // Se monta un enum de verdad en un esquema desechable y se le pregunta lo MISMO que se le
+    // pregunta a la tabla real. Sin esta contraprueba, un detector roto —uno que devolviera siempre
+    // `text`, o `null`— dejaria verde el caso de abajo sin haber medido nada.
+    const esquema = `t453e_${Date.now().toString(36)}_${randomUUID().slice(0, 8).replace(/-/g, "")}`;
+    const medido = await enTransaccionRevertida(prisma, async (tx) => {
+      await tx.$executeRawUnsafe(`CREATE SCHEMA "${esquema}"`);
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${esquema}"`);
+      await tx.$executeRawUnsafe(`CREATE TYPE "superficie_vista" AS ENUM ('ordenes')`);
+      await tx.$executeRawUnsafe(
+        `CREATE TABLE "vista_filtro_enum" (
+           "superficie_texto" TEXT NOT NULL,
+           "superficie_enum"  "superficie_vista" NOT NULL)`,
+      );
+      return {
+        texto: await tipoDeColumna(tx, esquema, "vista_filtro_enum", "superficie_texto"),
+        enumerado: await tipoDeColumna(tx, esquema, "vista_filtro_enum", "superficie_enum"),
+        inexistente: await tipoDeColumna(tx, esquema, "vista_filtro_enum", "no_existe"),
+      };
+    });
+
+    expect(medido.texto).toEqual({ dataType: "text", udtName: "text", typtype: "b" });
+    // ⚠️ ESTA ES LA MUTACION, HECHA DENTRO DEL PROPIO TEST: asi queda demostrado que la asercion de
+    // abajo TIENE forma de ponerse roja. Un enum se delata en las tres lecturas a la vez.
+    expect(medido.enumerado?.dataType).toBe("USER-DEFINED");
+    expect(medido.enumerado?.udtName).toBe("superficie_vista");
+    expect(medido.enumerado?.typtype).toBe("e");
+    // Y una columna que no existe devuelve `null`, no un falso «text».
+    expect(medido.inexistente).toBeNull();
+  });
+
+  it("⭑ la columna `superficie` de la tabla REAL es `text`, no un enum ni un dominio", async () => {
+    const tipo = await tipoDeColumna(prisma, "public", "vista_filtro", "superficie");
+
+    // AUTOCOMPROBACION: si la tabla o la columna no existieran, esto seria `null` y las tres
+    // aserciones de abajo no medirian nada.
+    expect(tipo, "no se encontro `public.vista_filtro.superficie`").not.toBeNull();
+    expect(tipo!.dataType).toBe("text");
+    expect(tipo!.udtName).toBe("text");
+    // El `typtype` es lo que de verdad cierra la puerta: un enum es `e` y un dominio es `d`.
+    expect(tipo!.typtype).toBe("b");
+  });
+
+  it("⭑ y no hay ningun CHECK que ate los valores que `superficie` admite", async () => {
+    // Un `CHECK (superficie IN ('ordenes'))` costaria lo mismo que el enum: una migracion por
+    // pantalla. La tabla solo puede llevar su PK, su unico y su FK.
+    const restricciones = await prisma.$queryRawUnsafe<
+      { conname: string; contype: string; def: string }[]
+    >(
+      `SELECT c.conname, c.contype::text AS contype, pg_get_constraintdef(c.oid) AS def
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+         JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE n.nspname = 'public' AND t.relname = 'vista_filtro'
+        ORDER BY c.conname`,
+    );
+    // AUTOCOMPROBACION: la tabla TIENE restricciones (PK, unico y FK); una lista vacia significaria
+    // que la consulta no encontro la tabla, y el barrido de abajo seria verde por vacio.
+    expect(restricciones.length).toBeGreaterThanOrEqual(3);
+    expect(restricciones.filter((r) => r.contype === "c")).toEqual([]);
+    for (const r of restricciones) {
+      expect(r.def, `${r.conname} ata los valores de superficie`).not.toMatch(
+        /superficie\s*(=|IN)/i,
+      );
+    }
+  });
+
+  it("⭑ la BASE acepta una superficie que el codigo NO declara: la unica fuente es `SUPERFICIES_VISTA`", async () => {
+    // Es la otra mitad, y es de COMPORTAMIENTO sobre la tabla REAL: encender una pantalla nueva es
+    // añadir una cadena a `SUPERFICIES_VISTA` y nada mas. Si alguien convirtiera la columna en enum
+    // —o le pusiera un CHECK— este `INSERT` reventaria y el caso se pondria rojo.
+    const nueva = "una-superficie-que-nadie-ha-declarado-todavia";
+    // Control: de verdad NO esta declarada (si alguien la añadiera, el caso dejaria de medir).
+    expect(SUPERFICIES_VISTA as readonly string[]).not.toContain(nueva);
+
+    const guardada = await enTransaccionRevertida(prisma, async (tx) => {
+      await serializarEscriturasReales(tx);
+      const modelo = await tx.$queryRawUnsafe<{ id: string }[]>(
+        `SELECT "id" FROM "usuario" LIMIT 1`,
+      );
+      // ⚠️ FALLA RUIDOSAMENTE con la base vacia: un `if (!modelo) return` reportaria `passed`.
+      expect(modelo.length, "la tabla `usuario` esta vacia: el caso no se puede medir").toBe(1);
+      const usuarioId = randomUUID();
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "usuario"
+           ("id","nombre","email","telefono","password_hash","cedula","tipo_identificacion_id","rol_id","updated_at")
+         SELECT $1, '453 R32', $2, '00000000', 'x', $3,
+                u."tipo_identificacion_id", u."rol_id", CURRENT_TIMESTAMP
+           FROM "usuario" u WHERE u."id" = $4`,
+        usuarioId,
+        `453-r32-${usuarioId}@test.local`,
+        `453r32-${usuarioId.slice(0, 10)}`,
+        modelo[0].id,
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "vista_filtro" ("id","usuario_id","superficie","nombre","filtro")
+           VALUES ($1,$2,$3,'La de la pantalla nueva',$4::jsonb)`,
+        randomUUID(),
+        usuarioId,
+        nueva,
+        JSON.stringify({ v: 1, termino: "", activos: ["zona"], seleccion: { zona: ["z-1"] } }),
+      );
+      const filas = await tx.$queryRawUnsafe<{ superficie: string }[]>(
+        `SELECT "superficie" FROM "vista_filtro" WHERE "usuario_id" = $1`,
+        usuarioId,
+      );
+      return filas.map((f) => f.superficie);
+    });
+
+    expect(guardada).toEqual([nueva]);
+    // Y quien la rechaza HOY es el codigo, no la base: esa es la definicion de «unica fuente».
+    expect(superficieVistaSchema.safeParse(nueva).success).toBe(false);
+    expect(superficieVistaSchema.safeParse("ordenes").success).toBe(true);
+  });
+});
+
+describe("453/R32 · el datamodel tampoco ata la superficie (esta mitad corre sin base)", () => {
+  const SCHEMA = fs.readFileSync(path.join(RAIZ, "db", "schema.prisma"), "utf8");
+
+  it("⭑ `VistaFiltro.superficie` se declara `String`, y no hay enum de superficies en el datamodel", () => {
+    const modelo = /model VistaFiltro \{([\s\S]*?)\n\}/.exec(SCHEMA);
+    // AUTOCOMPROBACION: el modelo se encontro y tiene cuerpo.
+    expect(modelo, "no se encontro `model VistaFiltro` en db/schema.prisma").not.toBeNull();
+    expect(modelo![1].length).toBeGreaterThan(200);
+
+    const linea = modelo![1]
+      .split("\n")
+      .find((l) => /^\s*superficie\s+/.test(l) && !l.trim().startsWith("//"));
+    expect(linea, "el modelo ya no declara `superficie`").toBeDefined();
+    expect(linea!.trim()).toMatch(/^superficie\s+String\s*$/);
+    // Y ningun enum del datamodel se llama de eso: si alguien lo escribe, cae aqui.
+    expect(SCHEMA).not.toMatch(/enum\s+\w*[Ss]uperficie\w*\s*\{/);
+  });
+
+  it("⭑ ninguna migracion del arbol crea un tipo para las superficies ni retipa la columna", () => {
+    // El caso de mas arriba mira SOLO esta carpeta. Este barre TODAS: es la mitad que cubre el
+    // futuro sin necesitar base, y la que se pone roja el dia que alguien escriba el enum.
+    const carpetas = fs
+      .readdirSync(MIGRACIONES, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+    expect(carpetas.length).toBeGreaterThan(150);
+
+    for (const carpeta of carpetas) {
+      for (const archivo of ["migration.sql", "down.sql"]) {
+        const ruta = path.join(MIGRACIONES, carpeta, archivo);
+        if (!fs.existsSync(ruta)) continue;
+        const sql = sinComentarios(fs.readFileSync(ruta, "utf8"));
+        for (const m of sql.matchAll(/CREATE TYPE "?(\w+)"?/gi)) {
+          expect(
+            m[1].toLowerCase(),
+            `${carpeta}/${archivo} crea un tipo de superficies`,
+          ).not.toMatch(/superficie|vista_filtro/);
+        }
+        expect(sql, `${carpeta}/${archivo} retipa la columna superficie`).not.toMatch(
+          /ALTER COLUMN "superficie" TYPE/i,
+        );
+      }
+    }
   });
 });

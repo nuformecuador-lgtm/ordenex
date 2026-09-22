@@ -438,3 +438,99 @@ Frontend de la 453 completo: la costura que faltaba desde la 328, el control en 
 compartida, el aviso que convierte la pérdida en reconocida en vez de anunciada, `/ordenes`
 encendida y recorrida en el navegador, y una red en las dos direcciones para que encender esto en
 las otras once pantallas no pueda pasar en silencio. `./init.sh` completo en **`INIT_EXIT=0`**.
+
+---
+
+# Ficha 453 — Ronda de revisión (2026-09-21)
+
+> El reviewer ejecutó **10 mutaciones** contra el código de las dos mitades y **las diez
+> sobrevivieron**: no se cambió una línea de producción. Lo que faltaba era **contrato**. Rama
+> `feat/453-vistas-de-filtros-guardadas`, desde `4413c464`.
+
+## Bloqueante 1 — las 20 tareas sin marcar
+
+`specs/453-vistas-de-filtros-guardadas/tasks.md` estaba **0 de 20**. Ahora **20 de 20**, con su
+estado real (`CHECKPOINTS.md:9`). Dos llevan además una nota de *estado real* donde lo entregado se
+apartó de lo escrito:
+
+- **T6.1** creció en la dirección contraria: además de R34 lleva la red de R31 (la barra sin la prop
+  y una barra real de otra pantalla no pintan nada ni piden nada), y por eso el archivo es `.tsx`.
+- **T6.4** son **tres** corridas completas, no una: `gate_453_backend.log`, `gate_453_frontend.log` y
+  `gate_453_c.log`, las tres en `INIT_EXIT=0` y las tres con 26 `skipped`.
+
+## Bloqueante 2 — R32 no lo verificaba nada
+
+El mapa apuntaba R32 a `vistas-superficies-declaradas.guardia.test.ts`, un archivo que **(a)** en
+disco es `.tsx` y **(b)** solo afirma R34 y R31. El agujero real: **nada comprobaba que `superficie`
+fuera TEXT**. El caso «NO crea ningún tipo» que ya existía lee el `.sql` de **esta** carpeta: es una
+foto de esta rama, y una migración futura que convirtiera la columna en enum lo dejaría verde —y con
+ello se rompería la decisión 3 del humano, porque encender una pantalla volvería a costar una
+migración.
+
+Añadidos **seis casos** en `tests/integration/db/vista-filtro-migration.test.ts`, dos bloques:
+
+**Contra el MOTOR** (lo único que refleja TODAS las migraciones aplicadas, no solo esta carpeta):
+
+1. *Autocomprobación del detector*: monta un ENUM de verdad en un esquema desechable y comprueba que
+   el mismo detector lo distingue de un TEXT (`USER-DEFINED` / `superficie_vista` / `typtype = e`) y
+   que una columna inexistente da `null`, no un falso «text». Sin esto, un detector roto dejaría todo
+   lo demás verde y mudo.
+2. `public.vista_filtro.superficie` es `data_type = text`, `udt_name = text` y **`typtype = b`** (tipo
+   base). El `typtype` es el que cierra la puerta: un enum es `e` y un dominio es `d`.
+3. **Ningún `CHECK`** ata los valores de `superficie` (un `CHECK (superficie IN (...))` costaría lo
+   mismo que el enum: una migración por pantalla). Con autocomprobación: la tabla tiene ≥3
+   restricciones (PK, único, FK), así que la lista no está vacía por accidente.
+4. **La BASE acepta una superficie que el código NO declara** —`INSERT` real sobre la tabla real, en
+   transacción revertida— y el borde la rechaza (`superficieVistaSchema`). Esa es la definición
+   operativa de «`SUPERFICIES_VISTA` es la única fuente»: la base no es una segunda fuente de verdad.
+
+**Sin base** (corre siempre, también en un worktree sin `.env`):
+
+5. `db/schema.prisma` declara `superficie String` y **no hay ningún enum de superficies** en el
+   datamodel.
+6. **Ninguna de las 206 carpetas** de `db/migrations` crea un tipo cuyo nombre mencione `superficie`
+   o `vista_filtro`, ni contiene un `ALTER COLUMN "superficie" TYPE`. Ésta es la mitad que cubre el
+   futuro, que era exactamente lo que faltaba.
+
+### La mutación que los mató
+
+Aplicar el enum sobre la base local compartida lo **bloqueó el sandbox** («Modify Shared
+Resources»), así que la mutación se hizo sobre una **copia real de la tabla** —el `migration.sql`
+ejecutado en un esquema desechable— dentro de una transacción revertida, con una sonda de un solo
+uso que repetía **las aserciones reales**:
+
+```sql
+CREATE TYPE "superficie_vista" AS ENUM ('ordenes');
+ALTER TABLE "vista_filtro" ALTER COLUMN "superficie" TYPE "superficie_vista"
+  USING "superficie"::"superficie_vista";
+```
+
+Resultado, las dos mitades rojas por separado:
+
+```
+AssertionError: expected false to be true          ← el INSERT de una superficie no declarada YA NO ENTRA
+AssertionError: expected 'USER-DEFINED' to be 'text' ← el tipo de la columna
+```
+
+La sonda (`tests/integration/db/zz-probe-453-mutacion-r32.test.ts`) **se borró** después de medir: no
+está en el árbol ni en ningún commit. La base local quedó intacta (la transacción se revierte sola) y
+`vista_filtro` sigue con 0 filas.
+
+## Menores del mismo paquete
+
+| Qué | Dónde |
+| --- | --- |
+| `gate_453.log` → los nombres reales (`gate_453_backend.log`, `gate_453_frontend.log`, `gate_453_c.log`) | `tasks.md` T6.4 y T6.5 |
+| `.guardia.test.ts` → `.guardia.test.tsx` en la guardia de superficies | `tasks.md` T6.1 y fila R34 · `design.md §14` |
+| `limit_reached` → **`limite_excedido`** (se corrige el SPEC, no el código) con el motivo escrito: es el término de otros diez módulos de `lib/types/`, y **no cabe en `ActionError`** porque R13 exige decir `maximo` y `actuales` | `design.md §5` |
+| Fila R32 del mapa, apuntando al archivo que de verdad lo verifica | `tasks.md` |
+| P1–P5 dejan de ser preguntas: **decisiones cerradas con fecha (2026-09-21)**, cada una con su motivo y el test que la sostiene. P1 confirmada por el humano: el orden del listado **no** entra en la vista | `requirements.md` |
+
+## Salida real de esta ronda
+
+```
+> pnpm run typecheck   → sin salida (cero errores)
+> pnpm run lint        → ✖ 202 problems (0 errors, 202 warnings)
+> vitest run (los 4 archivos tocados)  → Test Files 4 passed (4) · Tests 46 passed (46)
+   tests/integration/db/vista-filtro-migration.test.ts: 20 → 26 casos
+```
