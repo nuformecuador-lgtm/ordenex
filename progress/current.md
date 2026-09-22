@@ -1,5 +1,59 @@
 # Estado — sesión del 2026-09-21
 
+## CIERRE DE LA SESIÓN — lee esto primero
+
+`prod` = **`97822ca2`** (la 450, desplegada y verificada) · `dev` = **`fa6ec8ef`**, **pusheado**.
+**SF-001 sigue fuera de producción**, como se acordó: comprobado que `prod` no contiene `dev`.
+
+| Ficha | Estado |
+| --- | --- |
+| **450** · consultas concurrentes en la tx del cierre | ✅ `done`, **en producción** y verificada |
+| **451** · escanear las órdenes sin gestionar | spec escrito (39 requisitos), **sin implementar** |
+| **452** · el flake de api-keys | registrada, sin empezar |
+| **453** · vistas de filtros guardadas | ✅ `done`, en `dev`. **Trae migración: sin desplegar** |
+
+`in_progress` = 0 · gate completo de `dev` en verde: **30.150 tests, cero saltados de
+`integration/db`** (`progress/gate_dev_tras_453.log`).
+
+### Lo que espera al humano, por orden de lo que caduca antes
+
+1. **2026-09-28 — mirar si el aviso de `pg` desapareció** de producción. La entrada está en
+   `docs/release.md` › «Pendiente para la PRÓXIMA release», **con la lectura correcta escrita**: 0
+   confirma el arreglo, y un >0 significa **otro emisor**, no un arreglo fallido.
+2. **El modal del SINPE, ANTES de desplegar SF-001.** `RevisionSinpeBodega` se monta en el **layout
+   global** y es un `Modal`: tapa cualquier pantalla del rol y reaparece **cada sesión de navegador**
+   hasta confirmar el SINPE de la bodega (se aplaza en `sessionStorage`). Hoy no afecta a nadie
+   —en producción no existe ni la columna— pero el día que SF-001 salga, sí. **Decidir si ese
+   comportamiento es el querido.**
+3. **La 451**: antes de desplegarla hay que medir cuántos cierres `vencido` esperan en cola y decidir
+   si se drena. Al exigir el escaneo, esos 14 cierres pasan de 50 a **235** paquetes.
+4. **La 453 no está desplegada** y trae migración (`20260921120000_vista_filtro`, aditiva).
+
+### Hallazgos de esta sesión que muerden a otros
+
+- **`pnpm run db:migrate:create` NO funciona en este repo.** La shadow db revienta con `P3006` en
+  `20260918120200_zona_sinpe_no_nulo`. La migración de la 453 se escribió a mano sobre el DDL de
+  `migrate diff`. El siguiente que necesite crear una se dará el mismo golpe.
+- **`QA_PASSWORD` está rotada en la base LOCAL** a `VistasFiltro453!` (las cuatro cuentas QA).
+  Producción no se tocó.
+- **Quedan 6 lecturas con DOS consultas hermanas sobre un `tx`** (`CierreDiaRepository`,
+  `CierresAdminRepository`, `LiquidacionPagoRepository`, `UserRepository`). No disparan el aviso
+  —hacen falta tres— pero **dos consultas compartiendo conexión SÍ son la condición del `25P02`** de
+  la 440. Censadas por el brazo C de la guardia. Es el siguiente escalón si alguien lo quiere.
+- **Sin commitear, como estaban al empezar**: 7 carpetas `design-*` y ~35 logs viejos de `progress/`.
+
+### La lección de la sesión, medida tres veces
+
+Los **tres rechazos de revisión** del día —dos en la 450, uno en la 453— fueron de **trazabilidad o
+papeleo, ninguno de comportamiento**. El código sobrevivió las veinte y pico mutaciones que se le
+tiraron. Pero el de la 453 no era cosmético: la trazabilidad **afirmaba cubierto un requisito que no
+lo estaba**, y la ficha habría cerrado con su promesa principal sin red. El mapa entre lo que se
+promete y lo que se prueba **se desincroniza solo**; lo que lo caza es un reviewer que EJECUTA en vez
+de leer.
+
+---
+
+
 ## Dónde está todo
 
 `prod` = **`9d3d67b5`** (PR #816, la 449 — el fulfillment en el dinero de Analítica).
