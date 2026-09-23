@@ -163,6 +163,16 @@ T1.4 sobre esta misma rama.
 
 Ver `progress/gate_454_backend.log` (gate COMPLETO, `INIT_EXIT` dentro del log).
 
+- 1.ª corrida: `INIT_EXIT=1`, 6 archivos rojos nuevos (5 por censos que el esquema nuevo movio:
+  relaciones hacia `usuario`, `pg_enum` sin acotar esquema en mi test, censo de notificadores y su
+  cableado, la columna unica del enum de historial, la palabra «rastreo» en un comentario del esquema;
+  y 1 que venia de la Fase 0: `censo-order-status-rename` denuncia el hito publico `en_bodega` de C27 →
+  entrada de allowlist con motivo, sin tocar C27). Arreglados en `1af542e6`.
+- 2.ª corrida (definitiva): typecheck y lint en verde; `Test Files 2104 passed (2104)` · `Tests 30308
+  passed | 1 expected fail | 26 skipped (30335)`; los 26 skipped son de `tests/components/Analitica*`,
+  **0 skipped en `integration/db`**; `init OK`; `INIT_EXIT=0`. El `expected fail` es C07-concurrente
+  (sigue `it.fails` hasta T1.4).
+
 **Veredicto:** cimientos de la 454 (esquema, M1/M2, predicados unicos, webhook de eventos) hechos y
 verdes con la red de la Fase 0 intacta (28/28, C07 aun `it.fails`); la Fase 1 queda DETENIDA en T1.4 por
 cuatro invariantes de la Fase 0 que contradicen R1/R3/R13 y el input de §7.2.
