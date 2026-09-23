@@ -114,7 +114,8 @@ describeSiHayBase("454/T1.2 — la forma de `orden_evento` y de `job_tipo`, tal 
   it("`job_tipo` tiene `webhook_evento` (y siguen los diez de antes)", async () => {
     const filas = await mundo.prisma.$queryRaw<{ v: string }[]>`
       SELECT e.enumlabel AS v FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-       WHERE t.typname = 'job_tipo' ORDER BY e.enumsortorder`;
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+       WHERE n.nspname = 'public' AND t.typname = 'job_tipo' ORDER BY e.enumsortorder`;
     const valores = filas.map((f) => f.v);
     expect(valores).toContain("webhook_evento");
     expect(valores).toContain("push_web");
@@ -124,7 +125,8 @@ describeSiHayBase("454/T1.2 — la forma de `orden_evento` y de `job_tipo`, tal 
   it("`orden_evento_tipo` tiene los SEIS tipos, en su orden", async () => {
     const filas = await mundo.prisma.$queryRaw<{ v: string }[]>`
       SELECT e.enumlabel AS v FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-       WHERE t.typname = 'orden_evento_tipo' ORDER BY e.enumsortorder`;
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+       WHERE n.nspname = 'public' AND t.typname = 'orden_evento_tipo' ORDER BY e.enumsortorder`;
     expect(filas.map((f) => f.v)).toEqual([
       "gestion_registrada",
       "gestion_anulada",

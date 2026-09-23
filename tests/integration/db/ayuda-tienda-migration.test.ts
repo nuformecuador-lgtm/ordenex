@@ -270,8 +270,15 @@ describe("Feature 235 · enum — las DOS familias del viaje (R10/P2)", () => {
           .map((l) => `${e.name}: ${l.trim()}`);
       });
     // Exactamente una declaracion de columna, la de `20260713120000_orden_historial_estado`.
-    expect(columnas).toHaveLength(1);
+    // ⏳ 2026-09-23 (FICHA 454): AQUI DECIA `toHaveLength(1)`. La 454 adopta el enum en
+    // `orden_evento.familia_aplicacion` (`20260923120100_orden_evento`). El riesgo que este caso
+    // vigila —un down de este enum que migre una columna y deje la otra colgando del tipo `_old`— NO
+    // se da: el rollback va de la ultima hacia atras, y el down de esa migracion (`DROP TABLE
+    // "orden_evento"`) corre ANTES que cualquier down que recree este enum. Si una tercera tabla lo
+    // adopta, este caso vuelve a ponerse rojo, que es lo que tiene que hacer.
+    expect(columnas).toHaveLength(2);
     expect(columnas[0]).toContain('"origen_tipo"');
+    expect(columnas[1]).toMatch(/^20260923120100_orden_evento: "familia_aplicacion"/);
   });
 
   it("el DOWN tampoco toca policies RLS", () => {

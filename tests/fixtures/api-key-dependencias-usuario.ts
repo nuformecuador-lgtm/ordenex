@@ -74,6 +74,12 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
     categoria: "bloquea",
     motivo: `Solo hay habilitacion si hubo orden que habilitar: ${VIA_ORDEN}`,
   },
+  // FICHA 454 (2026-09-23): el actor de un hecho de orden. La cuenta de una key solo aparece aqui
+  // como actor de `ayuda_habilitada_api`, que exige una orden propia con ayuda abierta.
+  "OrdenEvento.actor": {
+    categoria: "bloquea",
+    motivo: `Solo hay hecho si hubo orden sobre la que actuar (habilitacion por API): ${VIA_ORDEN}`,
+  },
   "OrdenHistorialEstado.actor": {
     categoria: "bloquea",
     motivo:
@@ -162,6 +168,7 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
   },
   "OrdenTraspasoMensajero.mensajeroNuevo": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
   "OrdenTraspasoMensajero.actor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "OrdenEvento.mensajero": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO }, // ficha 454
   "GestionOrden.mensajero": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
   "GestionOrden.anuladaPorUsuario": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "GestionOrden.pagosEditadosPorUsuario": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },

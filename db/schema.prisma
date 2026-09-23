@@ -3532,7 +3532,7 @@ model OrdenEvento {
   mensajero Usuario?      @relation("OrdenEventoMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   actor     Usuario       @relation("OrdenEventoActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  @@index([ordenId, createdAt]) // linea de tiempo, rastreo, «ultimo evento de ayuda»
+  @@index([ordenId, createdAt]) // linea de tiempo, seguimiento publico, «ultimo evento de ayuda»
   @@index([gestionOrdenId]) // anulada/corregida por gestion; indexa la FK RESTRICT
   @@index([mensajeroId]) // indexa la FK RESTRICT
   @@index([actorUsuarioId]) // indexa la FK RESTRICT

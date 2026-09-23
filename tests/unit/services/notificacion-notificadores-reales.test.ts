@@ -520,6 +520,10 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     // no-op no es comodidad, es lo que impide que las suites que instancian este service escriban
     // avisos contra la base local, que en este repo es COMPARTIDA.
     "WebhookEstadoService.ts", // ficha 403 / §5
+    // FICHA 454 (T1.5): el hermano de `webhook_estado` para los HECHOS de orden (`webhook_evento`)
+    // comparte suscripcion y circuito de pausa, asi que avisa igual; mismo default no-op y por el mismo
+    // motivo (base local COMPARTIDA).
+    "WebhookEventoOrdenService.ts", // ficha 454 / design §12.1
     // FICHA 401 (T11, R12): la SALUD DEL GEOCODIFICADOR pasa a tener notificador — «el servicio de
     // mapas esta rechazando nuestras peticiones». Es el CUARTO aviso del arbol que se dispara SOLO
     // y sin nadie mirando: lo emite el drenador de la cola, que corre CADA MINUTO. Su default
@@ -634,6 +638,19 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     expect(uso).toContain("notificarWebhookSuscripcionPausadaReal");
     expect(uso).toMatch(
       /new WebhookEstadoService\([\s\S]*notificarWebhookSuscripcionPausadaReal,?[\s\S]*\)/,
+    );
+    expect(fuente).toContain(
+      'import { notificarWebhookSuscripcionPausadaReal } from "@/lib/notificaciones/notificadores"',
+    );
+  });
+
+  it("lib/services/jobs/webhook-evento-handler.ts inyecta el notificador real", () => {
+    // FICHA 454 (T1.5) — MISMO MOLDE QUE `webhook-estado-handler.ts`: el notificador es el SEPTIMO
+    // argumento, detras del logger; sin el, el aviso de pausa no se emitiria jamas con la suite verde.
+    const fuente = leer("lib", "services", "jobs", "webhook-evento-handler.ts");
+    const uso = fuenteSinImportsNiComentarios(fuente);
+    expect(uso).toMatch(
+      /new WebhookEventoOrdenService\([\s\S]*notificarWebhookSuscripcionPausadaReal,?[\s\S]*\)/,
     );
     expect(fuente).toContain(
       'import { notificarWebhookSuscripcionPausadaReal } from "@/lib/notificaciones/notificadores"',
