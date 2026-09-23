@@ -51,6 +51,9 @@ describe("R26 — el drenador resuelve el handler de webhook_estado y no lo re-a
       // asi que tampoco va en `buildRecurrencias`.
       "push_web",
       "webhook_estado",
+      // FICHA 454 (2026-09-23): entrega de UN hecho de orden (gestion registrada/anulada/corregida,
+      // ayuda). PUNTUAL, encolado en la misma tx que el hecho: no va en `buildRecurrencias`.
+      "webhook_evento",
       "whatsapp_bienvenida", // mensaje de bienvenida al recoger
       "whatsapp_chat_envio", // feature 109
       "whatsapp_template_sync", // integracion WhatsApp

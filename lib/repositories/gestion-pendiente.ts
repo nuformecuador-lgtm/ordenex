@@ -36,11 +36,20 @@ import { Prisma } from "@prisma/client";
 /** El valor del catalogo `order_status` donde vive toda gestion pendiente. */
 export const ESTATUS_CON_GESTION_PENDIENTE = "en_reparto";
 
+/**
+ * La condicion 2 sola, nivel GESTION: es una gestion de CALLE del modelo nuevo (tiene su evento
+ * `gestion_registrada`). Exportada para la 6.ª condicion de intentos (design §10, segunda via de
+ * inclusion) y para la aplicacion al aprobar (§7.2), que la necesitan SIN las otras dos.
+ */
+export function whereTieneRegistroDeCalle(): Prisma.GestionOrdenWhereInput {
+  return { eventos: { some: { tipo: "gestion_registrada" } } };
+}
+
 /** Forma Prisma, nivel GESTION. */
 export function whereGestionPendiente(): Prisma.GestionOrdenWhereInput {
   return {
     anuladaAt: null,
-    eventos: { some: { tipo: "gestion_registrada" } },
+    ...whereTieneRegistroDeCalle(),
     OR: [{ cierreId: null }, { cierre: { estado: { not: "aprobado" } } }],
   };
 }
