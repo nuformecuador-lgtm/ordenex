@@ -217,7 +217,7 @@ const CATALOGO = [
     id: "entregas",
     etiqueta: "Entregas",
     descripcion:
-      "Gestiones VIGENTES con resultado entregada; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
+      "Gestiones VIGENTES con resultado entregado; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -237,7 +237,7 @@ const CATALOGO = [
     id: "devoluciones",
     etiqueta: "Devoluciones",
     descripcion:
-      "Gestiones VIGENTES con resultado devuelta; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
+      "Gestiones VIGENTES con resultado novedad; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -257,7 +257,7 @@ const CATALOGO = [
     id: "rechazos",
     etiqueta: "Rechazos",
     descripcion:
-      "Gestiones VIGENTES con resultado rechazada; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
+      "Gestiones VIGENTES con resultado devolucion_a_origen_por_rechazo; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -277,7 +277,7 @@ const CATALOGO = [
     id: "reprogramaciones",
     etiqueta: "Reprogramaciones",
     descripcion:
-      "Gestiones VIGENTES con resultado reprogramada; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL), y una misma orden puede aportar varias.",
+      "Gestiones VIGENTES con resultado reprogramado; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL), y una misma orden puede aportar varias.",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -319,9 +319,9 @@ const CATALOGO = [
   },
   {
     id: "novedad_interna",
-    etiqueta: "Sin gestionar",
+    etiqueta: "Novedad interna", // 455 (T1.11, inventario T0.3): cuenta ordenes en `novedad_interna`
     descripcion:
-      "ORDENES sin gestionar HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus novedad_interna (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
+      "ORDENES en novedad interna HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus novedad_interna (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -454,7 +454,7 @@ const CATALOGO = [
     id: "primer_intento_ok",
     etiqueta: "Entrega al primer intento",
     descripcion:
-      "Entregas logradas sin intento previo, contadas con el criterio UNICO ya existente en el repo (numero de cierres APROBADOS distintos en los que la orden tuvo un resultado de gestion rechazada, devuelta o reprogramada), que excluye las gestiones anuladas; esta metrica NO define umbral propio ni columna materializada. DERIVA DECLARADA (feature 215): el criterio de «intento previo» CAMBIO —antes se derivaba de los destinos de transicion del historial, ahora de las gestiones dentro de un cierre APROBADO— y el historico ya escrito en el rollup diario NO se re-backfillea: el escalon de la serie se ASUME a proposito, porque reescribirlo falsearia meses de KPI ya reportados y aquellos cierres no estaban aprobados en el momento de aquel calculo. CORTE POR `updated_at`, NO POR `fecha`: toda fila del rollup diario cuyo `updated_at` sea ANTERIOR al despliegue de la 215 esta calculada con el criterio VIEJO y toda fila con `updated_at` posterior, con el NUEVO, sea cual sea su `fecha`; una fila de una fecha ANTERIOR al corte que se RECALCULA despues del corte pasa a estar calculada con el criterio NUEVO, porque el job recalcula dias pasados y el upsert refresca `updated_at` en cada recalculo, de modo que el corte es por cuando se calculo, no por que dia mide (`updated_at` ya existe por fila: no hace falta columna, tabla ni migracion nuevas, ni una constante de fecha de corte en codigo). EFECTO INTRADIA, propiedad NUEVA y PERMANENTE: una entrega cuya orden tiene cierres sin aprobar reporta 0 intentos previos y cuenta como primer intento, asi que el KPI SUBE durante el dia y BAJA al aprobarse los cierres; no es un artefacto de la migracion de criterio ni desaparece con la deriva declarada, y el mismo dia puede dar dos valores distintos segun cuando se recalcule. El KPI sigue remitiendo al punto unico de conteo del repo, sin COUNT propio, y se mantiene primer_intento_ok <= entregas.",
+      "Entregas logradas sin intento previo, contadas con el criterio UNICO ya existente en el repo (numero de cierres APROBADOS distintos en los que la orden tuvo un resultado de gestion devolucion_a_origen_por_rechazo, novedad o reprogramado), que excluye las gestiones anuladas; esta metrica NO define umbral propio ni columna materializada. DERIVA DECLARADA (feature 215): el criterio de «intento previo» CAMBIO —antes se derivaba de los destinos de transicion del historial, ahora de las gestiones dentro de un cierre APROBADO— y el historico ya escrito en el rollup diario NO se re-backfillea: el escalon de la serie se ASUME a proposito, porque reescribirlo falsearia meses de KPI ya reportados y aquellos cierres no estaban aprobados en el momento de aquel calculo. CORTE POR `updated_at`, NO POR `fecha`: toda fila del rollup diario cuyo `updated_at` sea ANTERIOR al despliegue de la 215 esta calculada con el criterio VIEJO y toda fila con `updated_at` posterior, con el NUEVO, sea cual sea su `fecha`; una fila de una fecha ANTERIOR al corte que se RECALCULA despues del corte pasa a estar calculada con el criterio NUEVO, porque el job recalcula dias pasados y el upsert refresca `updated_at` en cada recalculo, de modo que el corte es por cuando se calculo, no por que dia mide (`updated_at` ya existe por fila: no hace falta columna, tabla ni migracion nuevas, ni una constante de fecha de corte en codigo). EFECTO INTRADIA, propiedad NUEVA y PERMANENTE: una entrega cuya orden tiene cierres sin aprobar reporta 0 intentos previos y cuenta como primer intento, asi que el KPI SUBE durante el dia y BAJA al aprobarse los cierres; no es un artefacto de la migracion de criterio ni desaparece con la deriva declarada, y el mismo dia puede dar dos valores distintos segun cuando se recalcule. El KPI sigue remitiendo al punto unico de conteo del repo, sin COUNT propio, y se mantiene primer_intento_ok <= entregas.",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "porcentaje",
@@ -480,7 +480,7 @@ const CATALOGO = [
     id: "motivos_devolucion",
     etiqueta: "Motivos de devolución",
     descripcion:
-      "Gestiones VIGENTES de resultado devuelta agrupadas por su causa tipificada (not_found, wrong_number, wrong_address); no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
+      "Gestiones VIGENTES de resultado novedad agrupadas por su causa tipificada (not_found, wrong_number, wrong_address); no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -501,7 +501,7 @@ const CATALOGO = [
     id: "tiempo_ciclo",
     etiqueta: "Tiempo de ciclo",
     descripcion:
-      "Segundos entre la creacion de la orden y su llegada a un estado terminal (entregada, devuelta_a_tienda, incidente); mide tiempo de ORDENES, no volumen de gestiones, y no lo alteran las gestiones anuladas.",
+      "Segundos entre la creacion de la orden y su llegada a un estado terminal (entregado, devuelta_a_tienda, incidente); mide tiempo de ORDENES, no volumen de gestiones, y no lo alteran las gestiones anuladas.",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "segundos",

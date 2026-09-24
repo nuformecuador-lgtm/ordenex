@@ -63,30 +63,31 @@ describeSiHayBase("455/C15 — variable {{estatus}} de las plantillas (Postgres 
   });
 
   describe("[INTERMEDIO] lo que la 455 cambia por diseño (R35)", () => {
-    // Fase 0 (2026-09-24): hoy la variable produce el HITO publico del rastreo. La Fase 1 (T1.11) la
-    // cambia al nombre visible del estado y reescribe este bloque con fecha.
-    it("el texto de cada estado, hoy (hito publico)", () => {
+    // ⏳ 2026-09-24 (T1.11, Fase 1): REESCRITO. En la Fase 0 la variable producia el HITO publico del
+    // rastreo («No fue posible entregarlo»…). Ahora produce el NOMBRE VISIBLE del estado, el mismo
+    // que ve la oficina. Literal a mano (tabla §0.1 del spec), no contra `nombreDeEstado`.
+    it("el texto de cada estado es su nombre visible", () => {
       expect(Object.fromEntries(r.map((x) => [x.clave, x.texto]))).toEqual({
         entregado: "Entregado",
-        novedad: "No fue posible entregarlo",
-        devolviendoATienda: "En devolución a la tienda",
-        reprogramado: "Entrega reprogramada",
-        enRutaBodegaCentral: "En tránsito",
-        enBodegaCentral: "En nuestras instalaciones",
-        enPreparacion: "Envío registrado",
-        recogiendo: "En nuestras instalaciones",
-        enRutaBodegaSatelite: "En tránsito",
+        novedad: "Novedad",
+        devolviendoATienda: "Devolviendo a tienda",
+        reprogramado: "Reprogramado",
+        enRutaBodegaCentral: "En ruta a bodega central",
+        enBodegaCentral: "En bodega central",
+        enPreparacion: "En preparación",
+        recogiendo: "Mensajero recogiendo en la bodega",
+        enRutaBodegaSatelite: "En ruta a bodega satélite",
         enReparto: "En reparto",
-        rechazo: "No fue posible entregarlo",
-        enBodegaSatelite: "En nuestras instalaciones",
-        devueltaATienda: "Devuelto a la tienda",
-        novedadInterna: "En reparto",
-        porDevolverCentral: "En devolución a la tienda",
-        devolviendoABodegaCentral: "En devolución a la tienda",
-        porDevolverATienda: "En devolución a la tienda",
-        porRecolectarEnTienda: "Envío registrado",
-        incidente: "No fue posible entregarlo",
-        recolectando: "Envío registrado",
+        rechazo: "Devolución a origen por rechazo",
+        enBodegaSatelite: "En bodega satélite",
+        devueltaATienda: "Devuelta a tienda",
+        novedadInterna: "Novedad interna",
+        porDevolverCentral: "Por devolver a bodega central",
+        devolviendoABodegaCentral: "Devolviendo a bodega central",
+        porDevolverATienda: "Por devolver a tienda",
+        porRecolectarEnTienda: "Por recolectar en tienda",
+        incidente: "Incidente",
+        recolectando: "Recolectando",
       });
     });
   });

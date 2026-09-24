@@ -4,6 +4,7 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { RecepcionSateliteService } from "@/lib/services/RecepcionSateliteService";
 import { listarOrdenesBodegaPaginadoSchema } from "@/lib/types/recepcion-satelite";
 import { seleccionDesdeUrl } from "@/lib/utils/filtros-url";
+import { CODIGO_VIGENTE_DE_ANTERIOR } from "@/lib/types/order-status";
 import { filtroEstado } from "@/app/(app)/ordenes/_components/filtro-estado-def";
 import {
   CLAVE_ESTADO,
@@ -72,7 +73,14 @@ describeSiHayBase("455/C02 — filtro por codigo del listado satelite (Postgres 
       params.append(CLAVE_ESTADO, C.rechazo);
       const desdeUrl = seleccionDesdeUrl(params, [def]);
       const url = await pedir(desdeUrl);
-      return { todas, barra, desdeUrl, url };
+      // ⏳ 2026-09-24 (T1.12, R22): un enlace guardado ANTES de la 455, con los codigos ANTERIORES.
+      const anteriores = new URLSearchParams();
+      for (const vigente of [C.porDevolverCentral, C.rechazo]) {
+        anteriores.append(CLAVE_ESTADO, Object.entries(CODIGO_VIGENTE_DE_ANTERIOR).find(([, v]) => v === vigente)![0]);
+      }
+      const desdeUrlVieja = seleccionDesdeUrl(anteriores, [def]);
+      const urlVieja = await pedir(desdeUrlVieja);
+      return { todas, barra, desdeUrl, url, desdeUrlVieja, urlVieja };
     });
   }
 
@@ -103,11 +111,16 @@ describeSiHayBase("455/C02 — filtro por codigo del listado satelite (Postgres 
   });
 
   describe("[INTERMEDIO] lo que la 455 cambia por diseño (R22)", () => {
-    // Fase 0 (2026-09-24): la URL lleva el codigo que HOY existe y se aplica tal cual. La Fase 1
-    // (T1.12) reescribe este bloque para afirmar que un enlace con el codigo ANTERIOR aplica el vigente.
-    it("la URL con los dos codigos de hoy se lee como esa seleccion y devuelve las mismas cuatro", () => {
+    // ⏳ 2026-09-24 (T1.12, Fase 1): REESCRITO. La URL con los codigos vigentes se lee tal cual, y un
+    // enlace guardado ANTES de la 455 (codigos anteriores) aplica el vigente: mismas cuatro ordenes.
+    it("la URL con los dos codigos vigentes se lee como esa seleccion y devuelve las mismas cuatro", () => {
       expect(r.desdeUrl).toEqual({ [CLAVE_ESTADO]: [C.porDevolverCentral, C.rechazo] });
       expect(r.url).toEqual(r.barra);
+    });
+
+    it("R22: un enlace con los codigos ANTERIORES aplica los vigentes y devuelve las mismas cuatro", () => {
+      expect(r.desdeUrlVieja).toEqual({ [CLAVE_ESTADO]: [C.porDevolverCentral, C.rechazo] });
+      expect(r.urlVieja).toEqual(r.barra);
     });
   });
 });

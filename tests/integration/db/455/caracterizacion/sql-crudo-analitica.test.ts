@@ -262,10 +262,10 @@ describeSiHayBase("455/C05 — numeros de la analitica (Postgres real)", () => {
   });
 
   describe("[INTERMEDIO] lo que la 455 cambia por diseño (R3)", () => {
-    // Fase 0 (2026-09-24): la etiqueta del estatus del rollup operativo es su CODIGO. La Fase 1
-    // (T1.11, `label: nombreDeEstado(f.value)`) reescribe este bloque con fecha.
-    it("la etiqueta de estatus del rollup operativo es el codigo", () => {
-      expect(r.etiquetasLeidas).toEqual([C.entregado, C.novedad, C.novedadInterna]);
+    // ⏳ 2026-09-24 (T1.11, Fase 1): REESCRITO. En la Fase 0 la etiqueta del estatus del rollup
+    // operativo era su CODIGO; ahora es su NOMBRE VISIBLE (literal a mano, tabla §0.1).
+    it("la etiqueta de estatus del rollup operativo es el nombre visible", () => {
+      expect(r.etiquetasLeidas).toEqual(["Entregado", "Novedad", "Novedad interna"]);
     });
   });
 });

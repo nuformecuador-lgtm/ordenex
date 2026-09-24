@@ -18,7 +18,7 @@
 // cabecera que es tipos puros justamente para poder cruzar esa frontera).
 
 import { formatMonto } from "@/lib/config/moneda";
-import { ETIQUETA_POR_HITO, hitoDeEstatus } from "@/lib/types/rastreo-publico";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import { PARAM_GUIA } from "@/app/_landing/guia-en-url";
 
 /* -------------------------------------------------------------------------- */
@@ -488,11 +488,13 @@ const CATALOGO_DECLARADO: CampoPlantilla[] = [
     clave: "estatus",
     campo: "orden.estatusValue",
     nombre: "Estado del envío",
+    // FICHA 455 (T1.11, R35): el NOMBRE VISIBLE del estado, el mismo que ve la oficina (antes: el hito
+    // publico del rastreo, un vocabulario paralelo que la 455 retira).
     descripcion:
-      "Estado en el vocabulario PÚBLICO del rastreo («En reparto»), nunca el value interno de la base.",
+      "El nombre del estado, el mismo que ve la oficina («Mensajero recogiendo en la bodega»), nunca el código interno de la base.",
     ejemplo: "En reparto",
     leer: (d) => d.orden.estatusValue,
-    transform: (v) => (v === null ? VACIO : ETIQUETA_POR_HITO[hitoDeEstatus(v)]),
+    transform: (v) => (v === null ? VACIO : nombreDeEstado(v)),
   }),
   definir({
     clave: "fecha_reparto",

@@ -131,7 +131,9 @@ describe("R18 → 454/R35 — registrar un rechazo crea cuatro avisos con su alc
       expect(fila.entidadTipo).toBe("orden");
       expect(fila.entidadId).toBe("o-1");
       expect(fila.anexo).toBe("4242");
-      expect(fila.descripcion).toBe("Una orden fue rechazada por el destinatario.");
+      // FICHA 455 (R36): el texto CONTIENE el nombre visible exacto del estado (literal a mano).
+      expect(fila.descripcion).toBe("Devolución a origen por rechazo: el destinatario rechazó una orden.");
+      expect(fila.descripcion).toContain("Devolución a origen por rechazo");
       // §4.6: nunca direccion, telefono ni monto.
       expect(String(fila.descripcion)).not.toMatch(/\d+[,.]\d{2}/);
     }

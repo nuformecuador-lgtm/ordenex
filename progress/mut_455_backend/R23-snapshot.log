@@ -1,0 +1,53 @@
+# MUTACION R23-snapshot
+archivo: lib/services/HistorialAccionService.ts
+linea: 99
+- "ACCIONES_CON_SNAPSHOT_DE_RESULTADO.has(accion) ? codigoVigente(valor) : valor;"
++ "ACCIONES_CON_SNAPSHOT_DE_RESULTADO.has(accion) ? valor : valor;"
+tests: tests/integration/db/455/snapshot-lectura.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 1 passed (2)
+FAIL  tests/integration/db/455/snapshot-lectura.test.ts > 455/R23 — el snapshot de un codigo anterior se lee con el vigente > R23: la pantalla lee el codigo VIGENTE (literal a mano)
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/db/455/snapshot-lectura.test.ts (2 tests | 1 failed) 338ms
+     × R23: la pantalla lee el codigo VIGENTE (literal a mano) 7ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  06:23:00
+   Duration  2.98s (transform 942ms, setup 51ms, import 2.38s, tests 338ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/snapshot-lectura.test.ts > 455/R23 — el snapshot de un codigo anterior se lee con el vigente > R23: la pantalla lee el codigo VIGENTE (literal a mano)
+AssertionError: expected [ { anterior: 'entregada', …(1) } ] to deeply equal [ { anterior: 'entregado', …(1) } ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "anterior": "entregado",
+-     "nuevo": "devolucion_a_origen_por_rechazo",
++     "anterior": "entregada",
++     "nuevo": "rechazada",
+    },
+  ]
+
+ ❯ tests/integration/db/455/snapshot-lectura.test.ts:76:21
+     74|
+     75|   it("R23: la pantalla lee el codigo VIGENTE (literal a mano)", () => {
+     76|     expect(r.leido).toEqual([{ anterior: "entregado", nuevo: "devoluci…
+       |                     ^
+     77|   });
+     78|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

@@ -245,8 +245,10 @@ describe("R15 — CONTRAPRUEBA: el detector caza los values que de verdad serian
     const fugado = { ...envio, hitoVigente: "novedad_interna" };
 
     const delatoras = valuesInternosFiltrados(fugado);
-    expect(delatoras).toHaveLength(1);
-    expect(delatoras[0]).toContain("novedad_interna");
+    // ⏳ 2026-09-24 (455, T1.4): `novedad_interna` CONTIENE otro codigo vigente (`novedad`), asi que la
+    // misma cadena se delata dos veces. Lo que importa: se caza, y por el value que es.
+    expect(delatoras.length).toBeGreaterThanOrEqual(1);
+    expect(delatoras.some((d) => d.includes("contiene el value interno novedad_interna"))).toBe(true);
   });
 
   it("caza un value interno escondido dentro de un texto, no solo como valor exacto", async () => {
@@ -262,15 +264,18 @@ describe("R15 — CONTRAPRUEBA: el detector caza los values que de verdad serian
     expect(valuesInternosFiltrados(fugado).length).toBeGreaterThan(0);
   });
 
-  it("caza los DIECINUEVE values que no son homonimos de un hito publico", () => {
-    // Uno a uno: la excepcion de la homonimia se aplica a `en_reparto` y a NADIE mas.
+  it("caza los DIECISIETE values que no son homonimos de un hito publico", () => {
+    // ⏳ 2026-09-24 (455, T1.4): con los codigos de la 455, DOS estados mas se escriben igual que un
+    // hito publico (`entregado`, `reprogramado`): la homonimia pasa de uno a tres. Los hitos
+    // desaparecen con T1.9 (design DF) y esta guardia se reescribe entonces.
+    const HOMONIMOS = ["entregado", "reprogramado", "en_reparto"];
     const homonimos = ORDER_STATUS_SEED.filter((value) => VOCABULARIO_PUBLICO.has(value));
-    expect(homonimos).toEqual(["en_reparto"]);
+    expect(homonimos).toEqual(HOMONIMOS);
 
     for (const value of ORDER_STATUS_SEED) {
       const objeto = { hito: value, fecha: "2026-01-01T09:00-06:00" };
       const delatoras = valuesInternosFiltrados(objeto);
-      if (value === "en_reparto") expect(delatoras).toEqual([]);
+      if (HOMONIMOS.includes(value)) expect(delatoras).toEqual([]);
       else expect(delatoras, `el detector deja pasar ${value}`).not.toEqual([]);
     }
   });
