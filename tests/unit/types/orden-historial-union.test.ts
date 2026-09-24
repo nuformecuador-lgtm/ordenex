@@ -133,6 +133,10 @@ function etiquetaDe(entrada: OrdenHistorialEntradaDTO): string {
     case "traspaso_mensajero":
       // FICHA 427: estrechada, los dos nombres, el actor y su rol CONGELADO se leen sin ceremonia.
       return `${entrada.mensajeroAnteriorNombre}->${entrada.mensajeroNuevoNombre} por ${entrada.actorNombre} (${entrada.actorRol})`;
+    case "evento_orden":
+      // FICHA 454 (T1.21): estrechada, el tipo del hecho, su resultado y el actor con su rol
+      // CONGELADO se leen sin ceremonia. La cuarta clase llego por la trampa de este `default`.
+      return `${entrada.tipo}:${entrada.resultado ?? "-"} por ${entrada.actorNombre} (${entrada.actorRol})`;
     default: {
       // EXHAUSTIVIDAD DEMOSTRADA: una tercera clase sin rama rompe el build en esta linea.
       const _exhaustivo: never = entrada;
@@ -176,6 +180,18 @@ describe("262/R42 — la union discriminada del historial", () => {
     expect(etiquetaDe(traspaso)).toBe(
       "Andy Cortes->Carlos Eduardo por Coordinadora Ana (admin)",
     );
+
+    // FICHA 454 (T1.21): la CUARTA forma.
+    const evento: OrdenHistorialEntradaDTO = {
+      clase: "evento_orden",
+      tipo: "gestion_registrada",
+      resultado: "entregada",
+      resultadoAnterior: null,
+      actorNombre: "Carlos Eduardo",
+      actorRol: "mensajero",
+      createdAt: new Date("2026-09-23T15:00:00.000Z"),
+    };
+    expect(etiquetaDe(evento)).toBe("gestion_registrada:entregada por Carlos Eduardo (mensajero)");
   });
 
   it("el discriminante es EXPLICITO: las dos clases se distinguen por `clase` y no por la presencia de un campo", () => {
@@ -185,7 +201,8 @@ describe("262/R42 — la union discriminada del historial", () => {
       "transicion",
       "correccion_dia",
       "traspaso_mensajero",
+      "evento_orden", // FICHA 454 (T1.21)
     ];
-    expect(clases).toEqual(["transicion", "correccion_dia", "traspaso_mensajero"]);
+    expect(clases).toEqual(["transicion", "correccion_dia", "traspaso_mensajero", "evento_orden"]);
   });
 });

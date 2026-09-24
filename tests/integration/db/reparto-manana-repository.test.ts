@@ -443,7 +443,7 @@ describeSiHayBase("413/R4 — lo que NO se cuenta", () => {
         fechaReparto: "2026-09-12",
       };
 
-      // UNA por cada estado del universo del portal: las TRES tienen que contar.
+      // UNA por cada estado del universo del portal: todas tienen que contar (454: son DOS).
       for (const estado of ESTADOS_REPARTO_MENSAJERO) {
         await sembrarOrden(tx, { ...base, estatusId: await estatusIdDe(tx, estado) });
       }
@@ -459,9 +459,11 @@ describeSiHayBase("413/R4 — lo que NO se cuenta", () => {
       };
     });
 
-    // Se sembraron CINCO y cuentan TRES: el `where` está separando de verdad.
-    expect(r.sembradas).toBe(5);
-    expect(r.total, "el conteo incluye estados que el portal del mensajero no muestra").toBe(3);
+    // Se sembraron CUATRO y cuentan DOS: el `where` está separando de verdad.
+    // ⏳ 2026-09-23 (FICHA 454, R37): el universo del portal pierde `ayuda_tienda` (tres -> dos
+    // estados), asi que se siembran dos del universo + dos fuera. Antes: CINCO y TRES.
+    expect(r.sembradas).toBe(4);
+    expect(r.total, "el conteo incluye estados que el portal del mensajero no muestra").toBe(2);
   });
 
   it("⭑ R4: una orden SIN día de reparto (anterior a la 246) no entra", async () => {

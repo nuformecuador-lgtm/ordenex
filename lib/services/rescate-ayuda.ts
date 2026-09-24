@@ -28,22 +28,20 @@ import { estaEnVentanaDeEscritura } from "@/lib/types/ventana-hilo-notas";
  * rescatarla (bloqueado) ni cerrar (la orden en ayuda bloquea el cierre). Hoy tampoco se comprueba.
  */
 
-/** El estatus del que se rescata. */
-const ESTATUS_AYUDA = "ayuda_tienda";
-/** El estatus al que se vuelve: la orden regresa a la calle, con su mismo mensajero. */
-const ESTATUS_EN_REPARTO = "en_reparto";
+// FICHA 454 (T1.15): aqui vivian `ESTATUS_AYUDA` y `ESTATUS_EN_REPARTO`. El rescate ya no transiciona:
+// registra el hecho `ayuda_rescatada` sobre una orden que siguio `en_reparto`.
 
 /** Lo que el rescate necesita, por interfaz. Sin Prisma, sin Next, sin HTTP. */
 export interface RescateAyudaDeps {
   /** El MISMO repositorio del hilo y la MISMA autorizacion que usa `OrdenNotaService`. */
   notaRepo: Pick<IOrdenNotaRepository, "findOrdenParaHilo">;
-  ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "transicionarAyuda">;
+  ordenRepo: Pick<IOrdenRepository, "registrarAyudaResuelta">;
 }
 
 /**
  * `forbidden` es OPACO y hereda el del hilo tal cual: rol sin hilo, orden inexistente o ajena,
- * orden que NO esta en el estatus de ayuda, actor fuera de su ventana, o catalogo incompleto. Los
- * cinco devuelven lo mismo — el borde no es un oraculo del estado de una guia.
+ * orden SIN ayuda abierta, o actor fuera de su ventana. Todos devuelven lo mismo — el borde no es un
+ * oraculo del estado de una guia.
  */
 export type RescateAyudaResult = { status: "ok" } | { status: "forbidden" };
 
@@ -57,36 +55,27 @@ export async function rescatarOrdenAyuda(
   const acceso = await autorizarSobreHilo(deps.notaRepo, ordenId, actor);
   if (!acceso.ok) return { status: "forbidden" };
 
-  // 2. R9 — GUARDA DE ESTADO. Rescatar una orden que no esta en el estatus de ayuda no es un
-  //    no-op silencioso: se rechaza aqui, ANTES de tocar nada, para que no haya ninguna
-  //    transicion registrada. (La guarda del WHERE del repo es la segunda red, no la primera.)
-  if (acceso.orden.estatusValue !== ESTATUS_AYUDA) return { status: "forbidden" };
+  // 2. R9 (235) — GUARDA. FICHA 454 (T1.15): la condicion ya no es el estatus `ayuda_tienda` sino la
+  //    ayuda ABIERTA (derivacion unica): la orden sigue `en_reparto`. Rescatar una orden sin ayuda
+  //    abierta se rechaza aqui, ANTES de escribir nada; la re-lectura bajo candado del repositorio
+  //    es la segunda red.
+  if (!acceso.orden.ayudaAbierta) return { status: "forbidden" };
 
-  // 3. Y la misma VENTANA que para escribir en el hilo. Hoy es redundante con el paso 2 —
-  //    `ayuda_tienda` esta en la ventana de los DOS roles— y se conserva a proposito: quien no
-  //    puede decir nada sobre la orden tampoco puede declarar que la ayuda ya no hace falta, y si
-  //    algun dia la ventana se estrecha, el rescate se estrecha CON ella sin que nadie lo recuerde.
-  if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue)) {
+  // 3. Y la misma VENTANA que para escribir en el hilo (con la ayuda abierta, la de los dos roles).
+  //    Se conserva a proposito: quien no puede decir nada sobre la orden tampoco puede declarar que
+  //    la ayuda ya no hace falta.
+  if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayudaAbierta)) {
     return { status: "forbidden" };
   }
 
-  // 4. FALLO CERRADO al resolver el catalogo (design §3.3): si el seed no tiene alguno de los dos
-  //    values, la operacion se rechaza ENTERA sin mover nada. Una escritura a medias sobre el
-  //    estado es peor que un error visible. Mismo criterio que `MSG_CATALOGO` de `CierreDiaService`.
-  const [origenId, destinoId] = await Promise.all([
-    deps.ordenRepo.findEstatusIdByValue(ESTATUS_AYUDA),
-    deps.ordenRepo.findEstatusIdByValue(ESTATUS_EN_REPARTO),
-  ]);
-  if (origenId === null || destinoId === null) return { status: "forbidden" };
-
-  // 5. LA UNICA ESCRITURA. Guardada por el estado de origen y con su append en la misma tx.
-  //    `actorUsuarioId` es quien la provoco (R10): el mensajero o la tienda, segun quien llame.
-  await deps.ordenRepo.transicionarAyuda({
+  // 4. LA UNICA ESCRITURA: el hecho `ayuda_rescatada` —«Recuperar» del mensajero o «Habilitar» de la
+  //    tienda, que lo distingue `actor_rol`—, sin transicion (R23). Guardado por «ayuda abierta» bajo
+  //    candado; si otra via la cerro entre medias, no escribe nada (como el `updateMany` de la 235).
+  await deps.ordenRepo.registrarAyudaResuelta({
     ordenId,
-    estatusOrigenId: origenId,
-    estatusDestinoId: destinoId,
+    tipo: "ayuda_rescatada",
     actorUsuarioId: actor.usuarioId,
-    origenTipo: "rescate_ayuda_tienda",
+    actorRol: acceso.rol,
   });
 
   return { status: "ok" };

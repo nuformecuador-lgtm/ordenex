@@ -3,6 +3,7 @@ import { columnaIntentos } from "@/components/shared/intentos-entrega";
 import { PriceLabel } from "@/components/shared/PriceLabel";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { EstatusBadge } from "./EstatusBadge";
+import { NotaGestionPendiente } from "./NotaGestionPendiente";
 import { toValidNumber } from "@/lib/utils/number";
 
 // Placeholder para valores ausentes (relación opcional no resuelta).
@@ -100,11 +101,24 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   {
     id: "estatus",
     value: "Estado",
+    // FICHA 454 (T2.2/T2.6, R29) — junto al chip, la NOTA de la gestión pendiente de confirmar
+    // («Entregada · pendiente de confirmación») o de la ayuda abierta («Ayuda solicitada a la
+    // tienda»). El chip sigue diciendo el estado real («En reparto»): la nota no lo sustituye.
+    // Las dos señales las decide el SERVIDOR (`gestionPendiente`/`ayudaAbierta` del DTO, predicado
+    // único en `lib/repositories/gestion-pendiente.ts`); aquí solo se leen. Esta columna la
+    // comparten `/ordenes` y la bodega satélite (`recibidas-columns`), así que las dos pantallas
+    // la pintan por el mismo sitio. Un DTO sin los campos (lector que no los anota) no pinta nota.
     render: (row) => (
-      <EstatusBadge
-        value={row.relaciones?.estatus?.value ?? row.estatusValue ?? SIN_DATO}
-        zonaNombre={row.relaciones?.zona?.nombre ?? row.zonaNombre}
-      />
+      <span className="inline-flex flex-wrap items-center gap-1">
+        <EstatusBadge
+          value={row.relaciones?.estatus?.value ?? row.estatusValue ?? SIN_DATO}
+          zonaNombre={row.relaciones?.zona?.nombre ?? row.zonaNombre}
+        />
+        <NotaGestionPendiente
+          resultadoPendiente={row.gestionPendiente?.resultado ?? null}
+          ayudaAbierta={row.ayudaAbierta === true}
+        />
+      </span>
     ),
   },
   // Feature 160 (D6/R17/R21): intentos de entrega como COLUMNA propia, insertada

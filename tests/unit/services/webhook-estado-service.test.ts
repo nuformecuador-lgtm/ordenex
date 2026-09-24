@@ -609,7 +609,10 @@ describe("256/R17 — el conjunto de transiciones que emiten evento", () => {
     //
     // ⏳ 2026-08-31 — y eso es exactamente lo que hizo: 12 -> 13 al entrar `en_preparacion`, el
     // evento de NACIMIENTO de la rama de fulfillment. La lista de exencion NO se toca (sigue vacia).
-    expect(EVENTOS_PUBLICOS.size).toBe(13);
+    //
+    // ⏳ 2026-09-23 — FICHA 454 (R34): 13 -> 12, sale `ayuda_tienda` (el estado se retira; la ayuda
+    // viaja como `orden.ayuda_*` por `webhook_evento`). La exencion por familia sigue vacia.
+    expect(EVENTOS_PUBLICOS.size).toBe(12);
     expect(ORIGENES_SIN_EVENTO_PUBLICO.length).toBe(0);
   });
 });

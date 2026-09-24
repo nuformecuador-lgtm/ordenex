@@ -4,6 +4,8 @@ import type {
   RolValue,
 } from "@prisma/client";
 
+import type { OrdenEventoTipo } from "@/lib/types/orden-evento";
+
 // Feature 49 (design §1.2, R23) — fuente unica de verdad de los tipos de ORIGEN de una
 // transicion de estado, respaldada por el enum Postgres nativo `orden_historial_origen_tipo`
 // (patron METODO_PAGO_SEED / WALLET_*_SEED). Son los 12 call-sites de escritura de
@@ -529,7 +531,39 @@ export interface OrdenHistorialTraspasoDTO {
  * PROHIBIDOS en el borde publico. Renombrarlo dejaria esa guardia vigilando un simbolo muerto —
  * verde para siempre y sin decir nada.
  */
+/**
+ * FICHA 454 (T1.21, design §12.4; R30) — un HECHO sobre la orden que NO es una transicion de estado
+ * (`orden_evento`): gestion registrada, anulada o corregida, y la ida y la vuelta de la ayuda a la
+ * tienda. Con la 454 la gestion de calle deja de mover la orden (el estado se aplica al APROBAR el
+ * cierre) y la ayuda deja de ser estado: sin esta clase, la linea de tiempo no enseñaria NADA entre
+ * «En reparto» y la aplicacion, que puede tardar un dia entero.
+ *
+ * NO TIENE ESTADO DE ORIGEN NI DE DESTINO, por lo mismo que la correccion del dia y el traspaso.
+ *
+ * `resultado` es el snapshot del evento (el registrado; en `gestion_corregida`, el NUEVO) y
+ * `resultadoAnterior` solo viaja en `gestion_corregida`; `null` en los de ayuda.
+ *
+ * `actorNombre` es NOT NULL: ningun cron escribe `orden_evento` (la columna es NOT NULL). `actorRol`
+ * es el CONGELADO de la fila (427/R26), nunca el vivo.
+ *
+ * NO LLEVA `motivo` A PROPOSITO: R30 pide «actor e instante». La causa tipificada viaja por el
+ * webhook y por la gestion; la linea de tiempo no la necesita para decir QUE paso.
+ */
+export interface OrdenHistorialEventoDTO {
+  clase: "evento_orden";
+  tipo: OrdenEventoTipo;
+  resultado: GestionResultado | null;
+  resultadoAnterior: GestionResultado | null;
+  actorNombre: string;
+  /** R26 (427) — el rol CONGELADO en el instante del hecho, no el vivo de hoy. */
+  actorRol: RolValue;
+  createdAt: Date;
+}
+
+// FICHA 454 (T1.21): la CUARTA clase. Rompe a proposito `RANGO_POR_CLASE` y el `switch` exhaustivo
+// de `HistorialOrdenTimeline.tsx`, igual que la 427 con el traspaso.
 export type OrdenHistorialEntradaDTO =
   | OrdenHistorialTransicionDTO
   | OrdenHistorialCorreccionDiaDTO
-  | OrdenHistorialTraspasoDTO;
+  | OrdenHistorialTraspasoDTO
+  | OrdenHistorialEventoDTO;

@@ -4,7 +4,6 @@ import type {
   IOrdenNotaRepository,
   OrdenParaHilo,
 } from "@/lib/interfaces/repositories/IOrdenNotaRepository";
-import type { TransicionAyudaInput } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { HabilitarNovedadService } from "@/lib/services/HabilitarNovedadService";
 import { SolicitudAyudaService } from "@/lib/services/SolicitudAyudaService";
@@ -22,12 +21,16 @@ import type { OrdenNotaDTO } from "@/lib/types/orden-nota";
 // LO QUE SUSTITUYE. Hasta el 2026-08-19 habia DOS apagadores de la bandera haciendo lo mismo desde
 // dos sitios: `OrdenRepository.desmarcarAyuda` («Recuperar») y `OrdenRepository.habilitarNovedad`
 // («Habilitar»). R8 exige un solo punto de escritura y que sea el que usen los dos lados.
+//
+// ⏳ 2026-09-23 (FICHA 454, T1.15, R23): el rescate deja de ser la TRANSICION `ayuda_tienda ->
+// en_reparto` y pasa a ser el evento `ayuda_rescatada` (`registrarAyudaResuelta`): la orden estaba
+// y sigue `en_reparto`; lo que se cierra es la ayuda. «En ayuda» = ayuda ABIERTA (derivacion). El
+// punto unico, las dos puertas, el actor real y la idempotencia por construccion no cambian. Sin
+// catalogo que resolver, el fallo cerrado del catalogo (design §3.3 de la 235) desaparece.
 
 const MENSAJERO = "u-mensajero";
 const TIENDA = "u-tienda";
 const ORDEN = "11111111-1111-4111-8111-111111111111";
-const ID_AYUDA = "s-ayuda";
-const ID_EN_REPARTO = "s-en-reparto";
 
 const actorMensajero: Actor = { usuarioId: MENSAJERO, rol: "mensajero" };
 const actorTienda: Actor = { usuarioId: TIENDA, rol: "adminTienda" };
@@ -46,7 +49,8 @@ function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
   return {
     tiendaId: TIENDA,
     mensajeroAsignadoId: MENSAJERO,
-    estatusValue: "ayuda_tienda",
+    estatusValue: "en_reparto",
+    ayudaAbierta: true,
     deletedAt: null,
     // Feature 261 (B15): `fechaReparto` es OBLIGATORIO en `OrdenParaHilo` (insumo de la puerta
     // A de la via de la tienda). `null` = sin reserva, el caso por defecto.
@@ -55,13 +59,16 @@ function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
   };
 }
 
-function build(
-  orden: OrdenParaHilo | null = ordenParaHilo(),
-  catalogo: Record<string, string | null> = { ayuda_tienda: ID_AYUDA, en_reparto: ID_EN_REPARTO },
-) {
+interface ResueltaInput {
+  ordenId: string;
+  tipo: "ayuda_rescatada" | "ayuda_habilitada_api";
+  actorUsuarioId: string;
+  actorRol: string;
+}
+
+function build(orden: OrdenParaHilo | null = ordenParaHilo()) {
   const ordenRepo = {
-    findEstatusIdByValue: vi.fn(async (value: string) => catalogo[value] ?? null),
-    transicionarAyuda: vi.fn(async (_input: TransicionAyudaInput): Promise<boolean> => true),
+    registrarAyudaResuelta: vi.fn(async (_input: ResueltaInput): Promise<boolean> => true),
   };
   const notaRepo: Pick<IOrdenNotaRepository, "findOrdenParaHilo"> = {
     findOrdenParaHilo: vi.fn(async () => orden),
@@ -70,7 +77,7 @@ function build(
 }
 
 describe("rescatarOrdenAyuda — la ESCRITURA (R8/R10/R13)", () => {
-  it("R8: transiciona `ayuda_tienda -> en_reparto` con la familia de la VUELTA y el actor real", async () => {
+  it("R8 → 454/R23: registra `ayuda_rescatada` con el actor real (la orden no se mueve)", async () => {
     const { deps, ordenRepo } = build();
 
     const r = await rescatarOrdenAyuda(deps, ORDEN, actorMensajero);
@@ -78,12 +85,11 @@ describe("rescatarOrdenAyuda — la ESCRITURA (R8/R10/R13)", () => {
     expect(r).toEqual({ status: "ok" });
     // Igualdad EXACTA del input, no `toMatchObject`: R13 (money-safe) se sostiene sobre que el
     // service no le pida al repo nada mas que el cambio de estatus.
-    expect(ordenRepo.transicionarAyuda).toHaveBeenCalledWith({
+    expect(ordenRepo.registrarAyudaResuelta).toHaveBeenCalledWith({
       ordenId: ORDEN,
-      estatusOrigenId: ID_AYUDA,
-      estatusDestinoId: ID_EN_REPARTO,
+      tipo: "ayuda_rescatada",
       actorUsuarioId: MENSAJERO,
-      origenTipo: "rescate_ayuda_tienda",
+      actorRol: "mensajero",
     });
   });
 
@@ -95,7 +101,7 @@ describe("rescatarOrdenAyuda — la ESCRITURA (R8/R10/R13)", () => {
 
     await rescatarOrdenAyuda(deps, ORDEN, actorTienda);
 
-    expect(ordenRepo.transicionarAyuda.mock.calls[0]![0].actorUsuarioId).toBe(TIENDA);
+    expect(ordenRepo.registrarAyudaResuelta.mock.calls[0]![0].actorUsuarioId).toBe(TIENDA);
   });
 
   it("R13 (MONEY-SAFE): el input NO lleva montos, ni prioridad, ni mensajero", async () => {
@@ -103,14 +109,8 @@ describe("rescatarOrdenAyuda — la ESCRITURA (R8/R10/R13)", () => {
 
     await rescatarOrdenAyuda(deps, ORDEN, actorMensajero);
 
-    const input = ordenRepo.transicionarAyuda.mock.calls[0]![0];
-    expect(Object.keys(input).sort()).toEqual([
-      "actorUsuarioId",
-      "estatusDestinoId",
-      "estatusOrigenId",
-      "ordenId",
-      "origenTipo",
-    ]);
+    const input = ordenRepo.registrarAyudaResuelta.mock.calls[0]![0];
+    expect(Object.keys(input).sort()).toEqual(["actorRol", "actorUsuarioId", "ordenId", "tipo"]);
   });
 });
 
@@ -121,24 +121,22 @@ describe("rescatarOrdenAyuda — LA GUARDA DE ESTADO, atacada de frente (R9)", (
     ["entregada"], // otra pestaña la gestiono
     ["devuelta"], // una devolucion anclada: «Habilitar» tambien pasa por aqui
   ])(
-    "R9: rescatar una orden en `%s` devuelve forbidden y NO escribe ni una fila de historial",
+    "R9: rescatar una orden en `%s` SIN ayuda abierta devuelve forbidden y NO escribe nada",
     async (estatusValue) => {
-      const { deps, ordenRepo } = build(ordenParaHilo({ estatusValue }));
+      const { deps, ordenRepo } = build(ordenParaHilo({ estatusValue, ayudaAbierta: false }));
 
       const r = await rescatarOrdenAyuda(deps, ORDEN, actorMensajero);
 
       expect(r).toEqual({ status: "forbidden" });
-      expect(ordenRepo.transicionarAyuda).not.toHaveBeenCalled();
-      // Y ni siquiera se molesta en resolver el catalogo: la guarda corta ANTES.
-      expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalled();
+      expect(ordenRepo.registrarAyudaResuelta).not.toHaveBeenCalled();
     },
   );
 
   it("R9: un SEGUNDO rescate no produce una segunda transicion", async () => {
     // La idempotencia es POR CONSTRUCCION: no hay codigo de idempotencia. El primer rescate deja
     // la orden en `en_reparto` y el segundo encuentra un estado que la guarda rechaza.
-    const primero = build(ordenParaHilo({ estatusValue: "ayuda_tienda" }));
-    const segundo = build(ordenParaHilo({ estatusValue: "en_reparto" })); // tras el primero
+    const primero = build(ordenParaHilo({ ayudaAbierta: true }));
+    const segundo = build(ordenParaHilo({ ayudaAbierta: false })); // tras el primero
 
     await expect(rescatarOrdenAyuda(primero.deps, ORDEN, actorMensajero)).resolves.toEqual({
       status: "ok",
@@ -146,8 +144,8 @@ describe("rescatarOrdenAyuda — LA GUARDA DE ESTADO, atacada de frente (R9)", (
     await expect(rescatarOrdenAyuda(segundo.deps, ORDEN, actorMensajero)).resolves.toEqual({
       status: "forbidden",
     });
-    expect(primero.ordenRepo.transicionarAyuda).toHaveBeenCalledTimes(1);
-    expect(segundo.ordenRepo.transicionarAyuda).not.toHaveBeenCalled();
+    expect(primero.ordenRepo.registrarAyudaResuelta).toHaveBeenCalledTimes(1);
+    expect(segundo.ordenRepo.registrarAyudaResuelta).not.toHaveBeenCalled();
   });
 
   it("orden de OTRO mensajero: `forbidden` opaco y sin escritura", async () => {
@@ -156,7 +154,7 @@ describe("rescatarOrdenAyuda — LA GUARDA DE ESTADO, atacada de frente (R9)", (
     const r = await rescatarOrdenAyuda(deps, ORDEN, actorMensajero);
 
     expect(r).toEqual({ status: "forbidden" });
-    expect(ordenRepo.transicionarAyuda).not.toHaveBeenCalled();
+    expect(ordenRepo.registrarAyudaResuelta).not.toHaveBeenCalled();
   });
 
   it("orden de OTRA tienda: `forbidden` opaco y sin escritura", async () => {
@@ -165,7 +163,7 @@ describe("rescatarOrdenAyuda — LA GUARDA DE ESTADO, atacada de frente (R9)", (
     const r = await rescatarOrdenAyuda(deps, ORDEN, actorTienda);
 
     expect(r).toEqual({ status: "forbidden" });
-    expect(ordenRepo.transicionarAyuda).not.toHaveBeenCalled();
+    expect(ordenRepo.registrarAyudaResuelta).not.toHaveBeenCalled();
   });
 
   it("orden inexistente y orden borrada dan el MISMO `forbidden` (el borde no es un oraculo)", async () => {
@@ -178,8 +176,8 @@ describe("rescatarOrdenAyuda — LA GUARDA DE ESTADO, atacada de frente (R9)", (
     await expect(rescatarOrdenAyuda(borrada.deps, ORDEN, actorMensajero)).resolves.toEqual({
       status: "forbidden",
     });
-    expect(inexistente.ordenRepo.transicionarAyuda).not.toHaveBeenCalled();
-    expect(borrada.ordenRepo.transicionarAyuda).not.toHaveBeenCalled();
+    expect(inexistente.ordenRepo.registrarAyudaResuelta).not.toHaveBeenCalled();
+    expect(borrada.ordenRepo.registrarAyudaResuelta).not.toHaveBeenCalled();
   });
 
   it("un rol SIN hilo no llega ni a leer la orden", async () => {
@@ -192,20 +190,9 @@ describe("rescatarOrdenAyuda — LA GUARDA DE ESTADO, atacada de frente (R9)", (
 
     expect(r).toEqual({ status: "forbidden" });
     expect(notaRepo.findOrdenParaHilo).not.toHaveBeenCalled();
-    expect(ordenRepo.transicionarAyuda).not.toHaveBeenCalled();
+    expect(ordenRepo.registrarAyudaResuelta).not.toHaveBeenCalled();
   });
 
-  it("FALLO CERRADO: catalogo incompleto -> forbidden sin mover nada (design §3.3)", async () => {
-    const { deps, ordenRepo } = build(ordenParaHilo(), {
-      ayuda_tienda: ID_AYUDA,
-      en_reparto: null,
-    });
-
-    const r = await rescatarOrdenAyuda(deps, ORDEN, actorMensajero);
-
-    expect(r).toEqual({ status: "forbidden" });
-    expect(ordenRepo.transicionarAyuda).not.toHaveBeenCalled();
-  });
 });
 
 // =================================================================================================
@@ -216,14 +203,18 @@ describe("rescatarOrdenAyuda — LA GUARDA DE ESTADO, atacada de frente (R9)", (
 // escritura, con lo unico que debe diferenciarlos —el actor— cambiado.
 // =================================================================================================
 describe("R8 — «Recuperar» (mensajero) y «Habilitar» (tienda) escriben por el MISMO punto", () => {
-  it("los dos producen la MISMA transicion, y solo cambia el actor", async () => {
-    const compartido = build(ordenParaHilo({ estatusValue: "ayuda_tienda" }));
+  it("los dos producen el MISMO registro, y solo cambia el actor", async () => {
+    const compartido = build(ordenParaHilo({ ayudaAbierta: true }));
     const { deps, ordenRepo, notaRepo } = compartido;
 
     // El mensajero, por «Recuperar».
     const solicitud = new SolicitudAyudaService(
       { publicar: vi.fn(async () => ({ status: "forbidden" as const })) },
-      { ...ordenRepo, incrementarIntentoContacto: vi.fn(async () => 0) },
+      {
+        ...ordenRepo,
+        registrarAyudaSolicitada: vi.fn(async () => true),
+        incrementarIntentoContacto: vi.fn(async () => 0),
+      } as never,
       notaRepo,
       { liberarOrdenEnGestion: vi.fn(async () => true) },
     );
@@ -238,13 +229,14 @@ describe("R8 — «Recuperar» (mensajero) y «Habilitar» (tienda) escriben por
     await solicitud.recuperar({ ordenId: ORDEN }, actorMensajero);
     await habilitar.habilitar({ ordenId: ORDEN, nota: "ya lo resolvimos" }, actorTienda);
 
-    expect(ordenRepo.transicionarAyuda).toHaveBeenCalledTimes(2);
-    const [porRecuperar] = ordenRepo.transicionarAyuda.mock.calls[0]!;
-    const [porHabilitar] = ordenRepo.transicionarAyuda.mock.calls[1]!;
-    // Identicos salvo el actor: mismo origen, mismo destino, MISMA familia.
-    expect({ ...porRecuperar, actorUsuarioId: "X" }).toEqual({
+    expect(ordenRepo.registrarAyudaResuelta).toHaveBeenCalledTimes(2);
+    const [porRecuperar] = ordenRepo.registrarAyudaResuelta.mock.calls[0]!;
+    const [porHabilitar] = ordenRepo.registrarAyudaResuelta.mock.calls[1]!;
+    // Identicos salvo el actor (persona y rol): mismo tipo de evento.
+    expect({ ...porRecuperar, actorUsuarioId: "X", actorRol: "Y" }).toEqual({
       ...porHabilitar,
       actorUsuarioId: "X",
+      actorRol: "Y",
     });
     expect(porRecuperar.actorUsuarioId).toBe(MENSAJERO);
     expect(porHabilitar.actorUsuarioId).toBe(TIENDA);
@@ -262,6 +254,6 @@ describe("R8 — «Recuperar» (mensajero) y «Habilitar» (tienda) escriben por
     const r = await rescatarOrdenAyuda(deps, ORDEN, actorMensajero);
 
     expect(r).toEqual({ status: "ok" });
-    expect(ordenRepo.transicionarAyuda).toHaveBeenCalledTimes(1);
+    expect(ordenRepo.registrarAyudaResuelta).toHaveBeenCalledTimes(1);
   });
 });

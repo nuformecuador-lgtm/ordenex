@@ -91,6 +91,13 @@ export interface FilaGestionFake {
    * discriminador existe para impedir — y el que cobra dinero de mas.
    */
   origenTiposHistorial: string[];
+  /**
+   * FICHA 454 (design §10) — la SEGUNDA VIA de la sexta condicion: la gestion tiene su evento
+   * `gestion_registrada` (gestion de calle del modelo nuevo, cuya fila de historial se escribe al
+   * APROBAR y, si es `devuelta`, con la familia `anclaje_devolucion`). Opcional con default `false`
+   * a proposito: todas las filas anteriores a la 454 son de la primera via.
+   */
+  registradaComoCalle?: boolean;
 }
 
 /** Forma del `where` que produce `whereIntentosVigentes` (feature 215). */
@@ -100,7 +107,11 @@ interface WhereIntentos {
   anuladaAt: null;
   cierreId: { not: null };
   cierre: { estado: string };
-  historialEstados: { some: { ordenId: FiltroOrdenFake; origenTipo: { in: string[] } } };
+  // ⏳ 2026-09-23 (FICHA 454, design §10): la sexta condicion pasa a ser un `OR` de DOS vias.
+  OR: [
+    { historialEstados: { some: { ordenId: FiltroOrdenFake; origenTipo: { in: string[] } } } },
+    { eventos: { some: { tipo: string } } },
+  ];
 }
 
 /** El filtro de orden del predicado: id suelto o lote. */
@@ -127,13 +138,22 @@ export function filaCasaIntento(
   // Se evalua el `some` DE VERDAD, no su presencia: hay que leer `historialEstados.some` (si
   // alguien lo reescribiera como `none`, esta lectura es `undefined` y el acceso siguiente
   // REVIENTA en vez de dejar pasar las sinteticas) y su `origenTipo.in` (idem con `notIn`).
-  const familias = w.historialEstados.some.origenTipo.in;
+  //
+  // ⏳ 2026-09-23 (FICHA 454, design §10): la condicion es un `OR` de dos vias; se evaluan las DOS
+  // de verdad (una lectura de `OR[0]`/`OR[1]` que no existiera REVIENTA en vez de dejar pasar).
+  const [viaHistorial, viaEvento] = w.OR;
+  const familias = viaHistorial.historialEstados.some.origenTipo.in;
   // El `ordenId` repetido dentro del `some` es parte del predicado (rendimiento, design §3.4):
   // si desapareciera o dejara de acotar a la orden, este evaluador lo nota.
-  if (!filtroAlcanza(w.historialEstados.some.ordenId, fila.ordenId)) return false;
-  // `some` = interseccion NO vacia. Sin filas de historial (gestion legada) no hay interseccion
-  // posible ⇒ no cuenta (R34-d, direccion segura del error).
-  return fila.origenTiposHistorial.some((t) => familias.includes(t));
+  const primeraVia =
+    filtroAlcanza(viaHistorial.historialEstados.some.ordenId, fila.ordenId) &&
+    // `some` = interseccion NO vacia. Sin filas de historial (gestion legada) no hay interseccion
+    // posible ⇒ no cuenta por esta via (R34-d, direccion segura del error).
+    fila.origenTiposHistorial.some((t) => familias.includes(t));
+  // Segunda via (454): el evento de registro de CALLE. Lista de INCLUSION: solo `gestion_registrada`.
+  const segundaVia =
+    viaEvento.eventos.some.tipo === "gestion_registrada" && fila.registradaComoCalle === true;
+  return primeraVia || segundaVia;
 }
 
 /** `true` si el `where` acota a esa orden (id suelto o lote `{ in: [...] }`). */
@@ -179,5 +199,13 @@ export function prismaGestionSobreFilas(filas: FilaGestionFake[]) {
       findFirst: vi.fn(async () => null),
       createMany: vi.fn(),
     },
+    // FICHA 454 (T1.21, 2026-09-23): la linea de tiempo lee tambien `orden_evento`. Sin hechos en
+    // este doble: lo que se mide aqui es el conteo de intentos, no la linea.
+    ordenEvento: {
+      findMany: vi.fn(async () => []),
+    },
+    // FICHA 454 (R29, 2026-09-24): el detalle lee ademas las señales de la gestion pendiente y la
+    // ayuda con una consulta SQL. Sin filas: señales en reposo (aqui se mide el conteo, no esto).
+    $queryRaw: vi.fn(async () => []),
   };
 }

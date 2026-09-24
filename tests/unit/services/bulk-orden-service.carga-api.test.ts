@@ -240,7 +240,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // carga por API no las usa; se stubean neutras para satisfacer la interfaz completa.
     // Solicitud de ayuda (2026-08-18): exigidos por la interfaz, no ejercitados aqui.
     // Feature 235: los tres metodos de la bandera colapsaron en UN punto de escritura.
-    transicionarAyuda: vi.fn(async (): Promise<boolean> => true),
+    registrarAyudaSolicitada: vi.fn(async (): Promise<boolean> => true), // ficha 454
+    registrarAyudaResuelta: vi.fn(async (): Promise<boolean> => true), // ficha 454
     findParaHabilitacionApi: vi.fn(async () => null), // feature 266/T3.1: lectura scoped por owner del canal por API key
     // Ficha 320: el par lectura/escritura del BORRADO por API key, tambien scoped por owner.
     findParaEliminacionApi: vi.fn(async () => null),
@@ -250,6 +251,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     countNovedadesByTienda: vi.fn(async (): Promise<number> => 0),
     findNovedadesByTienda: vi.fn(async () => []),
     findFechaSolicitudAyuda: vi.fn(async () => new Map()),
+    findIdsConGestionPendiente: vi.fn(async () => new Set<string>()), // ficha 454
     // Feature 92 (R8/R35): metodos nuevos de lectura de `IOrdenRepository`. Estos
     // tests no ejercitan el gate de coordenadas ni la ruta: devuelven vacio.
     findParaAsignabilidad: vi.fn(async () => []),

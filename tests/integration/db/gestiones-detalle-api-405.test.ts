@@ -93,6 +93,10 @@ const CONSULTAS_DEL_DETALLE = [
   "orden_historial_estado", //   8. 405: el historial de la ORDEN (R6)
   "orden_incidente", //   9. `incidentesAdmin` (feature 268)
   "usuario", //  10. 405: `gestiones.mensajero` (R9)
+  // ⭑ 11b. FICHA 454 (R32, 2026-09-23): `gestiones.eventos` — el evento de registro de CALLE de
+  //   cada gestion (take 1), que deriva `pendienteConfirmacion`. UNA consulta para todas las
+  //   gestiones (sin N+1); por eso el detalle pasa de DOCE a TRECE.
+  "orden_evento",
   "order_status", //  11. 405: `historialEstados.estatusDestino` (R6)
   "orden_incidente_evidencia", //  12. la portada del incidente del admin (268)
 ];
@@ -585,14 +589,15 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
   //
   // El requisito se reescribió con el número MEDIDO y aquí se CONGELA. Las dos mitades se afirman
   // por separado, porque protegen cosas distintas.
-  it("R19/R19-b (+415): el detalle emite EXACTAMENTE 12 consultas, y son estas doce", async () => {
+  it("R19/R19-b (+415, +454): el detalle emite EXACTAMENTE 13 consultas, y son estas trece", async () => {
     const m = await escenario();
 
     // ⭑ EL NUMERO, CON NOMBRE Y APELLIDOS. Un `toEqual` de la lista entera: si mañana alguien
     // añade una relación al `select`, este aserto dice CUÁL es la consulta nueva.
     expect(m.tablasConGestiones).toEqual(CONSULTAS_DEL_DETALLE);
     // ⏳ 2026-09-10 (feature 415): NUEVE -> DOCE, medido con este mismo espia.
-    expect(m.tablasConGestiones).toHaveLength(12);
+    // ⏳ 2026-09-23 (ficha 454): DOCE -> TRECE (`orden_evento`, R32), medido igual.
+    expect(m.tablasConGestiones).toHaveLength(13);
     // Y el espía está midiendo de verdad: una lista vacía significaría que el `log: query` no
     // llegó y que este caso lleva pasando en falso.
     expect(m.tablasConGestiones.length).toBeGreaterThan(0);
@@ -606,7 +611,7 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
     // La segunda mitad del requisito, y la que de verdad importa para el coste: si alguien
     // resolviera `estadoResultante` con una consulta por gestión, aquí habría tres de más.
     expect(m.tablasConGestiones).toHaveLength(m.tablasSinGestiones.length);
-    // Ojo con el matiz: una orden SIN gestiones emite las mismas 12. Prisma pide la relación
+    // Ojo con el matiz: una orden SIN gestiones emite las mismas 13. Prisma pide la relación
     // igualmente, y por eso el conteo no se mueve.
     expect(m.tablasSinGestiones).toEqual(CONSULTAS_DEL_DETALLE);
   });

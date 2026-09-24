@@ -55,8 +55,8 @@ export const NO_ELIMINABLES_ESPERADOS = [
   "devolviendo_a_bodega_central",
   "por_devolver_a_tienda",
   "incidente",
-  "devolucion_por_confirmar",
-  "ayuda_tienda",
+  // FICHA 454 (2026-09-23): aqui estaban `devolucion_por_confirmar` y `ayuda_tienda`. Salen del
+  // catalogo; una orden con gestion pendiente o con ayuda abierta ESTA en `en_reparto` (arriba).
 ] as const;
 
 /**

@@ -110,6 +110,9 @@ export interface MiAsignacionRow {
 // borradas (deletedAt !== null) para que el service distinga "no existe"/"borrada"
 // y reporte el motivo exacto. Trae `mensajeroAsignadoId` (guardia de propiedad) y
 // `montoCobrar` (validacion (h) monto == montoCobrar en ENTREGADA).
+/** FICHA 454 (R3): el motivo por el que una orden en reparto no es gestionable, o `null`. */
+export type BloqueoDeGestion = "gestion_pendiente" | "ayuda_abierta" | null;
+
 export interface OrdenGestionRow {
   id: string;
   estatusValue: string;
@@ -326,10 +329,9 @@ export interface RechazarDesdeDevueltaInput {
  */
 export interface CrearGestionDesdeAyudaInput {
   ordenId: string;
-  /** GUARDA del `updateMany` (R23/R24): la orden tiene que seguir en el estatus de ayuda. */
-  estatusAyudaId: string;
-  /** Destino, del mapa unico `ESTATUS_POR_RESULTADO` (239). NO de la identidad de nombre (R26). */
-  estatusDestinoId: string;
+  // FICHA 454 (T1.15): aqui viajaban `estatusAyudaId` (guarda) y `estatusDestinoId` (destino). La
+  // ayuda es un hecho y la gestion de la tienda queda PENDIENTE de confirmar, sin transicion: la
+  // guarda es la ayuda ABIERTA bajo candado y el destino lo aplica la aprobacion del cierre.
   /** R3: a QUIEN se atribuye la gestion -> en que cierre cae. El MENSAJERO, no la tienda. */
   mensajeroId: string;
   /** R4: QUIEN la registro. La TIENDA. Solo va al historial. */
@@ -400,6 +402,22 @@ export interface IGestionOrdenRepository {
    */
   findByIdsParaGestion(ids: string[]): Promise<OrdenGestionRow[]>;
 
+  /**
+   * FICHA 454 (R3): por que una orden `en_reparto` no es gestionable — gestion pendiente de
+   * confirmar o ayuda abierta — o `null`. Lectura optimista para el motivo; la barrera real es
+   * `registrarGestionPendiente`.
+   */
+  findBloqueoDeGestion(ordenId: string): Promise<BloqueoDeGestion>;
+
+  /**
+   * FICHA 454 (R6/R22): de `ordenIds`, las que tienen gestion pendiente de confirmar y las que
+   * tienen ayuda abierta. Vacio → sin consulta.
+   */
+  findPendientesYAyudas(ordenIds: string[]): Promise<{
+    conGestionPendiente: Set<string>;
+    conAyudaAbierta: Set<string>;
+  }>;
+
   /** R20: la orden activa en gestion del mensajero (`orden_en_gestion_id`) o null. */
   getOrdenEnGestion(mensajeroId: string): Promise<string | null>;
 
@@ -441,24 +459,20 @@ export interface IGestionOrdenRepository {
   ): Promise<number>;
 
   /**
-   * R23/R26/R28/R30: bajo prisma.$transaction (todo-o-nada): (a) INSERT en
-   * gestion_orden con los campos de `gestion`, (b) UPDATE orden.estatus_id =
-   * `nuevoEstatusId`, (c) UPDATE usuario.orden_en_gestion_id = NULL (libera el
-   * bloqueo 1-a-1, R19). Sin logica de negocio: el service valida propiedad/origen
-   * y sube la evidencia ANTES de invocar. Devuelve el id de la gestion creada.
+   * FICHA 454 (design §5/§6, T1.4; R1-R5) — sustituye a `crearGestionYTransicionar`. En UNA
+   * transaccion: candado de la fila de `orden` + re-lectura de «gestionable» (en reparto, asignada a
+   * este mensajero, no borrada, sin gestion pendiente y sin ayuda abierta); si pasa, la gestion con
+   * sus hijas, el evento `gestion_registrada`, el puntero 1-a-1 liberado, el webhook del hecho, el
+   * aviso N1 si es `rechazada` y la reoptimizacion inmediata. La orden NO cambia de estado.
    *
-   * Feature 99 (R1/R29): la rama `devuelta` transiciona la orden a `devuelta` y la DEJA ahi
-   * (SIN transicion de seguimiento inmediata). El reintento a bodega / escalado a `rechazada`
-   * que la feature 47 aplicaba aqui se RELOCALIZO al cron SLA (`DevolucionSlaService`); por
-   * eso este metodo ya no acepta el parametro `seguimiento`. La devolucion se contabiliza como
-   * intento por el append a `devuelta` del choke point (R2).
+   * `null` = la orden ya no era gestionable al llegar al candado (doble envio, carrera con el corte):
+   * SIN NINGUN efecto (R4). El servicio responde `conflict` y compensa las evidencias subidas.
    */
-  crearGestionYTransicionar(input: {
+  registrarGestionPendiente(input: {
     ordenId: string;
     mensajeroId: string;
     gestion: GestionOrdenData;
-    nuevoEstatusId: string;
-  }): Promise<string>;
+  }): Promise<{ gestionId: string; ordenEventoId: string } | null>;
 
   /**
    * Feature 100 (design §2.1, R2/R3/R5/R11/R20/R21): reprograma UNA orden en `devuelta` a

@@ -56,8 +56,21 @@ const SENSIBLES = {
   confirmadaFisicaAt: "FUGA-CONFIRMADA-2026-09-03",
 } as const;
 
-/** La forma que el contrato publica, escrita a mano UNA vez. */
-const CLAVES_PUBLICAS = ["createdAt", "estadoResultante", "mensajero", "motivo", "resultado"];
+/**
+ * La forma que el contrato publica, escrita a mano UNA vez.
+ *
+ * ⏳ 2026-09-23 (FICHA 454, R32/R36, contrato ampliado por el spec aprobado): gana UNA clave,
+ * `pendienteConfirmacion` — la gestion de calle registrada cuyo cierre aun no se aprobo (su estado
+ * todavia no se aplico). Es un booleano derivado, sin PII. Antes: cinco claves.
+ */
+const CLAVES_PUBLICAS = [
+  "createdAt",
+  "estadoResultante",
+  "mensajero",
+  "motivo",
+  "pendienteConfirmacion",
+  "resultado",
+];
 const CLAVES_MENSAJERO = ["id", "nombre"];
 
 /**
@@ -99,9 +112,10 @@ const GESTION_POBLADA: FilaGestionPoblada = {
   // Lo que SI se publica
   createdAt: new Date("2026-09-02T15:41:07.000Z"),
   resultado: "devuelta",
-  estadoResultante: "devolucion_por_confirmar",
+  estadoResultante: "devuelta",
   motivo: "wrong_address",
   mensajero: MENSAJERO_POBLADO,
+  pendienteConfirmacion: false,
   // Lo que NO se publica y la fila trae igualmente
   id: SENSIBLES.gestionId,
   ordenId: SENSIBLES.ordenId,
@@ -162,7 +176,7 @@ function servicio() {
  */
 const fakeTarifas = () => ({ resolveTarifas: vi.fn().mockResolvedValue(new Map()) });
 
-describe("405/R3 — cada gestion lleva EXACTAMENTE las cinco claves publicas", () => {
+describe("405/R3 — cada gestion lleva EXACTAMENTE las seis claves publicas (454: +1)", () => {
   it("el conjunto de claves del elemento es el conjunto entero, ni una mas ni una menos", async () => {
     const res = await servicio().detallePorOrdenId(ACTOR, ORDEN_ID);
 
@@ -170,7 +184,7 @@ describe("405/R3 — cada gestion lleva EXACTAMENTE las cinco claves publicas", 
     expect(Object.keys(res!.gestiones[0]).sort()).toEqual(CLAVES_PUBLICAS);
   });
 
-  it("las cinco siguen presentes cuando TODO lo opcional es `null`", async () => {
+  it("las seis siguen presentes cuando TODO lo opcional es `null`", async () => {
     // R3 dice «SIEMPRE presentes, sea cual sea el resultado»: una entrega no tiene motivo ni
     // (si es legada) transicion, y aun asi las claves viajan.
     const repo = {
@@ -196,12 +210,13 @@ describe("405/R3 — cada gestion lleva EXACTAMENTE las cinco claves publicas", 
     expect(texto).toContain('"estadoResultante":null');
   });
 
-  it("el DTO publicado no puede declarar una SEXTA clave: el tipo es el contrato", () => {
+  it("el DTO publicado no puede declarar una SEPTIMA clave: el tipo es el contrato", () => {
     // Chequeo de TIPO. Si `ApiOrdenGestionDTO` ganara una clave, este `Exclude` deja de ser
     // `never` y el archivo no compila — que es como se quiere uno enterar.
+    // FICHA 454 (R32): la sexta, `pendienteConfirmacion`, entra por la puerta del spec.
     type Extra = Exclude<
       keyof ApiOrdenGestionDTO,
-      "createdAt" | "resultado" | "estadoResultante" | "motivo" | "mensajero"
+      "createdAt" | "resultado" | "estadoResultante" | "motivo" | "mensajero" | "pendienteConfirmacion"
     >;
     const sinExtras: Extra extends never ? true : never = true;
     expect(sinExtras).toBe(true);
@@ -289,7 +304,8 @@ describe("405/R12 — ningun valor sensible de la gestion cruza al DTO publico",
 
     expect(serializado).toContain("Carlos Jimenez Mora");
     expect(serializado).toContain("wrong_address");
-    expect(serializado).toContain("devolucion_por_confirmar");
+    // FICHA 454: el fixture publica `estadoResultante: devuelta` (el pre-estado se retira).
+    expect(serializado).toContain('"estadoResultante":"devuelta"');
     expect(serializado.length).toBeGreaterThan(100);
   });
 

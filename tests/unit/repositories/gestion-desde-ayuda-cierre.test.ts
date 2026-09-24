@@ -128,6 +128,11 @@ function buildStore(filas: FilaGestion[]) {
   const cierres: { id: string; mensajeroId: string }[] = [];
   /** Estatus REAL de cada orden. Sin sembrar, una orden se supone en el estatus de ayuda. */
   const ordenes = new Map<string, string>();
+  /**
+   * FICHA 454 (T1.15): la ayuda deja de ser estatus y pasa a ser un HECHO (evento abierto). Sin
+   * sembrar, la orden tiene la ayuda ABIERTA; aqui van las que ya la cerraron (rescate, corte…).
+   */
+  const ayudaCerrada = new Set<string>();
   const detalles: Record<string, unknown>[] = [];
 
   function casa(f: FilaGestion, where: Record<string, unknown>): boolean {
@@ -186,6 +191,20 @@ function buildStore(filas: FilaGestion[]) {
   };
 
   const prisma = {
+    // FICHA 454 (T1.15): `crearGestionDesdeAyuda` toma el candado de la orden, re-lee que la ayuda
+    // siga abierta y que la orden sea de ese mensajero (SQL crudo) y comprueba la suscripcion de
+    // webhooks del evento. El doble responde a las tres por su texto.
+    $queryRaw: vi.fn(async (q: readonly string[], ...valores: unknown[]) => {
+      const sql = q.join(" ? ");
+      if (sql.includes("FOR UPDATE")) return [{ id: valores[0] }];
+      if (sql.includes("webhook_suscripcion")) return [];
+      if (sql.includes('"mensajero_asignado_id" =')) {
+        const ordenId = valores[0] as string;
+        return ayudaCerrada.has(ordenId) ? [] : [{ id: ordenId }];
+      }
+      return [];
+    }),
+    ordenEvento: { create: vi.fn(async () => ({ id: "ev-registro" })) },
     gestionOrden,
     gestionOrdenEvidencia: { createMany: vi.fn(async () => ({ count: 0 })) },
     gestionOrdenPago: { createMany: vi.fn(async () => ({ count: 0 })) },
@@ -202,7 +221,9 @@ function buildStore(filas: FilaGestion[]) {
       // devolviera `count: 0` por la mera ausencia de la guarda daria un rojo FALSO: parecería
       // que el test caza la mutacion cuando lo que caza es su propia suposicion.
       updateMany: vi.fn(async (args: { where: Record<string, unknown>; data: { estatusId: string } }) => {
-        const actual = ordenes.get(args.where.id as string) ?? idEstado("ayuda_tienda");
+        // FICHA 454 (2026-09-23): el defecto era `idEstado("ayuda_tienda")`; el value salio del
+        // catalogo (ya no es `OrderStatusValue`) y una orden con ayuda abierta esta `en_reparto`.
+        const actual = ordenes.get(args.where.id as string) ?? idEstado("en_reparto");
         if ("estatusId" in args.where && args.where.estatusId !== actual) return { count: 0 };
         ordenes.set(args.where.id as string, args.data.estatusId);
         return { count: 1 };
@@ -247,7 +268,7 @@ function buildStore(filas: FilaGestion[]) {
     $transaction: vi.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(prisma)),
   };
 
-  return { prisma, filas, cierres, detalles, ordenes };
+  return { prisma, filas, cierres, detalles, ordenes, ayudaCerrada };
 }
 
 // Feature 274: la interfaz quedo en DOS metodos —`resolveTarifa` y `resolveTarifas`— y el
@@ -317,8 +338,6 @@ describe("💰 R29 — la gestion de la tienda entra en el cierre del mensajero,
 
     const gestionId = await gestionRepo.crearGestionDesdeAyuda({
       ordenId: "o-e2e",
-      estatusAyudaId: idEstado("ayuda_tienda"),
-      estatusDestinoId: idEstado("rechazada"),
       mensajeroId: "mensajero-1", // 💰 R3: a quien se ATRIBUYE
       actorUsuarioId: "tienda-1", // R4: quien la REGISTRA
       // Feature 261 (B17): la segunda capa del bloqueo por reserva. Este archivo mide DINERO
@@ -332,6 +351,18 @@ describe("💰 R29 — la gestion de la tienda entra en el cierre del mensajero,
     // La fila nace huerfana de cierre (R9) y el mecanismo de siempre se la lleva (R29).
     const creada = store.filas.find((f) => f.id === gestionId);
     expect(creada?.cierreId ?? null).toBeNull();
+    // FICHA 454 (R25): registrar NO transiciona la orden; su evento lleva la familia de la tienda.
+    expect(store.prisma.orden.updateMany).not.toHaveBeenCalled();
+    expect(store.prisma.ordenEvento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: "gestion_registrada",
+          familiaAplicacion: "gestion_tienda_ayuda",
+          mensajeroId: "mensajero-1",
+          actorUsuarioId: "tienda-1",
+        }),
+      }),
+    );
 
     const cierreId = await repoCon(store).crearCierre(inputCierre());
 
@@ -348,12 +379,13 @@ describe("💰 R29 — la gestion de la tienda entra en el cierre del mensajero,
   it("💰 end-to-end: si la orden YA salio de ayuda, no se crea gestion ni se mueve nada (R24/R25)", async () => {
     const store = buildStore([]);
     // El mensajero gano la carrera: pulso «Recuperar» y la orden volvio a `en_reparto`.
+    // ⏳ 2026-09-23 (FICHA 454): con la ayuda como hecho, «volver» es CERRAR la ayuda (evento
+    // `ayuda_rescatada`); la orden estaba y sigue `en_reparto`.
     store.ordenes.set("o-carrera", idEstado("en_reparto"));
+    store.ayudaCerrada.add("o-carrera");
 
     const gestionId = await gestionRepoCon(store).crearGestionDesdeAyuda({
       ordenId: "o-carrera",
-      estatusAyudaId: idEstado("ayuda_tienda"),
-      estatusDestinoId: idEstado("rechazada"),
       mensajeroId: "mensajero-1",
       actorUsuarioId: "tienda-1",
       diaEnCurso: new Date("2026-08-21T00:00:00.000Z"), // feature 261 (B17)
@@ -609,8 +641,6 @@ describe("💰 R30 — los movimientos son IDENTICOS venga la gestion del mensaj
 
     const gestionId = await gestionRepoCon(store).crearGestionDesdeAyuda({
       ordenId: "o-dinero",
-      estatusAyudaId: idEstado("ayuda_tienda"),
-      estatusDestinoId: idEstado("rechazada"),
       mensajeroId: "mensajero-1",
       actorUsuarioId: "tienda-1",
       diaEnCurso: new Date("2026-08-21T00:00:00.000Z"), // feature 261 (B17)
@@ -658,10 +688,12 @@ describe("R36 — el «Total a cobrar del dia» del mensajero no cambia: la orde
     );
     expect(bloque).not.toBeNull();
     const lista = (bloque as RegExpMatchArray)[1];
-    // Los DOS estatus en los que el paquete sigue con el mensajero. Si `ayuda_tienda` saliera de
-    // aqui, una orden en ayuda contaria en los DOS sumandos y su COD se sumaria dos veces.
+    // ⏳ 2026-09-23 (FICHA 454): la ayuda deja de ser estatus; la orden con ayuda abierta sigue
+    // `en_reparto`, asi que la lista queda en UN estatus y sigue cubriendo a la orden en ayuda. Si
+    // `en_reparto` saliera de aqui, esa orden contaria en los DOS sumandos y su COD se sumaria dos
+    // veces. Antes se exigia ademas el literal `"ayuda_tienda"`.
     expect(lista).toContain("ESTADO_EN_REPARTO");
-    expect(lista).toContain('"ayuda_tienda"');
+    expect(lista).not.toContain('"ayuda_tienda"');
     // Y el `where` de lo gestionado los excluye (`notIn`), que es lo que los hace disjuntos.
     expect(fuente).toMatch(
       /estatus: \{ value: \{ notIn: ESTADOS_EN_MANO_DEL_MENSAJERO \} \}/,

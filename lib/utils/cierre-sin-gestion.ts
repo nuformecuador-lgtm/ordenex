@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import type { CierreSinGestionRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import { esOrderStatusRetirado } from "@/lib/types/order-status";
 import { esOrderStatusValue } from "@/lib/types/order-status-transiciones";
 
 /**
@@ -69,6 +70,12 @@ export function toSinGestionRow(r: SinGestionSelectRow): CierreSinGestionRow {
     // El guard y no un `as`: un value que no este en el catalogo no es un estatus que la pantalla
     // pueda traducir, y R32 ya dice que hacer con lo que no consta —OMITIR la pieza—. Un cast
     // dejaria colar una cadena cruda hasta el rotulo.
-    estatusOrigen: value !== undefined && esOrderStatusValue(value) ? value : null,
+    //
+    // FICHA 454 (R40): tambien pasa un value RETIRADO (`ayuda_tienda`): la barrida HISTORICA se
+    // sigue leyendo «Ayuda de la tienda», como hoy. Lo que no es ni vigente ni retirado, omite.
+    estatusOrigen:
+      value !== undefined && (esOrderStatusValue(value) || esOrderStatusRetirado(value))
+        ? value
+        : null,
   };
 }

@@ -166,17 +166,19 @@ describe("268/R29 — el enum de `data.estado` se DERIVA de la politica, no se c
     expect(dataTs.properties.estado.enum).toEqual([...EVENTOS_PUBLICOS].sort());
   });
 
-  it("son 13 values y NO incluye los estados internos que el webhook nunca emite", () => {
+  // ⏳ 2026-09-23 (FICHA 454, R34): 13 -> 12, sale `ayuda_tienda` (el estado se retira; la ayuda
+  // viaja como `orden.ayuda_*` en `WebhookOrdenEvento`).
+  it("son 12 values y NO incluye los estados internos que el webhook nunca emite", () => {
     const publicados = dataTs.properties.estado.enum;
-    expect(publicados).toHaveLength(13);
+    expect(publicados).toHaveLength(12);
     // ⏳ 2026-08-31 — `en_preparacion` SALE de esta lista de internos: desde el parche de hoy SI se
     // publica, como evento de NACIMIENTO de la rama de fulfillment. Los tres que quedan son los de
     // ruteo satelite, y esos siguen sin viajar nunca en un evento.
     for (const interno of ["por_recoger", "en_bodega_satelite", "en_ruta_bodega_satelite"]) {
       expect(publicados, `el webhook no emite ${interno}`).not.toContain(interno);
     }
-    // Y si lleva los dos que la 268 añade a la politica, mas el del parche del 2026-08-31.
-    expect(publicados).toContain("ayuda_tienda");
+    // Y lleva `incidente` (268) y el del parche del 2026-08-31; `ayuda_tienda` ya NO (454/R34).
+    expect(publicados).not.toContain("ayuda_tienda");
     expect(publicados).toContain("incidente");
     expect(publicados).toContain("en_preparacion");
   });

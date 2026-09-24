@@ -106,7 +106,7 @@ describe("Feature 154 · SEED del catalogo — los dos values del flujo v2 (R1/R
     const previosVigentes = PREVIOS_18.filter((v) => v !== RETIRADO_155);
     expect(ORDER_STATUS_SEED.slice(0, previosVigentes.length)).toEqual(previosVigentes);
     // 20: la 157 apendio `recolectando` DESPUES de los dos de la 154.
-    expect(ORDER_STATUS_SEED).toHaveLength(22); // 2026-08-19 (235): +ayuda_tienda
+    expect(ORDER_STATUS_SEED).toHaveLength(20); // 2026-08-19 (235): +ayuda_tienda -> 22; 2026-09-23 (454): -2 -> 20
     expect(ORDER_STATUS_SEED as readonly string[]).not.toContain(RETIRADO_155);
   });
 });

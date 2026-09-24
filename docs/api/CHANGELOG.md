@@ -21,6 +21,59 @@
 
 ---
 
+## 2026-09-23 — El estado de una gestión se aplica al APROBAR el cierre; la ayuda deja de ser un estado; eventos NUEVOS
+
+**Qué cambia en la operación, en una frase:** cuando el mensajero registra una gestión (entregada,
+reprogramada, devuelta, rechazada o incidente), la orden **ya no cambia de estado en ese instante**:
+sigue `en_reparto` con la gestión **pendiente de confirmar**, y el estado real se aplica cuando se
+**aprueba su cierre del día**. Y pedir ayuda a la tienda **ya no mueve la orden a `ayuda_tienda`**:
+la orden sigue `en_reparto` y la ayuda viaja como un evento propio.
+
+**1. `orden.estado_actualizado` llega al APROBAR, no al gestionar.** Para una gestión nueva, el
+evento con `estado: "entregada"` (o `devuelta`, `rechazada`…) llega cuando se aprueba el cierre del
+mensajero —horas después de la visita—. Si necesitás enterarte en el instante del registro, suscribí
+el evento nuevo `orden.gestion_registrada` (punto 3).
+
+**2. Baja en el vocabulario de estados: `ayuda_tienda`.** Es la **única** baja y es deliberada:
+- Ya **no se emite** `orden.estado_actualizado` con `estado: "ayuda_tienda"` (ni con
+  `devolucion_por_confirmar`, que nunca fue público).
+- `ayuda_tienda` **sale de los cuatro `enum` de estado** del contrato (`OrdenListItem.estado` y sus
+  herederos) y del `enum` de `data.estado` del webhook (que pasa de 13 a 12 values).
+- Ninguna orden vuelve a estar en ese estado: las que estuvieran en él al desplegar pasan a
+  `en_reparto` con su ayuda abierta.
+
+**3. Eventos NUEVOS, en un cuerpo NUEVO (`WebhookOrdenEvento`).** Llegan al **mismo callback**, con
+la **misma firma** y el mismo circuito de reintento que `orden.estado_actualizado`. Ramificá por
+`evento`:
+- `orden.gestion_registrada` — se registró una gestión; `data.pendienteConfirmacion: true`.
+- `orden.gestion_anulada` — el mensajero deshizo esa gestión antes de entrar en un cierre.
+- `orden.gestion_corregida` — se corrigió su resultado dentro de un cierre abierto
+  (`data.resultadoAnterior` → `data.resultado`).
+- `orden.ayuda_solicitada` — el mensajero pidió ayuda a la tienda.
+- `orden.ayuda_resuelta` — la ayuda se cerró; `data.via` = `mensajero` | `tienda` | `api`.
+
+`data` lleva siempre `numGuia`, `numRemision`, `motivo` (la causa **TIPIFICADA**, jamás el texto
+libre del mensajero) y `mensajero`; el resto de claves se omite cuando el evento no las lleva.
+Deduplicá por `eventoId` (`webhook_evento:<id>`). Si tu receptor rechaza eventos desconocidos,
+**actualizalo antes del despliegue**: tratá un `evento` que no conocés como «ignorar».
+
+**4. Campo NUEVO en el detalle: `gestiones[].pendienteConfirmacion`** (aditivo, al final de cada
+elemento). `true` mientras la gestión espera la aprobación de su cierre; entonces
+`estadoResultante` es `null`. `false` en las ya aplicadas y en las anteriores a hoy.
+
+**5. `POST /api/ordenes/api-key/habilitar`: campo NUEVO `ayudaCerrada`** en cada fila (aditivo).
+`resultado: "habilitada"` y `estado: "en_reparto"` **se conservan** para la orden con ayuda abierta
+—que ya estaba `en_reparto` y sigue ahí, sin cambio de estado—, y `ayudaCerrada: true` dice que la
+ayuda quedó cerrada y el mensajero puede volver a gestionarla. `habilitadas` del resumen cuenta esas
+filas. `estado_no_habilitable` significa ahora «la orden no tiene una ayuda abierta ni está
+`devuelta`».
+
+⚠️ **Si validás el esquema en estricto** (`additionalProperties: false` o un DTO generado),
+**regenerá tu modelo** contra el contrato actualizado antes del despliegue: `pendienteConfirmacion`,
+`ayudaCerrada` y el schema `WebhookOrdenEvento` son nuevos.
+
+---
+
 ## 2026-09-10 — Tres campos NUEVOS: `zona`, `costoEstimado` y `costoReal`, en el listado y en el detalle
 
 **Es aditivo: nada de lo que hoy funciona deja de funcionar.** Ninguna clave se retira ni se

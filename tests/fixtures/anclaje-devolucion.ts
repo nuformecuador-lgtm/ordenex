@@ -1,7 +1,6 @@
 import { vi } from "vitest";
 
-import type { AnclajeDevolucionConfig } from "@/lib/interfaces/repositories/ICierresAdminRepository";
-import { ESTATUS_DEVOLUCION_POR_CONFIRMAR } from "@/lib/types/gestion-destino";
+import type { AplicacionGestionesConfig } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import { idEstado } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 239 (T2.1) — el cableado MINIMO que toda suite de `resolverCierre` necesita desde que
@@ -15,10 +14,20 @@ import { idEstado } from "@/tests/fixtures/catalogo-estados";
 // (`idEstado`), no de literales sueltos: asi el par `(origen, destino)` que el bloque de anclaje
 // registra es un par REAL del mapa `TRANSICIONES` y la guardia lo valida de verdad.
 
-/** Config del anclaje con los ids del catalogo de test. */
-export const ANCLAJE_DEVOLUCION: AnclajeDevolucionConfig = {
-  preEstadoId: idEstado(ESTATUS_DEVOLUCION_POR_CONFIRMAR),
-  devueltaId: idEstado("devuelta"),
+// ⏳ 2026-09-23 (FICHA 454, T1.7): el anclaje de la 239 se GENERALIZA a la aplicacion de las cinco
+// gestiones al aprobar (`aplicacionGestiones`, obligatorio). Aqui vivia `ANCLAJE_DEVOLUCION`
+// (`preEstadoId` = `devolucion_por_confirmar`); el pre-estado muere con la ficha.
+
+/** Config de la APLICACION DE GESTIONES con los ids del catalogo de test. */
+export const APLICACION_GESTIONES: AplicacionGestionesConfig = {
+  enRepartoId: idEstado("en_reparto"),
+  destinoPorResultado: {
+    entregada: idEstado("entregada"),
+    reprogramada: idEstado("reprogramada"),
+    rechazada: idEstado("rechazada"),
+    devuelta: idEstado("devuelta"),
+    incidente: idEstado("incidente"),
+  },
 };
 
 /**

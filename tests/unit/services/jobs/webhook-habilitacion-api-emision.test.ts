@@ -19,8 +19,16 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
 // que no existe ninguna entrada que pasarle a este choke point. Se afirma donde se puede afirmar,
 // en el service (`transicionarAyuda` NO llamado) -> R22.
 
+// ⏳ 2026-09-23 (FICHA 454, R24/R33/R37): la rama A YA NO PRODUCE TRANSICION. Habilitar por API una
+// orden con ayuda abierta registra el evento `ayuda_habilitada_api` (webhook `orden.ayuda_resuelta`,
+// cubierto por `tests/integration/db/454/webhook-evento-sql-real.test.ts` y
+// `ayuda-evento-sql-real.test.ts`), y el origen `ayuda_tienda` salio del catalogo y del grafo. Lo
+// que este archivo SIGUE midiendo es la POLITICA del emisor del choke point —que ninguna familia
+// (tampoco `habilitacion_api`, que sobrevive en filas historicas) este exceptuada, y que la pausa del
+// circuito no corta el grifo (403/R5)—, y para eso hace falta una transicion LEGAL hacia
+// `en_reparto`: se usa la de la recoleccion (`por_recoger -> en_reparto`), con la familia de siempre.
 const ORDEN_ID = "o-266";
-const ID_AYUDA = idEstado("ayuda_tienda");
+const ID_AYUDA = idEstado("por_recoger"); // antes `idEstado("ayuda_tienda")` (ver arriba)
 const ID_EN_REPARTO = idEstado("en_reparto");
 
 /** La entrada EXACTA que la rama A del service produce via `transicionarAyuda`. */

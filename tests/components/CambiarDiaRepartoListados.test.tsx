@@ -255,15 +255,22 @@ describe("R13 — `/ordenes` ofrece la corrección en los tres estados del día 
     expect(await screen.findByRole("button", { name: ACCION })).toBeInTheDocument();
   });
 
-  it("se ofrece en `ayuda_tienda` — el mismo bloqueo por la otra puerta", async () => {
-    const user = userEvent.setup();
+  // ⏳ 2026-09-23 (FICHA 454, R37): este caso decia «se ofrece en `ayuda_tienda` — el mismo
+  // bloqueo por la otra puerta». La ayuda deja de ser estado: la orden con ayuda abierta ESTÁ en
+  // `en_reparto`, que ya ofrece la corrección (caso de arriba). Una fila con el estado retirado
+  // —imposible tras la migración— cae al `default`: NO se ofrece (fallo cerrado).
+  it("454: una fila con el estado retirado `ayuda_tienda` NO ofrece la corrección", async () => {
     renderOrdenes([
       makeOrden({ id: "o3", estatusId: "est-ayuda_tienda", estatusValue: "ayuda_tienda" }),
     ]);
 
-    await seleccionarFila(user, "REM-o3");
-
-    expect(await screen.findByRole("button", { name: ACCION })).toBeInTheDocument();
+    // Sin ninguna acción que ofrecer, la fila ni siquiera es seleccionable: la fila está, su
+    // casilla no.
+    expect(await screen.findByText("REM-o3")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: "Seleccionar orden REM-o3" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
   });
 
   it("NO se ofrece en un estado donde el día ya no decide nada (`en_bodega_central`)", async () => {

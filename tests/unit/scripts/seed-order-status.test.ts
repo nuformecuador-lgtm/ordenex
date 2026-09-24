@@ -40,7 +40,8 @@ function createFakeOrderStatus() {
 // Feature 235 (2026-08-19) -> 22 (ayuda_tienda, el estatus de la solicitud de ayuda viva).
 // Feature 157 -> 20 (recolectando). Feature 239 (2026-08-19) -> 21 (devolucion_por_confirmar,
 // el pre-estado de la devolucion).
-describe("seedOrderStatus siembra los 22 estatus por value (R2/R5/R9 · 30 · 33 · PR #75 · 109 · 139 · 154 · 155 · 157 · 239 · 235)", () => {
+// FICHA 454 (2026-09-23) -> 20: salen `devolucion_por_confirmar` (239) y `ayuda_tienda` (235).
+describe("seedOrderStatus siembra los 20 estatus por value (R2/R5/R9 · 30 · 33 · PR #75 · 109 · 139 · 154 · 155 · 157 · 239 · 235 · 454)", () => {
   it("crea una fila por cada valor de ORDER_STATUS_SEED", async () => {
     const fake = createFakeOrderStatus();
     await seedOrderStatus({ orderStatus: { upsert: fake.upsert } } as unknown as Pick<
@@ -48,7 +49,7 @@ describe("seedOrderStatus siembra los 22 estatus por value (R2/R5/R9 · 30 · 33
       "orderStatus"
     >);
 
-    expect(fake.upsert).toHaveBeenCalledTimes(22); // 2026-08-19 (235): 21 -> 22, +ayuda_tienda
+    expect(fake.upsert).toHaveBeenCalledTimes(20); // 2026-08-19 (235): 21 -> 22; 2026-09-23 (454): 22 -> 20
     const valores = [...fake.rows.values()].map((r) => r.value).sort();
     expect(valores).toEqual([...ORDER_STATUS_SEED].sort());
   });
@@ -92,7 +93,7 @@ describe("seedOrderStatus siembra los 22 estatus por value (R2/R5/R9 · 30 · 33
 });
 
 describe("seedOrderStatus es idempotente (R3)", () => {
-  it("dos ejecuciones dejan 22 filas, sin duplicar y con id estable", async () => {
+  it("dos ejecuciones dejan 20 filas, sin duplicar y con id estable", async () => {
     const fake = createFakeOrderStatus();
     const client = { orderStatus: { upsert: fake.upsert } } as unknown as Pick<
       PrismaClient,
@@ -100,11 +101,11 @@ describe("seedOrderStatus es idempotente (R3)", () => {
     >;
 
     await seedOrderStatus(client);
-    expect(fake.rows.size).toBe(22); // 2026-08-19 (235): 21 -> 22, +ayuda_tienda
+    expect(fake.rows.size).toBe(20); // 2026-08-19 (235): 21 -> 22; 2026-09-23 (454): 22 -> 20
     const idsPrimera = new Map([...fake.rows.entries()].map(([k, v]) => [k, v.id]));
 
     await seedOrderStatus(client);
-    expect(fake.rows.size).toBe(22); // no crece
+    expect(fake.rows.size).toBe(20); // no crece
 
     for (const [k, v] of fake.rows.entries()) {
       expect(v.id).toBe(idsPrimera.get(k)); // id conservado (R3)

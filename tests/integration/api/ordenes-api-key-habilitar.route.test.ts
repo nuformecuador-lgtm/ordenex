@@ -25,11 +25,14 @@ const SECRETO = "ordx_secretovivo1234567890";
 const LOTE_OK: HabilitacionLoteResult = {
   resumen: { total: 2, habilitadas: 1, habilitadasSinCambioDeEstado: 0, conError: 1 },
   resultados: [
-    { numGuia: 100234, resultado: "habilitada", estado: "en_reparto", error: null },
+    // FICHA 454 (R24): cada fila lleva `ayudaCerrada` (el service es un doble; el controller la
+    // pasa tal cual).
+    { numGuia: 100234, resultado: "habilitada", estado: "en_reparto", ayudaCerrada: true, error: null },
     {
       numGuia: 999999,
       resultado: "error",
       estado: null,
+      ayudaCerrada: false,
       error: { codigo: "no_encontrada", mensaje: "no existe una orden viva con esa guia" },
     },
   ],
@@ -166,12 +169,19 @@ describe("266/R9-R10 — 200 con un resultado por fila, y el estado poblado en l
     const { service } = fakeService({
       resumen: { total: 3, habilitadas: 1, habilitadasSinCambioDeEstado: 1, conError: 1 },
       resultados: [
-        { numGuia: 1, resultado: "habilitada", estado: "en_reparto", error: null },
-        { numGuia: 2, resultado: "habilitada_sin_cambio_de_estado", estado: "devuelta", error: null },
+        { numGuia: 1, resultado: "habilitada", estado: "en_reparto", ayudaCerrada: true, error: null },
+        {
+          numGuia: 2,
+          resultado: "habilitada_sin_cambio_de_estado",
+          estado: "devuelta",
+          ayudaCerrada: false,
+          error: null,
+        },
         {
           numGuia: 3,
           resultado: "error",
           estado: null,
+          ayudaCerrada: false,
           error: { codigo: "estado_no_habilitable", mensaje: "no habilitable" },
         },
       ],

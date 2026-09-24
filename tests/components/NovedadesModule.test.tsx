@@ -179,6 +179,8 @@ afterEach(() => {
   cleanup();
 });
 
+// ⏳ 2026-09-23 (FICHA 454, T2.5): las filas del grupo AYUDA llevan `estatusValue: "en_reparto"` —la ayuda dejo
+// de ser el estado `ayuda_tienda`— y su grupo lo pone la lista que las trajo (`grupoDeFila`).
 describe("NovedadesModule", () => {
   it("R10: lista vacia -> estado vacio, sin filas", () => {
     render(<NovedadesModule grupo="devolucion" items={[]} total={0} page={1} pageSize={10} />);
@@ -327,7 +329,7 @@ describe("NovedadesModule", () => {
         grupo="ayuda"
         items={[
           novedad({
-            estatusValue: "ayuda_tienda",
+            estatusValue: "en_reparto",
             causa: null,
             mensajeroNombre: "Marta Mensajera",
           }),
@@ -375,7 +377,7 @@ describe("NovedadesModule", () => {
       <NovedadesModule
         grupo="ayuda"
         items={[
-          novedad({ estatusValue: "ayuda_tienda", causa: null, mensajeroNombre: null }),
+          novedad({ estatusValue: "en_reparto", causa: null, mensajeroNombre: null }),
         ]}
         total={1}
         page={1}
@@ -398,7 +400,7 @@ describe("NovedadesModule", () => {
         grupo="ayuda"
         items={[
           novedad({
-            estatusValue: "ayuda_tienda",
+            estatusValue: "en_reparto",
             causa: null,
             mensajeroNombre: "Marta Mensajera",
           }),
@@ -424,7 +426,7 @@ describe("NovedadesModule", () => {
   // que distingue en la lista una cosa de la otra.
   //
   // FEATURE 235 (T5.4, 2026-08-19) — los fixtures pasan de `ayuda: true` a
-  // `estatusValue: "ayuda_tienda"`. NO es una reescritura de los casos: el comportamiento visible
+  // `estatusValue: "en_reparto"`. NO es una reescritura de los casos: el comportamiento visible
   // que afirman es EXACTAMENTE el mismo, lo que cambia es de dónde sale la verdad. La bandera se
   // retiró con su columna y el estatus la sustituye.
   //
@@ -446,7 +448,7 @@ describe("NovedadesModule", () => {
     render(
       <NovedadesModule
         grupo="ayuda"
-        items={[novedad({ causa: null, estatusValue: "ayuda_tienda" })]}
+        items={[novedad({ causa: null, estatusValue: "en_reparto" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -463,7 +465,7 @@ describe("NovedadesModule", () => {
     render(
       <NovedadesModule
         grupo="ayuda"
-        items={[novedad({ causa: "not_found", estatusValue: "ayuda_tienda" })]}
+        items={[novedad({ causa: "not_found", estatusValue: "en_reparto" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -503,7 +505,7 @@ describe("NovedadesModule", () => {
     render(
       <NovedadesModule
         grupo="ayuda"
-        items={[novedad({ causa: null, estatusValue: "ayuda_tienda" })]}
+        items={[novedad({ causa: null, estatusValue: "en_reparto" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -551,7 +553,10 @@ describe("NovedadesModule", () => {
     render(
       <NovedadesModule
         grupo="ayuda"
-        items={[novedad({ causa: null, estatusValue: "en_reparto" })]}
+        // ⏳ 2026-09-23 (FICHA 454): era `en_reparto`, que ahora ES el estado de una fila de ayuda
+        // (la lista la trae por su ayuda abierta). Un estado que no casa con la lista que lo trajo
+        // es `sin_gestionar`.
+        items={[novedad({ causa: null, estatusValue: "sin_gestionar" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -600,7 +605,7 @@ describe("NovedadesModule", () => {
     render(
       <NovedadesModule
         grupo="ayuda"
-        items={[novedad({ intentosContacto: 0, estatusValue: "ayuda_tienda" })]}
+        items={[novedad({ intentosContacto: 0, estatusValue: "en_reparto" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -620,7 +625,7 @@ describe("NovedadesModule", () => {
     render(
       <NovedadesModule
         grupo="ayuda"
-        items={[novedad({ intentosContacto: 4, estatusValue: "ayuda_tienda" })]}
+        items={[novedad({ intentosContacto: 4, estatusValue: "en_reparto" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -638,7 +643,7 @@ describe("NovedadesModule", () => {
     render(
       <NovedadesModule
         grupo="ayuda"
-        items={[novedad({ intentosContacto: 2, estatusValue: "ayuda_tienda" })]}
+        items={[novedad({ intentosContacto: 2, estatusValue: "en_reparto" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -663,7 +668,7 @@ describe("NovedadesModule", () => {
     render(
       <NovedadesModule
         grupo="ayuda"
-        items={[novedad({ intentosContacto: 2, estatusValue: "ayuda_tienda" })]}
+        items={[novedad({ intentosContacto: 2, estatusValue: "en_reparto" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -1582,7 +1587,7 @@ describe("NovedadesModule — modal de Habilitar (nota obligatoria)", () => {
     render(
       <NovedadesModule
         grupo="ayuda"
-        items={[novedad({ destinatario: "Ana Cliente", estatusValue: "ayuda_tienda" })]}
+        items={[novedad({ destinatario: "Ana Cliente", estatusValue: "en_reparto" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -1824,7 +1829,7 @@ describe("NovedadesModule — 237: resolver desde la pestaña de ayuda", () => {
           novedad({
             id: "o1",
             destinatario: "Ana Cliente",
-            estatusValue: "ayuda_tienda",
+            estatusValue: "en_reparto",
             ...over,
           }),
         ]}

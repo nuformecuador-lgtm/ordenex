@@ -107,6 +107,8 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     findGestionParaDeshacer: vi.fn(async () => gestionDeshacer()),
     findUltimaGestionNoAnuladaId: vi.fn(async () => "g1"),
     anularGestionYDevolverAGestion: vi.fn(async () => true),
+    // FICHA 454 (T1.11): la rama NUEVA del deshacer (gestion pendiente, sin transicion).
+    anularGestionPendiente: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -124,6 +126,7 @@ function gestionDeshacer(overrides: Partial<GestionDeshacerRow> = {}): GestionDe
     // Feature 237 (T5.5, D3): el default es «la registro el mensajero», que es el caso feliz del
     // deshacer. Los casos de la 237 lo ponen en `true`.
     desdeAyudaTienda: false,
+    registradaComoPendiente: false, // ficha 454 (T1.11): rama LEGADA del deshacer
     ...overrides,
   };
 }
@@ -210,9 +213,11 @@ describe("listarCierreDia — autorizacion y alcance (R1/R2)", () => {
     // Feature 246: y un TERCER argumento, el dia CR con el que se descarta lo reservado para
     // despues. `expect.any(Date)` basta aqui —este test es sobre el ACOTAMIENTO POR ACTOR—; que el
     // dia sea el correcto lo afirma el bloque «Feature 246» de mas abajo, con el reloj inyectado.
+    // ⏳ 2026-09-23 (FICHA 454, R37): `ayuda_tienda` sale de la lista. La ayuda deja de ser estado:
+    // la orden con ayuda abierta sigue `en_reparto`, que ya esta aqui y la cubre.
     expect(repo.contarOrdenesPendientesGestion).toHaveBeenCalledWith(
       "m1",
-      ["por_recoger", "en_reparto", "ayuda_tienda"],
+      ["por_recoger", "en_reparto"],
       expect.any(Date),
     );
     expect(repo.findCierresByMensajero).toHaveBeenCalledWith("m1");
@@ -1015,16 +1020,11 @@ describe("Feature 67 · deshacerGestion — guardia de estado de la orden (R5, F
     { resultado: "devuelta" as const, estatusValue: "en_bodega_central", nota: "47: reintento a central" },
     { resultado: "devuelta" as const, estatusValue: "en_bodega_satelite", nota: "47: reintento a satelite" },
     { resultado: "devuelta" as const, estatusValue: "rechazada", nota: "47: escalado al umbral" },
-    // Feature 239 (T1.5, R24) — EL CASO DE LA FEATURE, y es una REGRESION EVITADA, no una
-    // asercion nueva de adorno: desde la 239 la gestion `devuelta` deja la orden en el
-    // PRE-ESTADO, asi que ese es el sitio donde el mensajero la encuentra el mismo dia. Sin
-    // `devolucion_por_confirmar` en `ESTADOS_ESPERADOS.devuelta`, esta guardia no casaria NUNCA
-    // y el mensajero perderia la capacidad de deshacer su propia devolucion del dia.
-    {
-      resultado: "devuelta" as const,
-      estatusValue: "devolucion_por_confirmar",
-      nota: "239: el mensajero deshace su devolucion del dia desde el pre-estado",
-    },
+    // ⏳ 2026-09-23 (FICHA 454, T1.23): aqui vivia el caso de la 239 «el mensajero deshace su
+    // devolucion del dia desde el PRE-ESTADO». El pre-estado sale del catalogo: una gestion
+    // `devuelta` nueva deja la orden `en_reparto` y la deshace la rama NUEVA (sin transicion,
+    // `deshacer-ramas-sql-real`), y M3 llevo toda orden que estuviera en el pre-estado a esa rama.
+    // La tabla de la rama LEGADA pierde el value (design §11 U4); el caso pasa a CASOS_CONFLICT.
   ];
 
   for (const c of CASOS_OK) {
@@ -1049,6 +1049,11 @@ describe("Feature 67 · deshacerGestion — guardia de estado de la orden (R5, F
     { resultado: "rechazada" as const, estatusValue: "devolviendo_a_tienda", nota: "48: ya se devolvio a la tienda" },
     { resultado: "devuelta" as const, estatusValue: "en_reparto", nota: "la bodega la reasigno y ruteo" },
     { resultado: "entregada" as const, estatusValue: "en_preparacion", nota: "ajuste administrativo" },
+    {
+      resultado: "devuelta" as const,
+      estatusValue: "devolucion_por_confirmar",
+      nota: "454: el pre-estado de la 239 ya no existe; la rama legada no lo espera",
+    },
   ];
 
   for (const c of CASOS_CONFLICT) {
@@ -2175,7 +2180,10 @@ describe("listarCierreDia — el DTO de gestion expone el desglose del recaudo (
 // NOMBRE. Eso es todo el cambio funcional, y estos casos son lo que lo vuelve auditable.
 // =================================================================================================
 describe("235 · el bloqueo del cierre (T4.1, R22/R23)", () => {
-  it("R23: la lista de estados pendientes NOMBRA `ayuda_tienda`", async () => {
+  // ⏳ 2026-09-23 (FICHA 454): la 235 temia que el bloqueo desapareciera «el dia que la orden dejara
+  // de estar en `en_reparto`». La 454 hace lo contrario: la orden con ayuda abierta VUELVE a estar
+  // `en_reparto`, que la lista nombra por su nombre. `ayuda_tienda` se retira (R37).
+  it("R23 → 454: la lista de estados pendientes NOMBRA `en_reparto` (donde vive la ayuda abierta)", async () => {
     // Se lee de la llamada real al repo, no de una constante importada: `ESTADOS_PENDIENTES` es
     // privado del modulo y afirmar una copia seria un espejo de si mismo.
     const { service, repo } = newService();
@@ -2184,9 +2192,10 @@ describe("235 · el bloqueo del cierre (T4.1, R22/R23)", () => {
 
     const estados = (repo.contarOrdenesPendientesGestion as ReturnType<typeof vi.fn>).mock
       .calls[0][1] as string[];
-    expect(estados).toContain("ayuda_tienda");
+    expect(estados).toContain("en_reparto");
+    expect(estados).not.toContain("ayuda_tienda");
     // Censo CERRADO: uno de mas bloquearia a mensajeros que no tienen nada en la mano.
-    expect(estados).toEqual(["por_recoger", "en_reparto", "ayuda_tienda"]);
+    expect(estados).toEqual(["por_recoger", "en_reparto"]);
   });
 
   it("R22: con una orden en `ayuda_tienda`, `solicitarCierre` devuelve conflict con motivo accionable", async () => {
@@ -2299,7 +2308,9 @@ describe("264/B9 — verCierrePasado emite `ordenesSinGestion` y `sinGestionRegi
     producto: "Caja",
     tiendaNombre: "Tienda W",
     zonaNombre: "Cartago",
-    estatusOrigen: "ayuda_tienda" as const,
+    // FICHA 454 (2026-09-23): era `"ayuda_tienda"`. El corte ya barre desde un solo origen
+    // (`en_reparto`, con o sin ayuda abierta); el value retirado no es un `OrderStatusValue`.
+    estatusOrigen: "en_reparto" as const,
   };
 
   function repoCon(sinGestion: (typeof BARRIDA)[], sinGestionRegistrado = true) {

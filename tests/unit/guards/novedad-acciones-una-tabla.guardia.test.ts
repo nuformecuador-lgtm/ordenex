@@ -87,8 +87,15 @@ const FUENTES: Modulo[] = listarFuentes(path.join(RAIZ, PANTALLA))
 
 /** Toda lectura de `estatusValue` del fuente. */
 const LECTURA_ESTATUS = /\.estatusValue\b/g;
-/** La ÚNICA lectura admitida: preguntarle su grupo a la declaración única. */
-const LECTURA_POR_EL_MAPA = /\bgrupoDeEstatus\s*\(\s*[A-Za-z_$][\w$]*\.estatusValue\s*\)/g;
+/**
+ * La ÚNICA lectura admitida: preguntarle su grupo a la declaración única.
+ *
+ * ⏳ 2026-09-23 (FICHA 454, T2.5): la pantalla pregunta ahora por `grupoDeFila(<orden>.estatusValue,
+ * <grupo listado>)` —la ayuda dejó de ser un estado y su grupo lo pone la lista que la trajo—, que
+ * vive en la MISMA declaración única (`lib/types/novedad-grupo.ts`). Se admiten las dos formas.
+ */
+const LECTURA_POR_EL_MAPA =
+  /\b(?:grupoDeEstatus\s*\(\s*[A-Za-z_$][\w$]*\.estatusValue\s*\)|grupoDeFila\s*\(\s*[A-Za-z_$][\w$]*\.estatusValue\s*,)/g;
 
 /**
  * R19 — lecturas de `estatusValue` que NO pasan por `grupoDeEstatus`. Debe salir cero.
@@ -106,7 +113,13 @@ export function lecturasCrudasDeEstatus(codigo: string): number {
 
 /** Un literal del catálogo de estatus escrito en el fuente (la forma clásica de la infracción). */
 export function literalesDeEstatus(codigo: string): string[] {
-  const catalogo = new Set<string>(ORDER_STATUS_SEED as readonly string[]);
+  // FICHA 454 (2026-09-23): + los dos values RETIRADOS del catálogo. Escribir a mano un estado que
+  // ya no existe es la misma infracción.
+  const catalogo = new Set<string>([
+    ...(ORDER_STATUS_SEED as readonly string[]),
+    "ayuda_tienda",
+    "devolucion_por_confirmar",
+  ]);
   const encontrados = new Set<string>();
   for (const m of codigo.matchAll(/["'`]([^"'`\n]*)["'`]/g)) {
     if (catalogo.has(m[1])) encontrados.add(m[1]);
@@ -128,7 +141,7 @@ export function particionesPorEstado(codigo: string): string[] {
   const hallazgos: string[] = [];
   for (const m of codigo.matchAll(RECORRIDO)) {
     const ventana = codigo.slice(m.index, m.index + 220);
-    if (/estatusValue|grupoDeEstatus/.test(ventana)) {
+    if (/estatusValue|grupoDeEstatus|grupoDeFila/.test(ventana)) {
       hallazgos.push(ventana.split("\n")[0].trim());
     }
   }

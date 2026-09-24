@@ -1,12 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import type { ChokePointTx } from "@/lib/repositories/registrar-cambio-estado";
+import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { emisorNotificacionReal, emitirOrdenRechazada } from "@/lib/notificaciones/emitir";
 import type { CrearNotificacionInput } from "@/lib/interfaces/repositories/INotificacionRepository";
+import type { GestionResultado } from "@prisma/client";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
-// Feature 146 — B13. Productor TRANSACCIONAL del rechazo del destinatario, enganchado al
-// choke point `appendCambioEstado`. Cubre R18, R19, R20 y R21.
+// Feature 146 — B13. Productor TRANSACCIONAL del aviso «orden rechazada por el destinatario».
+// Cubre R18, R19, R20 y R21 de la 146.
+//
+// ⏳ 2026-09-23 — FICHA 454 (design DD, R35): EL DISPARO SE MUDA. Hasta hoy el aviso salia del choke
+// point `appendCambioEstado`, al escribirse la transicion `en_reparto -> rechazada` de familia
+// `gestion`. Con la 454 la gestion ya NO transiciona al registrarse: esa transicion la escribe la
+// APROBACION del cierre, horas despues. Dejar el emisor en el choke point haria que el aviso llegara
+// TARDE —y dos veces—. El aviso sale ahora en `GestionOrdenRepository.registrarGestionPendiente`,
+// dentro de SU transaccion, en el MISMO instante que antes (el registro del mensajero). Las
+// garantias de la 146 se conservan, reapuntadas:
+//   R18 (cuatro avisos con su alcance)     -> al registrar una gestion `rechazada`
+//   R19 (el escalado por SLA no notifica)  -> el choke point ya no notifica NADA (ni SLA, ni tienda)
+//   R20 (rollback sin avisos)              -> el aviso vive en la tx del registro
+//   R21 (si la emision falla, no persiste) -> el error del aviso tumba el registro entero
+// Y la 237/D4 y la 240/R45 (la tienda no emite «rechazada POR EL DESTINATARIO»): la via de la tienda
+// (`crearGestionDesdeAyuda`) no llama al emisor.
 
 const ORDEN = {
   id: "o-1",
@@ -16,58 +32,82 @@ const ORDEN = {
   numRemision: "REM-0042",
 };
 
-function buildTx(orden: Record<string, unknown> = ORDEN) {
-  const creadas: unknown[] = [];
+function colaFake() {
+  return {
+    enqueue: vi.fn(async () => null),
+    claimBatch: vi.fn(async () => []),
+    complete: vi.fn(async () => {}),
+    fail: vi.fn(async () => {}),
+    findByDedupeKeys: vi.fn(async () => []),
+  };
+}
+
+/**
+ * La transaccion del registro, con lo que `registrarGestionPendiente` toca: candado + re-lectura
+ * (`$queryRaw`), la gestion, el evento, la lectura de la orden para el aviso y las notificaciones.
+ * `aplicada` emula el COMMIT: las notificaciones solo sobreviven si el callback resuelve.
+ */
+function buildRegistro(orden: Record<string, unknown> = ORDEN, cola = colaFake()) {
+  const comprometidas: Record<string, unknown>[] = [];
+  let buffer: Record<string, unknown>[] = [];
   const tx = {
-    ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
-    orden: { findMany: vi.fn(async () => [orden]) },
+    $queryRaw: vi.fn(async (q: unknown) => {
+      const partes = Array.isArray(q) ? q : ((q as { strings?: string[] }).strings ?? []);
+      return partes.join(" ").includes("webhook_suscripcion") ? [] : [{ id: orden.id }];
+    }),
+    ordenEvento: { create: vi.fn(async () => ({ id: "ev-1" })) },
+    gestionOrden: { create: vi.fn(async () => ({ id: "g-1" })) },
+    gestionOrdenEvidencia: { createMany: vi.fn(async () => ({ count: 0 })) },
+    gestionOrdenPago: { createMany: vi.fn(async () => ({ count: 0 })) },
+    orden: {
+      findUniqueOrThrow: vi.fn(async () => orden),
+      update: vi.fn(async () => ({})),
+    },
+    usuario: { update: vi.fn(async () => ({})) },
+    ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 0 })) },
     notificacion: {
-      create: vi.fn(async (arg: { data: unknown }) => {
-        creadas.push(arg.data);
-        return { id: `n-${creadas.length}` };
+      create: vi.fn(async (arg: { data: Record<string, unknown> }) => {
+        buffer.push(arg.data);
+        return { id: `n-${buffer.length}` };
       }),
       findFirst: vi.fn(async () => null), // sin dedupe previa
     },
     notificacionLectura: {},
   };
-  return { tx, creadas: creadas as Record<string, unknown>[] };
+  const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<unknown>) => {
+    buffer = [];
+    const r = await cb(tx); // si lanza, `buffer` no se compromete (ROLLBACK)
+    comprometidas.push(...buffer);
+    return r;
+  });
+  const repo = new GestionOrdenRepository({ $transaction } as never, cola as never);
+  return { repo, tx, comprometidas };
 }
 
-/** Entrada de lote: `en_reparto -> rechazada` por la GESTION del mensajero (transicion #15). */
-function rechazoPorGestion() {
-  return {
+function registrar(repo: GestionOrdenRepository, resultado: GestionResultado = "rechazada") {
+  return repo.registrarGestionPendiente({
     ordenId: "o-1",
-    estatusOrigenId: idEstado("en_reparto"),
-    estatusDestinoId: idEstado("rechazada"),
-    actorUsuarioId: "men-1",
-    origenTipo: "gestion" as const,
-  };
-}
-
-/** Entrada de lote: `devuelta -> rechazada` por el escalado automatico de SLA (transicion #21). */
-function rechazoPorSla() {
-  return {
-    ordenId: "o-1",
-    estatusOrigenId: idEstado("devuelta"),
-    estatusDestinoId: idEstado("rechazada"),
-    actorUsuarioId: null,
-    origenTipo: "escalado_devuelta_sla" as const,
-  };
+    mensajeroId: "men-1",
+    gestion:
+      resultado === "entregada"
+        ? { resultado, montoRecibido: 100, metodoPago: "efectivo", evidencias: [] }
+        : { resultado, motivo: "no la quiso", evidencias: [] },
+  });
 }
 
 beforeEach(async () => {
   await sembrarCatalogoEstados();
 });
 
-describe("R18 — el rechazo del destinatario crea cuatro avisos con su alcance", () => {
+describe("R18 → 454/R35 — registrar un rechazo crea cuatro avisos con su alcance", () => {
   it("emite maestro y admin sin alcance, adminTienda por tienda y adminSatelite por zona", async () => {
-    const { tx, creadas } = buildTx();
+    const { repo, comprometidas } = buildRegistro();
 
-    await appendCambioEstado(tx as unknown as ChokePointTx, [rechazoPorGestion()], async () => {});
+    await registrar(repo);
 
-    expect(creadas).toHaveLength(4);
+    expect(comprometidas).toHaveLength(4);
     expect(
-      creadas.map((c) => ({
+      comprometidas.map((c) => ({
         rol: c.destinatarioRol,
         tiendaId: c.tiendaId,
         zonaId: c.zonaId,
@@ -81,11 +121,11 @@ describe("R18 — el rechazo del destinatario crea cuatro avisos con su alcance"
   });
 
   it("las cuatro son de tipo alert, referencian la orden y llevan la guia como anexo", async () => {
-    const { tx, creadas } = buildTx();
+    const { repo, comprometidas } = buildRegistro();
 
-    await appendCambioEstado(tx as unknown as ChokePointTx, [rechazoPorGestion()], async () => {});
+    await registrar(repo);
 
-    for (const fila of creadas) {
+    for (const fila of comprometidas) {
       expect(fila.tipo).toBe("alert");
       expect(fila.evento).toBe("orden_rechazada");
       expect(fila.entidadTipo).toBe("orden");
@@ -98,214 +138,153 @@ describe("R18 — el rechazo del destinatario crea cuatro avisos con su alcance"
   });
 
   it("usa el numero de remision como anexo cuando la orden aun no tiene guia", async () => {
-    const { tx, creadas } = buildTx({ ...ORDEN, numGuia: null });
+    const { repo, comprometidas } = buildRegistro({ ...ORDEN, numGuia: null });
 
-    await appendCambioEstado(tx as unknown as ChokePointTx, [rechazoPorGestion()], async () => {});
+    await registrar(repo);
 
-    expect(creadas.every((c) => c.anexo === "REM-0042")).toBe(true);
+    expect(comprometidas.every((c) => c.anexo === "REM-0042")).toBe(true);
   });
 
   it("omite SOLO la fila del adminSatelite si la zona de la orden no se resuelve", async () => {
-    const { tx, creadas } = buildTx({ ...ORDEN, zonaId: null });
+    const { repo, comprometidas } = buildRegistro({ ...ORDEN, zonaId: null });
 
-    await appendCambioEstado(tx as unknown as ChokePointTx, [rechazoPorGestion()], async () => {});
+    await registrar(repo);
 
-    expect(creadas).toHaveLength(3);
-    expect(creadas.map((c) => c.destinatarioRol)).toEqual(["maestro", "admin", "adminTienda"]);
+    expect(comprometidas).toHaveLength(3);
+    expect(comprometidas.map((c) => c.destinatarioRol)).toEqual(["maestro", "admin", "adminTienda"]);
+  });
+
+  it("CONTROL: registrar un resultado que no es `rechazada` NO avisa ni lee la orden", async () => {
+    for (const resultado of ["entregada", "devuelta", "reprogramada", "incidente"] as const) {
+      const { repo, tx, comprometidas } = buildRegistro();
+      await registrar(repo, resultado);
+      expect(comprometidas, resultado).toHaveLength(0);
+      expect(tx.orden.findUniqueOrThrow, resultado).not.toHaveBeenCalled();
+    }
+  });
+
+  it("454: el registro que NO pasa la re-lectura (ya no gestionable) no avisa", async () => {
+    const { repo, tx, comprometidas } = buildRegistro();
+    tx.$queryRaw.mockImplementation(async () => []); // la re-lectura bajo candado no la ve
+
+    const r = await registrar(repo);
+
+    expect(r).toBeNull();
+    expect(comprometidas).toHaveLength(0);
   });
 });
 
-describe("R19 — el escalado automatico por SLA NO notifica", () => {
-  it("no crea ninguna notificacion cuando el rechazo viene de escalado_devuelta_sla", async () => {
-    const { tx, creadas } = buildTx();
-
-    await appendCambioEstado(tx as unknown as ChokePointTx, [rechazoPorSla()], async () => {});
-
-    expect(creadas).toHaveLength(0);
-    expect(tx.orden.findMany).not.toHaveBeenCalled(); // ni siquiera consulta la orden
-  });
-
-  it("no notifica transiciones de gestion cuyo destino no es `rechazada`", async () => {
-    const { tx, creadas } = buildTx();
-
-    await appendCambioEstado(
-      tx as unknown as ChokePointTx,
-      [
-        {
-          ordenId: "o-1",
-          estatusOrigenId: idEstado("en_reparto"),
-          estatusDestinoId: idEstado("entregada"),
-          actorUsuarioId: "men-1",
-          origenTipo: "gestion" as const,
-        },
-      ],
-      async () => {},
-    );
-
-    expect(creadas).toHaveLength(0);
-  });
-
-  it("dentro de un lote mixto solo notifica el rechazo por gestion", async () => {
-    const { tx, creadas } = buildTx();
-
-    await appendCambioEstado(
-      tx as unknown as ChokePointTx,
-      [rechazoPorSla(), rechazoPorGestion()],
-      async () => {},
-    );
-
-    expect(creadas).toHaveLength(4);
-  });
-});
-
-// ---------------------------------------------------------------------------------------------
-// FEATURE 240 (T2.4, R45) — el RECHAZO MANUAL DE LA TIENDA tampoco notifica.
-//
-// El texto del aviso es «Una orden fue rechazada POR EL DESTINATARIO». Sobre un rechazo manual eso
-// es FALSO por partida doble: no lo rechazo el destinatario, y ni siquiera hubo destinatario delante
-// —el paquete volvio a la bodega y se escaneo al aprobar el cierre (238) dias antes—. Este repo
-// tiene escrito lo que cuesta un dato que miente con formato de dato.
-//
-// La ausencia se AFIRMA, no se deja como hueco: un requisito de «no pasa nada» sin test es
-// indistinguible de un olvido, y aqui el olvido seria ensanchar la igualdad de `emitir.ts` la
-// proxima vez que alguien vea un `rechazada` sin aviso y lo tome por un fallo.
-// ---------------------------------------------------------------------------------------------
-
-/** Entrada de lote: `devuelta -> rechazada` decidido por la TIENDA (transicion #67, feature 240). */
-function rechazoManualDeLaTienda() {
-  return {
+describe("R19/R45 → 454/DD — el choke point ya NO emite el aviso, venga de donde venga", () => {
+  function buildChokeTx() {
+    const tx = {
+      ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
+      orden: { findMany: vi.fn(async () => [ORDEN]) },
+      notificacion: { create: vi.fn(async () => ({ id: "n" })), findFirst: vi.fn(async () => null) },
+      notificacionLectura: {},
+    };
+    return tx;
+  }
+  const entrada = (origenTipo: "gestion" | "escalado_devuelta_sla" | "rechazo_tienda") => ({
     ordenId: "o-1",
-    estatusOrigenId: idEstado("devuelta"),
+    estatusOrigenId: idEstado(origenTipo === "gestion" ? "en_reparto" : "devuelta"),
     estatusDestinoId: idEstado("rechazada"),
-    actorUsuarioId: "tienda-1", // a diferencia del cron, aqui SI hay una persona
-    origenTipo: "rechazo_tienda" as const,
-  };
-}
+    actorUsuarioId: origenTipo === "escalado_devuelta_sla" ? null : "x",
+    origenTipo,
+  });
 
-describe("R45 (240) — el rechazo MANUAL de la tienda NO emite el aviso del destinatario", () => {
-  it("no crea ninguna notificacion cuando el rechazo viene de `rechazo_tienda`", async () => {
-    const { tx, creadas } = buildTx();
+  it("la transicion `en_reparto -> rechazada` de familia `gestion` (la APLICACION al aprobar) no avisa", async () => {
+    // Es la que antes avisaba. Ahora la escribe la aprobacion, horas despues del hecho: el aviso ya
+    // salio al registrar. Si este emisor volviera, el aviso llegaria dos veces.
+    const tx = buildChokeTx();
 
-    await appendCambioEstado(
-      tx as unknown as ChokePointTx,
-      [rechazoManualDeLaTienda()],
-      async () => {},
-    );
+    await appendCambioEstado(tx as unknown as ChokePointTx, [entrada("gestion")], async () => {});
 
-    expect(creadas).toHaveLength(0);
+    expect(tx.notificacion.create).not.toHaveBeenCalled();
     expect(tx.orden.findMany).not.toHaveBeenCalled(); // ni siquiera consulta la orden
   });
 
-  it("CONTROL POSITIVO: el mismo destino con familia `gestion` SI notifica", () => {
-    // Sin este control, el caso de arriba estaria verde tambien si el emisor se hubiera roto
-    // entero y no notificara nunca. La pareja es lo que hace que la ausencia signifique algo.
-    const { tx, creadas } = buildTx();
-    return appendCambioEstado(
-      tx as unknown as ChokePointTx,
-      [rechazoPorGestion()],
-      async () => {},
-    ).then(() => {
-      expect(creadas).toHaveLength(4);
-    });
-  });
-
-  it("en un lote con las TRES vias a `rechazada`, solo notifica la del mensajero", async () => {
-    // Las tres aterrizan en el mismo estado y solo una describe un rechazo del destinatario.
-    const { tx, creadas } = buildTx();
+  it("las TRES vias a `rechazada` en un lote: ninguna avisa desde el choke point", async () => {
+    const tx = buildChokeTx();
 
     await appendCambioEstado(
       tx as unknown as ChokePointTx,
-      [rechazoPorSla(), rechazoManualDeLaTienda(), rechazoPorGestion()],
+      [entrada("escalado_devuelta_sla"), entrada("rechazo_tienda"), entrada("gestion")],
       async () => {},
     );
 
-    expect(creadas).toHaveLength(4);
-  });
-});
-
-describe("R20 — si la transaccion revierte, no queda ninguna notificacion", () => {
-  it("la emision vive dentro del mismo tx que el append (no hay canal fuera de la tx)", async () => {
-    const { tx, creadas } = buildTx();
-    // Simula el rollback: el `tx` deja de aceptar escrituras a mitad de la transaccion.
-    tx.notificacion.create.mockImplementation(async () => {
-      throw new Error("transaccion abortada");
-    });
-
-    await expect(
-      appendCambioEstado(tx as unknown as ChokePointTx, [rechazoPorGestion()], async () => {}),
-    ).rejects.toThrow("transaccion abortada");
-
-    expect(creadas).toHaveLength(0);
+    expect(tx.notificacion.create).not.toHaveBeenCalled();
   });
 
-  it("si el append del historial falla, la emision no llega a ejecutarse", async () => {
-    const { tx, creadas } = buildTx();
-    tx.ordenHistorialEstado.createMany.mockRejectedValue(new Error("append boom"));
-
-    await expect(
-      appendCambioEstado(tx as unknown as ChokePointTx, [rechazoPorGestion()], async () => {}),
-    ).rejects.toThrow("append boom");
-
-    expect(creadas).toHaveLength(0);
+  it("el emisor real es un no-op: no consulta nada ni con un rechazo por gestion", async () => {
+    const tx = buildChokeTx();
+    await emisorNotificacionReal(
+      tx as unknown as ChokePointTx,
+      [entrada("gestion")],
+      new Map([[idEstado("rechazada"), "rechazada"]]),
+    );
+    expect(tx.orden.findMany).not.toHaveBeenCalled();
     expect(tx.notificacion.create).not.toHaveBeenCalled();
   });
 });
 
-describe("R21 — si la emision falla, el cambio de estado no se persiste", () => {
-  it("propaga el error del emisor para que la transaccion del call-site revierta", async () => {
-    const { tx } = buildTx();
-    const emisorQueFalla = vi.fn(async () => {
+describe("R20 — si la transaccion del registro revierte, no queda ninguna notificacion", () => {
+  it("el aviso vive dentro de la MISMA tx que la gestion (no hay canal fuera de la tx)", async () => {
+    // Un paso POSTERIOR al aviso falla (el encolado de la re-optimizacion): la tx entera revierte.
+    const colaQueFalla = {
+      ...colaFake(),
+      enqueue: vi.fn(async () => {
+        throw new Error("transaccion abortada");
+      }),
+    };
+    const { repo, tx, comprometidas } = buildRegistro(ORDEN, colaQueFalla);
+
+    await expect(registrar(repo)).rejects.toThrow("transaccion abortada");
+
+    // Se INTENTO avisar (si no, este caso pasaria por no haber llegado al aviso)...
+    expect(tx.notificacion.create).toHaveBeenCalled();
+    // ...y aun asi no sobrevivio ni uno.
+    expect(comprometidas).toHaveLength(0);
+  });
+});
+
+describe("R21 — si la emision falla, la gestion no se persiste", () => {
+  it("el error de la emision propaga y tumba el registro entero", async () => {
+    const { repo, tx } = buildRegistro();
+    tx.notificacion.create.mockImplementation(async () => {
       throw new Error("emision caida");
     });
 
-    await expect(
-      appendCambioEstado(
-        tx as unknown as ChokePointTx,
-        [rechazoPorGestion()],
-        async () => {},
-        undefined,
-        emisorQueFalla,
-      ),
-    ).rejects.toThrow("emision caida");
-    expect(emisorQueFalla).toHaveBeenCalledTimes(1);
+    await expect(registrar(repo)).rejects.toThrow("emision caida");
   });
 
   it("el fallo de la lectura de la orden dentro de la tx tambien propaga", async () => {
-    const { tx } = buildTx();
-    tx.orden.findMany.mockRejectedValue(new Error("lectura caida"));
+    const { repo, tx } = buildRegistro();
+    tx.orden.findUniqueOrThrow.mockRejectedValue(new Error("lectura caida"));
 
-    await expect(
-      appendCambioEstado(tx as unknown as ChokePointTx, [rechazoPorGestion()], async () => {}),
-    ).rejects.toThrow("lectura caida");
+    await expect(registrar(repo)).rejects.toThrow("lectura caida");
   });
 });
 
 describe("compatibilidad del choke point con los call-sites existentes", () => {
   it("la firma sigue aceptando (tx, entradas) sin el quinto parametro", async () => {
-    const { tx } = buildTx();
-    await expect(
-      appendCambioEstado(tx as unknown as ChokePointTx, [rechazoPorGestion()], async () => {}),
-    ).resolves.toBeUndefined();
-  });
-
-  it("un `tx` sin las tablas de notificacion es un no-op (dobles historicos de la 49)", async () => {
-    const txViejo = {
+    const tx = {
       ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
     };
-
     await expect(
-      appendCambioEstado(txViejo as unknown as ChokePointTx, [rechazoPorGestion()], async () => {}),
+      appendCambioEstado(
+        tx as unknown as ChokePointTx,
+        [
+          {
+            ordenId: "o-1",
+            estatusOrigenId: idEstado("en_reparto"),
+            estatusDestinoId: idEstado("rechazada"),
+            actorUsuarioId: "men-1",
+            origenTipo: "gestion" as const,
+          },
+        ],
+        async () => {},
+      ),
     ).resolves.toBeUndefined();
-  });
-
-  it("el emisor real no consulta nada cuando el lote no trae ningun rechazo por gestion", async () => {
-    const { tx } = buildTx();
-    await emisorNotificacionReal(
-      tx as unknown as ChokePointTx,
-      [rechazoPorSla()],
-      new Map([[idEstado("rechazada"), "rechazada"]]),
-    );
-    expect(tx.orden.findMany).not.toHaveBeenCalled();
   });
 });
 

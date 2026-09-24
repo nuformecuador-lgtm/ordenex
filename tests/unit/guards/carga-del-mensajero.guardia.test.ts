@@ -130,6 +130,16 @@ function leer(rel: string): string {
 /** El estatus que esta guardia nació vigilando. Es «el paquete sigue con él, en la calle» (R1). */
 const AYUDA = "ayuda_tienda";
 
+/**
+ * ⏳ 2026-09-23 (FICHA 454, T1.15/T1.23, R37): `ayuda_tienda` se RETIRA. La ayuda deja de ser un
+ * estatus y pasa a ser un hecho (`orden_evento`): la orden con ayuda abierta SIGUE `en_reparto`, con
+ * el paquete encima. La PROPIEDAD que esta guardia protege no cambia —toda lista de la familia cubre
+ * a la orden en ayuda—, pero se cumple ahora por `en_reparto`. Por eso la decision por miembro pasa
+ * de «nombra `ayuda_tienda`» a «nombra `en_reparto` (donde vive la ayuda abierta) y NO nombra el
+ * estatus retirado». Antes: `lista.includes("ayuda_tienda") === incluyeAyuda (true)` en los nueve.
+ */
+const DONDE_VIVE_LA_AYUDA = "en_reparto";
+
 const RUTA_CIERRE_SERVICE = "lib/services/CierreDiaService.ts";
 const RUTA_GUIA_SERVICE = "lib/services/GuiaAsignacionService.ts";
 const RUTA_GUIA_ACTION = "lib/actions/ordenes-guia.ts";
@@ -367,14 +377,16 @@ describe("0 — el censo de esta guardia no está vacío ni miente", () => {
 // 235 — la decisión sobre `ayuda_tienda`, declarada miembro a miembro
 // =============================================================================================
 
-describe("235 — el estatus de ayuda OCUPA al mensajero, y las NUEVE listas lo dicen", () => {
+describe("235 → 454 — la orden con ayuda OCUPA al mensajero, y las NUEVE listas lo dicen", () => {
   it.each(FAMILIA.map((m) => [m.nombre, m] as const))(
-    "%s incluye `ayuda_tienda`",
+    "%s cubre la ayuda abierta (`en_reparto`) y no nombra el estatus retirado",
     (_nombre, miembro) => {
       const lista = miembro.estatus();
+      // 454/R37: el estatus retirado no puede reaparecer en ninguna lista de la familia.
+      expect(lista, `${miembro.nombre} (${miembro.ruta}) nombra el estatus RETIRADO \`${AYUDA}\``).not.toContain(AYUDA);
       expect(
-        lista.includes(AYUDA),
-        `${miembro.nombre} (${miembro.ruta}) NO nombra \`${AYUDA}\`.\n\n` +
+        lista.includes(DONDE_VIVE_LA_AYUDA),
+        `${miembro.nombre} (${miembro.ruta}) NO nombra \`${DONDE_VIVE_LA_AYUDA}\`, donde vive la ayuda abierta.\n\n` +
           `Razón por la que debe: ${miembro.razon}.\n\n` +
           `Si de verdad la decisión es que NO ocupe, no basta con quitarlo de la lista: hay que ` +
           `cambiar \`incluyeAyuda\` en esta guardia y escribir aquí POR QUÉ, igual que se hizo con ` +

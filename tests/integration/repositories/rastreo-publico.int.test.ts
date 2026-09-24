@@ -128,11 +128,15 @@ function buildPrisma() {
         .map((h) => proyectar(h as unknown as Record<string, unknown>, args.select));
     },
   );
+  // FICHA 454 (T1.19, R31): la gestion PENDIENTE de confirmar se lee con SQL crudo
+  // (`sqlUltimaGestionPendienteDeOrden`). Estas ordenes no tienen ninguna: `[]`.
+  const queryRaw = vi.fn(async () => []);
   const prisma = {
     orden: { findUnique },
     ordenHistorialEstado: { findMany },
+    $queryRaw: queryRaw,
   } as unknown as PrismaClient;
-  return { prisma, findUnique, findMany };
+  return { prisma, findUnique, findMany, queryRaw };
 }
 
 const CONFIG: RastreoPublicoConfig = {
@@ -143,9 +147,9 @@ const CONFIG: RastreoPublicoConfig = {
 };
 
 function build() {
-  const { prisma, findUnique, findMany } = buildPrisma();
+  const { prisma, findUnique, findMany, queryRaw } = buildPrisma();
   const repo = new RastreoPublicoRepository(prisma);
-  return { repo, service: new RastreoPublicoService(repo, CONFIG), findUnique, findMany };
+  return { repo, service: new RastreoPublicoService(repo, CONFIG), findUnique, findMany, queryRaw };
 }
 
 describe("R21 — la linea de tiempo sale en UNA consulta y ordenada asc", () => {
@@ -169,13 +173,16 @@ describe("R21 — la linea de tiempo sale en UNA consulta y ordenada asc", () =>
     expect(await repo.listarTransiciones("orden-borrada")).toHaveLength(1);
   });
 
-  it("con datos reales, la consulta publica completa emite exactamente dos lecturas", async () => {
-    const { service, findUnique, findMany } = build();
+  // ⏳ 2026-09-23 (FICHA 454, R31): TRES lecturas — la orden, su historial (sigue siendo UNA) y la
+  // gestion PENDIENTE de confirmar, que se pinta como ultimo hito marcado. Antes: dos.
+  it("con datos reales, la consulta publica completa emite exactamente tres lecturas", async () => {
+    const { service, findUnique, findMany, queryRaw } = build();
     const resultado = await service.consultar(4321, "7766");
 
     expect(resultado.estado).toBe("ok");
     expect(findUnique).toHaveBeenCalledTimes(1);
     expect(findMany).toHaveBeenCalledTimes(1);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
     expect(resultado.envio.linea.map((e) => e.hito)).toEqual([
       "registrado",

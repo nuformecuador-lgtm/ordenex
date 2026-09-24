@@ -1348,10 +1348,9 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
     // paquete SIGUE CON EL, en la calle (R1), asi que ocupa igual que `en_reparto`. Censo CERRADO:
     // uno de mas bloquearia a quien no lleva nada; uno de menos —el que se cayo al mover el
     // estatus— manda a recolectar a quien va cargado.
-    expect(repo.findMensajerosConOrdenesEn).toHaveBeenCalledWith(
-      ["m1"],
-      ["por_recoger", "en_reparto", "ayuda_tienda"],
-    );
+    // ⏳ 2026-09-23 (FICHA 454, R37): `ayuda_tienda` sale de la lista. La ayuda deja de ser estado:
+    // la orden con ayuda abierta sigue `en_reparto`, que ya esta aqui y la cubre.
+    expect(repo.findMensajerosConOrdenesEn).toHaveBeenCalledWith(["m1"], ["por_recoger", "en_reparto"]);
   });
 
   // ===============================================================================================
@@ -1367,15 +1366,17 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
   // las listas que describen la OCUPACION DEL MENSAJERO. La guardia
   // `carga-del-mensajero.guardia.test.ts` censa la familia entera para que no vuelva a pasar.
   // ===============================================================================================
-  it("235: no se le asigna una recoleccion a quien tiene una orden en `ayuda_tienda`", async () => {
+  // ⏳ 2026-09-23 (FICHA 454): la orden con ayuda ABIERTA esta `en_reparto` (antes `ayuda_tienda`);
+  // lo que la hace ocupar al mensajero es ese estado. El doble responde por `en_reparto`.
+  it("235 → 454: no se le asigna una recoleccion a quien tiene una orden con ayuda ABIERTA", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: ORIGEN_RECOLECCION }),
       ]),
-      // El doble responde como responderia la query real: pregunta por los tres estados y este
-      // mensajero tiene una orden en uno de ellos.
+      // El doble responde como responderia la query real: la orden con ayuda abierta vive en
+      // `en_reparto`, que es uno de los estados por los que se pregunta.
       findMensajerosConOrdenesEn: vi.fn(async (_ids: string[], estados: string[]) =>
-        estados.includes("ayuda_tienda") ? new Set(["m1"]) : new Set<string>(),
+        estados.includes("en_reparto") ? new Set(["m1"]) : new Set<string>(),
       ),
     });
 
@@ -1391,7 +1392,7 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
     expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
   });
 
-  it("235 (CASO NEGATIVO): si `ayuda_tienda` saliera de la lista, este mensajero pasaria", async () => {
+  it("235 (CASO NEGATIVO): si el estado que ocupa no estuviera en la lista, este mensajero pasaria", async () => {
     // La contraprueba que da sentido al caso de arriba: el MISMO doble, y lo unico que decide es si
     // el service pregunta o no por el estatus de ayuda. Sin este par, el caso anterior pasaria
     // igual con un doble que dijera «ocupado» siempre.

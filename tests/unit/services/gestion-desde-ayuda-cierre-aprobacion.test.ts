@@ -147,11 +147,13 @@ describe("💰 R32/D1 — la gestion de la tienda posterior a una RE-SOLICITUD c
 /* -------------------------------------------------------------------------- */
 
 describe("R33/R34 — esta ficha no cambia el bloqueo del cierre ni sus exenciones", () => {
-  it("R33: `ayuda_tienda` sigue en `ESTADOS_PENDIENTES` y sigue bloqueando la CREACION", async () => {
+  // ⏳ 2026-09-23 (FICHA 454, T1.15): la ayuda deja de ser estatus. Una orden con ayuda abierta
+  // sigue `en_reparto`, que SIGUE en `ESTADOS_PENDIENTES`: bloquea la creacion igual que antes
+  // (ahora como orden «en mano», no por un estatus propio). Antes la regex exigia la lista
+  // `["por_recoger", "en_reparto", "ayuda_tienda"]`.
+  it("R33: una orden con ayuda ABIERTA sigue bloqueando la CREACION (esta `en_reparto`)", async () => {
     const servicioSrc = quitarComentarios(fuente("lib/services/CierreDiaService.ts"));
-    expect(servicioSrc).toMatch(
-      /const ESTADOS_PENDIENTES = \["por_recoger", "en_reparto", "ayuda_tienda"\]/,
-    );
+    expect(servicioSrc).toMatch(/const ESTADOS_PENDIENTES = \["por_recoger", "en_reparto"\]/);
 
     // Y se ejerce: con una orden pendiente, la creacion se rechaza.
     const repo = repoParaSolicitar({});
@@ -209,7 +211,27 @@ describe("💰 R35 — el paquete que resolvio la tienda tambien hay que escanea
 /* -------------------------------------------------------------------------- */
 
 describe("R37 — esta ficha NO escribe dentro de la transaccion de aprobacion", () => {
-  it("ni `CierresAdminRepository` ni `CierresAdminService` nombran la familia nueva", () => {
+  // ⏳ 2026-09-23 (FICHA 454, R8): la 454 SI trae la familia al aprobar, y a proposito: la gestion
+  // de la tienda ya no transiciona al registrarse, y la APLICACION al aprobar escribe su transicion
+  // con familia `gestion_tienda_ayuda` y actor la persona de la tienda (R8). El censo se acota: la
+  // UNICA mencion en el repositorio vive dentro del bloque «APLICACION DE GESTIONES», que va
+  // DESPUES de los cinco feeds (`cierres-admin-caja-cod` sigue midiendo su orden); el servicio
+  // sigue sin nombrarla. Antes: ninguno de los dos archivos la nombraba.
+  it("la familia de la tienda solo aparece en el bloque de APLICACION del repositorio (454/R8)", () => {
+    const repoSrc = quitarComentarios(fuente("lib/repositories/CierresAdminRepository.ts"));
+    const i = repoSrc.indexOf("if (aplicacionGestiones)");
+    const f = repoSrc.indexOf("if (devolucionRechazadas)", i);
+    expect(i).toBeGreaterThan(-1);
+    expect(f).toBeGreaterThan(i);
+    const fuera = repoSrc.slice(0, i) + repoSrc.slice(f);
+    expect(fuera).not.toContain("gestion_tienda_ayuda");
+    expect(repoSrc.slice(i, f)).toContain("gestion_tienda_ayuda");
+    expect(quitarComentarios(fuente("lib/services/CierresAdminService.ts"))).not.toContain(
+      "gestion_tienda_ayuda",
+    );
+  });
+
+  it("(historico 237) el SERVICIO de aprobacion no nombra la familia nueva", () => {
     // La gestion se escribe en SU PROPIA transaccion, en el instante en que la tienda actua, igual
     // que `reprogramarDesdeDevuelta`. Lo que ocurre al aprobar son consecuencias de una fila que YA
     // existe: los cinco feeds la leen por `cierreId`, como a cualquier otra.
@@ -217,23 +239,21 @@ describe("R37 — esta ficha NO escribe dentro de la transaccion de aprobacion",
     // Si este censo se pone rojo, alguien metio trabajo de esta ficha dentro de la transaccion mas
     // cara del sistema, y con ello movio el orden de las llamadas que `cierres-admin-caja-cod`
     // mide porque los feeds se leen unos a otros.
-    for (const rel of [
-      "lib/repositories/CierresAdminRepository.ts",
-      "lib/services/CierresAdminService.ts",
-    ]) {
+    for (const rel of ["lib/services/CierresAdminService.ts"]) {
       expect(quitarComentarios(fuente(rel))).not.toContain("gestion_tienda_ayuda");
     }
   });
 
-  it("💰 el ANCLAJE (239) NUNCA alcanza una gestion de esta familia: solo mira `resultado: devuelta`", () => {
-    // Y desde ayuda NO se puede devolver (R1: los desenlaces son dos, y `devuelta` no esta). El
-    // bloque de anclaje es, por tanto, inalcanzable para esta ficha — no por casualidad, sino por
-    // la interseccion de dos conjuntos cerrados que se comprueba aqui.
+  // ⏳ 2026-09-23 (FICHA 454, T1.7): el bloque `if (anclajeDevolucion)` de la 239 se generaliza a
+  // `if (aplicacionGestiones)`. La rama `anclaje_devolucion` (actor = el aprobador) se elige por
+  // `resultado === "devuelta"`, y desde ayuda `devuelta` no es un desenlace: la interseccion de los
+  // dos conjuntos cerrados sigue vacia.
+  it("💰 la rama `anclaje_devolucion` NUNCA alcanza una gestion de esta familia: solo mira `devuelta`", () => {
     const src = quitarComentarios(fuente("lib/repositories/CierresAdminRepository.ts"));
-    const i = src.indexOf("if (anclajeDevolucion)");
+    const i = src.indexOf("if (aplicacionGestiones)");
     expect(i).toBeGreaterThan(-1);
-    const bloque = src.slice(i, i + 600);
-    expect(bloque).toMatch(/resultado:\s*"devuelta"/);
+    const bloque = src.slice(i, src.indexOf("if (devolucionRechazadas)", i));
+    expect(bloque).toMatch(/g\.resultado === "devuelta"[\s\S]*?"anclaje_devolucion"/);
 
     // La otra mitad: `devuelta` no es un desenlace posible desde ayuda. Se lee del CENSO REAL del
     // borde, no de una copia local — una copia local haria este caso verde para siempre.
@@ -246,16 +266,23 @@ describe("R37 — esta ficha NO escribe dentro de la transaccion de aprobacion",
 /* -------------------------------------------------------------------------- */
 
 describe("R44/D4 — el rechazo de la tienda NO emite «orden rechazada por el destinatario»", () => {
-  it("el emisor filtra por `origen_tipo === 'gestion'`, y la familia nueva no lo es", () => {
-    // El hecho tecnico que lo hace facil de creer: la ausencia sale sola porque el filtro es una
-    // IGUALDAD. Pero eso es una coincidencia, no una garantia — el dia que alguien convierta esa
-    // igualdad en un `in` «para cubrir mas casos», el aviso empezaria a salir. Por eso lleva test.
-    const src = quitarComentarios(fuente("lib/notificaciones/emitir.ts"));
-    expect(src).toMatch(/const ORIGEN_RECHAZO_DEL_DESTINATARIO = "gestion";/);
-    expect(src).toMatch(/e\.origenTipo === ORIGEN_RECHAZO_DEL_DESTINATARIO/);
-    // NO es un `in` ni un `includes`: si lo fuera, la familia nueva podria colarse.
-    expect(src).not.toMatch(/ORIGEN_RECHAZO_DEL_DESTINATARIO\.includes/);
-    expect(src).not.toContain("gestion_tienda_ayuda\",");
+  // ⏳ 2026-09-23 (FICHA 454, design DD): el aviso ya no sale del choke point filtrando por
+  // `origen_tipo === 'gestion'`: sale del REGISTRO de la gestion del mensajero. La ausencia para la
+  // tienda la sostiene ahora el SITIO del disparo, y eso es lo que se afirma: el registro del
+  // mensajero lo llama, el de la tienda no. Antes se afirmaba la igualdad del filtro de `emitir.ts`.
+  it("el aviso sale SOLO del registro del mensajero: la via de la tienda no lo dispara", () => {
+    const src = quitarComentarios(fuente("lib/repositories/GestionOrdenRepository.ts"));
+    const cuerpoDe = (metodo: string) => {
+      const i = src.indexOf(`async ${metodo}(`);
+      expect(i, `no se encontro ${metodo}`).toBeGreaterThan(-1);
+      const siguiente = src.indexOf("\n  async ", i + 1);
+      return src.slice(i, siguiente === -1 ? undefined : siguiente);
+    };
+    expect(cuerpoDe("registrarGestionPendiente")).toContain("emitirOrdenRechazadaEnTransaccion");
+    expect(cuerpoDe("crearGestionDesdeAyuda")).not.toContain("emitirOrdenRechazada");
+    // Y el choke point ya no avisa de nada (su emisor por defecto es un no-op).
+    const emitir = quitarComentarios(fuente("lib/notificaciones/emitir.ts"));
+    expect(emitir).toMatch(/export const emisorNotificacionReal: NotificacionEmisor = async \(\) => \{\};/);
   });
 
   it("la AUSENCIA esta escrita como decision en el propio archivo, con su porque", () => {

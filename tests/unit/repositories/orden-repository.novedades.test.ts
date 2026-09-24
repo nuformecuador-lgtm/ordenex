@@ -23,6 +23,15 @@ import { GRUPOS_NOVEDAD, type GrupoNovedad } from "@/lib/types/novedad-grupo";
 //     silencio: lo pone rojo.
 //  3. El evaluador se prueba a si mismo contra respuestas conocidas antes de usarse (bloque 0). Un
 //     evaluador roto diria «no casa» a todo y dejaria verdes todas las aserciones negativas.
+//
+// ⏳ 2026-09-23 — FICHA 454 (T1.16, design §4.3): LA AYUDA DEJA DE SER ESTADO. El discriminante del
+// grupo `ayuda` pasa de `estatus = ayuda_tienda` a la DERIVACION «ayuda abierta» de
+// `lib/repositories/ayuda-abierta.ts` (eventos append-only; cualquier transicion la cierra). Prisma no
+// puede expresar «el ULTIMO evento» con un filtro relacional, asi que el repo la compone como
+// `id: { in: <ids con ayuda abierta de la tienda> }`, resueltos con `$queryRaw`. El predicado de
+// `devolucion` no cambia. El evaluador aprende la SEGUNDA forma y sigue reventando ante cualquier
+// otra; la semantica de la derivacion contra Postgres la mide
+// `tests/integration/db/454/ayuda-abierta-sql-real.test.ts`.
 
 // ---------------------------------------------------------------------------------------------
 // El CONTRATO de la pantalla, escrito a mano: que estatus lista cada pestaña.
@@ -34,12 +43,24 @@ import { GRUPOS_NOVEDAD, type GrupoNovedad } from "@/lib/types/novedad-grupo";
 // obliga a pasar por aqui y decidir su estatus.
 // ---------------------------------------------------------------------------------------------
 const ESTATUS_ESPERADO: Record<GrupoNovedad, string> = {
-  ayuda: "ayuda_tienda", // feature 235: solicitud viva, el paquete sigue en la moto
+  // FICHA 454: la orden con ayuda abierta sigue `en_reparto` (antes `ayuda_tienda`); lo que la mete en
+  // la pestaña es la DERIVACION, no el estado. Este valor es el de la FILA representativa del grupo.
+  ayuda: "en_reparto",
   devolucion: "devuelta", // feature 239: devolucion ANCLADA (confirmada en el cierre)
 };
 
+/** Los ids que la derivacion «ayuda abierta» devuelve en esta suite (doble de `$queryRaw`). */
+const IDS_AYUDA_ABIERTA = ["o-ay-1", "o-ay-2"];
+
+/** Id de la fila representativa de cada grupo (la de ayuda esta en la derivacion). */
+const ID_DE_GRUPO: Record<GrupoNovedad, string> = { ayuda: "o-ay-1", devolucion: "o-dev" };
+
 /** El `where` que los DOS metodos DEBEN construir para `grupo`. Tres claves, ni una mas. */
 function novedadWhereEsperado(tiendaId: string, grupo: GrupoNovedad) {
+  if (grupo === "ayuda") {
+    // FICHA 454 (design §4.3): la derivacion, compuesta como lista de ids. Ningun estado.
+    return { tiendaId, deletedAt: null, id: { in: IDS_AYUDA_ABIERTA } };
+  }
   return {
     tiendaId,
     deletedAt: null, // R10: excluye borradas
@@ -54,6 +75,7 @@ function novedadWhereEsperado(tiendaId: string, grupo: GrupoNovedad) {
 // ---------------------------------------------------------------------------------------------
 
 interface FilaDePrueba {
+  id: string;
   tiendaId: string;
   deletedAt: Date | null;
   estatusValue: string;
@@ -68,11 +90,25 @@ function casa(where: unknown, fila: FilaDePrueba): boolean {
   // Si el predicado gana una forma nueva —un `OR`, un `in`, una relacion, una clave hermana— el
   // evaluador NO adivina: se detiene en rojo. Un evaluador permisivo dejaria pasar la mutacion que
   // este archivo existe para cazar.
+  if (claves.join(",") === "deletedAt,id,tiendaId") {
+    // FICHA 454: la forma del grupo `ayuda` — la derivacion compuesta como `id: { in: [...] }`.
+    const id = w.id as Record<string, unknown>;
+    if (Object.keys(id).join(",") !== "in" || !Array.isArray(id.in)) {
+      throw new Error("`id` dejo de ser una lista `{ in: [...] }`");
+    }
+    if (w.deletedAt !== null) throw new Error("`deletedAt` dejo de exigir `null`");
+    return (
+      fila.tiendaId === w.tiendaId &&
+      fila.deletedAt === null &&
+      (id.in as string[]).includes(fila.id)
+    );
+  }
   if (claves.join(",") !== "deletedAt,estatus,tiendaId") {
     throw new Error(
       `el predicado de novedades tiene claves inesperadas [${claves.join(", ")}]: el evaluador ` +
-        `solo entiende { tiendaId, deletedAt, estatus: { value } }. Si el predicado cambio de ` +
-        `forma a proposito, enseñale a leerla — no borres la comprobacion.`,
+        `solo entiende { tiendaId, deletedAt, estatus: { value } } y { tiendaId, deletedAt, id: ` +
+        `{ in } }. Si el predicado cambio de forma a proposito, enseñale a leerla — no borres la ` +
+        `comprobacion.`,
     );
   }
   const estatus = w.estatus as Record<string, unknown>;
@@ -88,7 +124,12 @@ function casa(where: unknown, fila: FilaDePrueba): boolean {
 }
 
 function fila(overrides: Partial<FilaDePrueba> = {}): FilaDePrueba {
-  return { tiendaId: "tienda-1", deletedAt: null, estatusValue: "devuelta", ...overrides };
+  return { id: "o-x", tiendaId: "tienda-1", deletedAt: null, estatusValue: "devuelta", ...overrides };
+}
+
+/** La fila representativa de `grupo`: la que su pestaña DEBE listar. */
+function filaDeGrupo(grupo: GrupoNovedad): FilaDePrueba {
+  return fila({ id: ID_DE_GRUPO[grupo], estatusValue: ESTATUS_ESPERADO[grupo] });
 }
 
 // 2026-08-13 (pedido humano) — fila TAL COMO LA DEVUELVE PRISMA para el `select` de
@@ -128,6 +169,10 @@ function prismaRow(overrides: Record<string, unknown> = {}) {
 
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   return {
+    // FICHA 454: la derivacion «ayuda abierta» (y la fecha de la solicitud) se leen con SQL crudo.
+    $queryRaw: vi.fn(async (..._args: unknown[]): Promise<unknown[]> =>
+      IDS_AYUDA_ABIERTA.map((id) => ({ id })),
+    ),
     orden: {
       findMany: vi.fn(),
       count: vi.fn(),
@@ -164,6 +209,12 @@ describe("0 — el evaluador de predicados de esta suite no esta roto", () => {
     expect(
       casa(sintetico, fila({ tiendaId: "t1", estatusValue: "devuelta", deletedAt: new Date() })),
     ).toBe(false);
+    // FICHA 454: la forma de la derivacion.
+    const porIds = { tiendaId: "t1", deletedAt: null, id: { in: ["a"] } };
+    expect(casa(porIds, fila({ id: "a", tiendaId: "t1" }))).toBe(true);
+    expect(casa(porIds, fila({ id: "b", tiendaId: "t1" }))).toBe(false);
+    expect(casa(porIds, fila({ id: "a", tiendaId: "t2" }))).toBe(false);
+    expect(casa(porIds, fila({ id: "a", tiendaId: "t1", deletedAt: new Date() }))).toBe(false);
   });
 
   it("REVIENTA ante una forma que no entiende (nunca «no la entiendo» -> «no casa»)", () => {
@@ -210,16 +261,17 @@ describe("0 — el evaluador de predicados de esta suite no esta roto", () => {
 
 describe("236/R3/R10 — `novedadWhere` es UNA igualdad de estado por grupo", () => {
   it.each([...GRUPOS_NOVEDAD])(
-    "grupo %s: el where tiene EXACTAMENTE tres claves y su estatus es el suyo",
+    "grupo %s: el where tiene EXACTAMENTE tres claves y su discriminante es el suyo",
     async (grupo) => {
       const where = await whereDeCount(grupo);
       expect(where).toEqual(novedadWhereEsperado("tienda-1", grupo));
-      // Censo CERRADO de claves: una clave hermana al lado del estado es la forma literal de las
-      // dos fugas de esta pila (`orden.ayuda`, `gestion_aprobada`). No caben.
-      expect(Object.keys(where).sort()).toEqual(["deletedAt", "estatus", "tiendaId"]);
+      // Censo CERRADO de claves: una clave hermana al lado del discriminante es la forma literal de
+      // las dos fugas de esta pila (`orden.ayuda`, `gestion_aprobada`). No caben.
+      expect(Object.keys(where).sort()).toEqual(
+        grupo === "ayuda" ? ["deletedAt", "id", "tiendaId"] : ["deletedAt", "estatus", "tiendaId"],
+      );
       expect(where).not.toHaveProperty("OR");
       expect(where).not.toHaveProperty("gestiones");
-      expect(Object.keys(where.estatus)).toEqual(["value"]);
       expect(where.deletedAt).toBeNull(); // R10: nunca cuenta borradas
     },
   );
@@ -254,7 +306,7 @@ describe("236/R9 — una orden de un grupo NO casa el predicado del otro", () =>
     for (const grupo of GRUPOS_NOVEDAD) predicados.set(grupo, await whereDeCount(grupo));
 
     for (const grupoFila of GRUPOS_NOVEDAD) {
-      const orden = fila({ estatusValue: ESTATUS_ESPERADO[grupoFila] });
+      const orden = filaDeGrupo(grupoFila);
       for (const grupoPredicado of GRUPOS_NOVEDAD) {
         const esperado = grupoFila === grupoPredicado;
         expect(
@@ -272,6 +324,8 @@ describe("236/R9 — una orden de un grupo NO casa el predicado del otro", () =>
     const predicados = await Promise.all(
       [...GRUPOS_NOVEDAD].map(async (g) => [g, await whereDeCount(g)] as const),
     );
+    // FICHA 454: ninguna de estas filas esta en la derivacion (su id no es de `IDS_AYUDA_ABIERTA`):
+    // `en_reparto` con la ayuda CERRADA (rescatada, habilitada o con gestion pendiente) no se lista.
     for (const estatus of [
       "en_reparto", // rescatada: vuelve a la calle y desaparece de la pantalla de la tienda
       "sin_gestionar", // el corte nocturno la barrio
@@ -290,7 +344,7 @@ describe("236/R9 — una orden de un grupo NO casa el predicado del otro", () =>
   it("R10: ni la orden de otra tienda ni la borrada casan ningun predicado", async () => {
     for (const grupo of GRUPOS_NOVEDAD) {
       const where = await whereDeCount(grupo);
-      const propia = fila({ estatusValue: ESTATUS_ESPERADO[grupo] });
+      const propia = filaDeGrupo(grupo);
       // Control POSITIVO al lado de cada negativo: si la fila propia no casara, los tres `false`
       // de abajo serian ciertos por la razon equivocada.
       expect(casa(where, propia)).toBe(true);
@@ -328,7 +382,7 @@ describe("236/R4 — el total y la pagina cuentan el mismo universo, en TODOS lo
     // Mata la mutacion «ignorar el parametro `grupo`»: con un predicado fijo, los dos grupos
     // producirian el MISMO where y esto cae.
     const wheres = await Promise.all([...GRUPOS_NOVEDAD].map((g) => whereDeCount(g)));
-    const valores = wheres.map((w) => (w as { estatus: { value: string } }).estatus.value);
+    const valores = wheres.map((w) => JSON.stringify(w));
     expect(new Set(valores).size).toBe(GRUPOS_NOVEDAD.length);
   });
 });
@@ -399,15 +453,15 @@ describe("OrdenRepository.findNovedadesByTienda (R4/R10)", () => {
     expect(arg.select).not.toHaveProperty("deletedAt");
   });
 
-  it("la pagina del grupo de AYUDA pide su propio estatus, con el mismo select", async () => {
-    // El espejo del caso de arriba para el grupo nuevo: mismo `select`, distinto predicado.
+  it("la pagina del grupo de AYUDA pide su propio predicado, con el mismo select", async () => {
+    // El espejo del caso de arriba para el otro grupo: mismo `select`, distinto predicado.
     const prisma = buildPrisma();
-    prisma.orden.findMany.mockResolvedValue([prismaRow({ estatus: { value: "ayuda_tienda" } })]);
+    prisma.orden.findMany.mockResolvedValue([prismaRow({ estatus: { value: "en_reparto" } })]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findNovedadesByTienda("tienda-1", "ayuda", { skip: 0, take: 10 });
 
-    expect(rows[0].estatusValue).toBe("ayuda_tienda");
+    expect(rows[0].estatusValue).toBe("en_reparto"); // FICHA 454: la ayuda no es un estado
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toEqual(novedadWhereEsperado("tienda-1", "ayuda"));
     expect(arg.select).toEqual(prisma.orden.findMany.mock.calls[0][0].select);
@@ -572,7 +626,7 @@ describe("OrdenRepository.findNovedadesByTienda (R4/R10)", () => {
   it("296: el nombre del mensajero se resuelve de la relacion, en la MISMA consulta", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
-      prismaRow({ estatus: { value: "ayuda_tienda" }, mensajeroAsignado: { nombre: "Kevin" } }),
+      prismaRow({ estatus: { value: "en_reparto" }, mensajeroAsignado: { nombre: "Kevin" } }),
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
@@ -580,8 +634,10 @@ describe("OrdenRepository.findNovedadesByTienda (R4/R10)", () => {
 
     expect(rows[0].mensajeroNombre).toBe("Kevin");
     // «En la MISMA consulta» no es un comentario: UNA llamada a `findMany` sobre `orden` y ni una
-    // sola sobre `usuario`. Si alguien lo resolviera con una lectura por fila, esto cae.
+    // sola sobre `usuario`. Si alguien lo resolviera con una lectura por fila, esto cae. (La
+    // derivacion de la ayuda es UNA consulta aparte, por pagina, no por fila.)
     expect(prisma.orden.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
   });
 
   it("296: sin mensajero asignado la relacion es null y el nombre sale null (nunca `\"\"`)", async () => {
@@ -669,36 +725,43 @@ describe("OrdenRepository.findCausasDevueltaVigentes (R6/R7/R8)", () => {
 // Feature 236 (T2.5, D7/R17) — la fecha de la SOLICITUD, que ordena la pestaña de ayuda
 // =============================================================================================
 
+// ⏳ 2026-09-23 (FICHA 454, T1.16): la fecha de la solicitud sale del EVENTO `ayuda_solicitada`
+// (`fechasSolicitudAyuda`, `ayuda-abierta.ts`), no de la fila de historial `solicitud_ayuda_tienda`
+// que la 454 deja de producir. «La mas reciente por orden» la resuelve el SQL (`MAX` + `GROUP BY`):
+// un doble no la ejecuta, asi que aqui se afirma la FORMA (una consulta, todos los ids, solo la IDA,
+// dos columnas) y el mapeo; la semantica se mide en `tests/integration/db/454/ayuda-abierta-sql-real`.
 describe("236/R17 — `findFechaSolicitudAyuda`: UNA consulta por pagina, la solicitud VIVA", () => {
-  it("consulta por la familia de origen de la IDA, con TODOS los ids de la pagina de una vez", async () => {
+  function sqlDe(call: unknown[]): string {
+    const q = call[0] as { strings?: readonly string[]; sql?: string };
+    return q.sql ?? (q.strings ?? []).join(" ? ");
+  }
+
+  it("consulta el evento de la IDA, con TODOS los ids de la pagina de una vez", async () => {
     const prisma = buildPrisma();
-    prisma.ordenHistorialEstado.findMany.mockResolvedValue([]);
+    prisma.$queryRaw.mockResolvedValue([]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     await repo.findFechaSolicitudAyuda(["o1", "o2", "o3"]);
 
     // UNA llamada para las tres ordenes: nunca una por fila (el N+1 que el contrato prohibe).
-    expect(prisma.ordenHistorialEstado.findMany).toHaveBeenCalledTimes(1);
-    const arg = prisma.ordenHistorialEstado.findMany.mock.calls[0][0];
-    expect(arg.where).toEqual({
-      ordenId: { in: ["o1", "o2", "o3"] },
-      // La IDA. La VUELTA (`rescate_ayuda_tienda`) describe el FINAL de una espera, no su
-      // comienzo: si se leyera aqui, la pestaña se ordenaria por cuando dejo de esperar.
-      origenTipo: "solicitud_ayuda_tienda",
-    });
-    expect(arg.orderBy).toEqual({ createdAt: "desc" });
-    // Solo dos columnas: ni el actor, ni el motivo, ni los estatus. Nada de PII (R47).
-    expect(arg.select).toEqual({ ordenId: true, createdAt: true });
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    const call = prisma.$queryRaw.mock.calls[0] as unknown[];
+    const sql = sqlDe(call);
+    // La IDA. El cierre (`ayuda_rescatada`/`ayuda_habilitada_api`) describe el FINAL de una espera.
+    expect(sql).toContain("'ayuda_solicitada'");
+    expect(sql).not.toContain("ayuda_rescatada");
+    expect(sql).toMatch(/MAX\("created_at"\)/);
+    expect(sql).toMatch(/GROUP BY "orden_id"/);
+    // Solo dos columnas: ni el actor, ni el rol, ni el motivo. Nada de PII (R47).
+    expect(sql).not.toContain("actor");
+    expect((call[0] as { values: unknown[] }).values).toEqual(["o1", "o2", "o3"]);
   });
 
-  it("se queda con la solicitud MAS RECIENTE por orden (un ciclo viejo no manda)", async () => {
-    // Una orden puede haber sido rescatada y vuelta a pedir. Lo que ordena la pestaña es la
-    // espera VIVA, no la primera de su historia.
+  it("traduce cada fila a su fecha, por orden", async () => {
     const prisma = buildPrisma();
-    prisma.ordenHistorialEstado.findMany.mockResolvedValue([
-      { ordenId: "o1", createdAt: new Date("2026-03-10T09:00:00Z") },
-      { ordenId: "o1", createdAt: new Date("2026-01-01T09:00:00Z") },
-      { ordenId: "o2", createdAt: new Date("2026-02-01T09:00:00Z") },
+    prisma.$queryRaw.mockResolvedValue([
+      { orden_id: "o1", en: new Date("2026-03-10T09:00:00Z") },
+      { orden_id: "o2", en: new Date("2026-02-01T09:00:00Z") },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
@@ -710,9 +773,7 @@ describe("236/R17 — `findFechaSolicitudAyuda`: UNA consulta por pagina, la sol
 
   it("una orden sin ninguna solicitud NO entra al mapa (el service cae a su fallback)", async () => {
     const prisma = buildPrisma();
-    prisma.ordenHistorialEstado.findMany.mockResolvedValue([
-      { ordenId: "o1", createdAt: new Date("2026-03-10T09:00:00Z") },
-    ]);
+    prisma.$queryRaw.mockResolvedValue([{ orden_id: "o1", en: new Date("2026-03-10T09:00:00Z") }]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const map = await repo.findFechaSolicitudAyuda(["o1", "sin-solicitud"]);
@@ -728,7 +789,7 @@ describe("236/R17 — `findFechaSolicitudAyuda`: UNA consulta por pagina, la sol
     const map = await repo.findFechaSolicitudAyuda([]);
 
     expect(map.size).toBe(0);
-    expect(prisma.ordenHistorialEstado.findMany).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 });
 
@@ -787,8 +848,11 @@ describe("239 — la visibilidad no depende de ninguna marca distinta del estado
     expect(conApagador.marcarAyuda).toBeUndefined();
     expect(conApagador.desmarcarAyuda).toBeUndefined();
     expect(conApagador.habilitarNovedad).toBeUndefined();
-    // Y el que los sustituye SI esta.
-    expect(typeof conApagador.transicionarAyuda).toBe("function");
+    // FICHA 454: tampoco la transicion de la 235 — la ayuda es un hecho, no un estado.
+    expect(conApagador.transicionarAyuda).toBeUndefined();
+    // Y los que los sustituyen SI estan: la ida y la vuelta como eventos append-only.
+    expect(typeof conApagador.registrarAyudaSolicitada).toBe("function");
+    expect(typeof conApagador.registrarAyudaResuelta).toBe("function");
   });
 
   // FEATURE 236 (T2.2) — los nombres viejos NO pueden convivir con los nuevos. Si alguien

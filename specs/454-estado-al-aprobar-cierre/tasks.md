@@ -8,6 +8,16 @@
 > Convenciones: `[P]` = paralelizable con las otras `[P]` de su bloque (sin archivos en común). `Dep:` =
 > dependencias. **Hecho** = criterio verificable. Un commit por tarea (`test(454): …`, `feat(454): …`).
 > El worktree nace de `dev`: primer paso `git checkout --detach <SHA dado>` + `git merge-base` (memoria).
+>
+> **Estado al 2026-09-24 (arreglo de la revisión T4.3).** T0.0–T3.3 hechas, con su evidencia en
+> `progress/impl_454_fase0.md`, `impl_454_backend.md`, `impl_454_datos.md`, `impl_454_frontend.md`,
+> `contraste_454.md` e `impl_454_fix_review.md`. Donde el **Hecho** se cumplió por otra vía que la escrita:
+> T1.16 «test de avisos diarios» → R65 es vacuo y medido (ver `requirements.md`, R65); T1.18 → su test llegó
+> en el arreglo de la revisión (`454/carga-mensajero-pendiente-sql-real.test.ts`); T1.20 → los tests reales
+> son los de la tabla R32/R36 de abajo (no existe un `ApiOrdenLecturaService` aparte); T1.21 → el DTO y la
+> clase `evento_orden` los cerró la Fase 2 (BLOQUEO-3 del backend); T3.2 → las mutaciones están repartidas
+> en las bitácoras y en la revisión (12) más las del arreglo. Pendientes: T4.1 (gate completo, lo corre el
+> leader), T4.2 (recorrido en curso), T4.3 (re-revisión) y la Fase 5.
 
 ---
 
@@ -30,11 +40,11 @@ verde sin datos», «gate sin .env salta la integración»), anotada en `progres
 Un test que no pueda ponerse rojo con su mutación **no cuenta**. Cada test afirma sus precondiciones (que el
 escenario existe) antes de afirmar el resultado: nada de `if (!x) return;`.
 
-- [ ] **T0.0 — Preparación.** Base local migrada a `dev` (`prisma migrate status` en verde, host local), `.env`
+- [x] **T0.0 — Preparación.** Base local migrada a `dev` (`prisma migrate status` en verde, host local), `.env`
   presente, `pnpm vitest run tests/integration/db --reporter=verbose` con `skipped = 0` en una suite de control.
   Avisar en `progress/current.md` antes de migrar la base local compartida (memoria).
   **Hecho:** salida pegada en `progress/impl_454_fase0.md`.
-- [ ] **T0.1 — Escenario compartido** `tests/integration/db/454/_escenario.ts`. Construye un mundo con tienda,
+- [x] **T0.1 — Escenario compartido** `tests/integration/db/454/_escenario.ts`. Construye un mundo con tienda,
   zona central y zona satélite, dos mensajeros, tarifas, suscripción de webhook activa y órdenes en
   `por_recoger`/`en_reparto`, y expone **verbos que llaman a los servicios reales** (no a Prisma):
   `gestionar`, `pedirAyuda`, `recuperar`, `habilitar`, `habilitarPorApi`, `gestionarDesdeAyuda`, `deshacer`,
@@ -76,7 +86,7 @@ Tests de caracterización (todos `[P]` entre sí, Dep: T0.1). Archivo: `tests/in
 | C27 | `rastreo-y-historial-legado` | Tras aprobar, el rastreo muestra el hito confirmado; una fila histórica con destino `devolucion_por_confirmar` se lee `no_entregado` y una con `ayuda_tienda` `en_reparto`. `[INTERMEDIO]`: el hito justo tras gestionar. | Cambiar el hito de `devolucion_por_confirmar` en `HITO_POR_ESTATUS`. | R31, R40 |
 | C28 | `rechazos-tienda-425` | Un rechazo de tienda suelto se incorpora como material de revisión al cierre del mensajero sin `cierre_id` y sin importe. | Quitar el 2.º cerrojo (`historialEstados some rechazo_tienda`). | R63 |
 
-- [ ] **T0.2 — Cierre de la Fase 0.** Las 28 filas en verde sobre el código actual y cada una con su rojo
+- [x] **T0.2 — Cierre de la Fase 0.** Las 28 filas en verde sobre el código actual y cada una con su rojo
   registrado. Dep: C01-C28. **Hecho:** `progress/impl_454_fase0.md` con 28 bloques completos; commit
   `test(454): caracterizacion del comportamiento actual`.
 
@@ -86,18 +96,18 @@ Tests de caracterización (todos `[P]` entre sí, Dep: T0.1). Archivo: `tests/in
 
 ### Cimientos
 
-- [ ] **T1.1 — Tipos de dominio.** `lib/types/orden-evento.ts` (SEED + exhaustividad); `order-status.ts`
+- [x] **T1.1 — Tipos de dominio.** `lib/types/orden-evento.ts` (SEED + exhaustividad); `order-status.ts`
   (fuera los dos valores, comentario fechado); `order-status-transiciones.ts` (§2); `gestion-destino.ts`
   (`devuelta → devuelta`, fuera `ESTATUS_DEVOLUCION_POR_CONFIRMAR`); `rastreo-publico.ts`
   (`HITO_POR_ESTATUS_RETIRADO`); `webhook-eventos.ts`; `tablero-dia.ts`; comentarios de familias sin
   productor en `orden-historial.ts`. **Hecho:** `pnpm typecheck` rojo **solo** en los consumidores de §11
   (lista pegada en `progress/impl_454.md`), que se resuelven en las tareas siguientes.
-- [ ] **T1.2 — Esquema y migraciones M1 y M2.** `db/schema.prisma` (modelo `OrdenEvento`, enum, relación
+- [x] **T1.2 — Esquema y migraciones M1 y M2.** `db/schema.prisma` (modelo `OrdenEvento`, enum, relación
   `GestionOrden.eventos`, valor de `job_tipo`). DDL con `prisma migrate diff … --script`, pegado a mano (no
   `db:migrate:create`). `down.sql` de las dos. Dep: T1.1.
   **Hecho:** `prisma migrate deploy` local verde; `down` + `deploy` otra vez verde; test
   `tests/integration/db/454/orden-evento-migration.test.ts` (tabla, CHECKs, índice único parcial, RLS activa).
-- [ ] **T1.3 — Predicados únicos.** `lib/repositories/gestion-pendiente.ts` y `lib/repositories/ayuda-abierta.ts`
+- [x] **T1.3 — Predicados únicos.** `lib/repositories/gestion-pendiente.ts` y `lib/repositories/ayuda-abierta.ts`
   (§3, §4.1), en forma Prisma y SQL. Dep: T1.2.
   **Hecho:** `gestion-pendiente-sql-real.test.ts` y `ayuda-abierta-sql-real.test.ts` cubren cada fila de la
   tabla de §4.1 y cada estado de cierre (sin cierre, solicitado, vencido, rechazado, aprobado), con una
@@ -107,69 +117,69 @@ Tests de caracterización (todos `[P]` entre sí, Dep: T0.1). Archivo: `tests/in
 
 ### Registro, aplicación y dinero
 
-- [ ] **T1.4 — Registro de la gestión** (§6): `registrarGestionPendiente` con el protocolo de §5;
+- [x] **T1.4 — Registro de la gestión** (§6): `registrarGestionPendiente` con el protocolo de §5;
   `MisAsignacionesService.gestionar` y `escogerParaGestion` con el predicado; compensación de evidencias en
   conflicto. Dep: T1.3. **Hecho:** `registro-gestion-sin-transicion-sql-real.test.ts` (R1, R2, R5) y
   `registro-gestion-concurrencia-sql-real.test.ts` (R4: doble envío, mensajero+tienda) verdes; C07 verde sin
   editar sus invariantes.
-- [ ] **T1.5 — Webhooks de eventos** (§12.1): job `webhook_evento`, encolador en la misma tx, handler,
+- [x] **T1.5 — Webhooks de eventos** (§12.1): job `webhook_evento`, encolador en la misma tx, handler,
   `WebhookEventoOrdenService` reusando sender/firma/pausa, alta en el procesador de jobs. `[P]` con T1.6.
   Dep: T1.4. **Hecho:** `webhook-evento-sql-real.test.ts` (encola solo con suscripción activa, dedupe por id,
   payload `{ ordenEventoId }` sin PII) y `tests/unit/services/WebhookEventoOrdenService.test.ts` (cuerpo por
   tipo, firma, reintento, pausa).
-- [ ] **T1.6 — N1 al registrar** (DD). `[P]` con T1.5. Dep: T1.4. **Hecho:** C20 verde sin editar; test de que
+- [x] **T1.6 — N1 al registrar** (DD). `[P]` con T1.5. Dep: T1.4. **Hecho:** C20 verde sin editar; test de que
   la aprobación no crea filas `orden_rechazada`.
-- [ ] **T1.7 — Aplicación en `resolverCierre`** (§7): bloque nuevo en su sitio, `RETURNING`, familias y actores
+- [x] **T1.7 — Aplicación en `resolverCierre`** (§7): bloque nuevo en su sitio, `RETURNING`, familias y actores
   de R8, `aplicacionGestiones` obligatorio, retiro del bloque de anclaje, servicio que resuelve ids y falla
   cerrado. Dep: T1.4. **Hecho:** `aplicacion-al-aprobar-sql-real.test.ts` (R7-R12, R14, R19, R57, R59 con
   una mutación registrada por guarda), `cierres-admin-caja-cod.test.ts` verde **sin tocar**, C04, C09, C11,
   C16, C17, C18, C23 verdes sin editar invariantes.
-- [ ] **T1.8 — Selección de la 139** (§8). Dep: T1.7. **Hecho:** `devolucion-rechazadas-seleccion-sql-real.test.ts`
+- [x] **T1.8 — Selección de la 139** (§8). Dep: T1.7. **Hecho:** `devolucion-rechazadas-seleccion-sql-real.test.ts`
   (propia, escritorio 240, escalado, tope y **legada de otro cierre abierto: no se mueve**); C10 verde.
-- [ ] **T1.9 — Intentos** (§10). `[P]` con T1.8. Dep: T1.7. **Hecho:**
+- [x] **T1.9 — Intentos** (§10). `[P]` con T1.8. Dep: T1.7. **Hecho:**
   `intentos-segunda-via-sql-real.test.ts` (una `devuelta` nueva cuenta 1 tras aprobar y 0 antes; una
   sintética nunca), guardia `sinteticas-sin-evento-registro.guardia.test.ts`, las dos guardias del criterio
   actualizadas con nota fechada, `anclaje-vs-intentos.guardia.test.ts` **sin tocar** y verde; C03, C04, C05,
   C19 verdes.
-- [ ] **T1.10 — Corte nocturno** (§9) con bloqueo. Dep: T1.3. **Hecho:** C01 y C02 verdes sin editar sus
+- [x] **T1.10 — Corte nocturno** (§9) con bloqueo. Dep: T1.3. **Hecho:** C01 y C02 verdes sin editar sus
   invariantes; `corte-excluye-pendientes-sql-real.test.ts` con cierre `rechazado` y `vencido`.
 
 ### Operaciones del mensajero, la tienda y el admin
 
-- [ ] **T1.11 — Deshacer** (rama nueva + legada, §11 U4). Dep: T1.4. **Hecho:** C21 verde;
+- [x] **T1.11 — Deshacer** (rama nueva + legada, §11 U4). Dep: T1.4. **Hecho:** C21 verde;
   `deshacer-ramas-sql-real.test.ts` (nueva: sin transición, evento, webhook; legada: aristas de hoy).
-- [ ] **T1.12 — Portal del mensajero** (listas, KPI, mapa, paradas). Confirmar si `contarEntregadas` cuenta
+- [x] **T1.12 — Portal del mensajero** (listas, KPI, mapa, paradas). Confirmar si `contarEntregadas` cuenta
   por gestión o por estado y ajustarlo para que dé lo mismo que hoy. `[P]` con T1.13. Dep: T1.3. **Hecho:**
   C12 y C13 verdes sin editar.
-- [ ] **T1.13 — Precondición de solicitar cierre** (U3). `[P]` con T1.12. Dep: T1.3. **Hecho:** C08 verde.
-- [ ] **T1.14 — Corrección #69** (ramas nueva y legada). Dep: T1.7. **Hecho:** C06 verde sin editar
+- [x] **T1.13 — Precondición de solicitar cierre** (U3). `[P]` con T1.12. Dep: T1.3. **Hecho:** C08 verde.
+- [x] **T1.14 — Corrección #69** (ramas nueva y legada). Dep: T1.7. **Hecho:** C06 verde sin editar
   invariantes; `correccion-ramas-sql-real.test.ts` (nueva: sin transición, evento, aplica `rechazada` al
   aprobar con familia `gestion`; legada: la de hoy).
-- [ ] **T1.15 — Ayuda como evento** (§4.2): solicitar, rescatar (Recuperar/Habilitar), habilitar por API
+- [x] **T1.15 — Ayuda como evento** (§4.2): solicitar, rescatar (Recuperar/Habilitar), habilitar por API
   (respuesta con `ayudaCerrada`), gestión desde ayuda (237). Dep: T1.4. **Hecho:** C22 verde sin editar
   invariantes; `ayuda-evento-sql-real.test.ts` (R21-R28 incluida la reapertura imposible tras un nuevo ciclo).
-- [ ] **T1.16 — Novedades, avisos, hilo, chat** (U11-U13, P4). `[P]` con T1.17. Dep: T1.15. **Hecho:**
+- [x] **T1.16 — Novedades, avisos, hilo, chat** (U11-U13, P4). `[P]` con T1.17. Dep: T1.15. **Hecho:**
   `novedades-predicado-sql-real.test.ts` y `hilo-ventana-alcanzable.guardia` verdes; test de avisos diarios.
-- [ ] **T1.17 — Traspaso y cambio de día** (U5, U6) con bloqueo. `[P]` con T1.16. Dep: T1.3. **Hecho:** C14 y
+- [x] **T1.17 — Traspaso y cambio de día** (U5, U6) con bloqueo. `[P]` con T1.16. Dep: T1.3. **Hecho:** C14 y
   C15 verdes; `traspaso-mensajero` y `correccion-dia-reparto(-efectos)` de integración verdes.
-- [ ] **T1.18 — Carga del mensajero** (U7, U8). `[P]`. Dep: T1.3. **Hecho:** tests de `GuiaAsignacionService`
+- [x] **T1.18 — Carga del mensajero** (U7, U8). `[P]`. Dep: T1.3. **Hecho:** tests de `GuiaAsignacionService`
   y `RepartoMananaRepository` con una orden pendiente que no cuenta.
 
 ### Publicación y lectores
 
-- [ ] **T1.19 — Rastreo público** (§12.3). `[P]`. Dep: T1.4. **Hecho:** `rastreo-pendiente-sql-real.test.ts`
+- [x] **T1.19 — Rastreo público** (§12.3). `[P]`. Dep: T1.4. **Hecho:** `rastreo-pendiente-sql-real.test.ts`
   (aparece, se anula, se corrige, se confirma; sin actor/motivo); C27 verde; `rastreo-frontera.guardia` verde.
-- [ ] **T1.20 — API detalle y OpenAPI** (§12.2, R36). `[P]`. Dep: T1.4, T1.5, T1.15. **Hecho:** tests de
+- [x] **T1.20 — API detalle y OpenAPI** (§12.2, R36). `[P]`. Dep: T1.4, T1.5, T1.15. **Hecho:** tests de
   `ApiOrdenLecturaService` (pendiente/aplicada), `openapi-spec` válido y sin los dos valores, eventos nuevos
   documentados.
-- [ ] **T1.21 — Línea de tiempo (DTO) y lectores de `cierre_sin_gestion`.** Clase `evento_orden` en el DTO y en
+- [x] **T1.21 — Línea de tiempo (DTO) y lectores de `cierre_sin_gestion`.** Clase `evento_orden` en el DTO y en
   `OrdenHistorialService` (`RANGO_POR_CLASE`). Medir quién lee `estatus_origen_id` de `cierre_sin_gestion`
   (Pregunta abierta 4) y, si alguien distingue la ayuda, derivarla del evento. `[P]`. Dep: T1.2.
   **Hecho:** test de servicio del historial con las cuatro clases; nota en `progress/impl_454.md`.
-- [ ] **T1.22 — SF-001.** Verificar conciliación de bodega y cierres de bodega (431) con el código nuevo.
+- [x] **T1.22 — SF-001.** Verificar conciliación de bodega y cierres de bodega (431) con el código nuevo.
   `[P]`. Dep: T1.7. **Hecho:** C24 verde; test de `resolverCierreBodega` sobre cierres aprobados con gestiones
   nuevas.
-- [ ] **T1.23 — Barrido de literales.** `exclude-por-rol.ts`, `estados-bodega-satelite.ts`, `cohorte-carga.ts`,
+- [x] **T1.23 — Barrido de literales.** `exclude-por-rol.ts`, `estados-bodega-satelite.ts`, `cohorte-carga.ts`,
   `order-status-eliminables.ts`, `correccion-datos-cliente.ts`, `habilitacion-api.ts`, `gestion-retorno.ts`,
   `gestion-orden.ts`, `novedad*.ts`, `CierreDiaRepository.marcarDesdeAyudaTienda` (425). Dep: T1.4-T1.21.
   **Hecho:** `grep -rn "devolucion_por_confirmar\|ayuda_tienda" lib app components` = solo comentarios
@@ -178,7 +188,7 @@ Tests de caracterización (todos `[P]` entre sí, Dep: T0.1). Archivo: `tests/in
 
 ### Migración de datos
 
-- [ ] **T1.24 — M3 backfill y retiro** (§1.6). Dep: T1.2, T1.15. **Hecho:**
+- [x] **T1.24 — M3 backfill y retiro** (§1.6). Dep: T1.2, T1.15. **Hecho:**
   `tests/integration/db/454/retiro-estados-migration.test.ts`: (a) órdenes en los dos estados → `en_reparto` con
   rastro, las de ayuda con ayuda abierta y la de devolución con gestión pendiente; (b) idempotencia;
   (c) retiro condicional (con y sin referencias); (d) sin jobs ni notificaciones nuevos; (e) `RAISE` si falta
@@ -188,11 +198,11 @@ Tests de caracterización (todos `[P]` entre sí, Dep: T0.1). Archivo: `tests/in
 
 ### Cierre del backend
 
-- [ ] **T1.25 — Fase 0 contra el código nuevo.** Las 28 suites verdes; **ninguna invariante editada** (diff
+- [x] **T1.25 — Fase 0 contra el código nuevo.** Las 28 suites verdes; **ninguna invariante editada** (diff
   de esos bloques vacío, comprobado con `git diff dev -- tests/integration/db/454/caracterizacion` filtrado
   por `describe` no `[INTERMEDIO]`); los `[INTERMEDIO]` reescritos con nota fechada. Dep: T1.1-T1.24.
   **Hecho:** tabla en `progress/impl_454.md`.
-- [ ] **T1.26 — Gate completo** `./init.sh` (el rápido se niega: hay migraciones y `lib/types`), con
+- [x] **T1.26 — Gate completo** `./init.sh` (el rápido se niega: hay migraciones y `lib/types`), con
   `INIT_EXIT=$?` escrito dentro del log y `skipped` de `integration/db` = 0. Dep: T1.25.
 
 ---
@@ -201,36 +211,36 @@ Tests de caracterización (todos `[P]` entre sí, Dep: T0.1). Archivo: `tests/in
 
 Ninguna pantalla nueva (si surge una, `/design` antes). Sin «SLA» en textos. Sin renombrar estados (455).
 
-- [ ] **T2.1 — Portal del mensajero** (`app/(app)/mis-asignaciones/**`, `RepartoModule`, `RutaMapa*`,
+- [x] **T2.1 — Portal del mensajero** (`app/(app)/mis-asignaciones/**`, `RepartoModule`, `RutaMapa*`,
   `pos-estado`, `chat-contactos`): grupos servidos por el servidor; las pendientes no aparecen; «con ayuda»
   igual que hoy. `[P]`. **Hecho:** tests de componentes; recorrido rol mensajero (T4.2).
-- [ ] **T2.2 — Órdenes** (`OrdenesListado.tsx`, detalle, `EstatusBadge.tsx`, filtro de estados): chip
+- [x] **T2.2 — Órdenes** (`OrdenesListado.tsx`, detalle, `EstatusBadge.tsx`, filtro de estados): chip
   «<resultado> — pendiente de confirmación»; los dos valores fuera. `[P]`. **Hecho:**
   `EstatusBadgeCatalogoV2.test.tsx` actualizado con nota; test del chip.
-- [ ] **T2.3 — Línea de tiempo** (`HistorialOrdenTimeline.tsx`): clase `evento_orden` en el `switch`
+- [x] **T2.3 — Línea de tiempo** (`HistorialOrdenTimeline.tsx`): clase `evento_orden` en el `switch`
   exhaustivo. `[P]`. **Hecho:** test de render de las cuatro clases.
-- [ ] **T2.4 — Rastreo público**: hito pendiente con su texto. `[P]`. **Hecho:** test de página con y sin
+- [x] **T2.4 — Rastreo público**: hito pendiente con su texto. `[P]`. **Hecho:** test de página con y sin
   pendiente.
-- [ ] **T2.5 — Novedades** (`NovedadesModule/Tabs/Acciones`, `HabilitarNovedadModal`, `HiloNotasAyudaModal`,
+- [x] **T2.5 — Novedades** (`NovedadesModule/Tabs/Acciones`, `HabilitarNovedadModal`, `HiloNotasAyudaModal`,
   `novedad-acciones-catalogo`, `ayuda-descarga-columnas`). `[P]`. **Hecho:** `novedad-acciones-una-tabla.guardia`
   y `ayuda-columna-retirada.guardia` verdes.
-- [ ] **T2.6 — Satélite** (`SateliteOrdenesListado`, `CambiarDiaRepartoSateliteModal`, recepción). `[P]`.
-- [ ] **T2.7 — Cierres admin** (`cierre-factura`, corrección de resultado: el aviso dice que el estado se
+- [x] **T2.6 — Satélite** (`SateliteOrdenesListado`, `CambiarDiaRepartoSateliteModal`, recepción). `[P]`.
+- [x] **T2.7 — Cierres admin** (`cierre-factura`, corrección de resultado: el aviso dice que el estado se
   aplica al aprobar). `[P]`.
-- [ ] **T2.8 — Gate** `./init.sh --rapido` (o completo si toca cimientos). Dep: T2.1-T2.7.
+- [x] **T2.8 — Gate** `./init.sh --rapido` (o completo si toca cimientos). Dep: T2.1-T2.7.
 
 ---
 
 ## FASE 3 — Verificación independiente. Dep: T2.8
 
-- [ ] **T3.1 — Contraste histórico** (§14): `scripts/contraste-454.sql` (solo `SELECT`) y
+- [x] **T3.1 — Contraste histórico** (§14): `scripts/contraste-454.sql` (solo `SELECT`) y
   `scripts/contraste-454.ts`. Correr en local y en producción (MCP de Supabase, solo lectura).
   **Hecho:** `progress/contraste_454.md` con K1-K8: diferencia **0** o explicada fila a fila; ninguna diferencia
   de dinero (K4, K8) sin explicar.
-- [ ] **T3.2 — Mutaciones sobre el código nuevo.** Repetir, adaptada, la mutación de cada C01-C28 y de cada
+- [x] **T3.2 — Mutaciones sobre el código nuevo.** Repetir, adaptada, la mutación de cada C01-C28 y de cada
   test nuevo de T1.3-T1.24; cada una debe poner rojo su test. **Hecho:** tabla con test, mutación, rojo y
   reversión en `progress/impl_454.md`.
-- [ ] **T3.3 — Población legada.** Consulta de gestiones legadas vivas (sin evento, no anuladas, cierre no
+- [x] **T3.3 — Población legada.** Consulta de gestiones legadas vivas (sin evento, no anuladas, cierre no
   aprobado) en local y producción. **Hecho:** número anotado; se re-mide en T5.4.
 
 ---
@@ -280,70 +290,78 @@ Ninguna pantalla nueva (si surge una, `/design` antes). Sin «SLA» en textos. S
 
 ## Trazabilidad R → test
 
+> **Reescrita el 2026-09-24 (revisión T4.3, m1).** La tabla original citaba 9 archivos que nunca se crearon
+> (`MisAsignacionesService.gestionable`, `ApiHabilitacionService`, `unit/services/OrdenesListado.gestion-pendiente`,
+> `ApiOrdenLecturaService.pendiente`, `openapi-spec`, `rastreo-publico.retirados`, `GuiaAsignacionService.carga`,
+> `RepartoMananaRepository`, `AvisoAgregadoRepository.ayuda`). Esta es la consolidada de
+> `progress/impl_454_backend.md`, `impl_454_datos.md`, `impl_454_frontend.md` e `impl_454_fix_review.md`:
+> **cada ruta existe** (comprobado sobre el árbol, ver la bitácora del arreglo). Rutas relativas a `tests/`;
+> `454/` = `tests/integration/db/454/`; `C<nn>` = el archivo de caracterización de la tabla de la Fase 0.
+
 | R | Test(s) |
 |---|---|
 | R1 | `454/registro-gestion-sin-transicion-sql-real.test.ts` |
 | R2 | `454/registro-gestion-sin-transicion-sql-real.test.ts` |
-| R3 | C07 `caracterizacion/no-doble-gestion.test.ts`; `unit/services/MisAsignacionesService.gestionable.test.ts` |
+| R3 | C07 `454/caracterizacion/no-doble-gestion.test.ts`; C22 `454/caracterizacion/ayuda-ciclo.test.ts` (no gestionable con ayuda); `454/gestion-pendiente-sql-real.test.ts` |
 | R4 | C07; `454/registro-gestion-concurrencia-sql-real.test.ts` |
 | R5 | `454/registro-gestion-sin-transicion-sql-real.test.ts` |
-| R6 | C13 `caracterizacion/portal-listas-mapa-ruta.test.ts` |
-| R7 | `454/aplicacion-al-aprobar-sql-real.test.ts` |
-| R8 | `454/aplicacion-al-aprobar-sql-real.test.ts` (una fila por resultado y vía) |
+| R6 | C13 `454/caracterizacion/portal-listas-mapa-ruta.test.ts` |
+| R7 | `454/aplicacion-al-aprobar-sql-real.test.ts`; `unit/repositories/cierres-admin-aplicacion-gestiones.test.ts` |
+| R8 | `454/aplicacion-al-aprobar-sql-real.test.ts` (una fila por resultado y vía); `unit/repositories/cierres-admin-aplicacion-gestiones.test.ts` |
 | R9 | `454/aplicacion-al-aprobar-sql-real.test.ts` |
-| R10 | `454/aplicacion-al-aprobar-sql-real.test.ts`; C04 |
-| R11 | `454/aplicacion-al-aprobar-sql-real.test.ts` (fallo inyectado tras el bloque) |
-| R12 | C11 `caracterizacion/dinero-aprobacion.test.ts`; `454/aplicacion-al-aprobar-sql-real.test.ts` |
-| R13 | C17 `caracterizacion/cierre-rechazado.test.ts` |
+| R10 | `454/aplicacion-al-aprobar-sql-real.test.ts`; C04 `454/caracterizacion/tope-276.test.ts` |
+| R11 | `454/aplicacion-al-aprobar-sql-real.test.ts` («R11», fallo inyectado tras el bloque) |
+| R12 | C11 `454/caracterizacion/dinero-aprobacion.test.ts`; `454/aplicacion-al-aprobar-sql-real.test.ts` |
+| R13 | C17 `454/caracterizacion/cierre-rechazado.test.ts`; `454/aplicacion-al-aprobar-sql-real.test.ts` |
 | R14 | `454/aplicacion-al-aprobar-sql-real.test.ts` (gestión legada) |
-| R15 | C21 `caracterizacion/deshacer.test.ts`; `454/deshacer-ramas-sql-real.test.ts` |
-| R16 | C21 |
-| R17 | C21 |
-| R18 | C06 `caracterizacion/correccion-69.test.ts`; `454/correccion-ramas-sql-real.test.ts` |
+| R15 | C21 `454/caracterizacion/deshacer.test.ts`; `454/deshacer-ramas-sql-real.test.ts` |
+| R16 | C21; `454/deshacer-ramas-sql-real.test.ts` |
+| R17 | C21; `454/deshacer-ramas-sql-real.test.ts` |
+| R18 | C06 `454/caracterizacion/correccion-69.test.ts`; `454/correccion-ramas-sql-real.test.ts` |
 | R19 | C06; `454/correccion-ramas-sql-real.test.ts` |
 | R20 | `454/deshacer-ramas-sql-real.test.ts`; `454/correccion-ramas-sql-real.test.ts` |
-| R21 | C22 `caracterizacion/ayuda-ciclo.test.ts`; `454/ayuda-evento-sql-real.test.ts` |
-| R22 | C22; C13; C08; `454/ayuda-abierta-sql-real.test.ts` |
+| R21 | C22; `454/ayuda-evento-sql-real.test.ts` |
+| R22 | C22; C13; C08 `454/caracterizacion/solicitar-cierre.test.ts`; `454/ayuda-abierta-sql-real.test.ts`; `454/novedades-predicado-sql-real.test.ts` |
 | R23 | C22; `454/ayuda-evento-sql-real.test.ts` |
-| R24 | C22; `unit/services/ApiHabilitacionService.test.ts` |
+| R24 | C22; `454/ayuda-evento-sql-real.test.ts`; `unit/services/api-habilitacion-service.test.ts`; `integration/api/ordenes-api-key-habilitar.route.test.ts` |
 | R25 | C22; `454/ayuda-evento-sql-real.test.ts` |
-| R26 | `454/ayuda-abierta-sql-real.test.ts` |
-| R27 | C01; C22 |
-| R28 | C14 `caracterizacion/traspaso.test.ts` |
-| R29 | `unit/services/OrdenesListado.gestion-pendiente.test.ts`; T2.2 test de componente del chip |
-| R30 | `unit/services/OrdenHistorialService.evento-orden.test.ts`; T2.3 |
-| R31 | C27; `454/rastreo-pendiente-sql-real.test.ts`; T2.4 |
-| R32 | `unit/services/ApiOrdenLecturaService.pendiente.test.ts` |
-| R33 | C26; `454/webhook-evento-sql-real.test.ts`; `unit/services/WebhookEventoOrdenService.test.ts` |
-| R34 | `unit/types/webhook-eventos.test.ts` |
-| R35 | C20 `caracterizacion/notificacion-n1.test.ts` |
-| R36 | `unit/api/openapi-spec.test.ts` |
-| R37 | `unit/guards/sin-estados-retirados.guardia.test.ts`; guardias de transiciones y catálogo |
+| R26 | `454/ayuda-abierta-sql-real.test.ts`; `454/ayuda-evento-sql-real.test.ts` |
+| R27 | C01 `454/caracterizacion/corte-no-barre-gestionadas.test.ts`; C22; `454/ayuda-evento-sql-real.test.ts` |
+| R28 | C14 `454/caracterizacion/traspaso.test.ts`; `454/ayuda-evento-sql-real.test.ts` |
+| R29 | `454/senales-gestion-lectores-sql-real.test.ts` (L1 `/ordenes`, L2 satélite, L3 detalle, con alcance); `components/OrdenesListado.gestion-pendiente.test.tsx`; `components/SateliteOrdenesListado.gestion-pendiente.test.tsx`; `components/HistorialOrdenSheet.gestion-pendiente.test.tsx`; `components/NotaGestionPendiente.test.tsx` |
+| R30 | `unit/services/OrdenHistorialService.evento-orden.test.ts`; `components/HistorialOrdenTimeline.evento-orden.test.tsx` |
+| R31 | C27 `454/caracterizacion/rastreo-y-historial-legado.test.ts`; `454/rastreo-pendiente-sql-real.test.ts`; `unit/types/rastreo-publico.nombre-resultado.test.ts`; `components/RastreoDialog.pendiente.test.tsx` |
+| R32 | `integration/api/ordenes-api-key-orden-consulta.route.test.ts`; `integration/db/gestiones-detalle-api-405.test.ts`; `unit/api/openapi-405-gestiones.test.ts` |
+| R33 | C26 `454/caracterizacion/webhook-estado.test.ts`; `454/webhook-evento-sql-real.test.ts`; `unit/services/WebhookEventoOrdenService.test.ts` |
+| R34 | `unit/types/webhook-eventos.test.ts`; `unit/api/openapi-webhook-contrato.test.ts` |
+| R35 | C20 `454/caracterizacion/notificacion-n1.test.ts`; `unit/repositories/notificacion-orden-rechazada.test.ts` |
+| R36 | `unit/api/openapi-454-eventos.test.ts`; `unit/api/openapi-webhook-contrato.test.ts` |
+| R37 | `unit/guards/sin-estados-retirados.guardia.test.ts`; `unit/domain/order-status-transiciones.guardia.test.ts`; `unit/types/order-status.test.ts` |
 | R38 | `454/retiro-estados-migration.test.ts` (a) |
 | R39 | `454/retiro-estados-migration.test.ts` (c) |
-| R40 | C27; `unit/types/rastreo-publico.retirados.test.ts` |
+| R40 | C27; `unit/guards/rastreo-hitos-exhaustivo.guardia.test.ts` («454/R40»); `components/EstatusBadgeCatalogoV2.test.tsx` («454/R40»); `unit/repositories/cierres-admin-repository.test.ts` (barridas históricas) |
 | R41 | `454/retiro-estados-migration.test.ts` (f, g) |
 | R42 | `454/retiro-estados-migration.test.ts` (d) |
-| R43 | C01 `caracterizacion/corte-no-barre-gestionadas.test.ts`; `454/corte-excluye-pendientes-sql-real.test.ts` |
-| R44 | C02 `caracterizacion/corte-concurrencia.test.ts` |
-| R45 | C03 `caracterizacion/intentos-conteo.test.ts`; `454/intentos-segunda-via-sql-real.test.ts` |
-| R46 | C04 `caracterizacion/tope-276.test.ts` |
-| R47 | C05 `caracterizacion/sla-devolucion-reloj.test.ts` |
-| R48 | C19 `caracterizacion/reprogramadas-liberacion.test.ts` |
-| R49 | C11; `cierres-admin-caja-cod.test.ts` (sin tocar); T3.1 K8 |
-| R50 | C09 `caracterizacion/liberacion-por-cierre.test.ts` |
-| R51 | C10; `454/devolucion-rechazadas-seleccion-sql-real.test.ts` |
-| R52 | C08 `caracterizacion/solicitar-cierre.test.ts` |
-| R53 | C12 `caracterizacion/kpi-portal.test.ts` |
+| R43 | C01; `454/corte-excluye-pendientes-sql-real.test.ts` |
+| R44 | C02 `454/caracterizacion/corte-concurrencia.test.ts` |
+| R45 | C03 `454/caracterizacion/intentos-conteo.test.ts`; `454/intentos-segunda-via-sql-real.test.ts` |
+| R46 | C04 |
+| R47 | C05 `454/caracterizacion/sla-devolucion-reloj.test.ts` |
+| R48 | C19 `454/caracterizacion/reprogramadas-liberacion.test.ts` |
+| R49 | C11; `unit/repositories/cierres-admin-caja-cod.test.ts` (sin tocar); T3.1 K8 (`progress/contraste_454.md`) |
+| R50 | C09 `454/caracterizacion/liberacion-por-cierre.test.ts` |
+| R51 | C10 `454/caracterizacion/devolucion-rechazadas-139.test.ts`; `454/devolucion-rechazadas-seleccion-sql-real.test.ts` |
+| R52 | C08 |
+| R53 | C12 `454/caracterizacion/kpi-portal.test.ts` |
 | R54 | C14 |
-| R55 | C15 `caracterizacion/cambio-dia.test.ts` |
-| R56 | `unit/services/GuiaAsignacionService.carga.test.ts`; `unit/repositories/RepartoMananaRepository.test.ts` |
-| R57 | C16 `caracterizacion/dos-gestiones-vivas.test.ts`; `454/aplicacion-al-aprobar-sql-real.test.ts` |
+| R55 | C15 `454/caracterizacion/cambio-dia.test.ts` |
+| R56 | `454/carga-mensajero-pendiente-sql-real.test.ts` (ocupado/«Generar guía» y reparto de mañana, con control positivo; MUT-R10 en rojo) |
+| R57 | C16 `454/caracterizacion/dos-gestiones-vivas.test.ts`; `454/aplicacion-al-aprobar-sql-real.test.ts` («R57») |
 | R58 | C17 |
-| R59 | C18 `caracterizacion/multi-dia-271.test.ts`; C09 |
-| R60 | C23 `caracterizacion/confirmacion-fisica-238.test.ts` |
-| R61 | C24 `caracterizacion/alcance-satelite-y-sf001.test.ts` |
-| R62 | C25 `caracterizacion/tablero-dia.test.ts` |
-| R63 | C28 `caracterizacion/rechazos-tienda-425.test.ts` |
-| R64 | C24; tests de autorización existentes de cada action tocada (sin editar) |
-| R65 | C22; `unit/repositories/AvisoAgregadoRepository.ayuda.test.ts` |
+| R59 | C18 `454/caracterizacion/multi-dia-271.test.ts`; C09; `454/corte-excluye-pendientes-sql-real.test.ts` |
+| R60 | C23 `454/caracterizacion/confirmacion-fisica-238.test.ts` |
+| R61 | C24 `454/caracterizacion/alcance-satelite-y-sf001.test.ts`; `454/cierre-bodega-sf001-sql-real.test.ts` |
+| R62 | C25 `454/caracterizacion/tablero-dia.test.ts` |
+| R63 | C28 `454/caracterizacion/rechazos-tienda-425.test.ts` |
+| R64 | C24; `454/senales-gestion-lectores-sql-real.test.ts` (alcance de los lectores nuevos; denegados sin datos por servicio y por Server Action, MUT-R6 en rojo); `454/correccion-ayuda-abierta-sql-real.test.ts`; `unit/actions/orden-historial-action.test.ts` |
+| R65 | **Se cumple por vacuidad, medido** (ver `requirements.md`, R65): ningún aviso diario cuenta `ayuda_tienda`. El conteo de la pestaña de ayuda sí pasa por la derivación: `454/novedades-predicado-sql-real.test.ts` |

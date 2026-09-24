@@ -157,6 +157,8 @@ model Usuario {
   traspasosCedidos                    OrdenTraspasoMensajero[]           @relation("OrdenTraspasoAnterior") // ficha 427/R25: ordenes que dejaron de ser de ESTE mensajero por un traspaso. FK RESTRICT: quien llevaba un paquete es evidencia y no se pierde al dar de baja al usuario
   traspasosRecibidos                  OrdenTraspasoMensajero[]           @relation("OrdenTraspasoNuevo") // ficha 427/R25: ordenes que ESTE mensajero recibio por un traspaso. FK RESTRICT por el mismo motivo
   traspasosEjecutados                 OrdenTraspasoMensajero[]           @relation("OrdenTraspasoActor") // ficha 427/R25/R26: traspasos que ESTE usuario ejecuto. `actor_rol` va CONGELADO en la fila, asi que esta relacion NO es la que pinta la linea de tiempo
+  eventosOrdenComoMensajero           OrdenEvento[]                      @relation("OrdenEventoMensajero") // ficha 454: hechos de orden (gestion registrada, ayuda...) en los que ESTE usuario era el mensajero asignado. FK RESTRICT
+  eventosOrdenComoActor               OrdenEvento[]                      @relation("OrdenEventoActor") // ficha 454: hechos de orden que ESTE usuario ejecuto. `actor_rol` va CONGELADO en la fila. FK RESTRICT
   habilitacionesApiPedidas            OrdenHabilitacionApi[]             @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones pedidas por el canal integrador a nombre de ESTE usuario (302: el dueno resuelto de la key -- su cuenta dedicada, o la tienda real a la que apunta); la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   cobrosGastoFijo                     GastoFijoCobro[]                   @relation("GastoFijoCobroDecisor") // ficha 333/R15/R21: cobros de gasto fijo que ESTE usuario aprobo o rechazo; la FK es RESTRICT (quien autorizo dinero es evidencia y no se pierde al dar de baja al usuario), mismo criterio que `orden_dia_reparto_cambio.actor_usuario_id`
   cobrosRechazoTiendaDecididos        RechazoTiendaCobro[]               @relation("RechazoTiendaCobroDecisor") // ficha 337: cobros por rechazo de tienda que ESTE usuario aprobo o rechazo. FK RESTRICT por el mismo motivo que la linea de arriba: quien autorizo un cobro es evidencia y no se pierde al dar de baja al usuario.
@@ -804,6 +806,7 @@ model Orden {
   diaRepartoCambios          OrdenDiaRepartoCambio[]            @relation("OrdenDiaRepartoCambioOrden") // feature 262/R20-R23: rastro append-only de las correcciones del dia de reparto de esta orden
   fechaReprogramacionCambios GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioOrden") // ficha 371: rastro append-only de las correcciones de la fecha de reprogramacion de esta orden
   traspasosMensajero         OrdenTraspasoMensajero[]           @relation("OrdenTraspasoOrden") // ficha 427/R25-R30: rastro append-only de los traspasos de esta orden entre mensajeros; la FK es RESTRICT (quien llevo un paquete es evidencia)
+  eventos                    OrdenEvento[]                      @relation("OrdenEventoOrden") // ficha 454 (design §1.1): hechos append-only que NO son transiciones de estado (gestion registrada/anulada/corregida, ayuda pedida/rescatada). FK RESTRICT
   habilitacionesApi          OrdenHabilitacionApi[]             @relation("OrdenHabilitacionApiOrden") // feature 266/R23-R24: bitacora append-only de las habilitaciones pedidas por el canal por API key sobre esta orden; la FK es CASCADE (borrar la orden se lleva su bitacora)
   // Ficha 337: los cobros a la tienda por rechazo desde novedades de ESTA orden. Coleccion y
   // no 1-1: la unicidad es por GESTION, y una orden podria acumular mas de un rechazo a lo
@@ -1224,6 +1227,9 @@ model GestionOrden {
   // Ficha 371: rastro append-only de las correcciones de `fecha_reprogramacion` de ESTA gestion.
   // La FK es RESTRICT: el rastro sobrevive a cualquier intento de borrar la gestion corregida.
   fechaReprogramacionCambios GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioGestion")
+  // Ficha 454 (design §1.1/§3): hechos de orden sobre ESTA gestion. El evento `gestion_registrada`
+  // es el que la hace «gestion de calle con el modelo nuevo» (pendiente hasta aprobar su cierre).
+  eventos                    OrdenEvento[]                      @relation("OrdenEventoGestion")
 
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
@@ -2644,6 +2650,7 @@ enum JobTipo {
   analitica_invalidacion_cache // feature 128/D3: invalida por tag la cache de la analitica operativa tras un recomputo del backfill (125); PUNTUAL, encolado por el script, payload { desde, hasta }
   whatsapp_bienvenida // mensaje de bienvenida: envia la plantilla marcada al recoger el paquete (por_recoger -> en_reparto, familia `recoleccion`); PUNTUAL, encolado por el choke point de estado, payload { ordenId, mensajeroId, ocurridoAt }
   push_web // ficha 410 (design 7): entrega de UNA notificacion ya creada a las suscripciones push de sus destinatarios. PUNTUAL, lo encola el decorador del repositorio de notificaciones; payload { notificacionId }, dedupe_key `push:<notificacionId>`, max_intentos 3
+  webhook_evento // ficha 454 (design §12.1): entrega firmada de UN hecho de orden (`orden_evento`) a su integrador. PUNTUAL, encolado en la MISMA tx que el hecho; payload { ordenEventoId } (sin datos personales), dedupe_key `webhook_evento:<ordenEventoId>`
 
   @@map("job_tipo")
 }
@@ -3474,6 +3481,62 @@ model OrdenTraspasoMensajero {
   @@index([actorUsuarioId]) // la FK RESTRICT del actor, indexada (patron `orden_dia_reparto_cambio`)
   @@index([loteId]) // reconstruir un acto completo (R27)
   @@map("orden_traspaso_mensajero")
+}
+
+/// FICHA 454 (design §1.2) — tipos de HECHO sobre una orden que NO son transiciones de estado.
+/// Enum NATIVO (patron `OrdenHistorialOrigenTipo`): el conjunto lo fija el codigo. SEED en
+/// `lib/types/orden-evento.ts` con el doble cierre `satisfies` + `_EnsureExhaustive`.
+/// «Recuperar» (mensajero) y «Habilitar» (tienda) comparten `ayuda_rescatada`: quien lo hizo lo
+/// dice `actor_rol`. La habilitacion por API tiene tipo propio: el usuario de la key ES la tienda.
+enum OrdenEventoTipo {
+  gestion_registrada
+  gestion_anulada
+  gestion_corregida
+  ayuda_solicitada
+  ayuda_rescatada
+  ayuda_habilitada_api
+
+  @@map("orden_evento_tipo")
+}
+
+/// FICHA 454 (design §1.1) — HECHOS append-only sobre una orden que NO son transiciones de estado.
+/// Precedente: `orden_dia_reparto_cambio` (262) y `orden_traspaso_mensajero` (427). Sin
+/// `updated_at`/`deleted_at` a proposito: nada de esta fila se edita nunca.
+///
+/// Lo que NO vive aqui (solo en la migracion, Prisma no lo expresa): los CHECK de forma por tipo,
+/// el indice UNICO PARCIAL `(gestion_orden_id) WHERE tipo = gestion_registrada` y la RLS.
+model OrdenEvento {
+  id                String                    @id @default(uuid())
+  ordenId           String                    @map("orden_id")
+  tipo              OrdenEventoTipo
+  /// NOT NULL en los tres `gestion_*` (CHECK en la migracion).
+  gestionOrdenId    String?                   @map("gestion_orden_id")
+  /// Solo en `gestion_registrada` (CHECK): la familia con la que la APROBACION escribira la
+  /// transicion (`gestion` | `incidente` | `gestion_tienda_ayuda`).
+  familiaAplicacion OrdenHistorialOrigenTipo? @map("familia_aplicacion")
+  /// Snapshot: el registrado en `gestion_registrada`; el NUEVO en `gestion_corregida`.
+  resultado         GestionResultado?
+  resultadoAnterior GestionResultado?         @map("resultado_anterior")
+  /// El mensajero asignado en ESE instante.
+  mensajeroId       String?                   @map("mensajero_id")
+  /// Siempre hay una persona: ningun cron escribe aqui.
+  actorUsuarioId    String                    @map("actor_usuario_id")
+  /// CONGELADO (427/R26): el rol cambia y leerlo vivo re-etiquetaria la historia.
+  actorRol          RolValue                  @map("actor_rol")
+  /// Causa tipificada o motivo de la correccion. Nunca datos personales.
+  motivo            String?
+  createdAt         DateTime                  @default(now()) @map("created_at")
+
+  orden     Orden         @relation("OrdenEventoOrden", fields: [ordenId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  gestion   GestionOrden? @relation("OrdenEventoGestion", fields: [gestionOrdenId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  mensajero Usuario?      @relation("OrdenEventoMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  actor     Usuario       @relation("OrdenEventoActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([ordenId, createdAt]) // linea de tiempo, seguimiento publico, «ultimo evento de ayuda»
+  @@index([gestionOrdenId]) // anulada/corregida por gestion; indexa la FK RESTRICT
+  @@index([mensajeroId]) // indexa la FK RESTRICT
+  @@index([actorUsuarioId]) // indexa la FK RESTRICT
+  @@map("orden_evento")
 }
 
 // =================================================================================================

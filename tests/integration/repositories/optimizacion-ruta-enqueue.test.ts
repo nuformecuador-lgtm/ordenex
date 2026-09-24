@@ -85,9 +85,17 @@ function prismaRecoger(idsGanadores: { id: string }[], falla = false) {
   return { prisma, tx };
 }
 
-/** Prisma fake de `crearGestionYTransicionar`. */
+/** Prisma fake de `registrarGestionPendiente` (antes `crearGestionYTransicionar`). */
+// ⏳ 2026-09-23 (FICHA 454, T1.4): `crearGestionYTransicionar` se sustituye por
+// `registrarGestionPendiente` (registra sin transicionar). La reoptimizacion inmediata sigue en la
+// MISMA transaccion. El doble gana el candado + re-lectura (`$queryRaw`) y el evento de registro.
 function prismaGestion(opts: { gestionId?: string; falla?: boolean } = {}) {
   const tx = {
+    $queryRaw: vi.fn(async (q: unknown) => {
+      const partes = Array.isArray(q) ? q : ((q as { strings?: string[] }).strings ?? []);
+      return partes.join(" ").includes("webhook_suscripcion") ? [] : [{ id: "o1" }];
+    }),
+    ordenEvento: { create: vi.fn(async () => ({ id: "ev-1" })) },
     gestionOrden: {
       create: vi.fn(async () => {
         if (opts.falla) throw new Error("create boom");
@@ -112,7 +120,6 @@ const GESTION_INPUT = {
   ordenId: "o1",
   mensajeroId: MENSAJERO,
   gestion: { resultado: "entregada" as const, montoRecibido: 100, metodoPago: "efectivo" as const },
-  nuevoEstatusId: idEstado("entregada"),
 };
 
 beforeEach(async () => {
@@ -215,7 +222,7 @@ describe("R19 — gestionar encola una reoptimizacion INMEDIATA", () => {
     const { prisma } = prismaGestion({ gestionId: "gestion-77" });
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).crearGestionYTransicionar(GESTION_INPUT);
+    await repoRecoger(prisma, cola).registrarGestionPendiente(GESTION_INPUT);
 
     expect(cola.ruta).toHaveLength(1);
     expect(cola.ruta[0].opts.runAfter).toBeUndefined();
@@ -239,7 +246,7 @@ describe("R19 — gestionar encola una reoptimizacion INMEDIATA", () => {
     expect(cola.ruta).toHaveLength(1);
 
     const gestion = prismaGestion({ gestionId: "gestion-77" });
-    await repoRecoger(gestion.prisma, cola, T0).crearGestionYTransicionar(GESTION_INPUT);
+    await repoRecoger(gestion.prisma, cola, T0).registrarGestionPendiente(GESTION_INPUT);
 
     expect(cola.ruta).toHaveLength(2);
     expect(cola.ruta[1].opts.dedupeKey).toContain(":inmediato:");
@@ -249,7 +256,7 @@ describe("R19 — gestionar encola una reoptimizacion INMEDIATA", () => {
   it("el encolado va DENTRO de la transaccion de la gestion", async () => {
     const { prisma, tx } = prismaGestion();
     const cola = new ColaEnMemoria();
-    await repoRecoger(prisma, cola).crearGestionYTransicionar(GESTION_INPUT);
+    await repoRecoger(prisma, cola).registrarGestionPendiente(GESTION_INPUT);
     expect(cola.ruta[0].tx).toBe(tx);
   });
 });
@@ -272,7 +279,7 @@ describe("R16/R19 — una transaccion REVERTIDA no deja jobs huerfanos", () => {
     const cola = new ColaEnMemoria();
 
     await expect(
-      repoRecoger(prisma, cola).crearGestionYTransicionar(GESTION_INPUT),
+      repoRecoger(prisma, cola).registrarGestionPendiente(GESTION_INPUT),
     ).rejects.toThrow();
 
     expect(cola.ruta).toHaveLength(0);

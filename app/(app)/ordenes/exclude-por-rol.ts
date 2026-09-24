@@ -25,19 +25,11 @@ export const EXCLUDE_POR_ROL: Record<string, string[]> = {
     "en_bodega_central",
     "en_bodega_satelite",
     "en_ruta_bodega_satelite",
-    // Feature 239/R26 (T1.7): el PRE-ESTADO de la devolución se excluye para el adminTienda,
-    // junto a `devuelta`. Este mapa es PARCIAL y NO rompe el build: un estado que no se liste
-    // aquí AUTO-APARECE como opción del desplegable de ese rol, así que olvidarlo pondría en la
-    // pantalla de la tienda justo el estado que la 239 decide que no debe ver todavía (P3: en el
-    // limbo la tienda no ve nada). Maestro/admin SÍ lo ven: solo excluyen "pendiente".
-    "devolucion_por_confirmar",
-    // Feature 235/R37/R45 (T1.5, 2026-08-19) — `ayuda_tienda` **NO se excluye para NADIE**, y por
-    // eso NO figura en esta lista. Es una decisión con su caso negativo escrito: a diferencia de
-    // `devuelta` y `devolucion_por_confirmar`, que se le excluyen al adminTienda porque son
-    // estados que no opera, el estatus de ayuda **es su pantalla de trabajo** — la solicitud se le
-    // hace A ELLA. Maestro/admin lo ven también (solo excluyen "pendiente"). Este mapa es PARCIAL:
-    // un estado no listado AUTO-APARECE como opción, así que la decisión aquí es la ausencia y
-    // hay que afirmarla en test (`tests/components/OrdenesExcludePorRol.test.ts`).
+    // FICHA 454 (2026-09-23, R37): aqui figuraba el PRE-ESTADO de la devolucion (239/R26) y una nota
+    // que afirmaba que el estado de ayuda a la tienda NO se excluia para nadie (235/R37). Los dos
+    // estados salen del catalogo: ninguno se ofrece ya como opcion (`VALUES_VIGENTES` de
+    // `filtro-estado-def.ts` solo ofrece lo que esta en `ORDER_STATUS_SEED`), asi que no hay nada
+    // que excluir. La gestion pendiente se ve como «En reparto» + su nota, y la ayuda es un evento.
   ],
 };
 

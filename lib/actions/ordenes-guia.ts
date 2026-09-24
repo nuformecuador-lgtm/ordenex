@@ -223,7 +223,9 @@ export async function listarMensajerosParaAsignacion(
     // marcador existe para evitar. `ayuda_tienda` entra en las dos: el paquete sigue con él (R1).
     // La guardia `carga-del-mensajero.guardia.test.ts` cruza las dos y falla si divergen.
     const [conReparto, conRecoleccion, bloqueados, noAsignables] = await Promise.all([
-      repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto", "ayuda_tienda"]),
+      // FICHA 454 (R56): sin `ayuda_tienda` (ya no es estado); la exclusion de las gestionadas vive
+      // en el repositorio.
+      repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto"]),
       repo.findMensajerosConOrdenesEn(ids, ["por_recolectar_en_tienda"]),
       repo.findMensajerosBloqueadosPorCierres(ids), // feature 271/R32
       // Pedido humano 2026-08-26: los dados de baja. MISMO predicado que las tres escrituras

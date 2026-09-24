@@ -11,7 +11,7 @@ import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/reposi
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 import type { IWalletIndemnizacionFeedService } from "@/lib/interfaces/services/IWalletIndemnizacionFeedService";
-import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
+import { APLICACION_GESTIONES } from "@/tests/fixtures/anclaje-devolucion";
 
 // Feature 38 — tests unit del CierresAdminRepository (mockea Prisma, sin DB real,
 // patron cierre-dia-repository.test.ts). Cubre R2/R4/R5 (findCierresByAlcance con
@@ -613,7 +613,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
@@ -639,7 +639,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
@@ -666,7 +666,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
@@ -688,7 +688,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       cierreId: "c-ajeno",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
@@ -827,7 +827,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
@@ -870,7 +870,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
       cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
@@ -891,7 +891,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
       cierreId: "c-vencido",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
@@ -922,7 +922,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
         cierreId: "c1",
         alcance: ALCANCE_MAESTRO,
         nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm-maestro",
         motivoRechazo: null,
@@ -948,7 +948,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
@@ -992,7 +992,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
       cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
@@ -1013,7 +1013,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
       cierreId: "c-vencido",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
@@ -1040,7 +1040,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
         cierreId: "c1",
         alcance: ALCANCE_MAESTRO,
         nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm-maestro",
         motivoRechazo: null,
@@ -1070,7 +1070,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
@@ -1119,7 +1119,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
       cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
@@ -1140,7 +1140,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
       cierreId: "c-vencido",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
@@ -1168,7 +1168,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
         cierreId: "c1",
         alcance: ALCANCE_MAESTRO,
         nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm-maestro",
         motivoRechazo: null,
@@ -1258,7 +1258,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
@@ -1367,7 +1367,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,

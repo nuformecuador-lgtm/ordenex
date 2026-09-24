@@ -109,7 +109,10 @@ function fakeRepo(over: Partial<IGestionOrdenRepository> = {}): IGestionOrdenRep
     setOrdenEnGestion: vi.fn(async () => true),
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
-    crearGestionYTransicionar: vi.fn(async () => "g1"),
+    registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev-g1" })),
+    // FICHA 454: la guarda de gestionabilidad pregunta por gestion pendiente / ayuda abierta.
+    findBloqueoDeGestion: vi.fn(async () => null),
+    findPendientesYAyudas: vi.fn(async () => ({ conGestionPendiente: new Set<string>(), conAyudaAbierta: new Set<string>() })),
     reprogramarDesdeDevuelta: vi.fn(async () => true),
     crearGestionDesdeAyuda: vi.fn(async () => "g-ayuda"),
     rechazarDesdeDevuelta: vi.fn(async () => true),
@@ -221,7 +224,7 @@ describe("R1/R4 — recoger una orden reservada para otro dia", () => {
 
     expect(repo.recogerLote).not.toHaveBeenCalled();
     expect(repo.setOrdenEnGestion).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("R4: un lote con UNA reservada aborta ENTERO (ninguna de las otras se recoge)", async () => {
@@ -413,7 +416,7 @@ describe("R2/R4/R27 — gestionar una orden reservada", () => {
     await service.gestionar(ENTREGA, MENSAJERO, NOCHE_DEL_21);
 
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("reservada para HOY: se gestiona con normalidad", async () => {
@@ -427,7 +430,7 @@ describe("R2/R4/R27 — gestionar una orden reservada", () => {
     const r = await service.gestionar(ENTREGA, MENSAJERO, NOCHE_DEL_21);
 
     expect(r.status).toBe("ok");
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("sin dia de reparto: se gestiona (R8)", async () => {

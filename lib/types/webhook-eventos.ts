@@ -99,7 +99,10 @@ export const EVENTOS_PUBLICOS: ReadonlySet<OrderStatusValue> = new Set<OrderStat
   "rechazada",
   "devolviendo_a_tienda",
   "devuelta_a_tienda",
-  "ayuda_tienda", // feature 268/R1: la IDA del ciclo de ayuda (revierte 235/P4)
+  // ⏳ 2026-09-23 (FICHA 454, R34): aqui estaba `"ayuda_tienda"` (268/R1, la IDA de la ayuda). La
+  // ayuda deja de ser estado: su ida y su vuelta se publican como EVENTOS DE ORDEN propios
+  // (`orden.ayuda_solicitada` / `orden.ayuda_resuelta`, job `webhook_evento`), y este evento de
+  // estado no vuelve a llevar ese valor. `devolucion_por_confirmar` nunca estuvo aqui.
   "incidente", // feature 268/R2: el desenlace que hoy el integrador no ve
 ]);
 

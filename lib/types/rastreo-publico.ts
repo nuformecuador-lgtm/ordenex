@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { GestionResultado } from "@prisma/client";
+
 import type { OrderStatusValue } from "@/lib/types/order-status";
 
 // Feature 229 (design §3) — CONTRATO COMPARTIDO del rastreo publico del envio.
@@ -93,6 +95,15 @@ export const HITO_POR_ESTATUS = {
   por_devolver_a_tienda: "devolucion_en_curso",
   devolviendo_a_tienda: "devolucion_en_curso",
   devuelta_a_tienda: "devuelto",
+} as const satisfies Record<OrderStatusValue, HitoPublico>;
+
+/**
+ * FICHA 454 (2026-09-23, design §11 «Rastreo»; R40) — los hitos de los dos estados RETIRADOS del
+ * catalogo. Ya no los tiene ninguna orden viva (M3 las lleva a `en_reparto`), pero el historial es
+ * append-only y sus filas se siguen proyectando: se leen EXACTAMENTE como se leian (las dos
+ * decisiones firmadas de abajo se conservan). `hitoDeEstatus` lo consulta antes del hito neutral.
+ */
+export const HITO_POR_ESTATUS_RETIRADO: Readonly<Record<string, HitoPublico>> = {
   // Feature 239/R28: el destinatario ve EXACTAMENTE el mismo hito que ve hoy una `devuelta`.
   // Para el cliente final no ha cambiado nada —el paquete no se le entregó— y quien falta por
   // confirmar es la bodega, que es asunto interno. Un hito propio le contaría un trámite
@@ -105,7 +116,7 @@ export const HITO_POR_ESTATUS = {
   // destinatario no ve ningun tramite nuestro, ni al pedir ayuda ni al rescatar. Precedente exacto:
   // `sin_gestionar -> en_reparto`, riesgo aceptado y firmado en la 229 (G8).
   ayuda_tienda: "en_reparto",
-} as const satisfies Record<OrderStatusValue, HitoPublico>;
+};
 
 /**
  * R17 — hito NEUTRAL para values huerfanos (fuera del catalogo vigente). El historial es
@@ -122,7 +133,7 @@ export const HITO_POR_DEFECTO: HitoPublico = "en_proceso";
  */
 export function hitoDeEstatus(value: string): HitoPublico {
   const explicito: Partial<Record<string, HitoPublico>> = HITO_POR_ESTATUS;
-  return explicito[value] ?? HITO_POR_DEFECTO;
+  return explicito[value] ?? HITO_POR_ESTATUS_RETIRADO[value] ?? HITO_POR_DEFECTO;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -160,7 +171,39 @@ export interface HitoPublicoEntrada {
   readonly hito: HitoPublico;
   /** Dia Y hora (G12) en la zona horaria del negocio, resuelta por configuracion (R19). */
   readonly fecha: string;
+  /**
+   * FICHA 454 (design §12.3; R31) — SOLO en la ULTIMA entrada, y solo cuando la orden tiene una
+   * gestion pendiente de confirmar: el hito de su resultado todavia no esta confirmado. La pagina lo
+   * pinta como «<hito> — pendiente de confirmacion». AUSENTE (no `false`) en las entradas
+   * confirmadas, para que su forma siga siendo exactamente `{ hito, fecha }`.
+   */
+  readonly pendiente?: true;
+  /**
+   * FICHA 454 (R31, decision del humano 2026-09-24, prevalece sobre §12.3 del design) — SOLO en la
+   * entrada `pendiente`: el NOMBRE VISIBLE del resultado pendiente (`Entregada`, `Reprogramada`,
+   * `Devuelta`, `Rechazada`, `Incidente`), para que la pagina diga «<Resultado> · pendiente de
+   * confirmación» y no el hito («No entregado»). Es texto, no un codigo: sale de
+   * `NOMBRE_RESULTADO_PENDIENTE`. AUSENTE en las entradas confirmadas.
+   */
+  readonly nombreResultado?: string;
 }
+
+/**
+ * FICHA 454 (R31) — el nombre visible de cada resultado de gestion, el MISMO que el chip de estado
+ * de las pantallas internas (`ORDER_STATUS_LABELS` del estado al que la aprobacion lo aplica,
+ * `ESTATUS_POR_RESULTADO`). Vive aqui y no se importa de alli porque `lib/` no puede importar de
+ * `app/`: es una copia DECLARADA de cinco nombres, atada a su fuente por
+ * `tests/unit/types/rastreo-publico.nombre-resultado.test.ts` (si uno cambia sin el otro, rojo).
+ * La 455 (design DA) mueve la fuente unica de nombres a `lib/types/order-status.ts`; entonces esta
+ * tabla pasa a derivarse de ella.
+ */
+export const NOMBRE_RESULTADO_PENDIENTE = {
+  entregada: "Entregada",
+  reprogramada: "Reprogramada",
+  devuelta: "Devuelta",
+  rechazada: "Rechazada",
+  incidente: "Incidente",
+} as const satisfies Record<GestionResultado, string>;
 
 /**
  * R22 — CUATRO campos y ninguno mas. Cualquier campo no declarado es una fuga, no una

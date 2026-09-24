@@ -183,7 +183,12 @@ describe("154/R28 — censo de values/familias declarados SIN productor (CERRADO
       fs.readFileSync(path.join(REPO_ROOT, ...GRADUADO_158.productorFamilia.split("/")), "utf8"),
     );
     // Q-G: el append de la transicion escribe la familia `incidente`, no `gestion`.
-    expect(conFamilia).toMatch(/origenTipo:[^\n]*"incidente"/);
+    //
+    // ⏳ 2026-09-23 (FICHA 454, R8): la transicion ya no la escribe el registro sino la APROBACION,
+    // que copia la familia que el registro dejo en su evento `gestion_registrada`. El productor de
+    // la familia `incidente` sigue siendo este archivo, ahora en `familiaAplicacion`. Antes:
+    // `/origenTipo:[^\n]*"incidente"/`.
+    expect(conFamilia).toMatch(/familiaAplicacion:[^\n]*"incidente"/);
   });
 
   // m6 del review — el stripper es la pieza de la que depende todo lo de arriba, asi que se

@@ -17,7 +17,7 @@ import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 212 (T7 · R18/R19) — el SERVICE es la SEGUNDA barrera del desglose, independiente del
 // borde zod y con aritmetica `Prisma.Decimal`. Dobles del repo/storage (nada de DB): lo que se
-// afirma es el `GestionOrdenData` EMITIDO hacia `crearGestionYTransicionar`, y que una suma que
+// afirma es el `GestionOrdenData` EMITIDO hacia `registrarGestionPendiente`, y que una suma que
 // no cuadra NO llega a persistirse.
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
@@ -53,7 +53,10 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     setOrdenEnGestion: vi.fn(async () => true),
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
-    crearGestionYTransicionar: vi.fn(async () => "g1"),
+    registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev-g1" })),
+    // FICHA 454: la guarda de gestionabilidad pregunta por gestion pendiente / ayuda abierta.
+    findBloqueoDeGestion: vi.fn(async () => null),
+    findPendientesYAyudas: vi.fn(async () => ({ conGestionPendiente: new Set<string>(), conAyudaAbierta: new Set<string>() })),
     reprogramarDesdeDevuelta: vi.fn(async () => true),
     // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
     // servicio); el doble lo declara porque la interfaz lo exige.
@@ -98,7 +101,7 @@ function newService(repo: IGestionOrdenRepository) {
 }
 
 function gestionEmitida(repo: IGestionOrdenRepository): GestionOrdenData {
-  const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  const call = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
   return call.gestion as GestionOrdenData;
 }
 
@@ -131,7 +134,7 @@ describe("R18: revalidacion de la suma en `Prisma.Decimal` (segunda barrera)", (
     if (r.status === "validation_error") expect(Object.keys(r.fieldErrors)).toEqual(["pagos"]);
     // La guarda esta ANTES de la subida y de la tx: sin efectos parciales.
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("un desglose INFLADO (suma de mas) tampoco pasa", async () => {
@@ -147,7 +150,7 @@ describe("R18: revalidacion de la suma en `Prisma.Decimal` (segunda barrera)", (
     );
 
     expect(r.status).toBe("validation_error");
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("R30: una suma con decimales que en float NO cuadraria SI cuadra en Decimal", async () => {
@@ -165,7 +168,7 @@ describe("R18: revalidacion de la suma en `Prisma.Decimal` (segunda barrera)", (
     );
 
     expect(r.status).toBe("ok");
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("R14: entrega SIN cobro (0 lineas, monto 0) cuadra y persiste sin lineas", async () => {
@@ -253,13 +256,15 @@ describe("R17: el desglose viaja DENTRO de `GestionOrdenData` (misma tx, sin fir
       MENSAJERO,
     );
 
-    const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(call.nuevoEstatusId).toBe("os-entregada");
+    const call = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO pasado al repositorio. Registrar ya
+    // no transiciona: el destino lo aplica la aprobacion del cierre.
+    expect(call).not.toHaveProperty("nuevoEstatusId");
     expect(call.gestion.pagos).toEqual([
       { metodo: "efectivo", monto: 5000 },
       { metodo: "transferencia", monto: 3000 },
     ]);
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("la comprobacion previa monto == montoCobrar (R22 de la 36) sigue mandando", async () => {
@@ -277,6 +282,6 @@ describe("R17: el desglose viaja DENTRO de `GestionOrdenData` (misma tx, sin fir
     if (r.status === "validation_error") {
       expect(Object.keys(r.fieldErrors)).toEqual(["montoRecibido"]);
     }
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });

@@ -51,6 +51,9 @@ describe("R21 — registro en el drenador", () => {
       // el inventario de tipos crece: que se pusiera rojo es la prueba de que sigue cerrado.
       "push_web",
       "webhook_estado", // feature 99
+      // FICHA 454 (2026-09-23): entrega de UN hecho de orden (gestion registrada/anulada/corregida,
+      // ayuda). PUNTUAL, encolado en la misma tx que el hecho: no va en `buildRecurrencias`.
+      "webhook_evento",
       "whatsapp_bienvenida", // mensaje de bienvenida al recoger: PUNTUAL, no va en buildRecurrencias
       "whatsapp_chat_envio", // feature 109
       "whatsapp_template_sync", // integracion WhatsApp

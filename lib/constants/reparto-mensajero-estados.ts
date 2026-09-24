@@ -49,10 +49,12 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
  * `recolectando` sigue FUERA, como lo dejo el corte limpio de la 167/R34: lo que no se lee no
  * puede contaminar los KPIs, el mapa, la ruta ni el corte del dia.
  */
+// FICHA 454 (T1.18, 2026-09-23): `ayuda_tienda` SALE. La ayuda deja de ser estado: una orden con
+// ayuda abierta sigue `en_reparto` y el portal la separa en «con ayuda» por la DERIVACION
+// (`lib/repositories/ayuda-abierta.ts`), no por el estado. El universo del portal vuelve a dos.
 export const ESTADOS_REPARTO_MENSAJERO = [
   "por_recoger",
   "en_reparto",
-  "ayuda_tienda",
 ] as const satisfies readonly OrderStatusValue[];
 
 /**

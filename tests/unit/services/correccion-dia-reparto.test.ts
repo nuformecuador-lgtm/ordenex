@@ -107,6 +107,8 @@ function fakeRepo(opts: EscenarioOpts = {}) {
     corregirDiaRepartoLote: vi.fn(
       opts.corregir ?? (async () => [aplicada()] as CorreccionDiaAplicada[]),
     ),
+    // FICHA 454 (R55): por defecto ninguna orden tiene gestion pendiente de confirmar.
+    findIdsConGestionPendiente: vi.fn(async () => new Set<string>()),
   };
   return repo as unknown as CorreccionDiaRepartoRepo & typeof repo;
 }
@@ -256,7 +258,9 @@ describe("262/R12 — la zona del satelite se resuelve en el servidor y acota de
 // =================================================================================================
 
 describe("262/R6 — solo los estados donde el dia TODAVIA decide algo, y el rechazo NOMBRA el estado", () => {
-  it.each(["por_recoger", "en_reparto", "ayuda_tienda"])(
+  // ⏳ 2026-09-23 (FICHA 454): `ayuda_tienda` sale — deja de ser estado (la orden con ayuda sigue
+  // `en_reparto`, que sigue admitido).
+  it.each(["por_recoger", "en_reparto"])(
     "`%s` se admite",
     async (estatusValue) => {
       const repo = fakeRepo({ ordenes: [ordenRow({ estatusValue })] });
@@ -539,7 +543,9 @@ describe("262/R14 — un cierre de dia sin resolver NO bloquea la correccion", (
 
 describe("262 — guardias de configuracion y forma del resultado", () => {
   it("catalogo incompleto => `validation_error`, sin escribir nada (fallo CERRADO)", async () => {
-    const repo = fakeRepo({ catalogo: (v) => (v === "ayuda_tienda" ? null : `os-${v}`) });
+    // ⏳ 2026-09-23 (FICHA 454): el valor que falta pasa a ser `en_reparto` (`ayuda_tienda` ya no se
+    // resuelve: deja de ser estado).
+    const repo = fakeRepo({ catalogo: (v) => (v === "en_reparto" ? null : `os-${v}`) });
     const service = new CorreccionDiaRepartoService(repo);
 
     const r = await service.corregir({ ordenIds: ["o1"], dia: "hoy", motivo: MOTIVO }, MAESTRO, NOW_21_CR);

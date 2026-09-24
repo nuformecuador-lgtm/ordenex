@@ -33,19 +33,21 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
  *  - `OrderStatusValue` en el valor exige que el destino EXISTA en el catalogo: un typo, o un
  *    estado retirado del seed, tampoco compila.
  *
- * `devuelta -> devolucion_por_confirmar` es la UNICA entrada que rompe la identidad de nombre, y
- * es el corazon de la feature 239: gestionar una devolucion ya NO deja la orden en `devuelta`.
- * La APROBACION DEL CIERRE es la que la lleva ahi (R4), y hasta entonces la orden no la ve la
- * tienda (R19) ni corre su ventana de SLA (R13).
+ * ⏳ 2026-09-23 (FICHA 454, design §6): AQUI DECIA que `devuelta -> devolucion_por_confirmar` era la
+ * unica entrada que rompia la identidad de nombre (la 239). Con la 454 NINGUNA gestion transiciona al
+ * registrarse: la orden se queda `en_reparto` y la APROBACION DEL CIERRE aplica el destino de ESTE
+ * mapa, que pasa a ser el mapa DE APLICACION. Por eso `devuelta` vuelve a la identidad: el pre-estado
+ * desaparece, y lo que la 239 protegia (el cobro prematuro) lo protege ahora que la aplicacion solo
+ * ocurre al aprobar. El reloj del plazo sigue arrancando en la aprobacion (familia
+ * `anclaje_devolucion`, R47).
  */
 export const ESTATUS_POR_RESULTADO = {
   entregada: "entregada",
   reprogramada: "reprogramada",
   rechazada: "rechazada",
   incidente: "incidente",
-  // ↓ feature 239/R2: la unica que NO es identidad. No "arreglar" devolviendola a `devuelta`:
-  // eso reabre el cobro prematuro que esta feature cierra.
-  devuelta: "devolucion_por_confirmar",
+  // FICHA 454: identidad otra vez. Se APLICA solo al aprobar el cierre (no al gestionar).
+  devuelta: "devuelta",
 } as const satisfies Record<GestionResultado, OrderStatusValue>;
 
 /**
@@ -58,10 +60,5 @@ export function estatusDestinoDeResultado(resultado: GestionResultado): OrderSta
   return ESTATUS_POR_RESULTADO[resultado];
 }
 
-/**
- * El pre-estado de la devolucion, nombrado UNA vez para los consumidores que lo necesitan por
- * su cuenta (la tabla de estados esperados del deshacer, el bloque de anclaje del cierre y sus
- * tests). Se DERIVA del mapa: si el destino de `devuelta` cambiara, esta constante cambia con el
- * y no hay dos verdades.
- */
-export const ESTATUS_DEVOLUCION_POR_CONFIRMAR = ESTATUS_POR_RESULTADO.devuelta;
+// ⏳ 2026-09-23 (FICHA 454): aqui vivia `ESTATUS_DEVOLUCION_POR_CONFIRMAR`, el pre-estado de la
+// devolucion de la 239. Muere con el estado (T1.1).

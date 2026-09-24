@@ -95,10 +95,13 @@ function listaDelPortal(): string[] {
 }
 
 describe("413/R2 — la lista de estados del reparto del mensajero tiene UNA fuente", () => {
-  it("⭑ la tupla declara EXACTAMENTE los tres estados, en orden — literal a mano", () => {
+  it("⭑ la tupla declara EXACTAMENTE los dos estados, en orden — literal a mano", () => {
     // Escrito a mano, no derivado. Si mañana el universo del portal cambia, este aserto obliga a
     // venir aquí a decirlo, que es justo el punto.
-    expect([...ESTADOS_REPARTO_MENSAJERO]).toEqual(["por_recoger", "en_reparto", "ayuda_tienda"]);
+    //
+    // ⏳ 2026-09-23 (FICHA 454, R37): sale `ayuda_tienda`. La orden con ayuda abierta sigue
+    // `en_reparto` y el portal la separa por la DERIVACION, no por estado. Antes: tres estados.
+    expect([...ESTADOS_REPARTO_MENSAJERO]).toEqual(["por_recoger", "en_reparto"]);
   });
 
   it("⭑ y la declara EL MÓDULO DE CONSTANTES, no otro sitio", () => {

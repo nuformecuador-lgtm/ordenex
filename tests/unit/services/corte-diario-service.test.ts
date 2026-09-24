@@ -203,9 +203,11 @@ describe("CorteDiarioService.ejecutarCorte", () => {
     // ordenes en ayuda se quedarian sin barrer cada noche y su mensajero, bloqueado para siempre.
     // Feature 246 (R11/R16): `diaCerrado` entra en la MISMA igualdad exacta y por el MISMO motivo
     // — si se cayera del cableado, el barrido perderia su criterio de dia en silencio.
+    //
+    // ⏳ 2026-09-23 (FICHA 454, R27): UN solo estado de origen — la orden con ayuda abierta sigue
+    // `en_reparto` —, asi que `ayudaEstatusId` sale del input. Antes: `ayudaEstatusId: "s-ayuda"`.
     expect(arg.corteSinGestionar).toEqual({
       enRepartoEstatusId: "s-reparto",
-      ayudaEstatusId: "s-ayuda",
       sinGestionarEstatusId: "s-sin-gestionar",
       diaCerrado: new Date("2026-08-20T00:00:00.000Z"),
     });
@@ -226,22 +228,33 @@ describe("CorteDiarioService.ejecutarCorte", () => {
     const pedidos = findEstatusIdByValue.mock.calls.map((c) => c[0]);
     expect(pedidos).toContain("en_reparto");
     expect(pedidos).toContain("sin_gestionar");
-    // Feature 235 (R26): tambien resuelve el estatus de la ayuda, porque tambien lo barre.
-    expect(pedidos).toContain("ayuda_tienda");
+    // Feature 235 (R26) resolvia tambien el estatus de la ayuda. ⏳ FICHA 454: ya no existe como
+    // estado de origen del barrido — no se resuelve.
+    expect(pedidos).not.toContain("ayuda_tienda");
     // Y lo que R5 protege sigue igual: `por_recoger` NUNCA se resuelve, asi que una orden que el
     // mensajero ni siquiera recogio no puede transicionar.
     expect(pedidos).not.toContain("por_recoger");
     expect(crearCierre.mock.calls[0][0].corteSinGestionar.enRepartoEstatusId).toBe("s-reparto");
-    expect(crearCierre.mock.calls[0][0].corteSinGestionar.ayudaEstatusId).toBe("s-ayuda");
   });
 
-  // Feature 235 (T4.4, R26): el fallback defensivo se extiende al tercer id. Los TRES o ninguno —
-  // barrer `en_reparto` sin barrer `ayuda_tienda` dejaria al mensajero con ordenes colgando y su
-  // cierre bloqueado, que es peor que no barrer nada y repetir el corte al dia siguiente.
-  it("235: catalogo sin `ayuda_tienda` -> crearCierre SIN corteSinGestionar (mismo fallback)", async () => {
+  // ⏳ 2026-09-23 (FICHA 454): aqui vivia «235: catalogo sin `ayuda_tienda` -> sin
+  // corteSinGestionar». Con un solo origen el fallback vuelve a ser el de la 109: sin `en_reparto`
+  // no hay barrido. El catalogo sin `ayuda_tienda` ya NO desactiva el corte (lo afirma este caso).
+  it("454: catalogo sin `ayuda_tienda` -> el corte barre igual (ya no es un origen)", async () => {
     const { service, crearCierre } = build({
       mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
       estatusIds: { en_reparto: "s-reparto", ayuda_tienda: null, sin_gestionar: "s-sin-gestionar" },
+    });
+
+    await service.ejecutarCorte();
+
+    expect(crearCierre.mock.calls[0][0].corteSinGestionar?.enRepartoEstatusId).toBe("s-reparto");
+  });
+
+  it("catalogo sin `en_reparto` -> crearCierre SIN corteSinGestionar (fallback 109)", async () => {
+    const { service, crearCierre } = build({
+      mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
+      estatusIds: { en_reparto: null, sin_gestionar: "s-sin-gestionar" },
     });
 
     await service.ejecutarCorte();

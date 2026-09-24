@@ -111,7 +111,7 @@ describe("312/A1 — R8: maestro y admin", () => {
     ["admin", ADMIN],
   ])("%s corrige en cualquier estado dentro de la ventana", (_nombre, rol) => {
     for (const estatusValue of ["en_reparto", "devuelta", "ayuda_tienda", "en_bodega_central"]) {
-      expect(rolAdmiteCorreccion(rol, estatusValue)).toBe(true);
+      expect(rolAdmiteCorreccion(rol, estatusValue, false)).toBe(true);
     }
   });
 
@@ -120,14 +120,14 @@ describe("312/A1 — R8: maestro y admin", () => {
     ["admin", ADMIN],
   ])("%s NO corrige en los cuatro estados bloqueados", (_nombre, rol) => {
     for (const estatusValue of ESTADOS_SIN_CORRECCION) {
-      expect(rolAdmiteCorreccion(rol, estatusValue)).toBe(false);
+      expect(rolAdmiteCorreccion(rol, estatusValue, false)).toBe(false);
     }
   });
 });
 
 describe("312/A1 — R9: adminTienda, en LOS DOS grupos de /novedades", () => {
   it("corrige en el grupo de la DEVOLUCION", () => {
-    expect(rolAdmiteCorreccion(ADMIN_TIENDA, ESTATUS_POR_GRUPO.devolucion)).toBe(true);
+    expect(rolAdmiteCorreccion(ADMIN_TIENDA, ESTATUS_POR_GRUPO.devolucion, false)).toBe(true);
   });
 
   it("corrige TAMBIEN en el grupo de la AYUDA (P2, 2026-08-28)", () => {
@@ -135,7 +135,18 @@ describe("312/A1 — R9: adminTienda, en LOS DOS grupos de /novedades", () => {
     // del grupo de devolucion. El humano la abrio a los dos porque en `ayuda_tienda` la tienda ya
     // reprograma, rechaza y escribe en el hilo. Si alguien "restaura" la version estrecha, cae
     // aqui.
-    expect(rolAdmiteCorreccion(ADMIN_TIENDA, ESTATUS_POR_GRUPO.ayuda)).toBe(true);
+    //
+    // ⏳ 2026-09-23 (FICHA 454, R64): la ayuda deja de ser el estado `ayuda_tienda`. La orden con
+    // ayuda ABIERTA esta en `en_reparto`, y lo que abre la correccion es la derivacion (tercer
+    // argumento, resuelto por el servidor). Antes: `rolAdmiteCorreccion(ADMIN_TIENDA,
+    // ESTATUS_POR_GRUPO.ayuda)` con `ayuda: "ayuda_tienda"`.
+    expect(rolAdmiteCorreccion(ADMIN_TIENDA, "en_reparto", true)).toBe(true);
+  });
+
+  it("454/R64: la ayuda abierta NO abre la correccion a los roles que nunca corrigen", () => {
+    for (const rol of [MENSAJERO, ADMIN_SATELITE, API_KEY]) {
+      expect(rolAdmiteCorreccion(rol, "en_reparto", true)).toBe(false);
+    }
   });
 
   it.each(["en_reparto", "por_recoger", "en_bodega_central", "reprogramada"])(
@@ -144,14 +155,14 @@ describe("312/A1 — R9: adminTienda, en LOS DOS grupos de /novedades", () => {
       // La asimetria de la regla: `maestro` SI puede ahi, la tienda no. Se comprueban las dos
       // mitades en la misma linea para que nadie "unifique" los dos caminos por parecerse.
       expect(estadoAdmiteCorreccion(estatusValue)).toBe(true);
-      expect(rolAdmiteCorreccion(MAESTRO, estatusValue)).toBe(true);
-      expect(rolAdmiteCorreccion(ADMIN_TIENDA, estatusValue)).toBe(false);
+      expect(rolAdmiteCorreccion(MAESTRO, estatusValue, false)).toBe(true);
+      expect(rolAdmiteCorreccion(ADMIN_TIENDA, estatusValue, false)).toBe(false);
     },
   );
 
   it("NO corrige en los cuatro estados bloqueados", () => {
     for (const estatusValue of ESTADOS_SIN_CORRECCION) {
-      expect(rolAdmiteCorreccion(ADMIN_TIENDA, estatusValue)).toBe(false);
+      expect(rolAdmiteCorreccion(ADMIN_TIENDA, estatusValue, false)).toBe(false);
     }
   });
 });
@@ -170,7 +181,7 @@ describe("312/A1 — R10: los tres roles que nunca corrigen", () => {
       "por_recoger",
       ...ESTADOS_SIN_CORRECCION,
     ]) {
-      expect(rolAdmiteCorreccion(rol, estatusValue)).toBe(false);
+      expect(rolAdmiteCorreccion(rol, estatusValue, false)).toBe(false);
     }
   });
 });
@@ -181,7 +192,7 @@ describe("312/A1 — el fallo cerrado alcanza tambien al predicado por rol", () 
     ["admin", ADMIN],
     ["adminTienda", ADMIN_TIENDA],
   ])("%s con estatus desconocido (undefined/null) no puede corregir", (_nombre, rol) => {
-    expect(rolAdmiteCorreccion(rol, undefined)).toBe(false);
-    expect(rolAdmiteCorreccion(rol, null)).toBe(false);
+    expect(rolAdmiteCorreccion(rol, undefined, false)).toBe(false);
+    expect(rolAdmiteCorreccion(rol, null, false)).toBe(false);
   });
 });

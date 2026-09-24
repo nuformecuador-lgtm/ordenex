@@ -46,7 +46,9 @@ const repoSrc = fs.readFileSync(REPO_FILE, "utf8");
 const SUITES_DE_LA_TRANSACCION = [
   "tests/unit/repositories/cierres-admin-repository.test.ts",
   "tests/unit/repositories/CierresAdminRepository.resolverCierre.devolucion.test.ts",
-  "tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts",
+  // ⏳ 2026-09-23 (FICHA 454, T1.7): la suite del anclaje (239) se jubilo con su bloque; la que
+  // ejecuta ahora esta transaccion para la APLICACION DE GESTIONES es la de abajo (git mv + reescrita).
+  "tests/unit/repositories/cierres-admin-aplicacion-gestiones.test.ts",
   "tests/unit/repositories/cierres-admin-caja-cod.test.ts",
   "tests/unit/repositories/cierres-admin-indemnizacion.test.ts",
   // Feature 238 (T3.7): la suite de la marca de confirmacion fisica EJECUTA esta transaccion, asi
@@ -85,17 +87,33 @@ const ESCRITURAS_DE_LA_APROBACION = [
     ],
   },
   {
+    // ⏳ 2026-09-23 (FICHA 454, T1.7/T1.8/T1.14): el ANCLAJE de la devolucion (239) ya no es un
+    // `updateMany`: lo absorbe la APLICACION DE GESTIONES, que escribe por `$queryRaw` con `RETURNING`
+    // (entrada propia en ESCRITURAS_SQL_DE_LA_APROBACION, abajo). Aqui quedan los demas bloques, y
+    // cada uno con la suite que lo nombra (antes las tres escrituras citaban una sola suite).
     escritura: "tx.orden.updateMany",
     que:
-      "TRES bloques comparten esta escritura: liberacion de `sin_gestionar` (109), devolucion " +
-      "de `rechazada` (139) y ANCLAJE de la devolucion (239). Los tres rutean por ids y van " +
-      "guardados por su estado de origen.",
-    cubiertaPor: ["tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts"],
+      "Comparten esta escritura: liberacion de `sin_gestionar` (109) y su rechazo por tope (276), " +
+      "devolucion de `rechazada` (139, seleccion por gestion desde la 454) y, fuera de la " +
+      "aprobacion, la transicion #69 de la correccion LEGADA (398). Todas rutean por ids y van " +
+      "guardadas por su estado de origen.",
+    cubiertaPor: [
+      "tests/unit/repositories/CierresAdminRepository.resolverCierre.devolucion.test.ts",
+      "tests/integration/db/454/devolucion-rechazadas-seleccion-sql-real.test.ts",
+      "tests/integration/db/liberacion-al-aprobar-cierre-real.test.ts",
+      "tests/integration/db/cierre-sin-gestion-tope-sql-real.test.ts",
+      "tests/integration/db/454/correccion-ramas-sql-real.test.ts",
+    ],
   },
   {
     escritura: "appendCambioEstado",
-    que: "el historial de las tres transiciones de arriba, por el punto unico de escritura",
-    cubiertaPor: ["tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts"],
+    que:
+      "el historial de las transiciones de arriba y de la APLICACION DE GESTIONES (454), por el " +
+      "punto unico de escritura",
+    cubiertaPor: [
+      "tests/unit/repositories/cierres-admin-aplicacion-gestiones.test.ts",
+      "tests/integration/db/454/aplicacion-al-aprobar-sql-real.test.ts",
+    ],
   },
   {
     // 💰 FEATURE 276 (T9, R23 · Q1 firmada el 2026-08-24) — LA GESTION SINTETICA DEL RECHAZO POR
@@ -142,6 +160,35 @@ const ESCRITURAS_FUERA_DE_LA_APROBACION = [
     escritura: "tx.gestionOrdenPago.createMany",
     que: "correccion del desglose de pago: las lineas NUEVAS, que sustituyen enteras a las anteriores",
     cubiertaPor: ["tests/unit/repositories/cierres-admin-corregir-pagos-where.test.ts"],
+  },
+  {
+    // FICHA 454 (T1.14, design §11 D10): la correccion #69 de una gestion PENDIENTE no transiciona;
+    // deja el evento `gestion_corregida` (resultado anterior/nuevo, actor, motivo) y su webhook.
+    escritura: "tx.ordenEvento.create",
+    que:
+      "correccion #69 en su rama NUEVA (`corregirResultadoGestionEnCierre`): el evento " +
+      "`gestion_corregida`, en la transaccion propia de la correccion, no en la de la resolucion.",
+    cubiertaPor: ["tests/integration/db/454/correccion-ramas-sql-real.test.ts"],
+  },
+] as const;
+
+/**
+ * FICHA 454 (T1.7, design §7) — escrituras de la aprobacion en SQL CRUDO. El censo de `tx.<modelo>.
+ * <metodo>` no las ve, asi que se declaran aparte con un fragmento LITERAL que tiene que seguir en el
+ * repositorio y la suite que las nombra. Un `UPDATE` crudo nuevo sin entrada no se detecta solo:
+ * por eso la autocomprobacion exige que el numero de `UPDATE "orden"` del archivo sea el declarado.
+ */
+const ESCRITURAS_SQL_DE_LA_APROBACION = [
+  {
+    fragmento: 'UPDATE "orden" SET "estatus_id" = ${destinoId}',
+    que:
+      "APLICACION DE GESTIONES (454/R7-R14): lleva la orden `en_reparto` al estado de su gestion " +
+      "pendiente del cierre, guardada por `estatus_id = en_reparto`, con `RETURNING` para escribir " +
+      "el historial solo de las que se movieron.",
+    cubiertaPor: [
+      "tests/integration/db/454/aplicacion-al-aprobar-sql-real.test.ts",
+      "tests/unit/repositories/cierres-admin-aplicacion-gestiones.test.ts",
+    ],
   },
 ] as const;
 
@@ -223,6 +270,19 @@ describe("239/R33 — el inventario de escrituras de la aprobacion esta CERRADO"
     expect(suite).toContain("ConfirmacionFisicaNoAplicableError");
     expect(suite).toMatch(/TESTIGO del `cierreId`/);
     expect(suite).toMatch(/TESTIGO del `resultado`/);
+  });
+
+  it("454/T1.7: las escrituras en SQL crudo declaradas siguen en el repositorio, citan suites que existen, y no hay otras", () => {
+    for (const e of ESCRITURAS_SQL_DE_LA_APROBACION) {
+      expect(repoSrc, `${e.fragmento} ya no aparece en el repositorio`).toContain(e.fragmento);
+      for (const suite of e.cubiertaPor) {
+        expect(fs.existsSync(path.join(REPO_ROOT, suite)), `${e.fragmento} cita ${suite}, que no existe`).toBe(true);
+      }
+    }
+    const crudos = [...repoSrc.matchAll(/UPDATE\s+"orden"/g)].length;
+    expect(crudos, "un UPDATE crudo sobre `orden` sin entrada en ESCRITURAS_SQL_DE_LA_APROBACION").toBe(
+      ESCRITURAS_SQL_DE_LA_APROBACION.length,
+    );
   });
 
   it("las escrituras por repositorio inyectado siguen invocandose en la transaccion", () => {

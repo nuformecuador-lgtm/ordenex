@@ -22,6 +22,12 @@ import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 // declaracion de la regla que R21 existe para impedir.
 import { clavePar } from "@/lib/utils/cascada-tarifa";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import {
+  SELECT_REGISTRO_DE_CALLE,
+  whereOrdenSinGestionPendiente,
+} from "@/lib/repositories/gestion-pendiente";
+import { encolarWebhookEvento } from "@/lib/services/jobs/webhook-evento-encolado";
+import type { JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
 import { ORIGENES_GESTION_DE_LA_TIENDA } from "@/lib/utils/gestion-de-la-tienda-flag";
 // 💰 FICHA 337 (2026-08-31): las familias de ESCRITORIO que NO pertenecen al cierre de ningun
 // mensajero. El porque, la revocacion que implican y el cobro que queda EN PAUSA estan escritos
@@ -748,6 +754,9 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         deletedAt: null,
         estatus: { value: { in: estados } },
         OR: [{ fechaReparto: null }, { fechaReparto: { lte: hoyCR } }],
+        // FICHA 454 (T1.13, R52): una orden gestionada sigue `en_reparto` hasta que se aprueba su
+        // cierre; ya NO es trabajo pendiente y no bloquea solicitarlo. Predicado unico.
+        ...whereOrdenSinGestionPendiente(),
       },
     });
   }
@@ -921,47 +930,73 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         // las NO protegidas. Las reservadas se quedan donde estan, en la mano del mensajero.
         let sinGestionarTransicionadas = 0;
         if (corteSinGestionar) {
-          const { enRepartoEstatusId, ayudaEstatusId, sinGestionarEstatusId, diaCerrado } =
-            corteSinGestionar;
+          const { enRepartoEstatusId, sinGestionarEstatusId, diaCerrado } = corteSinGestionar;
           // R20: se pregunta «¿esta reservada para un dia que AUN NO ha llegado?», no «¿es de
           // hoy?». A eso `NULL` responde una sola cosa —no— y por eso se barre igual que siempre.
           const noReservadaParaDespues = [
             { fechaReparto: null },
             { fechaReparto: { lte: diaCerrado } },
           ];
-          for (const origenEstatusId of [enRepartoEstatusId, ayudaEstatusId]) {
-            const pendientes = await tx.orden.findMany({
-              where: {
-                mensajeroAsignadoId: mensajeroId,
-                estatusId: origenEstatusId,
-                deletedAt: null,
-                OR: noReservadaParaDespues, // feature 246/R11
-              },
-              // FEATURE 264 (B3, R1/R9/R11): el pre-SELECT proyecta ADEMAS los descriptivos que la
-              // fila del vinculo congela. Es una sola consulta —la que ya se hacia—, no una
-              // segunda: cuando llegue el `createMany` la orden YA estara en `sin_gestionar` y
-              // releerla devolveria lo mismo, pero costaria otra ida a la base dentro de la
-              // transaccion del cron.
-              select: {
-                id: true,
-                numGuia: true,
-                numRemision: true,
-                destinatario: true,
-                producto: true,
-                tienda: { select: { nombre: true } },
-                zona: { select: { nombre: true } },
-              },
-            });
-            if (pendientes.length === 0) continue; // no-op: ni update, ni append, ni ruido
+          // ─── FICHA 454 (T1.10, design §5/§9; R43, R44, R27) ─────────────────────────────────
+          //
+          // UN SOLO ORIGEN. Hasta la 454 el bucle recorria DOS (`en_reparto` y `ayuda_tienda`); la
+          // ayuda deja de ser estado y una orden con ayuda abierta SIGUE `en_reparto`, asi que la
+          // barre esta misma vuelta, como hoy barre una en `ayuda_tienda` (R27).
+          //
+          // Y UNA EXCLUSION NUEVA, la que sostiene el dinero (D4): una orden GESTIONADA sigue
+          // `en_reparto` hasta que se aprueba su cierre. Barrerla la llevaria a `sin_gestionar` y la
+          // aprobacion podria terminarla en `rechazada` por tope con un cobro. Se excluye toda orden
+          // con gestion PENDIENTE de confirmar (predicado unico, `gestion-pendiente.ts`).
+          //
+          // PROTOCOLO DE §5, y el orden no es estetico:
+          //   1. CANDADO de las filas candidatas. Se toma con un `UPDATE` que no cambia nada
+          //      (`estatus_id = estatus_id`): es el mismo candado de fila que un `SELECT … FOR
+          //      UPDATE` —compite con el de `registrarGestionPendiente`— y ademas deja al corte
+          //      esperando en un `UPDATE "public"."orden"`, que es donde la caracterizacion C02
+          //      observa la carrera. Sin triggers ni realtime sobre `orden` (comprobado), asi que el
+          //      `UPDATE` sin cambios no dispara nada.
+          //   2. RE-LECTURA en una sentencia POSTERIOR: en READ COMMITTED ve la gestion que un
+          //      registro concurrente acaba de confirmar. Un `NOT EXISTS` dentro del mismo `UPDATE`
+          //      NO la veria (foto del inicio de la sentencia) y barreria una orden gestionada.
+          //   3. La ESCRITURA, repitiendo la guarda de estado en el `WHERE`.
+          const diaTexto = fechaRepartoComoTexto(diaCerrado);
+          const bloqueadas = await tx.$queryRaw<{ id: string }[]>`UPDATE "public"."orden" SET "estatus_id" = "estatus_id"
+             WHERE "mensajero_asignado_id" = ${mensajeroId}
+               AND "estatus_id" = ${enRepartoEstatusId}
+               AND "deleted_at" IS NULL
+               AND ("fecha_reparto" IS NULL OR "fecha_reparto" <= ${diaTexto}::date)
+             RETURNING "id"`;
+          const pendientes =
+            bloqueadas.length === 0
+              ? []
+              : await tx.orden.findMany({
+                  where: {
+                    id: { in: bloqueadas.map((b) => b.id) },
+                    mensajeroAsignadoId: mensajeroId,
+                    estatusId: enRepartoEstatusId,
+                    deletedAt: null,
+                    OR: noReservadaParaDespues, // feature 246/R11
+                    ...whereOrdenSinGestionPendiente(), // ficha 454/R43
+                  },
+                  // FEATURE 264 (B3, R1/R9/R11): el pre-SELECT proyecta ADEMAS los descriptivos que
+                  // la fila del vinculo congela.
+                  select: {
+                    id: true,
+                    numGuia: true,
+                    numRemision: true,
+                    destinatario: true,
+                    producto: true,
+                    tienda: { select: { nombre: true } },
+                    zona: { select: { nombre: true } },
+                  },
+                });
+          if (pendientes.length > 0) {
             const ids = pendientes.map((o) => o.id);
             const movidas = await tx.orden.updateMany({
-              // LA GUARDA: `estatusId: origenEstatusId`. Es lo que garantiza que el origen que se
-              // registra abajo es el REAL de esta vuelta y no el de la otra.
-              // Feature 246 (R11/R16): el filtro de dia se REPITE aqui a proposito. Es la escritura
-              // real; el pre-SELECT solo sirve para el historial.
+              // LA GUARDA: `estatusId = en_reparto` + el dia (246/R11/R16), repetidos en la escritura.
               where: {
                 id: { in: ids },
-                estatusId: origenEstatusId,
+                estatusId: enRepartoEstatusId,
                 deletedAt: null,
                 OR: noReservadaParaDespues,
               },
@@ -973,37 +1008,19 @@ export class CierreDiaRepository implements ICierreDiaRepository {
                 tx,
                 ids.map((ordenId) => ({
                   ordenId,
-                  estatusOrigenId: origenEstatusId, // R27: el origen de SU bloque, no uno supuesto
+                  estatusOrigenId: enRepartoEstatusId, // R27 (235): el origen REAL
                   estatusDestinoId: sinGestionarEstatusId,
                   actorUsuarioId: null, // R6: sistema/cron
                   origenTipo: "corte_sin_gestionar", // R6
                 })),
               );
               // FEATURE 264 (B3, R1/R2/R4/R11) — EL VINCULO PERSISTIDO, EN ESTA MISMA TRANSACCION.
+              // La aprobacion libera la orden y le borra el mensajero; esta fila es lo unico que
+              // sobrevive para decir que este cierre la barrio. MONEY-NEUTRAL: sin columnas de
+              // dinero. `skipDuplicates` por si una segunda corrida entrara por el mismo cierre.
               //
-              // POR QUE AQUI Y NO EN UNA LECTURA POSTERIOR. Hasta hoy la relacion cierre <-> orden
-              // barrida era un predicado VIVO (`orden.mensajero_asignado_id = cierre.mensajero_id
-              // AND estatus = sin_gestionar`), y la APROBACION lo destruye: libera la orden a
-              // bodega y le borra `mensajero_asignado_id`. Un cierre `aprobado` —el que se audita,
-              // porque es el que ya movio dinero— mostraba CERO ordenes, indistinguible de uno que
-              // de verdad no barrio ninguna. Escribirlo aqui es lo unico que sobrevive a eso (R5).
-              //
-              // R2/R3 SE CUMPLEN POR LA TRANSACCION: si algo revienta despues, ni el barrido ni
-              // este vinculo quedan. R6 tambien, y sin una linea: `crearCierre` sin
-              // `corteSinGestionar` (flujo 37) no entra a este bloque.
-              //
-              // R4 — `estatusOrigenId: origenEstatusId` es el origen de SU vuelta. Es literalmente
-              // la razon por la que este bucle tiene dos vueltas guardadas (feature 235/R27): con
-              // dos origenes en un solo `updateMany` habria que INVENTARSE de cual salio cada
-              // fila.
-              //
-              // MONEY-NEUTRAL: `cierre_sin_gestion` no tiene ni una columna de dinero, asi que
-              // esta escritura no puede mover un total ni aunque quisiera. No es disciplina: es
-              // que no hay donde guardar un importe.
-              //
-              // `skipDuplicates`: el `@@unique([cierreId, ordenId])` es la red por si una segunda
-              // corrida del corte entrara por el mismo cierre. Mismo criterio que el
-              // `ON CONFLICT DO NOTHING` del backfill de la migracion.
+              // FICHA 454 (Pregunta abierta 4): `estatusOrigenId` es `en_reparto` tambien para una
+              // orden que tenia la ayuda abierta (antes `ayuda_tienda`). Medido en T1.21 quien lo lee.
               await tx.cierreSinGestion.createMany({
                 data: pendientes.map((o) => ({
                   cierreId: cierre.id,
@@ -1014,14 +1031,13 @@ export class CierreDiaRepository implements ICierreDiaRepository {
                   producto: o.producto,
                   tiendaNombre: o.tienda.nombre,
                   zonaNombre: o.zona.nombre,
-                  estatusOrigenId: origenEstatusId, // R4: el origen REAL de esta vuelta
+                  estatusOrigenId: enRepartoEstatusId,
                 })),
                 skipDuplicates: true,
               });
             }
           }
         }
-
         // R13: consume las gestiones pendientes con guardia de propiedad + no-cerradas
         // en el WHERE (concurrencia-segura: solo las cierre_id IS NULL del actor).
         // Feature 41/C1 (R8/R9/R23): si vincula 0 (otra solicitud/corte concurrente las
@@ -1383,9 +1399,13 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         cierreId: true, // R2
         anuladaAt: true, // R3
         orden: { select: { deletedAt: true, estatusId: true, estatus: { select: { value: true } } } },
+        // FICHA 454 (T1.11): el evento de registro decide la RAMA — con evento, gestion pendiente
+        // del modelo nuevo (anular sin transicion); sin evento, LEGADA (la de siempre).
+        ...SELECT_REGISTRO_DE_CALLE,
       },
     });
     if (row === null) return null;
+    const registro = (row.eventos ?? [])[0] ?? null; // sin evento = LEGADA
     // 💰 Feature 237 (T5.5, D3/R38) — ¿la registro LA TIENDA desde la pestaña de ayuda? Se deriva
     // del historial, que es donde ya esta escrito quien la registro (`actor_usuario_id` +
     // `origen_tipo`), en vez de una columna nueva que habria que mantener.
@@ -1399,7 +1419,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     // puñado de filas de esa orden. Sin el, esta consulta recorreria entera una tabla append-only
     // que crece con CADA transicion del sistema — en el camino de un boton. No se crea un indice
     // nuevo: se copia el acceso que ya estaba medido.
-    const deLaTienda = await this.prisma.ordenHistorialEstado.findFirst({
+    const deLaTienda = registro !== null ? null : await this.prisma.ordenHistorialEstado.findFirst({
       where: {
         ordenId: row.ordenId,
         gestionOrdenId: row.id,
@@ -1419,8 +1439,69 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         estatusId: row.orden.estatusId, // R5: id REAL (guardia del UPDATE, sin re-resolver catalogo)
         estatusValue: row.orden.estatus.value,
       },
-      desdeAyudaTienda: deLaTienda !== null,
+      // FICHA 454: en la rama nueva «la registro la tienda» se lee de la familia del registro; en la
+      // legada, del historial como hasta hoy.
+      desdeAyudaTienda:
+        registro !== null
+          ? registro.familiaAplicacion === "gestion_tienda_ayuda"
+          : deLaTienda !== null,
+      registradaComoPendiente: registro !== null,
     };
+  }
+
+  /**
+   * FICHA 454 (T1.11, design §11 U4; R15) — DESHACE una gestion PENDIENTE de confirmar (rama
+   * nueva): la ANULA con rastro, registra el evento `gestion_anulada` y encola su webhook. SIN
+   * transicion de estado: la orden no se movio al gestionar, asi que tampoco se mueve al deshacer, y
+   * vuelve a ser gestionable porque su unica gestion pendiente queda anulada.
+   *
+   * Bajo el candado de la fila de `orden` (§5): compite con un registro o un corte concurrentes. La
+   * anulacion va GUARDADA (sigue del mensajero, sin cierre, sin anular, y la orden sigue
+   * `en_reparto` y no borrada); `false` = perdio la carrera, sin efectos.
+   */
+  async anularGestionPendiente(input: {
+    gestionId: string;
+    ordenId: string;
+    mensajeroId: string;
+    actorUsuarioId: string;
+    estatusEnRepartoId: string;
+  }): Promise<boolean> {
+    const { gestionId, ordenId, mensajeroId, actorUsuarioId, estatusEnRepartoId } = input;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "orden" WHERE "id" = ${ordenId} FOR UPDATE`;
+        const sigue = await tx.orden.count({
+          where: { id: ordenId, estatusId: estatusEnRepartoId, deletedAt: null },
+        });
+        if (sigue === 0) throw new NoAnulable();
+        const anulada = await tx.gestionOrden.updateMany({
+          where: { id: gestionId, mensajeroId, cierreId: null, anuladaAt: null },
+          data: { anuladaAt: new Date(), anuladaPor: actorUsuarioId },
+        });
+        if (anulada.count === 0) throw new NoAnulable();
+        const gestion = await tx.gestionOrden.findUniqueOrThrow({
+          where: { id: gestionId },
+          select: { resultado: true },
+        });
+        const evento = await tx.ordenEvento.create({
+          data: {
+            ordenId,
+            tipo: "gestion_anulada",
+            gestionOrdenId: gestionId,
+            resultado: gestion.resultado,
+            mensajeroId,
+            actorUsuarioId,
+            actorRol: "mensajero",
+          },
+          select: { id: true },
+        });
+        await encolarWebhookEvento(tx as unknown as JobTxClient, { ordenEventoId: evento.id, ordenId });
+        return true;
+      });
+    } catch (err) {
+      if (err instanceof NoAnulable) return false;
+      throw err;
+    }
   }
 
   /** Feature 67/R4: id de la gestion NO anulada mas reciente de la orden (o null). */

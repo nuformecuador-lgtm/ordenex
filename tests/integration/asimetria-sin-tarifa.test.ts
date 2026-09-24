@@ -205,6 +205,8 @@ function ordenListRow() {
 async function porElListado(filas: readonly FilaTarifa[]) {
   const prisma = {
     orden: { findMany: vi.fn(async () => [ordenListRow()]), count: vi.fn(async () => 1) },
+    // FICHA 454 (R29, 2026-09-24): las señales de la pagina (gestion pendiente, ayuda); vacias.
+    $queryRaw: vi.fn(async () => []),
     ...prismaTarifas(filas),
   };
   const res = await new OrdenRepository(prisma as unknown as PrismaClient).list({

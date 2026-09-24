@@ -472,7 +472,7 @@ function gestionCruda(over: Record<string, unknown> = {}) {
 }
 
 describe("GET /api/ordenes/api-key/orden/{id} — `gestiones` de punta a punta (feature 405)", () => {
-  it("405/R1: el detalle incluye la clave `gestiones` con sus cinco campos publicos", async () => {
+  it("405/R1 (+454/R32): el detalle incluye la clave `gestiones` con sus seis campos publicos", async () => {
     const { deps: d } = depsRealesDetalle(
       filaDetalle({
         gestiones: [gestionCruda()],
@@ -503,6 +503,8 @@ describe("GET /api/ordenes/api-key/orden/{id} — `gestiones` de punta a punta (
           id: "018f2c31-0000-4000-8000-0000000000bb",
           nombre: "Ana Solis Vargas",
         },
+        // FICHA 454 (R32): la gestion es LEGADA (sin evento de registro) -> no esta pendiente.
+        pendienteConfirmacion: false,
       },
     ]);
   });

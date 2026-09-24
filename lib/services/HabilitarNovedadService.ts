@@ -60,7 +60,7 @@ import { rescatarOrdenAyuda } from "@/lib/services/rescate-ayuda";
 export class HabilitarNovedadService implements IHabilitarNovedadService {
   constructor(
     private readonly notas: Pick<IOrdenNotaService, "publicar">,
-    private readonly repo: Pick<IOrdenRepository, "findEstatusIdByValue" | "transicionarAyuda">,
+    private readonly repo: Pick<IOrdenRepository, "registrarAyudaResuelta">, // ficha 454
     /**
      * Feature 235: el punto unico de rescate autoriza por su cuenta (no publica nada, asi que no
      * puede colarse por `publicar`), y para eso necesita el MISMO repositorio del hilo y la MISMA

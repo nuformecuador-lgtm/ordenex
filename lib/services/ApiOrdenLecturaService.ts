@@ -239,6 +239,8 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
       // del repositorio trajera una tercera, no cruzaria. Y si `ApiMensajeroDTO` ganara un campo
       // de verdad, esto deja de compilar (falta una propiedad), que es como se quiere enterar uno.
       mensajero: { id: g.mensajero.id, nombre: g.mensajero.nombre },
+      // FICHA 454 (R32): la clave NUEVA va AL FINAL del objeto, como en el contrato: es aditiva.
+      pendienteConfirmacion: g.pendienteConfirmacion,
     }));
 
     // ⏳ 2026-09-10 (feature 415, T4): el detalle hereda `zona`, `costoEstimado` y `costoReal` por

@@ -15,8 +15,8 @@ import { esEstadoHabilitableApi } from "@/lib/types/habilitacion-api";
 // por API key. Sin HTTP, sin Prisma y sin Next: recibe el actor ya autenticado y las filas ya
 // desenvueltas, y devuelve un resultado POR FILA.
 
-/** El estatus desde el que —y SOLO desde el que— se puede volver a la calle (design §1). */
-const ESTATUS_AYUDA = "ayuda_tienda";
+// FICHA 454 (T1.15): aqui vivia `ESTATUS_AYUDA = "ayuda_tienda"`. La ayuda es un hecho: la rama A se
+// decide por la derivacion `ayudaAbierta` que trae la lectura.
 /** El estatus al que vuelve la rama A: la orden regresa a reparto, con su mismo mensajero. */
 const ESTATUS_EN_REPARTO = "en_reparto";
 
@@ -41,7 +41,7 @@ const MENSAJE: Record<CodigoErrorHabilitacion, string> = {
  */
 export type OrdenRepoParaHabilitacionApi = Pick<
   IOrdenRepository,
-  "findParaHabilitacionApi" | "findEstatusIdByValue" | "transicionarAyuda"
+  "findParaHabilitacionApi" | "registrarAyudaResuelta"
 >;
 
 /** Una fila cuyos CAMPOS ya pasaron R7: la guia es un entero positivo y la nota viene recortada. */
@@ -73,7 +73,13 @@ function filaConError(
   numGuia: unknown,
   codigo: CodigoErrorHabilitacion,
 ): ResultadoFilaHabilitacion {
-  return { numGuia, resultado: "error", estado: null, error: { codigo, mensaje: MENSAJE[codigo] } };
+  return {
+    numGuia,
+    resultado: "error",
+    estado: null,
+    ayudaCerrada: false,
+    error: { codigo, mensaje: MENSAJE[codigo] },
+  };
 }
 
 /**
@@ -139,13 +145,15 @@ export class ApiHabilitacionService implements IApiHabilitacionService {
     // 4. R13/R14 — GUARDA DE ESTADO PROPIA, ANTES de cualquier escritura. Cubre `reprogramada`
     //    (R13-b) y la SEGUNDA habilitacion de una orden ya en `en_reparto` (R31/D3): un `error`
     //    honesto, no un acuse falso.
-    if (!esEstadoHabilitableApi(orden.estatusValue)) {
+    // FICHA 454 (R24): habilitable = ayuda ABIERTA (derivacion) o un estado habilitable (`devuelta`).
+    if (!orden.ayudaAbierta && !esEstadoHabilitableApi(orden.estatusValue)) {
       return filaConError(numGuia, "estado_no_habilitable");
     }
 
     // 5. RAMA A: el paquete sigue en la calle. Es el UNICO caso que mueve el estado, y solo se
     //    llega a el desde `ayuda_tienda` — una `devuelta` esta SIEMPRE desasignada (R14-b).
-    if (orden.estatusValue === ESTATUS_AYUDA && orden.mensajeroAsignadoId !== null) {
+    //    FICHA 454: la condicion es la ayuda ABIERTA (la orden sigue `en_reparto`), y ya no mueve estado.
+    if (orden.ayudaAbierta && orden.mensajeroAsignadoId !== null) {
       return await this.ramaA(actor, numGuia, nota, orden.id);
     }
 
@@ -162,6 +170,7 @@ export class ApiHabilitacionService implements IApiHabilitacionService {
       numGuia,
       resultado: "habilitada_sin_cambio_de_estado",
       estado: orden.estatusValue,
+      ayudaCerrada: false,
       error: null,
     };
   }
@@ -173,42 +182,40 @@ export class ApiHabilitacionService implements IApiHabilitacionService {
     nota: string,
     ordenId: string,
   ): Promise<ResultadoFilaHabilitacion> {
-    // 5.1. R19 — FALLO CERRADO al resolver el catalogo: si alguno de los dos values no resuelve,
-    //      la fila se rechaza SIN escribir nada. Mismo criterio que `rescate-ayuda.ts`.
-    const [origenId, destinoId] = await Promise.all([
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_AYUDA),
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_EN_REPARTO),
-    ]);
-    if (origenId === null || destinoId === null) {
-      return filaConError(numGuia, "estado_no_habilitable");
-    }
-
-    // 5.2. R15/R16 — LA UNICA ESCRITURA DE ESTADO, por el punto unico, guardada por el origen y
-    //      con su append al historial en la MISMA transaccion. D6: la entrada NO lleva `motivo` —
-    //      la nota vive SOLO en la bitacora, y copiarla aqui le daria dos hogares.
-    const transiciono = await this.ordenRepo.transicionarAyuda({
+    // FICHA 454 (T1.15, R24) — la ayuda se CIERRA con un hecho (`ayuda_habilitada_api`) y la orden
+    // NO cambia de estado: ya estaba `en_reparto`. Guardado por «ayuda abierta» bajo candado; si la
+    // cerro otra via entre la lectura y la escritura, `false` sin efectos y la fila es un error
+    // honesto (R18/R25 de la 266), sin registro: una bitacora que afirme lo que no ocurrio es peor
+    // que no tenerla.
+    const cerrada = await this.ordenRepo.registrarAyudaResuelta({
       ordenId,
-      estatusOrigenId: origenId,
-      estatusDestinoId: destinoId,
+      tipo: "ayuda_habilitada_api",
       actorUsuarioId: actor.usuarioId,
-      origenTipo: "habilitacion_api",
+      actorRol: actor.rol,
     });
-    // R18/R25 — la orden se movio entre la lectura y la escritura: 0 filas afectadas, ningun
-    // efecto parcial, y NINGUN registro. Una bitacora que afirme un cambio que no ocurrio es peor
-    // que no tener bitacora.
-    if (!transiciono) return filaConError(numGuia, "estado_no_habilitable");
+    if (!cerrada) return filaConError(numGuia, "estado_no_habilitable");
 
-    // 5.3. R23/R25 — el registro va DESPUES de la transicion confirmada, y a proposito (design
-    //      §8, riesgo 1): el hueco de atomicidad se acepta en la direccion segura.
+    // R23/R25 (266) — el registro va DESPUES del hecho confirmado. `cambioDeEstado: false`: no hubo
+    // transicion; `estadoResultante` es el estado en que la orden sigue.
     await this.logRepo.registrar({
       ordenId,
       actorUsuarioId: actor.usuarioId,
       nota,
-      cambioDeEstado: true,
+      cambioDeEstado: false,
       estadoResultante: ESTATUS_EN_REPARTO,
     });
 
-    return { numGuia, resultado: "habilitada", estado: ESTATUS_EN_REPARTO, error: null };
+    // R24 (454, design §4.2: «la respuesta HTTP GANA `ayudaCerrada`»): `resultado: "habilitada"` y
+    // `estado: "en_reparto"` se CONSERVAN —son el discriminador que el integrador ya lee y la
+    // caracterizacion C22 los fija como invariante— y la clave NUEVA dice lo que cambio: la ayuda
+    // quedo CERRADA. Que no hubo transicion lo registra la bitacora (`cambioDeEstado: false`).
+    return {
+      numGuia,
+      resultado: "habilitada",
+      estado: ESTATUS_EN_REPARTO,
+      ayudaCerrada: true,
+      error: null,
+    };
   }
 }
 

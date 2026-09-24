@@ -76,39 +76,35 @@ export const ORDER_STATUS_SEED = [
   // el mensajero escrito, seguia saliendo como asignable y se podia reasignar indefinidamente.
   // `por_recolectar_en_tienda` = nadie va todavia; `recolectando` = alguien va en camino.
   "recolectando",
-  // Feature 239/R1 (P1 FIRMADA por el humano el 2026-08-19): APENDICE, indice 20 -> el catalogo
-  // pasa de 20 a 21. Ni renombra, ni reordena, ni retira ninguno de los 20 vigentes.
-  //
-  // Es el PRE-ESTADO de la devolucion: el mensajero YA gestiono la orden como `devuelta`, pero la
-  // bodega todavia no lo ha confirmado al aprobar el cierre. La orden NO entra en `devuelta` al
-  // gestionar (esa arista, la #14, muere en este mismo commit): entra aqui, y la APROBACION DEL
-  // CIERRE **es** la transicion a `devuelta` (R4). Mientras este aqui: no la ve la tienda (R19),
-  // no corre su ventana de SLA (R13) y por tanto NO se puede cobrar el rechazo antes de tiempo,
-  // que es el fallo que esta feature arregla (`progress/auditoria_ayuda_tienda.md` §1).
-  //
-  // El nombre dice QUIEN FALTA (la bodega confirma), no que paso. No colisiona con
-  // `por_devolver` / `por_devolver_a_tienda`, que son el otro flujo (el de las rechazadas).
-  "devolucion_por_confirmar",
-  // Feature 235/R1 (P1 FIRMADA por el humano el 2026-08-19): APENDICE, indice 21 -> el catalogo
-  // pasa de 21 a 22. Ni renombra, ni reordena, ni retira ninguno de los 21 vigentes.
-  //
-  // Es la SOLICITUD DE AYUDA del mensajero a la tienda, viva: «el mensajero pidio ayuda sobre esta
-  // orden y el paquete sigue con el, en la calle». Hasta hoy esto era un BOOLEANO (`orden.ayuda`,
-  // merge #396) y la orden nunca salia de `en_reparto`, asi que CADA superficie que debia
-  // excluirla tenia que acordarse de leer esa columna — y no la leia ninguna: ni el optimizador de
-  // ruta, ni el mapa, ni la guardia de gestionabilidad, ni el listado del portal. Con un estatus,
-  // `satisfies Record<OrderStatusValue, ...>` de `TRANSICIONES` ROMPE EL BUILD hasta que alguien
-  // decide el caso nuevo, y esas superficies filtran por construccion
-  // (`progress/auditoria_ayuda_tienda.md` §2/§4).
-  //
-  // NO es un desenlace ni un pozo: tiene entrada (#62, la solicitud) y DOS salidas (#63 el rescate
-  // por cualquiera de los dos lados, #64 el corte de la noche). Las aristas de GESTION desde aqui
-  // —entregada/reprogramada/devolucion_por_confirmar/rechazada/incidente— NO se declaran en esta
-  // ficha: llegan con su productor en la 237.
-  "ayuda_tienda",
+  // Feature 454/R37 (2026-09-23): salen del SEED los dos valores que la 239 y la 235 habian
+  // anadido como apendice (indices 20 y 21): el pre-estado de la devolucion y la solicitud de
+  // ayuda a la tienda. La gestion se registra sin cambiar el estado (la orden sigue en
+  // `en_reparto` con una gestion pendiente de confirmar) y el estado real se aplica al APROBAR el
+  // cierre; la ayuda pasa a ser un evento (`orden_evento`), no un estado. El catalogo vuelve a 20.
+  // La migracion `20260923120200_retiro_estados_454` mueve las ordenes vivas y borra la fila del
+  // catalogo solo si nadie la referencia (en una base con historial sobrevive huerfana, como la
+  // del estado de fulfillment de la 155). Las filas historicas se siguen leyendo (R40) por los
+  // mapas de retirados: `HITO_POR_ESTATUS_RETIRADO` (rastreo) y `ORDER_STATUS_LABELS_RETIRADOS`
+  // (etiquetas, `EstatusBadge.tsx`).
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];
+
+/**
+ * FICHA 454 (R40) — los values RETIRADOS del catalogo que el historial todavia referencia (filas de
+ * `orden_historial_estado`, origenes de `cierre_sin_gestion`). NO son estados: ninguna orden viva
+ * los tiene tras M3, no se ofrecen en ningun filtro y el grafo no los declara. Existen solo para que
+ * una fila HISTORICA se siga leyendo igual en vez de caer a «no consta». Es el unico sitio de
+ * `lib/types` donde se escriben (guardia `sin-estados-retirados`: solo en mapas `*_RETIRADO(S)`).
+ */
+export const ORDER_STATUS_RETIRADOS = ["devolucion_por_confirmar", "ayuda_tienda"] as const;
+
+export type OrderStatusRetirado = (typeof ORDER_STATUS_RETIRADOS)[number];
+
+/** `true` si `value` es uno de los values retirados por la 454 (lectura de filas historicas). */
+export function esOrderStatusRetirado(value: string): value is OrderStatusRetirado {
+  return (ORDER_STATUS_RETIRADOS as readonly string[]).includes(value);
+}
 
 // Feature 63/A1 (R1-R4): resultado tipado y discriminado de la Server Action
 // `listarOrderStatus()`. Espeja el patron de resultados de dominio del repo

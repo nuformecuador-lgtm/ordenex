@@ -66,10 +66,7 @@ import {
 import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-sla";
 // FICHA 398: el destino de la orden corregida sale del PUNTO UNICO de la regla `resultado ->
 // estado` (239/R3), no de un literal escrito en el servicio.
-import {
-  ESTATUS_DEVOLUCION_POR_CONFIRMAR,
-  ESTATUS_POR_RESULTADO,
-} from "@/lib/types/gestion-destino";
+import { ESTATUS_POR_RESULTADO } from "@/lib/types/gestion-destino";
 // FEATURE 271 (R48/R10): la regla del bloqueo se CONSULTA, no se re-deriva aqui.
 import { SIN_CIERRES_ABIERTOS, estaBloqueadoPorCierres } from "@/lib/utils/bloqueo-cierre";
 import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
@@ -167,10 +164,9 @@ const ESTADO_RECHAZADA = "rechazada";
 const ESTADO_POR_DEVOLVER = "por_devolver";
 const ESTADO_POR_DEVOLVER_A_TIENDA = "por_devolver_a_tienda";
 
-// Feature 239 (T2.1, R4/R9): los DOS estados del ANCLAJE de la devolucion. Origen = el
-// pre-estado en el que el mensajero deja la orden al gestionar (`ESTATUS_POR_RESULTADO` de
-// `lib/types/gestion-destino.ts`, punto unico de esa regla); destino = `devuelta`.
-const ESTADO_DEVUELTA = "devuelta";
+// FICHA 454 (T1.7): AQUI VIVIAN los dos estados del ANCLAJE de la 239. La aplicacion al aprobar se
+// generaliza a los cinco resultados: origen `en_reparto`, destino del mapa `ESTATUS_POR_RESULTADO`.
+const ESTADO_EN_REPARTO_APLICACION = "en_reparto";
 
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
@@ -956,8 +952,11 @@ export class CierresAdminService implements ICierresAdminService {
       porDevolverId,
       porDevolverATiendaId,
       centralZonaId,
-      preEstadoId,
+      enRepartoId,
+      entregadaId,
+      reprogramadaId,
       devueltaId,
+      incidenteId,
     ] = await Promise.all([
       this.ordenRepo.findEstatusIdByValue(ESTADO_SIN_GESTIONAR),
       this.ordenRepo.findEstatusIdByValue(ESTADO_EN_BODEGA),
@@ -966,9 +965,13 @@ export class CierresAdminService implements ICierresAdminService {
       this.ordenRepo.findEstatusIdByValue(ESTADO_POR_DEVOLVER),
       this.ordenRepo.findEstatusIdByValue(ESTADO_POR_DEVOLVER_A_TIENDA),
       this.zonaRepo.findCentralZonaId(),
-      // Feature 239 (T2.1, R4/R9): los dos ids del ANCLAJE.
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_DEVOLUCION_POR_CONFIRMAR),
-      this.ordenRepo.findEstatusIdByValue(ESTADO_DEVUELTA),
+      // FICHA 454 (T1.7, design §7.2): los ids de la APLICACION DE GESTIONES — el origen
+      // `en_reparto` y el destino de cada resultado, del mapa UNICO `ESTATUS_POR_RESULTADO`.
+      this.ordenRepo.findEstatusIdByValue(ESTADO_EN_REPARTO_APLICACION),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.entregada),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.reprogramada),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.devuelta),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.incidente),
     ]);
     // 💰 FEATURE 276 (T9, R7/R21): la config gana el destino `rechazada` y el UMBRAL. El umbral se
     // resuelve AQUI, en el servicio, y viaja como numero: el repositorio no lee configuracion.
@@ -1005,7 +1008,17 @@ export class CierresAdminService implements ICierresAdminService {
     // congelada para siempre: invisible para la tienda, sin reloj y sin que nadie se entere.
     // Es exactamente el estado del que esta feature viene a sacarnos, asi que no se acepta ni
     // una vez. Sin efectos parciales: se devuelve ANTES de tocar el repo.
-    if (preEstadoId === null || devueltaId === null) {
+    //
+    // FICHA 454 (T1.7): el MISMO fallo cerrado, ampliado a los seis ids de la aplicacion. Aprobar sin
+    // poder aplicar dejaria gestiones pendientes para siempre en ordenes `en_reparto`.
+    if (
+      enRepartoId === null ||
+      entregadaId === null ||
+      reprogramadaId === null ||
+      rechazadaId === null ||
+      devueltaId === null ||
+      incidenteId === null
+    ) {
       return {
         status: "validation_error",
         fieldErrors: { estatus: [MSG_CATALOGO_ANCLAJE] },
@@ -1021,10 +1034,18 @@ export class CierresAdminService implements ICierresAdminService {
       motivoRechazo: null,
       liberacionSinGestionar, // feature 109/R16: libera `sin_gestionar` en la misma tx
       devolucionRechazadas, // feature 139/R5: dispara la devolucion de `rechazada` en la misma tx
-      // Feature 239/R4: ANCLA las devoluciones de este cierre en la MISMA tx. OBLIGATORIO (no
-      // opcional como las dos de arriba): sin el, la orden se queda en el pre-estado para
-      // siempre. Ver `AnclajeDevolucionConfig`.
-      anclajeDevolucion: { preEstadoId, devueltaId },
+      // FICHA 454 (T1.7): APLICA el estado real de las gestiones de calle de este cierre en la
+      // MISMA tx. OBLIGATORIO (sustituye al anclaje de la 239). Ver `AplicacionGestionesConfig`.
+      aplicacionGestiones: {
+        enRepartoId,
+        destinoPorResultado: {
+          entregada: entregadaId,
+          reprogramada: reprogramadaId,
+          rechazada: rechazadaId,
+          devuelta: devueltaId,
+          incidente: incidenteId,
+        },
+      },
       // Feature 158/R22: los montos ya con cobertura EXACTA verificada. El repo los escribe
       // GUARDADOS por `(cierreId, resultado)` y emite el egreso en la MISMA tx.
       indemnizaciones,

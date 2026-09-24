@@ -193,7 +193,8 @@ export const ESTADOS_BODEGA_SATELITE = [
   "por_recoger", // Asignadas a un mensajero que aun no las recogio (feature 149/R35)
   // --- En la calle --------------------------------------------------------------------
   "en_reparto", // FICHA 357: entra. El tramo entre el despacho y el desenlace
-  "ayuda_tienda", // FICHA 357: entra (revierte 235/R37)
+  // FICHA 454 (2026-09-23): salen los dos estados retirados del catalogo (R37). La orden con
+  // ayuda abierta o con gestion pendiente de confirmar ESTA en `en_reparto` y se ve por esa fila.
   // --- El desenlace -------------------------------------------------------------------
   "entregada", // FICHA 357 (cara A): 15 de las 17 invisibles estaban aqui
   "reprogramada", // FICHA 357 (cara A)
@@ -201,7 +202,6 @@ export const ESTADOS_BODEGA_SATELITE = [
   "sin_gestionar", // FICHA 357: el corte de la noche sobre una orden suya
   "incidente", // FICHA 357: dañada / perdida / robada
   // --- La devolucion ------------------------------------------------------------------
-  "devolucion_por_confirmar", // FICHA 357: entra (revierte 239/P4 SOLO en cuanto a VER)
   "por_devolver", // Por devolver — feature 139/R21
   "devolviendo_a_bodega_central", // En transito a central (informativo) — feature 139/R21
   "devuelta", // Devueltas — feature 100/R12

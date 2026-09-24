@@ -45,16 +45,10 @@ const TABLA_APROBADA: Record<OrderStatusValue, BucketSinResultado> = {
   por_devolver_a_tienda: "otros",
   por_recolectar_en_tienda: "otros", // R44: nadie va todavia
   incidente: "otros",
-  // Feature 239/R26 (2026-08-19, T1.7): `otros` POR DEFECTO, y es la clasificacion correcta, no
-  // un olvido. Estos buckets solo particionan ordenes SIN gestion vigente hoy; una orden en el
-  // pre-estado tiene gestion del dia (la devolucion que el mensajero acaba de registrar), asi
-  // que cuenta en `devueltas` y no puede caer en `sinRecoger` ni en `enReparto`.
-  devolucion_por_confirmar: "otros",
-  // Feature 235 (2026-08-19): `ayuda_tienda` cae en `otros` y NO en `enReparto`. Es una decision
-  // afirmada aqui porque `BUCKET_POR_ESTATUS` es PARCIAL y absorbe un value nuevo sin quejarse:
-  // los buckets `sinRecoger`/`enReparto` describen el avance normal del dia, y una orden detenida
-  // esperando a que la tienda conteste no es ninguno de los dos.
-  ayuda_tienda: "otros",
+  // ⏳ 2026-09-23 (FICHA 454, R37): aqui estaban `devolucion_por_confirmar: "otros"` (239) y
+  // `ayuda_tienda: "otros"` (235). Los dos salen del catalogo. Sus filas historicas se siguen
+  // clasificando `otros` por el defecto del mapa: lo afirman los dos casos 239/235 de abajo, que se
+  // conservan porque `bucketDeEstatus` recibe el value crudo de la base.
 };
 
 describe("R43 — clasificacion de una orden sin gestion vigente en el dia", () => {

@@ -42,7 +42,16 @@ function okResult(
     Extract<ObtenerHistorialOrdenResult, { status: "ok" }>
   > = {},
 ): Extract<ObtenerHistorialOrdenResult, { status: "ok" }> {
-  return { status: "ok", entradas: [ENTRADA], intentos: 0, umbral: 3, ...overrides };
+  // FICHA 454 (R29, 2026-09-24): el `ok` gana las dos señales del detalle; aqui en reposo.
+  return {
+    status: "ok",
+    entradas: [ENTRADA],
+    intentos: 0,
+    umbral: 3,
+    gestionPendiente: null,
+    ayudaAbierta: false,
+    ...overrides,
+  };
 }
 
 function fakeAction(result: ObtenerHistorialOrdenResult) {
@@ -218,6 +227,8 @@ describe("HistorialOrdenSheet (feature 262, F7/R39) — la descripción nombra l
           entradas: [ENTRADA, CORRECCION],
           intentos: 0,
           umbral: 3,
+          gestionPendiente: null, // FICHA 454 (R29): señales en reposo
+          ayudaAbierta: false,
         })}
       />,
     );

@@ -30,6 +30,8 @@ function fakeService(overrides: Partial<IOrdenHistorialService> = {}): IOrdenHis
       entradas: [entrada()],
       intentos: 0,
       umbral: 3,
+      gestionPendiente: null, // FICHA 454 (R29, 2026-09-24): señales del detalle en reposo
+      ayudaAbierta: false,
     })),
     contarIntentos: vi.fn(async () => 0),
     // Pedido humano 2026-08-27: el contrato gano ademas el conjunto de «ya gestionadas»

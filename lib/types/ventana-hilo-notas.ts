@@ -52,14 +52,15 @@ export const ROLES_CON_HILO = ["adminTienda", "mensajero"] as const satisfies re
  * inventarse una segunda puerta al lado, que es exactamente lo que habia que deshacer.
  */
 export const VENTANA_ESCRITURA = {
-  // `devuelta` = la devolucion ANCLADA (239). `ayuda_tienda` = la solicitud de ayuda viva (235).
-  // Las DOS ramas de lo que `/novedades` lista, y ninguna mas.
-  adminTienda: ["devuelta", "ayuda_tienda"],
-  // `en_reparto` = la orden en la calle. `ayuda_tienda` = la misma orden, con auxilio pedido: el
-  // paquete sigue en su moto y tiene que poder contestarle a la tienda (R34). Ademas, sin este
-  // valor la SEGUNDA solicitud de ayuda sobre la misma orden se rechazaria y el boton quedaria
-  // muerto — lo que el mensajero suele necesitar la segunda vez es AÑADIR contexto.
-  mensajero: ["en_reparto", "ayuda_tienda"],
+  // `devuelta` = la devolucion ANCLADA (239). La otra rama de lo que `/novedades` lista —la
+  // solicitud de ayuda viva— ya NO es un estatus (FICHA 454, U12): la abre el tercer parametro de
+  // `estaEnVentanaDeEscritura`, la DERIVACION «ayuda abierta». Hasta la 454: `"ayuda_tienda"`.
+  adminTienda: ["devuelta"],
+  // `en_reparto` = la orden en la calle, CON o SIN auxilio pedido: desde la 454 la orden con ayuda
+  // abierta sigue `en_reparto`, asi que el mensajero puede contestarle a la tienda (R34) y pedir
+  // ayuda una SEGUNDA vez para AÑADIR contexto sin que la ventana se cierre. Hasta la 454 esa orden
+  // estaba en `"ayuda_tienda"`, que figuraba aqui por eso.
+  mensajero: ["en_reparto"],
 } as const satisfies Record<RolConHilo, readonly OrderStatusValue[]>;
 
 /** R12: `true` si el rol es uno de los dos con acceso al hilo (estrecha el tipo). */
@@ -90,6 +91,17 @@ export function esRolConHilo(rol: RolValue): rol is RolConHilo {
  * pertenencia se comprueba antes y por separado (`autorizarSobreHilo`), asi que lo unico que abre
  * es la ventana TEMPORAL sobre una orden que ya era de ese actor.
  */
-export function estaEnVentanaDeEscritura(rol: RolConHilo, estatusValue: string): boolean {
+/**
+ * FICHA 454 (T1.16, U12/R22): el tercer parametro es la DERIVACION «ayuda abierta». La ayuda deja
+ * de ser el estatus `ayuda_tienda` y pasa a ser un hecho sobre una orden que sigue `en_reparto`:
+ * el `adminTienda` dueño escribe en el hilo mientras la ayuda este ABIERTA, como hoy mientras la
+ * orden esta en `ayuda_tienda`. OBLIGATORIO a proposito: un llamador que no lo resuelva no compila.
+ */
+export function estaEnVentanaDeEscritura(
+  rol: RolConHilo,
+  estatusValue: string,
+  ayudaAbierta: boolean,
+): boolean {
+  if (rol === "adminTienda" && ayudaAbierta) return true;
   return (VENTANA_ESCRITURA[rol] as readonly string[]).includes(estatusValue);
 }

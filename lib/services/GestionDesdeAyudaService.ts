@@ -13,7 +13,6 @@ import {
   compensarEvidencias,
   subirEvidenciasCompensadas,
 } from "@/lib/services/evidencias-compensadas";
-import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 // FEATURE 276 (T5, R1/R3/R4/R7): la MISMA regla y el MISMO motivo que el panel del mensajero. El
 // modulo del tope es puro y el motivo vive en `mensajes-bloqueo`: dos superficies, un solo texto.
 import { alcanzaElTope, permitidoEnElTope } from "@/lib/types/tope-intentos";
@@ -88,8 +87,8 @@ export interface GestionDesdeAyudaDeps {
   historial: Pick<IOrdenHistorialService, "contarIntentos">;
 }
 
-/** El estatus del que se resuelve. Uno solo, y por eso la comprobacion es una igualdad. */
-const ESTATUS_AYUDA = "ayuda_tienda";
+// FICHA 454 (T1.15): aqui vivia `ESTATUS_AYUDA = "ayuda_tienda"`. Se resuelve desde la ayuda
+// ABIERTA (derivacion `ayuda-abierta.ts`), sobre una orden que sigue `en_reparto`.
 
 /** El unico rol que puede resolver por esta via (R19/R20). */
 const ROL_AUTORIZADO = "adminTienda";
@@ -138,7 +137,8 @@ export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
     // 3) R23 — la orden tiene que estar EN AYUDA. Se comprueba aqui, antes de subir nada, para no
     //    dejar fotos huerfanas en el bucket por el camino previsible. (La guarda del WHERE del
     //    repo es la segunda red, no la primera: ver el paso 8.)
-    if (acceso.orden.estatusValue !== ESTATUS_AYUDA) {
+    // FICHA 454 (T1.15): «en ayuda» = ayuda ABIERTA (derivacion), no el estatus `ayuda_tienda`.
+    if (!acceso.orden.ayudaAbierta) {
       return { status: "conflict", motivo: MSG_FUERA_DE_AYUDA };
     }
 
@@ -147,7 +147,7 @@ export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
     //    en `rescatarOrdenAyuda`: quien no puede decir nada sobre la orden tampoco puede
     //    resolverla, y si algun dia la ventana se estrecha, esta via se estrecha CON ella sin que
     //    nadie tenga que acordarse.
-    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue)) {
+    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayudaAbierta)) {
       return { status: "forbidden" };
     }
 
@@ -215,21 +215,9 @@ export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
       }
     }
 
-    // 6) FALLO CERRADO al resolver el catalogo. Si el seed no tiene alguno de los dos values, la
-    //    operacion se rechaza ENTERA sin mover nada: una escritura a medias sobre el estado es
-    //    peor que un error visible. Mismo criterio que `rescatarOrdenAyuda` y `CierreDiaService`.
-    //
-    //    ⚠️ R26 — EL DESTINO SALE DEL MAPA UNICO `ESTATUS_POR_RESULTADO` (239), no de
-    //    `findEstatusIdByValue(input.resultado)`. Hasta la 239 el destino se derivaba por
-    //    IDENTIDAD DE NOMBRE y funcionaba de casualidad; aquella feature rompio la identidad para
-    //    `devuelta`, y volver a la coincidencia de nombres reabre el cobro prematuro que cerro.
-    const [estatusAyudaId, estatusDestinoId] = await Promise.all([
-      this.deps.ordenRepo.findEstatusIdByValue(ESTATUS_AYUDA),
-      this.deps.ordenRepo.findEstatusIdByValue(estatusDestinoDeResultado(input.resultado)),
-    ]);
-    if (estatusAyudaId === null || estatusDestinoId === null) {
-      return { status: "validation_error", fieldErrors: { estatus: [MSG_CATALOGO] } };
-    }
+    // 6) FICHA 454 (T1.15): aqui se resolvian los ids de `ayuda_tienda` y del destino para la
+    //    transicion. Sin transicion ya no hacen falta: la gestion queda PENDIENTE de confirmar y
+    //    el destino lo aplica la APROBACION del cierre del mensajero (`ESTATUS_POR_RESULTADO`).
 
     // 7) R15/R16/R17 — las fotos, por el MISMO mecanismo compensado que el camino del mensajero
     //    (modulo `evidencias-compensadas`, extraido en esta ficha). Suben ANTES de la transaccion:
@@ -252,8 +240,6 @@ export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
     try {
       gestionId = await this.deps.gestionRepo.crearGestionDesdeAyuda({
         ordenId: input.ordenId,
-        estatusAyudaId,
-        estatusDestinoId,
         // 💰 R3: EL MENSAJERO, no el actor. Es lo unico que hace que `crearCierre` la vincule y
         // que el dinero salga solo por los cinco feeds. Con el id de la tienda aqui, la fila no
         // entraria en ningun cierre nunca y seria invisible y gratis.

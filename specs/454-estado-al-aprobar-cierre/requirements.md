@@ -238,6 +238,18 @@
   salvo la visibilidad de la gestión pendiente descrita en R29-R32.
 - **R65 (avisos diarios)** — El aviso diario de novedades DEBE contar las ayudas abiertas donde hoy cuenta las
   órdenes en `ayuda_tienda`.
+  > **Se cumple por vacuidad — medido el 2026-09-24 (revisión T4.3, m2).** La premisa «hoy cuenta las
+  > órdenes en `ayuda_tienda`» es falsa: no existe ningún aviso diario que las cuente. El aviso diario es
+  > `app/api/cron/avisos-diarios/route.ts` → `AvisosDiariosService` → `AvisoAgregadoRepository`, y su único
+  > conteo de novedades es `countNovedadesByTienda(tiendaId, "devolucion")`. Prueba, sobre `dev` antes de la
+  > ficha (`f05b7c3f`) y sobre la rama: `git grep -n -i "ayuda" <ref> -- app/api/cron/avisos-diarios
+  > lib/services/AvisosDiariosService.ts lib/interfaces/services/IAvisosDiariosService.ts
+  > lib/config/avisos-diarios.ts lib/repositories/AvisoAgregadoRepository.ts` → **0 líneas** (exit 1) en los
+  > dos. Si algún día un aviso diario cuenta la ayuda, tendrá que usar la derivación de
+  > `lib/repositories/ayuda-abierta.ts` (la guardia `gestion-pendiente-unica-fuente` lo obliga: prohíbe
+  > nombrar `ayuda_solicitada` en un `where` fuera de ese módulo). El conteo de la
+  > pestaña de ayuda de `/novedades`, que SÍ pasa por la derivación, lo afirma
+  > `tests/integration/db/454/novedades-predicado-sql-real.test.ts`.
 
 ---
 

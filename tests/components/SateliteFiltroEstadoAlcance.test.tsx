@@ -83,7 +83,10 @@ vi.mock("@/hooks/useToast", () => ({
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
 
 import { listarOrderStatusOk } from "@/tests/fixtures/order-status-catalogo";
-import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
+import {
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_LABELS_RETIRADOS,
+} from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
@@ -287,8 +290,10 @@ describe("bodega satélite · el desplegable de estado es el de la central", () 
     // Lo que el humano señaló en la captura de la central y no estaba aquí: el catálogo.
     expect(opciones).toContain(INALCANZABLE);
     expect(opciones).toContain(ORDER_STATUS_LABELS.entregada);
-    expect(opciones).toContain(ORDER_STATUS_LABELS.ayuda_tienda);
-    expect(opciones).toContain(ORDER_STATUS_LABELS.devolucion_por_confirmar);
+    // ⏳ 2026-09-23 (FICHA 454, R37): aqui se afirmaba que el desplegable ofrecia la ayuda a la
+    // tienda y el pre-estado de la devolucion. Salen del catalogo: ya no se ofrecen.
+    expect(opciones).not.toContain(ORDER_STATUS_LABELS_RETIRADOS.ayuda_tienda);
+    expect(opciones).not.toContain(ORDER_STATUS_LABELS_RETIRADOS.devolucion_por_confirmar);
     expect(opciones).toContain(ORDER_STATUS_LABELS.devolviendo_a_bodega_central);
     expect(opciones.length).toBeGreaterThan(ESTADOS_BODEGA_SATELITE.length);
 

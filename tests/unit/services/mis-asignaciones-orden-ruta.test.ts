@@ -85,6 +85,11 @@ function build(rows: MiAsignacionRow[], rutaPrevia: RutaOptimizadaDTO | null) {
     findMisAsignacionesByIds: vi.fn(async () => []),
     contarEntregadas: vi.fn(async () => 7),
     sumMontoCobrarGestionadas: vi.fn(async () => 500),
+    // FICHA 454 (R6/R22): ni pendientes ni ayudas en estas filas — el reordenado es lo medido.
+    findPendientesYAyudas: vi.fn(async () => ({
+      conGestionPendiente: new Set<string>(),
+      conAyudaAbierta: new Set<string>(),
+    })),
   } as unknown as IGestionOrdenRepository;
 
   const rutaRepo = {

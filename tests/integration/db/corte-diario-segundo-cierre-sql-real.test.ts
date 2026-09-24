@@ -595,17 +595,30 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
       const cuarentena = await sembrarCierre(tx, uno, "aprobado");
       await ponerLaBaseEnCero(tx, cuarentena);
 
-      // MENSAJERO UNO: una guia en reparto, otra en ayuda_tienda, una gestion suelta, una gestion
-      // ANULADA (no es trabajo que cobrar) y una orden RESERVADA para mañana (246: protegida).
+      // MENSAJERO UNO: una guia en reparto, otra con la AYUDA ABIERTA, una gestion suelta, una
+      // gestion ANULADA (no es trabajo que cobrar) y una orden RESERVADA para mañana (246).
+      //
+      // ⏳ 2026-09-23 (FICHA 454, R27): la ayuda deja de ser el estado `ayuda_tienda`; la orden con
+      // ayuda abierta esta `en_reparto` con su evento `ayuda_solicitada`, y el corte la barre igual,
+      // con el origen REAL (`en_reparto`) en `cierre_sin_gestion`. Antes: sembrada en `ayuda_tienda`.
       const enReparto = await sembrarOrden(tx, "c3a-rep", {
         estatusId: catalogo.enReparto,
         mensajeroAsignadoId: uno,
         fechaReparto: null,
       });
       const enAyuda = await sembrarOrden(tx, "c3a-ayu", {
-        estatusId: catalogo.ayuda,
+        estatusId: catalogo.enReparto,
         mensajeroAsignadoId: uno,
         fechaReparto: null,
+      });
+      await tx.ordenEvento.create({
+        data: {
+          ordenId: enAyuda,
+          tipo: "ayuda_solicitada",
+          mensajeroId: uno,
+          actorUsuarioId: uno,
+          actorRol: "mensajero",
+        },
       });
       const reservada = await sembrarOrden(tx, "c3a-res", {
         estatusId: catalogo.enReparto,
@@ -715,8 +728,8 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     expect(medido.cierreDos).not.toBeNull();
     expect(medido.cierreUno).not.toBe(medido.cierreDos);
 
-    // ⭑ EL BARRIDO: `en_reparto` y `ayuda_tienda` van a `sin_gestionar`; la RESERVADA para mañana
-    // se queda donde esta (246/R11, y sigue vigente tras la 271).
+    // ⭑ EL BARRIDO: la de `en_reparto` y la de la ayuda abierta van a `sin_gestionar`; la
+    // RESERVADA para mañana se queda donde esta (246/R11, y sigue vigente tras la 271).
     expect(medido.ordenesTras1[medido.ids.enReparto]).toBe(catalogo.sinGestionar);
     expect(medido.ordenesTras1[medido.ids.enAyuda]).toBe(catalogo.sinGestionar);
     expect(medido.ordenesTras1[medido.ids.reservada]).toBe(catalogo.enReparto);
@@ -725,7 +738,7 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     expect(medido.registrosTras1).toEqual(
       [
         `${medido.ids.enReparto}|${catalogo.enReparto}`,
-        `${medido.ids.enAyuda}|${catalogo.ayuda}`,
+        `${medido.ids.enAyuda}|${catalogo.enReparto}`, // 454: su origen REAL es `en_reparto`
       ].sort(),
     );
 

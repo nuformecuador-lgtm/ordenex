@@ -125,6 +125,9 @@ const TRES: CierreOrdenSinGestion[] = [
     destinatario: "Carla Vega",
     producto: "Bulto",
     tiendaNombre: "Tienda Z",
+    // FICHA 454 (2026-09-23, R40): `ayuda_tienda` salio del catalogo, pero una barrida HISTORICA
+    // conserva ese origen en `cierre_sin_gestion` y se sigue leyendo «Ayuda de la tienda» (el
+    // tipo lo admite como `OrderStatusRetirado`).
     estatusOrigen: "ayuda_tienda",
   }),
   sinGestion({

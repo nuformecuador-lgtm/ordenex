@@ -330,9 +330,18 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
                     porDevolverATiendaId: estatus.get("por_devolver_a_tienda") as string,
                     centralZonaId: fks.zonaId,
                   },
-                  anclajeDevolucion: {
-                    preEstadoId: estatus.get("devolucion_por_confirmar") as string,
-                    devueltaId: estatus.get("devuelta") as string,
+                  // ⏳ 2026-09-23 (FICHA 454, T1.7): aqui viajaba `anclajeDevolucion` (239); el input de
+                  // la aprobacion lo sustituye por `aplicacionGestiones` (obligatorio). Solo cambia el
+                  // argumento.
+                  aplicacionGestiones: {
+                    enRepartoId: estatus.get("en_reparto") as string,
+                    destinoPorResultado: {
+                      entregada: estatus.get("entregada") as string,
+                      reprogramada: estatus.get("reprogramada") as string,
+                      rechazada: estatus.get("rechazada") as string,
+                      devuelta: estatus.get("devuelta") as string,
+                      incidente: estatus.get("incidente") as string,
+                    },
                   },
                   confirmacionFisica: [],
                   indemnizaciones: [],

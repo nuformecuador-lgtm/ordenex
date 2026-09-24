@@ -132,6 +132,10 @@ const ALLOWLIST = new Set([
   "rastreo-hitos-exhaustivo.guardia.test.ts", // afirma la tabla firmada y el caso huerfano
   "rastreo-publico-service.test.ts", // proyeccion esperada de la linea de tiempo
   "rastreo-publico.int.test.ts", // idem, con datos
+  // ⏳ 2026-09-23 (FICHA 454): la caracterizacion C27 del rastreo afirma la linea de tiempo PUBLICA
+  // (`["en_bodega", "no_entregado"]`): es el MISMO hito firmado de las cuatro entradas de arriba, no
+  // el value de `order_status`. Entro rojo con la Fase 0 (`3603d199`), que no corrio el gate completo.
+  "rastreo-y-historial-legado.test.ts",
 ]);
 
 // Feature 153 (R17) — censo de la ETIQUETA antigua. Se busca el literal EXACTO entre

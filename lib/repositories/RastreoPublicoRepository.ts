@@ -1,6 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
 
+import { sqlUltimaGestionPendienteDeOrden } from "@/lib/repositories/gestion-pendiente";
 import type {
+  GestionPendienteRastreoFila,
   IRastreoPublicoRepository,
   OrdenRastreoFila,
   TransicionRastreoFila,
@@ -18,7 +20,9 @@ import type {
 // `gestionOrdenId` sea VERIFICABLE por una guardia, no una promesa. Un `include` o una
 // fila completa proyectada despues volveria la fuga cuestion de memoria.
 
-type RastreoPrismaClient = Pick<PrismaClient, "orden" | "ordenHistorialEstado">;
+// FICHA 454 (T1.19): + `$queryRaw`, para la gestion pendiente (una consulta con su lista de
+// columnas EXPLICITA: `resultado` y `created_at`, y nada mas).
+type RastreoPrismaClient = Pick<PrismaClient, "orden" | "ordenHistorialEstado" | "$queryRaw">;
 
 export class RastreoPublicoRepository implements IRastreoPublicoRepository {
   constructor(private readonly prisma: RastreoPrismaClient) {}
@@ -35,6 +39,14 @@ export class RastreoPublicoRepository implements IRastreoPublicoRepository {
       telefonoDest: fila.telefonoDest,
       deletedAt: fila.deletedAt,
     };
+  }
+
+  async buscarGestionPendiente(ordenId: string): Promise<GestionPendienteRastreoFila | null> {
+    const filas = await this.prisma.$queryRaw<{ resultado: string; created_at: Date }[]>(
+      sqlUltimaGestionPendienteDeOrden(ordenId),
+    );
+    const f = filas[0];
+    return f === undefined ? null : { resultado: f.resultado, createdAt: f.created_at };
   }
 
   async listarTransiciones(ordenId: string): Promise<readonly TransicionRastreoFila[]> {

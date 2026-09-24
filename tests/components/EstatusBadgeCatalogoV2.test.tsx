@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
-import { EstatusBadge, ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
+import { EstatusBadge, ORDER_STATUS_LABELS, ORDER_STATUS_LABELS_RETIRADOS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 
 // Feature 154 (R29/R30/R31) — presentacion de los DOS estados nuevos.
@@ -81,9 +81,15 @@ describe("154/R31 — un estatus fuera del catalogo del build no rompe la vista"
 // Feature 235 (T1.4, R37) — la etiqueta y la variante del estatus de la AYUDA, EXACTAS y escritas
 // a mano. No se derivan del mapa: si se derivaran, este bloque diria que el mapa coincide consigo
 // mismo (el fallo «aserción contra su propia fuente» que ya costo un tope mal validado en el repo).
-describe("235/R37 — `ayuda_tienda`: etiqueta y variante firmadas (P1, 2026-08-19)", () => {
+//
+// ⏳ 2026-09-23 (FICHA 454, R37/R40): el estado sale del catalogo, asi que ya no esta en
+// `ORDER_STATUS_LABELS`. Sus filas HISTORICAS se siguen leyendo igual —misma etiqueta y misma
+// variante— por `ORDER_STATUS_LABELS_RETIRADOS`: los tres casos de este bloque se conservan y
+// ahora afirman esa lectura historica (R40). El primero cambia su fuente, no su literal.
+describe("235/R37 -> 454/R40 — `ayuda_tienda` historico: etiqueta y variante firmadas", () => {
   it("la etiqueta dice A QUIEN se le pidio la ayuda, no solo que se pidio", () => {
-    expect(ORDER_STATUS_LABELS.ayuda_tienda).toBe("Ayuda solicitada a la tienda");
+    expect(ORDER_STATUS_LABELS_RETIRADOS.ayuda_tienda).toBe("Ayuda solicitada a la tienda");
+    expect(Object.keys(ORDER_STATUS_LABELS)).not.toContain("ayuda_tienda");
     render(<EstatusBadge value="ayuda_tienda" />);
     expect(screen.getByText("Ayuda solicitada a la tienda")).toBeInTheDocument();
   });
@@ -115,8 +121,8 @@ describe("154 — el mapa de presentacion sigue cubriendo el catalogo EXACTO", (
   // se retira el estado interno de fulfillment en bodega). El conteo se mantiene escrito
   // a mano a proposito: es la red que caza un sobrante en el mapa de presentacion, que el
   // `Record<OrderStatusValue, ...>` solo caza si FALTA una clave, no si sobra en runtime.
-  it("tiene una etiqueta por cada uno de los 22 values, sin sobrantes", () => {
+  it("tiene una etiqueta por cada uno de los 20 values, sin sobrantes", () => {
     expect(Object.keys(ORDER_STATUS_LABELS).sort()).toEqual([...ORDER_STATUS_SEED].sort());
-    expect(Object.keys(ORDER_STATUS_LABELS)).toHaveLength(22); // +1: 157 (recolectando); +1: 239 (devolucion_por_confirmar); +1: 235 (ayuda_tienda, 2026-08-19)
+    expect(Object.keys(ORDER_STATUS_LABELS)).toHaveLength(20); // +1: 157 (recolectando); +1: 239 (devolucion_por_confirmar); +1: 235 (ayuda_tienda, 2026-08-19); -2: 454 (2026-09-23, los dos retirados)
   });
 });

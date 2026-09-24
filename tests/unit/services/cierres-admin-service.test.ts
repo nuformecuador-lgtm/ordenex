@@ -152,6 +152,12 @@ const ESTATUS_IDS: Record<string, string | null> = {
   // FEATURE 276 (T9, R21): el DESTINO del rechazo por agotamiento de intentos. Entra en la MISMA
   // condicion que los tres de la 109, asi que sin el la config de liberacion no se cablea.
   rechazada: "s-rechazada",
+  // FICHA 454 (T1.7): los de la APLICACION DE GESTIONES al aprobar — el origen `en_reparto` y el
+  // destino de cada resultado. Fallo cerrado como el de la 239: sin cualquiera, no se aprueba.
+  en_reparto: "s-en-reparto",
+  entregada: "s-entregada",
+  reprogramada: "s-reprogramada",
+  incidente: "s-incidente",
 };
 
 function newService(
@@ -1151,9 +1157,14 @@ describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestion
         sin_gestionar: null,
         en_bodega_central: "s-b",
         en_bodega_satelite: "s-bs",
-        // Feature 239: los del anclaje SI estan; lo que este caso mide es el defensivo de la 109.
-        devolucion_por_confirmar: "s-devolucion-por-confirmar",
+        // Feature 239 -> FICHA 454: los de la aplicacion SI estan; lo que este caso mide es el
+        // defensivo de la 109.
+        en_reparto: "s-en-reparto",
+        entregada: "s-entregada",
+        reprogramada: "s-reprogramada",
+        rechazada: "s-rechazada",
         devuelta: "s-devuelta",
+        incidente: "s-incidente",
       },
     });
 
@@ -1171,26 +1182,39 @@ describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestion
 // para siempre —invisible, sin reloj y sin que nadie se entere—, que es el estado del que esta
 // feature viene a sacarnos.
 describe("Feature 239 · aprobarCierre — config del ANCLAJE de la devolucion (R4/R9)", () => {
-  it("R4: resuelve el pre-estado y `devuelta` y los pasa al repo", async () => {
+  // ⏳ 2026-09-23 (FICHA 454, T1.7/T1.1): el anclaje de la 239 (pre-estado
+  // `devolucion_por_confirmar` -> `devuelta`) se sustituye por la APLICACION DE GESTIONES: al
+  // aprobar, cada gestion de calle del cierre lleva la orden de `en_reparto` a su destino, y la
+  // `devuelta` va DIRECTA a `devuelta`. El fallo cerrado (R9 de la 239) se conserva, ampliado a los
+  // seis ids.
+  it("454/T1.7: resuelve `en_reparto` y el destino de cada resultado y los pasa al repo", async () => {
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service, ordenRepo } = newService({ repo });
 
     await service.aprobarCierre("c1", MAESTRO);
 
     const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(arg.anclajeDevolucion).toEqual({
-      preEstadoId: "s-devolucion-por-confirmar",
-      devueltaId: "s-devuelta",
+    expect(arg.aplicacionGestiones).toEqual({
+      enRepartoId: "s-en-reparto",
+      destinoPorResultado: {
+        entregada: "s-entregada",
+        reprogramada: "s-reprogramada",
+        rechazada: "s-rechazada",
+        devuelta: "s-devuelta",
+        incidente: "s-incidente",
+      },
     });
-    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("devolucion_por_confirmar");
+    expect(arg).not.toHaveProperty("anclajeDevolucion");
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("en_reparto");
     expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("devuelta");
+    expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devolucion_por_confirmar");
   });
 
-  it("R9: catalogo SIN el pre-estado -> la aprobacion NO ocurre y no hay efectos parciales", async () => {
+  it("R9: catalogo SIN `en_reparto` -> la aprobacion NO ocurre y no hay efectos parciales", async () => {
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service } = newService({
       repo,
-      estatusIds: { ...ESTATUS_IDS, devolucion_por_confirmar: null },
+      estatusIds: { ...ESTATUS_IDS, en_reparto: null },
     });
 
     const r = await service.aprobarCierre("c1", MAESTRO);
@@ -1227,6 +1251,8 @@ describe("Feature 239 · aprobarCierre — config del ANCLAJE de la devolucion (
     const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.nuevoEstado).toBe("rechazado");
     expect(arg.anclajeDevolucion).toBeUndefined();
+    // FICHA 454: tampoco aplica gestiones (el rechazo las deja pendientes, R13).
+    expect(arg.aplicacionGestiones).toBeUndefined();
   });
 });
 
@@ -1353,7 +1379,7 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
         // predicados distintos — los feeds 42/43/44 (sin filtro) y la guardia de cobertura de
         // indemnizaciones + su feed (`resultado: "incidente"`). Sin honrarlo, la guardia veria
         // gestiones `entregada` como si fueran incidentes.
-        findMany: vi.fn(async (args?: { where?: { resultado?: string } }) =>
+        findMany: vi.fn(async (args?: { where?: { resultado?: string; eventos?: unknown } }) =>
           (gestiones as GestionFixture[])
             .map((g, i) => ({
               id: `g${i}`,
@@ -1364,7 +1390,11 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
             }))
             .filter((g) =>
               args?.where?.resultado === undefined ? true : g.resultado === args.where.resultado,
-            ),
+            )
+            // FICHA 454 (T1.7): el doble HONRA tambien el filtro de «gestion de calle con evento de
+            // registro» de la aplicacion al aprobar. Estas gestiones son LEGADAS (sin evento), asi que
+            // la aplicacion no encuentra nada y la suite sigue midiendo solo el dinero.
+            .filter(() => args?.where?.eventos === undefined),
         ),
         updateMany: vi.fn(async () => ({ count: 1 })),
       },

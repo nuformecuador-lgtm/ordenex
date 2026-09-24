@@ -17,7 +17,7 @@ import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 73 (R11/R12/R13) — el SERVICE propaga la causa a los datos de la gestion, en su
 // campo propio y SIN tocar el texto libre. Dobles del repo/storage (nada de DB real): lo que
-// se afirma es el `GestionOrdenData` EMITIDO hacia `crearGestionYTransicionar`.
+// se afirma es el `GestionOrdenData` EMITIDO hacia `registrarGestionPendiente`.
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 
@@ -58,7 +58,10 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     setOrdenEnGestion: vi.fn(async () => true),
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
-    crearGestionYTransicionar: vi.fn(async () => "g1"),
+    registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev-g1" })),
+    // FICHA 454: la guarda de gestionabilidad pregunta por gestion pendiente / ayuda abierta.
+    findBloqueoDeGestion: vi.fn(async () => null),
+    findPendientesYAyudas: vi.fn(async () => ({ conGestionPendiente: new Set<string>(), conAyudaAbierta: new Set<string>() })),
     reprogramarDesdeDevuelta: vi.fn(async () => true), // feature 100: no lo usa MisAsignacionesService
     // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
     // servicio); el doble lo declara porque la interfaz lo exige.
@@ -107,7 +110,7 @@ function newService(repo: IGestionOrdenRepository) {
 }
 
 function gestionEmitida(repo: IGestionOrdenRepository): GestionOrdenData {
-  const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  const call = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
   return call.gestion as GestionOrdenData;
 }
 
@@ -139,20 +142,22 @@ describe("Feature 73 · el service persiste la causa en su campo propio (R11)", 
   it("R13: la causa viaja DENTRO de `gestion` -> misma tx que el estado destino (sin firma nueva)", async () => {
     const repo = fakeRepo();
     await newService(repo).gestionar(devolucion(), MENSAJERO);
-    const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
     // Un solo argumento con la gestion (con su causa) + el estado destino. Feature 99: ya NO hay
     // transicion de seguimiento inmediata (se relocalizo al cron SLA). Feature 239 (2026-08-19):
     // ese destino es el PRE-ESTADO; la causa viaja igual y en la misma tx, que es lo que mide
     // este caso.
     expect(call.gestion.causaDevolucion).toBe("wrong_address");
-    expect(call.nuevoEstatusId).toBe("os-devolucion-por-confirmar");
+    // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO pasado al repositorio. Registrar ya
+    // no transiciona: el destino lo aplica la aprobacion del cierre.
+    expect(call).not.toHaveProperty("nuevoEstatusId");
     expect(call).not.toHaveProperty("seguimiento");
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("R13: si la tx falla, el service propaga el fallo (no hay causa persistida a medias)", async () => {
     const repo = fakeRepo({
-      crearGestionYTransicionar: vi.fn(async () => {
+      registrarGestionPendiente: vi.fn(async () => {
         throw new Error("fallo de la tx de gestion");
       }),
     });

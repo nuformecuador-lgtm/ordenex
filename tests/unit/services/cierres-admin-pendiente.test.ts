@@ -122,12 +122,14 @@ function newService(
     // Feature 271 (T7.1, R48): el estado de bloqueo del mensajero viaja en la fila del cierre.
     contarCierresAbiertosPorMensajero: vi.fn(async () => new Map()),
     findUsuarioZonaId: vi.fn(async () => "z-sat"),
-    // Feature 239 (T2.1, R9): los DOS ids del ANCLAJE son obligatorios al aprobar — sin ellos la
-    // aprobacion no ocurre. Los demas estados (la config OPCIONAL de la 109/139) siguen
-    // resolviendo a `null`, que es lo que esta suite necesita: mide el PENDIENTE, no la
-    // liberacion.
+    // Feature 239 (T2.1, R9) -> FICHA 454 (T1.7): los SEIS ids de la APLICACION DE GESTIONES son
+    // obligatorios al aprobar — sin ellos la aprobacion no ocurre. Los demas estados (la config
+    // OPCIONAL de la 109/139) siguen resolviendo a `null`, que es lo que esta suite necesita: mide
+    // el PENDIENTE, no la liberacion.
     findEstatusIdByValue: vi.fn(async (v: string) =>
-      v === "devolucion_por_confirmar" || v === "devuelta" ? `s-${v}` : null,
+      ["en_reparto", "entregada", "reprogramada", "rechazada", "devuelta", "incidente"].includes(v)
+        ? `s-${v}`
+        : null,
     ),
   } as unknown as IOrdenRepository;
   const signedUrls = {

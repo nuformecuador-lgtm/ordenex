@@ -21,6 +21,9 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       findUnique: vi.fn(),
     },
     ordenHistorialEstado: { createMany: vi.fn() },
+    // FICHA 454 (R29, 2026-09-24): el listado de la bodega anota las señales de la gestion
+    // pendiente y la ayuda con UNA consulta SQL. Sin filas: señales en reposo.
+    $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn(),
     ...overrides,
   };
@@ -173,6 +176,10 @@ describe("OrdenRepository.findRecepcionSateliteByZona (R6/R8/R9)", () => {
       // Feature 262/B8 (R16): el dia de reparto por orden, ya serializado a `YYYY-MM-DD`. Aqui la
       // fila sembrada no lo trae, asi que `toFechaISO` devuelve `null`.
       fechaRepartoISO: null,
+      // FICHA 454 (R29, 2026-09-24): el contrato CRECE en las dos señales que la pantalla pinta
+      // junto al estado. Aqui el doble de `$queryRaw` no devuelve filas: en reposo.
+      gestionPendiente: null,
+      ayudaAbierta: false,
       // FICHA 349 — LO QUE **NO** ESTA EN ESTE LITERAL ES LA MITAD DEL CONTRATO: no hay
       // `fleteConIva`, ni `comisionConIva`, ni `fleteOrigen`, y `relaciones.tienda` no lleva
       // `email`, `telefono` ni una `tarifa` distinta de `null`. El `toEqual` es EXACTO, asi que

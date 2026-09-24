@@ -30,13 +30,15 @@ const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29 (Q5 confirmada)
   recolectando: "Recolectando", // feature 157 (ampliacion): ya tiene mensajero y va en camino
   incidente: "Incidente", // feature 154/R30 (Q5 confirmada)
-  // Feature 239/R26 (2026-08-19): el catalogo pasa de 20 a 21 values. La etiqueta nombra a quien
-  // le toca actuar (la bodega confirma al aprobar el cierre), no el desenlace.
-  devolucion_por_confirmar: "Devolución por confirmar",
-  // Feature 235/R37 (2026-08-19): el catalogo pasa de 21 a 22 values. La etiqueta dice A QUIEN se
-  // le pidio la ayuda, que es lo que no se deduce de «Ayuda solicitada» a secas cuando maestro y
-  // admin la ven en /ordenes junto a otros veintiun estados.
-  ayuda_tienda: "Ayuda solicitada a la tienda",
+  // ⏳ 2026-09-23 (FICHA 454, R37): aqui estaban `devolucion_por_confirmar` (239/R26) y
+  // `ayuda_tienda` (235/R37). Salen del catalogo; su lectura HISTORICA se afirma abajo (R40), con
+  // los mismos literales escritos a mano.
+};
+
+/** 454/R40 — la lectura de siempre de los dos estados retirados, escrita a mano. */
+const LABELS_RETIRADOS_ESPERADAS: Record<string, string> = {
+  devolucion_por_confirmar: "Devolución por confirmar", // 239/R26
+  ayuda_tienda: "Ayuda solicitada a la tienda", // 235/R37
 };
 
 describe("estatusLabel — mapa de presentación value → label (R17)", () => {
@@ -54,6 +56,13 @@ describe("estatusLabel — mapa de presentación value → label (R17)", () => {
   // Feature 154/R30: el cierre en error se muestra con etiqueta legible en español.
   it("154/R30: incidente se muestra como “Incidente”", () => {
     expect(estatusLabel("incidente")).toBe("Incidente");
+  });
+
+  it("454/R40: una fila histórica de un estado RETIRADO se lee con su etiqueta de siempre, no cruda", () => {
+    for (const [value, label] of Object.entries(LABELS_RETIRADOS_ESPERADAS)) {
+      expect(estatusLabel(value)).toBe(label);
+      expect(ORDER_STATUS_SEED as readonly string[]).not.toContain(value);
+    }
   });
 
   // Feature 154/R31: un value fuera del catálogo conocido por el build NO rompe la vista.

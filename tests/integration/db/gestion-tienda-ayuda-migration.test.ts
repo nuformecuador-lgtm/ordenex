@@ -241,15 +241,17 @@ describe("Feature 237 · el codigo y la base dicen lo mismo (R5/R6/R43)", () => 
     expect([...ORIGEN_TIPOS_CON_GESTION]).toEqual(["gestion", "deshacer_gestion"]);
   });
 
-  it("R1/R45: la familia produce EXACTAMENTE dos aristas, y las dos salen de `ayuda_tienda`", () => {
-    // El valor de enum y el grafo tienen que decir lo mismo: si alguien declarara una tercera
-    // arista con este `via` (entregar, devolver o reportar incidente desde ayuda), aqui se veria.
+  // ⏳ 2026-09-23 (FICHA 454, design §2): las dos aristas salian de `ayuda_tienda` (#65/#66). El
+  // estado se retira y la gestion de la tienda desde una ayuda abierta se APLICA al aprobar el
+  // cierre desde `en_reparto` (#71/#72, mismo par que #13/#15). Lo que el caso vigila no cambia:
+  // EXACTAMENTE dos aristas con esta familia, y ninguna tercera (entregar, devolver, incidente).
+  it("R1/R45: la familia produce EXACTAMENTE dos aristas, y las dos salen de `en_reparto` (454)", () => {
     const conEstaVia = Object.entries(TRANSICIONES).flatMap(([origen, destinos]) =>
       destinos.filter((d) => d.via === FAMILIA).map((d) => `${origen} -> ${d.to}`),
     );
     expect(conEstaVia.sort()).toEqual([
-      "ayuda_tienda -> rechazada",
-      "ayuda_tienda -> reprogramada",
+      "en_reparto -> rechazada",
+      "en_reparto -> reprogramada",
     ]);
   });
 });

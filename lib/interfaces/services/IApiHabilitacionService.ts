@@ -69,6 +69,11 @@ export interface ResultadoFilaHabilitacion {
   resultado: ResultadoHabilitacion;
   /** `order_status.value` en el que la orden quedo; `null` cuando la fila fallo. */
   estado: string | null;
+  /**
+   * FICHA 454 (R24, contrato nuevo): `true` si esta fila CERRO una ayuda abierta (la orden sigue
+   * `en_reparto`: no hubo cambio de estado). `false` en la rama B y en los errores.
+   */
+  ayudaCerrada: boolean;
   error: ErrorHabilitacion | null;
 }
 

@@ -147,7 +147,10 @@ describe("GestionOrdenRepository.contarEntregadas (feature 61)", () => {
     const arg = (count.mock.calls[0] as unknown[])[0] as { where: Record<string, unknown> };
     expect(arg.where.mensajeroAsignadoId).toBe("m1");
     expect(arg.where.deletedAt).toBeNull();
-    expect(arg.where.estatus).toEqual({ value: "entregada" });
+    // ⏳ 2026-09-23 (FICHA 454, T1.12/R53): antes `{ value: "entregada" }`. La entrega de HOY sigue
+    // `en_reparto` (pendiente de confirmar) hasta que se aprueba su cierre; el KPI la cuenta igual.
+    // Lo que decide es la gestion `entregada` vigente de hoy (caso de abajo).
+    expect(arg.where.estatus).toEqual({ value: { in: ["entregada", "en_reparto"] } });
   });
 
   // El KPI es de JORNADA, no acumulado: el acote va sobre la GESTION vigente que entrego
@@ -215,25 +218,31 @@ describe("GestionOrdenRepository.sumMontoCobrarGestionadas (KPI 'Total a cobrar'
     // FEATURE 235 (R21, 2026-08-19): de UN value a DOS. El otro sumando (`porCobrar`) se calcula
     // sobre `porGestionar UNION conAyuda`, asi que el conjunto «en la mano» crecio y esta red
     // tenia que crecer con el. Censo CERRADO: uno de mas dejaria fuera dinero que si se gestiono.
-    expect(arg.where.estatus).toEqual({ value: { notIn: ["en_reparto", "ayuda_tienda"] } });
+    // ⏳ 2026-09-23 (FICHA 454, T1.12/R53): «no esta en la mano» = fuera de esos estados O con una
+    // gestion PENDIENTE de confirmar (sigue `en_reparto` pero ya se gestiono y el portal no la cuenta
+    // en `porCobrar`). La condicion pasa a un `OR` de las dos.
+    const or = arg.where.OR as Record<string, unknown>[];
+    // Y `ayuda_tienda` sale de la lista (R37): la orden con ayuda abierta sigue `en_reparto`.
+    expect(or[0]).toEqual({ estatus: { value: { notIn: ["en_reparto"] } } });
+    expect(or[1]).toMatchObject({ estatus: { value: "en_reparto" } });
     expect(arg.where.mensajeroAsignadoId).toBe("m1");
     expect(arg.where.deletedAt).toBeNull();
   });
 
   // Feature 235 (R21): el predicado, aplicado a filas, para que el caso de arriba no afirme solo
   // una forma. Los dos estados «en la mano» quedan fuera; los desenlaces, dentro.
-  it("235/R21: el predicado deja fuera `en_reparto` Y `ayuda_tienda`, y deja dentro los desenlaces", async () => {
+  it("235/R21 → 454: el predicado deja fuera `en_reparto` (con o sin ayuda) y deja dentro los desenlaces", async () => {
     const { repo, aggregate } = repoConAggregate(null);
 
     await repo.sumMontoCobrarGestionadas("m1", DIA);
+    // ⏳ 2026-09-23 (FICHA 454): la lista vive ahora en la primera rama del `OR` (ver arriba).
     const arg = (aggregate.mock.calls[0] as unknown[])[0] as {
-      where: { estatus: { value: { notIn: string[] } } };
+      where: { OR: [{ estatus: { value: { notIn: string[] } } }, unknown] };
     };
-    const cuenta = (estatus: string) => !arg.where.estatus.value.notIn.includes(estatus);
+    const cuenta = (estatus: string) => !arg.where.OR[0].estatus.value.notIn.includes(estatus);
 
     expect(cuenta("en_reparto")).toBe(false);
-    expect(cuenta("ayuda_tienda")).toBe(false);
-    for (const dentro of ["entregada", "reprogramada", "rechazada", "devolucion_por_confirmar"]) {
+    for (const dentro of ["entregada", "reprogramada", "rechazada", "devuelta", "incidente"]) {
       expect(cuenta(dentro), `${dentro} SI cuenta como gestionada del dia`).toBe(true);
     }
   });
@@ -469,32 +478,47 @@ describe("GestionOrdenRepository.liberarOrdenEnGestion (R35)", () => {
   });
 });
 
-describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · feature 49/#9)", () => {
-  function buildTxRepo(
-    origenEstatusId = idEstado("en_reparto"),
-    historialCreateMany: ReturnType<typeof vi.fn> = vi.fn(),
-  ) {
+// ⏳ 2026-09-23 (FICHA 454, T1.4): esta suite medía `crearGestionYTransicionar` (INSERT + UPDATE de
+// estado + append al historial). El metodo se SUSTITUYE por `registrarGestionPendiente`: la gestion
+// se registra SIN transicion (R1) y el estado real se aplica al aprobar el cierre. Los casos de
+// forma de la fila (causa, pagos, fechas, Decimal, atomicidad) se conservan tal cual contra el metodo
+// nuevo; los que afirmaban la TRANSICION se invierten a «no hay `orden.update` ni historial» y a la
+// FAMILIA DE APLICACION que viaja en el evento `gestion_registrada` (R2/R8). La barrera de
+// concurrencia (candado + re-lectura) se mide contra Postgres en
+// `tests/integration/db/454/registro-gestion-*-sql-real.test.ts`.
+describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes crearGestionYTransicionar)", () => {
+  function buildTxRepo(opts: { gestionable?: boolean; eventoCreate?: ReturnType<typeof vi.fn> } = {}) {
     const gestionCreate = vi.fn(async () => ({ id: "g1" }));
     const ordenUpdate = vi.fn(async () => ({}));
-    const ordenFindFirst = vi.fn(async () => ({ estatusId: origenEstatusId }));
     const usuarioUpdate = vi.fn(async () => ({}));
+    const historialCreateMany = vi.fn();
+    const eventoCreate = opts.eventoCreate ?? vi.fn(async () => ({ id: "ev1" }));
     // Feature 212 (R17): las lineas del desglose del recaudo se insertan por el cliente
-    // TRANSACCIONAL. `dentroDeTx` registra si la llamada ocurrio mientras la tx estaba abierta:
-    // un `createMany` fuera de ella dejaria lineas huerfanas si la transicion falla despues.
+    // TRANSACCIONAL. `dentroDeTx` registra si la llamada ocurrio mientras la tx estaba abierta.
     let txAbierta = false;
     const dentroDeTx: boolean[] = [];
     const pagoCreateMany = vi.fn(async () => {
       dentroDeTx.push(txAbierta);
       return { count: 0 };
     });
+    // `$queryRaw`: el candado y la re-lectura de «gestionable» devuelven la orden (o nada), y la
+    // consulta de suscripcion de webhook no devuelve ninguna (sin encolado).
+    const $queryRaw = vi.fn(async (q: { strings?: readonly string[] } | TemplateStringsArray) => {
+      const texto = Array.isArray(q) ? q.join(" ") : ((q as { strings?: readonly string[] }).strings ?? []).join(" ");
+      if (texto.includes("webhook_suscripcion")) return [];
+      if (opts.gestionable === false && texto.includes("order_status")) return [];
+      return [{ id: "o1" }];
+    });
     const tx = {
+      $queryRaw,
       gestionOrden: { create: gestionCreate },
       gestionOrdenPago: { createMany: pagoCreateMany },
-      orden: { update: ordenUpdate, findFirst: ordenFindFirst },
+      ordenEvento: { create: eventoCreate },
+      orden: { update: ordenUpdate },
       usuario: { update: usuarioUpdate },
       ordenHistorialEstado: { createMany: historialCreateMany },
     };
-    const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<string>) => {
+    const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<unknown>) => {
       txAbierta = true;
       try {
         return await cb(tx);
@@ -511,16 +535,18 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       usuarioUpdate,
       historialCreateMany,
       pagoCreateMany,
+      eventoCreate,
       dentroDeTx,
       cola,
       tx,
     };
   }
 
-  it("INSERT gestion + UPDATE estatus + limpiar puntero, todo bajo la misma tx", async () => {
-    const { repo, gestionCreate, ordenUpdate, usuarioUpdate } = buildTxRepo();
+  it("R1/R2/R5: INSERT gestion + evento + limpiar puntero, SIN tocar el estado de la orden", async () => {
+    const { repo, gestionCreate, ordenUpdate, usuarioUpdate, historialCreateMany, eventoCreate } =
+      buildTxRepo();
 
-    const id = await repo.crearGestionYTransicionar({
+    const r = await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: {
@@ -530,32 +556,58 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
         evidenciaStoragePath: "o1/entregada-1.jpg",
         evidenciaContentType: "image/jpeg",
       },
-      nuevoEstatusId: idEstado("entregada"),
     });
 
-    expect(id).toBe("g1");
+    expect(r).toEqual({ gestionId: "g1", ordenEventoId: "ev1" });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.resultado).toBe("entregada");
     expect(gArg.data.evidenciaStoragePath).toBe("o1/entregada-1.jpg");
     expect((gArg.data.montoRecibido as Prisma.Decimal).toString()).toBe("100");
-    expect((ordenUpdate.mock.calls[0] as unknown[])[0]).toMatchObject({
-      where: { id: "o1" },
-      data: { estatusId: idEstado("entregada") },
+    // R1: ni `orden.update` ni fila de historial.
+    expect(ordenUpdate).not.toHaveBeenCalled();
+    expect(historialCreateMany).not.toHaveBeenCalled();
+    // R2: el evento, con el actor y su rol congelado.
+    expect((eventoCreate.mock.calls[0] as unknown[])[0]).toMatchObject({
+      data: {
+        ordenId: "o1",
+        tipo: "gestion_registrada",
+        gestionOrdenId: "g1",
+        familiaAplicacion: "gestion",
+        resultado: "entregada",
+        mensajeroId: "m1",
+        actorUsuarioId: "m1",
+        actorRol: "mensajero",
+      },
     });
-    // R19: libera el puntero de bloqueo dentro de la transaccion.
+    // R19 (36) / R5 (454): libera el puntero de bloqueo dentro de la transaccion.
     expect((usuarioUpdate.mock.calls[0] as unknown[])[0]).toMatchObject({
       where: { id: "m1" },
       data: { ordenEnGestionId: null },
     });
   });
 
+  it("R4: si la orden ya no es gestionable al llegar al candado -> `null` SIN ningun efecto", async () => {
+    const { repo, gestionCreate, eventoCreate, usuarioUpdate, pagoCreateMany } = buildTxRepo({
+      gestionable: false,
+    });
+    const r = await repo.registrarGestionPendiente({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "entregada", montoRecibido: 1, metodoPago: "efectivo", pagos: [{ metodo: "efectivo", monto: 1 }] },
+    });
+    expect(r).toBeNull();
+    expect(gestionCreate).not.toHaveBeenCalled();
+    expect(pagoCreateMany).not.toHaveBeenCalled();
+    expect(eventoCreate).not.toHaveBeenCalled();
+    expect(usuarioUpdate).not.toHaveBeenCalled();
+  });
+
   it("R26: reprogramada persiste fecha (DATE) y motivo, sin evidencia", async () => {
     const { repo, gestionCreate } = buildTxRepo();
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
-      nuevoEstatusId: idEstado("reprogramada"),
     });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.fechaReprogramacion).toBeInstanceOf(Date);
@@ -563,196 +615,67 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(gArg.data.montoRecibido).toBeNull();
   });
 
-  // Feature 49/#9 (R17/R20/R22): entregada (sin motivo) deja historial con destino,
-  // gestion_orden_id, origen pre-leido y actor = el mensajero; motivo null.
-  it("R17/R20: entregada deja historial con destino, gestionOrdenId y motivo null", async () => {
-    const { repo, historialCreateMany } = buildTxRepo(idEstado("en_reparto"));
-
-    await repo.crearGestionYTransicionar({
-      ordenId: "o1",
-      mensajeroId: "m1",
-      gestion: {
-        resultado: "entregada",
-        montoRecibido: 100,
-        metodoPago: "efectivo",
-        evidenciaStoragePath: "o1/entregada-1.jpg",
-        evidenciaContentType: "image/jpeg",
-      },
-      nuevoEstatusId: idEstado("entregada"),
-    });
-
-    const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
-    expect(arg.data).toEqual([
-      {
-        ordenId: "o1",
-        estatusOrigenId: idEstado("en_reparto"),
-        estatusDestinoId: idEstado("entregada"),
-        actorUsuarioId: "m1",
-        origenTipo: "gestion",
-        motivo: null,
-        gestionOrdenId: "g1",
-      },
-    ]);
-  });
-
-  // R22: una gestion con motivo (devuelta) registra ese motivo en el historial.
-  it("R22: devuelta registra el motivo de la gestion en el historial", async () => {
-    const { repo, historialCreateMany } = buildTxRepo(idEstado("en_reparto"));
-
-    await repo.crearGestionYTransicionar({
-      ordenId: "o1",
-      mensajeroId: "m1",
-      gestion: { resultado: "devuelta", motivo: "cliente ausente" },
-      nuevoEstatusId: idEstado(estatusDestinoDeResultado("devuelta")),
-    });
-
-    const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as {
-      data: Record<string, unknown>[];
-    };
-    expect(arg.data[0].estatusDestinoId).toBe(
-      idEstado(estatusDestinoDeResultado("devuelta")),
-    );
-    expect(arg.data[0].motivo).toBe("cliente ausente");
-    expect(arg.data[0].origenTipo).toBe("gestion");
-    expect(arg.data[0].gestionOrdenId).toBe("g1");
-  });
-
-  // --- Feature 158 (R6/R8/R9, Q-G): el QUINTO resultado ---------------------------------
-  // La 154 declaro la arista #44 y la familia `incidente` del historial, y dejo esta ultima
-  // «SIN PRODUCTOR hasta la 158». Aqui esta el productor. El append escribe
-  // `origen_tipo = incidente`, NO `gestion`: es lo que hace el incidente auditable como
-  // familia propia, que es para lo que la 154 la dio de alta.
-
   it("158/R9: el INSERT de la gestion lleva la causa del incidente en su columna propia", async () => {
-    const { repo, gestionCreate } = buildTxRepo(idEstado("en_reparto"));
+    const { repo, gestionCreate } = buildTxRepo();
 
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      // Las N filas hijas de evidencia tienen su propia suite
-      // (`gestion-orden-evidencia.test.ts`); aqui se afirma el INSERT de la gestion.
       gestion: {
         resultado: "incidente",
         causaIncidente: "robado",
         motivo: "me asaltaron en la parada",
       },
-      nuevoEstatusId: idEstado("incidente"),
     });
 
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.resultado).toBe("incidente");
     expect(gArg.data.causaIncidente).toBe("robado");
     expect(gArg.data.motivo).toBe("me asaltaron en la parada");
-    // R22: el monto de la indemnizacion NO se escribe al reportar (lo captura el admin al
-    // aprobar el cierre). Si apareciera aqui, el mensajero fijaria su propia indemnizacion.
+    // R22 (158): el monto de la indemnizacion NO se escribe al reportar.
     expect(gArg.data).not.toHaveProperty("indemnizacion");
-    // No hay recaudo en un incidente.
     expect(gArg.data.montoRecibido).toBeNull();
     expect(gArg.data.metodoPago).toBeNull();
-    // Y NO se cuela la causa del OTRO enum (73).
     expect(gArg.data.causaDevolucion).toBeNull();
   });
 
-  it("158/R8/Q-G: el historial de la transicion usa la familia `incidente`, NO `gestion`", async () => {
-    const { repo, historialCreateMany } = buildTxRepo(idEstado("en_reparto"));
-
-    await repo.crearGestionYTransicionar({
+  // ⏳ 2026-09-23 (FICHA 454, R8): antes «el historial de la transicion usa la familia `incidente`».
+  // Ya no hay transicion al registrar: la familia viaja en el EVENTO y es la que la aprobacion usara.
+  it("R8: el incidente se registra con familia de aplicacion `incidente`; los otros cuatro con `gestion`", async () => {
+    const { repo, eventoCreate } = buildTxRepo();
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "incidente", causaIncidente: "danado", motivo: "caja aplastada" },
-      nuevoEstatusId: idEstado("incidente"),
     });
-
-    const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
-    expect(arg.data).toEqual([
-      {
-        ordenId: "o1",
-        estatusOrigenId: idEstado("en_reparto"), // R8: el origen REAL, pre-leido en la tx
-        estatusDestinoId: idEstado("incidente"),
-        actorUsuarioId: "m1", // R8: el actor
-        origenTipo: "incidente", // Q-G: la familia PROPIA, no `gestion`
-        motivo: "caja aplastada",
-        gestionOrdenId: "g1", // nace CON enlace a gestion (por eso no toca ORIGEN_TIPOS_CON_GESTION)
-      },
-    ]);
-  });
-
-  it("158/Q-G: los CUATRO resultados previos siguen appendeando con `gestion` (R35)", async () => {
-    for (const resultado of ["entregada", "reprogramada", "devuelta", "rechazada"] as const) {
-      const { repo, historialCreateMany } = buildTxRepo(idEstado("en_reparto"));
-      await repo.crearGestionYTransicionar({
+    expect((eventoCreate.mock.calls[0] as unknown[])[0]).toMatchObject({
+      data: { familiaAplicacion: "incidente", motivo: "danado" },
+    });
+    for (const resultado of ["entregada", "reprogramada", "devuelta"] as const) {
+      const b = buildTxRepo();
+      await b.repo.registrarGestionPendiente({
         ordenId: "o1",
         mensajeroId: "m1",
         gestion: { resultado, motivo: "x", fechaReprogramacion: "2099-01-01" },
-        nuevoEstatusId: idEstado(estatusDestinoDeResultado(resultado)),
       });
-      const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as {
-        data: Record<string, unknown>[];
-      };
-      expect(arg.data[0].origenTipo, `${resultado} deberia seguir siendo \`gestion\``).toBe(
-        "gestion",
-      );
+      expect(
+        ((b.eventoCreate.mock.calls[0] as unknown[])[0] as { data: { familiaAplicacion: string } }).data
+          .familiaAplicacion,
+        resultado,
+      ).toBe("gestion");
     }
   });
 
-  // --- Feature 99 (R1/R29): la rama `devuelta` DEJA la orden en `devuelta`, sin seguimiento ---
-  // INVIERTE la suite de la 47: antes `crearGestionYTransicionar` aplicaba una 2.ª transicion
-  // (reintento a bodega o escalado a `rechazada`) cuando el llamador pasaba `seguimiento`. Bajo
-  // la 99 ese parametro se retiro y la capacidad se relocalizo al cron SLA
-  // (`DevolucionSlaRepository`, verificado en devolucion-sla-repository.test.ts). Aqui se afirma
-  // que la devolucion produce UNA sola transicion (a `devuelta`) y UN solo append.
-
-  // 2026-08-19 (feature 239): el destino de la rama `devuelta` deja de ser `devuelta` y pasa a
-  // ser el PRE-ESTADO. Lo que este caso mide NO cambia —UNA transicion y UN append, sin
-  // seguimiento— y por eso el destino se lee del mapa en vez de escribirse a mano.
-  it("R1/R29: devuelta -> UN solo orden.update (al destino del mapa) y UN solo append, sin re-ruteo", async () => {
-    const historialCreateMany = vi.fn();
-    const { repo, ordenUpdate } = buildTxRepo(idEstado("en_reparto"), historialCreateMany);
-
-    await repo.crearGestionYTransicionar({
+  it("R2: el evento guarda la causa TIPIFICADA y nunca el texto libre del mensajero", async () => {
+    const { repo, eventoCreate } = buildTxRepo();
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "devuelta", motivo: "ausente" },
-      nuevoEstatusId: idEstado(estatusDestinoDeResultado("devuelta")),
+      gestion: { resultado: "devuelta", causaDevolucion: "wrong_number", motivo: "telefono errado" },
     });
-
-    // La orden REPOSA en `devuelta`: un unico update, sin 2.ª transicion a bodega/rechazada.
-    expect(ordenUpdate).toHaveBeenCalledTimes(1);
-    expect((ordenUpdate.mock.calls[0] as unknown[])[0]).toMatchObject({
-      where: { id: "o1" },
-      data: { estatusId: idEstado(estatusDestinoDeResultado("devuelta")) },
-    });
-    // El mensajero NO se limpia aqui (era parte del reintento de la 47, ahora en el cron).
-    const updData = (ordenUpdate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
-    expect(updData.data).not.toHaveProperty("mensajeroAsignadoId");
-
-    // UN solo append por el choke point: en_reparto -> devuelta (actor m1, origen_tipo gestion).
-    expect(historialCreateMany).toHaveBeenCalledTimes(1);
-    const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
-    expect(arg.data[0]).toMatchObject({
-      estatusOrigenId: idEstado("en_reparto"),
-      estatusDestinoId: idEstado(estatusDestinoDeResultado("devuelta")),
-      actorUsuarioId: "m1",
-      origenTipo: "gestion",
-      motivo: "ausente",
-      gestionOrdenId: "g1",
-    });
-  });
-
-  // Las otras 3 ramas: UNA sola transicion y UN solo append (igual que devuelta ahora).
-  it("R19: cualquier rama -> un solo orden.update y un solo append (sin seguimiento)", async () => {
-    const historialCreateMany = vi.fn();
-    const { repo, ordenUpdate } = buildTxRepo(idEstado("en_reparto"), historialCreateMany);
-
-    await repo.crearGestionYTransicionar({
-      ordenId: "o1",
-      mensajeroId: "m1",
-      gestion: { resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo" },
-      nuevoEstatusId: idEstado("entregada"),
-    });
-
-    expect(ordenUpdate).toHaveBeenCalledTimes(1);
-    expect(historialCreateMany).toHaveBeenCalledTimes(1);
+    const data = ((eventoCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> }).data;
+    expect(data.motivo).toBe("wrong_number");
+    expect(JSON.stringify(data)).not.toContain("telefono errado");
   });
 
   // --- Feature 73 (R11/R12/R13): la causa llega al INSERT, dentro de la MISMA tx ---
@@ -760,11 +683,10 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
   it("R11: devuelta con causa -> el INSERT lleva `causaDevolucion` en su columna propia", async () => {
     const { repo, gestionCreate } = buildTxRepo();
 
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", causaDevolucion: "wrong_number", motivo: "telefono errado" },
-      nuevoEstatusId: idEstado(estatusDestinoDeResultado("devuelta")),
     });
 
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
@@ -773,47 +695,32 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(gArg.data.motivo).toBe("telefono errado");
   });
 
-  it("R13: la causa entra en el MISMO create que la gestion (una sola tx, sin firma nueva)", async () => {
-    const { repo, gestionCreate, ordenUpdate } = buildTxRepo();
-
-    await repo.crearGestionYTransicionar({
-      ordenId: "o1",
-      mensajeroId: "m1",
-      gestion: { resultado: "devuelta", causaDevolucion: "not_found", motivo: "ausente" },
-      nuevoEstatusId: idEstado(estatusDestinoDeResultado("devuelta")),
+  it("R13: si el evento falla, el INSERT con causa no se confirma (atomicidad)", async () => {
+    // ⏳ 2026-09-23 (FICHA 454): antes «si el append de la transicion falla». Sin transicion, el
+    // paso posterior al INSERT que puede fallar es el evento: la tx revierte igual.
+    const eventoCreate = vi.fn(async () => {
+      throw new Error("evento falla");
     });
+    const { repo } = buildTxRepo({ eventoCreate });
 
-    // Un unico INSERT de gestion (con la causa dentro) + el UPDATE del estado: si la tx aborta,
-    // no queda ni gestion ni causa (atomicidad todo-o-nada ya provista por $transaction).
-    expect(gestionCreate).toHaveBeenCalledTimes(1);
-    expect(ordenUpdate).toHaveBeenCalledTimes(1);
-  });
-
-  it("R13: si el append de la transicion falla, el INSERT con causa no se confirma (atomicidad)", async () => {
-    const historialCreateMany = vi.fn(async () => {
-      throw new Error("append falla");
-    });
-    const { repo } = buildTxRepo(idEstado("en_reparto"), historialCreateMany);
-
-    // El fallo se propaga -> $transaction revierte: la causa NO queda persistida.
     await expect(
-      repo.crearGestionYTransicionar({
+      repo.registrarGestionPendiente({
         ordenId: "o1",
         mensajeroId: "m1",
         gestion: { resultado: "devuelta", causaDevolucion: "wrong_address", motivo: "x" },
-        nuevoEstatusId: idEstado(estatusDestinoDeResultado("devuelta")),
       }),
-    ).rejects.toThrow("append falla");
+    ).rejects.toThrow("evento falla");
   });
 
   it("R10/R16: una rama sin causa -> la columna se escribe NULL (nunca undefined)", async () => {
     const { repo, gestionCreate } = buildTxRepo();
 
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "rechazada", motivo: "cliente rechazo" },
-      nuevoEstatusId: idEstado("rechazada"),
+      // ⏳ 2026-09-23 (FICHA 454): antes `rechazada`; su aviso N1 sale ahora en este metodo y
+      // necesitaria el cliente de notificaciones. `reprogramada` es igual de «sin causa».
+      gestion: { resultado: "reprogramada", fechaReprogramacion: "2099-01-01", motivo: "otro dia" },
     });
 
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
@@ -821,15 +728,11 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
   });
 
   // --- Feature 212 (R17/R20): el DESGLOSE del recaudo, en la MISMA transaccion --------------
-  // `monto_recibido` sobrevive como TOTAL snapshot; las lineas `(metodo, monto)` son la fuente
-  // del reparto por metodo del cierre —y por tanto de la `E` del `min(P, E)` con el que se le
-  // paga al mensajero (feature 44)—. Una linea escrita fuera de la tx, o un monto convertido a
-  // float, no da un numero feo en pantalla: le paga de menos o de mas a una persona.
 
   it("212/R17: las lineas se insertan con el cliente de la MISMA tx, tras crear la gestion", async () => {
     const { repo, pagoCreateMany, dentroDeTx } = buildTxRepo();
 
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: {
@@ -841,14 +744,13 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
           { metodo: "transferencia", monto: 3000 },
         ],
       },
-      nuevoEstatusId: idEstado("entregada"),
     });
 
     expect(pagoCreateMany).toHaveBeenCalledTimes(1);
-    expect(dentroDeTx).toEqual([true]); // dentro de la transaccion abierta, no fuera
+    expect(dentroDeTx).toEqual([true]);
     const arg = (pagoCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
     expect(arg.data).toHaveLength(2);
-    expect(arg.data[0].gestionId).toBe("g1"); // enlazadas a la gestion recien creada
+    expect(arg.data[0].gestionId).toBe("g1");
     expect(arg.data[1].gestionId).toBe("g1");
     expect(arg.data[0].metodo).toBe("efectivo");
     expect(arg.data[1].metodo).toBe("transferencia");
@@ -857,7 +759,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
   it("212/R20: el monto de cada linea entra como Prisma.Decimal, nunca como float", async () => {
     const { repo, pagoCreateMany } = buildTxRepo();
 
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: {
@@ -869,7 +771,6 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
           { metodo: "SINPE", monto: 33.33 },
         ],
       },
-      nuevoEstatusId: idEstado("entregada"),
     });
 
     const arg = (pagoCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
@@ -878,19 +779,18 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     }
     expect((arg.data[0].monto as Prisma.Decimal).toString()).toBe("66.66");
     expect((arg.data[1].monto as Prisma.Decimal).toString()).toBe("33.33");
-    // Suma exacta en Decimal: 66.66 + 33.33 = 99.99 (con floats seria 99.99000000000001).
     const suma = (arg.data[0].monto as Prisma.Decimal).plus(arg.data[1].monto as Prisma.Decimal);
     expect(suma.toString()).toBe("99.99");
   });
 
-  it("212/R17: si el append de la transicion falla, la tx se revierte con las lineas dentro", async () => {
-    const historialCreateMany = vi.fn(async () => {
-      throw new Error("append falla");
+  it("212/R17: si el evento falla, la tx se revierte con las lineas dentro", async () => {
+    const eventoCreate = vi.fn(async () => {
+      throw new Error("evento falla");
     });
-    const { repo, pagoCreateMany, dentroDeTx } = buildTxRepo(idEstado("en_reparto"), historialCreateMany);
+    const { repo, pagoCreateMany, dentroDeTx } = buildTxRepo({ eventoCreate });
 
     await expect(
-      repo.crearGestionYTransicionar({
+      repo.registrarGestionPendiente({
         ordenId: "o1",
         mensajeroId: "m1",
         gestion: {
@@ -899,12 +799,9 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
           metodoPago: "efectivo",
           pagos: [{ metodo: "efectivo", monto: 5000 }],
         },
-        nuevoEstatusId: idEstado("entregada"),
       }),
-    ).rejects.toThrow("append falla");
+    ).rejects.toThrow("evento falla");
 
-    // El insert de las lineas ocurrio DENTRO de la misma tx que despues aborta -> no queda
-    // ninguna linea huerfana (atomicidad todo-o-nada ya provista por $transaction).
     expect(dentroDeTx).toEqual([true]);
     expect(pagoCreateMany).toHaveBeenCalledTimes(1);
   });
@@ -912,16 +809,14 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
   it("212/R14: lista de pagos VACIA -> no se inserta ninguna linea", async () => {
     const { repo, pagoCreateMany, gestionCreate } = buildTxRepo();
 
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "entregada", montoRecibido: 0, metodoPago: null, pagos: [] },
-      nuevoEstatusId: idEstado("entregada"),
     });
 
     expect(pagoCreateMany).not.toHaveBeenCalled();
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
-    // El TOTAL snapshot se escribe igual (0), y la columna deprecada va NULL (R19).
     expect((gArg.data.montoRecibido as Prisma.Decimal).toString()).toBe("0");
     expect(gArg.data.metodoPago).toBeNull();
   });
@@ -929,11 +824,11 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
   it("212/R5: una gestion sin `pagos` (rama sin recaudo) no toca la tabla del desglose", async () => {
     const { repo, pagoCreateMany } = buildTxRepo();
 
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "rechazada", motivo: "cliente rechazo" },
-      nuevoEstatusId: idEstado("rechazada"),
+      // ⏳ 2026-09-23 (FICHA 454): antes `rechazada` (ver la nota del caso R10/R16).
+      gestion: { resultado: "devuelta", causaDevolucion: "not_found", motivo: "no aparece" },
     });
 
     expect(pagoCreateMany).not.toHaveBeenCalled();

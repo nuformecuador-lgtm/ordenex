@@ -503,6 +503,16 @@ describe("el diálogo de la corrección", () => {
     );
   });
 
+  // FICHA 454 (T2.7, R18/R19): la corrección sella el resultado y el estado se aplica al APROBAR.
+  // Literal a mano (no desde `estatusLabel`): es el texto que el humano lee.
+  it("454: dice que el estado de la orden se aplica al aprobar el cierre, no ahora", () => {
+    renderDialogo(gestion());
+    const aviso = screen.getByRole("region", { name: "Al corregir:" });
+    expect(aviso).toHaveTextContent(
+      "La orden sigue «En reparto» hasta entonces: su estado pasa a «Rechazada» al aprobar el cierre.",
+    );
+  });
+
   it("💰 SIN MOTIVO no se puede confirmar, y no viaja nada", async () => {
     const user = userEvent.setup();
     renderDialogo(gestion());

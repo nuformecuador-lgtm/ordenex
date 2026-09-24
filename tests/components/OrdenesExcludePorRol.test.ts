@@ -5,6 +5,8 @@ import {
   EXCLUDE_POR_ROL,
   ESTADOS_FLUJO_DEVOLUCION,
 } from "@/app/(app)/ordenes/exclude-por-rol";
+import { estadosOfrecidos } from "@/app/(app)/ordenes/_components/filtro-estado-def";
+import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 
 // Feature 139 (T3.4, R19/R20) — `OrdenesListado` deriva las opciones del filtro por estado del catálogo `order_status`
 // MENOS `EXCLUDE_POR_ROL[rol]`. Estos tests blindan que NINGÚN estado del flujo de
@@ -39,52 +41,33 @@ describe("EXCLUDE_POR_ROL — visibilidad de los estados del flujo de devolució
   });
 });
 
-// Feature 239 (T1.7, R26/R19) — este mapa es PARCIAL y NO rompe el build: un estado que no se
-// liste AUTO-APARECE como opcion del desplegable de ese rol. La decision de la 239 (P3: durante
-// el limbo la tienda no ve nada) solo queda protegida si se afirma aqui.
-describe("EXCLUDE_POR_ROL — el pre-estado de la devolucion (239/R26)", () => {
-  const PRE_ESTADO = "devolucion_por_confirmar";
+// ⏳ 2026-09-23 (FICHA 454, R37): aqui vivian dos bloques —«el pre-estado de la devolucion
+// (239/R26)», excluido para el adminTienda, y «el estatus de la ayuda a la tienda (235/R37/R45)»,
+// que no se excluia para nadie—. Los dos estados salen del catalogo: el mapa ya no los nombra, y lo
+// que protegian se afirma ahora en su forma final: NINGUN rol los ve como opcion del filtro, aunque
+// la fila huerfana siga en la tabla `order_status` de una base con historial (produccion).
+describe("454/R37 — los dos estados retirados no se ofrecen a NINGUN rol como filtro", () => {
+  const RETIRADOS = ["devolucion_por_confirmar", "ayuda_tienda"];
+  // Catalogo como lo devolveria una base con historial: las filas huerfanas SIGUEN en la tabla.
+  const CATALOGO = [
+    ...ORDER_STATUS_SEED.map((value, i) => ({ id: `s-${i}`, value })),
+    ...RETIRADOS.map((value) => ({ id: `s-${value}`, value })),
+  ];
 
-  it("R19/R26: el adminTienda NO puede filtrar por el pre-estado (esta excluido, junto a `devuelta`)", () => {
-    const excluidos = EXCLUDE_POR_ROL[RolValue.adminTienda];
-    expect(excluidos).toContain(PRE_ESTADO);
-    // Va con `devuelta` porque son la misma cosa antes y despues de la confirmacion: si el
-    // pre-estado se colara en el desplegable, la tienda veria en su filtro justo el estado que
-    // la 239 decide que todavia no le corresponde ver.
-    expect(excluidos).toContain("devuelta");
-  });
+  it.each([RolValue.maestro, RolValue.admin, RolValue.adminTienda])(
+    "%s: ni `devolucion_por_confirmar` ni `ayuda_tienda` aparecen en el desplegable",
+    (rol) => {
+      const ofrecidos = estadosOfrecidos(CATALOGO, EXCLUDE_POR_ROL[rol]).map((s) => s.value);
+      expect(ofrecidos.length).toBeGreaterThan(0); // no-vacuidad
+      for (const retirado of RETIRADOS) expect(ofrecidos).not.toContain(retirado);
+    },
+  );
 
-  it("R26: maestro y admin SI lo ven (solo excluyen `pendiente`)", () => {
-    // Son los que tienen que poder contar la poblacion atascada en el pre-estado (R34).
-    expect(EXCLUDE_POR_ROL[RolValue.maestro]).not.toContain(PRE_ESTADO);
-    expect(EXCLUDE_POR_ROL[RolValue.admin]).not.toContain(PRE_ESTADO);
-  });
-});
-
-// Feature 235 (T1.5, R37/R45) — el estatus de la AYUDA no se excluye para NADIE, y la decision
-// solo queda protegida si se afirma con su CASO NEGATIVO al lado: este mapa es PARCIAL, asi que
-// un estado que no se liste AUTO-APARECE como opcion, y una ausencia por olvido se vería igual
-// que una ausencia decidida.
-describe("EXCLUDE_POR_ROL — el estatus de la ayuda a la tienda (235/R37/R45)", () => {
-  const AYUDA = "ayuda_tienda";
-
-  it("235/R37: el `adminTienda` SI ve `ayuda_tienda` en su filtro — es su pantalla de trabajo", () => {
-    const excluidos = EXCLUDE_POR_ROL[RolValue.adminTienda];
-    expect(excluidos).not.toContain(AYUDA);
-  });
-
-  it("235/R45 (CASO NEGATIVO): y eso lo distingue de `devuelta` y del pre-estado, que SI se le excluyen", () => {
-    // Sin este contraste, el caso de arriba solo diria «no esta en la lista». Lo que hay que
-    // afirmar es POR QUE no esta: la solicitud de ayuda se le hace A ELLA, mientras que `devuelta`
-    // y `devolucion_por_confirmar` son estados que la tienda no opera.
-    const excluidos = EXCLUDE_POR_ROL[RolValue.adminTienda];
-    expect(excluidos).toContain("devuelta");
-    expect(excluidos).toContain("devolucion_por_confirmar");
-    expect(excluidos).not.toContain(AYUDA);
-  });
-
-  it("235/R37: maestro y admin tambien lo ven (solo excluyen `pendiente`)", () => {
-    expect(EXCLUDE_POR_ROL[RolValue.maestro]).not.toContain(AYUDA);
-    expect(EXCLUDE_POR_ROL[RolValue.admin]).not.toContain(AYUDA);
+  it("y el mapa de exclusion ya no los nombra: no hace falta excluir lo que no existe", () => {
+    for (const lista of Object.values(EXCLUDE_POR_ROL)) {
+      for (const retirado of RETIRADOS) expect(lista).not.toContain(retirado);
+    }
+    // La exclusion del adminTienda que SI sigue siendo una decision: `devuelta`.
+    expect(EXCLUDE_POR_ROL[RolValue.adminTienda]).toContain("devuelta");
   });
 });

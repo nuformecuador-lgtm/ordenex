@@ -1,3 +1,4 @@
+import { conAyudaAbiertaDe } from "@/lib/repositories/ayuda-abierta";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type {
   CrearOrdenNotaInput,
@@ -13,7 +14,7 @@ import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre
 
 /** Los dos modelos que toca el repo. `Pick` para poder inyectar un `tx` de transaccion o un
  *  doble en los tests sin arrastrar el cliente entero. */
-type OrdenNotaPrismaClient = Pick<PrismaClient, "ordenNota" | "orden">;
+type OrdenNotaPrismaClient = Pick<PrismaClient, "ordenNota" | "orden" | "$queryRaw">; // ficha 454: + `$queryRaw` (ayuda abierta)
 
 /** El `select` de la fila del hilo, en un solo sitio: `crear` y `listarPorOrden` DEBEN devolver
  *  exactamente la misma forma (`OrdenNotaRow`), y dos listas de campos escritas por separado se
@@ -110,6 +111,7 @@ export class OrdenNotaRepository implements IOrdenNotaRepository {
       tiendaId: orden.tiendaId,
       mensajeroAsignadoId: orden.mensajeroAsignadoId,
       estatusValue: orden.estatus.value,
+      ayudaAbierta: (await conAyudaAbiertaDe(this.prisma, [ordenId])).has(ordenId), // ficha 454
       deletedAt: orden.deletedAt,
       fechaReparto: orden.fechaReparto,
     };

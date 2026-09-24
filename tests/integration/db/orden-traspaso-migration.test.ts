@@ -138,6 +138,14 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       // `usuario`; no toca `orden_traspaso_mensajero` ni ningun otro objeto preexistente, no lleva
       // backfill y no crea ningun enum.
       "20260921120000_vista_filtro",
+      // Ficha 454 (2026-09-23): M1, el valor `webhook_evento` de `job_tipo` (sola, por el 55P04), y
+      // M2, la tabla `orden_evento` con su enum. ADITIVAS: ninguna toca `orden_traspaso_mensajero`.
+      "20260923120000_job_tipo_webhook_evento",
+      "20260923120100_orden_evento",
+      // Ficha 454 (2026-09-23): M3, backfill y retiro condicional de `ayuda_tienda` y
+      // `devolucion_por_confirmar`. Toca `orden`, `orden_historial_estado`, `orden_evento` y
+      // `order_status`; no toca `orden_traspaso_mensajero` ni crea ningun enum.
+      "20260923120200_retiro_estados_454",
     ]);
   });
 });

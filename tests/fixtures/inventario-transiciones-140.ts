@@ -82,11 +82,10 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "11", origen: "por_recoger", destino: "en_reparto", via: "recoleccion", callSite: "MisAsignacionesService.recogerAsignaciones" },
   { n: "12", origen: "en_reparto", destino: "entregada", via: "gestion", callSite: "MisAsignacionesService.gestionar" },
   { n: "13", origen: "en_reparto", destino: "reprogramada", via: "gestion", callSite: "gestionar" },
-  // Feature 239 (2026-08-19): #14 (`en_reparto -> devuelta`) queda RETIRADA y la sustituye #59
-  // (`en_reparto -> devolucion_por_confirmar`). Es la MISMA accion del mensajero con otro
-  // destino: gestionar una devolucion ya no deja la orden en `devuelta`, y por eso la baja va en
-  // el mismo commit que su ultimo productor (el mapa `ESTATUS_POR_RESULTADO`).
-  { n: "59", origen: "en_reparto", destino: "devolucion_por_confirmar", via: "gestion", callSite: "MisAsignacionesService.gestionar -> GestionOrdenRepository.crearGestionYTransicionar (239)" },
+  // Feature 239 (2026-08-19): #14 (`en_reparto -> devuelta` por la gestion) queda RETIRADA.
+  // FICHA 454 (2026-09-23): #59 (`en_reparto -> devolucion_por_confirmar`, 239) queda RETIRADA con
+  // su estado; la gestion se REGISTRA sin transicion y la aprobacion aplica `en_reparto -> devuelta`
+  // (#70, abajo).
   { n: "15", origen: "en_reparto", destino: "rechazada", via: "gestion", callSite: "gestionar" },
   { n: "16", origen: "en_reparto", destino: "sin_gestionar", via: "corte_sin_gestionar", callSite: "CorteDiarioService -> CierreDiaRepository.crearCierre" },
   { n: "17", origen: "sin_gestionar", destino: "en_bodega_central", via: "liberacion_sin_gestionar", callSite: "CierresAdminService.aprobarCierre -> resolverCierre" },
@@ -151,16 +150,9 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // NUMERACION: el PR 1 salto del #47 al #53 A PROPOSITO, reservando #48-#52 y #54-#58 para el
   // camino del ADMIN, que no tenia productor todavia (design §15.2). El PR 2 los ocupa, abajo.
   { n: "53", origen: "incidente", destino: "en_reparto", via: "deshacer_gestion", callSite: "CierreDiaService.deshacerGestion -> CierreDiaRepository.anularGestionYDevolverAGestion (158)" },
-  // Feature 239 (2026-08-19) — las DOS salidas del pre-estado, las dos con productor real. #60
-  // es el ANCLAJE: la aprobacion del cierre ES la transicion a `devuelta`, con familia propia
-  // (`anclaje_devolucion`) porque el cron del SLA la busca por ella para saber cuando arranco el
-  // reloj. #61 es el deshacer del mensajero dentro de su ventana de siempre; sin ella el
-  // mensajero no podria deshacer su propia devolucion del dia (R24), que seria una REGRESION.
-  //
-  // NO hay aristas de `recuperacion_manual` desde el pre-estado: P4 se firmo EN CONTRA de la
-  // recomendacion del spec, y el precio esta escrito en `requirements.md`.
-  { n: "60", origen: "devolucion_por_confirmar", destino: "devuelta", via: "anclaje_devolucion", callSite: "CierresAdminService.aprobarCierre -> CierresAdminRepository.resolverCierre (239)" },
-  { n: "61", origen: "devolucion_por_confirmar", destino: "en_reparto", via: "deshacer_gestion", callSite: "CierreDiaService.deshacerGestion -> CierreDiaRepository.anularGestionYDevolverAGestion (239)" },
+  // FICHA 454 (2026-09-23): #60 (anclaje) y #61 (deshacer), las dos salidas del pre-estado de la
+  // 239, quedan RETIRADAS con su estado. El anclaje lo hereda #70; el deshacer de una gestion
+  // pendiente ya no transiciona (anula + evento `gestion_anulada`).
   // Feature 158, PR 2 — camino del ADMIN. CINCO entradas desde el conjunto CERRADO de origenes
   // que el humano fijo (Q-A) y sus CINCO inversas de reversion. Las diez son pares NUEVOS, asi
   // que suben por igual los dos recuentos (42 -> 52 y 40 -> 50). El `rol` de cada una esta
@@ -178,35 +170,10 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "56", origen: "incidente", destino: "en_ruta_bodega_central", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
   { n: "57", origen: "incidente", destino: "en_ruta_bodega_satelite", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
   { n: "58", origen: "incidente", destino: "por_recoger", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
-  // Feature 235 (2026-08-19) — el viaje de ida y vuelta de la AYUDA A LA TIENDA, mas su salida por
-  // el corte de la noche. Las TRES son pares NUEVOS y NO se retira ninguna: pedir ayuda no
-  // sustituye a ningun desenlace de `en_reparto`, lo anade (contraste con la 239, que si dio de
-  // baja #14 porque su productor cambio de destino).
-  //
-  // #63 tiene UN solo call-site aunque lo disparen DOS botones desde dos servicios: R8 exige un
-  // punto unico de escritura para el rescate y que sea el que usen tanto el mensajero como la
-  // tienda. `SolicitudAyudaService.recuperar` y `HabilitarNovedadService.habilitar` DELEGAN.
-  //
-  // NO hay aristas de GESTION desde `ayuda_tienda` (`-> entregada`, `-> reprogramada`,
-  // `-> devolucion_por_confirmar`, `-> rechazada`, `-> incidente`): son de la ficha 237 y llegan
-  // CON su productor. Declararlas aqui repetiria el error que la 154 cometio con #43/#44.
-  { n: "62", origen: "en_reparto", destino: "ayuda_tienda", via: "solicitud_ayuda_tienda", callSite: "SolicitudAyudaService.solicitar -> OrdenRepository.transicionarAyuda (235)" },
-  { n: "63", origen: "ayuda_tienda", destino: "en_reparto", via: "rescate_ayuda_tienda", callSite: "rescatarOrdenAyuda -> OrdenRepository.transicionarAyuda (235; lo llaman SolicitudAyudaService.recuperar y HabilitarNovedadService.habilitar)" },
-  { n: "64", origen: "ayuda_tienda", destino: "sin_gestionar", via: "corte_sin_gestionar", callSite: "CorteDiarioService.ejecutarCorte -> CierreDiaRepository.crearCierre, bloque guardado por ayuda_tienda (235)" },
-  // Feature 237 (2026-08-20) — LAS DOS GESTIONES DE LA TIENDA desde la pestaña de ayuda. Pares
-  // NUEVOS los dos (`ayuda_tienda -> reprogramada` y `ayuda_tienda -> rechazada` no estaban
-  // declarados por nadie) y no se retira ninguna: son desenlaces que ANTES no existian, no el
-  // relevo de otro productor.
-  //
-  // Comparten call-site (un solo metodo de repositorio decide el destino con el mapa
-  // `ESTATUS_POR_RESULTADO` de la 239), igual que #65/#66 comparten `via`. Lo que las separa es el
-  // `resultado` de la gestion que las produce.
-  //
-  // NO hay una tercera, cuarta ni quinta arista de gestion desde `ayuda_tienda`
-  // (`-> entregada`, `-> devolucion_por_confirmar`, `-> incidente`): 237/R1 concede EXACTAMENTE
-  // dos desenlaces y las otras tres siguen sin productor.
-  { n: "65", origen: "ayuda_tienda", destino: "reprogramada", via: "gestion_tienda_ayuda", callSite: "GestionDesdeAyudaService.gestionar -> GestionOrdenRepository.crearGestionDesdeAyuda (237)" },
-  { n: "66", origen: "ayuda_tienda", destino: "rechazada", via: "gestion_tienda_ayuda", callSite: "GestionDesdeAyudaService.gestionar -> GestionOrdenRepository.crearGestionDesdeAyuda (237)" },
+  // FICHA 454 (2026-09-23): #62-#66, la ayuda a la tienda como ESTADO (235: #62 solicitud, #63
+  // rescate, #64 corte; 237: #65/#66 gestion de la tienda), quedan RETIRADAS con el estado. La ayuda
+  // es un evento (`orden_evento`) sobre una orden que sigue `en_reparto`; el corte la barre por #16
+  // y la gestion de la tienda se aplica al aprobar por #71/#72 (abajo).
   // Feature 240 (2026-08-20) — EL RECHAZO MANUAL DE LA TIENDA. A diferencia de las tres altas
   // anteriores, esta NO es un par nuevo: `devuelta -> rechazada` YA estaba declarado por #21 (el
   // cron de plazo vencido). Es el TERCER duplicado historico del inventario, hermano exacto de
@@ -217,6 +184,19 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // Las dos vias conviven y la carrera entre ellas la cierra la guarda del `updateMany` (quien
   // llegue segundo obtiene count = 0 y no deja efectos), no una exclusion en el grafo.
   { n: "67", origen: "devuelta", destino: "rechazada", via: "rechazo_tienda", callSite: "RechazoTiendaService.rechazar -> GestionOrdenRepository.rechazarDesdeDevuelta (240)" },
+  // FICHA 454 (2026-09-23, design §2) — ALTA de `en_reparto -> devuelta` con familia
+  // `anclaje_devolucion`. Es el PAR de la vieja #14 (retirada por la 239), pero NO la reabre: la #14
+  // era la gestion del mensajero llevando a `devuelta` al instante; esta la produce SOLO la
+  // aprobacion del cierre, que es lo que la 239 pedia. Par NUEVO en el inventario vigente.
+  //
+  // Las BAJAS de la 454 (#59-#66 y las dos claves de los estados retirados) viajan con el retiro de
+  // los dos values del catalogo (fase 2 de la 454, 2026-09-23).
+  { n: "70", origen: "en_reparto", destino: "devuelta", via: "anclaje_devolucion", callSite: "CierresAdminRepository.resolverCierre, bloque APLICACION DE GESTIONES (454)" },
+  // FICHA 454 (2026-09-23, design §2) — METADATO de la gestion de la TIENDA desde una ayuda abierta
+  // (237), que ahora se aplica desde `en_reparto` al aprobar el cierre, con familia
+  // `gestion_tienda_ayuda`. Mismo par que #13/#15: suman arista y NO suman par.
+  { n: "71", origen: "en_reparto", destino: "reprogramada", via: "gestion_tienda_ayuda", callSite: "CierresAdminRepository.resolverCierre, bloque APLICACION DE GESTIONES (454; gestion registrada por GestionDesdeAyudaService)" },
+  { n: "72", origen: "en_reparto", destino: "rechazada", via: "gestion_tienda_ayuda", callSite: "CierresAdminRepository.resolverCierre, bloque APLICACION DE GESTIONES (454; gestion registrada por GestionDesdeAyudaService)" },
 ];
 
 /**
@@ -267,7 +247,10 @@ export const RECUENTO_INVENTARIO = {
   // 2026-08-20 (feature 240): 61 -> 62. Suma UNA (#67) y NO retira NINGUNA.
   // 2026-08-24 (feature 276): 62 -> 63. Suma UNA (#68) y NO retira ninguna.
   // 2026-09-08 (ficha 398): 63 -> 64. Suma UNA (#69) y NO retira ninguna.
-  aristasFlujo: 64, // +2 (157); +3 -1 (239); +3 (235); +2 (237); +1 (240); +1 (276); +1 (398)
+  // 2026-09-23 (ficha 454): 64 -> 65. Suma UNA (#70); sus bajas van con el retiro del catalogo.
+  // 2026-09-23 (ficha 454, retiro del catalogo): 65 -> 59. RETIRA OCHO (#59-#66: las aristas de los
+  // dos estados retirados) y suma DOS de metadato (#71/#72, `gestion_tienda_ayuda` desde `en_reparto`).
+  aristasFlujo: 59, // +2 (157); +3 -1 (239); +3 (235); +2 (237); +1 (240); +1 (276); +1 (398); +1 -8 +2 (454)
   // 52 -> 54 (239) -> 57 (235) -> 59 (237): las dos altas de la 237 son pares NUEVOS
   // (`ayuda_tienda -> reprogramada` y `ayuda_tienda -> rechazada`; ninguno estaba declarado, y
   // hasta la 237 de `ayuda_tienda` solo se salia rescatando o por el corte), igual que las tres de
@@ -291,6 +274,12 @@ export const RECUENTO_INVENTARIO = {
   // `entregada` solo se salia deshaciendo la gestion—, asi que la aritmetica de pares sigue a la de
   // aristas y la diferencia `aristas - pares` se queda en 3 (los duplicados #19/#23, #20/#24 y
   // #21/#67).
-  paresUnicos: 61,
+  // 2026-09-23 (ficha 454): 61 -> 62. La arista #70 (`en_reparto -> devuelta`) es un par NUEVO en
+  // el inventario vigente (su gemela #14 la retiro la 239), asi que la diferencia se queda en 3.
+  // 2026-09-23 (ficha 454, retiro del catalogo): 62 -> 54. Las OCHO aristas retiradas eran OCHO
+  // pares distintos (todos tocaban un estado retirado). #71/#72 repiten los pares de #13/#15, asi
+  // que no suman par: la diferencia `aristas - pares` pasa de 3 a 5 (#19/#23, #20/#24, #21/#67,
+  // #13/#71 y #15/#72).
+  paresUnicos: 54,
   aristasCreacion: 2,
 } as const;

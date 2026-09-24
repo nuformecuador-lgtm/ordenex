@@ -124,14 +124,24 @@ describe("ORIGEN_TIPOS_VISITA_REAL — el discriminador de las sinteticas (215/R
 
   // La lista no sirve de nada si el predicado no la usa como inclusion. Se mira el `where` REAL.
   it("R34-c: el predicado usa la lista con `in` y NO contiene ningun `none` ni `notIn`", () => {
+    // ⏳ 2026-09-23 (FICHA 454, design §10): la sexta condicion es ahora un `OR` de DOS vias de
+    // INCLUSION — (1) la fila de historial de una familia de visita real, con el `ordenId` repetido,
+    // y (2) el evento `gestion_registrada` de una gestion de calle del modelo nuevo. La intencion del
+    // caso no cambia: un solo criterio y lista de INCLUSION (`in`, ningun `none`/`notIn`).
     const where = whereIntentosVigentes("o1") as unknown as {
-      historialEstados: { some: { ordenId: string; origenTipo: { in: string[] } } };
+      OR: [
+        { historialEstados: { some: { ordenId: string; origenTipo: { in: string[] } } } },
+        { eventos: { some: { tipo: string } } },
+      ];
     };
-    expect(where.historialEstados.some.origenTipo).toEqual({ in: [...ORIGEN_TIPOS_VISITA_REAL] });
+    expect(where.OR).toHaveLength(2);
+    expect(where.OR[0].historialEstados.some.origenTipo).toEqual({ in: [...ORIGEN_TIPOS_VISITA_REAL] });
     // El `ordenId` repetido dentro del `some` NO es decorativo: `orden_historial_estado` no tiene
     // indice por `gestion_orden_id`, y repetirlo hace que el `EXISTS` entre por
     // `@@index([ordenId, createdAt])` en vez de recorrer una tabla append-only entera.
-    expect(where.historialEstados.some.ordenId).toBe("o1");
+    expect(where.OR[0].historialEstados.some.ordenId).toBe("o1");
+    // La segunda via: SOLO el registro de calle.
+    expect(where.OR[1]).toEqual({ eventos: { some: { tipo: "gestion_registrada" } } });
     const json = JSON.stringify(where);
     expect(json).not.toContain("none");
     expect(json).not.toContain("notIn");
@@ -174,7 +184,11 @@ describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (215/R14)", 
   // R14: el mapa NO se toca. Este caso ya existia con la 160; lo que cambia es lo que AFIRMA.
   // Antes derivaba de aqui que la arista #13 contaba como intento y la #22 no. Ahora NINGUNA
   // arista decide intentos: solo se comprueba que el mapa sigue igual.
-  it("R14: siguen existiendo EXACTAMENTE 3 aristas con destino `reprogramada` (#13, #22 y #65)", () => {
+  it("R14: siguen existiendo EXACTAMENTE 3 aristas con destino `reprogramada` (#13, #22 y #71)", () => {
+    // ⏳ 2026-09-23 (FICHA 454): la tercera ya no sale de `ayuda_tienda` (#65, retirada con su
+    // estado): la gestion de la tienda desde una ayuda abierta se APLICA desde `en_reparto` al
+    // aprobar el cierre (#71), con la MISMA familia `gestion_tienda_ayuda`. El recuento y las tres
+    // familias no cambian; cambia el origen de la tercera.
     // ⏳ 2026-08-20 (feature 237): eran DOS y son TRES. La tercera es
     // `ayuda_tienda -> reprogramada` (#65), la que registra LA TIENDA desde la pestaña de ayuda.
     // El censo se amplia a mano y se sigue enumerando entero: lo que este caso vigila es que
@@ -190,7 +204,7 @@ describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (215/R14)", 
       expect.arrayContaining([
         { origen: "en_reparto", destino: "reprogramada", via: "gestion" }, // #13
         { origen: "devuelta", destino: "reprogramada", via: "reprogramacion_tienda" }, // #22
-        { origen: "ayuda_tienda", destino: "reprogramada", via: "gestion_tienda_ayuda" }, // #65 (237)
+        { origen: "en_reparto", destino: "reprogramada", via: "gestion_tienda_ayuda" }, // #71 (454; antes #65 desde `ayuda_tienda`)
       ]),
     );
   });
@@ -227,12 +241,15 @@ describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (215/R14)", 
   // mira NINGUN destino de transicion — mira `resultado` (`devuelta` sigue en la lista) y la
   // familia de la fila de historial (`gestion` sigue siendo la que escribe la gestion del
   // mensajero, solo que ahora hacia el pre-estado). Las dos condiciones siguen intactas.
-  it("R14/239: la arista del mensajero conserva la familia `gestion` (cambia su DESTINO, no el conteo)", () => {
-    const delMensajero = aristas.filter(
-      (a) => a.origen === "en_reparto" && a.destino === "devolucion_por_confirmar",
+  it("R14/239 -> 454: ninguna arista de `gestion` lleva a `devuelta`; la entrada es el ANCLAJE al aprobar", () => {
+    // ⏳ 2026-09-23 (FICHA 454): AQUI SE AFIRMABA que la arista del mensajero hacia el pre-estado
+    // (`en_reparto -> devolucion_por_confirmar`, #59) conservaba la familia `gestion`. El pre-estado
+    // sale del catalogo y la gestion `devuelta` se REGISTRA sin transicion: su intento lo cuenta la
+    // SEGUNDA VIA de la 6.ª condicion (el evento `gestion_registrada`, design §10), no una arista.
+    const deGestionADevuelta = aristas.filter(
+      (a) => a.destino === "devuelta" && a.via === "gestion",
     );
-    expect(delMensajero).toHaveLength(1);
-    expect(delMensajero[0].via).toBe("gestion"); // R17: la sexta condicion del predicado sigue casando
+    expect(deGestionADevuelta).toEqual([]);
 
     // `devuelta` conserva entrada: la del ANCLAJE, con familia PROPIA. Y esa familia NO esta en
     // `ORIGEN_TIPOS_VISITA_REAL`, que es lo que impide que la confirmacion administrativa sume

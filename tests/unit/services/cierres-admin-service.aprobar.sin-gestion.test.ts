@@ -11,7 +11,7 @@ import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
-import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
+import { APLICACION_GESTIONES } from "@/tests/fixtures/anclaje-devolucion";
 
 /**
  * Feature 264 (B8, R5/R22) — LA APROBACION SIGUE MOVIENDO EXACTAMENTE EL MISMO DINERO.
@@ -133,7 +133,10 @@ function buildTx(
       })),
     },
     gestionOrden: {
-      findMany: vi.fn(async () => GESTIONES),
+      // FICHA 454 (T1.7): la aplicacion al aprobar pide solo gestiones de CALLE con evento de registro (`where.eventos`); las de este corpus son LEGADAS, asi que no encuentra ninguna y la suite sigue midiendo lo suyo.
+      findMany: vi.fn(async (args?: { where?: { eventos?: unknown } }) =>
+        args?.where?.eventos === undefined ? GESTIONES : [],
+      ),
       updateMany: vi.fn(async () => ({ count: 0 })),
       // FEATURE 276 (T9): el bloque del corte cuenta los intentos DENTRO de la tx con un
       // `groupBy`. Vacio = ninguna barrida llega al umbral, que es el corpus de esta suite; la
@@ -262,7 +265,7 @@ async function aprobarCon(
     // Feature 239: obligatorio en la rama `aprobado`. Esta suite no mide el anclaje —el bloque
     // corre en no-op con el corpus de aqui—, pero el tipo lo exige a proposito: un olvido de
     // cableado rompe el typecheck en vez de congelar devoluciones en produccion.
-    anclajeDevolucion: ANCLAJE_DEVOLUCION,
+    aplicacionGestiones: APLICACION_GESTIONES,
   });
 
   return { resultado, tx, ...captores };

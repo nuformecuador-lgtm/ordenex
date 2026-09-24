@@ -29,7 +29,9 @@ import { ESTATUS_POR_GRUPO } from "@/lib/types/novedad-grupo";
  * **solo `ayuda_tienda` puede volver a `en_reparto`**. `devuelta` cae SIEMPRE en solo-log.
  */
 export const ESTADOS_HABILITABLES_API = [
-  ESTATUS_POR_GRUPO.ayuda, // "ayuda_tienda"
+  // FICHA 454 (2026-09-23): la ayuda deja de ser estado. Una orden con ayuda ABIERTA es habilitable
+  // por la derivacion (`ApiHabilitacionService`: `orden.ayudaAbierta`), no por su estado, que es
+  // `en_reparto` — y `en_reparto` a secas NO es habilitable.
   ESTATUS_POR_GRUPO.devolucion, // "devuelta"
 ] as const satisfies readonly OrderStatusValue[];
 

@@ -70,7 +70,13 @@ import {
  *                              la sacaria del cierre abierto del origen y la meteria en el del
  *                              destino, en silencio y MOVIENDO DINERO.
  */
-export const ESTADOS_TRASPASABLES = ["en_reparto", "ayuda_tienda"];
+//
+// FICHA 454 (T1.17, R54/R28): `ayuda_tienda` sale porque deja de ser estado — una orden con ayuda
+// abierta sigue `en_reparto` y SIGUE siendo traspasable (con su ayuda abierta, R28). Lo que ya no se
+// traspasa es una orden `en_reparto` con gestion PENDIENTE de confirmar: su gestion y su cierre son
+// del mensajero de origen. Esa exclusion no cabe en una lista de estados: vive en la guarda de abajo
+// y, bajo candado, en `traspasarMensajeroLote`.
+export const ESTADOS_TRASPASABLES = ["en_reparto"];
 
 /**
  * Metodos de repo que consume el service (inyeccion por constructor, `Pick` para dobles de test sin
@@ -104,7 +110,13 @@ export type TraspasoMensajeroRepo = Pick<
   | "findMensajerosConOrdenesEn"
   | "findUsuarioNombre"
   | "traspasarMensajeroLote"
+  // FICHA 454 (R54): el motivo en palabras de «ya esta gestionada».
+  | "findIdsConGestionPendiente"
 >;
+
+/** FICHA 454 (R54): una orden gestionada y pendiente de confirmar no cambia de mensajero. */
+const MSG_GESTION_PENDIENTE =
+  "la orden ya esta gestionada y pendiente de confirmar: no se puede traspasar";
 
 /** R13: lo que ocupa al destino con un viaje a tienda ya comprometido (regla de dedicacion, 157). */
 const ESTADOS_RECOLECCION_PENDIENTE = ["recolectando"];
@@ -181,6 +193,11 @@ export class TraspasoMensajeroService implements ITraspasoMensajeroService {
         continue;
       }
       validas.push(orden);
+    }
+    // FICHA 454 (R54): gestionada = pendiente de confirmar; no se traspasa.
+    const pendientes = await this.repo.findIdsConGestionPendiente(validas.map((o) => o.id));
+    for (const o of validas) {
+      if (pendientes.has(o.id)) detalle.push({ ordenId: o.id, motivo: MSG_GESTION_PENDIENTE });
     }
     // R5: una sola rechazada aborta el lote ENTERO y SIN EFECTOS — ni una escritura, ni una fila de
     // rastro, ni una conversacion movida.

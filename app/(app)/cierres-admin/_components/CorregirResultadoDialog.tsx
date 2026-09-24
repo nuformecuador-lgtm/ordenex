@@ -10,6 +10,8 @@ import type {
   CierreTotales,
 } from "@/lib/interfaces/services/ICierreDiaService";
 
+import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+
 import { TotalesPanel } from "./cierre-detalle-shared";
 
 /**
@@ -50,6 +52,11 @@ const CONSECUENCIAS = [
   "El cobro registrado de esa entrega desaparece del cierre.",
   "El pago al mensajero por esa entrega pasa a cero.",
   "El paquete se tratará como una devolución al aprobar el cierre.",
+  // FICHA 454 (T2.7, R18/R19): la corrección ya NO cambia el estado de la orden: sella el nuevo
+  // resultado en la gestión, y el estado se APLICA al aprobar el cierre. Hasta hoy la orden pasaba
+  // a rechazada en el acto; decirlo evita que quien corrige busque ese cambio y no lo encuentre. El
+  // nombre del estado sale del mapa de etiquetas, no se escribe a mano.
+  `La orden sigue «${estatusLabel("en_reparto")}» hasta entonces: su estado pasa a «${estatusLabel("rechazada")}» al aprobar el cierre.`,
 ] as const;
 
 const AVISO =
