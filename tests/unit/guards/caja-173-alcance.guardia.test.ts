@@ -233,6 +233,19 @@ const CATALOGOS_PREEXISTENTES = [
   "lib/utils/aporte-por-orden.ts",
 ];
 
+/**
+ * Verificadores de SOLO LECTURA que nombran las categorias nuevas sin ser formula ni catalogo.
+ *
+ * `scripts/contraste-454.ts` (ficha 454, T3.1/T3.3): corredor local del contraste historico. Nombra
+ * `ingreso_cod_recaudado` solo en las filas FICTICIAS de `--autocomprobacion`, que se inyectan en el
+ * TEXTO de la consulta —nunca en la base— para provocar una diferencia por bloque. Ejecuta todo
+ * dentro de una transaccion `SET TRANSACTION READ ONLY` y no escribe en ningun libro.
+ *
+ * Declararlo aqui no lo exime de nada: el `it` «los verificadores de solo lectura no escriben» de
+ * abajo exige, sobre el codigo real, la transaccion de solo lectura y cero escrituras.
+ */
+const VERIFICADORES_SOLO_LECTURA = ["scripts/contraste-454.ts"];
+
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // R66 — el pago al mensajero entra en la caja EXACTAMENTE como antes. `[P2]` = (a).
 // ─────────────────────────────────────────────────────────────────────────────────────────
@@ -559,9 +572,32 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
     // `toEqual([])` de abajo pasaria sin haber mirado nada.
     expect(conCategoriasNuevas.length).toBeGreaterThan(0);
 
-    const declarados = new Set([...MODULOS_DE_LA_173, ...CATALOGOS_PREEXISTENTES]);
+    const declarados = new Set([
+      ...MODULOS_DE_LA_173,
+      ...CATALOGOS_PREEXISTENTES,
+      ...VERIFICADORES_SOLO_LECTURA,
+    ]);
     const sinDeclarar = conCategoriasNuevas.filter((ruta) => !declarados.has(ruta));
     expect(sinDeclarar).toEqual([]);
+  });
+
+  it("los verificadores de solo lectura no escriben: transaccion READ ONLY y cero escrituras", () => {
+    // Control de no-vacuidad: la lista no esta vacia y sus archivos existen.
+    expect(VERIFICADORES_SOLO_LECTURA.length).toBeGreaterThan(0);
+    for (const ruta of VERIFICADORES_SOLO_LECTURA) {
+      const codigo = codigoSinComentarios(ruta);
+      expect(codigo, `${ruta} no abre una transaccion de solo lectura`).toContain(
+        "SET TRANSACTION READ ONLY",
+      );
+      // Ninguna escritura por delegado de Prisma, del libro que sea.
+      const escrituraDelegado = new RegExp(`\\.\\w+\\.(${ESCRITURAS.join("|")})\\s*\\(`);
+      expect(codigo, `${ruta} escribe por un delegado de Prisma`).not.toMatch(escrituraDelegado);
+      // Toda sentencia cruda de escritura es, exactamente, la que fija la transaccion READ ONLY.
+      const crudas = codigo.match(/\$executeRaw(?:Unsafe)?\s*\(?`?[^;]*/g) ?? [];
+      for (const cruda of crudas) {
+        expect(cruda, `${ruta} ejecuta SQL de escritura`).toContain("SET TRANSACTION READ ONLY");
+      }
+    }
   });
 });
 

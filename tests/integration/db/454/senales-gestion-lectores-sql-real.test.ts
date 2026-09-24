@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import { RecepcionSateliteService } from "@/lib/services/RecepcionSateliteService";
 import { OrdenService } from "@/lib/services/OrdenService";
+import { obtenerHistorialOrden } from "@/lib/actions/orden-historial";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { listarOrdenesSchema, type SenalesGestionDTO } from "@/lib/types/orden";
 import { listarOrdenesBodegaPaginadoSchema } from "@/lib/types/recepcion-satelite";
@@ -165,15 +166,43 @@ describeSiHayBase("454/R29 — señales de gestion pendiente y ayuda en los lect
       );
 
       // --- L3: el detalle -------------------------------------------------------------------------
+      // REVISION 454 (B3, MUT-R6): en la rama no-`ok` el helper devuelve el resultado CRUDO. Antes
+      // devolvia solo `{ status }` y la asercion `toEqual({ status: "not_found" })` no podia fallar
+      // aunque el servicio colara las señales en un resultado denegado.
       const detalle = async (ordenId: string, actor: Actor) => {
         const d = await e.s.historialService.obtenerHistorial(ordenId, actor);
-        return d.status === "ok" ? { status: d.status, ...senales(d) } : { status: d.status };
+        return d.status === "ok" ? { status: d.status, ...senales(d) } : d;
       };
       const l3 = {} as Record<Caso, unknown>;
       for (const c of CASOS) l3[c] = await detalle(ids[c], e.actorMaestro);
       const l3Tienda = await detalle(ids.A, e.actorTienda);
       const l3TiendaAjena = await detalle(ajena, e.actorTienda);
       const l3Satelite = await detalle(ids.C, e.actorAdminSatelite);
+
+      // Denegados sobre ordenes CON señal (A: gestion pendiente; C: ayuda abierta), un actor por
+      // cada rama de `autorizar` que niega. El resultado entero tiene que ser solo el status.
+      const denegados = {
+        // adminTienda de otra tienda → not_found
+        tiendaAjenaA: await detalle(ids.A, otro.actorTienda),
+        tiendaAjenaC: await detalle(ids.C, otro.actorTienda),
+        // adminSatelite de otra zona → forbidden
+        sateliteAjenoA: await detalle(ids.A, otro.actorAdminSatelite),
+        sateliteAjenoC: await detalle(ids.C, otro.actorAdminSatelite),
+        // mensajero que ni la tiene asignada ni actuo sobre ella → forbidden
+        mensajeroAjenoA: await detalle(ids.A, e.actorMensajero2),
+        mensajeroAjenoC: await detalle(ids.C, e.actorMensajero2),
+      };
+
+      // La MISMA frontera por la Server Action (lo que llega al cliente), con el servicio real.
+      const porAction = (ordenId: string, actor: Actor | null) =>
+        obtenerHistorialOrden(ordenId, { service: e.s.historialService, getActor: async () => actor });
+      const action = {
+        okMaestroA: await porAction(ids.A, e.actorMaestro),
+        tiendaAjenaA: await porAction(ids.A, otro.actorTienda),
+        sateliteAjenoC: await porAction(ids.C, otro.actorAdminSatelite),
+        mensajeroAjenoA: await porAction(ids.A, e.actorMensajero2),
+        sinSesionA: await porAction(ids.A, null),
+      };
 
       return {
         ids,
@@ -188,6 +217,8 @@ describeSiHayBase("454/R29 — señales de gestion pendiente y ayuda en los lect
         l3Tienda,
         l3TiendaAjena,
         l3Satelite,
+        denegados,
+        action,
       };
     });
   }
@@ -271,6 +302,33 @@ describeSiHayBase("454/R29 — señales de gestion pendiente y ayuda en los lect
 
     it("el adminSatelite de la zona ve la ayuda abierta", () => {
       expect(r.l3Satelite).toEqual({ status: "ok", ...esperado("C") });
+    });
+
+    it("alcance (servicio): un resultado denegado es SOLO su status, sin señales ni ningun otro dato", () => {
+      expect(r.denegados).toEqual({
+        tiendaAjenaA: { status: "not_found" },
+        tiendaAjenaC: { status: "not_found" },
+        sateliteAjenoA: { status: "forbidden" },
+        sateliteAjenoC: { status: "forbidden" },
+        mensajeroAjenoA: { status: "forbidden" },
+        mensajeroAjenoC: { status: "forbidden" },
+      });
+    });
+
+    it("alcance (Server Action): lo que llega al cliente en forbidden/not_found/unauthenticated es solo el status", () => {
+      // Control: por la action, el maestro SI recibe la señal (la frontera no la borra siempre).
+      expect(r.action.okMaestroA).toMatchObject({ status: "ok", ...esperado("A") });
+      expect({
+        tiendaAjenaA: r.action.tiendaAjenaA,
+        sateliteAjenoC: r.action.sateliteAjenoC,
+        mensajeroAjenoA: r.action.mensajeroAjenoA,
+        sinSesionA: r.action.sinSesionA,
+      }).toEqual({
+        tiendaAjenaA: { status: "not_found" },
+        sateliteAjenoC: { status: "forbidden" },
+        mensajeroAjenoA: { status: "forbidden" },
+        sinSesionA: { status: "unauthenticated" },
+      });
     });
   });
 });

@@ -48,6 +48,9 @@ describeSiHayBase("454/C03 — conteo de intentos de entrega (Postgres real)", (
       },
       select: { id: true },
     });
+    // REVISION 454 (m4): FIXTURE, no asercion. En una base nueva la M3 retiro el destino legado de la
+    // `devuelta`; el escenario lo siembra dentro de la tx revertida.
+    await e.asegurarRetirados();
     await e.tx.ordenHistorialEstado.create({
       data: {
         ordenId,

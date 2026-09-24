@@ -23,6 +23,9 @@ describeSiHayBase("454/C27 — rastreo publico e historial legado (Postgres real
   let r: Awaited<ReturnType<typeof correr>>;
 
   async function fila(e: Escenario, ordenId: string, destino: string, minutos: number) {
+    // REVISION 454 (m4): FIXTURE, no asercion. Las filas historicas con destino retirado solo
+    // existen si el catalogo tiene el estado; en una base nueva lo siembra la tx revertida.
+    await e.asegurarRetirados();
     await e.tx.ordenHistorialEstado.create({
       data: {
         ordenId,

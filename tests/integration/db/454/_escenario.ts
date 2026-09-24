@@ -79,6 +79,24 @@ export const ESTATUS_454 = [
 ] as const;
 export type Estatus454 = (typeof ESTATUS_454)[number];
 
+/**
+ * REVISION 454 (m4, 2026-09-24): los dos estados que la M3 RETIRA del catalogo. En la base local
+ * compartida siguen existiendo (el historial los referencia y el retiro es condicional), pero en una
+ * base NUEVA —`migrate reset`, CI con base limpia— la M3 los borra, y exigirlos en `prepararMundo`
+ * tumbaba las 47 suites de la carpeta antes de medir nada.
+ *
+ * Ya no se exigen: si faltan, el escenario los SIEMBRA dentro de SU transaccion revertida, y solo
+ * cuando un fixture los pide (`sembrarOrden` con uno de ellos, `sembrarIntentoPasado` de una
+ * `devuelta`, o `asegurarRetirados()` explicito antes de `id()`). Perezoso a proposito: la columna
+ * `value` es UNIQUE, y un INSERT sin confirmar hace esperar a cualquier otra transaccion que inserte
+ * el mismo valor; sembrarlos en TODOS los escenarios serializaria la carpeta entera en una base nueva.
+ *
+ * Nunca en un escenario COMPROMETIDO (`sembrarComprometido`): alli el INSERT se confirmaria y
+ * devolveria al catalogo lo que la M3 retiro. Si un escenario comprometido los pide, falla ruidosamente.
+ */
+export const ESTATUS_RETIRADOS_454 = ["ayuda_tienda", "devolucion_por_confirmar"] as const;
+const RETIRADOS = new Set<string>(ESTATUS_RETIRADOS_454);
+
 export interface Mundo {
   prisma: PrismaClient;
   fks: { tiendaId: string; zonaId: string; provinciaId: string; cantonId: string };
@@ -122,6 +140,7 @@ export async function prepararMundo(): Promise<Mundo> {
   const estatus = new Map(catalogo.map((c) => [c.value, c.id]));
   const valorDeEstatus = new Map(catalogo.map((c) => [c.id, c.value]));
   for (const v of ESTATUS_454) {
+    if (RETIRADOS.has(v)) continue; // m4: los siembra el escenario, si hacen falta
     if (!estatus.has(v)) throw new Error(`falta el estatus «${v}» en \`order_status\``);
   }
   const central = await prisma.zona.findFirst({ where: { esCentral: true }, select: { id: true } });
@@ -302,8 +321,38 @@ export interface OrdenSembrada {
  * El escenario: personas propias + verbos sobre los servicios reales + lecturas.
  * `cliente` es la tx del test envuelta para que los repos puedan abrir su `$transaction`.
  */
-export async function crearEscenario(mundo: Mundo, tx: TxDeTest, cliente: PrismaClient) {
+export async function crearEscenario(
+  mundo: Mundo,
+  tx: TxDeTest,
+  cliente: PrismaClient,
+  opts: { comprometido?: boolean } = {},
+) {
   const s = montarServicios(cliente);
+
+  // m4: los estados retirados sembrados en ESTA transaccion (vacio si el catalogo ya los tiene).
+  const retiradosLocales = new Map<string, string>();
+  const valorRetiradoLocal = new Map<string, string>();
+
+  /** Garantiza, dentro de la tx del escenario, que los dos estados retirados esten en el catalogo. */
+  async function asegurarRetirados(): Promise<void> {
+    for (const v of ESTATUS_RETIRADOS_454) {
+      if (mundo.estatus.has(v) || retiradosLocales.has(v)) continue;
+      if (opts.comprometido) {
+        throw new Error(
+          `el estatus retirado «${v}» no esta en el catalogo y un escenario COMPROMETIDO no lo puede sembrar`,
+        );
+      }
+      await tx.$executeRaw`INSERT INTO "order_status" ("id", "value")
+        SELECT gen_random_uuid()::text, ${v}
+         WHERE NOT EXISTS (SELECT 1 FROM "order_status" WHERE "value" = ${v})`;
+      const fila = await tx.orderStatus.findUniqueOrThrow({ where: { value: v }, select: { id: true } });
+      retiradosLocales.set(v, fila.id);
+      valorRetiradoLocal.set(fila.id, v);
+    }
+  }
+
+  const valorDe = (estatusId: string): string | undefined =>
+    mundo.valorDeEstatus.get(estatusId) ?? valorRetiradoLocal.get(estatusId);
 
   async function crearUsuario(rol: string, zonaId: string | null): Promise<string> {
     const clave = claveUnica();
@@ -347,8 +396,14 @@ export async function crearEscenario(mundo: Mundo, tx: TxDeTest, cliente: Prisma
   const actorTienda: Actor = { usuarioId: tiendaId, rol: "adminTienda", zonaId: null };
 
   const id = (v: Estatus454 | string): string => {
-    const r = mundo.estatus.get(v);
-    if (r === undefined) throw new Error(`estatus «${v}» no esta en el catalogo`);
+    const r = mundo.estatus.get(v) ?? retiradosLocales.get(v);
+    if (r === undefined) {
+      throw new Error(
+        RETIRADOS.has(v)
+          ? `estatus retirado «${v}»: llama antes a \`await e.asegurarRetirados()\``
+          : `estatus «${v}» no esta en el catalogo`,
+      );
+    }
     return r;
   };
 
@@ -359,6 +414,7 @@ export async function crearEscenario(mundo: Mundo, tx: TxDeTest, cliente: Prisma
     montoCobrar?: number;
     fechaReparto?: Date | null;
   }): Promise<OrdenSembrada> {
+    if (RETIRADOS.has(o.estatus)) await asegurarRetirados();
     const k = claveUnica();
     const numGuia = guiaUnica();
     const orden = await tx.orden.create({
@@ -497,6 +553,7 @@ export async function crearEscenario(mundo: Mundo, tx: TxDeTest, cliente: Prisma
   ): Promise<{ gestionId: string; cierreId: string }> {
     const en = g.en ?? new Date("2026-09-01T10:00:00.000Z");
     const resultado = g.resultado ?? "devuelta";
+    if (resultado === "devuelta") await asegurarRetirados();
     const cierre = await tx.cierreDia.create({
       data: {
         mensajeroId,
@@ -556,7 +613,7 @@ export async function crearEscenario(mundo: Mundo, tx: TxDeTest, cliente: Prisma
 
   async function estadoDe(ordenId: string): Promise<string> {
     const o = await tx.orden.findUniqueOrThrow({ where: { id: ordenId }, select: { estatusId: true } });
-    return mundo.valorDeEstatus.get(o.estatusId) as string;
+    return valorDe(o.estatusId) as string;
   }
 
   async function ordenDe(ordenId: string) {
@@ -597,8 +654,8 @@ export async function crearEscenario(mundo: Mundo, tx: TxDeTest, cliente: Prisma
     });
     return filas.map((f) => ({
       ...f,
-      origen: f.estatusOrigenId ? (mundo.valorDeEstatus.get(f.estatusOrigenId) as string) : null,
-      destino: mundo.valorDeEstatus.get(f.estatusDestinoId) as string,
+      origen: f.estatusOrigenId ? (valorDe(f.estatusOrigenId) as string) : null,
+      destino: valorDe(f.estatusDestinoId) as string,
     }));
   }
 
@@ -608,6 +665,7 @@ export async function crearEscenario(mundo: Mundo, tx: TxDeTest, cliente: Prisma
     s,
     mundo,
     id,
+    asegurarRetirados,
     zonaSateliteId,
     tiendaId,
     mensajeroId,
@@ -681,7 +739,7 @@ export async function sembrarComprometido(
 ): Promise<Comprometido> {
   return mundo.prisma.$transaction(
     async (tx) => {
-      const e = await crearEscenario(mundo, tx, clienteConTransaccionAnidada(tx));
+      const e = await crearEscenario(mundo, tx, clienteConTransaccionAnidada(tx), { comprometido: true });
       const { ordenIds } = await fn(e);
       return {
         usuarios: [e.tiendaId, e.mensajeroId, e.mensajero2Id, e.adminSateliteId, e.maestroId],
