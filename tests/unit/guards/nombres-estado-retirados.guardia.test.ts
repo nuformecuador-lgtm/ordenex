@@ -81,6 +81,7 @@ const PENDIENTES_FASE_2: Record<string, number> = {
   "app/(app)/ranking/_components/ranking-descarga-columnas.ts": 1,
   "app/(app)/recoleccion/_components/RecoleccionModule.tsx": 1,
   "app/(app)/recoleccion/_components/RecolectadasHoyLista.tsx": 1,
+  "lib/analytics/metrics.ts": 1, // T2.6: etiqueta «Sin gestionar» -> «Novedad interna», JUNTO con catalogo-paneles.ts (guardia etiquetas-visibles)
   "lib/auth/menu-visibility.ts": 1, // T2.2 (titulo de menu «Recoger en bodega»)
   "lib/types/rastreo-publico.ts": 12, // T1.9 (BLOQUEO: el DTO del rastreo exige tocar app/_landing/RastreoDialog.tsx)
   "components/shared/nota-pendiente-confirmacion.ts": 1,

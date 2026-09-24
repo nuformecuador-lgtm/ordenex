@@ -319,9 +319,11 @@ const CATALOGO = [
   },
   {
     id: "novedad_interna",
-    etiqueta: "Novedad interna", // 455 (T1.11, inventario T0.3): cuenta ordenes en `novedad_interna`
+    // ⏳ 455: esta etiqueta y la del panel (`catalogo-paneles.ts`, UI) pasan JUNTAS a «Novedad interna»
+    // en la Fase 2 (T2.6): la guardia `etiquetas-visibles` exige que digan lo mismo.
+    etiqueta: "Sin gestionar",
     descripcion:
-      "ORDENES en novedad interna HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus novedad_interna (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
+      "ORDENES sin gestionar HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus novedad_interna (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",

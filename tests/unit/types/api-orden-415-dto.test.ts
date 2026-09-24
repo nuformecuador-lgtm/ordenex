@@ -147,7 +147,7 @@ describe("415/R2+R9 — la convencion de presencia en el item y la herencia del 
     expect(texto).toContain('"costoReal":null');
   });
 
-  it("el item con los tres campos poblados tiene TRECE claves exactas (R34: las diez siguen)", () => {
+  it("el item con los tres campos poblados tiene CATORCE claves exactas (R34: las diez siguen; 455/R24: + estadoNombre)", () => {
     const item: ApiOrdenListItemDTO = {
       ...ITEM_BASE,
       zona: ZONA,
@@ -161,6 +161,7 @@ describe("415/R2+R9 — la convencion de presencia en el item y la herencia del 
       "destinatario",
       "direccion",
       "estado",
+      "estadoNombre",
       "mensajero",
       "montoCobrar",
       "numGuia",
