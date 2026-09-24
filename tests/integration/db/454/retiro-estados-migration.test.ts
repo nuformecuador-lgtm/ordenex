@@ -116,8 +116,18 @@ describeSiHayBase("454/T1.24 — M3 contra Postgres real", () => {
       const dpc = await devueltaVieja(e);
       const todas = [ay, ayBorrada, ayRescatada, dpc.ordenId];
 
-      const jobs = () => e.tx.job.count();
-      const notifs = () => e.tx.notificacion.count();
+      // Solo las filas que escribio ESTA transaccion (`xmin` = su xid): el gate corre archivos en
+      // paralelo y un `count()` global de `jobs` cambia por los de otros tests (medido: 92 -> 90 en el
+      // gate completo del 2026-09-23). El DO de la migracion corre en la transaccion de nivel superior,
+      // asi que cualquier fila que escribiera llevaria ese xid.
+      const deEstaTx = async (tabla: "jobs" | "notificacion") => {
+        const [fila] = await e.tx.$queryRawUnsafe<{ n: number }[]>(
+          `SELECT count(*)::int AS n FROM "${tabla}" WHERE "xmin" = pg_current_xact_id()::xid`,
+        );
+        return fila.n;
+      };
+      const jobs = () => deEstaTx("jobs");
+      const notifs = () => deEstaTx("notificacion");
       const antes = { jobs: await jobs(), notifs: await notifs() };
       const estados = async (ids: string[]) => Promise.all(ids.map((id) => e.estadoDe(id)));
       const rastros = () => e.tx.ordenHistorialEstado.count({ where: { ordenId: { in: todas }, motivo: { in: RASTRO } } });
