@@ -90,53 +90,53 @@ con nota fechada.
 
 ### Cimientos
 
-- [ ] **T1.1 — Fuente única** (`design.md` §1.1-§1.2). `lib/types/order-status.ts` (seed con códigos
+- [x] **T1.1 — Fuente única** (`design.md` §1.1-§1.2). `lib/types/order-status.ts` (seed con códigos
   vigentes en las mismas posiciones, `NOMBRE_ESTADO`, `ESTADO_RETIRADO`, `CODIGO_VIGENTE_DE_ANTERIOR`,
   `nombreDeEstado`, `nombrePublicoDeEstado`, `codigoVigente`, comentario fechado); `lib/types/gestion-resultado.ts`
   (`nombreDeResultado`, `SENAL_PENDIENTE`, aserción de tipo). Tests unitarios: 20 nombres, retirado interno y
   público, código desconocido → «Estado no reconocido», traducción de los 7. Dep: T0.4.
   **Hecho:** tests verdes; G4 (T1.10) verde.
-- [ ] **T1.2 — `schema.prisma`** (§3.2): enum `GestionResultado` con los códigos vigentes; comentarios fechados;
+- [x] **T1.2 — `schema.prisma`** (§3.2): enum `GestionResultado` con los códigos vigentes; comentarios fechados;
   `prisma generate`. Dep: T1.1. **Hecho:** `prisma validate` y `migrate diff` sin diferencias frente a M1-M3.
-- [ ] **T1.3 — Migraciones M1, M2, M3 + `down.sql`** (§3.1) y `tests/integration/db/455/migracion.test.ts`
+- [x] **T1.3 — Migraciones M1, M2, M3 + `down.sql`** (§3.1) y `tests/integration/db/455/migracion.test.ts`
   (round-trip UP → UP → DOWN → UP con fotos comparadas, incluidos una vista guardada, un `orden_evento`, un job
   `webhook_estado` pendiente y un snapshot). M3 lista sus FK desde `information_schema` en el test, no a mano.
   Dep: T1.2. **Hecho:** test verde con `skipped = 0`; mutación: quitar un `UPDATE` de M1 → rojo; R16, R17, R19
   afirmados.
-- [ ] **T1.4 — Interruptor** `tests/fixtures/codigos-455.ts` a los códigos vigentes (una sola edición) y
+- [x] **T1.4 — Interruptor** `tests/fixtures/codigos-455.ts` a los códigos vigentes (una sola edición) y
   reemplazo mecánico de los literales en `lib/`, `app/` (solo tipos/lógica, no textos), `scripts/`, `tests/`
   (excepto los de la Fase 0, que no se tocan salvo sus `[INTERMEDIO]`). Incluye SQL crudo, `EXCLUDE_POR_ROL`,
   `EVENTOS_PUBLICOS`, `TRANSICIONES`, `ESTATUS_POR_RESULTADO` (identidad), `tests/fixtures/inventario-transiciones-140.ts`,
   el mapa `Record<GestionResultado, keyof FilaTableroDia>` (§1.2). Dep: T1.3. **Hecho:** `tsc` limpio; C01-C16
   invariantes verdes **sin editarlos**; G1 (T1.10) verde.
-- [ ] **T1.5 — Sembrado** (§3.3): comprobación de códigos anteriores en `seedOrderStatus` + test contra base con
+- [x] **T1.5 — Sembrado** (§3.3): comprobación de códigos anteriores en `seedOrderStatus` + test contra base con
   una fila `entregada` (falla, 0 inserciones). Dep: T1.1. `[P]` con T1.4. **Hecho:** R20 verde.
 
 ### Canal de integración (Dep: T1.4; `[P]` entre sí salvo T1.8)
 
-- [ ] **T1.6 — API por API key** (§5.1-§5.2): `estadoNombre`, `resultadoNombre`, `estadoResultanteNombre` en
+- [x] **T1.6 — API por API key** (§5.1-§5.2): `estadoNombre`, `resultadoNombre`, `estadoResultanteNombre` en
   listado, detalle, borrado, cancelación y habilitación; carga `estatus` → `estado` + `estadoNombre`; `422` por
   código anterior. Tests de servicio y de ruta por superficie con el literal esperado de una fila (no contra
   `nombreDeEstado`). **Hecho:** R24, R26, R27 verdes; C12 `[INTERMEDIO]` reescrito con fecha.
-- [ ] **T1.7 — Webhooks** (§5.1): `estadoNombre` tras `estado` en `orden.estado_actualizado`; `resultadoNombre`
+- [x] **T1.7 — Webhooks** (§5.1): `estadoNombre` tras `estado` en `orden.estado_actualizado`; `resultadoNombre`
   y `resultadoAnteriorNombre` en los eventos de la 454. **Hecho:** R25, R28 verdes; C11 invariante intacto.
-- [ ] **T1.8 — Contrato publicado** (§5.3): `openapi-spec.ts` derivado + `.yaml` espejo + Postman + entrada del
+- [x] **T1.8 — Contrato publicado** (§5.3): `openapi-spec.ts` derivado + `.yaml` espejo + Postman + entrada del
   CHANGELOG + `docs/ayuda/oficina/configuracion-api.md` + `docs/api/manual-metricas-por-mensajero.md`.
   Dep: T1.6, T1.7. **Hecho:** tests de contrato verdes; G5 verde; el CHANGELOG contiene la tabla de 7+4 filas.
-- [ ] **T1.9 — Rastreo público** (§4): DTO de nombres, fusión de tramos, retirados plegados al equivalente,
+- [ ] **T1.9 — Rastreo público** (⛔ 2026-09-24: BLOQUEO-1 de `progress/impl_455_backend.md`, el DTO exige tocar `app/_landing/RastreoDialog.tsx`) (§4): DTO de nombres, fusión de tramos, retirados plegados al equivalente,
   pendiente 454 con `SENAL_PENDIENTE`; `rastreo-sin-estatus-crudo.guardia` y `rastreo-hitos-exhaustivo.guardia`
   reescritas con fecha (la segunda se retira o pasa a afirmar la ausencia de hitos). `[P]` con T1.6-T1.8.
   **Hecho:** R31-R34 verdes; C13 invariante intacto.
 
 ### Resto del backend (Dep: T1.4; `[P]` entre sí)
 
-- [ ] **T1.10 — Guardias G1-G4** (§6.1-§6.4), cada una con su caso de mutación en el propio archivo (R44).
+- [x] **T1.10 — Guardias G1-G4** (§6.1-§6.4), cada una con su caso de mutación en el propio archivo (R44).
   Se retiran de la allowlist de `censo-order-status-rename.test.ts` las entradas de la homonimia de hitos
   (§4). **Hecho:** las cuatro verdes; cada una roja ante su mutación (anotado en `progress/impl_455_backend.md`).
-- [ ] **T1.11 — Textos que nacen en `lib/`**: `{{estatus}}` (`plantilla-datos.ts`), notificaciones
+- [x] **T1.11 — Textos que nacen en `lib/`**: `{{estatus}}` (`plantilla-datos.ts`), notificaciones
   (`emitir.ts`), `lib/services/mensajes-*.ts`, `label` de `AnaliticaOperativaRollupRepository`, métricas de
   `lib/analytics/metrics.ts` según T0.3. **Hecho:** R35, R36 verdes; C15 `[INTERMEDIO]` reescrito.
-- [ ] **T1.12 — Snapshots y URLs internas** (§2.2, §3.4): `codigoVigente` en el lector de
+- [x] **T1.12 (parte lib; la columna que pinta el snapshot es UI, C16 [INTERMEDIO] pasa a la Fase 2) — Snapshots y URLs internas** (§2.2, §3.4): `codigoVigente` en el lector de
   `historial_accion.valor_*` y en el parser del parámetro `estado` de la bodega satélite (y los demás de T0.3).
   **Hecho:** R22, R23 verdes; C02 y C16 `[INTERMEDIO]` reescritos.
 - [ ] **T1.13 — Cierre de la Fase 1.** `./init.sh` completo verde (`INIT_EXIT=0` escrito dentro del log, sin

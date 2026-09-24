@@ -132,7 +132,8 @@ describeSiHayBase("455/T1.3 — M1-M3 contra Postgres real (up → up → down �
       etiquetas: (
         await q<{ l: string }>(
           `SELECT e.enumlabel AS l FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-            WHERE t.typname = 'gestion_resultado' ORDER BY e.enumsortorder`,
+             JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE t.typname = 'gestion_resultado' AND n.nspname = 'public' ORDER BY e.enumsortorder`,
         )
       ).map((x) => x.l),
       estados: await q(

@@ -298,7 +298,6 @@ describe("153/R17 — invariante de censo: la etiqueta antigua “En ruta” no 
 // =================================================================================================
 
 const ANTERIORES = Object.keys(CODIGO_VIGENTE_DE_ANTERIOR);
-const TOKEN_ANTERIOR = new RegExp(`(?<![A-Za-z0-9_])(${ANTERIORES.join("|")})(?![A-Za-z0-9_])`);
 const CON_GUION_BAJO = ANTERIORES.filter((c) => c.includes("_"));
 const TOKEN_GUION_BAJO = new RegExp(`(?<![A-Za-z0-9_])(${CON_GUION_BAJO.join("|")})(?![A-Za-z0-9_])`);
 const ENTRE_COMILLAS_SIMPLES = new RegExp(`'(${ANTERIORES.join("|")})'`);

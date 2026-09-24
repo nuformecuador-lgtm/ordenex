@@ -19,10 +19,13 @@ BEGIN
     ) AS t("anterior", "vigente")
   LOOP
     IF EXISTS (
-      SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-       WHERE t.typname = 'gestion_resultado' AND e.enumlabel = v_par."vigente"
+      SELECT 1 FROM pg_enum e
+        JOIN pg_type t ON t.oid = e.enumtypid
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+       WHERE t.typname = 'gestion_resultado' AND n.nspname = current_schema()
+         AND e.enumlabel = v_par."vigente"
     ) THEN
-      EXECUTE format('ALTER TYPE "gestion_resultado" RENAME VALUE %L TO %L', v_par."vigente", v_par."anterior");
+      EXECUTE format('ALTER TYPE %I.%I RENAME VALUE %L TO %L', current_schema(), 'gestion_resultado', v_par."vigente", v_par."anterior");
     END IF;
   END LOOP;
 END $$;

@@ -582,8 +582,8 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     );
     expect([...estadosDeLaPagina].sort()).toEqual([
       "en_bodega_satelite",
-      "por_devolver_a_bodega_central",
       "mensajero_recogiendo_en_bodega",
+      "por_devolver_a_bodega_central",
     ]);
 
     // Sin nada marcado no se ofrece ninguna acción: no hay lote sobre el que actuar.
