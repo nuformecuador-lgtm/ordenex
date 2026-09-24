@@ -97,3 +97,8 @@ vitest sobre los archivos indicados, restauración byte a byte comprobada por sh
   si otra migración futura escribe un motivo técnico distinto, se pintaría tal cual.
 - Las filas YA escritas con «rechazada al aprobar el cierre: sin gestionar …» (motivo sintético de la 276) siguen
   diciendo eso: es texto guardado, igual que las notificaciones ya emitidas (O2 del recorrido).
+
+## Gate
+
+`./init.sh` completo contra `ordenex_455`, log `progress/gate_455_fix.log` (sin `tail`, `INIT_EXIT` escrito dentro):
+**2164/2164 archivos, 30 656 tests, 26 skipped (los preexistentes), `== init OK ==`, `INIT_EXIT=0`**, sobre `f2e7ff99`.
