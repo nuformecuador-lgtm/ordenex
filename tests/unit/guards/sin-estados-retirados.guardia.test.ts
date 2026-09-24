@@ -162,15 +162,14 @@ describe("0 — el detector de esta guardia no está roto", () => {
 
   it("el censo LEYÓ el árbol de verdad (no-vacuidad)", () => {
     expect(FUENTES.length).toBeGreaterThan(500);
-    // Los dos mapas de retirados que R40 exige existen y el detector los ve como admitidos: si
-    // alguien los renombrara sin el sufijo, esta guardia se pondría roja en el caso de abajo.
+    // El mapa de retirados que R40 exige existe y el detector lo ve como admitido: si alguien lo
+    // renombrara sin el sufijo, esta guardia se pondría roja en el caso de abajo.
+    // ⏳ 2026-09-24 (FICHA 455, design §1.1/§4): los dos mapas que había (`HITO_POR_ESTATUS_RETIRADO`
+    // del rastreo y `ORDER_STATUS_LABELS_RETIRADOS` del chip) se ABSORBEN en la fuente única
+    // `ESTADO_RETIRADO` de `lib/types/order-status.ts` (el rastreo ya no tiene hitos y el chip lee
+    // `nombreDeEstado`; la variante de una fila histórica la decide con `esOrderStatusRetirado`).
     const conMapa = FUENTES.filter((f) => /_RETIRADOS?\b/.test(f.codigo)).map((f) => f.ruta);
-    expect(conMapa).toEqual(
-      expect.arrayContaining([
-        "lib/types/rastreo-publico.ts",
-        "app/(app)/ordenes/_components/EstatusBadge.tsx",
-      ]),
-    );
+    expect(conMapa).toEqual(expect.arrayContaining(["lib/types/order-status.ts"]));
   });
 });
 

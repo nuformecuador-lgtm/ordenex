@@ -7,48 +7,29 @@ import type {
   TransicionRastreoFila,
 } from "@/lib/interfaces/repositories/IRastreoPublicoRepository";
 import { RastreoPublicoService } from "@/lib/services/RastreoPublicoService";
-import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 import {
-  HITOS_PUBLICOS,
-  HITO_POR_DEFECTO,
-  hitoDeEstatus,
-  type HitoPublico,
-  type RastreoPublicoDTO,
-} from "@/lib/types/rastreo-publico";
+  CODIGO_VIGENTE_DE_ANTERIOR,
+  NOMBRE_ESTADO,
+  ORDER_STATUS_SEED,
+} from "@/lib/types/order-status";
+import type { RastreoPublicoDTO } from "@/lib/types/rastreo-publico";
 
 // Feature 229 — GUARDIA DE NO-FUGA DE ESTATUS INTERNOS (T4.3, cubre R15).
 //
 // Se proyecta un historial que ATRAVIESA LOS 20 values de `ORDER_STATUS_SEED` y se comprueba
 // que ninguno cruza al resultado publico.
 //
-// ⚠ HOMONIMIA CONOCIDA, Y ES LA TRAMPA DE ESTE REQUISITO — leer antes de "arreglar" nada:
-//
-//   El hito PUBLICO firmado `en_reparto` (G5) se escribe EXACTAMENTE IGUAL que el
-//   `order_status.value` interno `en_reparto`. Son dos vocabularios distintos que coinciden en
-//   una palabra, no un estatus interno filtrado: el destinatario recibe un hito del vocabulario
-//   publico de nueve, que da la casualidad de llamarse como uno de los veinte estados internos.
-//   (La colision ya esta documentada en `rastreo-hitos-exhaustivo.guardia.test.ts:102-115`, y
-//   `censo-order-status-rename.test.ts` lleva cuatro entradas de allowlist por una homonimia
-//   HERMANA: el id del hito de bodega coincide con un value que la feature 135 retiro.)
-//
-//   ⚠ NOTA DE MANTENIMIENTO: por esa misma razon este archivo NO escribe literalmente el id de
-//   ese hito ni el value retirado por la 155 — no esta en la allowlist de aquel censo y no se
-//   le va a pedir que lo este por un dato de test. Donde hacen falta, se derivan del
-//   vocabulario publico (`HITOS_PUBLICOS`) o se usa un value huerfano cualquiera, que es lo
-//   que el caso de verdad necesita.
-//
-//   Consecuencia PRACTICA: un `ORDER_STATUS_SEED.some(v => JSON.stringify(res).includes(v))`
-//   —el barrido que sale solo al escribir esta guardia— da ROJO SIEMPRE contra un resultado
-//   PERFECTAMENTE correcto. Ese test seria falso: no mide R15, mide la homonimia. El primer
-//   caso de abajo lo deja DEMOSTRADO en vez de dicho, para que nadie lo reintroduzca.
-//
-// Por eso la comprobacion es ESTRUCTURAL y no de substrings:
-//   1. cada `hito` del resultado pertenece al vocabulario publico, y
-//   2. ninguna cadena del resultado contiene un value del seed, SALVO cuando la cadena entera
-//      es exactamente un id de hito publico (la excepcion es la homonimia, y solo esa).
-//
-// Y como una guardia que no puede fallar no vale nada, el mismo detector se ejecuta contra
-// resultados MUTADOS que publican `en_bodega_satelite` y `sin_gestionar`: tiene que cazarlos.
+// ⏳ REESCRITA EL 2026-09-24 (FICHA 455, T1.9; design §4; R31/R32). Hasta la 455 el resultado
+// publicaba ids de HITO (`en_reparto`, `entregado`…) que se escribian igual que tres codigos
+// internos, y esta guardia tenia que esquivar esa HOMONIMIA con una excepcion estructural (la
+// cadena entera igual a un id de hito publico). La 455 retira los hitos: cada entrada lleva el
+// NOMBRE VISIBLE del estado («En reparto»), que no es ningun codigo. La homonimia desaparece y la
+// regla queda entera y sin excepciones:
+//   1. cada `nombre` (y el vigente) es un nombre visible del catalogo (`NOMBRE_ESTADO`), y
+//   2. ninguna cadena del resultado —claves incluidas— contiene un codigo vigente ni un codigo
+//      ANTERIOR de la 455 (`CODIGO_VIGENTE_DE_ANTERIOR`).
+// Y como una guardia que no puede fallar no vale nada, el detector se ejecuta contra resultados
+// MUTADOS que publican codigos: tiene que cazarlos (la contraprueba conserva sus casos).
 
 const NUM_GUIA = 555_001;
 const TELEFONO = "8712-3456";
@@ -97,7 +78,10 @@ async function proyectar(
 /* El detector, escrito como funcion pura para poder probarlo con una fuga      */
 /* -------------------------------------------------------------------------- */
 
-const VOCABULARIO_PUBLICO = new Set<string>(HITOS_PUBLICOS);
+const NOMBRES_PUBLICABLES = new Set<string>(Object.values(NOMBRE_ESTADO));
+
+/** Los codigos que NUNCA pueden cruzar: los 20 vigentes y los 7 anteriores de la 455. */
+const CODIGOS: readonly string[] = [...ORDER_STATUS_SEED, ...Object.keys(CODIGO_VIGENTE_DE_ANTERIOR)];
 
 /** Todas las cadenas de un objeto y de sus descendientes, claves incluidas. */
 function cadenasProfundas(valor: unknown, acumulado: string[] = []): string[] {
@@ -119,18 +103,13 @@ function cadenasProfundas(valor: unknown, acumulado: string[] = []): string[] {
 }
 
 /**
- * Los `order_status.value` internos que se han colado en el resultado.
- *
- * La regla, dicha entera: una cadena delata un estatus interno si CONTIENE un value del seed
- * **y** ella misma no es, palabra por palabra, un id del vocabulario publico. Esa unica
- * excepcion es la homonimia de `en_reparto` (y solo puede serlo un id publico COMPLETO: un
- * `en_bodega_satelite` no lo es, aunque su prefijo sea el id de un hito publico).
+ * Los codigos de estado que se han colado en el resultado: cualquier cadena que CONTENGA uno. Sin
+ * excepciones: desde la 455 el resultado no lleva ids de hito, asi que no hay homonimia que salvar.
  */
 function valuesInternosFiltrados(valor: unknown): string[] {
   const delatoras: string[] = [];
   for (const cadena of cadenasProfundas(valor)) {
-    if (VOCABULARIO_PUBLICO.has(cadena)) continue;
-    for (const value of ORDER_STATUS_SEED) {
+    for (const value of CODIGOS) {
       if (cadena.includes(value)) delatoras.push(`${cadena} :: contiene el value interno ${value}`);
     }
   }
@@ -148,7 +127,7 @@ describe("R15 — un historial que atraviesa los 20 estatus no publica ningún v
     expect(new Set(TRANSICIONES.map((t) => t.estatusValue)).size).toBe(20);
   });
 
-  it("454/R40: las filas HISTÓRICAS de los dos estados retirados tampoco publican su value crudo", async () => {
+  it("454/R40 · 455/R34: las filas HISTÓRICAS de los retirados tampoco publican su value crudo", async () => {
     const RETIRADOS = ["devolucion_por_confirmar", "ayuda_tienda"];
     const historicas: TransicionRastreoFila[] = RETIRADOS.map((estatusValue, i) => ({
       createdAt: new Date(Date.UTC(2026, 1, 1 + i, 15, 0, 0)),
@@ -157,63 +136,34 @@ describe("R15 — un historial que atraviesa los 20 estatus no publica ningún v
     const envio = await proyectar([...TRANSICIONES, ...historicas]);
     const cadenas = JSON.stringify(envio);
     for (const retirado of RETIRADOS) expect(cadenas).not.toContain(retirado);
-    for (const entrada of envio.linea) expect(HITOS_PUBLICOS).toContain(entrada.hito);
+    for (const entrada of envio.linea) expect(NOMBRES_PUBLICABLES.has(entrada.nombre)).toBe(true);
   });
 
-  it("DEMOSTRACION de la homonimia: el `includes` ciego daria rojo contra un resultado CORRECTO", () => {
-    // Este caso no vigila el codigo: vigila a quien reescriba esta guardia. Deja medido que el
-    // barrido ingenuo denuncia un resultado impecable, y por que.
-    const serializado = JSON.stringify({
-      numGuia: NUM_GUIA,
-      hitoVigente: "registrado",
-      actualizadoEn: "2026-01-20T09:00-06:00",
-      linea: [{ hito: "en_reparto", fecha: "2026-01-10T09:00-06:00" }],
-    });
-
-    const ingenuo = ORDER_STATUS_SEED.filter((value) => serializado.includes(value));
-    expect(ingenuo).toEqual(["en_reparto"]); // el hito PUBLICO, no el estatus interno
-
-    // El detector estructural, sobre el MISMO objeto, no denuncia nada.
-    expect(valuesInternosFiltrados(JSON.parse(serializado))).toEqual([]);
-  });
-
-  it("ningún `order_status.value` cruza al resultado público", async () => {
+  it("ningún código de estado (vigente ni anterior) cruza al resultado público", async () => {
     const envio = await proyectar();
     expect(valuesInternosFiltrados(envio)).toEqual([]);
   });
 
-  it("cada `hito` publicado pertenece al vocabulario público, y el vigente tambien", async () => {
+  it("cada `nombre` publicado es un nombre visible del catálogo, y el vigente también", async () => {
     const envio = await proyectar();
 
     expect(envio.linea.length).toBeGreaterThan(0);
     for (const entrada of envio.linea) {
-      expect(HITOS_PUBLICOS, `hito fuera del vocabulario: ${entrada.hito}`).toContain(entrada.hito);
+      expect(NOMBRES_PUBLICABLES.has(entrada.nombre), `fuera del catálogo: ${entrada.nombre}`).toBe(true);
     }
-    expect(HITOS_PUBLICOS).toContain(envio.hitoVigente);
+    expect(NOMBRES_PUBLICABLES.has(envio.nombreVigente)).toBe(true);
   });
 
-  it("los veinte estatus se traducen a los NUEVE hitos firmados, sin sobrar ni faltar", () => {
-    // La cara positiva de R15: no basta con que no salga el value crudo, tiene que salir el
-    // hito. Si un value se publicara "en bruto" o se omitiera, este conjunto cambiaria.
-    //
-    // Los nueve se DERIVAN del vocabulario publico menos el neutral, en vez de escribirse a
-    // mano: la tabla firmada ya tiene su guardia de transcripcion (T1.3,
-    // `rastreo-hitos-exhaustivo.guardia.test.ts`), y aqui lo que se afirma es que el catalogo
-    // VIGENTE cubre los nueve hitos reales y NUNCA cae en la red de seguridad de R17.
-    const hitos = new Set<HitoPublico>();
-    for (const { estatusValue } of TRANSICIONES) hitos.add(hitoDeEstatus(estatusValue));
-
-    const nueveFirmados = HITOS_PUBLICOS.filter((hito) => hito !== HITO_POR_DEFECTO);
-    expect(nueveFirmados).toHaveLength(9);
-    expect([...hitos].sort()).toEqual([...nueveFirmados].sort());
-    expect(hitos.has(HITO_POR_DEFECTO)).toBe(false);
+  it("los veinte estados se publican con SUS veinte nombres, sin sobrar ni faltar", async () => {
+    // La cara positiva de R15: no basta con que no salga el código, tiene que salir su nombre. Con
+    // un estado por día y ninguno repetido, no hay rachas que fundir: 20 entradas, 20 nombres.
+    const envio = await proyectar();
+    expect(envio.linea.map((e) => e.nombre).sort()).toEqual([...NOMBRES_PUBLICABLES].sort());
   });
 
   it("una fila HUERFANA (el caso real de la feature 155) tampoco publica su value crudo", async () => {
-    // El historial es append-only: una fila puede apuntar a un estatus RETIRADO del catalogo
-    // vigente. El value concreto que la 155 retiro no se escribe aqui —lo censa
-    // `censo-order-status-rename.test.ts` y este archivo no esta en su allowlist—; el caso no
-    // depende de cual sea: depende de que NO este en el seed.
+    // El historial es append-only: una fila puede apuntar a un estatus fuera del catalogo vigente.
+    // El value concreto que la 155 retiro no se escribe aqui; el caso no depende de cual sea.
     const huerfano = "un_estatus_retirado_del_catalogo";
     expect(new Set<string>(ORDER_STATUS_SEED).has(huerfano)).toBe(false);
 
@@ -223,31 +173,29 @@ describe("R15 — un historial que atraviesa los 20 estatus no publica ningún v
     ]);
 
     expect(JSON.stringify(envio)).not.toContain(huerfano);
-    expect(envio.linea.map((e) => e.hito)).toEqual([HITO_POR_DEFECTO, "entregado"]);
+    expect(envio.linea.map((e) => e.nombre)).toEqual(["Estado no reconocido", "Entregado"]);
   });
 });
 
 describe("R15 — CONTRAPRUEBA: el detector caza los values que de verdad serian una fuga", () => {
-  it("caza `en_bodega_satelite`, aunque su PREFIJO sea el id de un hito público", async () => {
+  it("caza `en_bodega_satelite` publicado como nombre", async () => {
     const envio = await proyectar();
     const fugado = {
       ...envio,
-      linea: [...envio.linea, { hito: "en_bodega_satelite", fecha: "2026-01-21T09:00-06:00" }],
+      linea: [...envio.linea, { nombre: "en_bodega_satelite", fecha: "2026-01-21T09:00-06:00" }],
     };
 
     const delatoras = valuesInternosFiltrados(fugado);
-    expect(delatoras).toHaveLength(1);
-    expect(delatoras[0]).toContain("en_bodega_satelite");
+    expect(delatoras.some((d) => d.includes("contiene el value interno en_bodega_satelite"))).toBe(true);
   });
 
-  it("caza `novedad_interna`, que es justo el estado que G8 esconde tras «En reparto»", async () => {
+  it("caza `novedad_interna` como vigente", async () => {
     const envio = await proyectar();
-    const fugado = { ...envio, hitoVigente: "novedad_interna" };
+    const fugado = { ...envio, nombreVigente: "novedad_interna" };
 
     const delatoras = valuesInternosFiltrados(fugado);
-    // ⏳ 2026-09-24 (455, T1.4): `novedad_interna` CONTIENE otro codigo vigente (`novedad`), asi que la
-    // misma cadena se delata dos veces. Lo que importa: se caza, y por el value que es.
-    expect(delatoras.length).toBeGreaterThanOrEqual(1);
+    // `novedad_interna` CONTIENE otro codigo vigente (`novedad`), asi que la misma cadena se delata
+    // dos veces. Lo que importa: se caza, y por el value que es.
     expect(delatoras.some((d) => d.includes("contiene el value interno novedad_interna"))).toBe(true);
   });
 
@@ -257,26 +205,21 @@ describe("R15 — CONTRAPRUEBA: el detector caza los values que de verdad serian
       ...envio,
       linea: [
         ...envio.linea,
-        { hito: "en_proceso", fecha: "estado interno: por_recolectar_en_tienda" },
+        { nombre: "En reparto", fecha: "estado interno: por_recolectar_en_tienda" },
       ],
     };
 
     expect(valuesInternosFiltrados(fugado).length).toBeGreaterThan(0);
   });
 
-  it("caza los DIECISIETE values que no son homonimos de un hito publico", () => {
-    // ⏳ 2026-09-24 (455, T1.4): con los codigos de la 455, DOS estados mas se escriben igual que un
-    // hito publico (`entregado`, `reprogramado`): la homonimia pasa de uno a tres. Los hitos
-    // desaparecen con T1.9 (design DF) y esta guardia se reescribe entonces.
-    const HOMONIMOS = ["entregado", "reprogramado", "en_reparto"];
-    const homonimos = ORDER_STATUS_SEED.filter((value) => VOCABULARIO_PUBLICO.has(value));
-    expect(homonimos).toEqual(HOMONIMOS);
-
-    for (const value of ORDER_STATUS_SEED) {
-      const objeto = { hito: value, fecha: "2026-01-01T09:00-06:00" };
-      const delatoras = valuesInternosFiltrados(objeto);
-      if (HOMONIMOS.includes(value)) expect(delatoras).toEqual([]);
-      else expect(delatoras, `el detector deja pasar ${value}`).not.toEqual([]);
+  it("caza los VEINTE codigos vigentes y los SIETE anteriores: ya no hay homonimos que salvar", () => {
+    for (const value of CODIGOS) {
+      const delatoras = valuesInternosFiltrados({ nombre: value, fecha: "2026-01-01T09:00-06:00" });
+      expect(delatoras, `el detector deja pasar ${value}`).not.toEqual([]);
+    }
+    // Y ningun NOMBRE visible contiene un codigo (la homonimia de los hitos no se reproduce).
+    for (const nombre of NOMBRES_PUBLICABLES) {
+      expect(valuesInternosFiltrados({ nombre }), nombre).toEqual([]);
     }
   });
 });

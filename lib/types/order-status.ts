@@ -89,9 +89,9 @@ export const ORDER_STATUS_SEED = [
   // cierre; la ayuda pasa a ser un evento (`orden_evento`), no un estado. El catalogo vuelve a 20.
   // La migracion `20260923120200_retiro_estados_454` mueve las ordenes vivas y borra la fila del
   // catalogo solo si nadie la referencia (en una base con historial sobrevive huerfana, como la
-  // del estado de fulfillment de la 155). Las filas historicas se siguen leyendo (R40) por los
-  // mapas de retirados: `HITO_POR_ESTATUS_RETIRADO` (rastreo) y `ORDER_STATUS_LABELS_RETIRADOS`
-  // (etiquetas, `EstatusBadge.tsx`).
+  // del estado de fulfillment de la 155). Las filas historicas se siguen leyendo (R40) por
+  // `ESTADO_RETIRADO`, abajo (FICHA 455: absorbe los dos mapas de retirados que tenian el rastreo
+  // y el chip de `/ordenes`).
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

@@ -126,17 +126,15 @@ const ALLOWLIST = new Set([
   // implementacion para esquivar este censo. Si algun dia se renombra el hito, estas cuatro
   // entradas se retiran. Los dos archivos de test citan ademas el value RETIRADO por la 155
   // como dato de entrada del caso de fila huerfana (R17), igual que `analytics-daily-job`.
-  // OJO: la allowlist es por BASENAME, asi que esta entrada cubre tambien
-  // `lib/config/rastreo-publico.ts` y `lib/actions/rastreo-publico.ts`, que hoy no contienen
-  // ningun literal antiguo. Es un efecto de la primitiva del guard, no una excepcion pedida.
-  "rastreo-publico.ts", // lib/types: la tabla de hitos publicos
-  "rastreo-hitos-exhaustivo.guardia.test.ts", // afirma la tabla firmada y el caso huerfano
-  "rastreo-publico-service.test.ts", // proyeccion esperada de la linea de tiempo
-  "rastreo-publico.int.test.ts", // idem, con datos
-  // ⏳ 2026-09-23 (FICHA 454): la caracterizacion C27 del rastreo afirma la linea de tiempo PUBLICA
-  // (`["en_bodega", "no_entregado"]`): es el MISMO hito firmado de las cuatro entradas de arriba, no
-  // el value de `order_status`. Entro rojo con la Fase 0 (`3603d199`), que no corrio el gate completo.
-  "rastreo-y-historial-legado.test.ts",
+  //
+  // ⏳ 2026-09-24 (FICHA 455, T1.9; design §4): los hitos DESAPARECEN (el rastreo publica nombres de
+  // estado) y con ellos la homonimia: salen de esta allowlist `rastreo-publico.ts`,
+  // `rastreo-publico.int.test.ts` y `rastreo-y-historial-legado.test.ts` (la C27 de la 454, que
+  // habia entrado por el mismo hito). Se QUEDAN dos, por la otra mitad de su motivo: citan el value
+  // RETIRADO por la 155 como dato de entrada de una fila historica, que la 455 pliega a su
+  // equivalente en el rastreo (R34), igual que `analytics-daily-job`.
+  "rastreo-hitos-exhaustivo.guardia.test.ts", // lectura publica del retirado de la 155 (R34)
+  "rastreo-publico-service.test.ts", // proyeccion de una fila del retirado de la 155 (R34)
   // FICHA 455 (2026-09-24, design §1.1, R11): `ESTADO_RETIRADO` en `lib/types/order-status.ts` es la
   // fuente UNICA del nombre historico de los estados retirados, y una de sus claves es el value que la
   // 155 retiro: su fila sobrevive en `order_status` donde el historial la cita, y una linea de tiempo

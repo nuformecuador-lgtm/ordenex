@@ -8,12 +8,9 @@ import type {
   IRastreoPublicoService,
   ResultadoConsultaRastreo,
 } from "@/lib/interfaces/services/IRastreoPublicoService";
-import {
-  hitoDeEstatus,
-  NOMBRE_RESULTADO_PENDIENTE,
-  type HitoPublico,
-  type HitoPublicoEntrada,
-} from "@/lib/types/rastreo-publico";
+import { nombreDeResultado } from "@/lib/types/gestion-resultado";
+import { nombrePublicoDeEstado } from "@/lib/types/order-status";
+import type { EntradaLineaPublica } from "@/lib/types/rastreo-publico";
 import { normalizarTelefonoCR } from "@/lib/utils/telefono-cr";
 
 // Feature 229 (design §2.1/§3.3/§3.4) — proyeccion publica de un envio.
@@ -28,6 +25,14 @@ import { normalizarTelefonoCR } from "@/lib/utils/telefono-cr";
  * nunca alcanza el minimo exigido y nunca puede coincidir con un factor valido.
  */
 const TELEFONO_CENTINELA = "";
+
+/**
+ * `true` si el texto de la fila es un resultado de gestion. Se lee de las claves de
+ * `ESTATUS_POR_RESULTADO` (exhaustivo sobre el enum, sin importar Prisma en runtime: R33).
+ */
+function esResultadoDeGestion(valor: string): valor is keyof typeof ESTATUS_POR_RESULTADO {
+  return Object.hasOwn(ESTATUS_POR_RESULTADO, valor);
+}
 
 /** Los ultimos `n` caracteres (o la cadena entera si es mas corta). */
 function ultimos(texto: string, n: number): string {
@@ -63,15 +68,16 @@ function formatearEnZona(instante: Date, zonaHoraria: string): string {
 }
 
 /**
- * R18 (G9) — colapsa las rachas consecutivas del mismo hito conservando la fecha de la
- * PRIMERA ocurrencia. Con este mapeo una orden real encadena varias transiciones internas
- * bajo el mismo hito (dos paradas de bodega, por ejemplo), y esa granularidad es geografia
- * interna que el destinatario no necesita.
+ * R18 (G9) / FICHA 455 (R31) — colapsa las rachas consecutivas del mismo NOMBRE de estado
+ * conservando la fecha de la PRIMERA ocurrencia. Antes la racha se medía por hito; con nombres, lo
+ * que se funde es un mismo estado repetido y, sobre todo, un estado retirado plegado a su
+ * equivalente (R34): el viaje histórico `en_reparto -> ayuda_tienda -> en_reparto` se sigue viendo
+ * como UNA sola entrada «En reparto».
  */
-function colapsarRachas(entradas: readonly HitoPublicoEntrada[]): HitoPublicoEntrada[] {
-  const linea: HitoPublicoEntrada[] = [];
+function colapsarRachas(entradas: readonly EntradaLineaPublica[]): EntradaLineaPublica[] {
+  const linea: EntradaLineaPublica[] = [];
   for (const entrada of entradas) {
-    if (linea[linea.length - 1]?.hito === entrada.hito) continue;
+    if (linea[linea.length - 1]?.nombre === entrada.nombre) continue;
     linea.push(entrada);
   }
   return linea;
@@ -109,31 +115,27 @@ export class RastreoPublicoService implements IRastreoPublicoService {
     const transiciones = await this.repo.listarTransiciones(fila.id);
     const linea = this.proyectarLinea(transiciones);
     // FICHA 454 (T1.19, design §12.3; R31): la gestion PENDIENTE de confirmar se ve AL INSTANTE,
-    // como ultimo hito, marcada. Sin actor, sin motivo, sin mensajero: solo el hito de su resultado
-    // (mapa de aplicacion `ESTATUS_POR_RESULTADO` -> tabla firmada de hitos) y su instante. Al
-    // anularse desaparece; al corregirse muestra el corregido (la gestion lleva el resultado
-    // sellado); al aprobarse la sustituye el hito confirmado de la fila de historial.
+    // como ultima entrada, marcada. Sin actor, sin motivo, sin mensajero: solo su resultado y su
+    // instante. Al anularse desaparece; al corregirse muestra el corregido (la gestion lleva el
+    // resultado sellado); al aprobarse la sustituye la entrada confirmada de la fila de historial.
     //
-    // DECISION DEL HUMANO (2026-09-24, prevalece): la entrada pendiente lleva ademas el NOMBRE
-    // VISIBLE del resultado (`nombreResultado`: «Rechazada», no el hito «No entregado»). Es texto,
-    // no el codigo interno, y es lo unico que se añade.
+    // FICHA 455 (2026-09-24, R33): la entrada lleva el NOMBRE del resultado (`nombreDeResultado`,
+    // el de su estado homonimo: «Devolución a origen por rechazo»), y la pagina lo pinta como
+    // «<Resultado> · pendiente de confirmación». Sustituye al hito + `nombreResultado` de la 454.
     const pendiente = await this.repo.buscarGestionPendiente(fila.id);
-    if (pendiente !== null) {
-      const resultado = pendiente.resultado as keyof typeof ESTATUS_POR_RESULTADO;
-      const destino = ESTATUS_POR_RESULTADO[resultado];
-      if (destino !== undefined) {
-        linea.push({
-          hito: hitoDeEstatus(destino),
-          fecha: formatearEnZona(pendiente.createdAt, this.config.ZONA_HORARIA),
-          pendiente: true,
-          nombreResultado: NOMBRE_RESULTADO_PENDIENTE[resultado],
-        });
-      }
+    // El resultado llega como texto de la fila; si no es un codigo del catalogo no se publica nada
+    // (el mismo descarte que hacia la 454 cuando el resultado no tenia estado destino).
+    if (pendiente !== null && esResultadoDeGestion(pendiente.resultado)) {
+      linea.push({
+        nombre: nombreDeResultado(pendiente.resultado),
+        fecha: formatearEnZona(pendiente.createdAt, this.config.ZONA_HORARIA),
+        pendiente: true,
+      });
     }
 
-    // Sin transiciones no hay nada OCURRIDO que contar (G10) y `hitoVigente` no podria
+    // Sin transiciones no hay nada OCURRIDO que contar (G10) y `nombreVigente` no podria
     // derivarse de la misma linea (R20). Se responde como los demas casos sin envio.
-    const vigenteDeLaLinea: HitoPublicoEntrada | undefined = linea[linea.length - 1];
+    const vigenteDeLaLinea: EntradaLineaPublica | undefined = linea[linea.length - 1];
     if (vigenteDeLaLinea === undefined) {
       return { estado: "no_encontrado" };
     }
@@ -144,7 +146,7 @@ export class RastreoPublicoService implements IRastreoPublicoService {
       estado: "ok",
       envio: {
         numGuia: fila.numGuia ?? numGuia,
-        hitoVigente: vigenteDeLaLinea.hito,
+        nombreVigente: vigenteDeLaLinea.nombre,
         actualizadoEn: vigenteDeLaLinea.fecha,
         linea,
       },
@@ -152,19 +154,19 @@ export class RastreoPublicoService implements IRastreoPublicoService {
   }
 
   /**
-   * R14/R15/R20 — el historial ya ocurrido, traducido a hitos publicos, en orden
-   * cronologico ascendente y con las rachas colapsadas. No se sintetiza ninguna entrada
+   * R14/R15/R20 — el historial ya ocurrido, traducido a NOMBRES de estado (FICHA 455, R31/R34), en
+   * orden cronologico ascendente y con las rachas colapsadas. No se sintetiza ninguna entrada
    * futura (G10): el flujo puede desviarse a devolucion y prometer un paso que no llegara
    * es peor que no decir nada.
    */
-  private proyectarLinea(transiciones: readonly TransicionRastreoFila[]): HitoPublicoEntrada[] {
+  private proyectarLinea(transiciones: readonly TransicionRastreoFila[]): EntradaLineaPublica[] {
     const ascendente = [...transiciones].sort(
       (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
     );
-    const entradas: HitoPublicoEntrada[] = ascendente.map((transicion) => {
-      const hito: HitoPublico = hitoDeEstatus(transicion.estatusValue);
-      return { hito, fecha: formatearEnZona(transicion.createdAt, this.config.ZONA_HORARIA) };
-    });
+    const entradas: EntradaLineaPublica[] = ascendente.map((transicion) => ({
+      nombre: nombrePublicoDeEstado(transicion.estatusValue),
+      fecha: formatearEnZona(transicion.createdAt, this.config.ZONA_HORARIA),
+    }));
     return colapsarRachas(entradas);
   }
 }

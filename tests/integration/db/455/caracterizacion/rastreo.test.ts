@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import { RastreoPublicoRepository } from "@/lib/repositories/RastreoPublicoRepository";
 import { RastreoPublicoService } from "@/lib/services/RastreoPublicoService";
-import { ETIQUETA_POR_HITO } from "@/lib/types/rastreo-publico";
 import { C, R, RETIRADO } from "../../../../fixtures/codigos-455";
 import { HAY_BASE_DE_DATOS } from "../../_postgres-real";
 import { conEscenario, prepararMundo, type Escenario, type Mundo } from "../../454/_escenario";
@@ -116,11 +115,11 @@ describeSiHayBase("455/C13 — rastreo publico (Postgres real)", () => {
         fechas: linea.map((l) => l.fecha),
         fechaSola,
         vigente: c.estado === "ok" ? c.envio.actualizadoEn : "∅",
-        textos: linea.map((l) => ETIQUETA_POR_HITO[l.hito]),
+        textos: linea.map((l) => l.nombre),
         pendiente: {
           entradas: lineaPendiente.length,
           ultimaPendiente: lineaPendiente[lineaPendiente.length - 1]?.pendiente === true,
-          nombreResultado: lineaPendiente[lineaPendiente.length - 1]?.nombreResultado ?? "∅",
+          nombreResultado: lineaPendiente[lineaPendiente.length - 1]?.nombre ?? "∅",
         },
       };
     });
@@ -154,36 +153,40 @@ describeSiHayBase("455/C13 — rastreo publico (Postgres real)", () => {
   });
 
   describe("[INTERMEDIO] lo que la 455 cambia por diseño (R31, R33, R34)", () => {
-    // Fase 0 (2026-09-24): los textos de HOY son los nueve hitos de la 229 y la entrada pendiente lleva
-    // la copia `NOMBRE_RESULTADO_PENDIENTE` de la 454. La Fase 1 (T1.9) los cambia por nombres de estado.
-    it("los textos de la linea, hoy (hitos)", () => {
+    // Fase 0 (2026-09-24): los textos eran los nueve hitos de la 229 y la entrada pendiente llevaba la
+    // copia `NOMBRE_RESULTADO_PENDIENTE` de la 454.
+    // FASE 2 (2026-09-24, T1.9 — BLOQUEO-1 de la Fase 1): el rastreo publica NOMBRES de estado. Cada
+    // tramo es el nombre visible exacto; los retirados se pliegan a su equivalente (los dos de la
+    // 155 -> «En preparación», el de ayuda -> «En reparto», el pre-estado de la devolucion ->
+    // «Novedad») y se funden con su vecino igual. Mismas 21 entradas que con hitos (invariante).
+    it("los textos de la linea: los nombres de estado, retirados plegados a su equivalente", () => {
       expect(r.textos).toEqual([
-        "En proceso",
-        "En nuestras instalaciones",
-        "Envío registrado",
-        "En tránsito",
-        "En nuestras instalaciones",
+        "En preparación",
+        "En bodega central",
+        "En preparación",
+        "En ruta a bodega central",
+        "Mensajero recogiendo en la bodega",
         "En reparto",
         "Entregado",
-        "Envío registrado",
-        "En tránsito",
-        "En nuestras instalaciones",
-        "No fue posible entregarlo",
-        "En devolución a la tienda",
-        "Envío registrado",
-        "En devolución a la tienda",
-        "Entrega reprogramada",
-        "No fue posible entregarlo",
-        "En devolución a la tienda",
-        "En reparto",
-        "No fue posible entregarlo",
-        "En devolución a la tienda",
-        "Devuelto a la tienda",
+        "Por recolectar en tienda",
+        "En ruta a bodega satélite",
+        "En bodega satélite",
+        "Novedad",
+        "Por devolver a bodega central",
+        "Recolectando",
+        "Devolviendo a bodega central",
+        "Reprogramado",
+        "Devolución a origen por rechazo",
+        "Por devolver a tienda",
+        "Novedad interna",
+        "Incidente",
+        "Devolviendo a tienda",
+        "Devuelta a tienda",
       ]);
     });
 
-    it("el nombre del resultado pendiente, hoy", () => {
-      expect(r.pendiente.nombreResultado).toBe("Rechazada");
+    it("el nombre del resultado pendiente: el del estado homonimo", () => {
+      expect(r.pendiente.nombreResultado).toBe("Devolución a origen por rechazo");
     });
   });
 });

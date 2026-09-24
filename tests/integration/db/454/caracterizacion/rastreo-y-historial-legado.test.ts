@@ -13,6 +13,17 @@ import { conEscenario, prepararMundo, type Escenario, type Mundo } from "../_esc
  *   `no_entregado`; con destino `ayuda_tienda`, `en_reparto`. Es lo que R40 exige conservar cuando los
  *   dos valores salgan del catalogo.
  * `[INTERMEDIO]`: el hito justo tras gestionar (hoy ya `entregado`).
+ *
+ * FICHA 455 (2026-09-24, T1.9, design DF/§4; R31/R34) — TRADUCCION 1:1 DEL VOCABULARIO, no cambio de
+ * invariante. La 455 retira los hitos del rastreo: el DTO publica el NOMBRE VISIBLE del estado de
+ * cada tramo (`nombreVigente`, `linea[].nombre`) y un estado retirado se pliega a su vigente
+ * equivalente (R34). Cada literal de hito se sustituye por el nombre del estado que ese tramo tiene,
+ * con la misma forma de asercion (`toEqual` literal, misma longitud): el hito de bodega (fila
+ * `en_bodega_central`) -> «En bodega central»; `no_entregado` (fila `devolucion_por_confirmar`,
+ * retirado, equivalente `novedad`) -> «Novedad»; `en_reparto` (fila `ayuda_tienda`, retirado,
+ * equivalente `en_reparto`) -> «En reparto»; `entregado` -> «Entregado». Lo que R40 de la 454 exige
+ * —que la fila historica se siga leyendo, plegada a lo que el destinatario ya veia, y no caiga a un
+ * neutral ni al codigo crudo— sigue afirmado.
  */
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
@@ -41,7 +52,7 @@ describeSiHayBase("454/C27 — rastreo publico e historial legado (Postgres real
       const rastreo = new RastreoPublicoService(new RastreoPublicoRepository(e.cliente));
       const hitos = async (numGuia: number) => {
         const c = await rastreo.consultar(numGuia, TELEFONO);
-        return c.estado === "ok" ? { vigente: c.envio.hitoVigente, linea: c.envio.linea.map((l) => l.hito) } : null;
+        return c.estado === "ok" ? { vigente: c.envio.nombreVigente, linea: c.envio.linea.map((l) => l.nombre) } : null;
       };
 
       const o = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 2000 });
@@ -76,24 +87,24 @@ describeSiHayBase("454/C27 — rastreo publico e historial legado (Postgres real
   });
 
   describe("invariantes", () => {
-    it("tras aprobar, el rastreo muestra el hito confirmado `entregado`", () => {
+    it("tras aprobar, el rastreo muestra el estado confirmado «Entregado»", () => {
       expect(r.aprobacion).toBe("ok");
-      expect(r.trasAprobar?.vigente).toBe("entregado");
-      expect(r.trasAprobar?.linea).toEqual(["en_reparto", "entregado"]);
+      expect(r.trasAprobar?.vigente).toBe("Entregado");
+      expect(r.trasAprobar?.linea).toEqual(["En reparto", "Entregado"]);
     });
 
-    it("una fila historica con destino `devolucion_por_confirmar` se lee `no_entregado`", () => {
-      expect(r.legadoDevolucion?.linea).toEqual(["en_bodega", "no_entregado"]);
+    it("una fila historica con destino `devolucion_por_confirmar` se lee «Novedad» (su equivalente)", () => {
+      expect(r.legadoDevolucion?.linea).toEqual(["En bodega central", "Novedad"]);
     });
 
-    it("una fila historica con destino `ayuda_tienda` se lee `en_reparto`", () => {
-      expect(r.legadoAyuda?.linea).toEqual(["en_bodega", "en_reparto"]);
+    it("una fila historica con destino `ayuda_tienda` se lee «En reparto» (su equivalente)", () => {
+      expect(r.legadoAyuda?.linea).toEqual(["En bodega central", "En reparto"]);
     });
   });
 
   describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
-    it("hoy, justo tras gestionar, el hito vigente ya es `entregado`", () => {
-      expect(r.trasGestionar?.vigente).toBe("entregado");
+    it("hoy, justo tras gestionar, el estado vigente publicado ya es «Entregado» (pendiente)", () => {
+      expect(r.trasGestionar?.vigente).toBe("Entregado");
     });
   });
 });

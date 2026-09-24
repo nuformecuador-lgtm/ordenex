@@ -184,11 +184,12 @@ describe("R21 — la linea de tiempo sale en UNA consulta y ordenada asc", () =>
     expect(findMany).toHaveBeenCalledTimes(1);
     expect(queryRaw).toHaveBeenCalledTimes(1);
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
-    expect(resultado.envio.linea.map((e) => e.hito)).toEqual([
-      "registrado",
-      "en_bodega",
-      "en_reparto",
-      "entregado",
+    // FICHA 455 (2026-09-24, T1.9; R31): la linea publica NOMBRES de estado, no hitos.
+    expect(resultado.envio.linea.map((e) => e.nombre)).toEqual([
+      "En preparación",
+      "En bodega central",
+      "En reparto",
+      "Entregado",
     ]);
   });
 });

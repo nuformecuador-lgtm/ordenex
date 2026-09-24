@@ -14,10 +14,10 @@ import { Label } from "@/components/ui/label";
 import { textoPendienteConfirmacion } from "@/components/shared/nota-pendiente-confirmacion";
 import { consultarRastreoPublico } from "@/lib/actions/rastreo-publico";
 import { PARAM_GUIA } from "./guia-en-url";
-import {
-  ETIQUETA_POR_HITO,
-  type HitoPublicoEntrada,
-  type ResultadoRastreoPublico,
+import type {
+  EntradaLineaPublica,
+  RastreoPublicoDTO,
+  ResultadoRastreoPublico,
 } from "@/lib/types/rastreo-publico";
 
 // Feature 229 (T3.1, design §4.2) — el MODAL de rastreo publico del envio.
@@ -46,8 +46,8 @@ import {
 //     (design §0, F2/F3): no hay enlace compartible del seguimiento.
 //
 // Y lo que este modal NO hace (design §4.3): no re-deriva ninguna regla del servidor. Recibe
-// hitos ya mapeados y fechas ya formateadas en la zona del negocio, y solo elige la etiqueta.
-// No conoce ningun `order_status.value`.
+// NOMBRES de estado ya resueltos (FICHA 455, R31: los mismos que ve la app interna) y fechas ya
+// formateadas en la zona del negocio, y solo los pinta. No conoce ningun `order_status.value`.
 
 /** R28 — el MISMO texto para los cuatro casos de rechazo. Fijo, sin interpolar la entrada. */
 const MENSAJE_NO_ENCONTRADO =
@@ -67,31 +67,21 @@ const CLASE_ENVIAR =
   "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-md border border-brand bg-brand px-4 text-sm font-semibold text-white transition hover:border-brand-dark hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60";
 
 /**
- * FICHA 454 (T2.4, R31) — el texto de una entrada de la línea. Si el servidor la marca `pendiente`
- * (la gestión ya se registró y su cierre no se aprobó), se lee «<hito> · pendiente de
- * confirmación», con el formato único de `nota-pendiente-confirmacion.ts` (decisión del humano). El
- * nombre es el del HITO público, que es el vocabulario de esta superficie: el modal no conoce
- * ningún `order_status.value` ni ningún resultado interno, y no empieza a conocerlos aquí. Tampoco
- * decide nada: solo lee la marca que el servidor puso.
+ * FICHA 454 (T2.4, R31) / 455 (R33) — el texto de una entrada de la línea: el NOMBRE que publicó el
+ * servidor (FICHA 455: el nombre visible del estado, no un hito). Si el servidor la marca
+ * `pendiente` (la gestión ya se registró y su cierre no se aprobó), el nombre es el del RESULTADO y
+ * se lee «<Resultado> · pendiente de confirmación», con el formato único de
+ * `nota-pendiente-confirmacion.ts` (decisión del humano). El modal no decide nada: solo lee la marca
+ * que el servidor puso.
  */
-//
-// Actualizado 2026-09-24 (decisión del humano, `progress/impl_454_datos.md` §2): el servidor
-// publica en la entrada pendiente el NOMBRE del resultado (`nombreResultado`: «Entregada»,
-// «Rechazada»…), y es ése el que se pinta —«Rechazada · pendiente de confirmación», no «No
-// entregado · …»—. Si una respuesta pendiente llegara sin él, cae a la etiqueta del hito.
-function textoEntrada(entrada: HitoPublicoEntrada): string {
-  const etiqueta = ETIQUETA_POR_HITO[entrada.hito];
-  if (entrada.pendiente !== true) return etiqueta;
-  return textoPendienteConfirmacion(entrada.nombreResultado ?? etiqueta);
+function textoEntrada(entrada: EntradaLineaPublica): string {
+  return entrada.pendiente === true ? textoPendienteConfirmacion(entrada.nombre) : entrada.nombre;
 }
 
-/** La cabecera: el hito vigente, o —si la última entrada está pendiente— su mismo texto (R20). */
-function textoCabecera(envio: {
-  readonly hitoVigente: HitoPublicoEntrada["hito"];
-  readonly linea: readonly HitoPublicoEntrada[];
-}): string {
+/** La cabecera: el estado vigente, o —si la última entrada está pendiente— su mismo texto (R20). */
+function textoCabecera(envio: Pick<RastreoPublicoDTO, "nombreVigente" | "linea">): string {
   const ultima = envio.linea.at(-1);
-  return ultima?.pendiente === true ? textoEntrada(ultima) : ETIQUETA_POR_HITO[envio.hitoVigente];
+  return ultima?.pendiente === true ? textoEntrada(ultima) : envio.nombreVigente;
 }
 
 /**
@@ -304,7 +294,7 @@ export function RastreoDialog({ className, children, guiaInicial = null }: Rastr
 
             <ol className="flex flex-col gap-2">
               {envio.linea.map((entrada) => (
-                <li key={`${entrada.hito}-${entrada.fecha}`} className="flex items-start gap-2">
+                <li key={`${entrada.nombre}-${entrada.fecha}`} className="flex items-start gap-2">
                   <span
                     aria-hidden="true"
                     className="mt-1.5 size-2 shrink-0 rounded-full bg-brand"
