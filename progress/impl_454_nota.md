@@ -46,4 +46,12 @@ vistas guardadas: sin cambios de logica; `tests/components` + `tests/unit/compon
 
 ## Gate
 
-(ver abajo)
+`bash ./init.sh > progress/gate_454_nota.log 2>&1; echo "INIT_EXIT=$?" >> …` (sin `tail`), sobre
+`c091f430`: typecheck y lint en verde; `Test Files 2130 passed (2130)` · `Tests 30431 passed | 26
+skipped (30457)`; los 26 skipped son `tests/components/Analitica{Page,Shell}` (igual que las fases
+anteriores), 0 skipped en `integration/db`; `== init OK ==`; **`INIT_EXIT=0`** a la primera corrida.
+
+## Veredicto
+
+T2.2 y T2.6 cerradas: la nota se ve en `/ordenes`, la bodega satelite y el detalle; el rastreo dice
+el nombre del resultado; `/ordenes` ya no ofrece traspaso ni cambio de dia sobre una pendiente.
