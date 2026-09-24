@@ -8,7 +8,12 @@ import type {
   IRastreoPublicoService,
   ResultadoConsultaRastreo,
 } from "@/lib/interfaces/services/IRastreoPublicoService";
-import { hitoDeEstatus, type HitoPublico, type HitoPublicoEntrada } from "@/lib/types/rastreo-publico";
+import {
+  hitoDeEstatus,
+  NOMBRE_RESULTADO_PENDIENTE,
+  type HitoPublico,
+  type HitoPublicoEntrada,
+} from "@/lib/types/rastreo-publico";
 import { normalizarTelefonoCR } from "@/lib/utils/telefono-cr";
 
 // Feature 229 (design §2.1/§3.3/§3.4) — proyeccion publica de un envio.
@@ -108,6 +113,10 @@ export class RastreoPublicoService implements IRastreoPublicoService {
     // (mapa de aplicacion `ESTATUS_POR_RESULTADO` -> tabla firmada de hitos) y su instante. Al
     // anularse desaparece; al corregirse muestra el corregido (la gestion lleva el resultado
     // sellado); al aprobarse la sustituye el hito confirmado de la fila de historial.
+    //
+    // DECISION DEL HUMANO (2026-09-24, prevalece): la entrada pendiente lleva ademas el NOMBRE
+    // VISIBLE del resultado (`nombreResultado`: «Rechazada», no el hito «No entregado»). Es texto,
+    // no el codigo interno, y es lo unico que se añade.
     const pendiente = await this.repo.buscarGestionPendiente(fila.id);
     if (pendiente !== null) {
       const resultado = pendiente.resultado as keyof typeof ESTATUS_POR_RESULTADO;
@@ -117,6 +126,7 @@ export class RastreoPublicoService implements IRastreoPublicoService {
           hito: hitoDeEstatus(destino),
           fecha: formatearEnZona(pendiente.createdAt, this.config.ZONA_HORARIA),
           pendiente: true,
+          nombreResultado: NOMBRE_RESULTADO_PENDIENTE[resultado],
         });
       }
     }

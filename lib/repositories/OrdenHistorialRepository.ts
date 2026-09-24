@@ -1,4 +1,6 @@
 import { whereTieneRegistroDeCalle } from "@/lib/repositories/gestion-pendiente";
+import { senalesGestionDe, SIN_SENALES_GESTION } from "@/lib/repositories/ayuda-abierta";
+import type { SenalesGestionDTO } from "@/lib/types/orden";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CambioEstadoEntrada,
@@ -328,6 +330,24 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
       actorRol: fila.actorRol, // 427/R26: el CONGELADO de la fila
       createdAt: fila.createdAt,
     }));
+  }
+
+  /**
+   * FICHA 454 (R29): las señales del detalle, con la MISMA consulta que anota los listados
+   * (`senalesGestionDe`), aqui con un solo id. `registradaAt` sale ya en ISO, como en el listado.
+   */
+  async findSenalesGestion(ordenId: string): Promise<SenalesGestionDTO> {
+    const s = (await senalesGestionDe(this.prisma, [ordenId])).get(ordenId) ?? SIN_SENALES_GESTION;
+    return {
+      gestionPendiente:
+        s.gestionPendiente === null
+          ? null
+          : {
+              resultado: s.gestionPendiente.resultado,
+              registradaAt: s.gestionPendiente.registradaAt.toISOString(),
+            },
+      ayudaAbierta: s.ayudaAbierta,
+    };
   }
 
   /** R26/R5: linea de tiempo de la orden, orden cronologico (created_at asc), con labels. */

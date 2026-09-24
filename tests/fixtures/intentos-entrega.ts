@@ -204,5 +204,8 @@ export function prismaGestionSobreFilas(filas: FilaGestionFake[]) {
     ordenEvento: {
       findMany: vi.fn(async () => []),
     },
+    // FICHA 454 (R29, 2026-09-24): el detalle lee ademas las señales de la gestion pendiente y la
+    // ayuda con una consulta SQL. Sin filas: señales en reposo (aqui se mide el conteo, no esto).
+    $queryRaw: vi.fn(async () => []),
   };
 }

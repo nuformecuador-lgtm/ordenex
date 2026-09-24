@@ -346,6 +346,8 @@ describe("el LISTADO cobra el pacto y senala el hueco", () => {
 
   async function listar(zonaEspecial: boolean | null, tarifaEspecial: Prisma.Decimal | null) {
     const prisma = {
+      // FICHA 454 (R29, 2026-09-24): las señales de la pagina (gestion pendiente, ayuda); vacias.
+      $queryRaw: vi.fn(async () => []),
       orden: {
         findMany: vi.fn(async () => [ordenListRow(zonaEspecial)]),
         count: vi.fn(async () => 1),

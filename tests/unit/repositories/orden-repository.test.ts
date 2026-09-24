@@ -109,6 +109,9 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     distrito: { findUnique: vi.fn() },
     usuario: { findUnique: vi.fn() },
     ordenHistorialEstado: { createMany: vi.fn() },
+    // FICHA 454 (R29, 2026-09-24): el listado anota por pagina la gestion pendiente y la ayuda
+    // abierta con UNA consulta SQL (`senalesGestionDe`). Sin filas: señales en reposo.
+    $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn(),
     ...overrides,
   };
@@ -1041,7 +1044,10 @@ describe("OrdenRepository.list — tarifa por cascada (R18/R19/R20)", () => {
   // Se cuentan las dos que traen filas (ordenes + tarifas); el `count` de la paginacion es
   // una agregacion que ya existia, no una tercera lectura.
   for (const n of [1, 50]) {
-    it("R19: una pagina de " + n + " fila(s) hace 2 consultas de datos, no N + 1", async () => {
+    // FICHA 454 (R29, 2026-09-24): de 2 a 3 consultas de datos. La tercera son las señales de la
+    // gestion pendiente y la ayuda abierta, y tambien es UNA por pagina: el contrato de R19 (no
+    // N + 1) no cambia; cambia cuantas consultas fijas tiene la pagina.
+    it("R19: una pagina de " + n + " fila(s) hace 3 consultas de datos, no N + 1", async () => {
       const prisma = buildPrisma();
       prisma.orden.findMany.mockResolvedValue(
         Array.from({ length: n }, (_, i) =>
@@ -1065,10 +1071,13 @@ describe("OrdenRepository.list — tarifa por cascada (R18/R19/R20)", () => {
       expect(res.items).toHaveLength(n);
       expect(prisma.orden.findMany).toHaveBeenCalledTimes(1);
       expect(prisma.tarifa.findMany).toHaveBeenCalledTimes(1);
-      // La suma, dicha aparte: DOS consultas de datos, sea la pagina de 1 o de 50.
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1); // 454/R29: las señales, una vez
+      // La suma, dicha aparte: TRES consultas de datos, sea la pagina de 1 o de 50.
       expect(
-        prisma.orden.findMany.mock.calls.length + prisma.tarifa.findMany.mock.calls.length,
-      ).toBe(2);
+        prisma.orden.findMany.mock.calls.length +
+          prisma.tarifa.findMany.mock.calls.length +
+          prisma.$queryRaw.mock.calls.length,
+      ).toBe(3);
       // Y los pares van DEDUPLICADOS: la unica tienda una vez y las zonas presentes una vez
       // cada una (con n = 50, dos entradas, no cincuenta).
       const arg = prisma.tarifa.findMany.mock.calls[0][0];

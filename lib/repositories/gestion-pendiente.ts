@@ -84,6 +84,22 @@ export function whereOrdenSinGestionPendiente(): Prisma.OrdenWhereInput {
 }
 
 /**
+ * FICHA 454 (datos del chip, 2026-09-24) — las condiciones 1-3 de `whereGestionPendiente`, en SQL,
+ * sobre la gestion `"gp"` y su cierre `"gpc"` (LEFT JOIN). UNA sola escritura que comparten las tres
+ * formas SQL de este modulo (existe, la ultima de UNA orden y la ultima de CADA orden de un lote):
+ * si alguien toca una condicion, la tocan las tres a la vez.
+ */
+function sqlCondicionesPendiente(): Prisma.Sql {
+  return Prisma.sql`"gp"."anulada_at" IS NULL
+       AND EXISTS (
+         SELECT 1 FROM "orden_evento" "gpe"
+          WHERE "gpe"."gestion_orden_id" = "gp"."id"
+            AND "gpe"."tipo" = 'gestion_registrada'
+       )
+       AND ("gp"."cierre_id" IS NULL OR "gpc"."estado" <> 'aprobado')`;
+}
+
+/**
  * Fragmento SQL crudo: la gestion pendiente EXISTE para la orden cuyo id es `columnaOrdenId`
  * (por defecto `"o"."id"`). Para los repositorios que escriben con `$queryRaw` (corte, traspaso) y
  * para componer la ayuda abierta. MISMO predicado que `whereGestionPendiente`, condicion a
@@ -97,13 +113,7 @@ export function sqlExisteGestionPendiente(
       FROM "gestion_orden" "gp"
       LEFT JOIN "cierre_dia" "gpc" ON "gpc"."id" = "gp"."cierre_id"
      WHERE "gp"."orden_id" = ${columnaOrdenId}
-       AND "gp"."anulada_at" IS NULL
-       AND EXISTS (
-         SELECT 1 FROM "orden_evento" "gpe"
-          WHERE "gpe"."gestion_orden_id" = "gp"."id"
-            AND "gpe"."tipo" = 'gestion_registrada'
-       )
-       AND ("gp"."cierre_id" IS NULL OR "gpc"."estado" <> 'aprobado')
+       AND ${sqlCondicionesPendiente()}
   )`;
 }
 
@@ -125,13 +135,33 @@ export function sqlUltimaGestionPendienteDeOrden(ordenId: string): Prisma.Sql {
       LEFT JOIN "cierre_dia" "gpc" ON "gpc"."id" = "gp"."cierre_id"
      WHERE "gp"."orden_id" = ${ordenId}
        AND "gs"."value" = ${ESTATUS_CON_GESTION_PENDIENTE}
-       AND "gp"."anulada_at" IS NULL
+       AND ${sqlCondicionesPendiente()}
+     ORDER BY "gp"."created_at" DESC, "gp"."id" DESC
+     LIMIT 1`;
+}
+
+/**
+ * FICHA 454 (R29, datos del chip, 2026-09-24) — subconsulta LATERAL: la gestion PENDIENTE MAS
+ * RECIENTE de la orden cuyas columnas `id`/`estatus_id` se pasan (a lo sumo una fila, columnas
+ * `"resultado"` y `"registrada_at"`). Mismo predicado que `whereOrdenConGestionPendiente` —la orden
+ * `en_reparto` y la gestion con las condiciones 1-3—, para los LISTADOS: se une con
+ * `LEFT JOIN LATERAL (...) ON TRUE` a una consulta que ya recorre la pagina, y asi la pagina entera
+ * cuesta UNA consulta, no una por fila. La compone `senalesGestionDe` (`ayuda-abierta.ts`).
+ */
+export function sqlUltimaGestionPendienteLateral(orden: {
+  id: Prisma.Sql;
+  estatusId: Prisma.Sql;
+}): Prisma.Sql {
+  return Prisma.sql`
+    SELECT "gp"."resultado"::text AS "resultado", "gp"."created_at" AS "registrada_at"
+      FROM "gestion_orden" "gp"
+      LEFT JOIN "cierre_dia" "gpc" ON "gpc"."id" = "gp"."cierre_id"
+     WHERE "gp"."orden_id" = ${orden.id}
        AND EXISTS (
-         SELECT 1 FROM "orden_evento" "gpe"
-          WHERE "gpe"."gestion_orden_id" = "gp"."id"
-            AND "gpe"."tipo" = 'gestion_registrada'
+         SELECT 1 FROM "order_status" "gs"
+          WHERE "gs"."id" = ${orden.estatusId} AND "gs"."value" = ${ESTATUS_CON_GESTION_PENDIENTE}
        )
-       AND ("gp"."cierre_id" IS NULL OR "gpc"."estado" <> 'aprobado')
-     ORDER BY "gp"."created_at" DESC
+       AND ${sqlCondicionesPendiente()}
+     ORDER BY "gp"."created_at" DESC, "gp"."id" DESC
      LIMIT 1`;
 }

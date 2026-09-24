@@ -123,6 +123,7 @@ function montar() {
   const historialRepo = {
     findHistorialByOrden: vi.fn(async () => [T_RECOGIDA]),
     findEventosByOrden: vi.fn(async () => [E_REGISTRADA]),
+    findSenalesGestion: vi.fn(async () => ({ gestionPendiente: null, ayudaAbierta: false })), // 454/R29
     existeActuacionDe: vi.fn(async () => false),
     contarIntentosVigentes: vi.fn(async () => 0),
   };

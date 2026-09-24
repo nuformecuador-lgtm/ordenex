@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { GestionResultado } from "@prisma/client";
+
 import type { OrderStatusValue } from "@/lib/types/order-status";
 
 // Feature 229 (design §3) — CONTRATO COMPARTIDO del rastreo publico del envio.
@@ -176,7 +178,32 @@ export interface HitoPublicoEntrada {
    * confirmadas, para que su forma siga siendo exactamente `{ hito, fecha }`.
    */
   readonly pendiente?: true;
+  /**
+   * FICHA 454 (R31, decision del humano 2026-09-24, prevalece sobre §12.3 del design) — SOLO en la
+   * entrada `pendiente`: el NOMBRE VISIBLE del resultado pendiente (`Entregada`, `Reprogramada`,
+   * `Devuelta`, `Rechazada`, `Incidente`), para que la pagina diga «<Resultado> · pendiente de
+   * confirmación» y no el hito («No entregado»). Es texto, no un codigo: sale de
+   * `NOMBRE_RESULTADO_PENDIENTE`. AUSENTE en las entradas confirmadas.
+   */
+  readonly nombreResultado?: string;
 }
+
+/**
+ * FICHA 454 (R31) — el nombre visible de cada resultado de gestion, el MISMO que el chip de estado
+ * de las pantallas internas (`ORDER_STATUS_LABELS` del estado al que la aprobacion lo aplica,
+ * `ESTATUS_POR_RESULTADO`). Vive aqui y no se importa de alli porque `lib/` no puede importar de
+ * `app/`: es una copia DECLARADA de cinco nombres, atada a su fuente por
+ * `tests/unit/types/rastreo-publico.nombre-resultado.test.ts` (si uno cambia sin el otro, rojo).
+ * La 455 (design DA) mueve la fuente unica de nombres a `lib/types/order-status.ts`; entonces esta
+ * tabla pasa a derivarse de ella.
+ */
+export const NOMBRE_RESULTADO_PENDIENTE = {
+  entregada: "Entregada",
+  reprogramada: "Reprogramada",
+  devuelta: "Devuelta",
+  rechazada: "Rechazada",
+  incidente: "Incidente",
+} as const satisfies Record<GestionResultado, string>;
 
 /**
  * R22 — CUATRO campos y ninguno mas. Cualquier campo no declarado es una fuga, no una

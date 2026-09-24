@@ -7,7 +7,10 @@ import {
   conAyudaAbiertaDe,
   fechasSolicitudAyuda,
   idsConAyudaAbierta,
+  senalesGestionDe,
+  SIN_SENALES_GESTION,
   sqlAyudaAbierta,
+  type ClienteSqlAyuda,
 } from "@/lib/repositories/ayuda-abierta";
 import { sqlExisteGestionPendiente } from "@/lib/repositories/gestion-pendiente";
 import { encolarWebhookEvento } from "@/lib/services/jobs/webhook-evento-encolado";
@@ -50,7 +53,12 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // resolver del cierre de dia: el listado no puede tener una regla propia (R18/R21).
 import { clavePar, elegirPorCascada, whereCascada } from "@/lib/utils/cascada-tarifa";
 import type { ParTarifa } from "@/lib/utils/cascada-tarifa";
-import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
+import type {
+  OrdenDTO,
+  OrdenListItemDTO,
+  OrdenListItemRelaciones,
+  SenalesGestionDTO,
+} from "@/lib/types/orden";
 // FICHA 349 — el recorte por alcance del listado de ordenes, en su modulo SIN dependencias.
 // La bodega satelite proyecta con `toListItemDTO` (la misma que `/ordenes`) y por tanto tiene
 // que retirar lo que un alcance de zona no puede ver, con la UNICA declaracion que existe de
@@ -1801,6 +1809,43 @@ function toBodegaSateliteRow(row: OrdenListRow): RecepcionSateliteRow {
   };
 }
 
+/**
+ * FICHA 454 (R29, BLOQUEO-1 de la fase 2, 2026-09-24) — anota en cada fila de un listado YA
+ * ACOTADO su gestion pendiente de confirmar y su ayuda abierta.
+ *
+ * UNA consulta por pagina (`senalesGestionDe`), sea de 1 fila o de 50: la misma disciplina que la
+ * tarifa de la 274. No decide nada ni reescribe ningun predicado: los dos salen de sus modulos
+ * unicos (`gestion-pendiente.ts`, `ayuda-abierta.ts`), y la guardia
+ * `gestion-pendiente-unica-fuente` vigila que siga asi.
+ *
+ * NO ACOTA: recibe filas que el `where` de quien llama ya recorto (tienda, zona, mensajero), y solo
+ * pregunta por esos ids. Una fila sin respuesta (imposible salvo carrera con un borrado) sale con
+ * las señales en reposo, nunca con las de otra orden.
+ */
+async function anotarSenalesGestion<T extends { id: string }>(
+  cliente: ClienteSqlAyuda,
+  filas: readonly T[],
+): Promise<(T & SenalesGestionDTO)[]> {
+  const senales = await senalesGestionDe(
+    cliente,
+    filas.map((f) => f.id),
+  );
+  return filas.map((f) => {
+    const s = senales.get(f.id) ?? SIN_SENALES_GESTION;
+    return {
+      ...f,
+      gestionPendiente:
+        s.gestionPendiente === null
+          ? null
+          : {
+              resultado: s.gestionPendiente.resultado,
+              registradaAt: s.gestionPendiente.registradaAt.toISOString(),
+            },
+      ayudaAbierta: s.ayudaAbierta,
+    };
+  });
+}
+
 export class OrdenRepository implements IOrdenRepository {
   /**
    * Feature 91: `jobRepo` se inyecta para el encolado TRANSACTIONAL OUTBOX de la
@@ -2012,8 +2057,13 @@ export class OrdenRepository implements IOrdenRepository {
     // tres consultas y solo DOS de datos, sea la pagina de 1 fila o de 50.
     const tarifas = await this.resolverTarifasDePagina(items);
 
+    // FICHA 454 (R29): y UNA mas, las señales de la gestion pendiente y la ayuda abierta, sobre las
+    // filas que el `where` de arriba (con el acotamiento por rol) ya dejo pasar.
     return {
-      items: items.map((row) => toListItemDTO(row, tarifaDe(tarifas, row))),
+      items: await anotarSenalesGestion(
+        this.prisma,
+        items.map((row) => toListItemDTO(row, tarifaDe(tarifas, row))),
+      ),
       total,
     };
   }
@@ -4039,7 +4089,8 @@ export class OrdenRepository implements IOrdenRepository {
       // FICHA 349: la MISMA proyeccion que `/ordenes`, no una segunda.
       ...WITH_ESTATUS_Y_TIENDA,
     });
-    return rows.map(toBodegaSateliteRow);
+    // FICHA 454 (R29): las señales de la gestion pendiente y la ayuda, en una consulta mas.
+    return anotarSenalesGestion(this.prisma, rows.map(toBodegaSateliteRow));
   }
 
   /**
@@ -4190,10 +4241,15 @@ export class OrdenRepository implements IOrdenRepository {
       ...WITH_ESTATUS_Y_TIENDA,
     });
     const porId = new Map(filas.map((fila) => [fila.id, fila]));
-    return ids.flatMap((id) => {
-      const fila = porId.get(id);
-      return fila === undefined ? [] : [toBodegaSateliteRow(fila)];
-    });
+    // FICHA 454 (R29): las señales de la gestion pendiente y la ayuda, en UNA consulta por pagina
+    // (la comparten la pagina y la descarga, como el resto de la hidratacion).
+    return anotarSenalesGestion(
+      this.prisma,
+      ids.flatMap((id) => {
+        const fila = porId.get(id);
+        return fila === undefined ? [] : [toBodegaSateliteRow(fila)];
+      }),
+    );
   }
 
   async recibirEnSatelite(

@@ -176,11 +176,15 @@ export class OrdenHistorialService implements IOrdenHistorialService {
     // FICHA 454 (T1.21, R30): y una CUARTA, los hechos sin transicion (`orden_evento`): gestion
     // registrada/anulada/corregida y la ida y vuelta de la ayuda. Misma puerta, DESPUES de la
     // autorizacion y sin regla nueva: la ven los mismos roles que hoy ven la linea de tiempo.
-    const [transiciones, correcciones, traspasos, eventos] = await Promise.all([
+    //
+    // FICHA 454 (R29, BLOQUEO-1 de la fase 2): y las dos SEÑALES del detalle (gestion pendiente de
+    // confirmar y ayuda abierta), por la misma puerta y DESPUES de la autorizacion.
+    const [transiciones, correcciones, traspasos, eventos, senales] = await Promise.all([
       this.historialRepo.findHistorialByOrden(ordenId), // R26 cronologico
       this.correccionRepo.findCorreccionesByOrden(ordenId), // created_at asc, id asc
       this.traspasoRepo.findTraspasosByOrden(ordenId), // created_at asc, id asc
       this.historialRepo.findEventosByOrden(ordenId), // created_at asc, id asc (454)
+      this.historialRepo.findSenalesGestion(ordenId), // 454/R29
     ]);
     const entradas = fusionarLineaDeTiempo(transiciones, correcciones, traspasos, eventos); // R40 + 427/R29 + 454/R30
     // Feature 47 (R15/R17): junto a la linea de tiempo, el conteo de intentos DERIVADO
@@ -193,7 +197,14 @@ export class OrdenHistorialService implements IOrdenHistorialService {
     // distintos en los que la orden tuvo un resultado contable, no las transiciones.
     const intentos = await this.contarIntentos(ordenId); // R1/R3
     const umbral = reintentosConfig.MIN_INTENTOS_ENTREGA; // R3
-    return { status: "ok", entradas, intentos, umbral };
+    return {
+      status: "ok",
+      entradas,
+      intentos,
+      umbral,
+      gestionPendiente: senales.gestionPendiente,
+      ayudaAbierta: senales.ayudaAbierta,
+    };
   }
 
   /**

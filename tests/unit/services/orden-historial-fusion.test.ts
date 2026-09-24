@@ -473,7 +473,12 @@ interface Dobles {
     IOrdenHistorialRepository,
     // FICHA 454 (T1.21, 2026-09-23): + `findEventosByOrden`, la cuarta fuente (aqui siempre vacia;
     // su fusion y su autorizacion las prueba `OrdenHistorialService.evento-orden.test.ts`).
-    "findHistorialByOrden" | "existeActuacionDe" | "contarIntentosVigentes" | "findEventosByOrden"
+    // FICHA 454 (R29, 2026-09-24): + `findSenalesGestion`, las señales del detalle (en reposo).
+    | "findHistorialByOrden"
+    | "existeActuacionDe"
+    | "contarIntentosVigentes"
+    | "findEventosByOrden"
+    | "findSenalesGestion"
   >;
   correccionRepo: IOrdenDiaRepartoCambioRepository;
   /** FICHA 427 (T21): la tercera fuente. */
@@ -491,6 +496,7 @@ function dobles(overrides: Partial<OrdenDTO> = {}, actuo = false): Dobles {
       existeActuacionDe: vi.fn(async () => actuo),
       contarIntentosVigentes: vi.fn(async () => 0),
       findEventosByOrden: vi.fn(async () => []),
+      findSenalesGestion: vi.fn(async () => ({ gestionPendiente: null, ayudaAbierta: false })), // 454/R29
     },
     correccionRepo: { findCorreccionesByOrden: vi.fn(async () => [C_UNICA]) },
     traspasoRepo: { findTraspasosByOrden: vi.fn(async () => [X_UNICO]) },

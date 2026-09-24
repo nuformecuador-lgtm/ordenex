@@ -119,14 +119,26 @@ describeSiHayBase("454/T1.19 — rastreo publico con gestion pendiente (Postgres
 
   it("R31: al registrar, el ultimo hito es el del resultado, MARCADO pendiente, y es el vigente", () => {
     expect(r.conPendiente.linea).toHaveLength(r.antes.linea.length + 1);
-    expect(ultima(r.conPendiente.linea)).toEqual({ hito: "entregado", fecha: expect.any(String), pendiente: true });
+    // FICHA 454 (decision del humano 2026-09-24): la entrada pendiente lleva ademas el NOMBRE del
+    // resultado, texto y no codigo. Se añade al literal (es el contrato), no se relaja el `toEqual`.
+    expect(ultima(r.conPendiente.linea)).toEqual({
+      hito: "entregado",
+      fecha: expect.any(String),
+      pendiente: true,
+      nombreResultado: "Entregada",
+    });
     expect(r.conPendiente.hitoVigente).toBe("entregado");
     // Y la linea de antes no tenia ninguna marca.
     expect(r.antes.linea.some((h) => "pendiente" in h)).toBe(false);
   });
 
   it("R31: con el cierre SOLICITADO (aun sin aprobar) la marca sigue", () => {
-    expect(ultima(r.conCierreSolicitado.linea)).toEqual({ hito: "entregado", fecha: expect.any(String), pendiente: true });
+    expect(ultima(r.conCierreSolicitado.linea)).toEqual({
+      hito: "entregado",
+      fecha: expect.any(String),
+      pendiente: true,
+      nombreResultado: "Entregada",
+    });
   });
 
   it("R31: al anularse, desaparece — la linea vuelve a ser la de antes", () => {
@@ -134,11 +146,18 @@ describeSiHayBase("454/T1.19 — rastreo publico con gestion pendiente (Postgres
   });
 
   it("R31: al corregirse, muestra el resultado CORREGIDO (sigue pendiente)", () => {
-    expect(ultima(r.trasCorregir.linea)).toEqual({ hito: "no_entregado", fecha: expect.any(String), pendiente: true });
+    // El nombre es el del resultado CORREGIDO («Rechazada»), no el hito compartido «No entregado».
+    expect(ultima(r.trasCorregir.linea)).toEqual({
+      hito: "no_entregado",
+      fecha: expect.any(String),
+      pendiente: true,
+      nombreResultado: "Rechazada",
+    });
   });
 
   it("R31: al aprobar lo sustituye el hito CONFIRMADO del historial, sin marca", () => {
     expect(r.trasAprobar.linea.some((h) => "pendiente" in h)).toBe(false);
+    expect(r.trasAprobar.linea.some((h) => "nombreResultado" in h)).toBe(false);
     expect(r.trasAprobar.hitoVigente).toBe(hitoDeEstatus(r.estadoFinalC));
     expect(r.trasAprobar.linea.map((h) => h.hito)).toContain("no_entregado");
   });

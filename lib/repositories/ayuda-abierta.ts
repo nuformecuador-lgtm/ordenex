@@ -1,6 +1,10 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type GestionResultado } from "@prisma/client";
 
-import { ESTATUS_CON_GESTION_PENDIENTE, sqlExisteGestionPendiente } from "./gestion-pendiente";
+import {
+  ESTATUS_CON_GESTION_PENDIENTE,
+  sqlExisteGestionPendiente,
+  sqlUltimaGestionPendienteLateral,
+} from "./gestion-pendiente";
 
 /**
  * FICHA 454 (design §4.1, T1.3) — LA DERIVACION UNICA DE «AYUDA ABIERTA».
@@ -125,4 +129,60 @@ export async function fechasSolicitudAyuda(
        AND "orden_id" IN (${Prisma.join([...ordenIds])})
      GROUP BY "orden_id"`);
   return new Map(filas.map((f) => [f.orden_id, f.en]));
+}
+
+/**
+ * FICHA 454 (R29, BLOQUEO-1 de la fase 2, 2026-09-24) — las DOS señales de una orden que las
+ * pantallas internas pintan junto al estado: su gestion pendiente de confirmar (la mas reciente,
+ * con su resultado y su instante) y si tiene la ayuda a la tienda abierta. Por construccion no
+ * pueden ir juntas: una orden con gestion pendiente no tiene ayuda abierta (§4.1).
+ */
+export interface SenalesGestionOrden {
+  gestionPendiente: { resultado: GestionResultado; registradaAt: Date } | null;
+  ayudaAbierta: boolean;
+}
+
+/** Las señales de una orden sin nada pendiente ni ayuda abierta (lo que vale para una fila ausente). */
+export const SIN_SENALES_GESTION: SenalesGestionOrden = Object.freeze({
+  gestionPendiente: null,
+  ayudaAbierta: false,
+});
+
+/**
+ * FICHA 454 (R29) — las señales de CADA orden de `ordenIds`, en UNA sola consulta (la pagina de un
+ * listado entera, no una consulta por fila). Compone, sin reescribirlos, los dos predicados unicos:
+ * `sqlUltimaGestionPendienteLateral` (`gestion-pendiente.ts`) y `sqlAyudaAbierta` (este modulo).
+ *
+ * NO ACOTA NADA: responde sobre los ids que recibe. El alcance por rol lo pone quien trae la pagina
+ * (el `where` del listado); aqui solo se anotan las filas que ese `where` ya dejo pasar. Una orden que
+ * no exista no vuelve en el mapa; quien lee usa `SIN_SENALES_GESTION`. Lista vacia → sin consulta.
+ */
+export async function senalesGestionDe(
+  cliente: ClienteSqlAyuda,
+  ordenIds: readonly string[],
+): Promise<Map<string, SenalesGestionOrden>> {
+  if (ordenIds.length === 0) return new Map();
+  const o = columnas("o");
+  const filas = await cliente.$queryRaw<
+    { id: string; ayuda_abierta: boolean; resultado: string | null; registrada_at: Date | null }[]
+  >(Prisma.sql`
+    SELECT "o"."id",
+           ${sqlAyudaAbierta("o")} AS "ayuda_abierta",
+           "sg_gp"."resultado",
+           "sg_gp"."registrada_at"
+      FROM "orden" "o"
+      LEFT JOIN LATERAL (${sqlUltimaGestionPendienteLateral(o)}) "sg_gp" ON TRUE
+     WHERE "o"."id" IN (${Prisma.join([...ordenIds])})`);
+  return new Map(
+    filas.map((f) => [
+      f.id,
+      {
+        gestionPendiente:
+          f.resultado !== null && f.registrada_at !== null
+            ? { resultado: f.resultado as GestionResultado, registradaAt: f.registrada_at }
+            : null,
+        ayudaAbierta: f.ayuda_abierta === true,
+      },
+    ]),
+  );
 }

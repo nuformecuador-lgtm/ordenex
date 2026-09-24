@@ -4,6 +4,7 @@ import type {
   OrdenHistorialTransicionDTO,
   OrdenHistorialOrigenTipo,
 } from "@/lib/types/orden-historial";
+import type { SenalesGestionDTO } from "@/lib/types/orden";
 import type { JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
 import type { NotificacionTxClient } from "@/lib/interfaces/repositories/INotificacionRepository";
 
@@ -99,6 +100,13 @@ export interface IOrdenHistorialRepository {
    * tabla (tipo estrecho, igual que `findHistorialByOrden`); la fusion es del servicio.
    */
   findEventosByOrden(ordenId: string): Promise<OrdenHistorialEventoDTO[]>;
+  /**
+   * FICHA 454 (R29, BLOQUEO-1 de la fase 2, 2026-09-24) — las dos señales de la orden que el
+   * detalle pinta junto al estado: su gestion pendiente de confirmar (`{ resultado, registradaAt }`
+   * o `null`) y si tiene la ayuda a la tienda abierta. Derivadas por los predicados UNICOS
+   * (`gestion-pendiente.ts`, `ayuda-abierta.ts`); una orden inexistente responde en reposo.
+   */
+  findSenalesGestion(ordenId: string): Promise<SenalesGestionDTO>;
   /**
    * Feature 215 (R1/R3/R5/R8/R29/R30/R31/R32) — cuenta los INTENTOS DE ENTREGA de `ordenId`.
    *

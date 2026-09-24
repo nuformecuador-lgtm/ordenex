@@ -448,8 +448,13 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
       RANGO,
     );
 
-    expect(consultas).toHaveLength(1);
+    // FICHA 454 (R29, 2026-09-24): la hidratacion anota ademas las señales de la gestion pendiente
+    // y la ayuda con UNA consulta SQL por pagina. Son dos `$queryRaw`, y ninguna es un conteo: la
+    // primera ordena y trae el total; la segunda son las señales de los ids de la pagina.
+    expect(consultas).toHaveLength(2);
     expect(texto(consultas[0]!)).toContain('SELECT o."id", (COUNT(*) OVER ())::int AS "total"');
+    expect(texto(consultas[1]!)).toContain("LEFT JOIN LATERAL");
+    expect(texto(consultas[1]!)).not.toContain("COUNT(");
     // 31 es el conjunto; 2 son las filas de la pagina. Nunca `items.length`.
     expect(r.total).toBe(31);
     expect(r.items).toHaveLength(2);

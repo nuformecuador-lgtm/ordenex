@@ -78,6 +78,8 @@ type HistorialRepoMethods = Pick<
   // no-regresion: sin eventos, la linea es la de antes); su caso vive en
   // `OrdenHistorialService.evento-orden.test.ts`.
   | "findEventosByOrden"
+  // FICHA 454 (R29, 2026-09-24): las señales del detalle; aqui en reposo.
+  | "findSenalesGestion"
 >;
 
 // El catalogo de estados sigue existiendo para la AUTORIZACION y para otros consumidores; el
@@ -103,6 +105,7 @@ function historialRepo(overrides: Partial<HistorialRepoMethods> = {}): Historial
     contarIntentosVigentes: vi.fn(async () => 0),
     contarIntentosVigentesEnLote: vi.fn(async () => new Map<string, number>()),
     findEventosByOrden: vi.fn(async () => []),
+    findSenalesGestion: vi.fn(async () => ({ gestionPendiente: null, ayudaAbierta: false })), // 454/R29
     ...overrides,
   };
 }
