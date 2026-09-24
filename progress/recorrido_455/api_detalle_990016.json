@@ -1,0 +1,53 @@
+// GET /api/ordenes/api-key/orden/990016 -> HTTP 200
+{
+  "numGuia": 990016,
+  "numRemision": "QA-R-0020",
+  "estado": "en_reparto",
+  "estadoNombre": "En reparto",
+  "destinatario": "Kevin Zuniga",
+  "telefonoDest": "87600000",
+  "producto": "Traje de bano",
+  "direccion": "Quepos, Quepos",
+  "montoCobrar": 17500,
+  "createdAt": "2026-07-23T18:59:22.255Z",
+  "mensajero": {
+    "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+    "nombre": "Marco Mensajero"
+  },
+  "zona": {
+    "id": "30d1fad3-bdc1-4bbd-86e0-08f1166f95b0",
+    "nombre": "Quepos"
+  },
+  "costoEstimado": {
+    "flete": "3000.00",
+    "iva": "390.00",
+    "comision": "612.50",
+    "ivaComision": "79.63",
+    "fulfillment": "800.00"
+  },
+  "costoReal": null,
+  "evidencias": [
+    {
+      "resultado": "devolucion_a_origen_por_rechazo",
+      "resultadoNombre": "Devolución a origen por rechazo",
+      "contentType": "image/jpeg",
+      "url": "https://scfnwxqbsgkzwsdntdvd.supabase.co/storage/v1/object/sign/gestion-evidencias/40dc5562-39d4-489d-b055-f977e161d400/rechazada-1790233015333-0.jpg?token=***REDACTADO***",
+      "expiraEnSegundos": 300
+    }
+  ],
+  "gestiones": [
+    {
+      "createdAt": "2026-09-24T06:56:55.632Z",
+      "resultado": "devolucion_a_origen_por_rechazo",
+      "resultadoNombre": "Devolución a origen por rechazo",
+      "estadoResultante": null,
+      "estadoResultanteNombre": null,
+      "motivo": null,
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "pendienteConfirmacion": true
+    }
+  ]
+}

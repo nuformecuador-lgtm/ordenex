@@ -1,0 +1,26 @@
+Rastrear envío
+
+Ingresa el número de guía y los últimos 4 dígitos del teléfono del destinatario.
+
+Número de guía
+Últimos 4 dígitos del teléfono
+Consultar
+Guía 57202592
+Por devolver a bodega central
+En preparación
+2026-09-24 · 01:57
+En bodega central
+2026-09-24 · 01:57
+En ruta a bodega satélite
+2026-09-24 · 01:57
+En bodega satélite
+2026-09-24 · 02:01
+Mensajero recogiendo en la bodega
+2026-09-24 · 02:01
+En reparto
+2026-09-24 · 02:01
+Devolución a origen por rechazo
+2026-09-24 · 02:03
+Por devolver a bodega central
+2026-09-24 · 02:03
+Cerrar

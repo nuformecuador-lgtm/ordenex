@@ -1,0 +1,13 @@
+// GET /api/ordenes/api-key?estado=entregada -> HTTP 422
+{
+  "status": "error",
+  "code": "VALIDATION_ERROR",
+  "message": "Los datos enviados no son validos.",
+  "details": {
+    "fieldErrors": {
+      "estado": [
+        "'entregada' ya no existe: ahora se llama 'entregado' («Entregado»). Ver docs/api/CHANGELOG.md."
+      ]
+    }
+  }
+}

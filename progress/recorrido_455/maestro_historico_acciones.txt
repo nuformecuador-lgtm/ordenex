@@ -1,0 +1,84 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Wallet
+Configuración
+Cierres del día
+Incidentes
+Histórico
+Conversaciones
+Acciones
+Ayuda
+MQ
+Maestro QA
+Maestro
+Acciones
+
+Quién hizo qué, sobre qué y cuándo. Solo lectura.
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Filtros
+
+Más recientes
+Más antiguas
+Descargar
+Cuándo	Quién	Rol	Categoría	Qué	Tipo	Sobre qué	Importe	Valor anterior	Valor nuevo
+24 sept 2026, 7:33 a. m.	QA Maestro 362	Maestro	Mueve dinero	Aprobó un cobro por rechazo de tienda	Cobro por rechazo	R-c337mufko3ifpar	₡500	—	—
+24 sept 2026, 7:32 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cobro de gasto fijo	Cobro de gasto fijo	TEST-333-APROBACION · 2026-08	₡80.000	—	—
+24 sept 2026, 7:20 a. m.	QA Maestro 362	Maestro	Mueve dinero	Aprobó un cobro por rechazo de tienda	Cobro por rechazo	R-c337mufk85qvpar	₡500	—	—
+24 sept 2026, 7:19 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cobro de gasto fijo	Cobro de gasto fijo	TEST-333-APROBACION · 2026-08	₡80.000	—	—
+24 sept 2026, 6:57 a. m.	QA Maestro 362	Maestro	Mueve dinero	Aprobó un cobro por rechazo de tienda	Cobro por rechazo	R-c337mufjeu4rpar	₡500	—	—
+24 sept 2026, 6:57 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cobro de gasto fijo	Cobro de gasto fijo	TEST-333-APROBACION · 2026-08	₡80.000	—	—
+24 sept 2026, 5:51 a. m.	QA Maestro 362	Maestro	Mueve dinero	Aprobó un cobro por rechazo de tienda	Cobro por rechazo	R-c337mufh1efjpar	₡500	—	—
+24 sept 2026, 5:49 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cobro de gasto fijo	Cobro de gasto fijo	TEST-333-APROBACION · 2026-08	₡80.000	—	—
+24 sept 2026, 5:35 a. m.	QA Maestro 362	Maestro	Mueve dinero	Aprobó un cobro por rechazo de tienda	Cobro por rechazo	R-c337mufggioupar	₡500	—	—
+24 sept 2026, 5:34 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cobro de gasto fijo	Cobro de gasto fijo	TEST-333-APROBACION · 2026-08	₡80.000	—	—
+24 sept 2026, 4:24 a. m.	QA Maestro 362	Maestro	Mueve dinero	Aprobó un cobro por rechazo de tienda	Cobro por rechazo	R-c337mufdxs12par	₡500	—	—
+24 sept 2026, 4:22 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cobro de gasto fijo	Cobro de gasto fijo	TEST-333-APROBACION · 2026-08	₡80.000	—	—
+24 sept 2026, 3:05 a. m.	QA Maestro 362	Maestro	Mueve dinero	Aprobó un cobro por rechazo de tienda	Cobro por rechazo	R-c337mufb3wb4par	₡500	—	—
+24 sept 2026, 3:03 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cobro de gasto fijo	Cobro de gasto fijo	TEST-333-APROBACION · 2026-08	₡80.000	—	—
+24 sept 2026, 2:52 a. m.	QA Maestro 362	Maestro	Mueve dinero	Aprobó un cobro por rechazo de tienda	Cobro por rechazo	R-c337mufamvt6par	₡500	—	—
+24 sept 2026, 2:51 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cobro de gasto fijo	Cobro de gasto fijo	TEST-333-APROBACION · 2026-08	₡80.000	—	—
+24 sept 2026, 2:33 a. m.	QA Maestro 362	Maestro	Mueve dinero	Aprobó un cobro por rechazo de tienda	Cobro por rechazo	R-c337muf9z735par	₡500	—	—
+24 sept 2026, 2:33 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cobro de gasto fijo	Cobro de gasto fijo	TEST-333-APROBACION · 2026-08	₡80.000	—	—
+24 sept 2026, 2:03 a. m.	Sat QUEPOS	Admin satélite	Mueve dinero	Aprobó un cierre del día	Cierre del día	Quino QUEPOS · 2026-09-24	₡6.000	—	—
+24 sept 2026, 2:00 a. m.	Maestro QA	Maestro	Cambia permisos	Creó un usuario	Usuario	Sat QUEPOS	—	—	—
+24 sept 2026, 2:00 a. m.	Maestro QA	Maestro	Cambia permisos	Creó un usuario	Usuario	Quino QUEPOS	—	—	—
+24 sept 2026, 1:56 a. m.	Maestro QA	Maestro	Cambia permisos	Creó un usuario	Usuario	Quique Quepos	—	—	—
+24 sept 2026, 1:53 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cierre del día	Cierre del día	Rita Recorrido · 2026-09-24	₡32.500	—	—
+24 sept 2026, 1:45 a. m.	QA Maestro 362	Maestro	Mueve dinero	Aprobó un cobro por rechazo de tienda	Cobro por rechazo	R-c337muf88k69par	₡500	—	—
+24 sept 2026, 1:45 a. m.	Ana Admin	Administrador	Mueve dinero	Aprobó un cobro de gasto fijo	Cobro de gasto fijo	TEST-333-APROBACION · 2026-08	₡80.000	—	—
+1-25 de 698
+«
+‹
+1
+2
+…
+28
+›
+»
+10
+25
+50
+Confirmá el SINPE de GAM
+
+Hasta ahora tu bodega cobraba en el número de la central. Confirmá el tuyo para que la plata de tus clientes llegue a donde tiene que llegar.
+
+Número SINPE*
+
+8 dígitos, empieza por 6, 7 u 8.
+
+A nombre de*
+
+Tal como aparece en SINPE Móvil al teclear el número.
+
+Ahora no
+Confirmar

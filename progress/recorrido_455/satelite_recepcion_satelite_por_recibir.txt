@@ -1,0 +1,26 @@
+Ordenex
+Analítica
+Monitoreo
+Órdenes
+Por recibir
+En bodega
+Cierres del día
+Incidentes
+Mi bodega
+Ayuda
+SS
+Sara Satelite
+Admin satélite
+Por recibir
+
+Órdenes en camino a tu bodega satélite. Se reciben escaneando el QR.
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+Salir
+Recibir paquete
+Por recibir
+
+No hay órdenes por recibir.

@@ -1,0 +1,42 @@
+Ordenex
+Analítica
+Monitoreo
+Órdenes
+Cierres del día
+Incidentes
+Mi bodega
+Ayuda
+SS
+Sara Satelite
+Admin satélite
+Mi bodega
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+Salir
+SINPE de la bodega
+Es el número al que tus clientes transfieren cuando pagan por SINPE. Lo usan todos los mensajeros de esta bodega.
+Número SINPE*
+
+8 dígitos, empieza por 6, 7 u 8.
+
+A nombre de*
+
+Tal como aparece en SINPE Móvil al teclear el número.
+
+Guardar
+Cancelar
+
+Nadie ha revisado este número todavía.
+
+Vista previa
+Lo que va a leer el cliente
+
+No se pudo cargar el mensaje que reciben los clientes, así que no hay nada que comparar aquí. El número y el nombre de arriba se guardan igual.
+
+Revisá el número y el nombre juntos. SINPE Móvil le muestra al cliente el titular al teclear el número: si no coincide con lo que dice el mensaje, no va a pagar.
+
+Un número mal escrito no da error
+
+Los clientes transferirían a una cuenta equivocada y nos enteraríamos días después por los reclamos. Por eso queda registrado quién lo cambió y cuándo.
