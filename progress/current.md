@@ -13,6 +13,13 @@ aislarlo y documentarlo, sin bloquear el resto.
 - 455 (un nombre por estado): pendiente. Nombres decididos en su `status_note`.
 - 456 (tooltip): textos aprobados en `specs/456-tooltip-estados/textos-aprobados.md`.
 
+### Avance de la noche (se actualiza al cerrar cada ficha)
+
+- **454 HECHA, en dev** (PR #819, merge f4b3ebed). Contraste en prod: dinero 0 diferencias en 8 controles (165 cierres). Recorrido por rol en navegador OK. Revisión APROBADA. Gate completo verde. Deuda anotada para la release en su status_note.
+- **455 en curso** (Fase 0).
+- 456 pendiente (spec listo).
+- Local: se borraron 3 notificaciones creadas por el recorrido (rompían tests de downs de otras fichas); QA_PASSWORD local rotada a Recorrido454!qa; una API key local rotada.
+
 ---
 
 # Estado — sesión del 2026-09-21
