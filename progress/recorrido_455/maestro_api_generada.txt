@@ -1,0 +1,13 @@
+API key generada
+
+Credencial para "Recorrido 455 c".
+
+Esta es la única vez que verás estas credenciales. Si las pierdes, tendrás que generarlas de nuevo.
+
+Clave de API
+Copiar
+
+La API key se creó, pero el webhook no quedó registrado. Puedes registrarlo con el botón Editar de la fila.
+
+Ya guardé mis credenciales en un lugar seguro
+Cerrar

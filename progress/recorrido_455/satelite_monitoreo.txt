@@ -1,0 +1,28 @@
+Ordenex
+Analítica
+Monitoreo
+Órdenes
+Cierres del día
+Incidentes
+Mi bodega
+Ayuda
+SS
+Sara Satelite
+Admin satélite
+Monitoreo
+
+El pulso del día en curso: cuántas órdenes lleva hoy cada mensajero y en qué terminó cada una
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+Salir
+
+jueves, 24 de septiembre de 2026
+
+Actualizado hace 3 s
+
+Sin órdenes asignadas para hoy
+
+Ningún mensajero tiene órdenes asignadas para hoy dentro de tu alcance. El tablero muestra el trabajo de hoy: lo que se asigne para otro día aparecerá en el tablero de ese día.

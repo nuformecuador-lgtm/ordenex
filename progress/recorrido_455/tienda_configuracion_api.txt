@@ -1,0 +1,35 @@
+API
+
+Credenciales e integraciones de API
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Generar API key
+Descargar
+Identificador	Prefijo	Usuario dedicado	Tienda destino	Fecha de creación	Estado	Webhook	Acciones
+Prueba Tienda 18:06:29	ordx_7ZCGXFE…	apikey+prueba-tienda…
+apikey+prueba-tienda-18-06-29@apikey.invalid
+	Tania	4/9/26, 1:06 p. m.	Activa	Editar	
+Rotar
+Desactivar
+Eliminar
+
+Prueba Manual 17:54:20	ordx_3lhmuYE…	apikey+prueba-manual…
+apikey+prueba-manual-17-54-20@apikey.invalid
+	—	4/9/26, 12:54 p. m.	Inactiva	Editar	
+Rotar
+Activar
+Eliminar
+1-2 de 2
+«
+‹
+1
+›
+»
+10
+25
+50

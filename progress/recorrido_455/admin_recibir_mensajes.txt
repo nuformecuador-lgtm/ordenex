@@ -1,0 +1,11 @@
+Recibir paquete
+Recibir paquete
+
+Escanea o ingresa el número de guía
+
+Escanear con cámara
+Apunta al código de la guía
+O INGRESA MANUALMENTE
+Número de guía
+Recibir
+Cerrar

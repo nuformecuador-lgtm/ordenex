@@ -1,0 +1,69 @@
+Historial de la orden Q454-02
+
+Cambios de estado y correcciones del día de reparto, en orden cronológico.
+
+Creación
+·
+En preparación
+
+24 sept 2026, 1:57 a. m.
+
+Por Tania Tienda
+
+En preparación
+→
+En bodega central
+
+24 sept 2026, 1:57 a. m.
+
+Por Ana Admin
+
+En bodega central
+→
+En ruta a bodega satélite
+
+24 sept 2026, 1:57 a. m.
+
+Por Ana Admin
+
+En ruta a bodega satélite
+→
+En bodega satélite
+
+24 sept 2026, 2:01 a. m.
+
+Por Sat QUEPOS
+
+En bodega satélite
+→
+Mensajero recogiendo en la bodega
+
+24 sept 2026, 2:01 a. m.
+
+Por Sat QUEPOS
+
+Mensajero recogiendo en la bodega
+→
+En reparto
+
+24 sept 2026, 2:01 a. m.
+
+Por Quino QUEPOS
+
+Gestión registrada
+
+Resultado: Entregado
+
+24 sept 2026, 2:02 a. m.
+
+Por Quino QUEPOS (Mensajero)
+
+En reparto
+→
+Entregado
+
+24 sept 2026, 2:03 a. m.
+
+Por Quino QUEPOS
+
+Close

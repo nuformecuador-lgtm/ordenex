@@ -1,0 +1,108 @@
+Toggle Sidebar
+Cierre del día
+
+Detalle de lo gestionado, totales por método de pago y solicitud de cierre
+
+Tema claro activado.
+1 por hacer
+Salir
+Totales del día
+Efectivo
+₡0
+SINPE
+₡0
+Transferencia
+₡0
+Total general
+₡0
+Ganancia
+Total de ganancia
+₡0
+Solicitar cierre
+
+Tenes ordenes sin gestionar; gestionalas antes de cerrar.
+
+Cierres solicitados
+Descargar
+ORDENEX
+Cierre del día
+#FE596160
+Solicitado
+Ver
+Ver detalles
+Bodega central
+2026-09-24
+TOTAL
+₡6.500
+
+Motivo de rechazo: Faltan comprobantes de la entrega (recorrido 454)
+
+ORDENEX
+Cierre del día
+#404B272A
+Aprobado
+Ver
+Ver detalles
+Bodega central
+2026-08-20
+TOTAL
+₡0
+ORDENEX
+Cierre del día
+#D14D652D
+Aprobado
+Ver
+Ver detalles
+Bodega central
+2026-08-20
+TOTAL
+₡0
+ORDENEX
+Cierre del día
+#F6F307D0
+Aprobado
+Ver
+Ver detalles
+Bodega central
+2026-08-20
+TOTAL
+₡0
+ORDENEX
+Cierre del día
+#32FD6266
+Aprobado
+Ver
+Ver detalles
+Bodega central
+2026-08-13
+TOTAL
+₡12.500
+ORDENEX
+Cierre del día
+#86B22FC3
+Aprobado
+Ver
+Ver detalles
+Bodega central
+2026-08-13
+TOTAL
+₡16.300
+ORDENEX
+Cierre del día
+#73545E29
+Aprobado
+Ver
+Ver detalles
+Bodega central
+2026-08-12
+TOTAL
+₡124.100
+1-7 de 7
+«
+‹
+1
+›
+»
+10
+25
+50

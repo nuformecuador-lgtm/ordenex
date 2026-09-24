@@ -1,0 +1,9 @@
+Reprogramar entrega
+
+Elegí una nueva fecha para la orden de Cliente Recorrido 9 (guía 44203146).
+
+Nueva fecha
+Motivo
+(opcional)
+Cancelar
+Reprogramar

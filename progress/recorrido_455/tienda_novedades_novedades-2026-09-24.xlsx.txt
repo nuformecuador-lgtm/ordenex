@@ -1,0 +1,8 @@
+Nº Guía	Nº Remisión	Destinatario	Teléfono	Dirección	Ubicación	Producto	Monto a cobrar	Causa de devolución	Intentos de entrega
+44203146	R454-09	Cliente Recorrido 9	88454009	Frente al parque central de Curridabat	GAM · San José · Curridabat · Curridabat	Producto prueba 454 #9	9500	Cliente no localizado	1
+16757840	R454-08	Cliente Recorrido 8	88454008	Mall San Pedro, 100 m norte	GAM · San José · Montes de Oca · San Pedro	Producto prueba 454 #8	9000	Cliente no localizado	1
+990115	111115	Marianela Oreamuno bolaños	88835559	-Corrida Bad, José María Zeledón casa WS7, casa W 17 tercera etapa casa de rejas	GAM · San José · Curridabat · Curridabat	1 * Spray Analgésico Dental l Alivio del dolor de muelas.	13900	Sin causa registrada	0
+990008	QA-R-0008	Fernando Castro	87200001	Curridabat, Curridabat	GAM · San José · Curridabat · Curridabat	Reloj inteligente	45000	Cliente no localizado	1
+990009	QA-R-0009	Gabriela Nunez	87200002	Desamparados, Desamparados	GAM · San José · Desamparados · Desamparados	Bolso de mano	18500	Cliente no localizado	2
+990013	QA-R-0013	Valeria Segura	87200006	Guadalupe, Goicoechea	GAM · San José · Goicoechea · Guadalupe	Lampara de escritorio	15000	Cliente no localizado	1
+990011	QA-R-0011	Natalia Campos	87200004	Escazú, Escazú	GAM · San José · Escazú · Escazú	Auriculares gamer	27000	Cliente no localizado	1

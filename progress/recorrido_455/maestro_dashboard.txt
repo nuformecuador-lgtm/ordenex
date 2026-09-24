@@ -1,0 +1,89 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Wallet
+Configuración
+Cierres del día
+Incidentes
+Histórico
+Ayuda
+MQ
+Maestro QA
+Maestro
+Panel maestro
+
+Postulaciones pendientes: mensajeros, y vehículos o bodegas ofrecidos desde la web
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Postulaciones de mensajeros
+Prueba Comprime Pesadas
+Email
+e2e.2372910@ordenex.test
+Teléfono
+88882910
+Tipo de identificación
+cedula
+Nº de documento
+72372910
+Vehículo
+moto
+Placa
+E2E910
+Documentos
+Ver Cédula (anverso)
+Ver Cédula (reverso)
+Ver Matrícula (anverso)
+Ver Matrícula (reverso)
+Ver Foto de rostro
+Rechazar
+Aprobar
+1-1 de 1
+«
+‹
+1
+›
+»
+Vehículos y bodegas ofrecidos
+Pendientes
+Atendidas
+Vehículo
+Carlos Prueba VEHICULO
+Teléfono
+88884517
+Correo
+prueba.vehiculo.544517@ordenex.test
+Lo que nos contó
+
+Es un vehiculo de prueba del recorrido T10, con disponibilidad completa.
+
+Llegó
+20 ago 2026, 11:35 p. m.
+Marcar como atendida
+1-1 de 1
+«
+‹
+1
+›
+»
+Confirmá el SINPE de GAM
+
+Hasta ahora tu bodega cobraba en el número de la central. Confirmá el tuyo para que la plata de tus clientes llegue a donde tiene que llegar.
+
+Número SINPE*
+
+8 dígitos, empieza por 6, 7 u 8.
+
+A nombre de*
+
+Tal como aparece en SINPE Móvil al teclear el número.
+
+Ahora no
+Confirmar

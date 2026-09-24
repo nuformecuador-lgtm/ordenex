@@ -1,0 +1,189 @@
+Ordenex
+Analítica
+Órdenes
+Novedades
+Mi wallet
+Ayuda
+TT
+Tania Tienda
+Admin de tienda
+Órdenes
+
+Listado y gestión de órdenes
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+Salir
+Recibir paquete
+Carga masiva
+Vistas
+Filtros
+
+Descargar
+	Nº Guía	Nº Remisión	Estado	Intentos	Destinatario	Producto	Dirección	Tienda	Zona	Provincia	Cantón	Distrito	Monto a cobrar	Flete + IVA	Fulfillment	Comisión + IVA	Mensajero	Fecha de creación	Tiempo	Reprogramada para	Acciones
+	38589325	Q454-02	
+Entregado
+	0	Cliente Quepos 2	Producto prueba 454 #2	Parque central de Quepos	Tania	QUEPOS	Puntarenas	Quepos	Quepos	₡6.000	
+₡3.390
+	₡800	₡237,30	Quino QUEPOS	24/9/26, 2:57 a. m.	6h 16min	—	
+
+	57202592	Q454-01	
+Por devolver a bodega central
+	1	Cliente Quepos 1	Producto prueba 454 #1	Muelle de Quepos, 100 m norte	Tania	QUEPOS	Puntarenas	Quepos	Quepos	₡5.500	
+₡3.390
+	₡800	₡217,53	Quino QUEPOS	24/9/26, 2:57 a. m.	6h 16min	—	
+
+	13761058	R454-13	
+Incidente
+	0	Cliente Recorrido 13	Producto prueba 454 #13	Universidad de Costa Rica, Facultad de Derecho	Tania	GAM	San José	Montes de Oca	Mercedes	₡11.500	
+₡2.260
+	₡800	₡454,83	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	75067153	R454-06	
+Reprogramado
+	1	Cliente Recorrido 6	Producto prueba 454 #6	Universidad de Costa Rica, Facultad de Derecho	Tania	GAM	San José	Montes de Oca	Mercedes	₡8.000	
+₡2.260
+	₡800	₡316,40	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	2026-09-26	
+
+	71377932	R454-05	
+Entregado
+	0	Cliente Recorrido 5	Producto prueba 454 #5	Multiplaza Escazú, 200 m sur	Tania	GAM	San José	Escazú	San Rafael	₡7.500	
+₡2.260
+	₡800	₡296,63	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	32670963	R454-14	
+Por devolver a tienda
+	1	Cliente Recorrido 14	Producto prueba 454 #14	Iglesia de Desamparados, 100 m oeste	Tania	GAM	San José	Desamparados	Desamparados	₡12.000	
+₡2.260
+	₡800	₡474,60	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	82916953	R454-11	
+Por devolver a tienda
+	1	Cliente Recorrido 11	Producto prueba 454 #11	Universidad Nacional, entrada principal	Tania	GAM	Heredia	Heredia	Heredia	₡10.500	
+₡2.260
+	₡800	₡415,28	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	44203146	R454-09	
+Novedad
+	1	Cliente Recorrido 9	Producto prueba 454 #9	Frente al parque central de Curridabat	Tania	GAM	San José	Curridabat	Curridabat	₡9.500	
+₡2.260
+	₡800	₡375,73	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	40520764	R454-01	
+Entregado
+	0	Cliente Recorrido 1	Producto prueba 454 #1	Mall San Pedro, 100 m norte	Tania	GAM	San José	Montes de Oca	San Pedro	₡5.500	
+₡2.260
+	₡800	₡217,53	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	59144030	R454-04	
+Entregado
+	0	Cliente Recorrido 4	Producto prueba 454 #4	Universidad Nacional, entrada principal	Tania	GAM	Heredia	Heredia	Heredia	₡7.000	
+₡2.260
+	₡800	₡276,85	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	20447061	R454-12	
+Por devolver a tienda
+	1	Cliente Recorrido 12	Producto prueba 454 #12	Multiplaza Escazú, 200 m sur	Tania	GAM	San José	Escazú	San Rafael	₡11.000	
+₡2.260
+	₡800	₡435,05	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	16757840	R454-08	
+Novedad
+	1	Cliente Recorrido 8	Producto prueba 454 #8	Mall San Pedro, 100 m norte	Tania	GAM	San José	Montes de Oca	San Pedro	₡9.000	
+₡2.260
+	₡800	₡355,95	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	35371107	R454-07	
+Reprogramado
+	1	Cliente Recorrido 7	Producto prueba 454 #7	Iglesia de Desamparados, 100 m oeste	Tania	GAM	San José	Desamparados	Desamparados	₡8.500	
+₡2.260
+	₡800	₡336,18	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	2026-09-26	
+
+	28296862	R454-10	
+Por devolver a tienda
+	1	Cliente Recorrido 10	Producto prueba 454 #10	Teatro Nacional, 50 m este	Tania	GAM	San José	San José	Catedral	₡10.000	
+₡2.260
+	₡800	₡395,50	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	92987981	R454-03	
+Entregado
+	0	Cliente Recorrido 3	Producto prueba 454 #3	Teatro Nacional, 50 m este	Tania	GAM	San José	San José	Catedral	₡6.500	
+₡2.260
+	₡800	₡257,08	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+	80975515	R454-02	
+Entregado
+	0	Cliente Recorrido 2	Producto prueba 454 #2	Frente al parque central de Curridabat	Tania	GAM	San José	Curridabat	Curridabat	₡6.000	
+₡2.260
+	₡800	₡237,30	Rita Recorrido	24/9/26, 2:37 a. m.	6h 35min	—	
+
+
+	Pendiente	REM-T302-1	
+En preparación
+	0	Prueba 302	Caja	Av. Central	Tania	GAM	San José	San José	Carmen	₡15	
+₡2.260
+	₡800	₡0,60	—	4/9/26, 1:06 p. m.	19d 20h	—	
+
+	Pendiente	111137	
+En bodega satélite
+	0	Miguel -	1 * Crema anti verrugas.	Calle las brisas Granadilla -	Tania	Quepos	San José	Curridabat	Granadilla	₡14.990	
+₡3.390
+	₡800	₡592,85	—	24/7/26, 5:40 p. m.	61d 15h	—	
+
+	Pendiente	111128	
+Entregado
+	0	Gustavo -	1 * BATANA.	Universidad de Costa Rica San Pedro -	Tania	GAM	San José	Montes de Oca	Mercedes	₡17.700	
+₡2.260
+	₡800	₡700,04	Marco Mensajero	24/7/26, 5:40 p. m.	61d 15h	—	
+
+	Pendiente	111131	
+Entregado
+	0	Gustavo Herrera	2 * Spray Herbal para Hemorroides l Alivio Natural.	Fresh market guayabos, residencial quinta guayabos casa B15 Curridabat -	Tania	GAM	San José	Curridabat	Curridabat	₡21.000	
+₡2.260
+	₡800	₡830,55	Mensajero test	24/7/26, 5:40 p. m.	61d 15h	—	
+
+	Pendiente	111120	
+Entregado
+	0	Alejandra -	1 * TURKESTERONE.	San Rafael San Rafael Arriba -	Tania	GAM	San José	Desamparados	San Rafael Arriba	₡17.739	
+₡2.260
+	₡800	₡701,58	Marco Mensajero	24/7/26, 5:40 p. m.	61d 15h	—	
+
+	Pendiente	111114	
+Devolución a origen por rechazo
+	0	Elizabeth Blanco	2 * Spray Herbal para Hemorroides l Alivio Natural.	100 sur 150 este de McDonalds frente Plaza del Sol. Casa mano derecha Curridabat	Tania	GAM	San José	Curridabat	Curridabat	₡17.000	
+₡2.260
+	₡800	₡672,35	Mensajero test	24/7/26, 5:40 p. m.	61d 15h	—	
+
+
+	Pendiente	111138	
+Mensajero recogiendo en la bodega
+	0	Yendri	2 * Crema Dental Blanqueadora.	Sanjose Tirrases -	Tania	GAM	San José	Curridabat	Curridabat	₡27.040	
+₡2.260
+	₡800	₡1.069,43	Marco Mensajero	24/7/26, 5:40 p. m.	61d 15h	—	
+
+	Pendiente	111123	
+Incidente
+	0	Alejandra Ramírez Zamora	1 * Nebulizador Inalámbrico.	Pinares de Curridabat de la BMW 200 norte y 25 oeste cuarta casa mano derecha Sá	Tania	GAM	San José	Curridabat	Curridabat	₡11.900	
+₡2.260
+	₡800	₡470,65	Marco Mensajero	24/7/26, 5:40 p. m.	61d 15h	—	
+
+	990136	111136	
+En reparto
+Reprogramado · pendiente de confirmación
+	0	Roger Francisco Maradiaga paiz	1 * TURKESTERONE.	La Uruca del puente juan Pablo segundo la Uruca ala par dela empresa binbo la em	Tania	GAM	San José	Curridabat	Curridabat	₡17.700	
+₡2.260
+	₡800	₡700,04	Marco Mensajero	24/7/26, 5:40 p. m.	61d 15h	2026-09-27	
+1-25 de 84
+«
+‹
+1
+2
+…
+4
+›
+»
+10
+25
+50

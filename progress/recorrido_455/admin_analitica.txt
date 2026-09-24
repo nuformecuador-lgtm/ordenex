@@ -1,0 +1,337 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Wallet
+Cierres del día
+Incidentes
+Histórico
+Ayuda
+AA
+Ana Admin
+Administrador
+Analítica
+
+Panel de indicadores del negocio. Los paneles se irán activando por entregas.
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Filtros
+
+Actualizar
+Actualizado 08:44
+Detalle - Movimiento de las ordenes
+
+EFECTIVIDAD DE ENTREGA
+
+de 85 órdenes cargadas
+
+21,2%
+
+Entregado: 18
+
+de las 85 órdenes que entraron
+
+Entregado
+18
+Otro desenlace
+33
+Todavía en proceso
+34
+
+35,3% de las 51 órdenes con desenlace terminaron entregadas
+
+Efectividad de la gestión (entregadas y rechazadas de 85 órdenes)
+
+35,3%
+
+Entregado
+
+18
+
+Sin desenlace todavía
+
+34
+
+Ciclo de vida promedio (16 órdenes cerradas)
+
+193,5 h
+
+Período abierto. Este período todavía se está cerrando. 34 de sus 85 órdenes siguen vivas, así que la efectividad va a subir.
+
+Detalle gestión · 85
+Entregado
+18 (21,2%)
+Novedad
+9 (10,6%)
+Devolución a origen por rechazo
+12 (14,1%)
+Reprogramado
+10 (11,8%)
+Incidente
+2 (2,4%)
+Otros
+34 (40%)
+Detalle gestión, Entregado: 18 (21,2%)
+Detalle gestión, Novedad: 9 (10,6%)
+Detalle gestión, Devolución a origen por rechazo: 12 (14,1%)
+Detalle gestión, Reprogramado: 10 (11,8%)
+Detalle gestión, Incidente: 2 (2,4%)
+Detalle gestión, Otros: 34 (40%)
+Detalle de las ordenes · 85
+En preparación
+21 (24,7%)
+Entregado
+18 (21,2%)
+Devolución a origen por rechazo
+12 (14,1%)
+Reprogramado
+10 (11,8%)
+Novedad
+9 (10,6%)
+En bodega satélite
+4 (4,7%)
+Mensajero recogiendo en la bodega
+4 (4,7%)
+Novedad interna
+4 (4,7%)
+Incidente
+2 (2,4%)
+Por recolectar en tienda
+1 (1,2%)
+Detalle de las ordenes, En preparación: 21 (24,7%)
+Detalle de las ordenes, Entregado: 18 (21,2%)
+Detalle de las ordenes, Devolución a origen por rechazo: 12 (14,1%)
+Detalle de las ordenes, Reprogramado: 10 (11,8%)
+Detalle de las ordenes, Novedad: 9 (10,6%)
+Detalle de las ordenes, En bodega satélite: 4 (4,7%)
+Detalle de las ordenes, Mensajero recogiendo en la bodega: 4 (4,7%)
+Detalle de las ordenes, Novedad interna: 4 (4,7%)
+Detalle de las ordenes, Incidente: 2 (2,4%)
+Detalle de las ordenes, Por recolectar en tienda: 1 (1,2%)
+Órdenes cargadas por día
+Órdenes cargadas por día
+2026-07-31
+2026-08-12
+2026-08-24
+2026-09-06
+2026-09-24
+0
+8
+16
+Órdenes cargadas por día, 2026-07-25: 0
+Órdenes cargadas por día, 2026-07-26: 0
+Órdenes cargadas por día, 2026-07-27: 0
+Órdenes cargadas por día, 2026-07-28: 0
+Órdenes cargadas por día, 2026-07-29: 0
+Órdenes cargadas por día, 2026-07-30: 0
+Órdenes cargadas por día, 2026-07-31: 0
+Órdenes cargadas por día, 2026-08-01: 0
+Órdenes cargadas por día, 2026-08-02: 0
+Órdenes cargadas por día, 2026-08-03: 0
+Órdenes cargadas por día, 2026-08-04: 0
+Órdenes cargadas por día, 2026-08-05: 0
+Órdenes cargadas por día, 2026-08-06: 0
+Órdenes cargadas por día, 2026-08-07: 0
+Órdenes cargadas por día, 2026-08-08: 0
+Órdenes cargadas por día, 2026-08-09: 0
+Órdenes cargadas por día, 2026-08-10: 0
+Órdenes cargadas por día, 2026-08-11: 0
+Órdenes cargadas por día, 2026-08-12: 0
+Órdenes cargadas por día, 2026-08-13: 0
+Órdenes cargadas por día, 2026-08-14: 0
+Órdenes cargadas por día, 2026-08-15: 0
+Órdenes cargadas por día, 2026-08-16: 0
+Órdenes cargadas por día, 2026-08-17: 0
+Órdenes cargadas por día, 2026-08-18: 0
+Órdenes cargadas por día, 2026-08-19: 0
+Órdenes cargadas por día, 2026-08-20: 0
+Órdenes cargadas por día, 2026-08-21: 0
+Órdenes cargadas por día, 2026-08-22: 0
+Órdenes cargadas por día, 2026-08-23: 0
+Órdenes cargadas por día, 2026-08-24: 0
+Órdenes cargadas por día, 2026-08-25: 0
+Órdenes cargadas por día, 2026-08-26: 0
+Órdenes cargadas por día, 2026-08-27: 0
+Órdenes cargadas por día, 2026-08-28: 0
+Órdenes cargadas por día, 2026-08-29: 0
+Órdenes cargadas por día, 2026-08-30: 0
+Órdenes cargadas por día, 2026-08-31: 0
+Órdenes cargadas por día, 2026-09-01: 0
+Órdenes cargadas por día, 2026-09-02: 0
+Órdenes cargadas por día, 2026-09-03: 0
+Órdenes cargadas por día, 2026-09-04: 2
+Órdenes cargadas por día, 2026-09-05: 0
+Órdenes cargadas por día, 2026-09-06: 0
+Órdenes cargadas por día, 2026-09-07: 0
+Órdenes cargadas por día, 2026-09-08: 0
+Órdenes cargadas por día, 2026-09-09: 0
+Órdenes cargadas por día, 2026-09-10: 0
+Órdenes cargadas por día, 2026-09-11: 0
+Órdenes cargadas por día, 2026-09-12: 0
+Órdenes cargadas por día, 2026-09-13: 0
+Órdenes cargadas por día, 2026-09-14: 0
+Órdenes cargadas por día, 2026-09-15: 0
+Órdenes cargadas por día, 2026-09-16: 0
+Órdenes cargadas por día, 2026-09-17: 0
+Órdenes cargadas por día, 2026-09-18: 0
+Órdenes cargadas por día, 2026-09-19: 0
+Órdenes cargadas por día, 2026-09-20: 0
+Órdenes cargadas por día, 2026-09-21: 0
+Órdenes cargadas por día, 2026-09-22: 0
+Órdenes cargadas por día, 2026-09-23: 0
+Órdenes cargadas por día, 2026-09-24: 16
+
+Se muestran los últimos 62 días de los 66 del periodo: un eje diario más largo no se lee. Acota el filtro de fechas para ver los demás.
+
+Causas de devolución · 10
+Cliente no localizado
+9 (90%)
+Sin causa registrada
+1 (10%)
+Causas de devolución, Cliente no localizado: 9 (90%)
+Causas de devolución, Sin causa registrada: 1 (10%)
+Cargadas hoy (2026-09-24)
+Sin gestión en el día
+0 (0%)
+Gestionadas
+16 (100%)
+Cargadas hoy, Sin gestión en el día: 0 (0%)
+Cargadas hoy, Gestionadas: 16 (100%)
+
+No sigue al filtro de fechas: siempre cuenta el día en curso de Costa Rica. Sí responde a los de zona, provincia, cantón, distrito y tienda.
+
+Detalle - Productos
+Que productos se movieron en el rango y con que resultado. Responde a los mismos filtros de arriba.
+85 órdenes en el rango · 0 sin producto interpretable.
+Actualizado 08:44
+Cómo se cuenta
+Descargar
+Desglose
+	Tienda	Producto	Órdenes	En qué terminaron	Efectividad de entrega	Recaudado
+
+	Tania	Spray Herbal para Hemorroides l Alivio Natural	6	
+Entregado: 2 · Devolución a origen por rechazo: 1 · Sin desenlace todavía: 3
+	33,3%	—
+
+	Tania	Polvo Destapador de Cañerias Mágico	6	
+Entregado: 1 · Sin desenlace todavía: 5
+	16,7%	—
+
+	Tania	Parche Antivarices L	4	
+Entregado: 1 · Reprogramado: 1 · Sin desenlace todavía: 2
+	25%	—
+
+	Tania	TURKESTERONE	6	
+Entregado: 2 · Reprogramado: 1 · Sin desenlace todavía: 3
+	33,3%	—
+
+	Tania	Crema Dental Blanqueadora	4	
+Entregado: 1 · Sin desenlace todavía: 3
+	25%	—
+
+	Tania	Gel de Abejas	4	
+Reprogramado: 2 · Sin desenlace todavía: 2
+	0%	—
+
+	Tania	Lima Eléctrica Profesional para Pies	4	
+Entregado: 1 · Reprogramado: 1 · Sin desenlace todavía: 2
+	25%	—
+
+	Tania	AND	2	
+Entregado: 1 · Sin desenlace todavía: 1
+	50%	—
+
+	Tania	BATANA	2	
+Entregado: 1 · Sin desenlace todavía: 1
+	50%	—
+
+	Tania	Crema anti verrugas	2	
+Entregado: 1 · Sin desenlace todavía: 1
+	50%	—
+
+	Tania	Nebulizador Inalámbrico	2	
+Incidente: 1 · Sin desenlace todavía: 1
+	0%	—
+
+	Tania	Producto prueba 454 #1	2	
+Entregado: 1 · Devolución a origen por rechazo: 1
+	50%	₡5.500
+
+	Tania	Producto prueba 454 #2	2	
+Entregado: 2
+	100%	₡12.000
+
+	Tania	Protector Dental	2	
+Sin desenlace todavía: 2
+	0%	—
+
+	Tania	Spray Analgésico Dental l Alivio del dolor de muelas	2	
+Novedad: 1 · Sin desenlace todavía: 1
+	0%	—
+
+	Tania	Spray Protector	2	
+Sin desenlace todavía: 2
+	0%	—
+
+	Tania	Audifonos bluetooth	1	
+Devolución a origen por rechazo: 1
+	0%	—
+
+	Tania	Auriculares gamer	1	
+Novedad: 1
+	0%	—
+
+	Tania	Blusa y falda	1	
+Reprogramado: 1
+	0%	—
+
+	Tania	Bolso de mano	1	
+Novedad: 1
+	0%	—
+
+	Tania	Cafetera	1	
+Devolución a origen por rechazo: 1
+	0%	—
+
+	Tania	Caja	1	
+Sin desenlace todavía: 1
+	0%	—
+
+	Tania	Camisa formal	1	
+Novedad: 1
+	0%	—
+
+	Tania	Camiseta talla M	1	
+Sin desenlace todavía: 1
+	0%	—
+
+	Tania	Cargador USB-C	1	
+Reprogramado: 1
+	0%	—
+1-25 de 53
+«
+‹
+1
+2
+3
+›
+»
+10
+25
+50
+100
+Detalle - Cohorte de carga
+De las órdenes que se cargaron cada día, qué pasó con ellas: cuántas se entregaron, cuántas se devolvieron y cuántas siguen vivas. Cada orden se sigue hasta su desenlace, aunque haya ocurrido después del periodo.
+
+Elige un periodo para ver las cohortes
+
+Esta tabla sigue las órdenes que entraron cada día, así que necesita un rango de fechas. Elígelo en el filtro de arriba.
+
+0

@@ -1,0 +1,112 @@
+// GET /api/ordenes/api-key?estado=entregado&limit=3 -> HTTP 200
+{
+  "items": [
+    {
+      "numGuia": 38589325,
+      "numRemision": "Q454-02",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Cliente Quepos 2",
+      "telefonoDest": "88464002",
+      "producto": "Producto prueba 454 #2",
+      "direccion": "Parque central de Quepos",
+      "montoCobrar": 6000,
+      "createdAt": "2026-09-24T07:57:09.203Z",
+      "mensajero": {
+        "id": "d803b28a-3685-4672-a956-cb581cbc922a",
+        "nombre": "Quino QUEPOS"
+      },
+      "zona": {
+        "id": "6df0e4f5-e5fa-4e7a-8a45-1fd3b708c3d4",
+        "nombre": "QUEPOS"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "210.00",
+        "ivaComision": "27.30",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "210.00",
+        "ivaComision": "27.30",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 80975515,
+      "numRemision": "R454-02",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Cliente Recorrido 2",
+      "telefonoDest": "88454002",
+      "producto": "Producto prueba 454 #2",
+      "direccion": "Frente al parque central de Curridabat",
+      "montoCobrar": 6000,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "210.00",
+        "ivaComision": "27.30",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "210.00",
+        "ivaComision": "27.30",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 92987981,
+      "numRemision": "R454-03",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Cliente Recorrido 3",
+      "telefonoDest": "88454003",
+      "producto": "Producto prueba 454 #3",
+      "direccion": "Teatro Nacional, 50 m este",
+      "montoCobrar": 6500,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "227.50",
+        "ivaComision": "29.58",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "227.50",
+        "ivaComision": "29.58",
+        "fulfillment": "800.00"
+      }
+    }
+  ],
+  "pagination": {
+    "limit": 3,
+    "offset": 0,
+    "total": 18
+  }
+}

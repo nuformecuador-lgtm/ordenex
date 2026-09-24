@@ -1,0 +1,112 @@
+Historial de la orden QA-R-0012
+
+Cambios de estado y correcciones del día de reparto, en orden cronológico.
+
+Novedad · pendiente de confirmación
+Intento 1 de 3
+
+Creación
+·
+En preparación
+
+21 jul 2026, 9:59 p. m.
+
+Por Tania Tienda
+
+En preparación
+→
+Mensajero recogiendo en la bodega
+
+21 jul 2026, 11:29 p. m.
+
+Por Tania Tienda
+
+Mensajero recogiendo en la bodega
+→
+En reparto
+
+22 jul 2026, 12:59 a. m.
+
+Por Marco Mensajero
+
+En reparto
+→
+Reprogramado
+
+22 jul 2026, 2:29 a. m.
+
+Por Marco Mensajero
+
+Motivo: Cliente pide entregar manana.
+
+Reprogramado
+→
+En bodega central
+
+13 ago 2026, 2:18 p. m.
+
+Por Sistema
+
+En bodega central
+→
+Mensajero recogiendo en la bodega
+
+20 ago 2026, 5:44 p. m.
+
+Por Ana Admin
+
+Mensajero recogiendo en la bodega
+→
+En reparto
+
+20 ago 2026, 5:45 p. m.
+
+Por Marco Mensajero
+
+En reparto
+→
+Devolución por confirmar (estado retirado)
+
+20 ago 2026, 5:46 p. m.
+
+Por Marco Mensajero
+
+Motivo: Direccion no existe segun el vecino. El paquete vuelve a bodega.
+
+Devolución por confirmar (estado retirado)
+→
+En reparto
+
+20 ago 2026, 5:47 p. m.
+
+Por Marco Mensajero
+
+Gestión registrada
+
+Resultado: Novedad
+
+20 ago 2026, 5:48 p. m.
+
+Por Marco Mensajero (Mensajero)
+
+En reparto
+→
+Devolución por confirmar (estado retirado)
+
+20 ago 2026, 5:48 p. m.
+
+Por Marco Mensajero
+
+Motivo: Direccion no existe segun el vecino. El paquete vuelve a bodega.
+
+Devolución por confirmar (estado retirado)
+→
+En reparto
+
+23 sept 2026, 8:14 p. m.
+
+Por Sistema
+
+Motivo: migracion 454: retiro de devolucion_por_confirmar
+
+Close
