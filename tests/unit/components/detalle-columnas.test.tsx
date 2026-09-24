@@ -284,7 +284,7 @@ describe("columnasDetalle — «Resultado del día» (R22/R27)", () => {
     const { tabla } = pintar("zona", ordenDelDetalle({ id: "o1", resultadoDelDia: "reprogramado" }));
     const columna = idsMontados("zona").indexOf(COLUMNA_RESULTADO_ID);
     const celda = tabla.querySelectorAll("tbody td")[columna];
-    expect(celda?.textContent?.trim()).toBe("Reprogramada");
+    expect(celda?.textContent?.trim()).toBe("Reprogramado");
   });
 
   it("sin gestion hoy pinta el marcador de vacio, no una cadena cruda ni un cero", () => {

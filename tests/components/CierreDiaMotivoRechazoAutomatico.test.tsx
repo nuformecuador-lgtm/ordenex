@@ -170,7 +170,7 @@ describe("R11 — en el cierre del día, el motivo automático se sostiene solo"
   it("la celda «Motivo» lleva el texto LARGO completo", () => {
     renderModule({ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] });
 
-    expect(celdaDe("Rechazadas", "REM-SLA", "Motivo")).toBe(MOTIVO_LARGO);
+    expect(celdaDe("Devolución a origen por rechazo", "REM-SLA", "Motivo")).toBe(MOTIVO_LARGO);
   });
 
   it("NO se aplica aquí la variante corta del admin", () => {
@@ -179,7 +179,7 @@ describe("R11 — en el cierre del día, el motivo automático se sostiene solo"
     // motivo lo escribió él.
     renderModule({ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] });
 
-    const celda = celdaDe("Rechazadas", "REM-SLA", "Motivo");
+    const celda = celdaDe("Devolución a origen por rechazo", "REM-SLA", "Motivo");
     expect(celda).not.toBe(MOTIVO_CORTO);
     expect(celda).toContain("lo rechazó el sistema");
     expect(celda).toContain("plazo de la devolución");
@@ -188,7 +188,7 @@ describe("R11 — en el cierre del día, el motivo automático se sostiene solo"
   it("y sigue sin sigla ni value del enum", () => {
     renderModule({ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] });
 
-    const celda = celdaDe("Rechazadas", "REM-SLA", "Motivo");
+    const celda = celdaDe("Devolución a origen por rechazo", "REM-SLA", "Motivo");
     expect(celda).not.toContain("SLA");
     expect(celda).not.toContain("wrong_address");
     expect(celda).not.toContain("escalado");
@@ -199,7 +199,7 @@ describe("R11 — en el cierre del día, el motivo automático se sostiene solo"
     // diría antes de que el texto largo se convirtiera en un eco.
     renderModule({ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] });
 
-    const tabla = screen.getByRole("table", { name: "Rechazadas" });
+    const tabla = screen.getByRole("table", { name: "Devolución a origen por rechazo" });
     const encabezados = within(tabla)
       .getAllByRole("columnheader")
       .map((th) => th.textContent);
@@ -221,7 +221,7 @@ describe("R2 y R3 en la pantalla del mensajero", () => {
       ],
     });
 
-    expect(celdaDe("Rechazadas", "REM-MAN", "Motivo")).toBe(MOTIVO_LIBRE);
+    expect(celdaDe("Devolución a origen por rechazo", "REM-MAN", "Motivo")).toBe(MOTIVO_LIBRE);
   });
 
   it("una DEVUELTA con la plantilla del cron también se traduce, y con el texto largo", () => {
@@ -239,7 +239,7 @@ describe("R2 y R3 en la pantalla del mensajero", () => {
       ],
     });
 
-    expect(celdaDe("Devueltas", "REM-DEV", "Motivo")).toBe(
+    expect(celdaDe("Novedad", "REM-DEV", "Motivo")).toBe(
       "Cliente no localizado · lo rechazó el sistema al vencerse el plazo de la devolución",
     );
   });
@@ -257,6 +257,6 @@ describe("R2 y R3 en la pantalla del mensajero", () => {
       ],
     });
 
-    expect(celdaDe("Rechazadas", "REM-SIN", "Motivo")).toBe("—");
+    expect(celdaDe("Devolución a origen por rechazo", "REM-SIN", "Motivo")).toBe("—");
   });
 });

@@ -69,23 +69,23 @@ describe("columnas de descarga del detalle de un movimiento de la caja", () => {
   });
 
   it("emite el resultado como ETIQUETA LEGIBLE, nunca como valor del enum (R13)", () => {
-    expect(filaDescargaDetalleMovimiento(ORDEN).resultado).toBe("Entregada");
+    expect(filaDescargaDetalleMovimiento(ORDEN).resultado).toBe("Entregado");
     expect(filaDescargaDetalleMovimiento(ORDEN).resultado).not.toBe("entregado");
     expect(
       filaDescargaDetalleMovimiento({ ...ORDEN, resultados: ["devolucion_a_origen_por_rechazo"] }).resultado,
-    ).toBe("Rechazada");
+    ).toBe("Devolución a origen por rechazo");
   });
 
   it("R20: una orden con DOS gestiones en el cierre nombra las dos en su celda", () => {
     // El grano de la fila es la ORDEN, así que las dos gestiones vienen en la misma celda. Sin
-    // esto, el archivo diría «Entregada» de una orden que además fue reprogramada, y quien lo
+    // esto, el archivo diría «Entregado» de una orden que además fue reprogramada, y quien lo
     // cotejara no entendería de dónde sale su aporte.
     expect(
       filaDescargaDetalleMovimiento({
         ...ORDEN,
         resultados: ["entregado", "reprogramado"],
       }).resultado,
-    ).toBe("Entregada · Reprogramada");
+    ).toBe("Entregado · Reprogramado");
   });
 
   it("R14: la tienda SÍ es columna en la caja principal, con su nombre congelado", () => {

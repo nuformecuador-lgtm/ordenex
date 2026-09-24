@@ -106,7 +106,7 @@ function renderModule(props?: Partial<Parameters<typeof RecogerModule>[0]>) {
 
 /** La región del listado (el `<section aria-label>` de la pantalla). */
 function listado() {
-  return screen.getByRole("region", { name: "Por recoger" });
+  return screen.getByRole("region", { name: "Recoger en bodega" }); // FICHA 455 (R6): la acción, no un estado
 }
 
 /** El acceso a la recogida por guía/escaneo, plegado o no. */
@@ -175,7 +175,7 @@ afterEach(() => {
 });
 
 describe("RecogerModule — listado de solo-visualización", () => {
-  it("monta la región 'Por recoger' y NINGUNA superficie de reparto", () => {
+  it("monta la región «Recoger en bodega» y NINGUNA superficie de reparto", () => {
     renderModule({ porRecoger: [makeAsignacion({ id: "r1" })] });
 
     expect(listado()).toBeInTheDocument();

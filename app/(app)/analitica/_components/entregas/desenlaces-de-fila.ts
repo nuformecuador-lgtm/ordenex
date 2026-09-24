@@ -33,7 +33,7 @@
 import type { ConteoDeStatus } from "@/lib/types/conteo-por-status";
 
 import { calcularEfectividad } from "./efectividad";
-import { etiquetaDeDesenlaceContada } from "./etiqueta-desenlace";
+import { etiquetaDeDesenlace } from "./etiqueta-desenlace";
 import { composicionOtrosResultados, SEPARADOR_COMPOSICION } from "./otros-resultados";
 
 /** Los tres tramos de la barra, en el orden en que se pintan. */
@@ -72,17 +72,21 @@ export function tramosDeFila(porStatus: readonly ConteoDeStatus[]): TramosDeFila
 export interface ParteDesenlace {
   /** Identificador estable del trozo. Los del catalogo llevan su `value`. */
   readonly clave: string;
-  /** Como se nombra, YA en la forma en que se lee dentro de la frase (minuscula). */
+  /** Como se nombra: el nombre visible EXACTO del desenlace (FICHA 455, R2), o el rotulo del grupo. */
   readonly etiqueta: string;
   readonly conteo: number;
 }
 
 /**
- * El ROTULO de las ordenes que siguen su curso. No es un `value` del catalogo —«en proceso» se
- * define por NEGACION, es «lo que no tiene desenlace»— asi que es el unico nombre escrito a mano
- * de este modulo, y se escribe UNA vez.
+ * El ROTULO de las ordenes que siguen su curso. No es un `value` del catalogo —se define por
+ * NEGACION, es «lo que no tiene desenlace»— asi que es el unico nombre escrito a mano de este
+ * modulo, y se escribe UNA vez.
+ *
+ * FICHA 455 (2026-09-24, R6): antes decia «en proceso», un nombre retirado (§0.3: era el hito del
+ * rastreo para los estados fuera de catalogo). Es un GRUPO, asi que lleva un texto propio que no es
+ * el nombre de ningun estado. Lo comparten la tarjeta de `KpisEfectividad` y la columna del archivo.
  */
-export const ETIQUETA_EN_PROCESO = "en proceso";
+export const ETIQUETA_EN_PROCESO = "Sin desenlace todavía";
 
 /**
  * EN QUE TERMINARON las ordenes de la fila, trozo a trozo y en orden de lectura:
@@ -96,10 +100,10 @@ export const ETIQUETA_EN_PROCESO = "en proceso";
  * proximo renombre del catalogo. El resto de los desenlaces sale de `composicionOtrosResultados`,
  * que ya es la regla derivada que usan la celda de «Otros resultados» y el archivo descargable.
  *
- * ⚠ Y CONCUERDA EN NUMERO: «4 entregadas» pero «1 rechazada». El singular NO se calcula quitando
- * una «s»: ES el `value` del catalogo, que ya esta en singular (ver `etiquetaDeDesenlaceContada`).
- * La MISMA funcion la usa `textoComposicionOtrosResultados`, que viaja al archivo descargable, asi
- * que la pantalla y el `.xlsx` que se abre al lado no dicen la misma fila de dos formas.
+ * ⚠ FICHA 455 (2026-09-24, R2): cada desenlace por su nombre visible EXACTO (`nombreDeEstado`):
+ * sin plural, sin minusculas. Antes la frase decia «4 entregadas · 1 rechazada» pluralizando el
+ * codigo. La MISMA etiqueta la usa `textoComposicionOtrosResultados`, que viaja al archivo
+ * descargable, asi que la pantalla y el `.xlsx` que se abre al lado no dicen la fila de dos formas.
  */
 export function partesDesenlaceDeFila(
   porStatus: readonly ConteoDeStatus[],
@@ -108,30 +112,29 @@ export function partesDesenlaceDeFila(
   const partes: ParteDesenlace[] = [
     {
       clave: "entregado",
-      etiqueta: etiquetaDeDesenlaceContada("entregado", e.entregadas),
+      etiqueta: etiquetaDeDesenlace("entregado"),
       conteo: e.entregadas,
     },
     {
       clave: "devolucion_a_origen_por_rechazo",
-      etiqueta: etiquetaDeDesenlaceContada("devolucion_a_origen_por_rechazo", e.rechazadas),
+      etiqueta: etiquetaDeDesenlace("devolucion_a_origen_por_rechazo"),
       conteo: e.rechazadas,
     },
     // El RESTO de los desenlaces, cada uno por su nombre y en el orden determinista que ya fija
     // `composicionOtrosResultados` (cantidad desc, `status` asc por unidades de codigo).
     ...composicionOtrosResultados(porStatus).map<ParteDesenlace>((trozo) => ({
       clave: trozo.status,
-      etiqueta: etiquetaDeDesenlaceContada(trozo.status, trozo.conteo),
+      etiqueta: etiquetaDeDesenlace(trozo.status),
       conteo: trozo.conteo,
     })),
     { clave: "en_proceso", etiqueta: ETIQUETA_EN_PROCESO, conteo: e.enProceso },
   ];
-  return partes
-    .filter((parte) => parte.conteo > 0)
-    .map((parte) => ({ ...parte, etiqueta: parte.etiqueta.toLowerCase() }));
+  return partes.filter((parte) => parte.conteo > 0);
 }
 
 /**
- * La frase: «4 entregadas · 1 rechazada · 1 en proceso».
+ * La frase: «Entregado: 4 · Devolución a origen por rechazo: 1 · Sin desenlace todavía: 1».
+ * FICHA 455 (R2): el nombre va entero y la cantidad a su lado, tras dos puntos.
  *
  * ⚠ ESTA FRASE ES EL DATO ACCESIBLE DE LA BARRA. La barra es `aria-hidden` —pintura— y esta
  * linea es la que lee cualquier tecnologia de apoyo, exactamente el mismo reparto de papeles que
@@ -145,6 +148,6 @@ export function partesDesenlaceDeFila(
  */
 export function textoDesenlacesDeFila(porStatus: readonly ConteoDeStatus[]): string {
   return partesDesenlaceDeFila(porStatus)
-    .map((parte) => `${parte.conteo} ${parte.etiqueta}`)
+    .map((parte) => `${parte.etiqueta}: ${parte.conteo}`)
     .join(SEPARADOR_COMPOSICION);
 }

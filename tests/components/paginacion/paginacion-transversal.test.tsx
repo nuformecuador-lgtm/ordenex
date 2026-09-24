@@ -833,7 +833,7 @@ describe("T M.1 · R53 — los 3 listados del Anexo IV siguen completos, sin con
 
     // La sección de «Entregadas» es la del Anexo IV; la OTRA tabla de este módulo («Cierres
     // solicitados») sí pagina, y por eso la comprobación se acota a la región del grupo.
-    const seccion = screen.getByRole("region", { name: "Entregadas" });
+    const seccion = screen.getByRole("region", { name: "Entregado" });
     expect(within(seccion).getAllByRole("row")).toHaveLength(FILAS_ANEXO_IV + 1);
     // El contador por grupo, que es lo que paginar volvería mentira: diría «(25)» de 30.
     expect(seccion).toHaveTextContent(`(${FILAS_ANEXO_IV})`);
@@ -850,14 +850,14 @@ describe("T M.1 · R53 — los 3 listados del Anexo IV siguen completos, sin con
       <DetalleSecciones grupos={gruposCon(FILAS_ANEXO_IV)} onVerEvidencia={() => {}} />,
     );
 
-    const seccion = screen.getByRole("region", { name: "Entregadas" });
+    const seccion = screen.getByRole("region", { name: "Entregado" });
     expect(within(seccion).getAllByRole("row")).toHaveLength(FILAS_ANEXO_IV + 1);
     expect(seccion).toHaveTextContent(`(${FILAS_ANEXO_IV})`);
     expect(screen.queryAllByRole("navigation")).toHaveLength(0);
 
     // Las secciones con el grupo VACÍO no se pintan: es la otra mitad de lo que paginar rompe
     // (con páginas, una sección vacía podría ser sólo «esta página no trae ninguna»).
-    expect(screen.queryByRole("region", { name: "Rechazadas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Devolución a origen por rechazo" })).not.toBeInTheDocument();
   });
 
   it("el censo del Anexo IV son TRES, con motivo, y su descarga no relee nada (R30)", () => {

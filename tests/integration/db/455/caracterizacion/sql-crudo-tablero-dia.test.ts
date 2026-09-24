@@ -75,17 +75,20 @@ describeSiHayBase("455/C04 — tablero del dia (Postgres real)", () => {
   });
 
   describe("[INTERMEDIO] lo que la 455 cambia por diseño (R5/R6)", () => {
-    // Fase 0 (2026-09-24): los rotulos de HOY. La Fase 2 (T2.3) los reescribe con fecha.
-    it("los rotulos de los ocho contadores, hoy", () => {
+    // Fase 0 (2026-09-24): los rotulos eran «Entregadas», «Reprogramadas», «Devueltas», «Rechazadas»,
+    // «Incidentes», «Sin recoger», «En reparto», «Otros».
+    // FASE 2 (2026-09-24, T2.3): cada resultado con el nombre EXACTO de su estado homonimo (R5) y los
+    // grupos con un texto propio que no es nombre de ningun estado (R6).
+    it("los rotulos de los ocho contadores: nombres exactos y grupos con texto propio", () => {
       expect(CLAVES_CONTADOR.map((k) => etiquetaContador(k))).toEqual([
-        "Entregadas",
-        "Reprogramadas",
-        "Devueltas",
-        "Rechazadas",
-        "Incidentes",
-        "Sin recoger",
+        "Entregado",
+        "Reprogramado",
+        "Novedad",
+        "Devolución a origen por rechazo",
+        "Incidente",
+        "Todavía no sale a reparto",
         "En reparto",
-        "Otros",
+        "Otros estados",
       ]);
     });
   });

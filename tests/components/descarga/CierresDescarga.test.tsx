@@ -596,8 +596,8 @@ const TABLAS = [
   },
   { control: "Cierres solicitados", montar: renderCierreDia, filas: 2 },
   // El detalle compartido: UNA descarga por sección (P2 ratificada), no un archivo único.
-  { control: "Entregadas", montar: renderDetalle, filas: 1 },
-  { control: "Rechazadas", montar: renderDetalle, filas: 1 },
+  { control: "Entregado", montar: renderDetalle, filas: 1 },
+  { control: "Devolución a origen por rechazo", montar: renderDetalle, filas: 1 },
 ] as const;
 
 beforeEach(() => {
@@ -681,7 +681,7 @@ describe("Cierres · descarga", () => {
     const user = userEvent.setup();
     renderDetalle();
 
-    for (const seccion of ["Rechazadas", "Incidentes"]) {
+    for (const seccion of ["Devolución a origen por rechazo", "Incidente"]) {
       await user.click(screen.getByRole("button", { name: `Descargar ${seccion}` }));
       await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalled());
 
@@ -722,14 +722,14 @@ describe("Cierres · descarga", () => {
     // La causa del incidente y el origen del rechazo, en el detalle.
     const user2 = userEvent.setup();
     renderDetalle();
-    await user2.click(screen.getByRole("button", { name: "Descargar Incidentes" }));
+    await user2.click(screen.getByRole("button", { name: "Descargar Incidente" }));
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
     const [, filasIncidente] = buildXlsxRowsMock.mock.calls[0];
     expect(filasIncidente[0].causa).toBe("Paquete robado");
     // La indemnización, money-safe: el STRING tal cual, sin símbolo.
     expect(filasIncidente[0].indemnizacion).toBe("2500.00");
 
-    await user2.click(screen.getByRole("button", { name: "Descargar Rechazadas" }));
+    await user2.click(screen.getByRole("button", { name: "Descargar Devolución a origen por rechazo" }));
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(2));
     const [, filasRechazo] = buildXlsxRowsMock.mock.calls[1];
     expect(filasRechazo[0].origenRechazo).toBe("Automático");
@@ -1624,12 +1624,12 @@ describe("Cierres · descarga", () => {
     const user = userEvent.setup();
     renderDetalle();
 
-    const tabla = screen.getByRole("table", { name: "Entregadas" });
+    const tabla = screen.getByRole("table", { name: "Entregado" });
     const expandir = within(tabla).getAllByRole("button", { name: /Desglose de ingreso/ })[0];
     await user.click(expandir);
     expect(expandir).toHaveAttribute("aria-expanded", "true");
 
-    await user.click(screen.getByRole("button", { name: "Descargar Entregadas" }));
+    await user.click(screen.getByRole("button", { name: "Descargar Entregado" }));
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     // Sigue desplegada, y el listado no se ha reordenado ni recortado.

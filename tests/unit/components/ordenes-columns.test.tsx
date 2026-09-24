@@ -83,8 +83,11 @@ describe("ordenesColumns — feature 30 (R14: columna de zona)", () => {
   });
 });
 
-describe("ordenesColumns — feature 30 (R15: estado ruteado legible por zona)", () => {
-  it("R15: una fila en_ruta_bodega_satelite se lee 'En ruta a bodega <zona>' con el nombre real", () => {
+// ⏳ 2026-09-24 (FICHA 455, T2.1; R2): se RETIRA la derivación de la feature 30. El nombre de un
+// estado no interpola ningún dato: el chip dice «En ruta a bodega satélite» y la zona tiene su
+// propia columna. El caso se conserva invertido: la zona NO entra en el chip.
+describe("ordenesColumns — feature 30 → 455 (R2: el estado no interpola la zona)", () => {
+  it("455/R2: una fila en_ruta_bodega_satelite dice el nombre exacto, sin la zona", () => {
     const orden = makeOrden({
       id: "o1",
       numRemision: "REM-S1",
@@ -97,11 +100,10 @@ describe("ordenesColumns — feature 30 (R15: estado ruteado legible por zona)",
 
     const fila = screen.getByRole("row", { name: /REM-S1/ });
     expect(
-      within(fila).getByText("En ruta a bodega Guápiles"),
+      within(fila).getByText("En ruta a bodega satélite"),
     ).toBeInTheDocument();
-    // No debe caer al label estático genérico "satélite".
     expect(
-      within(fila).queryByText("En ruta a bodega satélite"),
+      within(fila).queryByText("En ruta a bodega Guápiles"),
     ).toBeNull();
   });
 });

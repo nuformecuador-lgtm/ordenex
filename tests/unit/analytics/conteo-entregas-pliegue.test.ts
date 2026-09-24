@@ -153,13 +153,15 @@ describe("El repositorio delega en el desglose por status", () => {
 // La etiqueta de cada segmento. Se deriva del `value` del catálogo, sin tabla escrita a mano:
 // `order_status` no tiene columna `label` y una tabla propia se desincronizaría en silencio
 // el próximo renombre (ya pasó tres veces: features 135, 153 y 154).
+// ⏳ 2026-09-24 (FICHA 455, T2.6; R2/R3): la etiqueta ya no se DERIVA del código (pluralizándolo
+// daba «Novedads»): es el nombre visible exacto de la fuente única. Literales a mano.
 describe("La etiqueta de un desenlace", () => {
-  it("pone en plural y capitaliza los cinco desenlaces", () => {
-    expect(etiquetaDeDesenlace("entregado")).toBe("Entregadas");
-    expect(etiquetaDeDesenlace("novedad")).toBe("Devueltas");
-    expect(etiquetaDeDesenlace("devolucion_a_origen_por_rechazo")).toBe("Rechazadas");
-    expect(etiquetaDeDesenlace("reprogramado")).toBe("Reprogramadas");
-    expect(etiquetaDeDesenlace("incidente")).toBe("Incidentes");
+  it("nombra los cinco desenlaces con su nombre visible exacto, sin plural", () => {
+    expect(etiquetaDeDesenlace("entregado")).toBe("Entregado");
+    expect(etiquetaDeDesenlace("novedad")).toBe("Novedad");
+    expect(etiquetaDeDesenlace("devolucion_a_origen_por_rechazo")).toBe("Devolución a origen por rechazo");
+    expect(etiquetaDeDesenlace("reprogramado")).toBe("Reprogramado");
+    expect(etiquetaDeDesenlace("incidente")).toBe("Incidente");
   });
 
   // ⚠ El bucket «otros» YA está en plural. Sin la guarda salía «Otross» en la leyenda — y se

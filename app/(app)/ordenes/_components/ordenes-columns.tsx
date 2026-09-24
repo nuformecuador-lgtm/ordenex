@@ -110,10 +110,9 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     // la pintan por el mismo sitio. Un DTO sin los campos (lector que no los anota) no pinta nota.
     render: (row) => (
       <span className="inline-flex flex-wrap items-center gap-1">
-        <EstatusBadge
-          value={row.relaciones?.estatus?.value ?? row.estatusValue ?? SIN_DATO}
-          zonaNombre={row.relaciones?.zona?.nombre ?? row.zonaNombre}
-        />
+        {/* FICHA 455 (R2): el chip es el nombre exacto, sin la zona interpolada (columna propia);
+            sin estado, `nombreDeEstado("")` pinta «—». */}
+        <EstatusBadge value={row.relaciones?.estatus?.value ?? row.estatusValue ?? ""} />
         <NotaGestionPendiente
           resultadoPendiente={row.gestionPendiente?.resultado ?? null}
           ayudaAbierta={row.ayudaAbierta === true}

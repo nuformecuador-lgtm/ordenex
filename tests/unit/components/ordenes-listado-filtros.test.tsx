@@ -510,7 +510,7 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
     await ponerFiltros(user, "Estado", "Zona");
 
-    await marcar(user, "Estado", "Entregada");
+    await marcar(user, "Estado", "Entregado");
     await marcar(user, "Zona", "GAM");
 
     await waitFor(() =>
@@ -609,7 +609,7 @@ describe("OrdenesListado — catálogo no disponible (R64)", () => {
     renderListado(<OrdenesListado catalogoFiltros={null} />);
     await ponerFiltros(user, "Estado");
 
-    await marcar(user, "Estado", "Entregada");
+    await marcar(user, "Estado", "Entregado");
 
     await waitFor(() =>
       expect(ultimoFilter()).toEqual({ status_id: ["est-entregada"] }),

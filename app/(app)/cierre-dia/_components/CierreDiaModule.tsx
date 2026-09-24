@@ -60,6 +60,7 @@ import {
   DESTINO_TIPO_LABEL,
   ESTADO_LABEL,
   RESULTADO_LABEL,
+  RESULTADO_VACIO,
   // FICHA 408 — el traductor del motivo de un rechazo automático. Se AÑADE al import que ya
   // estaba escrito: esta pantalla lee del módulo puro desde la 170, no se estrena dependencia.
   motivoGestionLegible,
@@ -305,13 +306,8 @@ function deshacerAriaLabel(g: CierreDetalleGestion): string {
 // pantallas —y el archivo de la descarga, que no puede importar React— leen del módulo PURO
 // `cierre-labels`. Ni un texto cambió; lo que cambia es que ya no pueden divergir (R8).
 
-const RESULTADO_VACIO: Record<CierreResultado, string> = {
-  entregado: "No hay entregas.",
-  reprogramado: "No hay reprogramaciones.",
-  novedad: "No hay devoluciones.",
-  devolucion_a_origen_por_rechazo: "No hay rechazos.",
-  incidente: "No hay incidentes.", // feature 158/R18
-};
+// FICHA 455 (2026-09-24, R5): el texto vacío de cada sección sale de `cierre-labels` con el nombre
+// exacto del resultado (antes, un mapa propio: «No hay devoluciones.» para `novedad`).
 
 const DESTINO_LABEL: Record<CierreDestinoTipo, string> = DESTINO_TIPO_LABEL;
 

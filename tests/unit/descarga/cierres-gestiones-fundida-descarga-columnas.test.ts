@@ -274,10 +274,10 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
       (resultado) => filaDescargaGestionFundida(gestion({ resultado })).resultado,
     );
     expect(etiquetas).toEqual([
-      "Entregada",
-      "Reprogramada",
-      "Devuelta",
-      "Rechazada",
+      "Entregado",
+      "Reprogramado",
+      "Novedad",
+      "Devolución a origen por rechazo",
       "Incidente",
     ]);
   });
@@ -357,7 +357,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     expect(filas.map((f) => f.numRemision)).toEqual(["REM-1", "REM-2", "REM-3"]);
     // El orden recibido se conserva: la proyección no ordena ni agrupa nada (R11 lo garantiza
     // el servidor; aquí se afirma que esto no lo deshace).
-    expect(filas.map((f) => f.resultado)).toEqual(["Entregada", "Reprogramada", "Incidente"]);
+    expect(filas.map((f) => f.resultado)).toEqual(["Entregado", "Reprogramado", "Incidente"]);
   });
 
   it("la fila de una ENTREGADA puebla sus diez específicas y deja vacías las otras siete", () => {
@@ -387,7 +387,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
       // les da valores DISTINTOS, así que una celda que cogiera el contador equivocado pone
       // rojo este `toEqual` con el número en la mano.
       intentosEntrega: 5,
-      resultado: "Entregada",
+      resultado: "Entregado",
       montoCobrar: "1000.10",
       // El fixture de `ingreso()` trae `tarifa: null` (gap R9): sin tarifa congelada no hay
       // fulfillment que mostrar, y la celda queda vacía como el resto de lo que no se congeló.
@@ -502,7 +502,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
       gestion({ resultado: "devolucion_a_origen_por_rechazo", esRechazoSla: false }),
     );
 
-    expect(entregada.resultado).toBe("Entregada");
+    expect(entregada.resultado).toBe("Entregado");
     expect(incidente.causa).toBe("Paquete perdido");
     expect(rechazada.origenRechazo).toBe("Manual");
     // El medio de pago ya no es una CELDA sino un ENCABEZADO, y ahí la etiqueta legible sigue

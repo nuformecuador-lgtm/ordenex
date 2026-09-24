@@ -399,8 +399,10 @@ describe("feature 264 — la sección es de consulta y no rellena lo que no sabe
       .closest('[role="listitem"]');
 
     expect((desdeReparto as HTMLElement).textContent).toContain("En reparto");
+    // ⏳ 2026-09-24 (FICHA 455, R11): el origen retirado se lee con su nombre histórico MARCADO,
+    // el mismo de la línea de tiempo (antes, «Ayuda de la tienda», un nombre que nunca tuvo).
     expect((desdeAyuda as HTMLElement).textContent).toContain(
-      "Ayuda de la tienda",
+      "Ayuda solicitada a la tienda (estado retirado)",
     );
   });
 
@@ -536,11 +538,11 @@ describe("feature 264 — el dinero del comprobante no se mueve por la sección 
     // «Entregadas 1» y las otras cuatro en cero. Concatenar las órdenes sin gestionar a
     // `grupos.entregada` —la otra mitad de M4— movería la primera.
     expect(pestanas.map((t) => t.textContent)).toEqual([
-      "Entregadas1",
-      "Reprogramadas0",
-      "Devueltas0",
-      "Rechazadas0",
-      "Incidentes0",
+      "Entregado1",
+      "Reprogramado0",
+      "Novedad0",
+      "Devolución a origen por rechazo0",
+      "Incidente0",
     ]);
   });
 });

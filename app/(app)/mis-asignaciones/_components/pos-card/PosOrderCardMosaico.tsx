@@ -18,7 +18,7 @@ import {
 import { AsignacionDetalle } from "../AsignacionDetalle";
 import { UbicacionTrigger } from "../UbicacionTrigger";
 import { formatMonto, formatPeso } from "./pos-format";
-import { estadoBadgeClass, estadoPorDefecto, textoParada } from "./pos-estado";
+import { claseChipEstado, marcasDeTarjeta, textoChipEstado, textoParada } from "./pos-estado";
 import { textoMensajero } from "./pos-mensajero";
 import { posSeleccionHandlers } from "./pos-seleccion";
 import { seccionesVisibles } from "./pos-secciones";
@@ -44,7 +44,7 @@ export function PosOrderCardMosaico({
   esDetalle = false,
   bloqueado = false,
   onGestionar,
-  estado: estadoProp,
+  nota,
   mostrarRuta = true,
   secciones,
   acciones,
@@ -52,7 +52,9 @@ export function PosOrderCardMosaico({
 }: PosOrderCardProps) {
   // Estado del desplegable del detalle: UI efímera, de un solo consumidor.
   const [detalleAbierto, setDetalleAbierto] = useState(false);
-  const estado = estadoProp ?? estadoPorDefecto(esActiva, esDetalle);
+  // FICHA 455 (R7/R8): el chip es el estado de la orden; activa/detalle/nota van en marcas aparte.
+  const estado = textoChipEstado(orden);
+  const marcas = marcasDeTarjeta(esActiva, esDetalle, nota);
   // Feature 196: las mismas cuatro compuertas que la card completa, con el mismo default.
   const {
     navegacion: verNavegacion,
@@ -120,11 +122,18 @@ export function PosOrderCardMosaico({
             </p>
           </div>
         </div>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${estadoBadgeClass(estado)}`}
-        >
-          {estado}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${claseChipEstado(orden.estatusValue)}`}
+          >
+            {estado}
+          </span>
+          {marcas.map((m) => (
+            <span key={m.texto} className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${m.clase}`}>
+              {m.texto}
+            </span>
+          ))}
+        </div>
       </header>
 
       <div className="min-w-0">

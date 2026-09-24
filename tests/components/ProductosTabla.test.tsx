@@ -503,7 +503,8 @@ describe("FICHA 346/442 · «En qué terminaron» suma la columna «Órdenes»",
     // +1: `DataTable` antepone la celda del control de desglose a cada fila.
     const td = tdsDeFila(nombreFila)[i + 1];
     const texto = td.textContent ?? "";
-    return [...texto.matchAll(/(\d+)\s/g)].map((m) => Number(m[1]));
+    // ⏳ 2026-09-24 (FICHA 455): la frase es «<Nombre>: <n> · …» — la cifra va tras los dos puntos.
+    return [...texto.matchAll(/: (\d+)/g)].map((m) => Number(m[1]));
   }
 
   /** La cifra de la columna «Órdenes» de una fila. */
@@ -561,7 +562,14 @@ describe("FICHA 346/442 · «En qué terminaron» suma la columna «Órdenes»",
     const texto = tdsDeFila("Crema Especial MLX")
       .map((td) => td.textContent ?? "")
       .join(" ");
-    for (const trozo of ["3 entregadas", "2 rechazadas", "4 devueltas", "2 reprogramadas", "13 en proceso"]) {
+    // ⏳ 2026-09-24 (FICHA 455, R2): nombres exactos, la cantidad al lado.
+    for (const trozo of [
+      "Entregado: 3",
+      "Devolución a origen por rechazo: 2",
+      "Novedad: 4",
+      "Reprogramado: 2",
+      "Sin desenlace todavía: 13",
+    ]) {
       expect(texto, trozo).toContain(trozo);
     }
     expect(PRODUCTOS_COLUMNAS.desenlaces).toBe("En qué terminaron");
@@ -583,7 +591,7 @@ describe("FICHA 346/442 · «En qué terminaron» suma la columna «Órdenes»",
     );
     expect(await screen.findByText("8,3%")).toBeInTheDocument();
     // Y el cubo «Otros resultados» con su composición, que la 347 puso y esta ficha no pierde.
-    expect(screen.getByText("4 devueltas · 2 reprogramadas")).toBeInTheDocument();
+    expect(screen.getByText("Novedad: 4 · Reprogramado: 2")).toBeInTheDocument();
   });
 
   it("y también en la vista de TELÉFONO, donde las cifras van apiladas", async () => {

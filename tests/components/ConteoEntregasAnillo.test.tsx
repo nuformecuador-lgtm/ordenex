@@ -93,11 +93,11 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     });
     renderAnillo();
 
-    expect(await screen.findByText(/Entregadas: 20/)).toBeInTheDocument();
-    expect(screen.getByText(/Devueltas: 5/)).toBeInTheDocument();
-    expect(screen.getByText(/Rechazadas: 3/)).toBeInTheDocument();
-    expect(screen.getByText(/Reprogramadas: 7/)).toBeInTheDocument();
-    expect(screen.getByText(/Incidentes: 1/)).toBeInTheDocument();
+    expect(await screen.findByText(/Entregado: 20/)).toBeInTheDocument();
+    expect(screen.getByText(/Novedad: 5/)).toBeInTheDocument();
+    expect(screen.getByText(/Devolución a origen por rechazo: 3/)).toBeInTheDocument();
+    expect(screen.getByText(/Reprogramado: 7/)).toBeInTheDocument();
+    expect(screen.getByText(/Incidente: 1/)).toBeInTheDocument();
     expect(screen.getByText(/Otros: 64/)).toBeInTheDocument();
   });
 
@@ -113,8 +113,8 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     });
     renderAnillo();
 
-    expect(await screen.findByText(/Entregadas: 3\s\(30\s?%\)/)).toBeInTheDocument();
-    expect(screen.getByText(/Devueltas: 5\s\(50\s?%\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/Entregado: 3\s\(30\s?%\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Novedad: 5\s\(50\s?%\)/)).toBeInTheDocument();
     expect(screen.getByText(/Otros: 2\s\(20\s?%\)/)).toBeInTheDocument();
   });
 
@@ -124,8 +124,8 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 10 }) });
     renderAnillo();
 
-    expect(await screen.findByText(/Entregadas: 10\s\(100\s?%\)/)).toBeInTheDocument();
-    expect(screen.getByText(/Incidentes: 0\s\(0\s?%\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/Entregado: 10\s\(100\s?%\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Incidente: 0\s\(0\s?%\)/)).toBeInTheDocument();
   });
 
   // ⚠ FICHA 364 — AQUI CAMBIO EL CONTRATO, Y ES EL PRECIO QUE EL HUMANO ACEPTO.
@@ -148,13 +148,13 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     });
     const { container } = renderAnillo();
 
-    await screen.findAllByText(/Entregadas: 1\s\(/);
+    await screen.findAllByText(/Entregado: 1\s\(/);
 
     // 1. Los tres pesos escritos: la razón exacta, la misma para los tres. Se lee sobre la
     //    lista ACCESIBLE y no sobre todo el documento, porque los mismos seis pesos salen dos
     //    veces —la leyenda visible y su gemela para lectores de pantalla—.
     const lista = within(screen.getByRole("list", { name: /Detalle gestión/ }));
-    for (const categoria of ["Entregadas", "Devueltas", "Rechazadas"]) {
+    for (const categoria of ["Entregado", "Novedad", "Devolución a origen por rechazo"]) {
       // `\s?` cubre el espacio (fino o duro) que `Intl` mete antes del símbolo.
       const texto = new RegExp(`${categoria}: 1\\s\\(33,3\\s?%\\)`);
       expect(lista.getByText(texto), categoria).toBeInTheDocument();
@@ -177,7 +177,7 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 20, otros: 80 }) });
     renderAnillo();
 
-    await screen.findByText(/Entregadas: 20/);
+    await screen.findByText(/Entregado: 20/);
     expect(screen.queryByText(/No entregadas/)).toBeNull();
   });
 
@@ -187,8 +187,8 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 20 }) });
     renderAnillo();
 
-    expect(await screen.findByText(/Devueltas: 0/)).toBeInTheDocument();
-    expect(screen.getByText(/Incidentes: 0/)).toBeInTheDocument();
+    expect(await screen.findByText(/Novedad: 0/)).toBeInTheDocument();
+    expect(screen.getByText(/Incidente: 0/)).toBeInTheDocument();
   });
 
   // Las etiquetas YA NO llevan calificador, y eso es la mitad del cambio del 2026-08-17.
@@ -200,7 +200,7 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 20, otros: 80 }) });
     renderAnillo();
 
-    await screen.findByText(/Entregadas: 20/);
+    await screen.findByText(/Entregado: 20/);
     expect(screen.queryByText(/\(periodo\)/)).toBeNull();
     expect(screen.queryByText(/abiertas al corte/i)).toBeNull();
     expect(screen.queryByText(/seguían abiertas/i)).toBeNull();
@@ -214,7 +214,7 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     renderAnillo();
 
     await waitFor(() => expect(consultarMock).toHaveBeenCalled());
-    expect(screen.queryByText(/Entregadas: 0/)).toBeNull();
+    expect(screen.queryByText(/Entregado: 0/)).toBeNull();
   });
 });
 
@@ -231,7 +231,7 @@ describe("Anillo de entregas — sin sello de frescura", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 20, otros: 80 }) });
     renderAnillo();
 
-    await screen.findByText(/Entregadas: 20/);
+    await screen.findByText(/Entregado: 20/);
     expect(screen.queryByText(/Actualizado/)).toBeNull();
   });
 
@@ -244,7 +244,7 @@ describe("Anillo de entregas — sin sello de frescura", () => {
     });
     renderAnillo();
 
-    expect(await screen.findByText(/Entregadas: 20/)).toBeInTheDocument();
+    expect(await screen.findByText(/Entregado: 20/)).toBeInTheDocument();
     expect(screen.queryByText(/Invalid Date/)).toBeNull();
   });
 });
@@ -264,7 +264,7 @@ describe("Anillo de entregas — los estados que NO son «sin datos»", () => {
 
     const aviso = await screen.findByRole("alert");
     expect(aviso.textContent ?? "").toContain(texto);
-    expect(screen.queryByText(/Entregadas: \d/)).toBeNull();
+    expect(screen.queryByText(/Entregado: \d/)).toBeNull();
     expect(screen.queryByText(/Actualizado/)).toBeNull();
   });
 

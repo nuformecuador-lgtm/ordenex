@@ -384,10 +384,12 @@ describe("primerDestino (aterrizaje de /dashboard)", () => {
   // 2026-07-31 (decisión del humano): el portal del mensajero se partió en dos pantallas
   // hermanas y "Entregas" pasó a ser un ítem con submenú. El ORDEN importa y es parte de
   // la decisión: Reparto primero, porque es donde el mensajero pasa el turno.
-  it("Entregas declara el submenú Reparto (primero) + Por recoger", () => {
+  // ⏳ 2026-09-24 (FICHA 455, T2.2; R6/R51): el subítem nombra la ACCIÓN, «Recoger en bodega»
+  // («Por recoger» era el nombre viejo de un estado). La RUTA no cambia (R51).
+  it("Entregas declara el submenú Reparto (primero) + Recoger en bodega", () => {
     expect(entregas.children?.map((c) => [c.label, c.href])).toEqual([
       ["Reparto", "/mis-asignaciones/reparto"],
-      ["Por recoger", "/mis-asignaciones/recoger"],
+      ["Recoger en bodega", "/mis-asignaciones/recoger"],
     ]);
   });
 

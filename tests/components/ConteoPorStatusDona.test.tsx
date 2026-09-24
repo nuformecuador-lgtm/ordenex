@@ -3,10 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
-import {
-  ConteoPorStatusDona,
-  etiquetaDeStatus,
-} from "@/app/(app)/analitica/_components/entregas/ConteoPorStatusDona";
+import { ConteoPorStatusDona } from "@/app/(app)/analitica/_components/entregas/ConteoPorStatusDona";
 import {
   TEXTO_PROHIBIDO,
   TEXTO_SESION_NO_VALIDA,
@@ -73,9 +70,9 @@ describe("Dona por estado — los segmentos", () => {
     });
     renderDona();
 
-    expect(await screen.findByText(/Entregada: 20/)).toBeInTheDocument();
+    expect(await screen.findByText(/Entregado: 20/)).toBeInTheDocument();
     expect(screen.getByText(/En reparto: 8/)).toBeInTheDocument();
-    expect(screen.getByText(/Devuelta: 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Novedad: 2/)).toBeInTheDocument();
   });
 
   // Los buckets vacíos no viajan (decisión del 2026-08-18), así que la dona no puede inventar
@@ -84,9 +81,9 @@ describe("Dona por estado — los segmentos", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregado", conteo: 20 }]) });
     renderDona();
 
-    await screen.findByText(/Entregada: 20/);
+    await screen.findByText(/Entregado: 20/);
     expect(screen.queryByText(/En reparto/)).toBeNull();
-    expect(screen.queryByText(/Devuelta/)).toBeNull();
+    expect(screen.queryByText(/Novedad/)).toBeNull();
   });
 
   it("sin ningún bucket cae al estado vacío, sin dibujar una dona de ceros", async () => {
@@ -111,7 +108,7 @@ describe("Dona por estado — sin rótulos bajo la gráfica", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregado", conteo: 20 }]) });
     renderDona();
 
-    await screen.findByText(/Entregada: 20/);
+    await screen.findByText(/Entregado: 20/);
     expect(screen.queryByText(/última gestión/i)).toBeNull();
   });
 
@@ -119,7 +116,7 @@ describe("Dona por estado — sin rótulos bajo la gráfica", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregado", conteo: 20 }]) });
     renderDona();
 
-    await screen.findByText(/Entregada: 20/);
+    await screen.findByText(/Entregado: 20/);
     expect(screen.queryByText(/Actualizado/)).toBeNull();
   });
 });
@@ -137,7 +134,7 @@ describe("Dona por estado — los estados que NO son «sin datos»", () => {
     const aviso = await screen.findByRole("alert");
     expect(aviso.textContent ?? "").toContain(texto);
     // Y ni una cifra: la dona no pinta un desglose que no tiene.
-    expect(screen.queryByText(/Entregada: d/)).toBeNull();
+    expect(screen.queryByText(/Entregado: d/)).toBeNull();
   });
 
   it("un fallo de red se presenta como aviso, no como vacío", async () => {
@@ -148,26 +145,34 @@ describe("Dona por estado — los estados que NO son «sin datos»", () => {
   });
 });
 
-// El `value` del catálogo sale de la base en snake_case. No hay tabla de etiquetas escrita a
-// mano a propósito: `order_status` no tiene columna `label` y una tabla propia se
-// desincronizaría en silencio el próximo renombre (ya pasó tres veces: 135, 153 y 154).
-describe("La etiqueta legible de un status", () => {
-  it("cambia guiones bajos por espacios y capitaliza", () => {
-    expect(etiquetaDeStatus("en_reparto")).toBe("En reparto");
-    expect(etiquetaDeStatus("devuelta_a_tienda")).toBe("Devuelta a tienda");
-    expect(etiquetaDeStatus("por_recolectar_en_tienda")).toBe("Por recolectar en tienda");
+// ⏳ 2026-09-24 (FICHA 455, T2.6; design §2.1; R3/R10/R42): aquí se probaba `etiquetaDeStatus`, que
+// HUMANIZABA el código (guiones bajos a espacios + mayúscula). Se retira: la leyenda usa el nombre
+// visible de la fuente única (`nombreDeEstado`). Los literales esperados van escritos A MANO.
+describe("455 — la leyenda nombra cada status con su nombre visible exacto", () => {
+  it("nombres exactos, incluidos los que el código no deja adivinar", async () => {
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([
+        { status: "mensajero_recogiendo_en_bodega", conteo: 3 },
+        { status: "devolucion_a_origen_por_rechazo", conteo: 2 },
+        { status: "devuelta_a_tienda", conteo: 1 },
+      ]),
+    });
+    renderDona();
+
+    expect(await screen.findByText(/Mensajero recogiendo en la bodega: 3/)).toBeInTheDocument();
+    expect(screen.getByText(/Devolución a origen por rechazo: 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Devuelta a tienda: 1/)).toBeInTheDocument();
   });
 
-  it("deja pasar un value de una sola palabra", () => {
-    expect(etiquetaDeStatus("entregado")).toBe("Entregada");
-  });
+  it("un value que el catálogo no conoce se lee «Estado no reconocido», nunca el código", async () => {
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([{ status: "estatus_inventado_manana", conteo: 4 }]),
+    });
+    renderDona();
 
-  // Un status NUEVO tiene que salir legible por el mero hecho de existir, sin tocar nada.
-  it("un value que nadie ha visto antes también sale legible", () => {
-    expect(etiquetaDeStatus("estatus_inventado_manana")).toBe("Estatus inventado manana");
-  });
-
-  it("no revienta con la cadena vacía", () => {
-    expect(etiquetaDeStatus("")).toBe("");
+    expect(await screen.findByText(/Estado no reconocido: 4/)).toBeInTheDocument();
+    expect(screen.queryByText(/estatus_inventado_manana|Estatus inventado manana/)).toBeNull();
   });
 });

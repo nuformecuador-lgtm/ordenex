@@ -578,7 +578,7 @@ describe("CierresAdminModule", () => {
 
     await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
     const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
-    const region = within(dialog).getByRole("region", { name: "Entregadas" });
+    const region = within(dialog).getByRole("region", { name: "Entregado" });
 
     // El botón identifica SU orden, no un genérico repetido por fila.
     const toggle = within(region).getByRole("button", {
@@ -651,7 +651,7 @@ describe("CierresAdminModule", () => {
 
     await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
     const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
-    const region = within(dialog).getByRole("region", { name: "Entregadas" });
+    const region = within(dialog).getByRole("region", { name: "Entregado" });
     expect(
       within(region).queryByRole("button", { name: /Desglose de ingreso/ }),
     ).not.toBeInTheDocument();
@@ -695,7 +695,7 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
-    const region = within(dialog).getByRole("region", { name: "Entregadas" });
+    const region = within(dialog).getByRole("region", { name: "Entregado" });
     await abrirFila(user, region, "REM-001");
     // Monto recibido y método van juntos en el desplegable de la orden.
     expect(
@@ -741,7 +741,7 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
-    const region = within(dialog).getByRole("region", { name: "Entregadas" });
+    const region = within(dialog).getByRole("region", { name: "Entregado" });
     await abrirFila(user, region, "REM-SINTARIFA");
     expect(within(region).getByText("Sin tarifa")).toBeInTheDocument();
   });
@@ -795,13 +795,13 @@ describe("CierresAdminModule", () => {
     });
 
     // Entrega con pago 0.00 pero SIN el flag: nada de badge, ni desplegada.
-    const entregadas = within(dialog).getByRole("region", { name: "Entregadas" });
+    const entregadas = within(dialog).getByRole("region", { name: "Entregado" });
     await abrirFila(user, entregadas, "REM-ENT");
     expect(within(entregadas).queryByText("Sin tarifa")).not.toBeInTheDocument();
 
     // Mismo caso en el rechazo: hay que pasar a su pestaña para verlo.
-    await user.click(within(dialog).getByRole("tab", { name: /Rechazadas/ }));
-    const rechazadas = within(dialog).getByRole("region", { name: "Rechazadas" });
+    await user.click(within(dialog).getByRole("tab", { name: /Devolución a origen por rechazo/ }));
+    const rechazadas = within(dialog).getByRole("region", { name: "Devolución a origen por rechazo" });
     await abrirFila(user, rechazadas, "REM-REC");
     expect(within(rechazadas).queryByText("Sin tarifa")).not.toBeInTheDocument();
   });
@@ -841,7 +841,7 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
-    const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    const region = within(dialog).getByRole("region", { name: "Devolución a origen por rechazo" });
     await abrirFila(user, region, "REM-REC");
     expect(within(region).getByText("Sin tarifa")).toBeInTheDocument();
   });
@@ -881,7 +881,7 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
-    const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    const region = within(dialog).getByRole("region", { name: "Devolución a origen por rechazo" });
     await abrirFila(user, region, "REM-REC");
     expect(within(region).getByText("₡3.500")).toBeInTheDocument();
   });
@@ -981,7 +981,7 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
-    const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    const region = within(dialog).getByRole("region", { name: "Devolución a origen por rechazo" });
     // Cada fila trae su marca de origen: SLA para el escalado, Manual para el del mensajero.
     await abrirFila(user, region, "REM-SLA", "Cliente SLA");
     expect(within(region).getByText("Automático")).toBeInTheDocument();
@@ -1025,7 +1025,7 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
-    const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    const region = within(dialog).getByRole("region", { name: "Devolución a origen por rechazo" });
     await abrirFila(user, region, "REM-001");
     await user.click(
       within(region).getByRole("button", {

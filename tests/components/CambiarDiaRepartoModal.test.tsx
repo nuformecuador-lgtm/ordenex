@@ -334,7 +334,7 @@ describe("R19 — un `conflict` pinta el motivo REAL de cada orden, no un genér
       "REM-1 — Esta orden ya está marcada para el día que elegiste.",
     );
     expect(aviso).toHaveTextContent(
-      "REM-2 — El día de reparto ya no decide nada para esta orden (Entregada).",
+      "REM-2 — El día de reparto ya no decide nada para esta orden (Entregado).",
     );
   });
 

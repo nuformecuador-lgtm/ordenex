@@ -122,11 +122,11 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("454/R29 — la bodega satélite pinta la nota junto al chip de estado", () => {
-  it("gestión pendiente: «En reparto» + «Devuelta · pendiente de confirmación»", () => {
+  it("gestión pendiente: «En reparto» + «Novedad · pendiente de confirmación»", () => {
     renderListado([PENDIENTE, EN_MANO]);
     const fila = filaDe("REM-pend");
     expect(within(fila).getByText("En reparto")).toBeInTheDocument();
-    expect(within(fila).getByText("Devuelta · pendiente de confirmación")).toBeInTheDocument();
+    expect(within(fila).getByText("Novedad · pendiente de confirmación")).toBeInTheDocument();
   });
 
   it("ayuda abierta: «En reparto» + «Ayuda solicitada a la tienda»", () => {

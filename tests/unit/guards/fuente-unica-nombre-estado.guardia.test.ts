@@ -32,17 +32,7 @@ const NOMBRES = new Set<string>([...Object.values(NOMBRE_ESTADO), ...NOMBRES_RET
 const FUENTE_UNICA = "lib/types/order-status.ts";
 
 /** ⏳ Lo que la Fase 2 tiene que cambiar (medido el 2026-09-24). */
-const PENDIENTES_FASE_2: Record<string, number> = {
-  "app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx": 1,
-  "app/(app)/analitica/_components/entregas/ConteoPorStatusDona.tsx": 1,
-  "app/(app)/cierre-dia/_components/CierreDiaModule.tsx": 1,
-  "app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx": 1,
-  "app/(app)/cierres-admin/_components/cierre-labels.ts": 2,
-  "app/(app)/mis-asignaciones/_components/chat/chat-format.ts": 1,
-  "app/(app)/mis-asignaciones/_components/pos-card/pos-estado.ts": 1,
-  "app/(app)/ordenes/_components/EstatusBadge.tsx": 1,
-  "lib/types/rastreo-publico.ts": 2, // T1.9 (BLOQUEO: el DTO del rastreo exige tocar app/_landing/RastreoDialog.tsx)
-};
+const PENDIENTES_FASE_2: Record<string, number> = {};
 
 /** ¿Es texto visible (y no una clase de Tailwind / un token de variante / una clave de columna)? */
 function esTextoVisible(s: string): boolean {

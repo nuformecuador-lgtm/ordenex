@@ -461,11 +461,12 @@ describe("T4.2/R33 — cada fila muestra guía, remisión, destinatario, resulta
       expect(texto).toContain("Pendiente");
     }
     // El resultado de cada una, en singular y traducido (nunca el value del enum).
-    expect(fila(dialog, DEV_1.gestionId)).toContain("Devuelta");
-    expect(fila(dialog, REC_1.gestionId)).toContain("Rechazada");
-    expect(fila(dialog, REP_1.gestionId)).toContain("Reprogramada");
-    // Y los encabezados de grupo, en plural.
-    for (const seccion of ["Reprogramadas (1)", "Devueltas (1)", "Rechazadas (1)"]) {
+    expect(fila(dialog, DEV_1.gestionId)).toContain("Novedad");
+    expect(fila(dialog, REC_1.gestionId)).toContain("Devolución a origen por rechazo");
+    expect(fila(dialog, REP_1.gestionId)).toContain("Reprogramado");
+    // Y los encabezados de grupo. ⏳ 2026-09-24 (FICHA 455, R4/R5): con el nombre exacto del
+    // resultado, sin plural.
+    for (const seccion of ["Reprogramado (1)", "Novedad (1)", "Devolución a origen por rechazo (1)"]) {
       expect(within(dialog).getByText(seccion)).toBeInTheDocument();
     }
     // La `entregada` NO entra en el conjunto esperado: su paquete se quedó con el cliente.
@@ -610,7 +611,7 @@ describe("T4.3/R31 — una guía del cierre cuyo paquete NO vuelve a bodega", ()
     await teclear(user, dialog, String(ENT_1.numGuia));
 
     expect(within(dialog).getByRole("alert")).toHaveTextContent(
-      "Esa guía es de este cierre, pero ese paquete no vuelve a bodega. Resultado: Entregada.",
+      "Esa guía es de este cierre, pero ese paquete no vuelve a bodega. Resultado: Entregado.",
     );
     expect(progreso(dialog)).toBe("Paquetes confirmados: 0 de 1.");
   });

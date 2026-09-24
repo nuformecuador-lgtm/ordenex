@@ -712,76 +712,76 @@ const SUPERFICIES: readonly Superficie[] = [
   },
   // Las CINCO secciones del detalle del admin. El título lleva el mensajero; el ámbito NO.
   {
-    control: `Entregadas · ${MENSAJERO_DETALLE}`,
+    control: `Entregado · ${MENSAJERO_DETALLE}`,
     ambito: AMBITO_DESCARGA_GESTIONES_ENTREGADAS,
     columnas: COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS,
     montar: renderDetalle,
-    region: "Entregadas",
+    region: "Entregado",
   },
   {
-    control: `Reprogramadas · ${MENSAJERO_DETALLE}`,
+    control: `Reprogramado · ${MENSAJERO_DETALLE}`,
     ambito: AMBITO_DESCARGA_GESTIONES_REPROGRAMADAS,
     columnas: COLUMNAS_DESCARGA_GESTIONES_REPROGRAMADAS,
     montar: renderDetalle,
-    region: "Reprogramadas",
+    region: "Reprogramado",
   },
   {
-    control: `Devueltas · ${MENSAJERO_DETALLE}`,
+    control: `Novedad · ${MENSAJERO_DETALLE}`,
     ambito: AMBITO_DESCARGA_GESTIONES_DEVUELTAS,
     columnas: COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
     montar: renderDetalle,
-    region: "Devueltas",
+    region: "Novedad",
   },
   {
-    control: `Rechazadas · ${MENSAJERO_DETALLE}`,
+    control: `Devolución a origen por rechazo · ${MENSAJERO_DETALLE}`,
     ambito: AMBITO_DESCARGA_GESTIONES_RECHAZADAS,
     columnas: COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS,
     montar: renderDetalle,
-    region: "Rechazadas",
+    region: "Devolución a origen por rechazo",
   },
   {
-    control: `Incidentes · ${MENSAJERO_DETALLE}`,
+    control: `Incidente · ${MENSAJERO_DETALLE}`,
     ambito: AMBITO_DESCARGA_GESTIONES_INCIDENTES,
     columnas: COLUMNAS_DESCARGA_GESTIONES_INCIDENTES,
     montar: renderDetalle,
-    region: "Incidentes",
+    region: "Incidente",
   },
   // Las CINCO secciones de `/cierre-dia`. Mismo resultado, OTRO catálogo (el mensajero ve
   // menos), y por eso otro ámbito.
   {
-    control: "Entregadas",
+    control: "Entregado",
     ambito: AMBITO_DESCARGA_DIA_ENTREGADAS,
     columnas: COLUMNAS_DESCARGA_DIA_ENTREGADAS,
     montar: renderCierreDia,
-    region: "Entregadas",
+    region: "Entregado",
   },
   {
-    control: "Reprogramadas",
+    control: "Reprogramado",
     ambito: AMBITO_DESCARGA_DIA_REPROGRAMADAS,
     columnas: COLUMNAS_DESCARGA_DIA_REPROGRAMADAS,
     montar: renderCierreDia,
-    region: "Reprogramadas",
+    region: "Reprogramado",
   },
   {
-    control: "Devueltas",
+    control: "Novedad",
     ambito: AMBITO_DESCARGA_DIA_DEVUELTAS,
     columnas: COLUMNAS_DESCARGA_DIA_DEVUELTAS,
     montar: renderCierreDia,
-    region: "Devueltas",
+    region: "Novedad",
   },
   {
-    control: "Rechazadas",
+    control: "Devolución a origen por rechazo",
     ambito: AMBITO_DESCARGA_DIA_RECHAZADAS,
     columnas: COLUMNAS_DESCARGA_DIA_RECHAZADAS,
     montar: renderCierreDia,
-    region: "Rechazadas",
+    region: "Devolución a origen por rechazo",
   },
   {
-    control: "Incidentes",
+    control: "Incidente",
     ambito: AMBITO_DESCARGA_DIA_INCIDENTES,
     columnas: COLUMNAS_DESCARGA_DIA_INCIDENTES,
     montar: renderCierreDia,
-    region: "Incidentes",
+    region: "Incidente",
   },
 ];
 
@@ -1037,9 +1037,9 @@ describe("Cierres · elección de columnas de la descarga", () => {
     const user = userEvent.setup();
     renderDetalle("Zoraida Mensajera"); // OTRO mensajero, otro título, MISMO juego de columnas
     await user.click(
-      within(screen.getByRole("region", { name: "Entregadas" })).getByRole(
+      within(screen.getByRole("region", { name: "Entregado" })).getByRole(
         "button",
-        { name: "Descargar Entregadas · Zoraida Mensajera" },
+        { name: "Descargar Entregado · Zoraida Mensajera" },
       ),
     );
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
@@ -1061,7 +1061,7 @@ describe("Cierres · elección de columnas de la descarga", () => {
       (s) => s.ambito === AMBITO_DESCARGA_GESTIONES_ENTREGADAS,
     )!;
     const oculta = columnaAOcultar(seccion);
-    const region = () => screen.getByRole("region", { name: "Entregadas" });
+    const region = () => screen.getByRole("region", { name: "Entregado" });
 
     await user.click(
       within(region()).getByRole("button", { name: DISPARADOR_SELECTOR }),

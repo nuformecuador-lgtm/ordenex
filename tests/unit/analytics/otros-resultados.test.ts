@@ -200,7 +200,9 @@ describe("FICHA 347 · un desenlace NUEVO del catálogo entra solo (R51/R52)", (
     expect(modulo.composicionOtrosResultados(porStatus)).toEqual([
       { status: SEXTO, conteo: 5 },
     ]);
-    expect(modulo.textoComposicionOtrosResultados(porStatus)).toBe("5 custodiada_en_puertos");
+    // ⏳ 2026-09-24 (FICHA 455, R3/R10): el nombre sale de la fuente única, así que un desenlace que
+    // el catálogo de nombres no conoce se lee «Estado no reconocido» — nunca el código crudo.
+    expect(modulo.textoComposicionOtrosResultados(porStatus)).toBe("Estado no reconocido: 5");
   });
 
   it("y sin tocar el catálogo ese mismo status es trabajo VIVO, no un resultado", () => {
@@ -230,11 +232,12 @@ describe("FICHA 347 · el texto de la composición (R55/R56)", () => {
       ]),
     );
 
-    expect(texto).toBe("3 devueltas · 2 reprogramadas");
-    // Y las etiquetas salen del MECANISMO QUE YA EXISTE, no de una tabla escrita en la ficha:
-    // `etiquetaDeDesenlace` pluraliza y capitaliza el value del catálogo.
-    expect(texto).toContain(etiquetaDeDesenlace("novedad").toLowerCase());
-    expect(texto).toContain(etiquetaDeDesenlace("reprogramado").toLowerCase());
+    // ⏳ 2026-09-24 (FICHA 455, R2/R3): el nombre visible EXACTO y la cantidad al lado (antes
+    // «3 devueltas · 2 reprogramadas», el código pluralizado en minúsculas).
+    expect(texto).toBe("Novedad: 3 · Reprogramado: 2");
+    // Y las etiquetas salen del MECANISMO QUE YA EXISTE, no de una tabla escrita en la ficha.
+    expect(texto).toContain(etiquetaDeDesenlace("novedad"));
+    expect(texto).toContain(etiquetaDeDesenlace("reprogramado"));
   });
 
   it("R56 — el orden es conteo DESCENDENTE y, a igualdad, `status` ascendente", () => {
@@ -263,20 +266,20 @@ describe("FICHA 347 · el texto de la composición (R55/R56)", () => {
     const alReves = textoComposicionOtrosResultados(desglose([...pares].reverse()));
 
     expect(alReves).toBe(directo);
-    expect(directo).toBe("7 reprogramadas · 4 devueltas · 4 incidentes");
+    expect(directo).toBe("Reprogramado: 7 · Incidente: 4 · Novedad: 4");
   });
 
   it("el número va CRUDO, sin separador de miles: el texto viaja al archivo", () => {
     // `Intl` pondría «1.234» con el locale del repo y «1,234» con otro. Un archivo que dice
     // cosas distintas según la máquina que lo generó es peor que uno feo.
     expect(textoComposicionOtrosResultados(desglose([["novedad", 1234]]))).toBe(
-      "1234 devueltas",
+      "Novedad: 1234",
     );
   });
 
   it("la etiqueta se puede INYECTAR, y el cálculo no cambia", () => {
     // El módulo es puro y no depende de nada de UI: quien quiera otro idioma pasa su función.
     const texto = textoComposicionOtrosResultados(desglose([["novedad", 3]]), () => "RETURNED");
-    expect(texto).toBe("3 returned");
+    expect(texto).toBe("RETURNED: 3");
   });
 });

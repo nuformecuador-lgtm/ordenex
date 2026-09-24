@@ -88,7 +88,8 @@ export function RecolectadasHoyLista({
 }: Readonly<RecolectadasHoyListaProps>) {
   /**
    * Una card «recolectada hoy». La MISMA de «Por recoger» y «Por recolectar»: sin `onGestionar`
-   * (solo-visualización) y sin ruta (no son paradas). El `estado` dice en qué punto está.
+   * (solo-visualización) y sin ruta (no son paradas). FICHA 455 (R7): el chip dice el estado
+   * ACTUAL de la orden; que se recolectó hoy lo dice el pie («Recolectada a las…»).
    */
   function renderCard(orden: RecolectadaHoyDTO, vistaCard: VistaCards) {
     const CardVista =
@@ -97,7 +98,6 @@ export function RecolectadasHoyLista({
       <CardVista
         orden={orden}
         total={recolectadasHoy.length}
-        estado="Recolectada"
         mostrarRuta={false}
         acciones={
           <p className="text-[11px] font-semibold text-muted-foreground">

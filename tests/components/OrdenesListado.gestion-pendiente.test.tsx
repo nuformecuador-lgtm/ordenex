@@ -188,14 +188,14 @@ async function filaDe(numRemision: string): Promise<HTMLElement> {
 }
 
 describe("454/R29 — `/ordenes` pinta la nota junto al chip de estado", () => {
-  it("gestión pendiente: «En reparto» + «Entregada · pendiente de confirmación»", async () => {
+  it("gestión pendiente: «En reparto» + «Entregado · pendiente de confirmación»", async () => {
     renderOrdenes([PENDIENTE, EN_MANO]);
     const fila = await filaDe("REM-pend");
     expect(within(fila).getByText("En reparto")).toBeInTheDocument();
-    expect(within(fila).getByText("Entregada · pendiente de confirmación")).toBeInTheDocument();
+    expect(within(fila).getByText("Entregado · pendiente de confirmación")).toBeInTheDocument();
   });
 
-  it("el nombre es el del resultado: rechazada → «Rechazada · pendiente de confirmación»", async () => {
+  it("el nombre es el del resultado: rechazada → «Devolución a origen por rechazo · pendiente de confirmación»", async () => {
     renderOrdenes([
       makeOrden({
         id: "rech",
@@ -203,7 +203,7 @@ describe("454/R29 — `/ordenes` pinta la nota junto al chip de estado", () => {
       }),
     ]);
     const fila = await filaDe("REM-rech");
-    expect(within(fila).getByText("Rechazada · pendiente de confirmación")).toBeInTheDocument();
+    expect(within(fila).getByText("Devolución a origen por rechazo · pendiente de confirmación")).toBeInTheDocument();
   });
 
   it("ayuda abierta: «En reparto» + «Ayuda solicitada a la tienda»", async () => {

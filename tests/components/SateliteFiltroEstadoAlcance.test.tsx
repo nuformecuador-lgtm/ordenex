@@ -83,10 +83,8 @@ vi.mock("@/hooks/useToast", () => ({
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
 
 import { listarOrderStatusOk } from "@/tests/fixtures/order-status-catalogo";
-import {
-  ORDER_STATUS_LABELS,
-  ORDER_STATUS_LABELS_RETIRADOS,
-} from "@/app/(app)/ordenes/_components/EstatusBadge";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
@@ -292,8 +290,10 @@ describe("bodega satélite · el desplegable de estado es el de la central", () 
     expect(opciones).toContain(ORDER_STATUS_LABELS.entregado);
     // ⏳ 2026-09-23 (FICHA 454, R37): aqui se afirmaba que el desplegable ofrecia la ayuda a la
     // tienda y el pre-estado de la devolucion. Salen del catalogo: ya no se ofrecen.
-    expect(opciones).not.toContain(ORDER_STATUS_LABELS_RETIRADOS.ayuda_tienda);
-    expect(opciones).not.toContain(ORDER_STATUS_LABELS_RETIRADOS.devolucion_por_confirmar);
+    // ⏳ 2026-09-24 (FICHA 455): su nombre histórico sale de la fuente única (`nombreDeEstado`).
+    expect(opciones).not.toContain(nombreDeEstado("ayuda_tienda"));
+    expect(opciones).not.toContain(nombreDeEstado("devolucion_por_confirmar"));
+    expect(opciones.some((o) => o?.startsWith("Ayuda solicitada") || o?.startsWith("Devolución por"))).toBe(false);
     expect(opciones).toContain(ORDER_STATUS_LABELS.devolviendo_a_bodega_central);
     expect(opciones.length).toBeGreaterThan(ESTADOS_BODEGA_SATELITE.length);
 

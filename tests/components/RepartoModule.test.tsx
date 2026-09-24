@@ -583,9 +583,11 @@ describe("RepartoModule", () => {
 
     // La selección sigue en la primera card. Ya no se comprueba contra el panel "Detalle de
     // la orden": el rediseño lo reserva al MODO FOCO (con una gestión activa), y en vista
-    // completa la orden elegida se distingue por el badge "En detalle" de su propia card.
-    expect(within(cardDe("REM-G1")).getByText("En detalle")).toBeInTheDocument();
-    expect(within(cardDe("REM-G2")).queryByText("En detalle")).toBeNull();
+    // completa la orden elegida se distingue por la marca de su propia card.
+    // ⏳ 2026-09-24 (FICHA 455, R8): la marca es «Abierta en detalle», aparte del chip de estado
+    // (antes el chip decía «En detalle», un nombre retirado).
+    expect(within(cardDe("REM-G1")).getByText("Abierta en detalle")).toBeInTheDocument();
+    expect(within(cardDe("REM-G2")).queryByText("Abierta en detalle")).toBeNull();
   });
 
   // Feature 113 (T6) reescribe el antiguo test de R19/R20: el spec 36 dejaba las demás

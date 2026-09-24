@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
-import { EstatusBadge, ORDER_STATUS_LABELS, ORDER_STATUS_LABELS_RETIRADOS } from "@/app/(app)/ordenes/_components/EstatusBadge";
+import { EstatusBadge, ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 
 // Feature 154 (R29/R30/R31) — presentacion de los DOS estados nuevos.
@@ -63,10 +63,13 @@ describe("154/R30 — incidente se presenta con etiqueta y variante propias", ()
   });
 });
 
-describe("154/R31 — un estatus fuera del catalogo del build no rompe la vista", () => {
-  it("muestra el value CRUDO con la variante neutra", () => {
+// ⏳ 2026-09-24 (FICHA 455, T2.1; R3/R10): el chip ya no enseña el value CRUDO de un estatus fuera
+// del catálogo (R3 lo prohíbe): dice «Estado no reconocido». La variante neutra no cambia.
+describe("154/R31 · 455/R10 — un estatus fuera del catalogo del build no rompe la vista", () => {
+  it("dice «Estado no reconocido» (nunca el código) con la variante neutra", () => {
     const desconocido = classesDe("estado_del_futuro");
-    expect(screen.getByText("estado_del_futuro")).toBeInTheDocument();
+    expect(screen.getByText("Estado no reconocido")).toBeInTheDocument();
+    expect(screen.queryByText("estado_del_futuro")).toBeNull();
     cleanup();
     // Neutro = ni el chip de espera ni el de error; y sin refuerzo de marca.
     const espera = classesDe("por_recolectar_en_tienda");
@@ -86,12 +89,24 @@ describe("154/R31 — un estatus fuera del catalogo del build no rompe la vista"
 // `ORDER_STATUS_LABELS`. Sus filas HISTORICAS se siguen leyendo igual —misma etiqueta y misma
 // variante— por `ORDER_STATUS_LABELS_RETIRADOS`: los tres casos de este bloque se conservan y
 // ahora afirman esa lectura historica (R40). El primero cambia su fuente, no su literal.
-describe("235/R37 -> 454/R40 — `ayuda_tienda` historico: etiqueta y variante firmadas", () => {
-  it("la etiqueta dice A QUIEN se le pidio la ayuda, no solo que se pidio", () => {
-    expect(ORDER_STATUS_LABELS_RETIRADOS.ayuda_tienda).toBe("Ayuda solicitada a la tienda");
+//
+// ⏳ 2026-09-24 (FICHA 455, T2.1; R11): el mapa `ORDER_STATUS_LABELS_RETIRADOS` se absorbe en la
+// fuente única (`ESTADO_RETIRADO`, `lib/types/order-status.ts`) y una fila histórica de un estado
+// retirado se lee «<nombre histórico> (estado retirado)». La variante (`warning`) no cambia.
+describe("235/R37 -> 454/R40 -> 455/R11 — `ayuda_tienda` historico: etiqueta y variante", () => {
+  it("la etiqueta dice A QUIEN se le pidio la ayuda, y que es un estado retirado", () => {
     expect(Object.keys(ORDER_STATUS_LABELS)).not.toContain("ayuda_tienda");
     render(<EstatusBadge value="ayuda_tienda" />);
-    expect(screen.getByText("Ayuda solicitada a la tienda")).toBeInTheDocument();
+    expect(screen.getByText("Ayuda solicitada a la tienda (estado retirado)")).toBeInTheDocument();
+  });
+
+  // (El retirado de la 155 lo cubre `EstatusBadgeRetiroFulfillment.test.tsx`.)
+  it("los otros retirados también se leen con su nombre histórico marcado", () => {
+    render(<EstatusBadge value="devolucion_por_confirmar" />);
+    expect(screen.getByText("Devolución por confirmar (estado retirado)")).toBeInTheDocument();
+    cleanup();
+    render(<EstatusBadge value="pendiente" />);
+    expect(screen.getByText("Pendiente (estado retirado)")).toBeInTheDocument();
   });
 
   it("usa la variante de ESPERA (`warning`): mismo chip que `novedad_interna`, sin acento de marca", () => {

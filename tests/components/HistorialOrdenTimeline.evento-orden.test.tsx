@@ -175,7 +175,9 @@ describe("454/R30 — la línea de tiempo pinta las CUATRO clases", () => {
     expect(within(ida).queryByText(/^Resultado:/)).toBeNull();
   });
 
-  it("R40 — una transición HISTÓRICA hacia un estado retirado se lee con su etiqueta de siempre", () => {
+  // ⏳ 2026-09-24 (FICHA 455, T2.7; R11): la fila histórica se sigue leyendo (R40 de la 454), ahora con
+  // su nombre histórico MARCADO «(estado retirado)», el mismo en toda superficie interna.
+  it("R40 · 455/R11 — una transición HISTÓRICA hacia un estado retirado se lee con su nombre histórico, marcado", () => {
     render(
       <HistorialOrdenTimeline
         entradas={[
@@ -192,7 +194,7 @@ describe("454/R30 — la línea de tiempo pinta las CUATRO clases", () => {
       />,
     );
     const fila = items()[0];
-    expect(within(fila).getByText("Ayuda solicitada a la tienda")).toBeTruthy();
+    expect(within(fila).getByText("Ayuda solicitada a la tienda (estado retirado)")).toBeTruthy();
     expect(within(fila).queryByText("ayuda_tienda")).toBeNull();
   });
 });

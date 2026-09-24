@@ -27,6 +27,7 @@ import { serializarFiltroEntregas } from "@/app/(app)/_components/entregas-filtr
 import { useFiltroEntregas } from "@/app/(app)/_components/filtro-entregas";
 import { formatearValor } from "@/components/private/analytics/formato";
 import { GraficaRanking } from "@/components/private/analytics/GraficaRanking";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import { consultarConteoPorStatus } from "@/lib/actions/conteo-por-status";
 import type { ResultadoConteoPorStatus } from "@/lib/types/conteo-por-status";
 
@@ -79,21 +80,11 @@ function mensajeDe(resultado: ResultadoConteoPorStatus | undefined, fallo: boole
   }
 }
 
-/**
- * El `value` del catalogo tal cual sale de la base (`en_reparto`, `devuelta_a_tienda`) puesto
- * en algo que se pueda leer en una leyenda: guiones bajos a espacios y la primera en mayuscula.
- *
- * ⚠ NO hay tabla de etiquetas escrita a mano, y es deliberado: `order_status` no tiene columna
- * `label` —la etiqueta ES el value— y una tabla propia aqui se desincronizaria en silencio la
- * proxima vez que el catalogo renombre un valor (ya paso tres veces: features 135, 153 y 154).
- * Un status nuevo entra en la leyenda solo, legible, por el mero hecho de existir. Si algun dia
- * se quieren nombres de verdad («En reparto» vs «Devuelta a tienda»), eso es un catalogo de
- * etiquetas con su propia decision, no un `Record` colado en este archivo.
- */
-export function etiquetaDeStatus(value: string): string {
-  const conEspacios = value.replaceAll("_", " ");
-  return conEspacios.charAt(0).toUpperCase() + conEspacios.slice(1);
-}
+// FICHA 455 (2026-09-24, design §2.1; R3/R42): aquí vivía `etiquetaDeStatus`, que HUMANIZABA el
+// código (guiones bajos a espacios: «Novedad interna» salía bien por casualidad, pero
+// «Mensajero_recogiendo…» o un código desconocido se enseñaban crudos). La leyenda usa ahora el
+// nombre visible de la fuente única (`nombreDeEstado`): exacto, y «Estado no reconocido» ante un
+// código que no es del catálogo (R10), nunca el código.
 
 export function ConteoPorStatusDona() {
   const { filtro } = useFiltroEntregas();
@@ -135,7 +126,7 @@ export function ConteoPorStatusDona() {
           // criterios de orden distintos —uno en la base y otro en el cliente— repintarian
           // los mismos datos con colores distintos segun quien los tocara al final.
           puntos: datos.porStatus.map((fila) => ({
-            categoria: etiquetaDeStatus(fila.status),
+            categoria: nombreDeEstado(fila.status),
             valor: fila.conteo,
           })),
         },

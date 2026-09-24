@@ -77,7 +77,7 @@ function resultadoBase() {
   };
 }
 
-/** Una gestión entregada mínima: solo para que la sección "Entregadas" exista. */
+/** Una gestión entregada mínima: solo para que la sección "Entregado" exista. */
 function gestionEntregada(): CierreDetalleGestion {
   return {
     gestionId: "g1",
@@ -150,7 +150,7 @@ describe("CierreDiaPage — control de acceso por rol (R1)", () => {
       screen.getByRole("region", { name: "Totales del día" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Entregadas" }),
+      screen.getByRole("region", { name: "Entregado" }),
     ).toBeInTheDocument();
   });
 
@@ -160,9 +160,9 @@ describe("CierreDiaPage — control de acceso por rol (R1)", () => {
     const page = await CierreDiaPage();
     render(page);
 
-    expect(screen.queryByRole("region", { name: "Entregadas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Entregado" })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("region", { name: "Reprogramadas" }),
+      screen.queryByRole("region", { name: "Reprogramado" }),
     ).not.toBeInTheDocument();
   });
 

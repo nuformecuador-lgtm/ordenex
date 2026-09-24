@@ -130,7 +130,7 @@ describe("R9 — donde está el marcador, la columna «Motivo» no lo repite", (
       />,
     );
 
-    expect(celdaDe("Rechazadas", "REM-SLA", "Motivo")).toBe(DIRECCION_ERRADA);
+    expect(celdaDe("Devolución a origen por rechazo", "REM-SLA", "Motivo")).toBe(DIRECCION_ERRADA);
   });
 
   it("esa celda NO dice «automático» ni repite la nota del marcador", () => {
@@ -141,7 +141,7 @@ describe("R9 — donde está el marcador, la columna «Motivo» no lo repite", (
       />,
     );
 
-    const celda = celdaDe("Rechazadas", "REM-SLA", "Motivo");
+    const celda = celdaDe("Devolución a origen por rechazo", "REM-SLA", "Motivo");
     expect(celda.toLowerCase()).not.toContain("automático");
     expect(celda).not.toContain(NOTA_MARCADOR_AUTOMATICO);
     expect(celda).not.toContain("plazo");
@@ -158,7 +158,7 @@ describe("R9 — donde está el marcador, la columna «Motivo» no lo repite", (
       />,
     );
 
-    const tabla = screen.getByRole("table", { name: "Rechazadas" });
+    const tabla = screen.getByRole("table", { name: "Devolución a origen por rechazo" });
     expect(within(tabla).queryByText("escalado SLA wrong_address")).toBeNull();
   });
 });
@@ -172,9 +172,9 @@ describe("R8 — el marcador de origen sigue diciendo lo que decía", () => {
       />,
     );
 
-    expect(celdaDe("Rechazadas", "REM-SLA", "Origen")).toBe("Automático");
+    expect(celdaDe("Devolución a origen por rechazo", "REM-SLA", "Origen")).toBe("Automático");
 
-    const tabla = screen.getByRole("table", { name: "Rechazadas" });
+    const tabla = screen.getByRole("table", { name: "Devolución a origen por rechazo" });
     const badge = within(tabla).getByLabelText(NOTA_MARCADOR_AUTOMATICO);
     expect(badge).toHaveTextContent("Automático");
     expect(badge).toHaveAttribute("title", NOTA_MARCADOR_AUTOMATICO);
@@ -188,7 +188,7 @@ describe("R8 — el marcador de origen sigue diciendo lo que decía", () => {
       />,
     );
 
-    expect(celdaDe("Rechazadas", "REM-MAN", "Origen")).toBe("Manual");
+    expect(celdaDe("Devolución a origen por rechazo", "REM-MAN", "Origen")).toBe("Manual");
   });
 });
 
@@ -201,8 +201,8 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
       />,
     );
 
-    expect(celdaDe("Rechazadas", "REM-SLA", "Motivo")).toBe(DIRECCION_ERRADA);
-    expect(celdaDe("Rechazadas", "REM-MAN", "Motivo")).toBe(MOTIVO_LIBRE);
+    expect(celdaDe("Devolución a origen por rechazo", "REM-SLA", "Motivo")).toBe(DIRECCION_ERRADA);
+    expect(celdaDe("Devolución a origen por rechazo", "REM-MAN", "Motivo")).toBe(MOTIVO_LIBRE);
   });
 
   it("una DEVUELTA con motivo libre tampoco se toca (la sección sin columna «Origen»)", () => {
@@ -223,7 +223,7 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
       />,
     );
 
-    expect(celdaDe("Devueltas", "REM-DEV", "Motivo")).toBe(MOTIVO_LIBRE);
+    expect(celdaDe("Novedad", "REM-DEV", "Motivo")).toBe(MOTIVO_LIBRE);
   });
 
   it("un motivo ausente sigue pintando el guion de pantalla", () => {
@@ -246,6 +246,6 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
 
     // El `?? "—"` vive en el render, no dentro del traductor: en la hoja descargada esta misma
     // celda va VACÍA (R3).
-    expect(celdaDe("Rechazadas", "REM-SIN", "Motivo")).toBe("—");
+    expect(celdaDe("Devolución a origen por rechazo", "REM-SIN", "Motivo")).toBe("—");
   });
 });

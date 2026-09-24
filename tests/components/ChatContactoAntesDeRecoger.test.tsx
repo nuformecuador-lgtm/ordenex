@@ -394,10 +394,11 @@ describe("(4) conversar no es aceptar: el chat no ofrece trabajar la orden", () 
     expect(within(modal).queryByRole("button", { name: /más tarde/i })).toBeNull();
   });
 
-  it("la fila de la asignada se anuncia como «Por recoger», no como en reparto", async () => {
+  // ⏳ 2026-09-24 (FICHA 455, R7): el chip dice el NOMBRE del estado de la orden, no «Por recoger».
+  it("la fila de la asignada se anuncia con su estado, «Mensajero recogiendo en la bodega», no como en reparto", async () => {
     const modal = await chatDesdeReparto();
 
-    expect(fila(modal, "Carlos Sin Recoger")).toHaveTextContent("Por recoger");
+    expect(fila(modal, "Carlos Sin Recoger")).toHaveTextContent("Mensajero recogiendo en la bodega");
   });
 });
 

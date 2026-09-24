@@ -57,7 +57,7 @@ describe("columnas de descarga del ranking histórico", () => {
       "Posición",
       "Mensajero",
       "% del día",
-      "Entregadas",
+      "Entregado",
       "Asignadas",
       "Premio",
     ]);

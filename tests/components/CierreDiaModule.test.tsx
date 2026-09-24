@@ -197,16 +197,16 @@ describe("CierreDiaModule", () => {
     renderModule({ grupos });
 
     expect(
-      within(screen.getByRole("region", { name: "Entregadas" })).getByText("REM-ENT"),
+      within(screen.getByRole("region", { name: "Entregado" })).getByText("REM-ENT"),
     ).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "Reprogramadas" })).getByText("REM-REP"),
+      within(screen.getByRole("region", { name: "Reprogramado" })).getByText("REM-REP"),
     ).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "Devueltas" })).getByText("REM-DEV"),
+      within(screen.getByRole("region", { name: "Novedad" })).getByText("REM-DEV"),
     ).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "Rechazadas" })).getByText("REM-REC"),
+      within(screen.getByRole("region", { name: "Devolución a origen por rechazo" })).getByText("REM-REC"),
     ).toBeInTheDocument();
   });
 
@@ -231,7 +231,7 @@ describe("CierreDiaModule", () => {
     ];
     renderModule({ grupos });
 
-    const region = screen.getByRole("region", { name: "Devueltas" });
+    const region = screen.getByRole("region", { name: "Novedad" });
     expect(within(region).getByText("2002")).toBeInTheDocument();
     expect(within(region).getByText("Beto Ruiz")).toBeInTheDocument();
     expect(within(region).getByText("Av. Central 100")).toBeInTheDocument();
@@ -259,7 +259,7 @@ describe("CierreDiaModule", () => {
     ];
     renderModule({ grupos });
 
-    const region = screen.getByRole("region", { name: "Entregadas" });
+    const region = screen.getByRole("region", { name: "Entregado" });
     expect(within(region).getByText("₡1.250,50")).toBeInTheDocument();
     expect(within(region).getByText("SINPE")).toBeInTheDocument();
   });
@@ -330,7 +330,7 @@ describe("CierreDiaModule", () => {
     ];
     renderModule({ grupos });
 
-    const region = screen.getByRole("region", { name: "Entregadas" });
+    const region = screen.getByRole("region", { name: "Entregado" });
     expect(within(region).getByText("₡1.500")).toBeInTheDocument();
   });
 
@@ -354,7 +354,7 @@ describe("CierreDiaModule", () => {
     ];
     renderModule({ grupos });
 
-    const region = screen.getByRole("region", { name: "Rechazadas" });
+    const region = screen.getByRole("region", { name: "Devolución a origen por rechazo" });
     expect(within(region).queryByText("Ingreso bodega")).not.toBeInTheDocument();
     expect(within(region).queryByText("₡3.500")).not.toBeInTheDocument();
   });
@@ -1059,10 +1059,10 @@ describe("CierreDiaModule", () => {
 // `conflict` + motivo accionable, que la vista muestra tal cual (R38).
 
 const REGIONES: Array<{ resultado: CierreResultado; region: string }> = [
-  { resultado: "entregado", region: "Entregadas" },
-  { resultado: "reprogramado", region: "Reprogramadas" },
-  { resultado: "novedad", region: "Devueltas" },
-  { resultado: "devolucion_a_origen_por_rechazo", region: "Rechazadas" },
+  { resultado: "entregado", region: "Entregado" },
+  { resultado: "reprogramado", region: "Reprogramado" },
+  { resultado: "novedad", region: "Novedad" },
+  { resultado: "devolucion_a_origen_por_rechazo", region: "Devolución a origen por rechazo" },
 ];
 
 /** Abre el modal de confirmación desde la fila indicada y devuelve el diálogo. */
@@ -1105,7 +1105,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     ];
     renderModule({ grupos });
 
-    const region = screen.getByRole("region", { name: "Entregadas" });
+    const region = screen.getByRole("region", { name: "Entregado" });
     expect(
       within(region).getAllByRole("button", { name: /^Devolver a gestión la orden/ }),
     ).toHaveLength(2);
@@ -1133,7 +1133,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Devueltas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Novedad", "Devolver a gestión la orden REM-A · Ana Pérez");
 
     expect(dialog).toBeInTheDocument();
     expect(deshacerMock).not.toHaveBeenCalled();
@@ -1147,7 +1147,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
 
     expect(deshacerMock).not.toHaveBeenCalled();
@@ -1162,7 +1162,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-A · Ana Pérez");
 
     expect(dialog).toHaveTextContent(/Orden REM-A · Ana Pérez/);
     expect(dialog).toHaveTextContent(/quedará anulada/i);
@@ -1180,7 +1180,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
 
     const dialog = await abrirDeshacer(
       user,
-      "Reprogramadas",
+      "Reprogramado",
       "Devolver a gestión la orden REM-2 · Beto Ruiz",
     );
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
@@ -1197,7 +1197,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
 
     await vi.waitFor(() => expect(successMock).toHaveBeenCalled());
@@ -1231,7 +1231,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     };
     renderModule({ grupos, totales, totalPagoMensajero: "1500.00" });
 
-    const dialog = await abrirDeshacer(user, "Devueltas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Novedad", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
 
     await vi.waitFor(() =>
@@ -1242,7 +1242,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     expect(successMock).not.toHaveBeenCalled();
     expect(refreshMock).not.toHaveBeenCalled();
     // La fila sigue en su tabla y los totales no se movieron (R38).
-    const region = screen.getByRole("region", { name: "Devueltas" });
+    const region = screen.getByRole("region", { name: "Novedad" });
     expect(within(region).getByText("REM-A")).toBeInTheDocument();
     expect(
       within(region).getByRole("button", { name: "Devolver a gestión la orden REM-A · Ana Pérez" }),
@@ -1263,7 +1263,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Rechazadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Devolución a origen por rechazo", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
 
     await vi.waitFor(() =>
@@ -1271,7 +1271,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     );
     expect(refreshMock).not.toHaveBeenCalled();
     expect(
-      within(screen.getByRole("region", { name: "Rechazadas" })).getByText("REM-A"),
+      within(screen.getByRole("region", { name: "Devolución a origen por rechazo" })).getByText("REM-A"),
     ).toBeInTheDocument();
   });
 
@@ -1287,7 +1287,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
       fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
     });
     renderModule({ grupos });
-    let dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    let dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
     await vi.waitFor(() =>
       expect(errorMock).toHaveBeenCalledWith("catalogo de estados incompleto (seed pendiente)"),
@@ -1297,7 +1297,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     vi.clearAllMocks();
     deshacerMock.mockResolvedValue({ status: "unauthenticated" });
     renderModule({ grupos });
-    dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
     await vi.waitFor(() =>
       expect(errorMock).toHaveBeenCalledWith("No se pudo deshacer la gestión. Intentá de nuevo."),
@@ -1319,12 +1319,12 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-1 · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-1 · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
 
     // El refresh aún no repuso las props (el test las mantiene): la fila sigue visible.
-    const region = screen.getByRole("region", { name: "Entregadas" });
+    const region = screen.getByRole("region", { name: "Entregado" });
     await vi.waitFor(() =>
       expect(
         within(region).getByRole("button", { name: "Devolver a gestión la orden REM-1 · Ana Pérez" }),
@@ -1345,13 +1345,13 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-1 · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-1 · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
 
     await vi.waitFor(() =>
       expect(
-        within(screen.getByRole("region", { name: "Entregadas" })).getByRole("button", {
+        within(screen.getByRole("region", { name: "Entregado" })).getByRole("button", {
           name: "Devolver a gestión la orden REM-1 · Ana Pérez",
         }),
       ).toBeEnabled(),
@@ -1372,7 +1372,7 @@ describe("Feature 213 — desglose de pago en la tabla del cierre del día", () 
    * otra celda de la misma fila.
    */
   function celdaMetodo(): string {
-    const region = screen.getByRole("region", { name: "Entregadas" });
+    const region = screen.getByRole("region", { name: "Entregado" });
     const tabla = within(region).getByRole("table");
     const encabezados = within(tabla)
       .getAllByRole("columnheader")

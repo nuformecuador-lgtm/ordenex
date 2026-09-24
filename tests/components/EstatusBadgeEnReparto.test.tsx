@@ -92,16 +92,18 @@ describe("153/R10/R11 — variante y acento de marca preservados byte a byte", (
     cleanup();
     const desconocido = classesDe(VALUE_ANTIGUO);
 
-    // El value antiguo ya no existe en el catalogo: cae al chip neutro con el valor crudo.
+    // El value antiguo ya no existe en el catalogo: cae al chip neutro. ⏳ 2026-09-24 (FICHA 455,
+    // R3/R10): sin el valor crudo, con «Estado no reconocido».
     expect(desconocido).not.toContain("bg-brand-soft");
     expect(conocido).not.toEqual(desconocido);
-    expect(screen.getByText(VALUE_ANTIGUO)).toBeInTheDocument();
+    expect(screen.getByText("Estado no reconocido")).toBeInTheDocument();
+    expect(screen.queryByText(VALUE_ANTIGUO)).toBeNull();
   });
 
-  it("el vecino en_ruta_bodega_satelite sigue con su variante info y su label derivable", () => {
-    const { container } = render(
-      <EstatusBadge value="en_ruta_bodega_satelite" zonaNombre="Heredia" />,
-    );
-    expect(container.textContent).toBe("En ruta a bodega Heredia");
+  // ⏳ 2026-09-24 (FICHA 455, T2.1; R2): se retira la derivación «En ruta a bodega <zona>» de la
+  // feature 30. El nombre de un estado no interpola ningún dato: el chip dice el nombre exacto.
+  it("el vecino en_ruta_bodega_satelite dice su nombre exacto, sin la zona", () => {
+    const { container } = render(<EstatusBadge value="en_ruta_bodega_satelite" />);
+    expect(container.textContent).toBe("En ruta a bodega satélite");
   });
 });

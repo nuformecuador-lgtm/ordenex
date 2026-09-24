@@ -38,7 +38,7 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import {
-  esOrderStatusRetirado,
+  nombreDeEstado,
   type OrderStatusRetirado,
   type OrderStatusValue,
 } from "@/lib/types/order-status";
@@ -1416,34 +1416,23 @@ const SIN_GESTION_LISTA_LABEL = "Lista de órdenes sin gestionar";
  * [Q6/R32] El estado del que la orden SALIÓ, traducido. Distingue el paquete que se quedó en la
  * mano del mensajero del que esperaba respuesta de la tienda, y eso cambia qué se hace con él.
  *
- * `Partial` y no `Record` exhaustivo A PROPÓSITO: el corte solo barre desde `ESTADOS_A_BARRER`
- * (`en_reparto`, `ayuda_tienda`), así que sólo esos dos pueden llegar. Cualquier otro valor —o
- * `null`, que es lo que viaja cuando NO CONSTA— hace que la pieza se OMITA (R32). Nada de un
- * «—» permanente: un marcador de ausencia fijo es el mismo silencio ambiguo de R28 en pequeño.
- *
- * Las etiquetas son las CORTAS del `design.md §4` y no las de `ORDER_STATUS_LABELS`
- * («Ayuda solicitada a la tienda», 28 caracteres): esto va incrustado en la línea del producto,
- * no en un chip de una tabla de estados.
+ * El corte solo barre desde `ESTADOS_A_BARRER`. `null` —lo que viaja cuando NO CONSTA— hace que
+ * la pieza se OMITA (R32). Nada de un «—» permanente: un marcador de ausencia fijo es el mismo
+ * silencio ambiguo de R28 en pequeño.
  *
  * FICHA 454 (2026-09-23): el corte ya barre desde UN solo origen (`en_reparto`, con o sin ayuda
  * abierta; la ayuda dejó de ser estado). El origen de ayuda sobrevive SOLO para las filas
- * históricas de cierres barridos antes de la ficha (R40), en `SIN_GESTION_ORIGEN_LABEL_RETIRADOS`.
+ * históricas de cierres barridos antes de la ficha (R40).
  * Una barrida nueva con ayuda abierta se lee «En reparto» (Pregunta abierta 4 del spec).
  */
-const SIN_GESTION_ORIGEN_LABEL: Partial<Record<OrderStatusValue, string>> = {
-  en_reparto: "En reparto",
-};
-
-/** FICHA 454 (R40): la lectura de siempre para el origen retirado de las barridas históricas. */
-const SIN_GESTION_ORIGEN_LABEL_RETIRADOS: Readonly<Partial<Record<OrderStatusRetirado, string>>> = {
-  ayuda_tienda: "Ayuda de la tienda",
-};
-
-/** El rótulo del origen: vigente o retirado; `undefined` si no hay (se OMITE, R32). */
+//
+// FICHA 455 (2026-09-24, design §2.1; R2/R11): el rótulo del origen es `nombreDeEstado(origen)`, la
+// fuente única. Aquí vivían dos mapas propios («En reparto» y, para las barridas históricas, «Ayuda
+// de la tienda», un nombre que el estado nunca tuvo): un origen vigente se lee con su nombre y el
+// retirado de la 454 como «Ayuda solicitada a la tienda (estado retirado)» (R11), igual que en la
+// línea de tiempo. `null`/ausente sigue OMITIENDO la pieza (R32).
 function rotuloOrigen(origen: OrderStatusValue | OrderStatusRetirado): string | undefined {
-  return esOrderStatusRetirado(origen)
-    ? SIN_GESTION_ORIGEN_LABEL_RETIRADOS[origen]
-    : SIN_GESTION_ORIGEN_LABEL[origen];
+  return origen ? nombreDeEstado(origen) : undefined;
 }
 
 /** Tono de la píldora de conteo de cada pestaña, por resultado. */

@@ -61,14 +61,14 @@ describe("columnas de descarga del detalle de un movimiento de la tienda", () =>
   });
 
   it("emite el resultado como ETIQUETA LEGIBLE, nunca como valor del enum (R13)", () => {
-    expect(filaDescargaDetalleMiMovimiento(ORDEN).resultado).toBe("Entregada");
+    expect(filaDescargaDetalleMiMovimiento(ORDEN).resultado).toBe("Entregado");
     expect(filaDescargaDetalleMiMovimiento(ORDEN).resultado).not.toBe("entregado");
     expect(
       filaDescargaDetalleMiMovimiento({
         ...ORDEN,
         resultados: ["entregado", "reprogramado"],
       }).resultado,
-    ).toBe("Entregada · Reprogramada");
+    ).toBe("Entregado · Reprogramado");
   });
 
   it("emite valores CRUDOS: texto, número o celda vacía, nunca objetos", () => {

@@ -36,6 +36,7 @@ import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { RankingRowDTO } from "@/lib/types/ranking";
 
 import { RANKING_COLUMNAS } from "./ranking-labels";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
 /**
  * Columnas del archivo, en el orden de la pantalla. Las tres primeras reusan el rótulo de
@@ -45,7 +46,8 @@ export const COLUMNAS_DESCARGA_RANKING: DescargaColumna[] = [
   { clave: "posicion", encabezado: RANKING_COLUMNAS.posicion },
   { clave: "mensajero", encabezado: RANKING_COLUMNAS.mensajero },
   { clave: "porcentaje", encabezado: RANKING_COLUMNAS.porcentaje },
-  { clave: "entregadas", encabezado: "Entregadas" },
+  // FICHA 455 (2026-09-24, R5): cuenta UN resultado, lleva su nombre exacto.
+  { clave: "entregadas", encabezado: NOMBRE_ESTADO.entregado },
   { clave: "asignadas", encabezado: "Asignadas" },
 ];
 

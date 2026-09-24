@@ -329,7 +329,7 @@ describe("Ficha 344 — qué dice el detalle (R9–R14)", () => {
     // R14: la caja principal SÍ dice de qué tienda es cada orden.
     expect(dentro.getByText("Tienda Central")).toBeInTheDocument();
     // R13: la etiqueta legible del catálogo, NUNCA el valor del enum.
-    expect(dentro.getByText("Entregada")).toBeInTheDocument();
+    expect(dentro.getByText("Entregado")).toBeInTheDocument();
     expect(dentro.queryByText("entregado")).toBeNull();
     expect(dentro.getByText("₡1.700")).toBeInTheDocument();
   });
@@ -343,7 +343,7 @@ describe("Ficha 344 — qué dice el detalle (R9–R14)", () => {
     await abrir(ABRIR_FLETE);
     const region = await screen.findByRole("region", { name: PANEL_FLETE });
 
-    expect(within(region).getByText("Entregada · Reprogramada")).toBeInTheDocument();
+    expect(within(region).getByText("Entregado · Reprogramado")).toBeInTheDocument();
     // UNA fila de datos, no dos: el grano es la ORDEN.
     expect(filasDeDatos(region)).toHaveLength(1);
   });
@@ -668,7 +668,7 @@ describe("Ficha 344 — el detalle en un teléfono (R50/R52)", () => {
     ).toBeInTheDocument();
     expect(dentro.getByText("María Fernández")).toBeInTheDocument();
     expect(dentro.getByText("Tienda Central")).toBeInTheDocument();
-    expect(dentro.getByText("Entregada")).toBeInTheDocument();
+    expect(dentro.getByText("Entregado")).toBeInTheDocument();
     expect(dentro.getByText("₡1.700")).toBeInTheDocument();
   });
 

@@ -14,7 +14,7 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
-// Feature 158 (T2.2 — R18/R17/Q-D) — el grupo "Incidentes" en el detalle del cierre del
+// Feature 158 (T2.2 — R18/R17/Q-D) — el grupo "Incidente" en el detalle del cierre del
 // MENSAJERO. Lo que este archivo protege:
 //   - que el grupo existe, tiene etiqueta legible en español y es PROPIO (R18);
 //   - que NO trae ninguna columna de dinero (R17): un incidente no se paga al mensajero, y
@@ -151,12 +151,12 @@ afterEach(() => {
 });
 
 describe("R18 — el incidente es un grupo PROPIO del detalle del mensajero", () => {
-  it('pinta la sección "Incidentes" con su etiqueta en español y el conteo', () => {
+  it('pinta la sección "Incidente" con su etiqueta en español y el conteo', () => {
     renderModule({ ...emptyGrupos(), incidente: [incidente()] });
 
-    const region = screen.getByRole("region", { name: "Incidentes" });
+    const region = screen.getByRole("region", { name: "Incidente" });
     expect(region).toBeInTheDocument();
-    expect(within(region).getByRole("heading", { name: /Incidentes/ })).toHaveTextContent("(1)");
+    expect(within(region).getByRole("heading", { name: /Incidente/ })).toHaveTextContent("(1)");
     expect(within(region).getByText("REM-INC")).toBeInTheDocument();
     expect(within(region).getByText("Caja aplastada en el furgón")).toBeInTheDocument();
   });
@@ -168,8 +168,8 @@ describe("R18 — el incidente es un grupo PROPIO del detalle del mensajero", ()
       incidente: [incidente()],
     });
 
-    const incidentes = screen.getByRole("region", { name: "Incidentes" });
-    const devueltas = screen.getByRole("region", { name: "Devueltas" });
+    const incidentes = screen.getByRole("region", { name: "Incidente" });
+    const devueltas = screen.getByRole("region", { name: "Novedad" });
     expect(within(incidentes).getByText("REM-INC")).toBeInTheDocument();
     expect(within(incidentes).queryByText("REM-DEV")).toBeNull();
     expect(within(devueltas).queryByText("REM-INC")).toBeNull();
@@ -177,14 +177,14 @@ describe("R18 — el incidente es un grupo PROPIO del detalle del mensajero", ()
 
   it("el grupo VACÍO no se pinta (patrón de la 37)", () => {
     renderModule(emptyGrupos());
-    expect(screen.queryByRole("region", { name: "Incidentes" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Incidente" })).toBeNull();
   });
 
   it("la evidencia se abre desde la URL FIRMADA que llega del servidor", async () => {
     const user = userEvent.setup();
     renderModule({ ...emptyGrupos(), incidente: [incidente()] });
 
-    const region = screen.getByRole("region", { name: "Incidentes" });
+    const region = screen.getByRole("region", { name: "Incidente" });
     await user.click(within(region).getByRole("button", { name: "Ver evidencia" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Evidencia de la gestión" });
@@ -204,7 +204,7 @@ describe("R17 — el incidente no muestra dinero en la vista del mensajero", () 
       incidente: [incidente({ pagoMensajero: "0.00", montoRecibido: "0.00" })],
     });
 
-    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    const tabla = screen.getByRole("table", { name: "Incidente" });
     const cabeceras = within(tabla)
       .getAllByRole("columnheader")
       .map((th) => th.textContent);
@@ -222,7 +222,7 @@ describe("R17 — el incidente no muestra dinero en la vista del mensajero", () 
     // permanente que se leería como «me deben algo y todavía no me lo pagan».
     renderModule({ ...emptyGrupos(), incidente: [incidente()] });
 
-    const cabeceras = within(screen.getByRole("table", { name: "Incidentes" }))
+    const cabeceras = within(screen.getByRole("table", { name: "Incidente" }))
       .getAllByRole("columnheader")
       .map((th) => th.textContent);
     expect(cabeceras).not.toContain("Indemnización");
@@ -244,7 +244,7 @@ describe("R17 — el incidente no muestra dinero en la vista del mensajero", () 
       ],
     });
 
-    const tabla = screen.getByRole("table", { name: "Entregadas" });
+    const tabla = screen.getByRole("table", { name: "Entregado" });
     const cabeceras = within(tabla)
       .getAllByRole("columnheader")
       .map((th) => th.textContent);
@@ -265,7 +265,7 @@ describe("R9 — el mensajero SÍ ve la causa que él mismo reportó", () => {
     // columna ese `select` no lo vería nadie y sería código muerto.
     renderModule({ ...emptyGrupos(), incidente: [incidente({ causaIncidente: value })] });
 
-    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    const tabla = screen.getByRole("table", { name: "Incidente" });
     expect(within(tabla).getByText(etiqueta)).toBeInTheDocument();
     expect(tabla.textContent).not.toMatch(/danado/);
     cleanup();
@@ -277,7 +277,7 @@ describe("R9 — el mensajero SÍ ve la causa que él mismo reportó", () => {
       novedad: [makeGestion({ gestionId: "gd", resultado: "novedad" })],
     });
 
-    const cabeceras = within(screen.getByRole("table", { name: "Devueltas" }))
+    const cabeceras = within(screen.getByRole("table", { name: "Novedad" }))
       .getAllByRole("columnheader")
       .map((th) => th.textContent);
     expect(cabeceras).not.toContain("Causa");
@@ -289,7 +289,7 @@ describe("Q-D/R14 — un incidente SE PUEDE deshacer desde el detalle", () => {
     const user = userEvent.setup();
     renderModule({ ...emptyGrupos(), incidente: [incidente()] });
 
-    const region = screen.getByRole("region", { name: "Incidentes" });
+    const region = screen.getByRole("region", { name: "Incidente" });
     await user.click(
       within(region).getByRole("button", {
         name: "Devolver a gestión la orden REM-INC · Beto Ruiz",

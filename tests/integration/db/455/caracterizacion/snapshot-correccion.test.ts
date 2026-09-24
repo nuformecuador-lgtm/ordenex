@@ -85,10 +85,11 @@ describeSiHayBase("455/C16 — snapshot de la correccion de resultado (Postgres 
   });
 
   describe("[INTERMEDIO] lo que la 455 cambia por diseño (R23)", () => {
-    // Fase 0 (2026-09-24): la columna pinta el CODIGO crudo (viola R3). La Fase 1 (T1.12) traduce al
-    // leer y reescribe este bloque con fecha.
-    it("la columna pinta hoy el codigo crudo", () => {
-      expect(r.pintado).toEqual([{ anterior: R.entregado, nuevo: R.rechazo }]);
+    // Fase 0 (2026-09-24): la columna pintaba el CODIGO crudo (viola R3).
+    // FASE 2 (2026-09-24, T1.12 parte UI / T2.7): el servidor traduce el snapshot al codigo vigente
+    // al leer (Fase 1) y la columna lo pinta con su NOMBRE visible (`valorLegible`).
+    it("la columna pinta el nombre visible del resultado, no el codigo", () => {
+      expect(r.pintado).toEqual([{ anterior: "Entregado", nuevo: "Devolución a origen por rechazo" }]);
     });
   });
 });

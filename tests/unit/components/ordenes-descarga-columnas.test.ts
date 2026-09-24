@@ -122,7 +122,7 @@ describe("columnas de descarga del listado de órdenes", () => {
     expect(fila.distrito).toBe("San Rafael");
     expect(fila.mensajero).toBe("Luis Mora");
     // Etiqueta legible del estatus, no el `value` máquina ni el uuid.
-    expect(fila.estatus).toBe("Entregada");
+    expect(fila.estatus).toBe("Entregado");
 
     // Sin relaciones resueltas cae a los escalares legibles, nunca a un id.
     const escalares = filaDescargaOrden(
@@ -130,7 +130,7 @@ describe("columnas de descarga del listado de órdenes", () => {
     );
     expect(escalares.tienda).toBe("Tienda X");
     expect(escalares.zona).toBe("Zona Sur");
-    expect(escalares.estatus).toBe("Entregada");
+    expect(escalares.estatus).toBe("Entregado");
 
     const orden = makeOrden();
     const ids = [

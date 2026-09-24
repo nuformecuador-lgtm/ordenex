@@ -151,7 +151,7 @@ function celdasDeMedios(region: HTMLElement): [string, string, string] {
 
 function renderTabla(grupos: CierreGrupos) {
   render(<DetalleSecciones grupos={grupos} onVerEvidencia={() => {}} />);
-  return screen.getByRole("region", { name: "Entregadas" });
+  return screen.getByRole("region", { name: "Entregado" });
 }
 
 /** Abre el renglón de la orden en el comprobante y devuelve el texto de la fila «Recibido». */

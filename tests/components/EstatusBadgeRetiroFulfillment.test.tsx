@@ -66,12 +66,16 @@ describe("155/R28 — el estado retirado ya no esta en los mapas de presentacion
   });
 });
 
-describe("155/R41 — un value fuera del catalogo del build degrada al chip neutro", () => {
-  it("el value RETIRADO se pinta crudo, con la presentacion neutra EXACTA", () => {
+// ⏳ 2026-09-24 (FICHA 455, T2.1; R3/R10/R11): el chip ya no pinta el value CRUDO. El retirado de la
+// 155 se lee con su nombre histórico MARCADO («En fulfillment (estado retirado)», R11) y un value
+// desconocido, «Estado no reconocido» (R10). La presentación NEUTRA exacta no cambia.
+const LABEL_RETIRADA_MARCADA = `${LABEL_RETIRADA} (estado retirado)`;
+
+describe("155/R41 · 455/R11 — un value fuera del catalogo del build degrada al chip neutro", () => {
+  it("el value RETIRADO se pinta con su nombre histórico marcado, con la presentacion neutra EXACTA", () => {
     const retirado = classesDe(RETIRADO);
-    // Texto crudo: sin etiqueta legible, se muestra el value tal cual (no "—", no vacio).
-    expect(screen.getByText(RETIRADO)).toBeInTheDocument();
-    expect(screen.queryByText(LABEL_RETIRADA)).toBeNull();
+    expect(screen.getByText(LABEL_RETIRADA_MARCADA)).toBeInTheDocument();
+    expect(screen.queryByText(RETIRADO)).toBeNull();
     cleanup();
     // Estilo neutro: mismas clases que un estado `secondary` sin acento.
     expect(retirado).toEqual(classesDe(NEUTRO));
@@ -79,13 +83,14 @@ describe("155/R41 — un value fuera del catalogo del build degrada al chip neut
 
   it("un value cualquiera que el build no conoce degrada igual (no es un caso especial)", () => {
     const desconocido = classesDe("estado_que_no_existe");
-    expect(screen.getByText("estado_que_no_existe")).toBeInTheDocument();
+    expect(screen.getByText("Estado no reconocido")).toBeInTheDocument();
+    expect(screen.queryByText("estado_que_no_existe")).toBeNull();
     cleanup();
     expect(desconocido).toEqual(classesDe(NEUTRO));
   });
 
-  it("el mapa de presentacion de texto tambien cae al value crudo", () => {
-    expect(estatusLabel(RETIRADO)).toBe(RETIRADO);
+  it("el mapa de presentacion de texto dice lo mismo que el chip (nunca el value crudo)", () => {
+    expect(estatusLabel(RETIRADO)).toBe(LABEL_RETIRADA_MARCADA);
   });
 
   it("una fila de historial que referencia el value retirado NO rompe la linea de tiempo", () => {
@@ -103,11 +108,12 @@ describe("155/R41 — un value fuera del catalogo del build degrada al chip neut
 
     render(<HistorialOrdenTimeline entradas={[entrada]} />);
 
-    // La vista se monta y la transicion es legible: origen crudo -> destino con etiqueta.
+    // La vista se monta y la transicion es legible: origen con su nombre histórico MARCADO (R11)
+    // -> destino con etiqueta.
     expect(
       screen.getByRole("list", { name: "Línea de tiempo de la orden" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(RETIRADO)).toBeInTheDocument();
+    expect(screen.getByText(LABEL_RETIRADA_MARCADA)).toBeInTheDocument();
     expect(screen.getByText(ORDER_STATUS_LABELS.en_preparacion)).toBeInTheDocument();
     // Y el motivo de la migracion es visible: la orden no cambio de estado sin explicacion.
     expect(screen.getByText(new RegExp(`migracion 155`))).toBeInTheDocument();

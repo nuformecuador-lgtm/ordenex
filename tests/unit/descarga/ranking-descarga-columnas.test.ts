@@ -45,7 +45,7 @@ describe("orden de las columnas de descarga del ranking del día", () => {
       "Posición",
       "Mensajero",
       "% del día",
-      "Entregadas",
+      "Entregado",
       "Asignadas",
     ]);
   });

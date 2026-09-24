@@ -54,7 +54,10 @@ vi.mock("next/navigation", () => ({
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
 
 const ZONA = "Limón";
-const ESTADO_EN_RUTA = `${ORDER_STATUS_LABELS.en_ruta_bodega_satelite} de ${ZONA}`;
+// ⏳ 2026-09-24 (FICHA 455, R2): el estado de la tarjeta es el nombre EXACTO, sin la zona
+// interpolada (antes «En ruta a bodega satélite de Limón»). La zona sigue a la vista en la franja
+// de ubicación de la tarjeta.
+const ESTADO_EN_RUTA = ORDER_STATUS_LABELS.en_ruta_bodega_satelite;
 const REGION = "Por recibir";
 const ABRIR_ESCANER = "Recibir paquete";
 

@@ -9,9 +9,14 @@
 // POR QUÉ UN MÓDULO Y NO UNA PLANTILLA EN CADA PANTALLA. Cinco superficies escribiendo la misma
 // frase a mano son cinco frases: la primera corrección (la 455 renombrará los estados) se quedaría a
 // medias. Aquí vive el formato; el NOMBRE del resultado NO se escribe aquí: lo pone quien llama,
-// sacándolo de su fuente canónica (`estatusLabel` en las pantallas internas, `ETIQUETA_POR_HITO` en
-// el rastreo público, que es el vocabulario que esa superficie ya enseña). Así el nombre cambia en un
-// solo sitio y la nota lo sigue sola.
+// sacándolo de su fuente canónica. FICHA 455 (2026-09-24, R33): esa fuente es UNA para todas las
+// superficies, internas y rastreo público: `nombreDeResultado` (`lib/types/gestion-resultado.ts`,
+// vía `SENAL_PENDIENTE`). Así el nombre cambia en un solo sitio y la nota lo sigue sola.
+//
+// La nota de la AYUDA («Ayuda solicitada a la tienda», texto de la 456) NO es un estado: la 454
+// convirtió la ayuda en un evento y la orden sigue `en_reparto`. Coincide con el nombre HISTÓRICO
+// del estado retirado `ayuda_tienda`, y por eso la guardia de nombres retirados la lista como
+// excepción cerrada con su motivo (requirements 455 §0.3 retira ese texto «como estado»).
 //
 // Módulo de PRESENTACIÓN puro: sin React, sin dominio, sin fetch.
 

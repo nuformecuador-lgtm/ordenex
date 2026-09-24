@@ -95,9 +95,11 @@ describeSiHayBase("455/C14 — pestañas de novedades y ayuda de la tienda (Post
   });
 
   describe("[INTERMEDIO] lo que la 455 cambia por diseño (R5/R6)", () => {
-    // Fase 0 (2026-09-24): los rotulos de HOY. La Fase 2 (T2.5) los reescribe con fecha.
-    it("los rotulos de las dos pestañas, hoy", () => {
-      expect(TEXTOS_POR_GRUPO.devolucion.pestana).toBe("En devolución");
+    // Fase 0 (2026-09-24): «En devolución» y «Ayuda solicitada».
+    // FASE 2 (2026-09-24, T2.5): la pestaña que lista UN estado (`novedad`) lleva su nombre exacto
+    // (R5); la de ayuda es un grupo (454) y conserva su texto propio (R6).
+    it("los rotulos de las dos pestañas: «Novedad» y «Ayuda solicitada»", () => {
+      expect(TEXTOS_POR_GRUPO.devolucion.pestana).toBe("Novedad");
       expect(TEXTOS_POR_GRUPO.ayuda.pestana).toBe("Ayuda solicitada");
     });
   });

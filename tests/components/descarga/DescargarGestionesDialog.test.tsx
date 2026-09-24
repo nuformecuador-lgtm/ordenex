@@ -383,7 +383,7 @@ describe("diálogo de descarga detallada de gestiones (T4.1)", () => {
     // UNA hoja, y su nombre es el titulo de la descarga detallada (R6/R51).
     expect(hoja).toBe("Gestiones de cierres");
     expect(filas).toHaveLength(1);
-    expect(filas[0].resultado).toBe("Entregada");
+    expect(filas[0].resultado).toBe("Entregado");
   });
 });
 

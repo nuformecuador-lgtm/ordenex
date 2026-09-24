@@ -160,8 +160,11 @@ function renderModule(
 }
 
 /** Una orden en el estatus de ayuda, tal como llega hoy: en la SEGUNDA lista y con su estado. */
+// ⏳ 2026-09-24 (FICHA 455): desde la 454 una orden con ayuda abierta sigue `en_reparto` (la ayuda es
+// un evento, no un estado). El fixture decía `ayuda_tienda`, un estado RETIRADO que ninguna orden
+// viva puede tener; con la 455 el chip pinta el estado real y el fixture tiene que ser realista.
 function enAyuda(over: Partial<MiAsignacionDTO> & { id: string }): MiAsignacionDTO {
-  return makeAsignacion({ estatusValue: "ayuda_tienda", ...over });
+  return makeAsignacion({ estatusValue: "en_reparto", ...over });
 }
 
 /** La sección de abajo, por su nombre accesible. `query` para poder afirmar que NO está. */
@@ -370,16 +373,18 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
     expect(refreshMock).toHaveBeenCalled();
   });
 
-  it("235/R37: el chip de la card NO dice «En reparto», que es lo que la orden dejó de ser", () => {
-    // Medido en el navegador (T8.1), no en la suite: la card montaba `esActiva`/`esDetalle` en
-    // `false` y sin `estado`, así que `estadoPorDefecto` devolvía el literal «En reparto». Para los
-    // otros tres valores el chip DESCRIBE la situación de la orden; aquí afirmaba justo la que esta
-    // ficha volvió falsa, y a un palmo del encabezado que dice lo contrario.
+  // ⏳ 2026-09-24 (FICHA 455, T2.2; design §2.1; R7/R8). La 235 hizo que el chip de esta card NO
+  // dijera «En reparto» (mostraba «En ayuda») porque entonces la ayuda ERA un estado. La 454 la
+  // convirtió en evento (la orden sigue `en_reparto`) y la 455 fija que el chip dice SIEMPRE el
+  // estado de la orden: «En reparto», que es lo cierto. La ayuda va como NOTA aparte, con el texto
+  // de la 456 («Ayuda solicitada a la tienda»), y «En ayuda» (nombre retirado, §0.3) desaparece.
+  it("455/R7: el chip dice el estado de la orden («En reparto») y la ayuda va como nota aparte", () => {
     renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })]);
 
     const seccion = seccionAyuda() as HTMLElement;
-    expect(within(seccion).queryByText("En reparto")).toBeNull();
-    expect(within(seccion).getByText("En ayuda")).toBeInTheDocument();
+    expect(within(seccion).getByText("En reparto")).toBeInTheDocument();
+    expect(within(seccion).getByText("Ayuda solicitada a la tienda")).toBeInTheDocument();
+    expect(within(seccion).queryByText("En ayuda")).toBeNull();
   });
 
   it("235/R37: y el COLOR de ese chip es el de `warning` sólido, fijado y no heredado", () => {
@@ -393,10 +398,16 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
     // fijo-sobre-fijo que DESIGN.md exige para un chip sólido.
     renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })]);
 
+    // ⏳ 2026-09-24 (FICHA 455, R12): el color del chip sale del CÓDIGO (`en_reparto` → `warning`
+    // sólido), no de un rótulo; la nota de ayuda lleva la familia `warning` en su tratamiento suave.
     const seccion = seccionAyuda() as HTMLElement;
-    expect(within(seccion).getByText("En ayuda")).toHaveClass(
+    expect(within(seccion).getByText("En reparto")).toHaveClass(
       "bg-warning",
       "text-navy",
+    );
+    expect(within(seccion).getByText("Ayuda solicitada a la tienda")).toHaveClass(
+      "bg-warning-soft",
+      "text-warning-strong",
     );
   });
 

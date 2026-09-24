@@ -178,8 +178,8 @@ export function RecogerModule({
    *
    * Sin `onGestionar`: aquí no hay nada que gestionar, así que la card es de
    * solo-visualización (ni clickeable ni enfocable). `mostrarRuta={false}` porque estas
-   * órdenes todavía no entraron en la ruta optimizada, y `estado` fijo porque no se deriva
-   * de un puntero de gestión que en esta pantalla no existe.
+   * órdenes todavía no entraron en la ruta optimizada. FICHA 455 (R7): el chip dice el estado de
+   * la orden («Mensajero recogiendo en la bodega»), no un rótulo fijo de la pantalla.
    */
   function renderCardPorRecoger(
     orden: MiAsignacionDTO,
@@ -192,7 +192,6 @@ export function RecogerModule({
       <CardVista
         orden={orden}
         total={total}
-        estado="Por recoger"
         mostrarRuta={false}
       />
     );
@@ -306,7 +305,7 @@ export function RecogerModule({
       {/* `aria-label` y no un `<h2>` visible: el `<h1>` de la página ya dice "Por
           recoger" y repetirlo debajo sería ruido. El nombre accesible se conserva porque
           es por donde la región se identifica (y por donde la buscan los tests). */}
-      <section aria-label="Por recoger" className="flex flex-col gap-3">
+      <section aria-label="Recoger en bodega" className="flex flex-col gap-3">
         {/* Buscador y conmutador de vista comparten fila: son los dos controles de la
             lista. En pantallas angostas se apilan (`flex-col`) para que el input no se
             estruje; desde `sm` van en la MISMA línea, el input ocupando el espacio libre

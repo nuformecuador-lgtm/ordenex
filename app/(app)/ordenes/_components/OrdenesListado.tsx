@@ -88,7 +88,6 @@ import {
 // FICHA 355: el control de ESTADO se declara una sola vez y lo montan las dos superficies
 // (aquí y la bodega satélite). Ver la cabecera de ese módulo.
 import {
-  EXCLUDE_ESTADO_DEFAULT,
   estadosOfrecidos,
   filtroEstado,
 } from "./filtro-estado-def";
@@ -154,7 +153,8 @@ async function mensajerosFetcher() {
 // FICHA 355: el valor por defecto vive ahora en `filtro-estado-def.ts`, junto al resto de
 // la declaración del control, para que una superficie que lo monte sin pasar `exclude`
 // obtenga exactamente lo mismo que maestro/admin.
-const DEFAULT_EXCLUDE = [...EXCLUDE_ESTADO_DEFAULT];
+// FICHA 455 (2026-09-24, R18): el default ya no excluye nada (el catálogo vigente es el filtro).
+const DEFAULT_EXCLUDE: string[] = [];
 
 /*
  * ── FICHA 355 (2026-09-02): AQUÍ VIVÍAN `VALUES_VIGENTES` Y EL DESPLEGABLE DE ESTADO ─────────

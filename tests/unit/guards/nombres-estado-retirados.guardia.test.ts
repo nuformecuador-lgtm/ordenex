@@ -51,44 +51,24 @@ const EXCEPCIONES: Record<string, { maximo: number; motivo: string }> = {
       "`ESTADO_RETIRADO.nombreHistorico`: el nombre que tenian los estados retirados, que R11 obliga a " +
       "mostrar como «<historico> (estado retirado)» en las filas historicas",
   },
+  // FASE 2 (2026-09-24): no es un pendiente que se arregla, es una excepcion que SE QUEDA, y se
+  // declara aqui y no escondida. requirements §0.3 retira «Ayuda solicitada a la tienda» COMO ESTADO;
+  // design §2.1 (fila de `pos-estado.ts`) y `specs/456-tooltip-estados/textos-aprobados.md` fijan ese
+  // mismo texto para la NOTA de la ayuda (la 454 la hizo evento: la orden sigue `en_reparto`), que
+  // se pinta junto al chip de estado y nunca en su lugar. El detector no distingue estado de nota.
+  "components/shared/nota-pendiente-confirmacion.ts": {
+    maximo: 1,
+    motivo:
+      "`NOTA_AYUDA_SOLICITADA`: la nota de la ayuda de la 454 (evento, no estado), texto fijado por " +
+      "design §2.1 y la 456; §0.3 lo retira solo como nombre de estado",
+  },
 };
 
 /**
  * ⏳ Lo que la FASE 2 tiene que cambiar (T2.1-T2.10). Medido el 2026-09-24 sobre este arbol.
  * La Fase 2 retira cada entrada al corregir su archivo; no puede anadir ninguna.
  */
-const PENDIENTES_FASE_2: Record<string, number> = {
-  "app/(app)/analitica/_components/entregas/analitica-productos-descarga-columnas.ts": 3,
-  "app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx": 2,
-  "app/(app)/analitica/_components/entregas/HoyGestionBarras.tsx": 1,
-  "app/(app)/analitica/_components/entregas/KpisEfectividad.tsx": 2,
-  "app/(app)/analitica/_components/entregas/madurez-textos.ts": 1,
-  "app/(app)/analitica/_components/operativo/catalogo-paneles.ts": 1,
-  "app/(app)/cierres-admin/_components/cierre-factura.tsx": 1,
-  "app/(app)/cierres-admin/_components/cierre-labels.ts": 8,
-  "app/(app)/mis-asignaciones/recoger/page.tsx": 1,
-  "app/(app)/mis-asignaciones/_components/chat/chat-format.ts": 4,
-  "app/(app)/mis-asignaciones/_components/chat/ChatOrdenesLista.tsx": 1,
-  "app/(app)/mis-asignaciones/_components/KpisMensajero.tsx": 1,
-  "app/(app)/mis-asignaciones/_components/pos-card/pos-estado.ts": 9,
-  "app/(app)/mis-asignaciones/_components/pos-card/PosOrderCard.tsx": 2,
-  "app/(app)/mis-asignaciones/_components/RecogerModule.tsx": 2,
-  "app/(app)/mis-asignaciones/_components/RepartoModule.tsx": 1,
-  "app/(app)/monitoreo/_components/contadores.ts": 5,
-  "app/(app)/novedades/_components/novedad-grupo-textos.ts": 1,
-  "app/(app)/ordenes/_components/EstatusBadge.tsx": 9,
-  "app/(app)/ranking/historico/_components/ranking-historico-labels.ts": 1,
-  "app/(app)/ranking/_components/ranking-descarga-columnas.ts": 1,
-  "app/(app)/recoleccion/_components/RecoleccionModule.tsx": 1,
-  "app/(app)/recoleccion/_components/RecolectadasHoyLista.tsx": 1,
-  "lib/analytics/metrics.ts": 1, // T2.6: etiqueta «Sin gestionar» -> «Novedad interna», JUNTO con catalogo-paneles.ts (guardia etiquetas-visibles)
-  "lib/auth/menu-visibility.ts": 1, // T2.2 (titulo de menu «Recoger en bodega»)
-  "lib/types/rastreo-publico.ts": 12, // T1.9 (BLOQUEO: el DTO del rastreo exige tocar app/_landing/RastreoDialog.tsx)
-  "components/shared/nota-pendiente-confirmacion.ts": 1,
-  "docs/ayuda/mensajero/recoleccion.md": 2,
-  "docs/ayuda/mensajero/reparto.md": 2,
-  "docs/ayuda/tienda/novedades.md": 1,
-};
+const PENDIENTES_FASE_2: Record<string, number> = {};
 
 function listar(dir: string, re: RegExp, acc: string[] = []): string[] {
   for (const e of readdirSync(dir)) {

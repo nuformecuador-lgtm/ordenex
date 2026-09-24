@@ -407,7 +407,7 @@ describe("OrdenesListado — columna 'Reprogramada para' siempre visible", () =>
     renderListado(<OrdenesListado />);
     await abrirFiltro(user);
 
-    await user.click(screen.getByRole("option", { name: /reprogramada/i }));
+    await user.click(screen.getByRole("option", { name: /reprogramado/i }));
 
     expect(
       await screen.findByRole("columnheader", { name: "Reprogramada para" }),
@@ -420,7 +420,7 @@ describe("OrdenesListado — columna 'Reprogramada para' siempre visible", () =>
     renderListado(<OrdenesListado />);
     await abrirFiltro(user);
 
-    await user.click(screen.getByRole("option", { name: /reprogramada/i }));
+    await user.click(screen.getByRole("option", { name: /reprogramado/i }));
     await screen.findByRole("columnheader", { name: "Reprogramada para" });
     await user.click(screen.getByRole("option", { name: OPT_ENTREGADA }));
 

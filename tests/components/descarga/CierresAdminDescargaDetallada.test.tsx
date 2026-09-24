@@ -329,10 +329,10 @@ describe("descarga detallada en cierres del día (T5.1)", () => {
     // Cinco resultados distintos, CINCO filas, en la misma hoja y con la columna que los nombra.
     expect(filas).toHaveLength(5);
     expect(filas.map((f) => f.resultado)).toEqual([
-      "Entregada",
-      "Reprogramada",
-      "Devuelta",
-      "Rechazada",
+      "Entregado",
+      "Reprogramado",
+      "Novedad",
+      "Devolución a origen por rechazo",
       "Incidente",
     ]);
   });

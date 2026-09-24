@@ -509,7 +509,7 @@ describe("el diálogo de la corrección", () => {
     renderDialogo(gestion());
     const aviso = screen.getByRole("region", { name: "Al corregir:" });
     expect(aviso).toHaveTextContent(
-      "La orden sigue «En reparto» hasta entonces: su estado pasa a «Rechazada» al aprobar el cierre.",
+      "La orden sigue «En reparto» hasta entonces: su estado pasa a «Devolución a origen por rechazo» al aprobar el cierre.",
     );
   });
 

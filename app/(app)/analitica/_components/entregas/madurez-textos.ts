@@ -37,6 +37,7 @@ import {
   type PorcentajeDeEntrega,
 } from "@/lib/analytics/madurez-cohorte";
 import { efectividadCohorteConfig } from "@/lib/config/efectividad-cohorte";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
 import {
   contarOrdenes,
@@ -70,7 +71,8 @@ export const TEXTO_HEROE = {
    */
   baseCargadas: (cargadas: number) => `de ${contarOrdenes(cargadas, ORDENES_CARGADAS)}`,
   leyenda: {
-    entregadas: "Entregadas",
+    // FICHA 455 (2026-09-24, R5): el tramo cuenta UN desenlace y lleva su nombre exacto.
+    entregadas: NOMBRE_ESTADO.entregado,
     otroDesenlace: "Otro desenlace",
     vivas: "Todavía en proceso",
   },
@@ -80,9 +82,15 @@ export const TEXTO_HEROE = {
 const TOLERANCIA = formatearValor(efectividadCohorteConfig.MAXIMO_SALTO_POR_ORDEN, "porcentaje");
 const SUELO = formatearValor(MINIMO_BASE_PORCENTAJE, "conteo");
 
-/** «424 entregadas», concordando en singular. La cifra pasa por el formateador de la analitica. */
+/**
+ * «Entregado: 424». La cifra pasa por el formateador de la analitica.
+ *
+ * FICHA 455 (2026-09-24, R2/R5): el nombre del estado va EXACTO («Entregado») y la cantidad a su
+ * lado. Antes era «424 entregadas» / «1 entregada» (y el reemplazo mecanico de la Fase 1 dejo el
+ * singular en «1 entregado»): el nombre no se pluraliza ni se pasa a minusculas.
+ */
 function contarEntregadas(n: number): string {
-  return `${formatearValor(n, "conteo")} ${n === 1 ? "entregado" : "entregadas"}`;
+  return `${NOMBRE_ESTADO.entregado}: ${formatearValor(n, "conteo")}`;
 }
 
 /**

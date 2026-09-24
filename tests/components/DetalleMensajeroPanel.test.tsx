@@ -405,7 +405,7 @@ describe("Feature 192 · R48 — el lenguaje visual es el del listado", () => {
     const filaConResultado = within(tabla).getByText("1002").closest("tr") as HTMLElement;
 
     expect(within(filaSinResultado).getByText("—")).toBeInTheDocument();
-    expect(within(filaConResultado).getByText("Reprogramada")).toBeInTheDocument();
+    expect(within(filaConResultado).getByText("Reprogramado")).toBeInTheDocument();
   });
 
   it("el vocabulario del listado se CONSUME, y ni el panel ni sus columnas declaran otro (censo)", () => {

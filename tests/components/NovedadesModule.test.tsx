@@ -185,8 +185,8 @@ describe("NovedadesModule", () => {
   it("R10: lista vacia -> estado vacio, sin filas", () => {
     render(<NovedadesModule grupo="devolucion" items={[]} total={0} page={1} pageSize={10} />);
 
-    expect(screen.getByText(/No tenés órdenes en devolución/i)).toBeInTheDocument();
-    expect(screen.queryByRole("list", { name: "Órdenes en devolución" })).toBeNull();
+    expect(screen.getByText(/No tenés órdenes en novedad/i)).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Órdenes en novedad" })).toBeNull();
   });
 
   it("R9: por cada orden muestra guia, destinatario y botones de contacto", () => {
@@ -760,7 +760,7 @@ describe("NovedadesModule", () => {
     // En ok: la fila sale de la lista (queda el estado vacío) + toast de éxito.
     await waitFor(() =>
       expect(
-        screen.getByText(/No tenés órdenes en devolución/i),
+        screen.getByText(/No tenés órdenes en novedad/i),
       ).toBeInTheDocument(),
     );
     expect(successMock).toHaveBeenCalledWith("Orden reprogramada.");
@@ -1549,7 +1549,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
     // alguien copiara ESE envoltorio aquí, esta cuenta se rompería en una de las dos vistas.
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(
-      screen.getByRole("list", { name: "Órdenes en devolución" }),
+      screen.getByRole("list", { name: "Órdenes en novedad" }),
     ).toBeInTheDocument();
   });
 

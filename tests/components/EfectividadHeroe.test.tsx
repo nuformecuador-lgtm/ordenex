@@ -57,7 +57,8 @@ describe("El período del diseño: 790 cargadas, 424 entregadas, 265 vivas", () 
 
     // 424/790 = 53,7 % — EL número de la pantalla.
     expect(screen.getByText(norm(formatearValor(424 / 790, "porcentaje")))).toBeInTheDocument();
-    expect(screen.getByText("424 entregadas")).toBeInTheDocument();
+    // ⏳ 2026-09-24 (FICHA 455, R2/R5): el nombre exacto del estado, la cifra al lado.
+    expect(screen.getByText("Entregado: 424")).toBeInTheDocument();
     expect(screen.getByText("de las 790 órdenes que entraron")).toBeInTheDocument();
     // 424/525 = 80,8 % sobre las que ya cerraron, con SU sustantivo y no «cerradas».
     expect(
@@ -73,7 +74,7 @@ describe("El período del diseño: 790 cargadas, 424 entregadas, 265 vivas", () 
     render(<EfectividadHeroe madurez={madurez(790, 424, 265)} />);
 
     const leyenda = screen.getAllByRole("listitem").map((li) => li.textContent);
-    expect(leyenda).toEqual(["Entregadas424", "Otro desenlace101", "Todavía en proceso265"]);
+    expect(leyenda).toEqual(["Entregado424", "Otro desenlace101", "Todavía en proceso265"]);
     // Y los tres tramos suman las cargadas: 424 + 101 + 265 = 790.
     expect(424 + 101 + 265).toBe(790);
   });
@@ -147,7 +148,7 @@ describe("Zona Puntarenas: 27 cargadas y ninguna con desenlace (medido)", () => 
     render(<EfectividadHeroe madurez={madurez(27, 0, 27)} />);
 
     expect(screen.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
-      "Entregadas0",
+      "Entregado0",
       "Otro desenlace0",
       "Todavía en proceso27",
     ]);
@@ -197,7 +198,7 @@ describe("Zona El Coco: 64 cargadas y sólo 3 con desenlace (medido)", () => {
     // NINGUNA de las dos cifras: ni 4/12 arriba ni 4/10 abajo.
     expect(screen.queryByText(norm(formatearValor(4 / 12, "porcentaje")))).toBeNull();
     expect(screen.queryByText(norm(formatearValor(4 / 10, "porcentaje")))).toBeNull();
-    expect(screen.getByText("4 entregadas de 12 órdenes")).toBeInTheDocument();
+    expect(screen.getByText("Entregado: 4 de 12 órdenes")).toBeInTheDocument();
     expect(screen.getByText(/Son muy pocas para un porcentaje/)).toBeInTheDocument();
     expect(screen.queryByText(SIN_MONTO)).toBeNull();
   });

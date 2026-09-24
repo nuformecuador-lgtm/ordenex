@@ -33,6 +33,7 @@ import type { OrigenFlete } from "@/lib/utils/ingreso-ordenex";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import {
   RESULTADO_LABEL,
+  RESULTADO_VACIO,
   ESTADO_LABEL,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
@@ -129,6 +130,7 @@ import {
 // `cierre-labels.ts`, que es donde vive y de donde la leen por igual la pantalla y el archivo.
 export {
   RESULTADO_LABEL,
+  RESULTADO_VACIO,
   ESTADO_LABEL,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
@@ -183,13 +185,8 @@ export {
   GESTION_TIENDA_BADGE_NOTA,
 };
 
-export const RESULTADO_VACIO: Record<CierreResultado, string> = {
-  entregado: "No hay entregas.",
-  reprogramado: "No hay reprogramaciones.",
-  novedad: "No hay devoluciones.",
-  devolucion_a_origen_por_rechazo: "No hay rechazos.",
-  incidente: "No hay incidentes.", // feature 158/R18
-};
+// FICHA 455 (2026-09-24, R5): `RESULTADO_VACIO` vive ahora en `cierre-labels` (nombre exacto del
+// resultado) y se reexporta desde aquí para sus consumidores.
 
 // Feature 41 (R20): variante de badge por estado para diferenciar VISUALMENTE el
 // `vencido` (generado por el corte diario: dinero sin conciliar mas alla del plazo)

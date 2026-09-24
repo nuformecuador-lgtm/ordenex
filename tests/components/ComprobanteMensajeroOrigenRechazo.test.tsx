@@ -366,7 +366,7 @@ describe("R7 — el comprobante del mensajero dice cuándo la gestión la regist
     // retira— dejaría esta fila MUDA sin romper nada visible. `desdeAyudaTienda` es ORTOGONAL al
     // resultado: en la tabla en vivo vive en las columnas comunes, o sea en las cinco secciones.
     montar(conLasDosDeLaTienda(), "mensajero");
-    await verSeccion("Entregadas");
+    await verSeccion("Entregado");
     await desplegar("REM-ENT", "Beto Mora");
 
     const marca = screen.getByText(TIENDA_LABEL);
@@ -376,7 +376,7 @@ describe("R7 — el comprobante del mensajero dice cuándo la gestión la regist
 
   it("un RECHAZO registrado por la tienda va marcado igual, con la misma nota", async () => {
     montar(conLasDosDeLaTienda(), "mensajero");
-    await verSeccion("Rechazadas");
+    await verSeccion("Devolución a origen por rechazo");
     await desplegar("REM-CRON");
 
     const marca = screen.getByText(TIENDA_LABEL);
@@ -387,7 +387,7 @@ describe("R7 — el comprobante del mensajero dice cuándo la gestión la regist
   it("y en ese rechazo la marca CONVIVE con el motivo, que sigue diciendo lo suyo", async () => {
     // Las dos cosas responden preguntas distintas: el motivo dice POR QUÉ, la marca dice QUIÉN.
     montar(conLasDosDeLaTienda(), "mensajero");
-    await verSeccion("Rechazadas");
+    await verSeccion("Devolución a origen por rechazo");
     await desplegar("REM-CRON");
 
     expect(valorDe("Motivo")).toBe(MOTIVO_LARGO);

@@ -320,8 +320,8 @@ function badgeNovedad(novedad: NovedadDTO, grupoListado: GrupoNovedad): string {
   // FICHA 454 (T2.5): el grupo de la fila es el de la lista que la trajo, confirmado contra su
   // estado (`grupoDeFila`); la ayuda ya no se deduce del estado, que es `en_reparto`.
   const grupo = grupoDeFila(novedad.estatusValue, grupoListado);
-  const chipFijo = grupo ? TEXTOS_POR_GRUPO[grupo].chipFijo : null;
-  return chipFijo ?? causaLabel(novedad.causa);
+  const notaFija = grupo ? TEXTOS_POR_GRUPO[grupo].notaFija : null;
+  return notaFija ?? causaLabel(novedad.causa);
 }
 
 export function NovedadesModule({
@@ -751,10 +751,10 @@ export function NovedadesModule({
               // pinta (`mostrarRuta={false}`). Se pasa el tamaño de la página porque es el
               // dato honesto que esta pantalla tiene, no un cero de relleno.
               total={visibles.length}
-              // El badge lo decide el GRUPO DE LA FILA (ver `badgeNovedad`). No hay estado de
-              // reparto que anunciar: lo que la tienda necesita saber de un vistazo es por qué
-              // esa orden está en su pantalla.
-              estado={badgeNovedad(novedad, grupo)}
+              // FICHA 455 (R7): el chip dice el ESTADO de la orden («Novedad», «En reparto»); la
+              // NOTA de al lado la decide el GRUPO DE LA FILA (ver `badgeNovedad`): lo que la tienda
+              // necesita saber de un vistazo es por qué esa orden está en su pantalla.
+              nota={badgeNovedad(novedad, grupo)}
               // FICHA 296 — A QUIÉN PREGUNTARLE. Hasta hoy la tienda veía una orden pidiendo
               // ayuda y la card no nombraba a nadie. El dato es campo PROPIO de `NovedadDTO`
               // (no de `MiAsignacionDTO`, que es el contrato del portal del mensajero), así que

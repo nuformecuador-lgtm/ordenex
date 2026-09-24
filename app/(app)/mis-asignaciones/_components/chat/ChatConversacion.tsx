@@ -63,8 +63,7 @@ import { BurbujaContenido } from "./BurbujaContenido";
 import { BurbujaSistema } from "./BurbujaSistema";
 import { Reacciones } from "./Reacciones";
 import {
-  ESTADO_CHIP,
-  estadoDe,
+  chipDeEstado,
   guiaVisible,
   horaCorta,
   iniciales,
@@ -389,7 +388,7 @@ export function ChatConversacion({
     );
   }
 
-  const chip = ESTADO_CHIP[estadoDe(orden.estatusValue)];
+  const chip = chipDeEstado(orden.estatusValue);
   const puedeEnviar =
     !enviando &&
     !preparando &&

@@ -56,7 +56,7 @@ describe("las etiquetas del catálogo de métricas — el texto que se lee en el
       ["rechazos", "Rechazos"],
       ["reprogramaciones", "Reprogramaciones"],
       ["incidentes", "Incidentes"],
-      ["novedad_interna", "Sin gestionar"],
+      ["novedad_interna", "Novedad interna"],
       ["tasa_entrega", "Tasa de entrega"],
       ["tasa_devolucion", "Tasa de devolución"],
       ["tasa_rechazo", "Tasa de rechazo"],
@@ -87,7 +87,7 @@ describe("los rótulos del tablero operativo — la otra mitad del texto visible
     // es lo que el maestro lee como encabezado del panel Y lo que un lector de pantalla anuncia.
     // Dos NO son etiquetas de métrica y por eso no salen del catálogo ni pueden cruzarse con él:
     // «Resultado de las gestiones» (el panel junta cuatro) y «Órdenes sin gestionar» (la métrica
-    // se llama «Sin gestionar»; el panel la nombra entera).
+    // se llama «Novedad interna» —FICHA 455, antes «Sin gestionar»—; el panel la describe).
     expect(PANELES_OPERATIVOS.map((p) => p.titulo)).toEqual([
       "Órdenes creadas",
       "Órdenes por estado",
@@ -107,7 +107,7 @@ describe("los rótulos del tablero operativo — la otra mitad del texto visible
         ["devoluciones", "Devoluciones"],
         ["rechazos", "Rechazos"],
         ["incidentes", "Incidentes"],
-        ["novedad_interna", "Sin gestionar"],
+        ["novedad_interna", "Novedad interna"],
         ["tasa_entrega", "Tasa de entrega"],
         ["tiempo_ciclo", "Tiempo de ciclo"],
       ],

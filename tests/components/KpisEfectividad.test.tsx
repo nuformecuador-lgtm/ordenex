@@ -162,8 +162,10 @@ describe("Las tarjetas de efectividad", () => {
     // Las dos tarjetas de CONTEO no llevan base: su cifra ya ES un conteo de órdenes, y un
     // «(100 órdenes)» junto a un «60» sería el denominador de nada.
     // En plural: el rótulo de la tarjeta y la entrada de la leyenda del héroe dicen lo mismo.
-    expect(screen.getAllByText("Entregadas").length).toBeGreaterThan(0);
-    expect(screen.getByText("En proceso")).toBeInTheDocument();
+    // ⏳ 2026-09-24 (FICHA 455, R5/R6): «Entregado» (un desenlace, nombre exacto) y el grupo sin
+    // desenlace con su rótulo propio (antes «En proceso», nombre retirado).
+    expect(screen.getAllByText("Entregado").length).toBeGreaterThan(0);
+    expect(screen.getByText("Sin desenlace todavía")).toBeInTheDocument();
     // 60 entregadas y 20 en proceso. En plural: la barra de madurez del héroe repite las dos
     // cifras en su leyenda, a propósito — es la misma partición vista dos veces.
     expect(screen.getAllByText("60").length).toBeGreaterThan(0);
@@ -319,7 +321,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
     // «100 %» es la cifra que NO puede aparecer. (Se busca esa y no un «%» cualquiera: la
     // propia frase que explica el veto nombra la tolerancia, que se escribe en por ciento.)
     expect(screen.queryByText(/100\s?%/)).toBeNull();
-    expect(screen.getByText("1 entregada de 1 orden")).toBeInTheDocument();
+    expect(screen.getByText("Entregado: 1 de 1 orden")).toBeInTheDocument();
   });
 });
 

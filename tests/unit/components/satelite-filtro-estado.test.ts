@@ -126,7 +126,8 @@ describe("bodega satélite · el filtro de estado sale del catálogo compartido"
       opciones.find((o) => o.value === value)?.label;
     expect(etiquetaDe("en_bodega_satelite")).toBe("En bodega satélite");
     expect(etiquetaDe("en_bodega_satelite")).not.toBe("Recibidas");
-    expect(etiquetaDe("mensajero_recogiendo_en_bodega")).toBe("Por recoger");
+    // ⏳ 2026-09-24 (FICHA 455): el nombre de la fuente única (antes «Por recoger»).
+    expect(etiquetaDe("mensajero_recogiendo_en_bodega")).toBe("Mensajero recogiendo en la bodega");
     expect(etiquetaDe("mensajero_recogiendo_en_bodega")).not.toBe("Asignadas (por recoger)");
     expect(etiquetaDe("devolviendo_a_bodega_central")).toBe(
       "Devolviendo a bodega central",
@@ -134,7 +135,7 @@ describe("bodega satélite · el filtro de estado sale del catálogo compartido"
     expect(etiquetaDe("devolviendo_a_bodega_central")).not.toBe(
       "En tránsito a central",
     );
-    expect(etiquetaDe("novedad")).toBe("Devuelta");
+    expect(etiquetaDe("novedad")).toBe("Novedad"); // FICHA 455 (antes «Devuelta»)
     expect(etiquetaDe("novedad")).not.toBe("Devueltas");
   });
 
@@ -174,8 +175,9 @@ describe("bodega satélite · el filtro de estado sale del catálogo compartido"
         (ORDER_STATUS_LABELS as Record<string, string>)[value],
       );
     }
-    // Un value que el catálogo no conoce cae a sí mismo, no a «—» ni a un vacío.
-    expect(etiquetaEstado("estado_desconocido")).toBe("estado_desconocido");
+    // Un value que el catálogo no conoce no cae a «—» ni a un vacío. ⏳ 2026-09-24 (FICHA 455,
+    // R3/R10): tampoco al código crudo: «Estado no reconocido».
+    expect(etiquetaEstado("estado_desconocido")).toBe("Estado no reconocido");
   });
 });
 

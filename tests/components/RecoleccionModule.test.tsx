@@ -499,9 +499,10 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
+    // ⏳ 2026-09-24 (FICHA 455, R3): el estado se nombra con su nombre visible, no con el código.
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith(
-        'La guía 1001 ya no está por recolectar (está en "en_bodega_central").',
+        "La guía 1001 ya no está por recolectar (está en «En bodega central»).",
       ),
     );
     expect(refreshMock).not.toHaveBeenCalled();

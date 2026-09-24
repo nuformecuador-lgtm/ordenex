@@ -321,7 +321,7 @@ describe("ficha 425 — la sección existe, va aparte y tiene la forma aprobada 
     ).toBeInTheDocument();
     expect(
       within(s).getByText(
-        "Al aprobar el cierre, las 3 pasan solas a «Por devolver a tienda» (las de zona satélite, a «Por devolver»).",
+        "Al aprobar el cierre, las 3 pasan solas a «Por devolver a tienda» (las de zona satélite, a «Por devolver a bodega central»).",
       ),
     ).toBeInTheDocument();
   });
@@ -445,11 +445,11 @@ describe("ficha 425 — la sección no es dinero ni se toca (R16, R10)", () => {
     expect(kpi("Pago al mensajero")).toBe("₡1.200");
 
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Entregadas2",
-      "Reprogramadas0",
-      "Devueltas0",
-      "Rechazadas0",
-      "Incidentes0",
+      "Entregado2",
+      "Reprogramado0",
+      "Novedad0",
+      "Devolución a origen por rechazo0",
+      "Incidente0",
     ]);
 
     expect(
@@ -468,7 +468,7 @@ describe("ficha 425 — singular y plural, sin «orden(es)»", () => {
     expect(within(s).getByText("Separar 1 orden para devolución, sin escanearla.")).toBeInTheDocument();
     expect(
       within(s).getByText(
-        "Al aprobar el cierre, la orden pasa sola a «Por devolver a tienda» (si es de zona satélite, a «Por devolver»).",
+        "Al aprobar el cierre, la orden pasa sola a «Por devolver a tienda» (si es de zona satélite, a «Por devolver a bodega central»).",
       ),
     ).toBeInTheDocument();
     expect(within(conteo("Rechazados por la tienda")).getByText("1")).toBeInTheDocument();
@@ -485,7 +485,7 @@ describe("ficha 425 — singular y plural, sin «orden(es)»", () => {
 
     expect(texto).toContain("Separar 3 órdenes para devolución, sin escanearlas.");
     expect(texto).toContain(
-      "Al aprobar el cierre, las 3 pasan solas a «Por devolver a tienda» (las de zona satélite, a «Por devolver»).",
+      "Al aprobar el cierre, las 3 pasan solas a «Por devolver a tienda» (las de zona satélite, a «Por devolver a bodega central»).",
     );
     for (const colado of ["3 orden ", "(es)", "pasa sola", "escanearla."]) {
       expect(texto, `con tres órdenes se coló «${colado}»`).not.toContain(colado);
