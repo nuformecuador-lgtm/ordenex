@@ -1,10 +1,77 @@
 # Revisión independiente — Feature 455 «Un solo nombre por estado»
 
+## Veredicto FINAL (re-revisión, 2026-09-24): **APROBADO** — sobre `origin/feature/455-fix` @ `7faebeff` (código `f2e7ff99`)
+
+Los 4 mayores de la primera revisión (M1–M4) y los 11 fallos del recorrido (F1–F11) están corregidos y cada uno tiene una red que se pone ROJA si vuelve. Sin bloqueantes. Quedan tareas previas a la release (§R5), que no son de código de esta ficha.
+
+## Re-revisión
+
+> Árbol: `7faebeff` en modo detached (contiene `79d0a0b6` = esta revisión y el recorrido `721f25ec`). Base `ordenex_455` (la misma). No se repitió el gate completo: `progress/gate_455_fix.log` dice 2164/2164 archivos, 30 656 tests, 26 skipped preexistentes, `== init OK ==`, `INIT_EXIT=0`. Búsqueda con grep y lectura de archivos; el grafo MCP no se usó.
+
+### R1. M1–M4 y F1–F11
+
+| Punto | Estado | Evidencia |
+|---|---|---|
+| M1 | ✅ | `envio-devolucion-central-error-messages.ts:23` interpola `nombreDeEstado(por_devolver_a_bodega_central)`; mutación W2 → G2 ROJO |
+| M2 | ✅ | «Devolución a origen por plazo vencido», «Reprogramado para», «Entregados / asignados», «Recogido a las», «Recogidos en tienda hoy», `docs/ayuda/tienda/novedades.md:30`; mutaciones W3–W8 → G2 ROJO |
+| M3 | ✅ | G2 con `“”`, brazo «contiene» de palabra completa, plurales en minúscula y excepciones acotadas por TEXTO (`textos: [...]`, ya no por número); `PENDIENTES_FASE_2` vacío |
+| M4 | ✅ | `tasks.md`: T1.9, T1.13, T2.1–T2.11 marcadas; tabla R→test reescrita. Quedan sin marcar T3.1, T3.2, T4.1 y T5.x (ver §R5) |
+| F1–F8, F11 | ✅ | textos de `impl_455_fix.md` confirmados en los archivos; test nuevo `tests/unit/components/textos-455-recorrido.test.ts` con literales a mano |
+| F9 | ✅ | §R3 |
+| F10 | ✅ | `motivo-historial.ts` (solo presentación) + `HistorialOrdenTimeline.motivo-migracion.test.tsx` |
+
+**Grep propio de palabra completa** (app/, components/, lib/, hooks/, docs/ayuda; nombres de §0.3 en mayúscula de rótulo y sus plurales): todo lo que queda está en comentarios, en `ESTADO_RETIRADO` (excepción declarada) o en «Devuelta a tienda»/«Por recolectar en tienda» (vigentes). En minúscula dentro de prosa quedan dos, por debajo del límite declarado de G2 (m8).
+
+### R2. G2 reforzada: mutaciones repetidas (todas sobre G2, restauración byte a byte comprobada, árbol limpio al final)
+
+| Id | Mutación | Resultado |
+|---|---|---|
+| W1 (= V9) | `NOTA_AYUDA_SOLICITADA = Sin gestionar` | ROJO (2) — antes sobrevivía |
+| W2 (M1) | el error vuelve a «“Por devolver”» | ROJO |
+| W3 (M2) | pestaña «Rechazadas por plazo vencido» | ROJO |
+| W4 (M2) | columna «Reprogramada para» | ROJO |
+| W5 (M2) | ranking «Entregadas / asignadas» | ROJO |
+| W6 (M2) | «Recolectada a las» | ROJO |
+| W7 (M2) | título «Recolectadas hoy» | ROJO |
+| W8 (M2) | `docs/ayuda/tienda/novedades.md` «**Rechazadas por plazo vencido.**» | ROJO (2: árbol + contexto del asistente) |
+| W9 | el texto de la excepción («Ayuda solicitada a la tienda») en OTRO archivo (`pos-estado.ts`) | ROJO: la excepción no se filtra fuera de su archivo |
+
+### R3. F9 (rastreo)
+
+- `tests/integration/db/455/rastreo-retirado-y-pendiente-sql-real.test.ts` (Postgres real): afirma precondiciones (no es un verde sin datos), la gestión UNA vez como pendiente, orden cronológico, claves sin repetir y el control sin pendiente (R34). Redes 454+455 con él: **70 archivos / 351 tests, 0 skipped, exit 0** (corrida propia).
+- W10 (apagar el descarte: `fechaPendiente !== null &&` → `false &&`) → ROJO: F9 «UNA vez» y «cronológico».
+- W11 (quitar la condición de estado: descarta CUALQUIER fila del mismo minuto que la pendiente) → **VERDE, sobrevive** (m9).
+
+### R4. Cambios fuera del frontend y guardias de otras fichas
+
+- `CierreDiaService.MSG_PENDIENTES`: solo texto; lo devuelven `motivoBloqueo` y el `conflict`, nadie lo compara. `CierreBodegaService` tiene su propio mensaje, sin nombres retirados.
+- `CierresAdminRepository.MOTIVO_RECHAZO_TOPE_INTENTOS`: ahora se arma con `nombreDeEstado`. En código de `app/` y `lib/` solo se ESCRIBE (línea 2081); los tests lo comparan contra la constante y `textos-455-recorrido` contra el literal. Confirmo lo que dijo el leader: nadie lo lee… salvo los scripts de contraste (§R5).
+- `RastreoPublicoService`: el cambio F9 de arriba; DTO igual (lista blanca intacta, `rastreo-dto-lista-blanca` verde).
+- `lib/analytics/metrics.ts`: solo la `descripcion` de `novedad_interna` (prosa); etiqueta y valores sin cambio.
+- **Las 3 guardias retocadas NO se debilitan:** `catalogo-universo` cambia la regex «sin gestionar … hoy» por «en novedad interna … hoy» (misma forma, texto nuevo); `etiquetas-visibles` cambia un literal del `toEqual` por el título nuevo (mismo tamaño de la lista); `EstatusBadgeRetiroFulfillment` pasa de una regex parcial a `getByText` exacto MÁS `queryByText(migracion 155)` nulo: queda más estricta.
+- Guardias completas sobre `7faebeff`: 249 archivos / 3520 tests, exit 0.
+
+### R5. Pendiente antes de la release (no bloquea el código)
+
+- **`scripts/contraste-454.sql:63` y `scripts/contraste-454.ts:84,152`** reconocen las gestiones sintéticas del tope por el motivo VIEJO («rechazada al aprobar el cierre: sin gestionar y sin intentos de entrega disponibles»). Desde la 455 las filas nuevas llevan «Devolución a origen por rechazo al aprobar el cierre: estaba en Novedad interna y sin intentos de entrega disponibles». Deben aceptar **los dos textos** (las filas viejas conservan el anterior); si no, tras el despliegue el contraste deja de ver las sintéticas nuevas en silencio. Tarea previa a la release.
+- T3.2: repetir el recorrido en las pantallas de F1–F11 (su criterio de «Hecho»), y marcar T3.1 con la evidencia existente (mis V1/V7/V8 y W1–W9, y las del `impl_455_fix.md` cubren los cinco casos que pide).
+- T5.x como estaban (re-medir, aviso a integradores con la fecha en el CHANGELOG, ventana, verificación posterior).
+
+### Menores nuevos
+
+- **m8 —** prosa en minúscula con nombres retirados, por debajo del límite de G2: `RecuperarABodegaModal.tsx:72` «… orden(es) en devolución a la bodega central …» y `cierre-factura.tsx:1876` nombre accesible «Lista de órdenes rechazadas por la tienda» (rechazo de la TIENDA, 425: concepto distinto del estado). Sugerencia, no obligación.
+- **m9 —** F9 compara la fila retirada y la pendiente por la fecha FORMATEADA (precisión de minuto): si caen en minutos distintos, el duplicado vuelve; y W11 muestra que ningún test fija que solo se descarta `devolucion_por_confirmar` (una fila de otro estado en el mismo minuto se ocultaría). Añadir un caso con otro estado en el mismo minuto.
+- **m10 —** F10 cubre solo el patrón «migracion <n>: retiro de <retirado>» (deuda ya anotada en `impl_455_fix.md`).
+
+---
+
+# Primera revisión (sobre `fd5b64de`) — se conserva como historial
+
 > Reviewer · 2026-09-24 · árbol revisado: `origin/feature/455-frontend` @ `fd5b64de` (Fase 0 + backend `9f1a0d37` + frontend).
 > Base de datos: clon `ordenex_455` (`prisma migrate status` → `ordenex_455` en `localhost:5432`, 212 migraciones, al día). `.env` copiado sin imprimir; `node_modules` por junction; `prisma generate` hecho.
 > NO se corrió `./init.sh` completo (orden del leader: el recorrido en navegador usa el mismo clon). Se usó `grep` y lectura directa de archivos; el grafo MCP no se consultó en esta revisión (los símbolos se verificaron en el archivo real).
 
-## Veredicto: **RECHAZADO**
+## Veredicto de la primera revisión: **RECHAZADO** (superado: ver arriba)
 
 El núcleo está bien hecho y medido (migraciones, API, webhooks, rastreo, fuente única, redes 454/455 verdes, 8 mutaciones propias en lógica todas rojas). Se rechaza porque **quedan nombres retirados de §0.3 como texto visible** (R41/R2, R39), en sitios que la guardia G2 no puede ver por diseño, y que el recorrido T3.2 marcará igual (su criterio es «cero apariciones de cada nombre de §0.3»). El arreglo es pequeño y está listado en §6.
 
