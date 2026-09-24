@@ -184,16 +184,35 @@ el 2026-08-25) esta por debajo de ese volumen.
   ventana temporal [-1 min, +10 min] alrededor de `resuelto_at`.
 - K5b mira las gestiones de las 36 h previas al corte del mismo mensajero.
 
-## PRODUCCION: lo corre el leader
+## PRODUCCION: corrido por el leader el 2026-09-23 (MCP Supabase, solo lectura)
 
-> Pegar `scripts/contraste-454.sql` en el MCP de Supabase (`execute_sql`, solo lectura) y anotar aqui la
-> tabla (k, total_evaluado, diferencias, muestra_ids, nota). Revisar antes los parametros de entorno
-> (umbral y ventanas SLA). Cada diferencia distinta de 0 se explica fila a fila; K4* y K8* sin explicar
-> son un FALLO.
+Sentencia: `scripts/contraste-454.sql` sin cambios (parametros por defecto: desde 2026-08-25, umbral 3,
+24 h / 5 d). **Los parametros de entorno de prod NO se pudieron leer**: el modo automatico denego la
+lectura de variables de Vercel. Si prod tuviera `REINTENTOS_MIN_INTENTOS` distinto de 3, K3/K7b se
+deben re-correr con ese valor; K2, K4a, K5 y K8 no dependen de el.
 
 | K | evaluado | diferencias | explicacion |
 |---|---|---|---|
-| (pendiente) | | | |
+| K1 aplicacion | 3670 | **1** | Gestion `7bc70003`: el mensajero marco `entregada` y la central la **corrigio a mano en la base** el 2026-09-08 (motivo «Correccion desde la central por error del mensajero»; historial `ajuste_estado entregada→rechazada`, no enlazado a la gestion) — el caso que dio origen a la 398. La logica nueva aplica el `resultado` ya corregido (`rechazada`): da el desenlace CORRECTO. No es regresion. |
+| K2 intentos | 2704 | 0 | viejo = nuevo = 2012 intentos |
+| K3 tope | 194 | 0 | 194 a bodega, 0 al tope, en ambas logicas |
+| K4a rechazos cobrados | 165 | 0 | 131 rechazadas cobradas, 131.700,00 |
+| K4b cobro por tope | 194 | 0 | 0 y 0 |
+| K4c cobro por escalado SLA | 504 | 0 | 17 y 17 |
+| K5a corte: barridas con gestion pendiente | 194 | 0 | el corte de hoy nunca barrio una orden gestionada |
+| K5b corte: gestionadas no barridas | 377 | 0 | 199 pendientes + 178 aplicadas, ninguna «en mano» |
+| K6 devolucion 139 | 687 | **41** | Rechazadas que el 139 devolvio al aprobar OTRO cierre del mismo mensajero mientras el cierre propio de su gestion seguia sin aprobar (5 cierres). Medido aparte: los 5 cierres propios terminaron **aprobados**, asi que la logica nueva las devuelve igual, al aprobar el suyo: **10,8 h despues de media, 143,4 h como maximo**. Es la regla que pidio el humano (nada se confirma sin su cierre); sin efecto en dinero (K8 = 0). Efecto operativo: esas cajas esperan en la satelite hasta su propia aprobacion. |
+| K7a liberacion reprogramadas | 620 | 0 | |
+| K7b SLA devoluciones | 504 | 0 | ancla movida > 5 min: 0 |
+| K8a caja ingresos | 165 | 0 | 7.544.343,13 = 7.544.343,13 |
+| K8b ledger tienda | 165 | 0 | 35.121.644,13 = 35.121.644,13 |
+| K8c caja COD | 165 | 0 | 27.577.301,00 = 27.577.301,00 |
+| K8d pago mensajero | 165 | 0 | 3.262.100,00 = 3.262.100,00 |
+| K8e indemnizacion | 165 | 0 | 1,00 = 1,00 |
+| T3.3 poblacion legada viva | 371 | — | 191 de calle + 180 sinteticas; entregada 88, reprogramada 146, devuelta 40, rechazada 97, incidente 0. Se re-mide en T5.4 el dia del despliegue. |
+
+**Veredicto:** dinero 0 diferencias en los 8 controles sobre 165 cierres aprobados. Las dos diferencias
+no monetarias estan explicadas y ninguna es regresion.
 
 ## Verificaciones
 
