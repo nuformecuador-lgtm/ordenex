@@ -37,3 +37,12 @@ ni `ayuda_tienda` (los retira la 454). Mismo texto para todos los roles y el ras
 Formato único en todas partes: «<resultado> · pendiente de confirmación», para los 5 resultados que
 registra el mensajero (Entregado, Reprogramado, Novedad, Devolución a origen por rechazo, Incidente).
 La ayuda lleva su propia nota «Ayuda solicitada a la tienda». Novedad interna no lleva nota.
+
+## Pendiente de visto bueno del humano
+
+Añadido el 2026-09-23 por la enmienda del coordinador al spec de la 456; derivado de las palabras del humano.
+**No forma parte de la tabla aprobada de arriba** hasta que el humano lo confirme.
+
+| Nota | Texto |
+|---|---|
+| Ayuda solicitada a la tienda | El mensajero pidió ayuda a la tienda con esta entrega. El paquete sigue en reparto hasta que se registre su gestión. |
