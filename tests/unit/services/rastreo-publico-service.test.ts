@@ -41,7 +41,10 @@ function buildRepo(
 ) {
   const buscarPorGuia = vi.fn(async (_numGuia: number) => orden);
   const listarTransiciones = vi.fn(async (_ordenId: string) => transiciones);
-  const repo: IRastreoPublicoRepository = { buscarPorGuia, listarTransiciones };
+  // FICHA 454 (T1.19): sin gestion pendiente en estos escenarios; no cuenta como llamada del
+  // conteo de «una sola llamada al historial» (es otra lectura, medida en su propio caso).
+  const buscarGestionPendiente = vi.fn(async (_ordenId: string) => null);
+  const repo: IRastreoPublicoRepository = { buscarPorGuia, listarTransiciones, buscarGestionPendiente };
   const llamadas = () => buscarPorGuia.mock.calls.length + listarTransiciones.mock.calls.length;
   return { repo, buscarPorGuia, listarTransiciones, llamadas };
 }

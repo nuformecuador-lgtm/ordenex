@@ -8,7 +8,7 @@ import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoR
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
-import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
+import { APLICACION_GESTIONES } from "@/tests/fixtures/anclaje-devolucion";
 
 // Feature 158 (T1.14, R22/R23/R26/R28) — la escritura de los montos y la emision del egreso,
 // DENTRO de la transaccion de aprobacion. Doble de Prisma con la semantica del indice unico
@@ -129,12 +129,15 @@ function buildPrisma(
           return { count };
         },
       ),
-      findMany: vi.fn(async (args?: { where?: { cierreId?: string; resultado?: string } }) =>
-        gestiones.filter(
-          (g) =>
-            (args?.where?.cierreId === undefined || g.cierreId === args.where.cierreId) &&
-            (args?.where?.resultado === undefined || g.resultado === args.where.resultado),
-        ),
+      findMany: vi.fn(
+        async (args?: { where?: { cierreId?: string; resultado?: string; eventos?: unknown } }) =>
+          gestiones.filter(
+            (g) =>
+              (args?.where?.cierreId === undefined || g.cierreId === args.where.cierreId) &&
+              (args?.where?.resultado === undefined || g.resultado === args.where.resultado) &&
+              // FICHA 454 (T1.7): la aplicacion al aprobar pide solo gestiones de CALLE con evento de registro (`where.eventos`); las de este corpus son LEGADAS, asi que no encuentra ninguna y la suite sigue midiendo lo suyo.
+              args?.where?.eventos === undefined,
+          ),
       ),
     },
     cierreDetail: { findMany: vi.fn(async () => []) },
@@ -205,7 +208,7 @@ function aprobar(
     cierreId: "c1",
     alcance: ALCANCE,
     nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
     resueltoPor: "adm",
     motivoRechazo: null,
@@ -284,7 +287,7 @@ describe("R22 — persistir los montos y emitir el egreso, en la MISMA transacci
       cierreId: "c1",
       alcance: ALCANCE,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION,
+      aplicacionGestiones: APLICACION_GESTIONES,
       confirmacionFisica: [{ gestionId: "g-devuelta" }],
       resueltoPor: "adm",
       motivoRechazo: null,
@@ -338,10 +341,15 @@ describe("R22 — persistir los montos y emitir el egreso, en la MISMA transacci
         return { count: 1 };
       },
     );
-    (prisma.gestionOrden.findMany as ReturnType<typeof vi.fn>).mockImplementation(async () => {
-      orden.push("read");
-      return gestiones.filter((g) => g.resultado === "incidente");
-    });
+    (prisma.gestionOrden.findMany as ReturnType<typeof vi.fn>).mockImplementation(
+      async (args?: { where?: { eventos?: unknown } }) => {
+        // FICHA 454 (T1.7): la consulta de la APLICACION al aprobar (gestiones de calle con evento
+        // de registro) no es la lectura del feed que este caso mide; el corpus es LEGADO -> vacia.
+        if (args?.where?.eventos !== undefined) return [];
+        orden.push("read");
+        return gestiones.filter((g) => g.resultado === "incidente");
+      },
+    );
 
     await aprobar(buildRepo(prisma), [{ gestionId: G1, monto: "5.00" }]);
 

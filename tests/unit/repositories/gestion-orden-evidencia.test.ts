@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
+// ⏳ 2026-09-23 (FICHA 454, T1.4): `crearGestionYTransicionar` se sustituye por
+// `registrarGestionPendiente` (registra SIN transicionar la orden). Lo que esta suite mide —las N
+// filas hijas en la MISMA tx y la portada dual-escrita— no cambia; lo que cambia es que ya no hay
+// `orden.update` (se afirma su ausencia) y que las `rechazada` pasan a `devuelta` (su aviso N1 sale
+// ahora en el registro y necesitaria el cliente de notificaciones, que no es lo que se mide aqui).
+//
 // Feature 119 (R9/R12) — `crearGestionYTransicionar` con Prisma mockeado (sin DB). Verifica que
 // las N filas hijas (`gestion_orden_evidencia`) se insertan en la MISMA transaccion que crea la
 // gestion y transiciona la orden (R9), y que la PORTADA (indice 0) se dual-escribe en las columnas
@@ -25,6 +31,13 @@ function buildTxRepo() {
   const usuarioUpdate = vi.fn(async () => ({}));
   const historialCreateMany = vi.fn();
   const tx = {
+    // FICHA 454: candado + re-lectura devuelven la orden; sin suscripcion de webhook.
+    $queryRaw: vi.fn(async (q: { strings?: readonly string[] }) =>
+      (Array.isArray(q) ? q.join(" ") : (q.strings ?? []).join(" ")).includes("webhook_suscripcion")
+        ? []
+        : [{ id: "o1" }],
+    ),
+    ordenEvento: { create: vi.fn(async () => ({ id: "ev1" })) },
     gestionOrden: { create: gestionCreate },
     gestionOrdenEvidencia: { createMany: evidenciaCreateMany },
     orden: { update: ordenUpdate, findFirst: ordenFindFirst },
@@ -46,22 +59,22 @@ beforeEach(async () => {
   await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
 });
 
-describe("crearGestionYTransicionar — N filas hijas en la misma tx (R9)", () => {
+describe("registrarGestionPendiente — N filas hijas en la misma tx (R9)", () => {
   it("R9: gestion + createMany de las N evidencias + UPDATE estatus, todo bajo un unico $transaction", async () => {
     const { repo, gestionCreate, evidenciaCreateMany, ordenUpdate, $transaction } = buildTxRepo();
 
-    const id = await repo.crearGestionYTransicionar({
+    const r = await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencias: evidencias3 },
-      nuevoEstatusId: idEstado("entregada"),
     });
 
-    expect(id).toBe("g1");
+    expect(r?.gestionId).toBe("g1");
     // Una sola transaccion envuelve TODO (todo-o-nada).
     expect($transaction).toHaveBeenCalledTimes(1);
     expect(gestionCreate).toHaveBeenCalledTimes(1);
-    expect(ordenUpdate).toHaveBeenCalledTimes(1);
+    // FICHA 454 (R1): sin transicion al registrar.
+    expect(ordenUpdate).not.toHaveBeenCalled();
     // Las N filas hijas van en un unico createMany, enlazadas a la gestion recien creada.
     expect(evidenciaCreateMany).toHaveBeenCalledTimes(1);
     const arg = (evidenciaCreateMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
@@ -74,11 +87,10 @@ describe("crearGestionYTransicionar — N filas hijas en la misma tx (R9)", () =
 
   it("R2: preserva el indice 0..N-1 EXACTO de cada evidencia en las filas hijas", async () => {
     const { repo, evidenciaCreateMany } = buildTxRepo();
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "rechazada", motivo: "x", evidencias: evidencias3 },
-      nuevoEstatusId: idEstado("rechazada"),
+      gestion: { resultado: "devuelta", motivo: "x", evidencias: evidencias3 },
     });
     const arg = (evidenciaCreateMany.mock.calls[0] as unknown[])[0] as { data: { indice: number }[] };
     expect(arg.data.map((e) => e.indice)).toEqual([0, 1, 2]);
@@ -88,11 +100,10 @@ describe("crearGestionYTransicionar — N filas hijas en la misma tx (R9)", () =
 describe("crearGestionYTransicionar — dual-write de la portada (R12)", () => {
   it("R12: la evidencia indice 0 se copia a evidencia_storage_path/_content_type en el MISMO insert", async () => {
     const { repo, gestionCreate } = buildTxRepo();
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencias: evidencias3 },
-      nuevoEstatusId: idEstado("entregada"),
     });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.evidenciaStoragePath).toBe("o1/entregada-1-0.jpg");
@@ -105,11 +116,10 @@ describe("crearGestionYTransicionar — dual-write de la portada (R12)", () => {
       { storagePath: "p1", contentType: "image/png", indice: 1 },
       { storagePath: "p0", contentType: "image/jpeg", indice: 0 },
     ];
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "rechazada", motivo: "x", evidencias: desordenadas },
-      nuevoEstatusId: idEstado("rechazada"),
+      gestion: { resultado: "devuelta", motivo: "x", evidencias: desordenadas },
     });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.evidenciaStoragePath).toBe("p0");
@@ -120,11 +130,10 @@ describe("crearGestionYTransicionar — dual-write de la portada (R12)", () => {
 describe("crearGestionYTransicionar — ramas sin foto (reprogramada)", () => {
   it("sin evidencias: NO llama createMany y la portada queda NULL", async () => {
     const { repo, gestionCreate, evidenciaCreateMany } = buildTxRepo();
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
-      nuevoEstatusId: idEstado("reprogramada"),
     });
     expect(evidenciaCreateMany).not.toHaveBeenCalled();
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
@@ -144,7 +153,7 @@ describe("crearGestionYTransicionar — evidencias del INCIDENTE (158/R10)", () 
   it("158/R10: persiste las N filas hijas y la portada, en la MISMA tx que la gestion", async () => {
     const { repo, gestionCreate, evidenciaCreateMany, $transaction } = buildTxRepo();
 
-    await repo.crearGestionYTransicionar({
+    await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: {
@@ -153,7 +162,6 @@ describe("crearGestionYTransicionar — evidencias del INCIDENTE (158/R10)", () 
         motivo: "caja aplastada",
         evidencias: evidenciasIncidente,
       },
-      nuevoEstatusId: idEstado("incidente"),
     });
 
     expect($transaction).toHaveBeenCalledTimes(1);

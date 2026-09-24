@@ -23,10 +23,14 @@ const ESTATUS_IDS: Record<string, string | null> = {
   rechazada: "s-rechazada",
   por_devolver: "s-por-devolver",
   por_devolver_a_tienda: "s-por-devolver-a-tienda",
-  // Feature 239 (T2.1): los dos del ANCLAJE. Sin ellos la aprobacion NO ocurre (R9, fallo
-  // cerrado), asi que esta suite —que aprueba— tiene que resolverlos.
-  devolucion_por_confirmar: "s-devolucion-por-confirmar",
+  // Feature 239 -> FICHA 454: `devuelta` sigue siendo obligatorio al aprobar (fallo cerrado).
   devuelta: "s-devuelta",
+  // FICHA 454 (T1.7): los de la APLICACION DE GESTIONES (origen + destino de cada resultado).
+  // Sin cualquiera de ellos la aprobacion NO ocurre (fallo cerrado, heredado de la 239/R9).
+  en_reparto: "s-en-reparto",
+  entregada: "s-entregada",
+  reprogramada: "s-reprogramada",
+  incidente: "s-incidente",
 };
 
 function fakeRepo(): ICierresAdminRepository {

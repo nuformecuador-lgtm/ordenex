@@ -5,10 +5,7 @@ import type {
   IOrdenHabilitacionApiRepository,
   RegistrarHabilitacionApiInput,
 } from "@/lib/interfaces/repositories/IOrdenHabilitacionApiRepository";
-import type {
-  OrdenParaHabilitacionApi,
-  TransicionAyudaInput,
-} from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { OrdenParaHabilitacionApi } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { FilaHabilitacionInput } from "@/lib/interfaces/services/IApiHabilitacionService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { TOPE_CARACTERES_NOTA_HABILITAR } from "@/lib/config/habilitacion-api";
@@ -17,30 +14,49 @@ import { TOPE_CARACTERES_NOTA_HABILITAR } from "@/lib/config/habilitacion-api";
 // falsos. Aqui vive la mayor parte de la trazabilidad de la ficha.
 //
 // ⚠️ D1 (puerta del 2026-08-23): los estados habilitables son `ayuda_tienda` y `devuelta`, y
-// `reprogramada` QUEDA FUERA. Y como una `devuelta` esta SIEMPRE desasignada, **el unico estado
-// que puede volver a `en_reparto` es `ayuda_tienda`**: ni un solo caso de abajo espera que una
-// `devuelta` transicione, y eso no es una laguna de cobertura sino la verdad fisica del paquete.
+// `reprogramada` QUEDA FUERA. Y como una `devuelta` esta SIEMPRE desasignada, el unico caso que
+// podia volver a `en_reparto` era `ayuda_tienda`.
+//
+// ⏳ 2026-09-23 (FICHA 454, T1.15, R24) — LA AYUDA DEJA DE SER ESTADO. «En ayuda» es ahora la
+// derivacion `ayudaAbierta` sobre una orden que SIGUE `en_reparto`. La rama A ya no transiciona:
+// registra el hecho `ayuda_habilitada_api` (`registrarAyudaResuelta`, guardado por «ayuda abierta»
+// bajo candado) y la fila de bitacora con `cambioDeEstado: false`, y responde
+// `habilitada_sin_cambio_de_estado` + `ayudaCerrada: true` (R24: «indicando que no hubo cambio de
+// estado y que la ayuda quedo cerrada»). `habilitada` queda sin productor. Sin catalogo que resolver,
+// el fallo cerrado de R19 (266) desaparece. Lo que NO cambia: el owner opaco, R7/R8, la guarda del
+// llamador, el orden hecho -> bitacora y el punto unico de escritura.
 
 const ACTOR: Actor = { usuarioId: "store-1", rol: "apiKey" };
-const ID_AYUDA = "os-ayuda_tienda";
-const ID_EN_REPARTO = "os-en_reparto";
 
-/** Una orden tal como la devuelve `findParaHabilitacionApi` (los TRES campos del discriminador). */
+/** Una orden tal como la devuelve `findParaHabilitacionApi` (los campos del discriminador). */
 function orden(
   estatusValue: string,
   mensajeroAsignadoId: string | null,
   id = "o1",
+  ayudaAbierta = false,
 ): OrdenParaHabilitacionApi {
-  return { id, estatusValue, mensajeroAsignadoId };
+  return { id, estatusValue, mensajeroAsignadoId, ayudaAbierta };
+}
+
+/** FICHA 454: la orden «en ayuda» — `en_reparto` con la ayuda ABIERTA. */
+function enAyuda(mensajeroAsignadoId: string | null, id = "o1"): OrdenParaHabilitacionApi {
+  return orden("en_reparto", mensajeroAsignadoId, id, true);
 }
 
 function fila(num_guia: unknown, nota: unknown = "el cliente pidio reintento"): FilaHabilitacionInput {
   return { num_guia, nota };
 }
 
+interface ResueltaInput {
+  ordenId: string;
+  tipo: "ayuda_rescatada" | "ayuda_habilitada_api";
+  actorUsuarioId: string;
+  actorRol: string;
+}
+
 /**
  * Los dos dobles. El del repo de ordenes esta TIPADO como el `Pick` del constructor (design
- * §4.4): declararle un cuarto metodo de escritura no compilaria, que es la mitad estructural del
+ * §4.4): declararle otro metodo de escritura no compilaria, que es la mitad estructural del
  * assert de T4.3.
  */
 function build(ordenes: (OrdenParaHabilitacionApi | null)[] = []) {
@@ -49,18 +65,13 @@ function build(ordenes: (OrdenParaHabilitacionApi | null)[] = []) {
     void ownerId;
     return ordenes.shift() ?? null;
   });
-  const findEstatusIdByValue = vi.fn(
-    async (value: string): Promise<string | null> =>
-      value === "ayuda_tienda" ? ID_AYUDA : value === "en_reparto" ? ID_EN_REPARTO : null,
-  );
-  const transicionarAyuda = vi.fn(async (input: TransicionAyudaInput) => {
+  const registrarAyudaResuelta = vi.fn(async (input: ResueltaInput) => {
     void input;
     return true;
   });
   const ordenRepo: OrdenRepoParaHabilitacionApi = {
     findParaHabilitacionApi,
-    findEstatusIdByValue,
-    transicionarAyuda,
+    registrarAyudaResuelta,
   };
   const registrar = vi.fn(async (input: RegistrarHabilitacionApiInput) => {
     void input;
@@ -71,8 +82,7 @@ function build(ordenes: (OrdenParaHabilitacionApi | null)[] = []) {
     service,
     ordenRepo,
     findParaHabilitacionApi,
-    findEstatusIdByValue,
-    transicionarAyuda,
+    registrarAyudaResuelta,
     registrar,
   };
 }
@@ -88,31 +98,23 @@ describe("266/R3-R4 — el owner sale del actor y una guia ajena es opaca", () =
   });
 
   it("cuando no hay orden viva del owner con esa guia, la fila falla y no se escribe nada", async () => {
-    const { service, transicionarAyuda, registrar } = build([null]);
+    const { service, registrarAyudaResuelta, registrar } = build([null]);
     const res = await service.habilitarLote(ACTOR, [fila(999999)]);
     expect(res.resultados[0]).toEqual({
       numGuia: 999999,
       resultado: "error",
       estado: null,
+      ayudaCerrada: false,
       error: { codigo: "no_encontrada", mensaje: expect.any(String) },
     });
-    expect(transicionarAyuda).not.toHaveBeenCalled(); // R4: cero escrituras
+    expect(registrarAyudaResuelta).not.toHaveBeenCalled(); // R4: cero escrituras
     expect(registrar).not.toHaveBeenCalled();
   });
 
   it("R4: MISMA GUIA, OTRA TIENDA — responde `no_encontrada`, igual que si la guia no existiera", async () => {
-    // EL CASO QUE EL RESTO DEL ARCHIVO DABA POR SUPUESTO. La guia 100234 EXISTE y esta en un
-    // estado perfectamente habilitable (`ayuda_tienda` con mensajero asignado: seria rama A), pero
-    // pertenece a OTRA tienda. El scope va en el `where` del repo (`tienda_id = ownerId`), asi que
-    // la orden ajena NUNCA llega al service: `findParaHabilitacionApi` devuelve `null`. Lo que
-    // este caso fija es que ese `null` produce EXACTAMENTE la misma respuesta que una guia que no
-    // existe.
-    //
-    // La OPACIDAD es deliberada, no un descuido de mensajes: si «no existe» y «es de otra tienda»
-    // se distinguieran, el endpoint seria un oraculo con el que cualquier integrador podria barrer
-    // el rango de guias y averiguar cuales son de la competencia. Mismo criterio que
-    // `cancelarViaApi`. Por eso se afirma la IGUALDAD de las dos respuestas —codigo y mensaje— y no
-    // solo que ambas fallen.
+    // La OPACIDAD es deliberada: si «no existe» y «es de otra tienda» se distinguieran, el endpoint
+    // seria un oraculo con el que barrer el rango de guias. El scope va en el `where` del repo, asi
+    // que la orden ajena NUNCA llega al service.
     const ajena = build([null]); // el repo, scoped por owner, no la ve
     const inexistente = build([null]);
     const resAjena = await ajena.service.habilitarLote(ACTOR, [fila(100234)]);
@@ -123,15 +125,12 @@ describe("266/R3-R4 — el owner sale del actor y una guia ajena es opaca", () =
       numGuia: 100234,
       resultado: "error",
       estado: null,
+      ayudaCerrada: false,
       error: { codigo: "no_encontrada", mensaje: expect.any(String) },
     });
-    // Identico a lo que recibe quien pregunta por una guia inventada, salvo la guia que el
-    // integrador ya conocia porque la mando el.
     expect(resAjena.resultados[0].error).toEqual(resInexistente.resultados[0].error);
-    // Y el mensaje no filtra por la puerta de atras que la orden existe en algun sitio.
     expect(resAjena.resultados[0].error?.mensaje).not.toMatch(/tienda|otro|ajen|permiso|autoriz/i);
-    // Cero efectos sobre una orden que no es del owner.
-    expect(ajena.transicionarAyuda).not.toHaveBeenCalled();
+    expect(ajena.registrarAyudaResuelta).not.toHaveBeenCalled();
     expect(ajena.registrar).not.toHaveBeenCalled();
   });
 });
@@ -205,26 +204,30 @@ describe("266/R8 — la misma guia repetida en el lote solo se procesa la primer
 // =================================================================================================
 describe("266/R11 — la salida conserva orden y cardinalidad de la entrada", () => {
   it("tres filas de entrada devuelven tres resultados, en el mismo orden y con su guia", async () => {
-    const { service } = build([orden("devuelta", null), null, orden("ayuda_tienda", "m1", "o3")]);
+    const { service } = build([orden("devuelta", null), null, enAyuda("m1", "o3")]);
     const res = await service.habilitarLote(ACTOR, [fila(11), fila(22), fila(33)]);
     expect(res.resultados).toHaveLength(3);
     expect(res.resultados.map((r) => r.numGuia)).toEqual([11, 22, 33]);
+    // FICHA 454 (R24): la rama A tampoco cambia el estado.
     expect(res.resultados.map((r) => r.resultado)).toEqual([
       "habilitada_sin_cambio_de_estado",
       "error",
-      "habilitada",
+      "habilitada_sin_cambio_de_estado",
     ]);
+    expect(res.resultados.map((r) => r.ayudaCerrada)).toEqual([false, false, true]);
   });
 });
 
 describe("266/R9-R10 — el resumen cuadra y el estado viaja en los dos desenlaces de exito", () => {
   it("total = habilitadas + habilitadasSinCambioDeEstado + conError, con un lote de los tres tipos", async () => {
-    const { service } = build([orden("ayuda_tienda", "m1"), orden("devuelta", null, "o2"), null]);
+    const { service } = build([enAyuda("m1"), orden("devuelta", null, "o2"), null]);
     const res = await service.habilitarLote(ACTOR, [fila(11), fila(22), fila(33)]);
+    // ⏳ 2026-09-23 (FICHA 454, R24): antes `habilitadas: 1, habilitadasSinCambioDeEstado: 1`. La
+    // rama A ya no cambia el estado, asi que cuenta como «sin cambio de estado».
     expect(res.resumen).toEqual({
       total: 3,
-      habilitadas: 1,
-      habilitadasSinCambioDeEstado: 1,
+      habilitadas: 0,
+      habilitadasSinCambioDeEstado: 2,
       conError: 1,
     });
     const { total, habilitadas, habilitadasSinCambioDeEstado, conError } = res.resumen;
@@ -232,7 +235,7 @@ describe("266/R9-R10 — el resumen cuadra y el estado viaja en los dos desenlac
   });
 
   it("las dos filas de exito llevan `estado` poblado y la fila con error lo lleva en null", async () => {
-    const { service } = build([orden("ayuda_tienda", "m1"), orden("devuelta", null, "o2"), null]);
+    const { service } = build([enAyuda("m1"), orden("devuelta", null, "o2"), null]);
     const res = await service.habilitarLote(ACTOR, [fila(11), fila(22), fila(33)]);
     expect(res.resultados[0].estado).toBe("en_reparto");
     expect(res.resultados[1].estado).toBe("devuelta");
@@ -244,32 +247,30 @@ describe("266/R9-R10 — el resumen cuadra y el estado viaja en los dos desenlac
 // =================================================================================================
 // EL DISCRIMINADOR (R12) Y LAS DOS RAMAS
 // =================================================================================================
-describe("266/R12-R16 — rama A: `ayuda_tienda` CON mensajero vuelve a `en_reparto`", () => {
-  it("transiciona una sola vez, por el punto unico, con la familia propia de esta feature", async () => {
-    const { service, transicionarAyuda } = build([orden("ayuda_tienda", "m1")]);
+describe("266/R12-R16 → 454/R24 — rama A: ayuda ABIERTA con mensajero: se cierra la ayuda", () => {
+  it("registra UNA vez el cierre de la ayuda, por el punto unico, y responde sin cambio de estado", async () => {
+    const { service, registrarAyudaResuelta } = build([enAyuda("m1")]);
     const res = await service.habilitarLote(ACTOR, [fila(100234)]);
-    expect(transicionarAyuda).toHaveBeenCalledTimes(1);
-    expect(transicionarAyuda).toHaveBeenCalledWith({
+    expect(registrarAyudaResuelta).toHaveBeenCalledTimes(1);
+    expect(registrarAyudaResuelta).toHaveBeenCalledWith({
       ordenId: "o1",
-      estatusOrigenId: ID_AYUDA, // origen `ayuda_tienda`
-      estatusDestinoId: ID_EN_REPARTO, // destino `en_reparto`
+      tipo: "ayuda_habilitada_api", // R24: su propio tipo de evento, distinto del rescate
       actorUsuarioId: "store-1", // R3: el owner de la key
-      origenTipo: "habilitacion_api", // R16: familia propia, distinta del rescate
+      actorRol: "apiKey",
     });
     expect(res.resultados[0]).toEqual({
       numGuia: 100234,
-      resultado: "habilitada",
+      resultado: "habilitada_sin_cambio_de_estado",
       estado: "en_reparto",
+      ayudaCerrada: true,
       error: null,
     });
   });
 
-  it("D6: la entrada de la transicion NO lleva `motivo` — la nota vive SOLO en la bitacora", async () => {
-    // Firmado en la puerta: la nota no se copia al historial. Si alguien la anadiera «para que se
-    // vea en la linea de tiempo», el dato tendria dos hogares y este assert lo delata.
-    const { service, transicionarAyuda, registrar } = build([orden("ayuda_tienda", "m1")]);
+  it("D6: la entrada del registro NO lleva `motivo` — la nota vive SOLO en la bitacora", async () => {
+    const { service, registrarAyudaResuelta, registrar } = build([enAyuda("m1")]);
     await service.habilitarLote(ACTOR, [fila(100234, "el cliente pidio reintento")]);
-    const entrada = transicionarAyuda.mock.calls[0][0] as unknown as Record<string, unknown>;
+    const entrada = registrarAyudaResuelta.mock.calls[0][0] as unknown as Record<string, unknown>;
     expect(Object.keys(entrada)).not.toContain("motivo");
     expect(JSON.stringify(entrada)).not.toContain("reintento");
     expect(registrar).toHaveBeenCalledWith(
@@ -279,26 +280,26 @@ describe("266/R12-R16 — rama A: `ayuda_tienda` CON mensajero vuelve a `en_repa
 });
 
 describe("266/R12-R22 — rama B: el paquete ya esta en bodega, solo se deja log", () => {
-  it("`ayuda_tienda` SIN mensajero asignado no transiciona: es rama B (defensa)", async () => {
-    const { service, transicionarAyuda, registrar } = build([orden("ayuda_tienda", null)]);
+  it("ayuda abierta SIN mensajero asignado no cierra la ayuda: es rama B (defensa)", async () => {
+    const { service, registrarAyudaResuelta, registrar } = build([enAyuda(null)]);
     const res = await service.habilitarLote(ACTOR, [fila(100234)]);
-    expect(transicionarAyuda).not.toHaveBeenCalled(); // R20
+    expect(registrarAyudaResuelta).not.toHaveBeenCalled(); // R20
     expect(res.resultados[0].resultado).toBe("habilitada_sin_cambio_de_estado");
+    expect(res.resultados[0].ayudaCerrada).toBe(false);
     expect(registrar).toHaveBeenCalledWith(
-      expect.objectContaining({ cambioDeEstado: false, estadoResultante: "ayuda_tienda" }),
+      expect.objectContaining({ cambioDeEstado: false, estadoResultante: "en_reparto" }),
     );
   });
 
   it("R14-b: una `devuelta` cae SIEMPRE en rama B y NUNCA se manda a `en_reparto`", async () => {
-    // La verdad fisica del paquete: los cuatro caminos que devuelven una orden ponen
-    // `mensajero_asignado_id` a NULL. Mandarla a `en_reparto` seria publicar una mentira.
-    const { service, transicionarAyuda, registrar } = build([orden("devuelta", null)]);
+    const { service, registrarAyudaResuelta, registrar } = build([orden("devuelta", null)]);
     const res = await service.habilitarLote(ACTOR, [fila(100234, "reintento pactado")]);
-    expect(transicionarAyuda).not.toHaveBeenCalled();
+    expect(registrarAyudaResuelta).not.toHaveBeenCalled();
     expect(res.resultados[0]).toEqual({
       numGuia: 100234,
       resultado: "habilitada_sin_cambio_de_estado",
       estado: "devuelta",
+      ayudaCerrada: false,
       error: null,
     });
     expect(registrar).toHaveBeenCalledWith({
@@ -309,55 +310,43 @@ describe("266/R12-R22 — rama B: el paquete ya esta en bodega, solo se deja log
       estadoResultante: "devuelta",
     });
   });
-
-  it("la rama B no consulta siquiera el catalogo de estados: no hay nada que transicionar", async () => {
-    const { service, findEstatusIdByValue } = build([orden("devuelta", null)]);
-    await service.habilitarLote(ACTOR, [fila(100234)]);
-    expect(findEstatusIdByValue).not.toHaveBeenCalled();
-  });
 });
 
 // =================================================================================================
 // LA GUARDA DE ESTADO, ATACADA DIRECTAMENTE (R13/R13-b/R14/R31)
 // =================================================================================================
 describe("266/R13-R14 — la guarda de estado del llamador rechaza lo que no es habilitable", () => {
-  it("R13-b: `reprogramada` NO es habilitable — ni transiciona ni deja registro", async () => {
-    // Se ataca aparte y no como un caso mas de la tabla: `reprogramada` SI es novedad para el
-    // integrador y estuvo propuesta como habilitable hasta la puerta del 2026-08-23. Si alguien la
-    // «anade por simetria», este `it` se pone rojo con su nombre.
-    const { service, transicionarAyuda, registrar } = build([orden("reprogramada", "m1")]);
+  it("R13-b: `reprogramada` NO es habilitable — ni escribe nada ni deja registro", async () => {
+    const { service, registrarAyudaResuelta, registrar } = build([orden("reprogramada", "m1")]);
     const res = await service.habilitarLote(ACTOR, [fila(100234)]);
     expect(res.resultados[0]).toMatchObject({
       resultado: "error",
       estado: null,
       error: { codigo: "estado_no_habilitable" },
     });
-    expect(transicionarAyuda).not.toHaveBeenCalled();
+    expect(registrarAyudaResuelta).not.toHaveBeenCalled();
     expect(registrar).not.toHaveBeenCalled();
   });
 
   it.each(["entregada", "rechazada", "en_reparto", "incidente", "sin_gestionar"])(
-    "una orden en `%s` devuelve estado_no_habilitable sin escribir ni estado ni bitacora",
+    "una orden en `%s` SIN ayuda abierta devuelve estado_no_habilitable sin escribir nada",
     async (estado) => {
-      // ATAQUE DIRECTO a la guarda: es la PRIMERA red y vive en este service, no en el `WHERE`
-      // del repo. Con mensajero asignado a proposito, para que ni siquiera el discriminador de
-      // rama pueda salvarla.
-      const { service, transicionarAyuda, registrar } = build([orden(estado, "m1")]);
+      // ATAQUE DIRECTO a la guarda: es la PRIMERA red y vive en este service. Con mensajero
+      // asignado a proposito, para que ni siquiera el discriminador de rama pueda salvarla.
+      const { service, registrarAyudaResuelta, registrar } = build([orden(estado, "m1")]);
       const res = await service.habilitarLote(ACTOR, [fila(100234)]);
       expect(res.resultados[0].error?.codigo).toBe("estado_no_habilitable");
-      expect(transicionarAyuda).not.toHaveBeenCalled();
+      expect(registrarAyudaResuelta).not.toHaveBeenCalled();
       expect(registrar).not.toHaveBeenCalled();
     },
   );
 
-  it("R31/D3: habilitar por segunda vez una orden ya en `en_reparto` devuelve error, JAMAS `habilitada`", async () => {
-    // Un acuse falso es peor que un error honesto. El assert es sobre el `resultado` devuelto,
-    // ademas del cero-escrituras: si alguien implementara la idempotencia «amable», el primer
-    // expect caeria.
-    const { service, transicionarAyuda, registrar } = build([orden("en_reparto", "m1")]);
+  it("R31/D3: habilitar por segunda vez (ayuda ya cerrada) devuelve error, JAMAS un exito", async () => {
+    // Un acuse falso es peor que un error honesto. Tras la primera habilitacion la orden sigue
+    // `en_reparto` y la ayuda esta CERRADA: la guarda la rechaza.
+    const { service, registrarAyudaResuelta, registrar } = build([orden("en_reparto", "m1")]);
     const res = await service.habilitarLote(ACTOR, [fila(100234)]);
     expect(res.resultados[0].resultado).toBe("error");
-    expect(res.resultados[0].resultado).not.toBe("habilitada");
     expect(res.resultados[0].error?.codigo).toBe("estado_no_habilitable");
     expect(res.resumen).toEqual({
       total: 1,
@@ -365,56 +354,38 @@ describe("266/R13-R14 — la guarda de estado del llamador rechaza lo que no es 
       habilitadasSinCambioDeEstado: 0,
       conError: 1,
     });
-    expect(transicionarAyuda).not.toHaveBeenCalled();
+    expect(registrarAyudaResuelta).not.toHaveBeenCalled();
     expect(registrar).not.toHaveBeenCalled();
   });
 });
 
 // =================================================================================================
-// FALLO CERRADO Y CARRERA (R18/R19/R25)
+// CARRERA (R18/R25)
 // =================================================================================================
-describe("266/R19 — si el catalogo no resuelve, la fila se rechaza sin escribir nada", () => {
-  it.each(["ayuda_tienda", "en_reparto"])(
-    "cuando `%s` no resuelve, no se transiciona ni se registra",
-    async (valueAusente) => {
-      const { service, findEstatusIdByValue, transicionarAyuda, registrar } = build([
-        orden("ayuda_tienda", "m1"),
-      ]);
-      findEstatusIdByValue.mockImplementation(async (value: string) =>
-        value === valueAusente ? null : `os-${value}`,
-      );
-      const res = await service.habilitarLote(ACTOR, [fila(100234)]);
-      expect(res.resultados[0].resultado).toBe("error");
-      expect(transicionarAyuda).not.toHaveBeenCalled();
-      expect(registrar).not.toHaveBeenCalled();
-    },
-  );
-});
-
-describe("266/R18-R25 — si la orden se movio entre la lectura y la escritura, no queda nada a medias", () => {
-  it("`transicionarAyuda` que devuelve false da estado_no_habilitable y NO deja bitacora", async () => {
-    const { service, transicionarAyuda, registrar } = build([orden("ayuda_tienda", "m1")]);
-    transicionarAyuda.mockResolvedValue(false); // el `updateMany` guardado afecto 0 filas
+describe("266/R18-R25 — si la ayuda se cerro entre la lectura y la escritura, no queda nada a medias", () => {
+  it("`registrarAyudaResuelta` que devuelve false da estado_no_habilitable y NO deja bitacora", async () => {
+    const { service, registrarAyudaResuelta, registrar } = build([enAyuda("m1")]);
+    registrarAyudaResuelta.mockResolvedValue(false); // la re-lectura bajo candado no la vio abierta
     const res = await service.habilitarLote(ACTOR, [fila(100234)]);
     expect(res.resultados[0].error?.codigo).toBe("estado_no_habilitable");
-    expect(registrar).not.toHaveBeenCalled(); // R25: sin transicion confirmada, sin registro
+    expect(res.resultados[0].ayudaCerrada).toBe(false);
+    expect(registrar).not.toHaveBeenCalled(); // R25: sin hecho confirmado, sin registro
   });
 });
 
-describe("266/R23-R25 — la bitacora se escribe DESPUES de la transicion, nunca antes", () => {
-  it("en la rama A, `registrar` ocurre despues de `transicionarAyuda` y con cambioDeEstado true", async () => {
-    // El ORDEN es el que garantiza que nunca exista una fila de bitacora que afirme un cambio de
-    // estado que no ocurrio (design §8, riesgo 1). Se afirma con el orden real de invocacion.
-    const { service, transicionarAyuda, registrar } = build([orden("ayuda_tienda", "m1")]);
+describe("266/R23-R25 — la bitacora se escribe DESPUES del hecho, nunca antes", () => {
+  it("en la rama A, `registrar` ocurre despues del cierre de la ayuda y con cambioDeEstado false", async () => {
+    const { service, registrarAyudaResuelta, registrar } = build([enAyuda("m1")]);
     await service.habilitarLote(ACTOR, [fila(100234, "reintento")]);
-    expect(transicionarAyuda.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(registrarAyudaResuelta.mock.invocationCallOrder[0]).toBeLessThan(
       registrar.mock.invocationCallOrder[0],
     );
+    // ⏳ 2026-09-23 (FICHA 454, R24): antes `cambioDeEstado: true` (la orden volvia a `en_reparto`).
     expect(registrar).toHaveBeenCalledWith({
       ordenId: "o1",
       actorUsuarioId: "store-1",
       nota: "reintento",
-      cambioDeEstado: true, // R23
+      cambioDeEstado: false,
       estadoResultante: "en_reparto",
     });
   });
@@ -423,34 +394,28 @@ describe("266/R23-R25 — la bitacora se escribe DESPUES de la transicion, nunca
 // =================================================================================================
 // T4.3 — EL PUNTO UNICO DE ESCRITURA, AFIRMADO POR TIPOS + LLAMADA (nunca por un `grep`)
 // =================================================================================================
-describe("266/R15 (T4.3) — toda escritura de estado pasa por `transicionarAyuda`, una por fila", () => {
-  it("un lote de 3 filas de rama A invoca `transicionarAyuda` exactamente 3 veces", async () => {
-    const { service, transicionarAyuda, registrar } = build([
-      orden("ayuda_tienda", "m1", "o1"),
-      orden("ayuda_tienda", "m2", "o2"),
-      orden("ayuda_tienda", "m3", "o3"),
+describe("266/R15 (T4.3) — toda escritura pasa por `registrarAyudaResuelta`, una por fila", () => {
+  it("un lote de 3 filas de rama A invoca `registrarAyudaResuelta` exactamente 3 veces", async () => {
+    const { service, registrarAyudaResuelta, registrar } = build([
+      enAyuda("m1", "o1"),
+      enAyuda("m2", "o2"),
+      enAyuda("m3", "o3"),
     ]);
     const res = await service.habilitarLote(ACTOR, [fila(11), fila(22), fila(33)]);
-    expect(res.resumen.habilitadas).toBe(3);
-    expect(transicionarAyuda).toHaveBeenCalledTimes(3);
-    expect(transicionarAyuda.mock.calls.map((c) => (c[0] as { ordenId: string }).ordenId)).toEqual([
-      "o1",
-      "o2",
-      "o3",
-    ]);
+    expect(res.resumen.habilitadasSinCambioDeEstado).toBe(3);
+    expect(registrarAyudaResuelta).toHaveBeenCalledTimes(3);
+    expect(
+      registrarAyudaResuelta.mock.calls.map((c) => (c[0] as { ordenId: string }).ordenId),
+    ).toEqual(["o1", "o2", "o3"]);
     expect(registrar).toHaveBeenCalledTimes(3);
   });
 
-  it("el repo que el service recibe NO expone ningun otro metodo: solo los tres del `Pick`", async () => {
-    // La otra mitad del assert es de TIPOS y la hace el compilador: el constructor pide
-    // `Pick<IOrdenRepository, "findParaHabilitacionApi" | "findEstatusIdByValue" |
-    // "transicionarAyuda">`, asi que un segundo `updateMany` sobre `orden.estatus_id` no es que
-    // este prohibido por convencion — no compila. Esto afirma la mitad de runtime.
+  it("el repo que el service recibe NO expone ningun otro metodo: solo los dos del `Pick`", async () => {
+    // La otra mitad del assert es de TIPOS y la hace el compilador. Esto afirma la mitad de runtime.
     const { ordenRepo } = build();
     expect(Object.keys(ordenRepo).sort()).toEqual([
-      "findEstatusIdByValue",
       "findParaHabilitacionApi",
-      "transicionarAyuda",
+      "registrarAyudaResuelta",
     ]);
   });
 });

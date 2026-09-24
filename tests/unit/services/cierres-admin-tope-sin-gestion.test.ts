@@ -31,8 +31,13 @@ const ESTATUS_IDS: Record<string, string | null> = {
   rechazada: "s-rechazada",
   por_devolver: "s-por-devolver",
   por_devolver_a_tienda: "s-por-devolver-a-tienda",
-  devolucion_por_confirmar: "s-devolucion-por-confirmar",
   devuelta: "s-devuelta",
+  // FICHA 454 (T1.7): los de la APLICACION DE GESTIONES (origen + destino de cada resultado).
+  // Sin cualquiera de ellos la aprobacion NO ocurre (fallo cerrado, heredado de la 239/R9).
+  en_reparto: "s-en-reparto",
+  entregada: "s-entregada",
+  reprogramada: "s-reprogramada",
+  incidente: "s-incidente",
 };
 
 function fakeRepo(): ICierresAdminRepository {
@@ -140,19 +145,25 @@ describe("276/T9 · R7 — el umbral lo resuelve el SERVICIO, no el repositorio"
 });
 
 describe("276/T9 · el bloque falla CERRADO cuando el catalogo no resuelve", () => {
-  it("sin `rechazada` en el catalogo, la config NO se cablea (y con ella se cae la rama vieja)", async () => {
+  it("sin `rechazada` en el catalogo, NO se libera nada a bodega (la aprobacion entera no ocurre)", async () => {
     // Es fallo cerrado deliberado y hay que leerlo entero: sin destino de rechazo, el bloque de
     // liberacion NO se cablea, asi que tampoco se libera a bodega. La alternativa —cablearlo sin
     // destino de rechazo— mandaria a bodega, EN SILENCIO, ordenes que ya agotaron sus intentos:
     // exactamente lo que esta ficha existe para impedir.
+    //
+    // ⏳ 2026-09-23 (FICHA 454, T1.7, design §7.2): `rechazada` es ademas uno de los seis ids de la
+    // APLICACION DE GESTIONES, cuyo fallo cerrado aborta la aprobacion ENTERA. La garantia de la
+    // 276 (ninguna liberacion a bodega sin destino de rechazo) se cumple ahora con mas margen: el
+    // repositorio ni se llama. Antes: `expect(configDeLaUltimaAprobacion(repo)).toBeUndefined()`.
     const { service, repo } = newService(CierresAdminService, {
       ...ESTATUS_IDS,
       rechazada: null,
     });
 
-    await service.aprobarCierre("c1", MAESTRO);
+    const r = await service.aprobarCierre("c1", MAESTRO);
 
-    expect(configDeLaUltimaAprobacion(repo)).toBeUndefined();
+    expect(r.status).toBe("validation_error");
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
   });
 
   it("sin `sin_gestionar` tampoco se cablea (el comportamiento de siempre, sin cambios)", async () => {

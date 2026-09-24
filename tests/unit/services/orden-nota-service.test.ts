@@ -442,13 +442,21 @@ describe("R14 — ventana de escritura ASIMETRICA por rol", () => {
     expect(entregada.filas).toHaveLength(0);
   });
 
-  it("235/R36: la firma de la ventana YA NO ADMITE ninguna bandera", () => {
-    // La afirmacion estructural, no de comportamiento: mientras el tercer parametro exista, alguien
-    // puede reabrir la puerta pasando `true`. `length` de la funcion cuenta los parametros sin
-    // default, que son exactamente los dos que quedan.
-    expect(estaEnVentanaDeEscritura).toHaveLength(2);
-    // Y el resultado depende solo de (rol, estatus): dos llamadas identicas no pueden diferir.
-    expect(estaEnVentanaDeEscritura("adminTienda", "devolucion_por_confirmar")).toBe(false);
+  // ⏳ 2026-09-23 (FICHA 454, design U12): la ventana del `adminTienda` pasa de `estatus ∈ {devuelta,
+  // ayuda_tienda}` a `estatus = devuelta ∨ ayuda_abierta`, y la ayuda ya no es un estatus: la firma
+  // gana un TERCER parametro obligatorio, `ayudaAbierta`. Lo que la 235 cerraba era la BANDERA
+  // PERSISTIDA (`orden.ayuda`, que cualquiera podia poner a `true` con un `update`); este parametro
+  // es la DERIVACION unica de `ayuda-abierta.ts` (eventos append-only, guardia de fuente unica) y
+  // lo proyecta el repositorio del hilo, no quien llama. Antes: `toHaveLength(2)`.
+  it("235/R36 → 454/U12: la firma admite SOLO la derivacion `ayudaAbierta`, sin default", () => {
+    // `length` cuenta los parametros sin default: los tres son obligatorios, asi que ningun
+    // llamador puede olvidarse de la ayuda y abrir o cerrar la puerta por omision.
+    expect(estaEnVentanaDeEscritura).toHaveLength(3);
+    // Y el resultado depende solo de (rol, estatus, ayuda abierta).
+    expect(estaEnVentanaDeEscritura("adminTienda", "devolucion_por_confirmar", false)).toBe(false);
+    // La ayuda abierta abre la ventana de la TIENDA sobre una orden `en_reparto`; sin ella, no.
+    expect(estaEnVentanaDeEscritura("adminTienda", "en_reparto", true)).toBe(true);
+    expect(estaEnVentanaDeEscritura("adminTienda", "en_reparto", false)).toBe(false);
   });
 
   it("`por_recoger` NO abre ventana para nadie (decision deliberada del design §2.2)", async () => {

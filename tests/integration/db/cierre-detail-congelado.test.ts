@@ -10,7 +10,7 @@ import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWallet
 import type { CrearMovimientoTiendaInput } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
-import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
+import { APLICACION_GESTIONES } from "@/tests/fixtures/anclaje-devolucion";
 
 // Feature 69/R17/R18 — EL CORAZON DE LA FEATURE. Los dos casos son money-critical.
 //
@@ -429,7 +429,7 @@ function aprobar(db: Db, cierreId: string) {
     cierreId,
     alcance: ALCANCE,
     nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
     resueltoPor: "adm",
     motivoRechazo: null,

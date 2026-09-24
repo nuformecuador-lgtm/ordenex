@@ -39,7 +39,9 @@ function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
   return {
     tiendaId: "tienda-1",
     mensajeroAsignadoId: "mensajero-1",
-    estatusValue: "ayuda_tienda",
+    // ⏳ 2026-09-23 (FICHA 454, T1.15): `en_reparto` con la ayuda ABIERTA (ya no hay estatus de ayuda).
+    estatusValue: "en_reparto",
+    ayudaAbierta: true,
     deletedAt: null,
     fechaReparto: null,
     ...over,
@@ -200,7 +202,10 @@ describe("276/T5 · R11 — no hay campo del input que abra la puerta", () => {
     // Si el orden se invirtiera, una orden que ya salio de ayuda leeria el motivo del tope en vez
     // del suyo, y la tienda no sabria que paso.
     const notaRepo = {
-      findOrdenParaHilo: vi.fn(async () => ordenParaHilo({ estatusValue: "en_reparto" })),
+      // FICHA 454: «salio de ayuda» = ayuda CERRADA (la orden sigue `en_reparto`).
+      findOrdenParaHilo: vi.fn(async () =>
+        ordenParaHilo({ estatusValue: "en_reparto", ayudaAbierta: false }),
+      ),
     };
     const historial = fakeIntentosEnLote({ o1: UMBRAL + 1 });
     const service = new GestionDesdeAyudaService({

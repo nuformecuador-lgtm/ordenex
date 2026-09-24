@@ -70,7 +70,10 @@ function fakeRepo(over: Partial<IGestionOrdenRepository> = {}): IGestionOrdenRep
     setOrdenEnGestion: vi.fn(async () => true),
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
-    crearGestionYTransicionar: vi.fn(async () => "g1"),
+    registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev-g1" })),
+    // FICHA 454: la guarda de gestionabilidad pregunta por gestion pendiente / ayuda abierta.
+    findBloqueoDeGestion: vi.fn(async () => null),
+    findPendientesYAyudas: vi.fn(async () => ({ conGestionPendiente: new Set<string>(), conAyudaAbierta: new Set<string>() })),
     reprogramarDesdeDevuelta: vi.fn(async () => true),
     crearGestionDesdeAyuda: vi.fn(async () => "g-ayuda"),
     rechazarDesdeDevuelta: vi.fn(async () => true),
@@ -186,7 +189,7 @@ describe("276/T4 · R1 — en el tope no se acepta `reprogramada` ni `devuelta`"
     // R6: el motivo sale del SIMBOLO compartido, no de un literal gemelo escrito aqui. Si el
     // servicio reescribiera la frase, este caso cae.
     expect(r.motivo).toBe(MSG_TOPE_INTENTOS_GESTION);
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("2. `devuelta` con `intentos = umbral - 1` -> el MISMO conflict", async () => {
@@ -195,7 +198,7 @@ describe("276/T4 · R1 — en el tope no se acepta `reprogramada` ni `devuelta`"
     const r = await service.gestionar(ENTRADA.devuelta(), MENSAJERO);
 
     expect(r).toEqual({ status: "conflict", motivo: MSG_TOPE_INTENTOS_GESTION });
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
@@ -216,7 +219,7 @@ describe("276/T4 · R2 — en el tope, los tres permitidos llegan al repositorio
       const r = await service.gestionar(ENTRADA[resultado](), MENSAJERO);
 
       expect(r.status).toBe("ok");
-      expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+      expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
     });
   }
 
@@ -243,7 +246,7 @@ describe("276/T4 · R1 — por debajo del tope nada cambia", () => {
     const r = await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
 
     expect(r.status).toBe("ok");
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("4.bis — y con `intentos` POR ENCIMA del umbral sigue bloqueada (`>=`, no `===`)", async () => {
@@ -254,7 +257,7 @@ describe("276/T4 · R1 — por debajo del tope nada cambia", () => {
     const r = await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
 
     expect(r).toEqual({ status: "conflict", motivo: MSG_TOPE_INTENTOS_GESTION });
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
@@ -283,7 +286,7 @@ describe("276/T4 · R5 — el rechazo por tope no produce NINGUN efecto", () => 
     expect(r.status).toBe("conflict");
     expect(storage.upload).not.toHaveBeenCalled();
     expect(storage.remove).not.toHaveBeenCalled(); // ni siquiera hubo que compensar
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
     expect(repo.setOrdenEnGestion).not.toHaveBeenCalled();
     expect(repo.liberarOrdenEnGestion).not.toHaveBeenCalled();
   });
@@ -345,7 +348,7 @@ describe("276/T4 · R7 — el umbral es configurable de verdad", () => {
     const r = await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
 
     expect(r.status).toBe("ok");
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("6b. con umbral 5 e `intentos = 4`, reprogramar NO pasa", async () => {
@@ -354,7 +357,7 @@ describe("276/T4 · R7 — el umbral es configurable de verdad", () => {
     const r = await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
 
     expect(r.status).toBe("conflict");
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
@@ -381,7 +384,7 @@ describe("276/T4 · R11 — la decision no depende de lo que mande el cliente", 
 
     expect(r).toEqual({ status: "conflict", motivo: MSG_TOPE_INTENTOS_GESTION });
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("7.bis — el orden de guardas NO se invierte: el bloqueo por cierres gana al tope", async () => {

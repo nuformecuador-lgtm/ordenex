@@ -28,7 +28,10 @@ function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
   return {
     tiendaId: "tienda-1",
     mensajeroAsignadoId: "mensajero-1",
-    estatusValue: "ayuda_tienda",
+    // ⏳ 2026-09-23 (FICHA 454, T1.15): la ayuda deja de ser estatus. La orden sigue `en_reparto`
+    // con la ayuda ABIERTA (derivacion `ayuda-abierta.ts`), que es lo que la hace resoluble aqui.
+    estatusValue: "en_reparto",
+    ayudaAbierta: true,
     deletedAt: null,
     // Feature 261 (B15): `fechaReparto` es OBLIGATORIO en `OrdenParaHilo` (insumo de la puerta
     // A de la via de la tienda). `null` = sin reserva, el caso por defecto.
@@ -111,7 +114,7 @@ const REPROGRAMACION: GestionDesdeAyudaInput = {
 /* -------------------------------------------------------------------------- */
 
 describe("gestionar — el camino feliz (R2/R3/R4/R26)", () => {
-  it("la tienda dueña resuelve y el repo recibe el mensajero, la tienda y los dos estatus", async () => {
+  it("la tienda dueña resuelve y el repo recibe el mensajero y la tienda (454: sin estatus)", async () => {
     const { service, gestionRepo } = montar();
 
     const r = await service.gestionar(RECHAZO, TIENDA);
@@ -121,31 +124,28 @@ describe("gestionar — el camino feliz (R2/R3/R4/R26)", () => {
       .calls[0][0] as Record<string, unknown>;
     expect(arg).toMatchObject({
       ordenId: "o1",
-      estatusAyudaId: "os-ayuda",
-      estatusDestinoId: "os-rechazada",
       // 💰 R3: EL MENSAJERO de la orden, leido de la MISMA lectura que autorizo. Es lo que mete la
       // gestion en su cierre.
       mensajeroId: "mensajero-1",
       // R4: la TIENDA que la registro, para el historial.
       actorUsuarioId: "tienda-1",
     });
+    // FICHA 454 (R25): ni el estatus de ayuda ni el de destino viajan al repo — no hay transicion.
+    expect(arg).not.toHaveProperty("estatusAyudaId");
+    expect(arg).not.toHaveProperty("estatusDestinoId");
   });
 
-  it("R26: el destino sale del MAPA UNICO, no de `findEstatusIdByValue(resultado)`", async () => {
-    // Hoy los dos resultados de esta via se llaman igual que su estado, asi que la diferencia no se
-    // ve en el valor: se ve en el CAMINO. Se afirma que el servicio pidio al catalogo el value que
-    // dicta `ESTATUS_POR_RESULTADO`, que es el mapa que la 239 creo al romper esa identidad para
-    // `devuelta`. Volver a la coincidencia de nombres reabre el cobro prematuro que aquella cerro.
+  // ⏳ 2026-09-23 (FICHA 454, T1.15/R25): este caso afirmaba que el servicio resolvia en el catalogo
+  // `ayuda_tienda` y el destino de `ESTATUS_POR_RESULTADO` (dos lecturas). Registrar ya no
+  // transiciona: el destino lo aplica la APROBACION del cierre, que es donde ahora se lee el mapa
+  // unico (`CierresAdminService`, fallo cerrado de los seis ids). Aqui: CERO lecturas de catalogo.
+  it("R26 → 454: el servicio NO resuelve estatus — el destino del mapa unico se aplica al aprobar", async () => {
     const { service, ordenRepo } = montar();
     await service.gestionar(REPROGRAMACION, TIENDA);
 
-    const pedidos = (ordenRepo.findEstatusIdByValue as ReturnType<typeof vi.fn>).mock.calls.map(
-      (c) => c[0] as string,
-    );
-    expect(pedidos).toContain(ESTATUS_POR_RESULTADO.reprogramada);
-    expect(pedidos).toContain("ayuda_tienda");
-    // Y ningun otro: dos lecturas, ni una de mas.
-    expect(pedidos).toHaveLength(2);
+    expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalled();
+    // El mapa unico sigue diciendo lo que la aprobacion aplicara.
+    expect(ESTATUS_POR_RESULTADO.reprogramada).toBe("reprogramada");
   });
 
   it("la fecha de reprogramacion viaja al repo; en un rechazo va NULA", async () => {
@@ -252,7 +252,7 @@ describe("gestionar — la puerta (R19/R20/R21/R22)", () => {
     // operacion se rechaza. Aqui se simula un estatus que NO esta en la ventana del adminTienda y
     // que tampoco es el de ayuda: el resultado es un rechazo, no un paso adelante.
     const { service, gestionRepo } = montar({
-      orden: ordenParaHilo({ estatusValue: "por_recoger" }),
+      orden: ordenParaHilo({ estatusValue: "por_recoger", ayudaAbierta: false }),
     });
     const r = await service.gestionar(RECHAZO, TIENDA);
     expect(r.status).not.toBe("ok");
@@ -265,11 +265,14 @@ describe("gestionar — la puerta (R19/R20/R21/R22)", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("gestionar — el estado de la orden y su mensajero (R23/R8)", () => {
+  // ⏳ 2026-09-23 (FICHA 454): «fuera de ayuda» deja de ser «estatus distinto de `ayuda_tienda`» y
+  // pasa a ser «sin ayuda ABIERTA». `en_reparto` sin ayuda abierta (rescatada, o con una gestion ya
+  // pendiente) es el caso nuevo que importa; los otros estatus, sin ayuda abierta por construccion.
   it.each(["en_reparto", "devuelta", "entregada", "sin_gestionar"])(
-    "R23: una orden en `%s` ⇒ `conflict`, sin tocar el repo de gestion ni subir nada",
+    "R23: una orden en `%s` SIN ayuda abierta ⇒ `conflict`, sin tocar el repo de gestion ni subir nada",
     async (estatusValue) => {
       const { service, gestionRepo, storage } = montar({
-        orden: ordenParaHilo({ estatusValue }),
+        orden: ordenParaHilo({ estatusValue, ayudaAbierta: false }),
       });
       const r = await service.gestionar(RECHAZO, TIENDA);
       expect(r).toEqual({
@@ -302,19 +305,17 @@ describe("gestionar — el estado de la orden y su mensajero (R23/R8)", () => {
 /* Fallo cerrado del catalogo                                                   */
 /* -------------------------------------------------------------------------- */
 
-describe("gestionar — catalogo incompleto ⇒ fallo CERRADO", () => {
-  it.each([
-    ["falta el estatus de ayuda", { rechazada: "os-rechazada" }],
-    ["falta el destino", { ayuda_tienda: "os-ayuda" }],
-    ["falta todo", {}],
-  ])("%s ⇒ no se escribe nada y se reporta el catalogo", async (_caso, catalogo) => {
-    // Una escritura a medias sobre el estado es peor que un error visible: el estatus quedaria
-    // movido sin gestion que lo explique, o al reves.
-    const { service, gestionRepo, storage } = montar({ catalogo });
+// ⏳ 2026-09-23 (FICHA 454, T1.15): aqui se afirmaba el FALLO CERRADO del catalogo al registrar
+// (sin `ayuda_tienda` o sin el destino -> `validation_error`, nada escrito). Registrar ya no escribe
+// estatus: no hay escritura a medias posible sobre el estado. El fallo cerrado del catalogo vive
+// donde ahora se aplica el estado, en la aprobacion (`cierres-admin-service.test.ts`, «R9: catalogo
+// SIN `en_reparto`» y el de `devuelta`).
+describe("gestionar — el catalogo ya no interviene al registrar (454)", () => {
+  it("con el catalogo VACIO la gestion se registra igual: no hay estatus que resolver", async () => {
+    const { service, gestionRepo } = montar({ catalogo: {} });
     const r = await service.gestionar(RECHAZO, TIENDA);
-    expect(r.status).toBe("validation_error");
-    expect(gestionRepo.crearGestionDesdeAyuda).not.toHaveBeenCalled();
-    expect(storage.upload).not.toHaveBeenCalled();
+    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "rechazada" });
+    expect(gestionRepo.crearGestionDesdeAyuda).toHaveBeenCalledTimes(1);
   });
 });
 

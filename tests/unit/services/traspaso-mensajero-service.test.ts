@@ -89,6 +89,8 @@ function buildRepo(overrides: Partial<Record<keyof Dobles["espias"], unknown>> =
       movidas: input.ordenes.length,
       conversaciones: input.ordenes.length,
     })),
+    // FICHA 454 (R54): por defecto ninguna orden tiene gestion pendiente de confirmar.
+    findIdsConGestionPendiente: vi.fn(async () => new Set<string>()),
     ...overrides,
   } as Dobles["espias"];
   return { repo: espias as unknown as TraspasoMensajeroRepo, espias };
@@ -194,19 +196,22 @@ describe("427/R2 y D1 — cualquier otro rol: `forbidden` SIN tocar nada", () =>
   });
 });
 
-describe("427/R4 y R5 — solo `en_reparto` y `ayuda_tienda`; el resto rechaza el lote entero", () => {
-  it("⭑ la constante tiene EXACTAMENTE esos dos, y `ayuda_tienda` es uno de ellos (D4)", () => {
+// ⏳ 2026-09-23 (FICHA 454, R54/R28): la constante pasa a UN estado — `ayuda_tienda` deja de ser
+// estado; una orden con ayuda abierta sigue `en_reparto` y se traspasa igual (con su ayuda). Lo que
+// ya no se traspasa es la orden GESTIONADA y pendiente de confirmar (guarda aparte, abajo).
+describe("427/R4 y R5 — solo `en_reparto`; el resto rechaza el lote entero", () => {
+  it("⭑ la constante tiene EXACTAMENTE `en_reparto` (D4; ficha 454)", () => {
     // Literal a mano, no derivado: comparar la lista contra su propia fuente esta siempre verde.
-    expect([...ESTADOS_TRASPASABLES].sort()).toEqual(["ayuda_tienda", "en_reparto"]);
+    expect([...ESTADOS_TRASPASABLES].sort()).toEqual(["en_reparto"]);
   });
 
-  it("⭑ `ayuda_tienda` SI se traspasa: el paquete sigue con el, en la calle (235/R1)", async () => {
+  it("⭑ FICHA 454 (R54): una orden con gestion PENDIENTE de confirmar NO se traspasa", async () => {
     const { repo, espias } = buildRepo({
-      findByIdsForTransicion: vi.fn(async () => [orden({ estatusValue: "ayuda_tienda" })]),
+      findIdsConGestionPendiente: vi.fn(async () => new Set([ORDEN_A])),
     });
     const r = await new TraspasoMensajeroService(repo).traspasar(entrada(), MAESTRO);
-    expect(r.status).toBe("ok");
-    expect(espias.traspasarMensajeroLote).toHaveBeenCalledTimes(1);
+    expect(r.status).toBe("conflict");
+    expect(espias.traspasarMensajeroLote).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -684,7 +689,8 @@ describe("427 — guardas de forma del servicio", () => {
     const { repo, espias } = buildRepo({
       findByIdsForTransicion: vi.fn(async () => [
         orden(),
-        orden({ id: ORDEN_B, estatusValue: "ayuda_tienda" }),
+        // ⏳ 2026-09-23 (FICHA 454): antes la segunda era `ayuda_tienda`; ya no es estado.
+        orden({ id: ORDEN_B, estatusValue: "en_reparto" }),
       ]),
     });
     await new TraspasoMensajeroService(repo).traspasar(
@@ -693,7 +699,7 @@ describe("427 — guardas de forma del servicio", () => {
     );
     expect(espias.traspasarMensajeroLote.mock.calls[0][0].ordenes).toEqual([
       { ordenId: ORDEN_A, estatusIdEsperado: "estatus-en_reparto" },
-      { ordenId: ORDEN_B, estatusIdEsperado: "estatus-ayuda_tienda" },
+      { ordenId: ORDEN_B, estatusIdEsperado: "estatus-en_reparto" },
     ]);
   });
 });

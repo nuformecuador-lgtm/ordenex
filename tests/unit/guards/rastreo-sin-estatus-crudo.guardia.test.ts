@@ -74,6 +74,10 @@ class RepositorioDeLosVeinte implements IRastreoPublicoRepository {
   async listarTransiciones(): Promise<readonly TransicionRastreoFila[]> {
     return this.transiciones;
   }
+  // FICHA 454 (T1.19): este escenario no tiene gestion pendiente de confirmar.
+  async buscarGestionPendiente(): Promise<null> {
+    return null;
+  }
 }
 
 async function proyectar(

@@ -469,13 +469,15 @@ describe("contarIntentosVigentesEnLote (215/R4/R7/R8/R29/R30)", () => {
     // Feature 215/T20: el filtro de orden aparece DOS veces —fuera y repetido dentro del `some`
     // de `historialEstados`, por rendimiento (design §3.4)— y las dos son el MISMO valor. Se
     // comprueba antes de normalizarlas para comparar el resto.
-    expect(individual.historialEstados.some.ordenId).toBe(individual.ordenId);
-    expect(lote.historialEstados.some.ordenId).toEqual(lote.ordenId);
+    // ⏳ 2026-09-23 (FICHA 454, design §10): el `some` vive ahora en la PRIMERA via del `OR`.
+    expect(individual.OR[0].historialEstados.some.ordenId).toBe(individual.ordenId);
+    expect(lote.OR[0].historialEstados.some.ordenId).toEqual(lote.ordenId);
     const sinOrden = (w: Record<string, never>) => {
       const copia: Record<string, unknown> = { ...w };
-      const rel = copia.historialEstados as { some: Record<string, unknown> };
-      copia.historialEstados = { some: { ...rel.some } };
-      delete (copia.historialEstados as { some: Record<string, unknown> }).some.ordenId;
+      const or = copia.OR as [{ historialEstados: { some: Record<string, unknown> } }, unknown];
+      const some = { ...or[0].historialEstados.some };
+      delete some.ordenId;
+      copia.OR = [{ historialEstados: { some } }, or[1]];
       delete copia.ordenId;
       return copia;
     };
@@ -614,9 +616,14 @@ describe("el discriminador de las gestiones SINTETICAS (215/R12/R18-b/R34) [💰
     // visita real: es el desenlace de la visita que el mensajero si hizo. El literal se conserva
     // como literal a proposito —es el censo cerrado que impide que una familia entre de rebote— y
     // NO se sustituye por `[...ORIGEN_TIPOS_VISITA_REAL]`, que quedaria verde para siempre.
-    expect(where.historialEstados).toEqual({
+    // ⏳ 2026-09-23 (FICHA 454, design §10): la sexta condicion es ahora un `OR` de DOS vias de
+    // INCLUSION — (1) la fila de historial de una familia de visita real, con el `ordenId` repetido,
+    // y (2) el evento `gestion_registrada` de una gestion de calle del modelo nuevo. La intencion del
+    // caso no cambia: un solo criterio y lista de INCLUSION (`in`, ningun `none`/`notIn`).
+    expect(where.OR[0].historialEstados).toEqual({
       some: { ordenId: "o1", origenTipo: { in: ["gestion", "gestion_tienda_ayuda"] } },
     });
+    expect(where.OR[1]).toEqual({ eventos: { some: { tipo: "gestion_registrada" } } });
     const json = JSON.stringify(where);
     expect(json).not.toContain("none");
     expect(json).not.toContain("notIn");

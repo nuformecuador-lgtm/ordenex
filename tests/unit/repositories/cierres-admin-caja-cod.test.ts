@@ -5,7 +5,7 @@ import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoR
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { CrearMovimientoTiendaInput } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
-import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
+import { APLICACION_GESTIONES } from "@/tests/fixtures/anclaje-devolucion";
 
 /**
  * Feature 173 / T B.2 (R11/R12/R13/R15) — el enganche del contra-entrega en la APROBACION del
@@ -236,7 +236,7 @@ function aprobar(repo: CierresAdminRepository, cierreId = CIERRE) {
     cierreId,
     alcance: ALCANCE,
     nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
     resueltoPor: "adm",
     motivoRechazo: null,

@@ -124,14 +124,24 @@ describe("ORIGEN_TIPOS_VISITA_REAL — el discriminador de las sinteticas (215/R
 
   // La lista no sirve de nada si el predicado no la usa como inclusion. Se mira el `where` REAL.
   it("R34-c: el predicado usa la lista con `in` y NO contiene ningun `none` ni `notIn`", () => {
+    // ⏳ 2026-09-23 (FICHA 454, design §10): la sexta condicion es ahora un `OR` de DOS vias de
+    // INCLUSION — (1) la fila de historial de una familia de visita real, con el `ordenId` repetido,
+    // y (2) el evento `gestion_registrada` de una gestion de calle del modelo nuevo. La intencion del
+    // caso no cambia: un solo criterio y lista de INCLUSION (`in`, ningun `none`/`notIn`).
     const where = whereIntentosVigentes("o1") as unknown as {
-      historialEstados: { some: { ordenId: string; origenTipo: { in: string[] } } };
+      OR: [
+        { historialEstados: { some: { ordenId: string; origenTipo: { in: string[] } } } },
+        { eventos: { some: { tipo: string } } },
+      ];
     };
-    expect(where.historialEstados.some.origenTipo).toEqual({ in: [...ORIGEN_TIPOS_VISITA_REAL] });
+    expect(where.OR).toHaveLength(2);
+    expect(where.OR[0].historialEstados.some.origenTipo).toEqual({ in: [...ORIGEN_TIPOS_VISITA_REAL] });
     // El `ordenId` repetido dentro del `some` NO es decorativo: `orden_historial_estado` no tiene
     // indice por `gestion_orden_id`, y repetirlo hace que el `EXISTS` entre por
     // `@@index([ordenId, createdAt])` en vez de recorrer una tabla append-only entera.
-    expect(where.historialEstados.some.ordenId).toBe("o1");
+    expect(where.OR[0].historialEstados.some.ordenId).toBe("o1");
+    // La segunda via: SOLO el registro de calle.
+    expect(where.OR[1]).toEqual({ eventos: { some: { tipo: "gestion_registrada" } } });
     const json = JSON.stringify(where);
     expect(json).not.toContain("none");
     expect(json).not.toContain("notIn");

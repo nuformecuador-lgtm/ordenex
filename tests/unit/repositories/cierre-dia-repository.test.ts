@@ -548,22 +548,32 @@ describe("CierreDiaRepository.findCierreParaAviso (feature 271/R56 — cierra M9
 // ============================================================================
 
 describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/R6/R8/R22)", () => {
-  // tx con lo que la transicion del corte + el flujo normal necesitan. SIN $queryRaw -> el emisor
-  // de webhooks del choke point es no-op (guard defensivo de `emisorWebhookEstadoReal`).
-  // FEATURE 235 (T4.4): el corte recorre DOS BLOQUES GUARDADOS, uno por estado de origen. El doble
-  // responde POR `estatusId` para que cada vuelta reciba SUS ordenes — con un `mockResolvedValue`
-  // unico, los dos bloques verian la misma lista y el test no podria distinguir un bloque del otro.
+  // ⏳ 2026-09-23 (FICHA 454, T1.10, R27/R43): el corte tiene UN SOLO ORIGEN (`en_reparto`). La
+  // ayuda deja de ser estado: una orden con ayuda abierta SIGUE `en_reparto` y la barre la misma
+  // vuelta. Antes de la re-lectura el repositorio toma el CANDADO de las candidatas con un `UPDATE`
+  // sin cambios (`$queryRaw`, protocolo §5); el doble devuelve como bloqueadas las `enReparto`
+  // pedidas. Cualquier otro `$queryRaw` (el emisor de webhooks del choke point) recibe `[]`: sin
+  // suscripciones, el emisor no encola nada.
+  function textoSql(q: unknown): string {
+    const strings = (q as { strings?: readonly string[] } | readonly string[]) ?? [];
+    return Array.isArray(strings)
+      ? strings.join(" ")
+      : ((strings as { strings?: readonly string[] }).strings ?? []).join(" ");
+  }
   function buildCorteTx(
     opts: {
       enReparto?: { id: string }[];
-      conAyuda?: { id: string }[];
       movidas?: number;
       vinculadas?: number;
     } = {},
   ) {
     const enReparto = opts.enReparto ?? [{ id: "o1" }, { id: "o2" }];
-    const conAyuda = opts.conAyuda ?? [];
     const tx = {
+      $queryRaw: vi.fn(async (q: unknown) =>
+        textoSql(q).includes('UPDATE "public"."orden" SET "estatus_id" = "estatus_id"')
+          ? enReparto.map((o) => ({ id: o.id }))
+          : [],
+      ),
       cierreDia: { create: vi.fn() },
       orden: { findMany: vi.fn(), updateMany: vi.fn() },
       gestionOrden: { updateMany: vi.fn(), findMany: vi.fn() },
@@ -573,12 +583,8 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
       ordenHistorialEstado: { createMany: vi.fn() },
     };
     tx.cierreDia.create.mockResolvedValue({ id: "cv1" });
-    tx.orden.findMany.mockImplementation(async (args: { where: { estatusId: string } }) =>
-      (args.where.estatusId === idEstado("ayuda_tienda") ? conAyuda : enReparto).map(
-        ordenBarridaProyectada,
-      ),
-    );
-    // `movidas` fuerza un conteo distinto del real (para el caso money-neutral); por defecto cada
+    tx.orden.findMany.mockImplementation(async () => enReparto.map(ordenBarridaProyectada));
+    // `movidas` fuerza un conteo distinto del real (para el caso money-neutral); por defecto el
     // `updateMany` mueve exactamente lo que su pre-SELECT trajo.
     tx.orden.updateMany.mockImplementation(async (args: { where: { id: { in: string[] } } }) => ({
       count: opts.movidas ?? args.where.id.in.length,
@@ -597,14 +603,23 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
   const DIA_CERRADO = new Date("2026-08-20T00:00:00.000Z");
   // Feature 246: el `OR` que separa lo reservado de lo barrible, tal como el repo lo construye.
   const OR_NO_RESERVADA = [{ fechaReparto: null }, { fechaReparto: { lte: DIA_CERRADO } }];
+  // FICHA 454 (R43): la exclusion de la orden con gestion PENDIENTE de confirmar, escrita LITERAL
+  // (es el contrato del `where`, no su fuente). Su semantica contra Postgres la mide
+  // `tests/integration/db/454/corte-excluye-pendientes-sql-real.test.ts`.
+  const SIN_GESTION_PENDIENTE = {
+    gestiones: {
+      none: {
+        anuladaAt: null,
+        eventos: { some: { tipo: "gestion_registrada" } },
+        OR: [{ cierreId: null }, { cierre: { estado: { not: "aprobado" } } }],
+      },
+    },
+  };
 
   const CORTE = {
     enRepartoEstatusId: idEstado("en_reparto"),
-    // Feature 235 (T4.4, R26): OBLIGATORIO en `CorteSinGestionarInput`. Un olvido de cableado
-    // rompe el TYPECHECK en vez de dejar ordenes en ayuda sin barrer para siempre.
-    ayudaEstatusId: idEstado("ayuda_tienda"),
     sinGestionarEstatusId: idEstado("sin_gestionar"),
-    // Feature 246 (T2.3, R11/R16): tambien OBLIGATORIO, y por el mismo motivo.
+    // Feature 246 (T2.3, R11/R16): OBLIGATORIO, para que un olvido de cableado rompa el typecheck.
     diaCerrado: DIA_CERRADO,
   };
   function corteInput(overrides: Record<string, unknown> = {}) {
@@ -630,12 +645,16 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
 
     await repo.crearCierre(corteInput());
 
-    // Pre-SELECT del PRIMER bloque: las ordenes del mensajero en en_reparto.
+    // Re-lectura TRAS el candado: solo las bloqueadas, del mensajero, en en_reparto, no reservadas
+    // para despues y SIN gestion pendiente (454/R43).
+    expect(tx.orden.findMany).toHaveBeenCalledTimes(1);
     expect(tx.orden.findMany.mock.calls[0][0].where).toEqual({
+      id: { in: ["o1", "o2"] },
       mensajeroAsignadoId: "m1",
       estatusId: idEstado("en_reparto"),
       deletedAt: null,
       OR: OR_NO_RESERVADA, // feature 246/R11: el dia entra en el WHERE, no en memoria
+      ...SIN_GESTION_PENDIENTE,
     });
     // updateMany GUARDADO por estatus_id=en_reparto -> sin_gestionar; NO limpia mensajero (Q1).
     const upd = tx.orden.updateMany.mock.calls[0][0];
@@ -651,6 +670,23 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     expect(upd.data).toEqual({ estatusId: idEstado("sin_gestionar") });
     expect(upd.data).not.toHaveProperty("mensajeroAsignadoId"); // se conserva
     expect(upd.data).not.toHaveProperty("prioridad"); // money-safe: no toca prioridad
+  });
+
+  it("454/§5: el CANDADO precede a la re-lectura — un `UPDATE` sin cambios sobre las candidatas", async () => {
+    const tx = buildCorteTx();
+    const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.crearCierre(corteInput());
+
+    const candado = tx.$queryRaw.mock.calls.findIndex((c) =>
+      textoSql(c[0]).includes('UPDATE "public"."orden" SET "estatus_id" = "estatus_id"'),
+    );
+    expect(candado).toBeGreaterThanOrEqual(0);
+    // El candado ocurre ANTES del pre-SELECT (orden de invocacion global de vitest).
+    expect(tx.$queryRaw.mock.invocationCallOrder[candado]).toBeLessThan(
+      tx.orden.findMany.mock.invocationCallOrder[0],
+    );
   });
 
   it("R6/R22: choke point con actor null + origen `corte_sin_gestionar`, SOLO de las transicionadas", async () => {
@@ -694,95 +730,55 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     expect(tx.cierreDia.create.mock.calls[0][0].data.estado).toBe("vencido");
   });
 
-  it("R8/R9: 0 gestiones + 0 en_reparto + 0 en ayuda -> rollback -> null (no-op real)", async () => {
-    const tx = buildCorteTx({ enReparto: [], conAyuda: [], vinculadas: 0 });
+  it("R8/R9: 0 gestiones + 0 en_reparto -> rollback -> null (no-op real)", async () => {
+    const tx = buildCorteTx({ enReparto: [], vinculadas: 0 });
     const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const id = await repo.crearCierre(corteInput());
 
     expect(id).toBeNull();
-    // sin en_reparto no se hace updateMany de orden ni append.
+    // Sin candidatas bloqueadas no hay re-lectura, ni updateMany de orden, ni append.
+    expect(tx.orden.findMany).not.toHaveBeenCalled();
     expect(tx.orden.updateMany).not.toHaveBeenCalled();
     expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 
   // ===============================================================================================
-  // FEATURE 235 (T4.4, R26/R27/R28/R29) — EL CORTE BARRE TAMBIEN EL ESTATUS DE AYUDA.
-  //
-  // EL CASO CARO ES R27. El bloque original hacia pre-SELECT + `updateMany` guardado por
-  // `en_reparto` y un `appendCambioEstado` con `estatusOrigenId: enRepartoEstatusId`, justificado
-  // por el comentario «la guarda garantiza este origen». Meter `ayuda_tienda` en un `in` habria
-  // dejado ese comentario MINTIENDO: con dos origenes posibles en un solo `updateMany`, el append
-  // tendria que inventarse de cual salia cada fila y escribiria un historial FALSO.
-  //
-  // ⚠️ LA MUTACION QUE MATA ESTOS CASOS: unificar los dos bloques en un `estatusId: { in: [...] }`
-  // con un solo append. El caso «cada append lleva el estatusOrigenId de SU bloque» se pone rojo.
+  // ⏳ 2026-09-23 (FICHA 454, R27): hasta la 454 el corte recorria DOS bloques (`en_reparto` y
+  // `ayuda_tienda`) y aqui se afirmaba que cada append llevaba el origen de SU bloque. La ayuda deja
+  // de ser estado: una orden con ayuda abierta sigue `en_reparto`, y su fila de historial dice
+  // `en_reparto` porque ES su origen real. Lo que la 235 protegia (R26: el mensajero cuyo dia acabo
+  // con ayudas abiertas genera igual su `vencido`; R28: money-neutral) se conserva abajo.
   // ===============================================================================================
-  it("235/R26: barre las de `en_reparto` Y las de `ayuda_tienda` en la MISMA transaccion", async () => {
-    const tx = buildCorteTx({ enReparto: [{ id: "o1" }], conAyuda: [{ id: "a1" }, { id: "a2" }] });
+  it("235/R27 → 454: UN solo bloque — un `updateMany` y un append, con el origen real `en_reparto`", async () => {
+    const tx = buildCorteTx({ enReparto: [{ id: "o1" }, { id: "a1" }] });
     const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.crearCierre(corteInput());
 
-    // DOS pre-SELECT, uno por estado de origen, en ese orden.
-    expect(tx.orden.findMany).toHaveBeenCalledTimes(2);
-    expect(tx.orden.findMany.mock.calls[1][0].where).toEqual({
-      mensajeroAsignadoId: "m1",
-      estatusId: idEstado("ayuda_tienda"),
-      deletedAt: null,
-      OR: OR_NO_RESERVADA, // feature 246/R11: la proteccion alcanza tambien al bloque de ayuda
-    });
-    // DOS `updateMany`, cada uno GUARDADO por SU origen.
-    expect(tx.orden.updateMany).toHaveBeenCalledTimes(2);
-    expect(tx.orden.updateMany.mock.calls[1][0].where).toEqual({
-      id: { in: ["a1", "a2"] },
-      estatusId: idEstado("ayuda_tienda"),
-      deletedAt: null,
-      OR: OR_NO_RESERVADA,
-    });
-  });
-
-  it("235/R27: cada append lleva el `estatusOrigenId` de SU bloque, no uno supuesto", async () => {
-    const tx = buildCorteTx({ enReparto: [{ id: "o1" }], conAyuda: [{ id: "a1" }] });
-    const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    await repo.crearCierre(corteInput());
-
-    // DOS appends, no uno con las cuatro filas mezcladas.
-    expect(tx.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(2);
-    const primero = tx.ordenHistorialEstado.createMany.mock.calls[0][0].data;
-    const segundo = tx.ordenHistorialEstado.createMany.mock.calls[1][0].data;
-    expect(primero).toEqual([
-      {
-        ordenId: "o1",
-        estatusOrigenId: idEstado("en_reparto"),
-        estatusDestinoId: idEstado("sin_gestionar"),
-        actorUsuarioId: null,
-        origenTipo: "corte_sin_gestionar",
-        motivo: null,
-        gestionOrdenId: null,
-      },
+    expect(tx.orden.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+    const filas = tx.ordenHistorialEstado.createMany.mock.calls[0][0].data as {
+      estatusOrigenId: string;
+    }[];
+    expect(filas.map((f) => f.estatusOrigenId)).toEqual([
+      idEstado("en_reparto"),
+      idEstado("en_reparto"),
     ]);
-    expect(segundo).toEqual([
-      {
-        ordenId: "a1",
-        // ⭑ EL ORIGEN REAL. Si los dos bloques se unificaran, esta fila diria `en_reparto` y el
-        // historial afirmaria que la orden salio de un estado en el que nunca estuvo.
-        estatusOrigenId: idEstado("ayuda_tienda"),
-        estatusDestinoId: idEstado("sin_gestionar"),
-        actorUsuarioId: null,
-        origenTipo: "corte_sin_gestionar",
-        motivo: null,
-        gestionOrdenId: null,
-      },
+    // El vinculo 264 congela el MISMO origen.
+    const vinculo = tx.cierreSinGestion.createMany.mock.calls[0][0].data as {
+      estatusOrigenId: string;
+    }[];
+    expect(vinculo.map((v) => v.estatusOrigenId)).toEqual([
+      idEstado("en_reparto"),
+      idEstado("en_reparto"),
     ]);
   });
 
-  it("235/R28 (MONEY-NEUTRAL): el `data` del bloque de ayuda toca SOLO `estatusId`", async () => {
-    const tx = buildCorteTx({ enReparto: [], conAyuda: [{ id: "a1" }] });
+  it("235/R28 (MONEY-NEUTRAL): el `data` del barrido toca SOLO `estatusId`", async () => {
+    const tx = buildCorteTx({ enReparto: [{ id: "a1" }] });
     const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
@@ -797,11 +793,10 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     expect(cierre.totalGeneral.toString()).toBe("0");
   });
 
-  it("235/R26: un mensajero cuyo dia entero acabo EN AYUDA genera igual su cierre `vencido`", async () => {
-    // La guarda «algo paso» acumula LOS DOS bloques. Sin esa suma, este mensajero se quedaria sin
-    // cierre `vencido` y por tanto sin bloqueo: podria seguir recibiendo guias al dia siguiente con
-    // paquetes de ayer todavia en la mano.
-    const tx = buildCorteTx({ enReparto: [], conAyuda: [{ id: "a1" }, { id: "a2" }], vinculadas: 0 });
+  it("235/R26: un mensajero cuyo dia entero acabo con AYUDAS ABIERTAS genera igual su cierre `vencido`", async () => {
+    // Con la 454 esas ordenes estan `en_reparto` (la ayuda es un hecho, no un estado): entran por
+    // el unico bloque y la guarda «algo paso» las cuenta.
+    const tx = buildCorteTx({ enReparto: [{ id: "a1" }, { id: "a2" }], vinculadas: 0 });
     const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
@@ -811,18 +806,20 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     expect(tx.cierreDia.create.mock.calls[0][0].data.estado).toBe("vencido");
   });
 
-  it("235: un bloque VACIO no escribe nada — ni `updateMany` ni append de esa vuelta", async () => {
-    // El `continue` del bucle. Sin el, un mensajero sin ordenes en ayuda produciria un
-    // `updateMany` con `id: { in: [] }` y un append vacio cada noche.
-    const tx = buildCorteTx({ enReparto: [{ id: "o1" }], conAyuda: [] });
+  it("454/R43: si la re-lectura no trae nada (todas pendientes), NO escribe — ni `updateMany` ni append", async () => {
+    // Las candidatas bloqueadas resultaron tener gestion pendiente: la re-lectura las excluye.
+    const tx = buildCorteTx({ enReparto: [{ id: "o1" }] });
+    tx.orden.findMany.mockImplementation(async () => []);
     const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    await repo.crearCierre(corteInput());
+    const id = await repo.crearCierre(corteInput());
 
-    expect(tx.orden.findMany).toHaveBeenCalledTimes(2); // los dos pre-SELECT SI ocurren
-    expect(tx.orden.updateMany).toHaveBeenCalledTimes(1); // pero solo escribe el que tenia filas
-    expect(tx.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.orden.findMany).toHaveBeenCalledTimes(1);
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
+    expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
+    expect(tx.cierreSinGestion.createMany).not.toHaveBeenCalled();
+    expect(id).toBeNull(); // 0 gestiones + 0 barridas -> rollback
   });
 
   it("sin corteSinGestionar (flujo 37): NO toca `orden` ni el historial", async () => {
@@ -1122,6 +1119,8 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
       anuladaAt: null, // R3
       orden: { deletedAt: null, estatusId: idEstado("en_bodega_central"), estatusValue: "en_bodega_central" }, // R5/R6
       desdeAyudaTienda: false, // feature 237 (D3/R38): la registro el mensajero, no la tienda
+      // FICHA 454 (T1.12, R56): sin evento `gestion_registrada` -> rama LEGADA del deshacer.
+      registradaComoPendiente: false,
     });
   });
 
@@ -2319,12 +2318,28 @@ describe("246/R11-R15 — el corte NO barre lo reservado para un dia que aun no 
   function buildTxSemantico(filas: FilaBarrido[]) {
     const escritas: string[] = [];
     const tx = {
+      // FICHA 454 (§5): el candado del corte (`UPDATE` sin cambios) devuelve las candidatas
+      // `en_reparto`; el filtro de dia que se AFIRMA aqui es el del `findMany`/`updateMany`, que
+      // son los que este doble honra. Cualquier otro `$queryRaw` (emisor de webhooks) recibe `[]`.
+      $queryRaw: vi.fn(async (q: { strings?: readonly string[] } | readonly string[]) => {
+        const partes = Array.isArray(q) ? q : ((q as { strings?: readonly string[] }).strings ?? []);
+        return partes.join(" ").includes('UPDATE "public"."orden" SET "estatus_id" = "estatus_id"')
+          ? filas.filter((f) => f.estatusId === idEstado("en_reparto")).map((f) => ({ id: f.id }))
+          : [];
+      }),
       cierreDia: { create: vi.fn(async () => ({ id: "cv1" })) },
       orden: {
         findMany: vi.fn(
-          async (args: { where: { estatusId: string; OR?: RamaFecha[] } }) =>
+          async (args: {
+            where: { id: { in: string[] }; estatusId: string; OR?: RamaFecha[] };
+          }) =>
             filas
-              .filter((f) => f.estatusId === args.where.estatusId && casaFecha(f, args.where.OR))
+              .filter(
+                (f) =>
+                  args.where.id.in.includes(f.id) &&
+                  f.estatusId === args.where.estatusId &&
+                  casaFecha(f, args.where.OR),
+              )
               .map((f) => ordenBarridaProyectada({ id: f.id })),
         ),
         updateMany: vi.fn(
@@ -2371,7 +2386,6 @@ describe("246/R11-R15 — el corte NO barre lo reservado para un dia que aun no 
           destinoZonaId: "z1",
           corteSinGestionar: {
             enRepartoEstatusId: idEstado("en_reparto"),
-            ayudaEstatusId: idEstado("ayuda_tienda"),
             sinGestionarEstatusId: idEstado("sin_gestionar"),
             diaCerrado: DIA_CERRADO_B,
           },
@@ -2422,11 +2436,13 @@ describe("246/R11-R15 — el corte NO barre lo reservado para un dia que aun no 
   });
 
   it("R15: MEZCLA — se barren solo las NO protegidas y la reservada queda intacta", async () => {
+    // ⏳ 2026-09-23 (FICHA 454, R27): las `a-*` eran ordenes en `ayuda_tienda`; con la ayuda como
+    // hecho (no estado) estan `en_reparto` con la ayuda abierta, y el filtro de dia las trata igual.
     const { run, escritas } = corteConDia([
       { id: "o-hoy", estatusId: idEstado("en_reparto"), fechaReparto: F_HOY },
       { id: "o-manana", estatusId: idEstado("en_reparto"), fechaReparto: F_MANANA },
-      { id: "a-manana", estatusId: idEstado("ayuda_tienda"), fechaReparto: F_MANANA },
-      { id: "a-sin", estatusId: idEstado("ayuda_tienda"), fechaReparto: null },
+      { id: "a-manana", estatusId: idEstado("en_reparto"), fechaReparto: F_MANANA },
+      { id: "a-sin", estatusId: idEstado("en_reparto"), fechaReparto: null },
     ]);
 
     const id = await run();
@@ -2636,7 +2652,6 @@ describe("264/B3 — crearCierre PERSISTE el vinculo de las ordenes barridas", (
   const DIA_CERRADO = new Date("2026-08-20T00:00:00.000Z");
   const CORTE_264 = {
     enRepartoEstatusId: idEstado("en_reparto"),
-    ayudaEstatusId: idEstado("ayuda_tienda"),
     sinGestionarEstatusId: idEstado("sin_gestionar"),
     diaCerrado: DIA_CERRADO,
   };
@@ -2649,26 +2664,28 @@ describe("264/B3 — crearCierre PERSISTE el vinculo de las ordenes barridas", (
   function corteConAlmacen(
     opts: {
       enReparto?: { id: string }[];
-      conAyuda?: { id: string }[];
       vinculadas?: number;
       fallaAlVincular?: Error;
     } = {},
   ) {
     const enReparto = opts.enReparto ?? [{ id: "o1" }, { id: "o2" }];
-    const conAyuda = opts.conAyuda ?? [];
     /** Lo que sobrevive al final: solo lo comprometido. */
     const comprometidas: FilaVinculo[] = [];
     /** Lo escrito dentro de la tx en curso. */
     let buffer: FilaVinculo[] = [];
 
     const tx = {
+      // FICHA 454 (§5): el candado del corte es un `UPDATE` sin cambios por `$queryRaw`; el doble
+      // devuelve las candidatas. Cualquier otro `$queryRaw` (emisor de webhooks) recibe `[]`.
+      $queryRaw: vi.fn(async (q: { strings?: readonly string[] } | readonly string[]) => {
+        const partes = Array.isArray(q) ? q : ((q as { strings?: readonly string[] }).strings ?? []);
+        return partes.join(" ").includes('UPDATE "public"."orden" SET "estatus_id" = "estatus_id"')
+          ? enReparto.map((o) => ({ id: o.id }))
+          : [];
+      }),
       cierreDia: { create: vi.fn(async () => ({ id: "cv1" })) },
       orden: {
-        findMany: vi.fn(async (args: { where: { estatusId: string } }) =>
-          (args.where.estatusId === idEstado("ayuda_tienda") ? conAyuda : enReparto).map(
-            ordenBarridaProyectada,
-          ),
-        ),
+        findMany: vi.fn(async () => enReparto.map(ordenBarridaProyectada)),
         updateMany: vi.fn(async (args: { where: { id: { in: string[] } } }) => ({
           count: args.where.id.in.length,
         })),
@@ -2800,24 +2817,21 @@ describe("264/B3 — crearCierre PERSISTE el vinculo de las ordenes barridas", (
     expect(comprometidas).toEqual([]);
   });
 
-  it("R4: cada fila lleva el estatus de origen de SU vuelta, nunca uno supuesto", async () => {
-    // Es literalmente la razon por la que el bucle del corte tiene dos vueltas guardadas
-    // (feature 235/R27): con dos origenes en un solo `updateMany` habria que INVENTARSE de cual
-    // salio cada fila, y eso es un dato de auditoria falso.
+  it("R4: cada fila lleva el estatus de origen REAL — con la 454, `en_reparto` para todas", async () => {
+    // ⏳ 2026-09-23 (FICHA 454, R27 + Pregunta abierta 4): la ayuda deja de ser estado. Una orden
+    // con ayuda abierta esta `en_reparto` cuando el corte la barre, y ese ES su origen real. Hasta
+    // la 454 este caso afirmaba dos origenes (`en_reparto` y `ayuda_tienda`), uno por vuelta.
     const { repo, comprometidas } = corteConAlmacen({
-      enReparto: [{ id: "o1" }],
-      conAyuda: [{ id: "a1" }, { id: "a2" }],
+      enReparto: [{ id: "o1" }, { id: "a1" }, { id: "a2" }],
     });
 
     await repo.crearCierre(inputCorte());
 
     expect(comprometidas.map((f) => `${f.ordenId}:${f.estatusOrigenId}`)).toEqual([
       `o1:${idEstado("en_reparto")}`,
-      `a1:${idEstado("ayuda_tienda")}`,
-      `a2:${idEstado("ayuda_tienda")}`,
+      `a1:${idEstado("en_reparto")}`,
+      `a2:${idEstado("en_reparto")}`,
     ]);
-    // Contrapunto: los dos origenes son DISTINTOS. Si el bucle se unificara, este par seria uno.
-    expect(new Set(comprometidas.map((f) => f.estatusOrigenId)).size).toBe(2);
   });
 
   it("R6: solicitar el cierre por el flujo normal (37, sin corte) NO registra ningun vinculo", async () => {
@@ -2831,14 +2845,13 @@ describe("264/B3 — crearCierre PERSISTE el vinculo de las ordenes barridas", (
     expect(comprometidas).toEqual([]);
   });
 
-  it("una vuelta que no movio nada no escribe filas de esa vuelta", async () => {
-    // El `continue` del bucle. Sin el, un mensajero sin ordenes en ayuda produciria cada noche un
-    // `createMany` con `data: []`.
-    const { repo, tx } = corteConAlmacen({ enReparto: [{ id: "o1" }], conAyuda: [] });
+  it("un corte que no movio nada no escribe filas de vinculo", async () => {
+    // ⏳ 2026-09-23 (FICHA 454): ya no hay dos vueltas; sin candidatas no hay `createMany` vacio.
+    const { repo, tx } = corteConAlmacen({ enReparto: [] });
 
     await repo.crearCierre(inputCorte());
 
-    expect(tx.cierreSinGestion.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.cierreSinGestion.createMany).not.toHaveBeenCalled();
   });
 
   it("usa `skipDuplicates`: una segunda corrida del corte no duplica el vinculo", async () => {

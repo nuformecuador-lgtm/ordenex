@@ -1405,7 +1405,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       },
     });
     if (row === null) return null;
-    const registro = row.eventos[0] ?? null;
+    const registro = (row.eventos ?? [])[0] ?? null; // sin evento = LEGADA
     // 💰 Feature 237 (T5.5, D3/R38) — ¿la registro LA TIENDA desde la pestaña de ayuda? Se deriva
     // del historial, que es donde ya esta escrito quien la registro (`actor_usuario_id` +
     // `origen_tipo`), en vez de una columna nueva que habria que mantener.

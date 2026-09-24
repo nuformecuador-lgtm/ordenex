@@ -5,7 +5,7 @@ import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepositor
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
-import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
+import { APLICACION_GESTIONES } from "@/tests/fixtures/anclaje-devolucion";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 42/T9 — idempotencia + no-doble-conteo (R6/R13). Simula el constraint unico
@@ -59,11 +59,11 @@ function makeOrdenStore() {
     // o1 entrego: nunca entra en el pre-estado.
     { id: "o1", estatusId: idEstado("entregada"), deletedAt: null as Date | null },
     // o2 es la devolucion de ESTE cierre (gestion g2): la que tiene que quedar anclada.
-    { id: "o2", estatusId: ANCLAJE_DEVOLUCION.preEstadoId, deletedAt: null as Date | null },
+    { id: "o2", estatusId: APLICACION_GESTIONES.preEstadoId, deletedAt: null as Date | null },
     // La testigo: MISMO resultado `devuelta` y MISMO pre-estado, pero su gestion (g3) es de OTRO
     // cierre. Solo el `cierreId` la separa, asi que si la guardia desapareciera del WHERE, esta
     // orden se anclaria sola — con la aprobacion de un cierre que no es el suyo.
-    { id: "o3", estatusId: ANCLAJE_DEVOLUCION.preEstadoId, deletedAt: null as Date | null },
+    { id: "o3", estatusId: APLICACION_GESTIONES.preEstadoId, deletedAt: null as Date | null },
   ];
   type WhereOrden = {
     id?: { in?: string[] };
@@ -332,7 +332,7 @@ describe("wallet idempotencia (R6/R13)", () => {
         cierreId: "c1",
         alcance: ALCANCE,
         nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm",
         motivoRechazo: null,
@@ -384,7 +384,7 @@ describe("wallet idempotencia (R6/R13)", () => {
         cierreId: "c1",
         alcance: ALCANCE,
         nuevoEstado: "aprobado",
-        anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+        aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
         confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm",
         motivoRechazo: null,
@@ -399,8 +399,8 @@ describe("wallet idempotencia (R6/R13)", () => {
     // por tanto NO se le puede cobrar el rechazo.
     expect(estado()).toEqual({
       o1: idEstado("entregada"),
-      o2: ANCLAJE_DEVOLUCION.devueltaId,
-      o3: ANCLAJE_DEVOLUCION.preEstadoId,
+      o2: APLICACION_GESTIONES.devueltaId,
+      o3: APLICACION_GESTIONES.preEstadoId,
     });
 
     // El WHERE tal cual sale del repositorio: acota a los ids derivados de ESTE cierre y va
@@ -410,10 +410,10 @@ describe("wallet idempotencia (R6/R13)", () => {
     expect(prisma.orden.updateMany).toHaveBeenCalledWith({
       where: {
         id: { in: ["o2"] },
-        estatusId: ANCLAJE_DEVOLUCION.preEstadoId,
+        estatusId: APLICACION_GESTIONES.preEstadoId,
         deletedAt: null,
       },
-      data: { estatusId: ANCLAJE_DEVOLUCION.devueltaId },
+      data: { estatusId: APLICACION_GESTIONES.devueltaId },
     });
 
     const llamadasTrasLaPrimera = prisma.orden.updateMany.mock.calls.length;
@@ -425,8 +425,8 @@ describe("wallet idempotencia (R6/R13)", () => {
     // segunda fila de historial. La idempotencia no la da un `if`, la da el WHERE.
     expect(estado()).toEqual({
       o1: idEstado("entregada"),
-      o2: ANCLAJE_DEVOLUCION.devueltaId,
-      o3: ANCLAJE_DEVOLUCION.preEstadoId,
+      o2: APLICACION_GESTIONES.devueltaId,
+      o3: APLICACION_GESTIONES.preEstadoId,
     });
     expect(prisma.orden.updateMany.mock.calls.length).toBe(llamadasTrasLaPrimera + 1); // se INTENTA
     expect(prisma.ordenHistorialEstado.createMany.mock.calls.length).toBe(historialTrasLaPrimera); // y no escribe
@@ -452,7 +452,7 @@ describe("wallet idempotencia (R6/R13)", () => {
         cierreId: "c1",
         alcance: ALCANCE,
         nuevoEstado: "aprobado",
-        anclajeDevolucion: ANCLAJE_DEVOLUCION,
+        aplicacionGestiones: APLICACION_GESTIONES,
         resueltoPor: "adm",
         motivoRechazo: null,
         // `g2` es la unica gestion de `c1` cuyo paquete vuelve: es lo que bodega escaneo.

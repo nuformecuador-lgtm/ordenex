@@ -1,26 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
-import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 237 (T5.1, R2/R3/R4/R5/R9/R10/R18/R24/R25/R28) — `crearGestionDesdeAyuda` con Prisma
-// mockeado (sin DB, mismo patron que `gestion-orden-evidencia.test.ts` y
-// `gestion-orden-reprogramar.test.ts`).
+// mockeado (sin DB, mismo patron que `gestion-orden-evidencia.test.ts`).
 //
-// Es LA ESCRITURA de la ficha mas delicada en dinero de la pila, asi que aqui se mira la FORMA
-// EXACTA de cada sentencia, no solo el resultado:
-//   - el `where` del `updateMany` (R24: la guarda de la carrera vive AHI y no en el service);
-//   - el `data` del `updateMany` (R10/R11: SOLO `estatusId`);
-//   - `mensajero_id` = EL MENSAJERO y `cierre_id` NULO (💰 R3/R9: es lo que mete la fila en el
-//     cierre del mensajero y lo que hace que el dinero salga solo por los cinco feeds);
-//   - el actor y la familia del append (R4/R5);
-//   - y que `usuario.update` NO se llame (R10), que es el fallo que copiar
-//     `crearGestionYTransicionar` habria traido.
-//
-// El catalogo de estados se siembra porque la guardia del choke point (140) es de FALLO CERRADO:
-// valida el par `ayuda_tienda -> reprogramada|rechazada` contra `TRANSICIONES` de verdad. Si las
-// aristas #65/#66 no estuvieran declaradas, estos casos reventarian aqui — que es justo lo que se
-// quiere.
+// ⏳ 2026-09-23 (FICHA 454, T1.15; design §4.2/§5) — LA FORMA DE LA ESCRITURA CAMBIA, Y ESTA SUITE
+// CON ELLA. La ayuda deja de ser el estado `ayuda_tienda`: la orden sigue `en_reparto` con la ayuda
+// ABIERTA (derivacion de `ayuda-abierta.ts`), y la gestion de la tienda queda PENDIENTE de confirmar
+// —sin transicion— hasta que la aprobacion del cierre del mensajero la aplica. Por eso:
+//   - la guarda de la carrera ya no es un `updateMany` guardado por estatus: es el CANDADO de la fila
+//     (`SELECT … FOR UPDATE`) y la RE-LECTURA de «ayuda abierta + suya + dia» en una sentencia
+//     posterior. La SEMANTICA de esa barrera se mide contra Postgres en
+//     `tests/integration/db/454/ayuda-evento-sql-real.test.ts` y `gestion-desde-ayuda-dia-reserva`;
+//     aqui se afirma que va ANTES de escribir y que perderla no deja NI UN efecto (R25/R28);
+//   - el historial de estados NO se escribe: quien la registro y con que familia viajan en el
+//     evento `gestion_registrada` (actor = la tienda, familia `gestion_tienda_ayuda`, R4/R5), que
+//     es con el que la aprobacion escribira la transicion.
+// Lo que NO cambia y aqui sigue afirmado caso por caso: 💰 la fila se atribuye AL MENSAJERO, nace
+// sin cierre y sin importes (R3/R9/R11), su forma es la del mensajero (R2), las evidencias van en la
+// misma tx (R15), sin ubicacion (R18), sin tocar el puntero del mensajero (R10) y sin reoptimizar.
 
 function colaFake() {
   return {
@@ -32,43 +32,63 @@ function colaFake() {
   };
 }
 
-function buildTxRepo(overrides: { updateManyCount?: number } = {}) {
-  const ordenUpdateMany = vi.fn(async () => ({
-    count: overrides.updateManyCount ?? 1,
-  }));
-  const gestionCreate = vi.fn(async () => ({ id: "g-ayuda" }));
+type Sql = { strings?: readonly string[] };
+const textoDe = (q: Sql | readonly string[]) =>
+  Array.isArray(q) ? q.join(" ") : ((q as Sql).strings ?? []).join(" ");
+
+function buildTxRepo(overrides: { admite?: () => boolean } = {}) {
+  const admite = overrides.admite ?? (() => true);
+  const orden: string[] = [];
+  // `$queryRaw`: (1) el candado `FOR UPDATE`, (2) la re-lectura de «ayuda abierta», y (3) la
+  // consulta de suscripcion del encolado del webhook (sin suscripcion en esta suite).
+  const $queryRaw = vi.fn(async (q: Sql) => {
+    const t = textoDe(q);
+    if (t.includes("FOR UPDATE")) {
+      orden.push("candado");
+      return [{ id: "o1" }];
+    }
+    if (t.includes("webhook_suscripcion")) return [];
+    orden.push("relectura");
+    return admite() ? [{ id: "o1" }] : [];
+  });
+  const gestionCreate = vi.fn(async () => {
+    orden.push("gestion");
+    return { id: "g-ayuda" };
+  });
   const evidenciaCreateMany = vi.fn(async () => ({ count: 0 }));
   const pagoCreateMany = vi.fn(async () => ({ count: 0 }));
   const ordenUpdate = vi.fn(async () => ({}));
-  const ordenFindFirst = vi.fn(async () => ({
-    estatusId: idEstado("ayuda_tienda"),
-  }));
+  const ordenUpdateMany = vi.fn(async () => ({ count: 1 }));
   const usuarioUpdate = vi.fn(async () => ({}));
   const historialCreateMany = vi.fn(async () => ({ count: 1 }));
+  const eventoCreate = vi.fn(async () => ({ id: "ev-ayuda" }));
   const tx = {
-    orden: {
-      updateMany: ordenUpdateMany,
-      update: ordenUpdate,
-      findFirst: ordenFindFirst,
-    },
+    $queryRaw,
+    orden: { update: ordenUpdate, updateMany: ordenUpdateMany },
     gestionOrden: { create: gestionCreate },
     gestionOrdenEvidencia: { createMany: evidenciaCreateMany },
     gestionOrdenPago: { createMany: pagoCreateMany },
     usuario: { update: usuarioUpdate },
     ordenHistorialEstado: { createMany: historialCreateMany },
+    ordenEvento: { create: eventoCreate },
   };
   const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx));
-  const repo = new GestionOrdenRepository({ $transaction } as never, colaFake() as never);
+  const cola = colaFake();
+  const repo = new GestionOrdenRepository({ $transaction } as never, cola as never);
   return {
     repo,
-    ordenUpdateMany,
+    orden,
+    $queryRaw,
     gestionCreate,
     evidenciaCreateMany,
     pagoCreateMany,
     ordenUpdate,
+    ordenUpdateMany,
     usuarioUpdate,
     historialCreateMany,
+    eventoCreate,
     $transaction,
+    cola,
   };
 }
 
@@ -85,18 +105,12 @@ const EVIDENCIAS = [
   },
 ];
 
-/**
- * Feature 261 (B17): el DIA DE COSTA RICA EN CURSO que el servicio resuelve y pasa a la
- * escritura (convencion `@db.Date`). Aqui entra como `Date` —no como texto— porque el `where`
- * es de Prisma, que conoce el tipo de la columna.
- */
+/** Feature 261 (B17): el DIA DE COSTA RICA EN CURSO que el servicio resuelve y pasa a la escritura. */
 const DIA_CR = new Date("2026-08-21T00:00:00.000Z");
 
 /** El caso base: la tienda RECHAZA. Los dos ids de usuario son personas distintas. */
 const INPUT = {
   ordenId: "o1",
-  estatusAyudaId: idEstado("ayuda_tienda"),
-  estatusDestinoId: idEstado("rechazada"),
   mensajeroId: "mensajero-1", // 💰 R3: a quien se ATRIBUYE
   actorUsuarioId: "tienda-1", // R4: quien la REGISTRA
   diaEnCurso: DIA_CR, // feature 261 (R30): la segunda capa del bloqueo por reserva
@@ -109,7 +123,6 @@ const INPUT = {
 
 const INPUT_REPROGRAMADA = {
   ...INPUT,
-  estatusDestinoId: idEstado("reprogramada"),
   gestion: {
     resultado: "reprogramada" as const,
     motivo: "el cliente pidio otro dia",
@@ -123,48 +136,27 @@ beforeEach(async () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* (a) R24 — la guarda de la carrera vive EN EL WHERE                           */
+/* (a) R24 — la barrera va ANTES de escribir, bajo candado                      */
 /* -------------------------------------------------------------------------- */
 
-describe("crearGestionDesdeAyuda — la guarda va en el WHERE que muta (R24)", () => {
-  it("R24 + 261/R30: el `where` del `updateMany` lleva estado, borrado y DIA DE REPARTO", async () => {
-    // El literal ES el contrato: cualquier condicion de mas o de menos cambia QUE filas puede tocar
-    // la tienda. Si `estatusId` desapareciera (mutacion T8.3), la tienda podria resolver una orden
-    // que el mensajero ya recupero o que el corte de la noche ya se llevo — y sobre esa fila hay
-    // DOS actores, asi que no es un caso hipotetico.
-    //
-    // FEATURE 261 (B17, R30): + el `OR` del dia. Con un doble esto afirma la FORMA del `where`,
-    // no que Postgres seleccione las filas que decimos: eso lo prueba
-    // `tests/integration/db/gestion-desde-ayuda-dia-reserva.int.test.ts`, y es esa la que mata
-    // la mutacion M-o.
-    const { repo, ordenUpdateMany } = buildTxRepo();
+describe("crearGestionDesdeAyuda — la barrera va antes de escribir (R24; ficha 454)", () => {
+  it("R24 + 261/R30: candado de la fila y RE-LECTURA (ayuda abierta, suya, dia) ANTES de la gestion", async () => {
+    const { repo, orden, $queryRaw } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
 
-    const arg = (ordenUpdateMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      where: unknown;
-      data: unknown;
-    };
-    expect(arg.where).toEqual({
-      id: "o1",
-      estatusId: idEstado("ayuda_tienda"),
-      deletedAt: null,
-      // Predicado COPIADO del corte, no reinventado: `NULL` entra por la primera rama (una orden
-      // sin dia se resuelve igual que siempre) y es `lte` —no `lt`— porque una orden reservada
-      // para HOY es de hoy.
-      OR: [{ fechaReparto: null }, { fechaReparto: { lte: DIA_CR } }],
-    });
+    expect(orden.slice(0, 3)).toEqual(["candado", "relectura", "gestion"]);
+    const relectura = textoDe(($queryRaw.mock.calls as unknown as Sql[][])[1][0]);
+    // El dia entra como TEXTO con `::date` (SQL crudo) y la condicion de reserva es la del corte.
+    expect(relectura).toContain('"fecha_reparto" IS NULL OR "o"."fecha_reparto" <=');
+    expect(relectura).toContain('"mensajero_asignado_id" =');
+    expect(relectura).toContain('"deleted_at" IS NULL');
   });
 
-  it("💰 R10/R11: el `data` del `updateMany` toca UNICAMENTE `estatusId`", async () => {
-    // Money-safe y R10 a la vez: ni mensajero asignado, ni prioridad, ni un solo importe. Si esta
-    // sentencia creciera, la tienda estaria escribiendo columnas de la orden que no decidio.
-    const { repo, ordenUpdateMany } = buildTxRepo();
+  it("💰 R10/R11 (454): la orden NO se escribe — ni `updateMany` ni `update` (sin transicion)", async () => {
+    const { repo, ordenUpdate, ordenUpdateMany } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
-
-    const arg = (ordenUpdateMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      data: Record<string, unknown>;
-    };
-    expect(arg.data).toEqual({ estatusId: idEstado("rechazada") });
+    expect(ordenUpdateMany).not.toHaveBeenCalled();
+    expect(ordenUpdate).not.toHaveBeenCalled();
   });
 
   it("todo ocurre bajo UNA sola `$transaction` (todo-o-nada)", async () => {
@@ -178,47 +170,25 @@ describe("crearGestionDesdeAyuda — la guarda va en el WHERE que muta (R24)", (
 /* (b) R25/R28 — carrera perdida: NI UN efecto                                  */
 /* -------------------------------------------------------------------------- */
 
-describe("crearGestionDesdeAyuda — `count = 0` no deja NI UN rastro (R25/R28)", () => {
-  it("devuelve `null` y no crea gestion, ni evidencias, ni historial", async () => {
-    const { repo, gestionCreate, evidenciaCreateMany, historialCreateMany } = buildTxRepo({
-      updateManyCount: 0,
-    });
+describe("crearGestionDesdeAyuda — sin ayuda abierta no deja NI UN rastro (R25/R28)", () => {
+  it("devuelve `null` y no crea gestion, ni evidencias, ni evento, ni historial", async () => {
+    const { repo, gestionCreate, evidenciaCreateMany, historialCreateMany, eventoCreate } =
+      buildTxRepo({ admite: () => false });
 
     const r = await repo.crearGestionDesdeAyuda(INPUT);
 
     expect(r).toBeNull();
     expect(gestionCreate).not.toHaveBeenCalled();
     expect(evidenciaCreateMany).not.toHaveBeenCalled();
+    expect(eventoCreate).not.toHaveBeenCalled();
     expect(historialCreateMany).not.toHaveBeenCalled();
   });
 
-  it("R28: el SEGUNDO envio simultaneo encuentra la orden fuera de ayuda y no crea una segunda", async () => {
-    // La idempotencia sale por CONSTRUCCION de la guarda del WHERE: no hay codigo de idempotencia
-    // que pueda divergir de ella. Se simula el par de envios: el primero gana la guarda, el
-    // segundo la pierde.
+  it("R28: el SEGUNDO envio simultaneo encuentra la ayuda ya cerrada y no crea una segunda", async () => {
+    // La idempotencia sale por CONSTRUCCION de la barrera: el primero deja una gestion pendiente, y
+    // con ella la ayuda deja de estar abierta; el segundo la re-lee bajo candado y no pasa.
     let intento = 0;
-    const ordenUpdateMany = vi.fn(async () => ({
-      count: ++intento === 1 ? 1 : 0,
-    }));
-    const gestionCreate = vi.fn(async () => ({ id: "g-ayuda" }));
-    const tx = {
-      orden: {
-        updateMany: ordenUpdateMany,
-        update: vi.fn(),
-        findFirst: vi.fn(),
-      },
-      gestionOrden: { create: gestionCreate },
-      gestionOrdenEvidencia: { createMany: vi.fn(async () => ({ count: 0 })) },
-      gestionOrdenPago: { createMany: vi.fn(async () => ({ count: 0 })) },
-      usuario: { update: vi.fn() },
-      ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
-    };
-    const repo = new GestionOrdenRepository(
-      {
-        $transaction: vi.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx)),
-      } as never,
-      colaFake() as never,
-    );
+    const { repo, gestionCreate } = buildTxRepo({ admite: () => ++intento === 1 });
 
     const primero = await repo.crearGestionDesdeAyuda(INPUT);
     const segundo = await repo.crearGestionDesdeAyuda(INPUT);
@@ -233,22 +203,18 @@ describe("crearGestionDesdeAyuda — `count = 0` no deja NI UN rastro (R25/R28)"
 /* (c) 💰 R2/R3/R9 — la fila: a quien se atribuye y en que cierre cae           */
 /* -------------------------------------------------------------------------- */
 
+function dataDe(gestionCreate: ReturnType<typeof vi.fn>): Record<string, unknown> {
+  return (gestionCreate.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+}
+
 describe("crearGestionDesdeAyuda — la fila que cobra el dinero (R2/R3/R9)", () => {
   it("💰 R3: `mensajero_id` es EL MENSAJERO de la orden, NO el actor que la registro", async () => {
     // ESTE es el caso que sostiene la ficha entera. `crearCierre` vincula por
-    // `{ mensajeroId, cierreId: null, anuladaAt: null }` y `findGestionesPendientes` filtra igual:
-    // con el id de la tienda aqui, la gestion no se vincularia a NINGUN cierre nunca, quedaria
-    // fuera de los cinco feeds de dinero, fuera del snapshot, fuera del escaneo de la confirmacion
-    // fisica (238) y fuera del conteo de intentos. La ficha dejaria de cumplirse sin que nada
-    // fallara. Es la mutacion T8.1.
+    // `{ mensajeroId, cierreId: null, anuladaAt: null }`: con el id de la tienda aqui, la gestion no
+    // se vincularia a NINGUN cierre nunca y quedaria fuera de los cinco feeds de dinero.
     const { repo, gestionCreate } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
-
-    const data = (
-      (gestionCreate as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-        data: Record<string, unknown>;
-      }
-    ).data;
+    const data = dataDe(gestionCreate);
     expect(data.mensajeroId).toBe("mensajero-1");
     expect(data.mensajeroId).not.toBe("tienda-1");
   });
@@ -256,47 +222,26 @@ describe("crearGestionDesdeAyuda — la fila que cobra el dinero (R2/R3/R9)", ()
   it("💰 R9: la gestion nace con `cierre_id` NULO — la vincula el MISMO mecanismo que las del mensajero", async () => {
     const { repo, gestionCreate } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
-
-    const data = (
-      (gestionCreate as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-        data: Record<string, unknown>;
-      }
-    ).data;
-    // `cierreId` no se escribe EN ABSOLUTO: la columna es nullable y su default es NULL, que es
-    // exactamente lo que `crearCierre` busca (`{ mensajeroId, cierreId: null, anuladaAt: null }`)
-    // para vincularla. Escribir cualquier valor aqui seria un camino propio, y R9 pide justo lo
-    // contrario: que la vincule EL MISMO mecanismo que las del mensajero.
+    const data = dataDe(gestionCreate);
     expect(data).not.toHaveProperty("cierreId");
-    // Y la fila tampoco nace anulada: si naciera, no entraria en ningun cierre ni contaria.
     expect(data).not.toHaveProperty("anuladaAt");
   });
 
   it("💰 R11: la fila NO lleva ningun importe (ni monto recibido, ni ingreso, ni pago)", async () => {
     const { repo, gestionCreate, pagoCreateMany } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
-
-    const data = (
-      (gestionCreate as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-        data: Record<string, unknown>;
-      }
-    ).data;
+    const data = dataDe(gestionCreate);
     expect(data.montoRecibido).toBeNull();
     expect(data.metodoPago).toBeNull();
     expect(data).not.toHaveProperty("ingresoBodegaRechazo");
     expect(data).not.toHaveProperty("pagoMensajero");
-    // Y ni una linea de desglose de recaudo: esta via no cobra al cliente.
     expect(pagoCreateMany).not.toHaveBeenCalled();
   });
 
   it("R2: `rechazada` produce la MISMA forma de fila que la del mensajero para ese resultado", async () => {
     const { repo, gestionCreate } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
-
-    const data = (
-      (gestionCreate as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-        data: Record<string, unknown>;
-      }
-    ).data;
+    const data = dataDe(gestionCreate);
     expect(data).toMatchObject({
       ordenId: "o1",
       mensajeroId: "mensajero-1",
@@ -309,12 +254,7 @@ describe("crearGestionDesdeAyuda — la fila que cobra el dinero (R2/R3/R9)", ()
   it("R2: `reprogramada` persiste la fecha como DATE a medianoche UTC (mismo trato que el mensajero)", async () => {
     const { repo, gestionCreate } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT_REPROGRAMADA);
-
-    const data = (
-      (gestionCreate as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-        data: Record<string, unknown>;
-      }
-    ).data;
+    const data = dataDe(gestionCreate);
     expect(data.resultado).toBe("reprogramada");
     expect(data.fechaReprogramacion).toEqual(new Date("2027-01-05T00:00:00.000Z"));
   });
@@ -324,32 +264,12 @@ describe("crearGestionDesdeAyuda — la fila que cobra el dinero (R2/R3/R9)", ()
     await repo.crearGestionDesdeAyuda(INPUT);
 
     expect(evidenciaCreateMany).toHaveBeenCalledTimes(1);
-    const filas = (
-      (evidenciaCreateMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-        data: unknown[];
-      }
-    ).data;
-    expect(filas).toEqual([
-      {
-        gestionId: "g-ayuda",
-        storagePath: "o1/ayuda-rechazada-1-0.jpg",
-        contentType: "image/jpeg",
-        indice: 0,
-      },
-      {
-        gestionId: "g-ayuda",
-        storagePath: "o1/ayuda-rechazada-1-1.png",
-        contentType: "image/png",
-        indice: 1,
-      },
+    const filas = (evidenciaCreateMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
+    expect(filas.data).toEqual([
+      { gestionId: "g-ayuda", storagePath: "o1/ayuda-rechazada-1-0.jpg", contentType: "image/jpeg", indice: 0 },
+      { gestionId: "g-ayuda", storagePath: "o1/ayuda-rechazada-1-1.png", contentType: "image/png", indice: 1 },
     ]);
-    // Dual-write de la portada (119/R12): los consumidores que muestran UNA foto siguen viendo la
-    // del indice 0 sin cambios, tambien para las gestiones de la tienda.
-    const data = (
-      (gestionCreate as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-        data: Record<string, unknown>;
-      }
-    ).data;
+    const data = dataDe(gestionCreate);
     expect(data.evidenciaStoragePath).toBe("o1/ayuda-rechazada-1-0.jpg");
     expect(data.evidenciaContentType).toBe("image/jpeg");
   });
@@ -357,12 +277,7 @@ describe("crearGestionDesdeAyuda — la fila que cobra el dinero (R2/R3/R9)", ()
   it("R18: NO escribe ubicacion — la tienda gestiona desde un escritorio", async () => {
     const { repo, gestionCreate } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
-
-    const data = (
-      (gestionCreate as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-        data: Record<string, unknown>;
-      }
-    ).data;
+    const data = dataDe(gestionCreate);
     expect(data.ubicacionLat).toBeNull();
     expect(data.ubicacionLng).toBeNull();
     expect(data.ubicacionAusencia).toBeNull();
@@ -370,97 +285,55 @@ describe("crearGestionDesdeAyuda — la fila que cobra el dinero (R2/R3/R9)", ()
 });
 
 /* -------------------------------------------------------------------------- */
-/* (d) R4/R5 — el append: quien la registro y con que familia                   */
+/* (d) R4/R5 (454) — quien la registro y con que familia, en el EVENTO          */
 /* -------------------------------------------------------------------------- */
 
-describe("crearGestionDesdeAyuda — el historial dice la verdad (R4/R5)", () => {
-  it("R4/R5: actor = LA TIENDA, familia `gestion_tienda_ayuda`, origen = el estatus de ayuda", async () => {
-    const { repo, historialCreateMany } = buildTxRepo();
+describe("crearGestionDesdeAyuda — el evento dice la verdad (R4/R5; ficha 454)", () => {
+  it("R4/R5: evento `gestion_registrada`, actor = LA TIENDA, familia `gestion_tienda_ayuda`; SIN historial", async () => {
+    const { repo, eventoCreate, historialCreateMany } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
 
-    expect(historialCreateMany).toHaveBeenCalledTimes(1);
-    const filas = (
-      (historialCreateMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-        data: Record<string, unknown>[];
-      }
-    ).data;
-    expect(filas).toHaveLength(1);
-    expect(filas[0]).toMatchObject({
-      ordenId: "o1",
-      estatusOrigenId: idEstado("ayuda_tienda"),
-      estatusDestinoId: idEstado("rechazada"),
-      // R4: el historial es la UNICA evidencia de quien decidio el rechazo que se le cobra a la
-      // tienda. Si aqui fuera el mensajero, el sistema le atribuiria un acto que no hizo.
-      actorUsuarioId: "tienda-1",
-      // R5: familia propia. Es la que hace que la gestion cuente como intento (R6) sin que el
-      // historial mienta, y la que permite responder «¿puede el mensajero deshacerla?» (D3).
-      origenTipo: "gestion_tienda_ayuda",
-      motivo: "el cliente no la quiere",
-      gestionOrdenId: "g-ayuda",
+    expect(historialCreateMany).not.toHaveBeenCalled();
+    expect(eventoCreate).toHaveBeenCalledTimes(1);
+    expect((eventoCreate.mock.calls[0] as unknown[])[0]).toMatchObject({
+      data: {
+        ordenId: "o1",
+        tipo: "gestion_registrada",
+        gestionOrdenId: "g-ayuda",
+        // R5: la familia con la que la APROBACION escribira la transicion — la que la hace contar
+        // como intento (237/R6) y la que dice «la resolvio la tienda» al deshacer (D3).
+        familiaAplicacion: "gestion_tienda_ayuda",
+        resultado: "rechazada",
+        mensajeroId: "mensajero-1",
+        // R4: la UNICA evidencia de quien decidio el rechazo que se le cobra a la tienda.
+        actorUsuarioId: "tienda-1",
+        actorRol: "adminTienda",
+      },
     });
   });
 
-  it("R5: `reprogramada` usa la MISMA familia (lo que cambia es el destino, no el origen)", async () => {
-    const { repo, historialCreateMany } = buildTxRepo();
+  it("R5: `reprogramada` usa la MISMA familia", async () => {
+    const { repo, eventoCreate } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT_REPROGRAMADA);
-
-    const filas = (
-      (historialCreateMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-        data: Record<string, unknown>[];
-      }
-    ).data;
-    expect(filas[0].origenTipo).toBe("gestion_tienda_ayuda");
-    expect(filas[0].estatusDestinoId).toBe(idEstado("reprogramada"));
+    expect((eventoCreate.mock.calls[0] as unknown[])[0]).toMatchObject({
+      data: { familiaAplicacion: "gestion_tienda_ayuda", resultado: "reprogramada" },
+    });
   });
 });
 
 /* -------------------------------------------------------------------------- */
-/* (e) R10 — el testigo: `usuario.update` NO se llama                           */
+/* (e) R10 — lo que NO toca                                                     */
 /* -------------------------------------------------------------------------- */
 
 describe("crearGestionDesdeAyuda — lo que NO toca (R10)", () => {
   it("R10: `usuario.update` NO se llama — copiar ese bloque le arrancaria OTRA orden al mensajero", async () => {
-    // `crearGestionYTransicionar` limpia `usuario.ordenEnGestionId` del mensajero SEA CUAL SEA la
-    // orden a la que apunte. Una orden en `ayuda_tienda` no puede ser su orden en gestion
-    // (`escogerParaGestion` exige `en_reparto` y la solicitud de ayuda ya libero el puntero,
-    // 235/R7), asi que ese puntero apunta a OTRA orden que el mensajero podria estar gestionando
-    // en la calle en ese momento. Reutilizar el bloque se la quitaria de las manos.
     const { repo, usuarioUpdate } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
     expect(usuarioUpdate).not.toHaveBeenCalled();
   });
 
-  it("R10: `orden.update` (por PK, sin guarda) tampoco se usa: la unica escritura es el `updateMany`", async () => {
-    const { repo, ordenUpdate, ordenUpdateMany } = buildTxRepo();
-    await repo.crearGestionDesdeAyuda(INPUT);
-    expect(ordenUpdate).not.toHaveBeenCalled();
-    expect(ordenUpdateMany).toHaveBeenCalledTimes(1);
-  });
-
-  it("no encola reoptimizacion de ruta (paridad con `transicionarAyuda`)", async () => {
-    // La orden salio de la ruta al entrar en ayuda; sacarla otra vez no cambia el conjunto de
-    // paradas. `transicionarAyuda` (235) tampoco encola: es paridad deliberada, no olvido. El
-    // doble de la cola falla ruidosamente si alguien encola.
-    const cola = colaFake();
-    const tx = {
-      orden: {
-        updateMany: vi.fn(async () => ({ count: 1 })),
-        update: vi.fn(),
-        findFirst: vi.fn(),
-      },
-      gestionOrden: { create: vi.fn(async () => ({ id: "g-ayuda" })) },
-      gestionOrdenEvidencia: { createMany: vi.fn(async () => ({ count: 0 })) },
-      gestionOrdenPago: { createMany: vi.fn(async () => ({ count: 0 })) },
-      usuario: { update: vi.fn() },
-      ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
-    };
-    const repo = new GestionOrdenRepository(
-      {
-        $transaction: vi.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx)),
-      } as never,
-      cola as never,
-    );
-
+  it("no encola reoptimizacion de ruta (la orden salio de la ruta al pedir ayuda)", async () => {
+    const { repo, cola } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
     expect(cola.enqueue).not.toHaveBeenCalled();
   });

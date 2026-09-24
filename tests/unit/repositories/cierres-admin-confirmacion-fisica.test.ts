@@ -11,8 +11,8 @@ import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/
 import type { IWalletFeedService } from "@/lib/interfaces/services/IWalletFeedService";
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWalletTiendaFeedService";
-import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
-import { sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { APLICACION_GESTIONES } from "@/tests/fixtures/anclaje-devolucion";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 238 (T3.3/T3.4, R17-R24/R44) — LA MARCA DE CONFIRMACION FISICA dentro de la transaccion
 // de aprobacion.
@@ -39,6 +39,11 @@ interface GestionFila {
   anuladaAt: Date | null;
   createdAt: Date;
   confirmadaFisicaAt: Date | null;
+  /**
+   * FICHA 454: la gestion es de CALLE del modelo nuevo (tiene evento `gestion_registrada`). Solo
+   * esas las aplica la aprobacion. Ausente = LEGADA.
+   */
+  registrada?: boolean;
 }
 
 const T0 = new Date("2026-08-19T10:00:00.000Z");
@@ -120,6 +125,9 @@ interface WhereGestion {
   resultado?: string | { in?: string[] };
   anuladaAt?: Date | null;
   ordenId?: { in?: string[] };
+  // FICHA 454 (T1.7): la aplicacion al aprobar pide solo gestiones de CALLE con evento de
+  // registro (`where.eventos`). El doble lo honra con `GestionFila.registrada`.
+  eventos?: unknown;
 }
 
 /** `resultado` puede llegar como escalar (anclaje 239) o como `{ in }` (confirmacion 238). */
@@ -142,10 +150,20 @@ function buildBase(filas: GestionFila[], estadosOrden: Record<string, string> = 
           (where.cierreId === undefined || g.cierreId === where.cierreId) &&
           casaResultado(g, where.resultado) &&
           (where.anuladaAt === undefined || g.anuladaAt === where.anuladaAt) &&
-          (where.ordenId?.in === undefined || where.ordenId.in.includes(g.ordenId)),
+          (where.ordenId?.in === undefined || where.ordenId.in.includes(g.ordenId)) &&
+          (where.eventos === undefined || g.registrada === true),
       );
       void orderBy;
-      return encontradas.map((g) => ({ id: g.id, ordenId: g.ordenId }));
+      return encontradas.map((g) => ({
+        id: g.id,
+        ordenId: g.ordenId,
+        resultado: g.resultado,
+        mensajeroId: "m1",
+        motivo: null,
+        eventos: g.registrada
+          ? [{ id: `ev-${g.id}`, familiaAplicacion: "gestion", actorUsuarioId: "m1" }]
+          : [],
+      }));
     }),
     updateMany: vi.fn(
       async ({ where, data }: { where: WhereGestion; data: Record<string, unknown> }) => {
@@ -184,7 +202,25 @@ function buildBase(filas: GestionFila[], estadosOrden: Record<string, string> = 
       },
     ),
   };
+  // FICHA 454 (T1.7): la APLICACION escribe con `UPDATE "orden" SET "estatus_id" = $destino WHERE
+  // "id" IN (…) AND "estatus_id" = $enReparto … RETURNING "id"`. El doble honra la guarda. El
+  // resto de sentencias (emisor de webhooks del choke point) recibe `[]`: sin suscripciones.
+  const $queryRaw = vi.fn(async (...c: unknown[]) => {
+    const sql = (c[0] as readonly string[]).join(" ? ");
+    if (!sql.includes('UPDATE "orden" SET "estatus_id" =')) return [];
+    const destinoId = c[1] as string;
+    const ids = (c[2] as { values: string[] }).values;
+    const guarda = c[3] as string;
+    const movidas: { id: string }[] = [];
+    for (const id of ids) {
+      if (ordenes[id] !== guarda) continue;
+      ordenes[id] = destinoId;
+      movidas.push({ id });
+    }
+    return movidas;
+  });
   const prisma = {
+    $queryRaw,
     cierreDia: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       count: vi.fn().mockResolvedValue(1),
@@ -236,7 +272,7 @@ function aprobar(repo: CierresAdminRepository, ids: string[], cierreId = "c1") {
     nuevoEstado: "aprobado",
     resueltoPor: "adm-maestro",
     motivoRechazo: null,
-    anclajeDevolucion: ANCLAJE_DEVOLUCION,
+    aplicacionGestiones: APLICACION_GESTIONES,
     confirmacionFisica: ids.map((gestionId) => ({ gestionId })),
   });
 }
@@ -343,7 +379,7 @@ describe("238/R18 — las dos guardas del WHERE, con su caso testigo cada una", 
   });
 
   it("R18: al lanzar, NADA de la aprobacion queda aplicado (la tx revierte entera)", async () => {
-    const base = buildBase(gestiones(), { "o-dev": ANCLAJE_DEVOLUCION.preEstadoId });
+    const base = buildBase(gestiones(), { "o-dev": APLICACION_GESTIONES.preEstadoId });
     const repo = makeRepo(base.prisma);
 
     await expect(aprobar(repo, [G_DEV, G_INC])).rejects.toBeInstanceOf(
@@ -353,7 +389,7 @@ describe("238/R18 — las dos guardas del WHERE, con su caso testigo cada una", 
     // El bloque de ANCLAJE (239) va DESPUES de este, asi que al lanzar aqui ni siquiera corre: la
     // orden se queda en el pre-estado y no hay fila de historial. Con `$transaction` real, ademas,
     // se revertiria lo que hubiera pasado antes (los cinco feeds y la propia aprobacion).
-    expect(base.ordenes["o-dev"]).toBe(ANCLAJE_DEVOLUCION.preEstadoId);
+    expect(base.ordenes["o-dev"]).toBe(APLICACION_GESTIONES.preEstadoId);
     expect(base.prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 });
@@ -394,17 +430,26 @@ describe("238/R22/R25 — un cierre que no se aprueba no marca nada", () => {
   });
 });
 
-describe("238/R23 — la invariante que cruza 238 y 239", () => {
-  it("toda gestion ANCLADA quedo confirmada en la MISMA transaccion", async () => {
-    // `o-dev` esta en el pre-estado: la aprobacion la ancla a `devuelta`. Su gestion `g-dev` es la
-    // que bodega confirmo unas lineas antes, en la misma tx.
-    const base = buildBase(gestiones(), { "o-dev": ANCLAJE_DEVOLUCION.preEstadoId });
+// ⏳ 2026-09-23 (FICHA 454, T1.7): el ANCLAJE de la 239 (`devolucion_por_confirmar -> devuelta`) se
+// generaliza a la APLICACION de las gestiones de calle al aprobar: la orden de una devolucion del
+// modelo nuevo sigue `en_reparto` hasta aqui y la aprobacion la lleva a `devuelta`. La invariante
+// de la 238 se conserva tal cual: toda devolucion APLICADA fue confirmada en la MISMA tx, antes.
+/** El corpus de siempre, con la devolucion `g-dev` registrada por el modelo nuevo (454). */
+function gestionesConDevolucionNueva(): GestionFila[] {
+  return gestiones().map((g) => (g.id === G_DEV ? { ...g, registrada: true } : g));
+}
+
+describe("238/R23 — la invariante que cruza 238 y 239 (454: aplicacion)", () => {
+  it("toda gestion APLICADA quedo confirmada en la MISMA transaccion", async () => {
+    // `o-dev` esta `en_reparto` con su devolucion pendiente: la aprobacion la aplica a `devuelta`.
+    // Su gestion `g-dev` es la que bodega confirmo unas lineas antes, en la misma tx.
+    const base = buildBase(gestionesConDevolucionNueva(), { "o-dev": idEstado("en_reparto") });
 
     const res = await aprobar(makeRepo(base.prisma), [G_DEV, G_REC, G_REP]);
 
     expect(res).toBe("updated");
-    // (1) El anclaje ocurrio: la orden se movio y dejo su fila de historial.
-    expect(base.ordenes["o-dev"]).toBe(ANCLAJE_DEVOLUCION.devueltaId);
+    // (1) La aplicacion ocurrio: la orden se movio y dejo su fila de historial.
+    expect(base.ordenes["o-dev"]).toBe(APLICACION_GESTIONES.destinoPorResultado.devuelta);
     expect(base.prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
 
     // (2) LA INVARIANTE: las gestiones que produjeron ese anclaje estan TODAS confirmadas. No se
@@ -422,8 +467,16 @@ describe("238/R23 — la invariante que cruza 238 y 239", () => {
     }
   });
 
-  it("la marca se escribe ANTES del anclaje (el orden operativo del bloque)", async () => {
-    const base = buildBase(gestiones(), { "o-dev": ANCLAJE_DEVOLUCION.preEstadoId });
+  // ⏳ 2026-09-23 (FICHA 454, design §7.1 y §16 «rojos esperados»): este caso decia «la marca se
+  // escribe ANTES del anclaje» y afirmaba `["confirmar", "anclar"]`. La 454 muda la aplicacion
+  // ANTES de la devolucion de rechazadas (R10: una orden que queda `rechazada` en esta aprobacion
+  // tiene que llegar a `por_devolver*` en la MISMA), y la confirmacion fisica sigue donde estaba,
+  // despues de la 139. El orden pasa a ser `["anclar", "confirmar"]`, DENTRO de la misma tx: la
+  // invariante que importa —toda devolucion aplicada queda confirmada o la tx entera revierte— la
+  // mide el caso de arriba. Corrida del test viejo contra el codigo nuevo:
+  // `expected [ 'anclar', 'confirmar' ] to deeply equal [ 'confirmar', 'anclar' ]`.
+  it("454: la aplicacion va ANTES de la marca, las dos en la MISMA tx (orden de §7.1)", async () => {
+    const base = buildBase(gestionesConDevolucionNueva(), { "o-dev": idEstado("en_reparto") });
     const orden: string[] = [];
     const marcar = base.prisma.gestionOrden.updateMany.getMockImplementation();
     base.prisma.gestionOrden.updateMany.mockImplementation(
@@ -432,19 +485,18 @@ describe("238/R23 — la invariante que cruza 238 y 239", () => {
         return marcar ? marcar(args) : { count: 0 };
       },
     );
-    const anclar = base.prisma.orden.updateMany.getMockImplementation();
-    base.prisma.orden.updateMany.mockImplementation(
-      async (args: Parameters<typeof base.prisma.orden.updateMany>[0]) => {
+    // FICHA 454: la aplicacion escribe por `$queryRaw` (UPDATE … RETURNING), no por `updateMany`.
+    const aplicar = base.prisma.$queryRaw.getMockImplementation();
+    base.prisma.$queryRaw.mockImplementation(async (...c: unknown[]) => {
+      if ((c[0] as readonly string[]).join(" ").includes('UPDATE "orden" SET "estatus_id" =')) {
         orden.push("anclar");
-        return anclar ? anclar(args) : { count: 0 };
-      },
-    );
+      }
+      return aplicar ? aplicar(...c) : [];
+    });
 
     await aprobar(makeRepo(base.prisma), [G_DEV]);
 
-    // Se confirma que el paquete esta, y A CONTINUACION la devolucion se ancla y se vuelve
-    // visible para la tienda. Es el orden que pide el diseno (§4.1) y se lee igual en el codigo.
-    expect(orden).toEqual(["confirmar", "anclar"]);
+    expect(orden).toEqual(["anclar", "confirmar"]);
   });
 });
 

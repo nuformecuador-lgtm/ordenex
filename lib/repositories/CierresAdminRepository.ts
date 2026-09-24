@@ -553,17 +553,6 @@ export class IndemnizacionNoAplicableError extends Error {
  * Mensaje SIN PII (R44, patron `IndemnizacionNoAplicableError`): solo el id del cierre — ni
  * gestiones, ni guias, ni destinatarios, ni actores.
  */
-/**
- * FICHA 454 (T1.7) — la aprobacion llego sin la configuracion de APLICACION DE GESTIONES. Fallo
- * cerrado: se lanza dentro de la transaccion y no queda nada de la aprobacion (R11).
- */
-export class AplicacionGestionesAusenteError extends Error {
-  constructor(cierreId: string) {
-    super(`aprobacion sin configuracion de aplicacion de gestiones (cierre ${cierreId})`);
-    this.name = "AplicacionGestionesAusenteError";
-  }
-}
-
 export class ConfirmacionFisicaNoAplicableError extends Error {
   constructor(readonly cierreId: string) {
     super(`confirmacion fisica no aplicable a una gestion del cierre ${cierreId}`);
@@ -1628,7 +1617,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       // gestion esta PENDIENTE de confirmar: la orden sigue `en_reparto` y la correccion es SOLO el
       // sello sobre la gestion (+ evento `gestion_corregida` + webhook), sin transicion: al aprobar
       // se aplicara el resultado corregido (R19). Sin evento es LEGADA: la de siempre, con la #69.
-      const esPendiente = previa.eventos.length > 0;
+      const esPendiente = (previa.eventos ?? []).length > 0; // sin evento = LEGADA
 
       // 💰 Los DOS snapshots POR GESTION (design §2.2).
       //
@@ -2162,10 +2151,10 @@ export class CierresAdminRepository implements ICierresAdminRepository {
         //
         // Liberacion y aplicacion son independientes: una orden barrida no tiene gestion pendiente de
         // este cierre (el corte no barre ordenes con gestion pendiente, T1.10).
-        {
-          // FALLO CERRADO (239/R9): sin la configuracion de aplicacion, la aprobacion NO ocurre. El
-          // tipo ya lo exige; esto es la red para quien llegue sin tipos (un doble, un `as never`).
-          if (aplicacionGestiones === undefined) throw new AplicacionGestionesAusenteError(cierreId);
+        // El FALLO CERRADO vive donde lo puso la 239 para su anclaje: el TIPO lo exige al aprobar y el
+        // SERVICIO rechaza la aprobacion entera si no resuelve un solo id (`CierresAdminService`).
+        // Aqui, como el bloque de la 239, sin configuracion no se aplica nada.
+        if (aplicacionGestiones) {
           const { enRepartoId, destinoPorResultado } = aplicacionGestiones;
           // (1) Las gestiones de CALLE (con evento de registro) vigentes de ESTE cierre. `cierreId`
           // es la GUARDIA (R59: nada de otro cierre). Las LEGADAS (sin evento) quedan fuera: ya

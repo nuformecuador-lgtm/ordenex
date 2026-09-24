@@ -798,7 +798,7 @@ function toApiOrdenDetalleRow(row: ApiOrdenDetalleSelectRow): ApiOrdenDetalleRow
       estadoResultante: estadoPorGestion.get(g.id) ?? null,
       // FICHA 454 (T1.20, R32): gestion de calle del modelo nuevo que TODAVIA no se aplico (su
       // cierre no se aprobo). Tras aprobar tiene su primera transicion enlazada y pasa a `false`.
-      pendienteConfirmacion: g.eventos.length > 0 && !estadoPorGestion.has(g.id),
+      pendienteConfirmacion: (g.eventos ?? []).length > 0 && !estadoPorGestion.has(g.id),
       motivo: causaTipificadaDeGestion({
         resultado: g.resultado as GestionResultado,
         causaDevolucion: g.causaDevolucion,

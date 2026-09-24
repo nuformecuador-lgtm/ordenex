@@ -18,7 +18,7 @@ import { bloqueoConVencido } from "@/tests/fixtures/bloqueo-cierre";
 
 // Feature 158 (R6/R7/R8/R10/R11) — el SERVICE del reporte de incidente del mensajero. Dobles
 // del repo/storage (nada de DB real): lo que se afirma es el `GestionOrdenData` EMITIDO hacia
-// `crearGestionYTransicionar`, el estado destino y los efectos sobre el bucket.
+// `registrarGestionPendiente`, el estado destino y los efectos sobre el bucket.
 //
 // Molde: `mis-asignaciones-causa-devolucion.test.ts` (73).
 
@@ -59,7 +59,10 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     setOrdenEnGestion: vi.fn(async () => true),
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
-    crearGestionYTransicionar: vi.fn(async () => "g1"),
+    registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev-g1" })),
+    // FICHA 454: la guarda de gestionabilidad pregunta por gestion pendiente / ayuda abierta.
+    findBloqueoDeGestion: vi.fn(async () => null),
+    findPendientesYAyudas: vi.fn(async () => ({ conGestionPendiente: new Set<string>(), conAyudaAbierta: new Set<string>() })),
     reprogramarDesdeDevuelta: vi.fn(async () => true),
     // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
     // servicio); el doble lo declara porque la interfaz lo exige.
@@ -111,7 +114,7 @@ function newService(
 }
 
 function gestionEmitida(repo: IGestionOrdenRepository): GestionOrdenData {
-  const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  const call = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
   return call.gestion as GestionOrdenData;
 }
 
@@ -136,18 +139,20 @@ describe("Feature 158 · R6 — la gestion y la transicion viajan en UNA sola tr
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.estado).toBe("incidente");
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
-    const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
+    const call = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
     // El mapeo resultado -> estado es 1:1 POR NOMBRE (`findEstatusIdByValue(resultado)`): si
     // el value del catalogo y el value del enum divergieran, esto se caeria.
-    expect(call.nuevoEstatusId).toBe("os-incidente");
+    // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO pasado al repositorio. Registrar ya
+    // no transiciona: el destino lo aplica la aprobacion del cierre.
+    expect(call).not.toHaveProperty("nuevoEstatusId");
     expect(call.gestion.resultado).toBe("incidente");
     expect(call.mensajeroId).toBe("m1");
   });
 
   it("R6: si la tx falla, el service PROPAGA el fallo (nada queda persistido a medias)", async () => {
     const repo = fakeRepo({
-      crearGestionYTransicionar: vi.fn(async () => {
+      registrarGestionPendiente: vi.fn(async () => {
         throw new Error("fallo de la tx de gestion");
       }),
     });
@@ -157,13 +162,19 @@ describe("Feature 158 · R6 — la gestion y la transicion viajan en UNA sola tr
     );
   });
 
-  it("R6: el catalogo sin el value `incidente` (seed pendiente) -> validation_error sin escribir", async () => {
+  // ⏳ 2026-09-23 (FICHA 454, R1): AQUI VIVIA «el catalogo sin el value `incidente` -> validation_error
+  // sin escribir». Registrar ya no resuelve el estado destino (no transiciona): el catalogo lo exige la
+  // APROBACION del cierre, que falla cerrada. Se afirma ahora que el registro no lo consulta.
+  it("R6: registrar un incidente NO consulta el catalogo de estados (no transiciona, R1)", async () => {
     const repo = fakeRepo();
     const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findBloqueoDetalle"> = {
-      findEstatusIdByValue: vi.fn(async (v: string) => (v === "incidente" ? null : "os-x")),
+      findEstatusIdByValue: vi.fn(async () => null),
       findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
     };
-    const storage: IFileStorage = { upload: vi.fn(), remove: vi.fn(async () => {}) };
+    const storage: IFileStorage = {
+      upload: vi.fn(async (i: { path: string }) => i.path),
+      remove: vi.fn(async () => {}),
+    };
     const service = new MisAsignacionesService(
       repo,
       ordenRepo,
@@ -181,10 +192,9 @@ describe("Feature 158 · R6 — la gestion y la transicion viajan en UNA sola tr
 
     const r = await service.gestionar(incidente(), MENSAJERO);
 
-    expect(r.status).toBe("validation_error");
-    // R7: la guardia del catalogo va ANTES de subir la foto -> cero objetos en el bucket.
-    expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(r.status).toBe("ok");
+    expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -283,7 +293,7 @@ describe("Feature 158 · R10 — las 1..N evidencias se suben y se persisten", (
       remove,
     };
     const repo = fakeRepo({
-      crearGestionYTransicionar: vi.fn(async () => {
+      registrarGestionPendiente: vi.fn(async () => {
         throw new Error("boom");
       }),
     });
@@ -332,7 +342,7 @@ describe("Feature 158 · R10 — las 1..N evidencias se suben y se persisten", (
     ).rejects.toThrow("storage caido");
 
     expect((remove.mock.calls[0] as unknown as [string[]])[0]).toHaveLength(1);
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
@@ -352,7 +362,7 @@ describe("Feature 158 · R7 — el reporte se rechaza SIN efectos si la guardia 
 
       expect(r.status).toBe("conflict");
       expect(storage.upload).not.toHaveBeenCalled(); // cero objetos en el bucket
-      expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+      expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
     },
   );
 
@@ -366,7 +376,7 @@ describe("Feature 158 · R7 — el reporte se rechaza SIN efectos si la guardia 
 
     expect(r).toEqual({ status: "forbidden" });
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("R7: orden BORRADA -> conflict, sin subir fotos ni escribir", async () => {
@@ -379,7 +389,7 @@ describe("Feature 158 · R7 — el reporte se rechaza SIN efectos si la guardia 
 
     expect(r.status).toBe("conflict");
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("R7: mensajero con un CIERRE PENDIENTE que lo bloquea -> conflict, sin efectos", async () => {
@@ -413,7 +423,7 @@ describe("Feature 158 · R7 — el reporte se rechaza SIN efectos si la guardia 
 
     expect(r.status).toBe("conflict");
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
