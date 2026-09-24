@@ -36,7 +36,7 @@ describeSiHayBase("454/T1.11 — deshacer: rama nueva y rama legada (Postgres re
 
       // NUEVA
       const n = await e.sembrarOrden({ estatus: "en_reparto" });
-      const gN = await e.gestionarOk(n.ordenId, "devuelta");
+      const gN = await e.gestionarOk(n.ordenId, "novedad");
       const desN = await deshacer(gN);
       const eventosN = await e.tx.ordenEvento.findMany({
         where: { ordenId: n.ordenId, tipo: "gestion_anulada" },
@@ -51,12 +51,12 @@ describeSiHayBase("454/T1.11 — deshacer: rama nueva y rama legada (Postgres re
         anulada: (await e.gestionesDe(n.ordenId))[0].anuladaAt !== null,
       };
       // La orden vuelve a ser gestionable: una segunda gestion (entregada) entra.
-      const gN2 = await e.gestionarOk(n.ordenId, "entregada");
+      const gN2 = await e.gestionarOk(n.ordenId, "entregado");
 
       // NUEVA con la orden movida por otra via.
       const m = await e.sembrarOrden({ estatus: "en_reparto", mensajeroId: m2.mensajeroId });
-      const gM = await e.gestionarOk(m.ordenId, "rechazada", { actor: m2.actor });
-      await e.tx.orden.update({ where: { id: m.ordenId }, data: { estatusId: e.id("sin_gestionar") } });
+      const gM = await e.gestionarOk(m.ordenId, "devolucion_a_origen_por_rechazo", { actor: m2.actor });
+      await e.tx.orden.update({ where: { id: m.ordenId }, data: { estatusId: e.id("novedad_interna") } });
       const desM = await deshacer(gM, m2.actor);
       // Y la guarda de DENTRO de la tx (anti-TOCTOU), llamada directa: el servicio ya la filtra antes.
       const repoM = await e.s.cierreDiaRepo.anularGestionPendiente({
@@ -71,10 +71,10 @@ describeSiHayBase("454/T1.11 — deshacer: rama nueva y rama legada (Postgres re
         eventos: await e.tx.ordenEvento.count({ where: { ordenId: m.ordenId, tipo: "gestion_anulada" } }),
       };
       // LEGADA
-      const l = await e.sembrarOrden({ estatus: "rechazada", mensajeroId: m2.mensajeroId });
+      const l = await e.sembrarOrden({ estatus: "devolucion_a_origen_por_rechazo", mensajeroId: m2.mensajeroId });
       const gL = (
         await e.tx.gestionOrden.create({
-          data: { ordenId: l.ordenId, mensajeroId: m2.mensajeroId, resultado: "rechazada", motivo: "No la quiso" },
+          data: { ordenId: l.ordenId, mensajeroId: m2.mensajeroId, resultado: "devolucion_a_origen_por_rechazo", motivo: "No la quiso" },
           select: { id: true },
         })
       ).id;
@@ -82,7 +82,7 @@ describeSiHayBase("454/T1.11 — deshacer: rama nueva y rama legada (Postgres re
         data: {
           ordenId: l.ordenId,
           estatusOrigenId: e.id("en_reparto"),
-          estatusDestinoId: e.id("rechazada"),
+          estatusDestinoId: e.id("devolucion_a_origen_por_rechazo"),
           origenTipo: "gestion",
           actorUsuarioId: m2.mensajeroId,
           gestionOrdenId: gL,
@@ -145,7 +145,7 @@ describeSiHayBase("454/T1.11 — deshacer: rama nueva y rama legada (Postgres re
 
   it("R15 (nueva): deja UN evento `gestion_anulada` del mensajero y su webhook", () => {
     expect(r.eventosN).toEqual([
-      { id: expect.any(String), gestionOrdenId: r.gN, resultado: "devuelta", actorUsuarioId: r.mensajeroId, actorRol: "mensajero" },
+      { id: expect.any(String), gestionOrdenId: r.gN, resultado: "novedad", actorUsuarioId: r.mensajeroId, actorRol: "mensajero" },
     ]);
     expect(r.jobsN).toBe(1);
   });
@@ -158,7 +158,7 @@ describeSiHayBase("454/T1.11 — deshacer: rama nueva y rama legada (Postgres re
 
   it("R20 (legada): vuelve a `en_reparto` por `deshacer_gestion`, sin evento", () => {
     expect(r.trasL.estado).toBe("en_reparto");
-    expect(r.trasL.historial).toEqual(["gestion:en_reparto->rechazada", "deshacer_gestion:rechazada->en_reparto"]);
+    expect(r.trasL.historial).toEqual(["gestion:en_reparto->devolucion_a_origen_por_rechazo", "deshacer_gestion:devolucion_a_origen_por_rechazo->en_reparto"]);
     expect(r.trasL.eventos).toBe(0);
   });
 
@@ -167,7 +167,7 @@ describeSiHayBase("454/T1.11 — deshacer: rama nueva y rama legada (Postgres re
       { es: "gN", cierre: false },
       { es: "gN2", cierre: true },
     ]);
-    expect(r.estadoFinalN).toBe("entregada");
-    expect(r.historialFinalN).toEqual([{ fila: "gestion:en_reparto->entregada", gestion: "gN2" }]);
+    expect(r.estadoFinalN).toBe("entregado");
+    expect(r.historialFinalN).toEqual([{ fila: "gestion:en_reparto->entregado", gestion: "gN2" }]);
   });
 });

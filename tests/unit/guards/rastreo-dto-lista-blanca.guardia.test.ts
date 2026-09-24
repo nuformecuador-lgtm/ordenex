@@ -127,8 +127,8 @@ const TRANSICIONES: readonly FilaTransicionPoblada[] = [
   transicionPoblada("en_preparacion", "2026-03-01T15:00:00.000Z"),
   transicionPoblada("en_bodega_central", "2026-03-02T15:00:00.000Z"),
   transicionPoblada("en_reparto", "2026-03-03T15:00:00.000Z"),
-  transicionPoblada("devuelta", "2026-03-04T15:00:00.000Z"),
-  transicionPoblada("entregada", "2026-03-05T15:00:00.000Z"),
+  transicionPoblada("novedad", "2026-03-04T15:00:00.000Z"),
+  transicionPoblada("entregado", "2026-03-05T15:00:00.000Z"),
 ];
 
 class RepositorioPoblado implements IRastreoPublicoRepository {

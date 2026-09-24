@@ -225,7 +225,7 @@ export async function listarMensajerosParaAsignacion(
     const [conReparto, conRecoleccion, bloqueados, noAsignables] = await Promise.all([
       // FICHA 454 (R56): sin `ayuda_tienda` (ya no es estado); la exclusion de las gestionadas vive
       // en el repositorio.
-      repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto"]),
+      repo.findMensajerosConOrdenesEn(ids, ["mensajero_recogiendo_en_bodega", "en_reparto"]),
       repo.findMensajerosConOrdenesEn(ids, ["por_recolectar_en_tienda"]),
       repo.findMensajerosBloqueadosPorCierres(ids), // feature 271/R32
       // Pedido humano 2026-08-26: los dados de baja. MISMO predicado que las tres escrituras

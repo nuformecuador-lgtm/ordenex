@@ -53,11 +53,11 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
   it("R7/R8/R10/R14: aplica cada resultado con su familia y su actor; la legada no se toca", async () => {
     const r = await conEscenario(mundo, async (e) => {
       const o = {
-        entregada: await e.sembrarOrden({ estatus: "en_reparto" }),
-        devuelta: await e.sembrarOrden({ estatus: "en_reparto" }),
-        rechazada: await e.sembrarOrden({ estatus: "en_reparto" }),
+        entregado: await e.sembrarOrden({ estatus: "en_reparto" }),
+        novedad: await e.sembrarOrden({ estatus: "en_reparto" }),
+        devolucion_a_origen_por_rechazo: await e.sembrarOrden({ estatus: "en_reparto" }),
         incidente: await e.sembrarOrden({ estatus: "en_reparto" }),
-        reprogramada: await e.sembrarOrden({ estatus: "en_reparto" }),
+        reprogramado: await e.sembrarOrden({ estatus: "en_reparto" }),
       };
       const g: Record<string, string> = {};
       for (const [resultado, orden] of Object.entries(o)) {
@@ -68,7 +68,7 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
       // cierre). Si la aplicacion la re-aplicara, la llevaria a `entregada`.
       const legada = await e.sembrarOrden({ estatus: "en_reparto", fechaReparto: diaCR(1) });
       const gLegada = await e.tx.gestionOrden.create({
-        data: { ordenId: legada.ordenId, mensajeroId: e.mensajeroId, resultado: "entregada" },
+        data: { ordenId: legada.ordenId, mensajeroId: e.mensajeroId, resultado: "entregado" },
         select: { id: true },
       });
 
@@ -101,7 +101,7 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
           enCierre: (await e.gestionesDe(legada.ordenId)).find((x) => x.id === gLegada.id)?.cierreId,
         },
         cierreId,
-        devolucion139: await e.historialDe(o.rechazada.ordenId),
+        devolucion139: await e.historialDe(o.devolucion_a_origen_por_rechazo.ordenId),
       };
     });
 
@@ -110,15 +110,15 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
     expect(r.aprobacion).toBe("ok");
 
     // R7: cada una a su estado real...
-    expect(r.despues.entregada).toBe("entregada");
-    expect(r.despues.devuelta).toBe("devuelta");
+    expect(r.despues.entregado).toBe("entregado");
+    expect(r.despues.novedad).toBe("novedad");
     expect(r.despues.incidente).toBe("incidente");
-    expect(r.despues.reprogramada).toBe("reprogramada");
+    expect(r.despues.reprogramado).toBe("reprogramado");
     // ...y R10: la `rechazada` NO se queda en `rechazada`: la 139 la devuelve en ESTA aprobacion.
-    expect(r.despues.rechazada).toBe("por_devolver_a_tienda");
+    expect(r.despues.devolucion_a_origen_por_rechazo).toBe("por_devolver_a_tienda");
     expect(r.devolucion139.map((h) => `${h.origen}->${h.destino}:${h.origenTipo}`)).toEqual([
-      "en_reparto->rechazada:gestion",
-      "rechazada->por_devolver_a_tienda:devolucion_rechazada",
+      "en_reparto->devolucion_a_origen_por_rechazo:gestion",
+      "devolucion_a_origen_por_rechazo->por_devolver_a_tienda:devolucion_rechazada",
     ]);
 
     // R8: UNA fila de aplicacion por orden, con su familia, su actor y la gestion enlazada.
@@ -126,19 +126,19 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
       expect(r.filas[k], k).toHaveLength(1);
       return r.filas[k][0];
     };
-    expect(una("entregada")).toMatchObject({
+    expect(una("entregado")).toMatchObject({
       origen: "en_reparto",
-      destino: "entregada",
+      destino: "entregado",
       origenTipo: "gestion",
       actorUsuarioId: r.mensajeroId,
-      gestionOrdenId: r.g.entregada,
+      gestionOrdenId: r.g.entregado,
     });
-    expect(una("devuelta")).toMatchObject({
+    expect(una("novedad")).toMatchObject({
       origen: "en_reparto",
-      destino: "devuelta",
+      destino: "novedad",
       origenTipo: "anclaje_devolucion", // D8: el reloj del plazo lee esta familia
       actorUsuarioId: r.aprobadorId, // D8: el APROBADOR
-      gestionOrdenId: r.g.devuelta,
+      gestionOrdenId: r.g.novedad,
     });
     expect(una("incidente")).toMatchObject({
       destino: "incidente",
@@ -146,10 +146,10 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
       actorUsuarioId: r.mensajeroId,
       gestionOrdenId: r.g.incidente,
     });
-    expect(una("reprogramada")).toMatchObject({
-      destino: "reprogramada",
+    expect(una("reprogramado")).toMatchObject({
+      destino: "reprogramado",
       origenTipo: "gestion",
-      gestionOrdenId: r.g.reprogramada,
+      gestionOrdenId: r.g.reprogramado,
     });
 
     // R14: la legada entro en el cierre (su dinero es de ese cierre) pero la orden NO se movio.
@@ -161,7 +161,7 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
   it("R9: una orden que ya salio de `en_reparto` no se mueve, y la aprobacion sigue", async () => {
     const r = await conEscenario(mundo, async (e) => {
       const fuera = await e.sembrarOrden({ estatus: "en_reparto" });
-      await e.gestionarOk(fuera.ordenId, "devuelta");
+      await e.gestionarOk(fuera.ordenId, "novedad");
       // Otra via la saco de reparto antes de la aprobacion (sin pasar por el choke point: lo que se
       // mide es la GUARDA de la aplicacion, no quien la movio).
       await e.tx.orden.update({
@@ -169,7 +169,7 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
         data: { estatusId: e.id("en_bodega_central") },
       });
       const testigo = await e.sembrarOrden({ estatus: "en_reparto" });
-      await e.gestionarOk(testigo.ordenId, "entregada");
+      await e.gestionarOk(testigo.ordenId, "entregado");
 
       const cierreId = await e.solicitarCierreOk();
       const aprobacion = await e.aprobar(cierreId);
@@ -184,13 +184,13 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
     expect(r.aprobacion).toBe("ok");
     expect(r.fuera).toBe("en_bodega_central"); // la guarda `estatus_id = en_reparto` la dejo fuera
     expect(r.filasFuera).toEqual([]);
-    expect(r.testigo).toBe("entregada"); // control positivo en la MISMA aprobacion
+    expect(r.testigo).toBe("entregado"); // control positivo en la MISMA aprobacion
   });
 
   it("R57: con dos gestiones de calle vigentes, aprobar el cierre de la VIEJA no mueve la orden", async () => {
     const r = await conEscenario(mundo, async (e) => {
       const orden = await e.sembrarOrden({ estatus: "en_reparto" });
-      const vieja = await e.gestionarOk(orden.ordenId, "devuelta");
+      const vieja = await e.gestionarOk(orden.ordenId, "novedad");
       const cierreId = await e.solicitarCierreOk();
       // La anomalia medida en produccion («dos gestiones vivas de la misma orden», 1 de 48): una
       // SEGUNDA gestion de calle vigente, mas reciente, fuera de este cierre. Se siembra directa
@@ -199,7 +199,7 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
         data: {
           ordenId: orden.ordenId,
           mensajeroId: e.mensajeroId,
-          resultado: "entregada",
+          resultado: "entregado",
           createdAt: new Date(Date.now() + 60_000),
         },
         select: { id: true },
@@ -210,7 +210,7 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
           tipo: "gestion_registrada",
           gestionOrdenId: nueva.id,
           familiaAplicacion: "gestion",
-          resultado: "entregada",
+          resultado: "entregado",
           mensajeroId: e.mensajeroId,
           actorUsuarioId: e.mensajeroId,
           actorRol: "mensajero",
@@ -236,13 +236,13 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
     // dejaria de ser «la mas reciente» y la orden se quedaria `en_reparto` para siempre.
     const r = await conEscenario(mundo, async (e) => {
       const orden = await e.sembrarOrden({ estatus: "en_reparto" });
-      await e.gestionarOk(orden.ordenId, "entregada");
+      await e.gestionarOk(orden.ordenId, "entregado");
       const cierreId = await e.solicitarCierreOk();
       await e.tx.gestionOrden.create({
         data: {
           ordenId: orden.ordenId,
           mensajeroId: e.mensajeroId,
-          resultado: "reprogramada",
+          resultado: "reprogramado",
           createdAt: new Date(Date.now() + 60_000),
         },
       });
@@ -251,13 +251,13 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
     });
 
     expect(r.aprobacion).toBe("ok");
-    expect(r.estado).toBe("entregada");
+    expect(r.estado).toBe("entregado");
   });
 
   it("R12: re-aprobar el mismo cierre no aplica otra vez ni escribe historial", async () => {
     const r = await conEscenario(mundo, async (e) => {
       const orden = await e.sembrarOrden({ estatus: "en_reparto" });
-      await e.gestionarOk(orden.ordenId, "devuelta");
+      await e.gestionarOk(orden.ordenId, "novedad");
       const cierreId = await e.solicitarCierreOk();
       const primera = await e.aprobar(cierreId);
       const filasTras1 = (await e.historialDe(orden.ordenId)).length;
@@ -273,7 +273,7 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
 
     expect(r.primera).toBe("ok");
     expect(r.segunda).toBe("conflict");
-    expect(r.estado).toBe("devuelta");
+    expect(r.estado).toBe("novedad");
     expect(r.filasTras1).toBe(1);
     expect(r.filasTras2).toBe(r.filasTras1);
   });
@@ -281,7 +281,7 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
   it("R11: si un paso POSTERIOR de la aprobacion falla, no queda nada de la aplicacion", async () => {
     const r = await conEscenario(mundo, async (e) => {
       const orden = await e.sembrarOrden({ estatus: "en_reparto" });
-      await e.gestionarOk(orden.ordenId, "devuelta");
+      await e.gestionarOk(orden.ordenId, "novedad");
       const cierreId = await e.solicitarCierreOk();
       // Los servicios REALES sobre un cliente cuyo `$transaction` abre un SAVEPOINT de verdad y cuyo
       // ULTIMO paso de la aprobacion (el registro de la decision, ficha 362) revienta. La aplicacion
@@ -318,7 +318,7 @@ describeSiHayBase("454/T1.7 — la aplicacion de las gestiones al aprobar (Postg
   it("R13: rechazar el cierre no mueve ninguna orden; la gestion sigue pendiente", async () => {
     const r = await conEscenario(mundo, async (e) => {
       const orden = await e.sembrarOrden({ estatus: "en_reparto" });
-      await e.gestionarOk(orden.ordenId, "entregada");
+      await e.gestionarOk(orden.ordenId, "entregado");
       const cierreId = await e.solicitarCierreOk();
       const rechazo = await e.rechazar(cierreId);
       return {

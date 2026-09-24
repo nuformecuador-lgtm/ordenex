@@ -17,10 +17,10 @@ import {
 // ninguno de los cinco valores del enum se queda sin etiqueta.
 
 const ESPERADO = {
-  entregada: "Entregada",
-  reprogramada: "Reprogramada",
-  devuelta: "Devuelta",
-  rechazada: "Rechazada",
+  entregado: "Entregada",
+  reprogramado: "Reprogramada",
+  novedad: "Devuelta",
+  devolucion_a_origen_por_rechazo: "Rechazada",
   incidente: "Incidente",
 } as const;
 
@@ -42,7 +42,7 @@ describe("RESULTADO_FILA_LABEL (feature 230, T1.3)", () => {
       expect(singular).not.toBe(plural);
     }
     // Y el plural NO se toca (R3 del espiritu de la feature: lo que ya existe sigue igual).
-    expect(RESULTADO_LABEL.entregada).toBe("Entregadas");
+    expect(RESULTADO_LABEL.entregado).toBe("Entregadas");
   });
 
   it("ninguna etiqueta es el value del enum (R45)", () => {

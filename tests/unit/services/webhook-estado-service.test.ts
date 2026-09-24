@@ -81,7 +81,7 @@ const DATOS_BASE: DatosEntregaOrden = {
 
 /** Feature 256 — datos de una orden que transiciona a `devuelta` con su causa vigente. */
 function datosDevuelta(causaDevolucion: CausaDevolucion | null): DatosEntregaOrden {
-  return { ...DATOS_BASE, estado: "devuelta", causaDevolucion };
+  return { ...DATOS_BASE, estado: "novedad", causaDevolucion };
 }
 
 /** ⏳ 2026-08-22 (268) — datos de una orden que transiciona a `incidente` con su causa vigente. */
@@ -463,7 +463,7 @@ describe("256/R6-R7 — la forma: UNA sola, el campo siempre presente", () => {
     const body = JSON.parse(cuerpoDe(entregar));
     expect(body.data.numGuia).toBe(12345);
     expect(body.data.numRemision).toBe(NUM_REMISION);
-    expect(body.data.estado).toBe("devuelta");
+    expect(body.data.estado).toBe("novedad");
     expect(body.orden).toBeUndefined(); // la clave retirada por la 112 no vuelve
     expect(body.evento).toBe("orden.estado_actualizado");
   });
@@ -656,7 +656,7 @@ describe("268/R20-R21 — `data.motivo` transporta tambien la causa del incident
     // R21 pide «la misma convencion de ausencia que fije la 256», y la 256 fijo PRESENTE-CON-NULL,
     // no la omision: su OpenAPI documenta forma UNICA para las cuatro claves.
     const { service, entregar } = buildService({
-      datos: { ...DATOS_BASE, estado: "entregada", causaIncidente: "perdido" },
+      datos: { ...DATOS_BASE, estado: "entregado", causaIncidente: "perdido" },
     });
     await service.ejecutar(job());
     const body = JSON.parse(cuerpoDe(entregar));
@@ -681,7 +681,7 @@ describe("268/R20-R21 — `data.motivo` transporta tambien la causa del incident
       causaDevolucion: "not_found",
       causaIncidente: "robado",
     };
-    const a = buildService({ datos: { ...datos, estado: "devuelta" } });
+    const a = buildService({ datos: { ...datos, estado: "novedad" } });
     await a.service.ejecutar(jobDevuelta());
     expect(JSON.parse(cuerpoDe(a.entregar)).data.motivo).toBe("not_found");
     expect(cuerpoDe(a.entregar)).not.toContain("robado");
@@ -718,7 +718,7 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
       "evidenciasUrl",
     ]);
 
-    const b = buildService({ datos: { ...DATOS_BASE, estado: "entregada" } });
+    const b = buildService({ datos: { ...DATOS_BASE, estado: "entregado" } });
     await b.service.ejecutar(job());
     const bodyEntregada = JSON.parse(cuerpoDe(b.entregar));
     // R24: no viaja. Se afirma por AUSENCIA DE CLAVE, no con `toBeUndefined()` a secas.

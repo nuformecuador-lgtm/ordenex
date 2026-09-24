@@ -57,8 +57,8 @@ const NOTA_TOPE =
  * `GestionarDesdeAyudaModal.test.tsx`.
  */
 const MODOS: { modo: ModoGestionDesdeAyuda; resultado: GestionResultado; boton: string }[] = [
-  { modo: "reprogramar", resultado: "reprogramada", boton: BOTON_REPROGRAMAR },
-  { modo: "rechazar", resultado: "rechazada", boton: BOTON_RECHAZAR },
+  { modo: "reprogramar", resultado: "reprogramado", boton: BOTON_REPROGRAMAR },
+  { modo: "rechazar", resultado: "devolucion_a_origen_por_rechazo", boton: BOTON_RECHAZAR },
 ];
 
 function novedad(over: Partial<NovedadDTO> = {}): NovedadDTO {
@@ -110,7 +110,7 @@ beforeEach(() => {
   gestionarMock.mockResolvedValue({
     status: "ok",
     ordenId: "o1",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
   });
 });
 

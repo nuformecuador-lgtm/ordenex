@@ -105,9 +105,9 @@ describeSiHayBase("345 / T3.3 — ConteoProductosRepository contra Postgres real
     // (e) DOS GESTIONES: la ULTIMA VIGENTE manda, y una anulada no cuenta ni aunque sea la mas
     // reciente. La orden tiene que salir como `rechazada`, no como `entregada` ni por su estatus.
     const conGestiones = await crearOrden(tx, tiendaA, "1 * Producto Con Gestiones");
-    await crearGestion(tx, conGestiones, mensajero, "entregada", new Date("2026-08-30T10:00:00Z"));
-    await crearGestion(tx, conGestiones, mensajero, "rechazada", new Date("2026-08-31T10:00:00Z"));
-    await crearGestion(tx, conGestiones, mensajero, "devuelta", new Date("2026-09-01T10:00:00Z"), {
+    await crearGestion(tx, conGestiones, mensajero, "entregado", new Date("2026-08-30T10:00:00Z"));
+    await crearGestion(tx, conGestiones, mensajero, "devolucion_a_origen_por_rechazo", new Date("2026-08-31T10:00:00Z"));
+    await crearGestion(tx, conGestiones, mensajero, "novedad", new Date("2026-09-01T10:00:00Z"), {
       anulada: true,
     });
 
@@ -193,7 +193,7 @@ describeSiHayBase("345 / T3.3 — ConteoProductosRepository contra Postgres real
     // La mas reciente esta ANULADA (`devuelta`), asi que manda la anterior vigente. Si el
     // `LATERAL` no filtrara `anulada_at IS NULL`, aqui saldria `devuelta`; si ordenara al reves,
     // saldria `entregada`; y si no hubiera `LATERAL`, saldria el `order_status` de la orden.
-    expect(fila?.status).toBe("rechazada");
+    expect(fila?.status).toBe("devolucion_a_origen_por_rechazo");
     expect(fila?.n).toBe(1);
   });
 
@@ -206,7 +206,7 @@ describeSiHayBase("345 / T3.3 — ConteoProductosRepository contra Postgres real
       expect(typeof fila.status).toBe("string");
       expect(fila.status.length).toBeGreaterThan(0);
       // No es un resultado de gestion: es el `value` del catalogo de estatus.
-      expect(["entregada", "rechazada", "devuelta", "reprogramada", "incidente"]).not.toContain(
+      expect(["entregado", "devolucion_a_origen_por_rechazo", "novedad", "reprogramado", "incidente"]).not.toContain(
         fila.status,
       );
     }
@@ -287,7 +287,7 @@ describeSiHayBase("345 / T3.3 — ConteoProductosRepository contra Postgres real
     tx: Tx,
     ordenId: string,
     mensajeroId: string,
-    resultado: "entregada" | "rechazada" | "devuelta",
+    resultado: "entregado" | "devolucion_a_origen_por_rechazo" | "novedad",
     createdAt: Date,
     opts: { anulada?: boolean } = {},
   ): Promise<void> {

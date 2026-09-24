@@ -196,7 +196,7 @@ describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía 
     const user = userEvent.setup();
     asignarDesdeBodegaMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "id-o2", estado: "por_recoger" }],
+      resultados: [{ ordenId: "id-o2", estado: "mensajero_recogiendo_en_bodega" }],
     });
     generarEtiquetasMock.mockResolvedValue({
       status: "ok",

@@ -13,7 +13,7 @@ import { consultaDe, cubo, rollupFalso, servicioCon } from "./_fake-operativa";
 
 const ETIQUETAS = new Map([
   ["e-reparto", { value: "en_reparto", label: "en_reparto" }],
-  ["e-entregada", { value: "entregada", label: "entregada" }],
+  ["e-entregada", { value: "entregado", label: "entregado" }],
 ]);
 
 /** Tres dias con 10 ordenes vivas en el mismo estado: es la MISMA decena, no 30 ordenes. */
@@ -90,6 +90,6 @@ describe("R12 · el embudo es una serie por fecha, nunca un total del rango", ()
       consultaDe("ordenes_por_estado"),
     );
     expect(serie.puntos).toHaveLength(2);
-    expect(serie.puntos.map((p) => p.dimension).sort()).toEqual(["en_reparto", "entregada"]);
+    expect(serie.puntos.map((p) => p.dimension).sort()).toEqual(["en_reparto", "entregado"]);
   });
 });

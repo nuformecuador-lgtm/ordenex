@@ -24,7 +24,7 @@ const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   en_reparto: "os-reparto",
-  entregada: "os-entregada",
+  entregado: "os-entregada",
 };
 
 function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
@@ -108,7 +108,7 @@ function gestionEmitida(repo: IGestionOrdenRepository): GestionOrdenData {
 function entrega(montoRecibido: number, pagos: LineaPago[]): GestionarInput {
   return {
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido,
     // Ya normalizado por el borde: el escalar solo sobrevive para la columna deprecada.
     metodoPago: null,
@@ -231,7 +231,7 @@ describe("R19: la columna DEPRECADA `metodo_pago` se deriva del desglose", () =>
 
     const input: GestionarInput = {
       ordenId: "o1",
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: 8000,
       metodoPago: "efectivo",
       pagos: [{ metodo: "transferencia", monto: 8000 }],

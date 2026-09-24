@@ -20,7 +20,7 @@ const ORDEN: OrdenAporteDTO = {
   guia: "48127",
   destinatario: "María Fernández",
   tiendaNombre: "Tienda Central",
-  resultados: ["entregada"],
+  resultados: ["entregado"],
   aporte: "98765432109.87",
 };
 
@@ -70,9 +70,9 @@ describe("columnas de descarga del detalle de un movimiento de la caja", () => {
 
   it("emite el resultado como ETIQUETA LEGIBLE, nunca como valor del enum (R13)", () => {
     expect(filaDescargaDetalleMovimiento(ORDEN).resultado).toBe("Entregada");
-    expect(filaDescargaDetalleMovimiento(ORDEN).resultado).not.toBe("entregada");
+    expect(filaDescargaDetalleMovimiento(ORDEN).resultado).not.toBe("entregado");
     expect(
-      filaDescargaDetalleMovimiento({ ...ORDEN, resultados: ["rechazada"] }).resultado,
+      filaDescargaDetalleMovimiento({ ...ORDEN, resultados: ["devolucion_a_origen_por_rechazo"] }).resultado,
     ).toBe("Rechazada");
   });
 
@@ -83,7 +83,7 @@ describe("columnas de descarga del detalle de un movimiento de la caja", () => {
     expect(
       filaDescargaDetalleMovimiento({
         ...ORDEN,
-        resultados: ["entregada", "reprogramada"],
+        resultados: ["entregado", "reprogramado"],
       }).resultado,
     ).toBe("Entregada · Reprogramada");
   });

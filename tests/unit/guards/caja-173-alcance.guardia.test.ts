@@ -486,7 +486,7 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
   it("MEDIDO: flete, IVA del flete, comision COD e IVA de la comision, importe a importe", () => {
     // Entregada, zona CENTRAL, 20 000 de contra-entrega, con comision.
     const r = derivarIngresoOrden(
-      { resultado: "entregada", esCentral: true, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
+      { resultado: "entregado", esCentral: true, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
       TARIFA,
     );
 
@@ -504,7 +504,7 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
     // FICHA 301 (2026-08-28): este caso medía `devuelta`. El flete de devolucion y su IVA no
     // cambiaron de formula ni de importe — cambio QUIEN los paga: solo `rechazada`.
     const r = derivarIngresoOrden(
-      { resultado: "rechazada", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
+      { resultado: "devolucion_a_origen_por_rechazo", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
       TARIFA,
     );
 
@@ -520,7 +520,7 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
     // formula) y una devuelta dejo de facturar. Queda medido aqui para que el proximo cambio
     // "de pasada" en ingreso-ordenex.ts tenga que pasar tambien por este archivo.
     const r = derivarIngresoOrden(
-      { resultado: "devuelta", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
+      { resultado: "novedad", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
       TARIFA,
     );
     expect(r).toEqual({});
@@ -528,12 +528,12 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
 
   it("MEDIDO: el pago al mensajero por gestion — solo `entregada` paga, y paga `cobroEntregado`", () => {
     const tarifa = { cobroEntregado: "1200.00", cobroRechazado: "600.00" };
-    expect(pagoPorResultado("entregada", tarifa)).toBe("1200.00");
+    expect(pagoPorResultado("entregado", tarifa)).toBe("1200.00");
     // El `cobroRechazado` NUNCA se paga al mensajero, y es distinto a proposito.
-    expect(pagoPorResultado("rechazada", tarifa)).toBe("0.00");
-    expect(pagoPorResultado("devuelta", tarifa)).toBe("0.00");
-    expect(pagoPorResultado("reprogramada", tarifa)).toBe("0.00");
-    expect(pagoPorResultado("entregada", null)).toBe("0.00");
+    expect(pagoPorResultado("devolucion_a_origen_por_rechazo", tarifa)).toBe("0.00");
+    expect(pagoPorResultado("novedad", tarifa)).toBe("0.00");
+    expect(pagoPorResultado("reprogramado", tarifa)).toBe("0.00");
+    expect(pagoPorResultado("entregado", null)).toBe("0.00");
   });
 
   it("MEDIDO: `min(P, E)` sigue neteando por cierre, con los tres importes", () => {

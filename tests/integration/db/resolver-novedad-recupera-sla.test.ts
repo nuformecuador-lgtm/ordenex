@@ -30,7 +30,7 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
 // ---------------------------------------------------------------------------------------------
 
 const ESTATUS: Record<string, string> = {
-  devuelta: idEstado("devuelta"),
+  novedad: idEstado("novedad"),
   en_bodega_central: idEstado("en_bodega_central"),
   en_bodega_satelite: idEstado("en_bodega_satelite"),
 };
@@ -68,7 +68,7 @@ function makeDb(zonaId: string) {
   const ordenes: OrdenRow[] = [
     {
       id: "o1",
-      estatusId: ESTATUS.devuelta, // reposa en `devuelta` (feature 99), con mensajero asignado
+      estatusId: ESTATUS.novedad, // reposa en `devuelta` (feature 99), con mensajero asignado
       deletedAt: null,
       zonaId,
       mensajeroAsignadoId: "m1",
@@ -81,7 +81,7 @@ function makeDb(zonaId: string) {
       id: "g-devuelta",
       ordenId: "o1",
       mensajeroId: "m1",
-      resultado: "devuelta",
+      resultado: "novedad",
       anuladaAt: null,
       createdAt: new Date("2026-07-20T18:00:00.000Z"),
       causaDevolucion: "cliente_ausente",
@@ -220,7 +220,7 @@ function recuperar(db: Db, destinoValue: "en_bodega_central" | "en_bodega_sateli
   return repo.recuperarABodega({
     ordenId: "o1",
     destinoEstatusId: ESTATUS[destinoValue],
-    estatusDevueltaId: ESTATUS.devuelta,
+    estatusDevueltaId: ESTATUS.novedad,
     actorUsuarioId: "admin-1",
   });
 }

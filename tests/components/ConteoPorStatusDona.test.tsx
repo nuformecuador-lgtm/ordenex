@@ -43,7 +43,7 @@ afterEach(cleanup);
 
 describe("Dona por estado — de dónde sale la cifra", () => {
   it("consulta `consultarConteoPorStatus` y por ninguna otra puerta", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregada", conteo: 20 }]) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregado", conteo: 20 }]) });
     renderDona();
 
     await waitFor(() => expect(consultarMock).toHaveBeenCalledTimes(1));
@@ -51,7 +51,7 @@ describe("Dona por estado — de dónde sale la cifra", () => {
 
   // Mismo trato que el anillo hermano: nada preestablecido. Los filtros los manda la barra.
   it("la primera consulta va SIN filtro", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregada", conteo: 20 }]) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregado", conteo: 20 }]) });
     renderDona();
 
     await waitFor(() => expect(consultarMock).toHaveBeenCalled());
@@ -66,9 +66,9 @@ describe("Dona por estado — los segmentos", () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
-        { status: "entregada", conteo: 20 },
+        { status: "entregado", conteo: 20 },
         { status: "en_reparto", conteo: 8 },
-        { status: "devuelta", conteo: 2 },
+        { status: "novedad", conteo: 2 },
       ]),
     });
     renderDona();
@@ -81,7 +81,7 @@ describe("Dona por estado — los segmentos", () => {
   // Los buckets vacíos no viajan (decisión del 2026-08-18), así que la dona no puede inventar
   // segmentos en cero: pinta lo que llegó y nada más.
   it("no inventa segmentos para los status que no llegaron", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregada", conteo: 20 }]) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregado", conteo: 20 }]) });
     renderDona();
 
     await screen.findByText(/Entregada: 20/);
@@ -108,7 +108,7 @@ describe("Dona por estado — los segmentos", () => {
 // se quito es el rotulo.
 describe("Dona por estado — sin rótulos bajo la gráfica", () => {
   it("no pinta la nota de la fuente del estado", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregada", conteo: 20 }]) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregado", conteo: 20 }]) });
     renderDona();
 
     await screen.findByText(/Entregada: 20/);
@@ -116,7 +116,7 @@ describe("Dona por estado — sin rótulos bajo la gráfica", () => {
   });
 
   it("ni la hora de la última actualización", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregada", conteo: 20 }]) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos([{ status: "entregado", conteo: 20 }]) });
     renderDona();
 
     await screen.findByText(/Entregada: 20/);
@@ -159,7 +159,7 @@ describe("La etiqueta legible de un status", () => {
   });
 
   it("deja pasar un value de una sola palabra", () => {
-    expect(etiquetaDeStatus("entregada")).toBe("Entregada");
+    expect(etiquetaDeStatus("entregado")).toBe("Entregada");
   });
 
   // Un status NUEVO tiene que salir legible por el mero hecho de existir, sin tocar nada.

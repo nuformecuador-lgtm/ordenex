@@ -28,7 +28,7 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
     })),
     recogerAsignaciones: vi.fn(async () => ({ status: "ok" as const, recogidas: ["o1"] })),
     escogerParaGestion: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1" })),
-    gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "rechazada" })),
+    gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "devolucion_a_origen_por_rechazo" })),
     liberarGestion: vi.fn(async () => ({ status: "ok" as const })),
     ...overrides,
   };
@@ -49,7 +49,7 @@ describe("R5: getAll('evidencia') -> lista de N EvidenciaArchivo, en orden", () 
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "rechazada");
+    fd.set("resultado", "devolucion_a_origen_por_rechazo");
     fd.set("motivo", "cliente rechazo");
     fd.append("evidencia", imagenFile("a.jpg", "image/jpeg"));
     fd.append("evidencia", imagenFile("b.png", "image/png"));
@@ -59,7 +59,7 @@ describe("R5: getAll('evidencia') -> lista de N EvidenciaArchivo, en orden", () 
 
     expect(r.status).toBe("ok");
     const input = inputRecibido(service);
-    expect(input.resultado).toBe("rechazada");
+    expect(input.resultado).toBe("devolucion_a_origen_por_rechazo");
     expect(input.evidencias).toHaveLength(3);
     // Cada elemento trae bytes leidos y su contentType (orden preservado -> indice 0..N-1).
     expect(input.evidencias[0].contentType).toBe("image/jpeg");
@@ -74,7 +74,7 @@ describe("R5: getAll('evidencia') -> lista de N EvidenciaArchivo, en orden", () 
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "rechazada");
+    fd.set("resultado", "devolucion_a_origen_por_rechazo");
     fd.set("motivo", "cliente rechazo");
     fd.set("evidencia", imagenFile("a.jpg"));
 
@@ -87,13 +87,13 @@ describe("R5: getAll('evidencia') -> lista de N EvidenciaArchivo, en orden", () 
 
   it("entrega con 2 fotos -> delega con montoRecibido number y las 2 evidencias", async () => {
     const service = buildService({
-      gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "entregada" })),
+      gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "entregado" })),
     });
     const fd = new FormData();
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "entregada");
+    fd.set("resultado", "entregado");
     fd.set("montoRecibido", "100");
     fd.set("metodoPago", "efectivo");
     fd.append("evidencia", imagenFile("a.jpg"));
@@ -109,13 +109,13 @@ describe("R5: getAll('evidencia') -> lista de N EvidenciaArchivo, en orden", () 
 });
 
 describe("R6/R7: el borde revalida el conteo (min 1 / max) sin invocar al service", () => {
-  it("sin ninguna foto en rechazada -> validation_error, service NO invocado", async () => {
+  it("sin ninguna foto en devolucion_a_origen_por_rechazo -> validation_error, service NO invocado", async () => {
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "rechazada");
+    fd.set("resultado", "devolucion_a_origen_por_rechazo");
     fd.set("motivo", "cliente rechazo");
 
     const r = await gestionar(fd, { service, getActor: actorMensajero });
@@ -130,7 +130,7 @@ describe("R6/R7: el borde revalida el conteo (min 1 / max) sin invocar al servic
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "rechazada");
+    fd.set("resultado", "devolucion_a_origen_por_rechazo");
     fd.set("motivo", "cliente rechazo");
     for (const nombre of ["a", "b", "c", "d"]) fd.append("evidencia", imagenFile(`${nombre}.jpg`));
 
@@ -146,7 +146,7 @@ describe("R6/R7: el borde revalida el conteo (min 1 / max) sin invocar al servic
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "rechazada");
+    fd.set("resultado", "devolucion_a_origen_por_rechazo");
     fd.set("motivo", "cliente rechazo");
     fd.append("evidencia", imagenFile("a.jpg"));
     fd.append("evidencia", new File([new Uint8Array([1])], "doc.pdf", { type: "application/pdf" }));

@@ -107,13 +107,13 @@ export function partesDesenlaceDeFila(
   const e = calcularEfectividad(porStatus);
   const partes: ParteDesenlace[] = [
     {
-      clave: "entregada",
-      etiqueta: etiquetaDeDesenlaceContada("entregada", e.entregadas),
+      clave: "entregado",
+      etiqueta: etiquetaDeDesenlaceContada("entregado", e.entregadas),
       conteo: e.entregadas,
     },
     {
-      clave: "rechazada",
-      etiqueta: etiquetaDeDesenlaceContada("rechazada", e.rechazadas),
+      clave: "devolucion_a_origen_por_rechazo",
+      etiqueta: etiquetaDeDesenlaceContada("devolucion_a_origen_por_rechazo", e.rechazadas),
       conteo: e.rechazadas,
     },
     // El RESTO de los desenlaces, cada uno por su nombre y en el orden determinista que ya fija

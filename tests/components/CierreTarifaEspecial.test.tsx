@@ -80,7 +80,7 @@ function gestion(ing: IngresoOrdenexDTO): CierreDetalleGestion {
     gestionId: "g1",
     ordenId: "o1",
     fechaGestion: "2026-07-11",
-    resultado: "entregada",
+    resultado: "entregado",
     numGuia: 1001,
     numRemision: "REM-001",
     destinatario: "Beto Ruiz",
@@ -110,7 +110,7 @@ function gestion(ing: IngresoOrdenexDTO): CierreDetalleGestion {
 
 /** Celda de la columna de flete + IVA de una gestión, tal como la pinta la tabla. */
 function celdaFlete(ing: IngresoOrdenexDTO) {
-  const columna = columnasPara("entregada", () => {}).find((c) => c.id === "fleteConIva");
+  const columna = columnasPara("entregado", () => {}).find((c) => c.id === "fleteConIva");
   // `render` es opcional y puede ser una clave del DTO: acá tiene que ser la función, porque
   // la marca de origen se pinta dentro de ella.
   if (typeof columna?.render !== "function") {

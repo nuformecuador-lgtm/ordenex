@@ -167,10 +167,10 @@ function totalesIngreso(over: {
 
 const ZONA = "33333333-3333-4333-8333-333333333333";
 const GRUPOS_VACIOS: CierreGrupos = {
-  entregada: [],
-  reprogramada: [],
-  devuelta: [],
-  rechazada: [],
+  entregado: [],
+  reprogramado: [],
+  novedad: [],
+  devolucion_a_origen_por_rechazo: [],
   incidente: [],
 };
 

@@ -172,7 +172,7 @@ afterEach(() => {
 
 const PENDIENTE = makeOrden({
   id: "pend",
-  gestionPendiente: { resultado: "entregada", registradaAt: "2026-09-23T21:00:00.000Z" },
+  gestionPendiente: { resultado: "entregado", registradaAt: "2026-09-23T21:00:00.000Z" },
   ayudaAbierta: false,
 });
 const CON_AYUDA = makeOrden({ id: "ayuda", gestionPendiente: null, ayudaAbierta: true });
@@ -199,7 +199,7 @@ describe("454/R29 — `/ordenes` pinta la nota junto al chip de estado", () => {
     renderOrdenes([
       makeOrden({
         id: "rech",
-        gestionPendiente: { resultado: "rechazada", registradaAt: "2026-09-23T21:00:00.000Z" },
+        gestionPendiente: { resultado: "devolucion_a_origen_por_rechazo", registradaAt: "2026-09-23T21:00:00.000Z" },
       }),
     ]);
     const fila = await filaDe("REM-rech");

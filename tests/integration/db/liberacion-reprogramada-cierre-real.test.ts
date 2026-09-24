@@ -110,18 +110,18 @@ describeSiHayBase("276/T6 — `findOrdenesLiberables` contra Postgres real", () 
       );
     }
     const catalogo = await prisma.orderStatus.findMany({
-      where: { value: { in: ["reprogramada", "en_bodega_central", "en_bodega_satelite"] } },
+      where: { value: { in: ["reprogramado", "en_bodega_central", "en_bodega_satelite"] } },
       select: { id: true, value: true },
     });
     const idPorValue = new Map(catalogo.map((c) => [c.value, c.id]));
-    for (const v of ["reprogramada", "en_bodega_central", "en_bodega_satelite"]) {
+    for (const v of ["reprogramado", "en_bodega_central", "en_bodega_satelite"]) {
       if (!idPorValue.has(v)) {
         throw new Error(
           `falta el estatus «${v}» en el catalogo \`order_status\`. Corre \`pnpm run db:seed\`.`,
         );
       }
     }
-    const estatusReprogramadaId = idPorValue.get("reprogramada") as string;
+    const estatusReprogramadaId = idPorValue.get("reprogramado") as string;
 
     const usuarios = await prisma.usuario.findMany({ select: { id: true }, take: 1 });
     if (usuarios.length < 1) {
@@ -191,7 +191,7 @@ describeSiHayBase("276/T6 — `findOrdenesLiberables` contra Postgres real", () 
             data: {
               ordenId: orden.id,
               mensajeroId,
-              resultado: "reprogramada",
+              resultado: "reprogramado",
               fechaReprogramacion: MANANA,
               cierreId: cierreViejo.id,
               anuladaAt: new Date("2026-07-13T12:00:00.000Z"), // ANULADA: no cuenta
@@ -213,7 +213,7 @@ describeSiHayBase("276/T6 — `findOrdenesLiberables` contra Postgres real", () 
             data: {
               ordenId: orden.id,
               mensajeroId,
-              resultado: "reprogramada",
+              resultado: "reprogramado",
               fechaReprogramacion: s.fecha,
               cierreId: cierreVigenteId,
               anuladaAt: null,
@@ -335,7 +335,7 @@ describeSiHayBase("276/T6 — `findOrdenesLiberables` contra Postgres real", () 
         { findCentralZonaId: async () => ctx.centralZonaId },
         {
           findEstatusIdByValue: async (v: string) =>
-            v === "reprogramada" ? ctx.estatusReprogramadaId : `os-${v}`,
+            v === "reprogramado" ? ctx.estatusReprogramadaId : `os-${v}`,
         },
         { warn: () => {} },
       );

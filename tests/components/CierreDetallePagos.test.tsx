@@ -78,10 +78,10 @@ function makeGestion(
 
 function emptyGrupos(): CierreGrupos {
   return {
-    entregada: [],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: [],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 }
@@ -90,10 +90,10 @@ function emptyGrupos(): CierreGrupos {
 function gruposConEntrega(over: Partial<CierreDetalleGestion>): CierreGrupos {
   return {
     ...emptyGrupos(),
-    entregada: [
+    entregado: [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: "8000.00",
         ...over,
       }),

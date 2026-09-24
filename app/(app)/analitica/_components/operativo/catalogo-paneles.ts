@@ -111,7 +111,7 @@ export const PANELES_OPERATIVOS: readonly PanelTablero[] = [
     titulo: "Órdenes sin gestionar",
     grafica: "lineas",
     // R21/D6 — DERIVADA del embudo por la 126 (y antes dada por «sin productor»). No se filtra.
-    metricas: [{ metricaId: "sin_gestionar", etiqueta: "Sin gestionar", unidad: "conteo" }],
+    metricas: [{ metricaId: "novedad_interna", etiqueta: "Sin gestionar", unidad: "conteo" }],
   },
   {
     id: "tasa-entrega",

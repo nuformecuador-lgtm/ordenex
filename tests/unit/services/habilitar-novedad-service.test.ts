@@ -189,7 +189,7 @@ describe("239/R23 + 235 — habilitar retira la AYUDA, y NUNCA una devolucion", 
     const publicar = vi.fn(async () => ({ status: "ok" as const, nota: NOTA }));
     const { service, repo } = build(
       publicar,
-      ordenParaHilo({ estatusValue: "devuelta", ayudaAbierta: false }),
+      ordenParaHilo({ estatusValue: "novedad", ayudaAbierta: false }),
     );
 
     const r = await service.habilitar(
@@ -215,7 +215,7 @@ describe("239/R23 + 235 — habilitar retira la AYUDA, y NUNCA una devolucion", 
     // este, que los pone uno al lado del otro sobre el MISMO servicio.
     const publicar = vi.fn(async () => ({ status: "ok" as const, nota: NOTA }));
     const enAyuda = build(publicar, ordenParaHilo({ ayudaAbierta: true }));
-    const devuelta = build(publicar, ordenParaHilo({ estatusValue: "devuelta", ayudaAbierta: false }));
+    const devuelta = build(publicar, ordenParaHilo({ estatusValue: "novedad", ayudaAbierta: false }));
 
     return Promise.all([
       enAyuda.service.habilitar({ ordenId: ORDEN, nota: "una" }, actorTienda),

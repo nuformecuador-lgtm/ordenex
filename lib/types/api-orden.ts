@@ -212,7 +212,7 @@ export interface ApiOrdenListadoDTO {
  * no, `ApiOrdenLecturaService.toDetalleDTO` deja de compilar, que es la idea.
  */
 export interface ApiOrdenEvidenciaDTO {
-  resultado: "entregada" | "rechazada" | "incidente";
+  resultado: "entregado" | "devolucion_a_origen_por_rechazo" | "incidente";
   contentType: string | null;
   url: string; // URL firmada (5 min); NUNCA el storage_path crudo ni el bucket (R16)
   expiraEnSegundos: number;

@@ -129,7 +129,7 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 const ZERO_TOTALES: CierreTotales = {
@@ -188,10 +188,10 @@ afterEach(() => {
 describe("CierreDiaModule", () => {
   it("R3: agrupa las gestiones en las 4 secciones por resultado", () => {
     const grupos: CierreGrupos = {
-      entregada: [makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-ENT" })],
-      reprogramada: [makeGestion({ gestionId: "g2", resultado: "reprogramada", numRemision: "REM-REP" })],
-      devuelta: [makeGestion({ gestionId: "g3", resultado: "devuelta", numRemision: "REM-DEV" })],
-      rechazada: [makeGestion({ gestionId: "g4", resultado: "rechazada", numRemision: "REM-REC" })],
+      entregado: [makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-ENT" })],
+      reprogramado: [makeGestion({ gestionId: "g2", resultado: "reprogramado", numRemision: "REM-REP" })],
+      novedad: [makeGestion({ gestionId: "g3", resultado: "novedad", numRemision: "REM-DEV" })],
+      devolucion_a_origen_por_rechazo: [makeGestion({ gestionId: "g4", resultado: "devolucion_a_origen_por_rechazo", numRemision: "REM-REC" })],
       incidente: [], // feature 158/R18: la 5.a seccion la puebla la fase 2 (T2.2)
     };
     renderModule({ grupos });
@@ -212,10 +212,10 @@ describe("CierreDiaModule", () => {
 
   it("R4: muestra el detalle completo de la orden gestionada", () => {
     const grupos = emptyGrupos();
-    grupos.devuelta = [
+    grupos.novedad = [
       makeGestion({
         gestionId: "g1",
-        resultado: "devuelta",
+        resultado: "novedad",
         numGuia: 2002,
         numRemision: "REM-DETALLE",
         destinatario: "Beto Ruiz",
@@ -245,10 +245,10 @@ describe("CierreDiaModule", () => {
 
   it("R6: una entrega expone su monto (string, money-safe) y su método de pago", () => {
     const grupos = emptyGrupos();
-    grupos.entregada = [
+    grupos.entregado = [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         numRemision: "REM-ENT",
         montoRecibido: "1250.50",
         metodoPago: "SINPE",
@@ -267,10 +267,10 @@ describe("CierreDiaModule", () => {
   it("R5: la evidencia se muestra vía URL firmada en el visor (nunca el path crudo)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numRemision: "REM-REC",
         motivo: "Dirección inexistente",
         evidenciaUrl: "https://signed.example/evidencia.jpg?token=abc",
@@ -317,10 +317,10 @@ describe("CierreDiaModule", () => {
 
   it("R10: expone el pago al mensajero por orden (string, money-safe) en la sección de entregadas", () => {
     const grupos = emptyGrupos();
-    grupos.entregada = [
+    grupos.entregado = [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         numRemision: "REM-ENT",
         montoRecibido: "1250.50",
         metodoPago: "efectivo",
@@ -343,10 +343,10 @@ describe("CierreDiaModule", () => {
 
   it("feature 56/R12: el ingreso de bodega por rechazos NO se muestra por orden en la tabla de rechazadas (solo el total; el desglose vive en las vistas de bodega/admin)", () => {
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numRemision: "REM-REC",
         motivo: "Cliente rechazó",
         ingresoBodegaRechazo: "3500.00",
@@ -384,7 +384,7 @@ describe("CierreDiaModule", () => {
   it("solicitar cierre OK: confirma, muestra toast de éxito y refresca", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [makeGestion({ gestionId: "g1", resultado: "entregada" })];
+    grupos.entregado = [makeGestion({ gestionId: "g1", resultado: "entregado" })];
     renderModule({ grupos, puedesSolicitar: true });
 
     await user.click(screen.getByRole("button", { name: "Solicitar cierre" }));
@@ -407,7 +407,7 @@ describe("CierreDiaModule", () => {
       motivo: "Ya tienes un cierre solicitado.",
     });
     const grupos = emptyGrupos();
-    grupos.entregada = [makeGestion({ gestionId: "g1", resultado: "entregada" })];
+    grupos.entregado = [makeGestion({ gestionId: "g1", resultado: "entregado" })];
     renderModule({ grupos, puedesSolicitar: true });
 
     await user.click(screen.getByRole("button", { name: "Solicitar cierre" }));
@@ -510,10 +510,10 @@ describe("CierreDiaModule", () => {
       cierre: CIERRE_PASADO,
       grupos: {
         ...emptyGrupos(),
-        entregada: [
+        entregado: [
           makeGestion({
             gestionId: "g1",
-            resultado: "entregada",
+            resultado: "entregado",
             destinatario: "Ana Pérez",
             montoRecibido: "300.00",
             metodoPago: "efectivo",
@@ -1059,10 +1059,10 @@ describe("CierreDiaModule", () => {
 // `conflict` + motivo accionable, que la vista muestra tal cual (R38).
 
 const REGIONES: Array<{ resultado: CierreResultado; region: string }> = [
-  { resultado: "entregada", region: "Entregadas" },
-  { resultado: "reprogramada", region: "Reprogramadas" },
-  { resultado: "devuelta", region: "Devueltas" },
-  { resultado: "rechazada", region: "Rechazadas" },
+  { resultado: "entregado", region: "Entregadas" },
+  { resultado: "reprogramado", region: "Reprogramadas" },
+  { resultado: "novedad", region: "Devueltas" },
+  { resultado: "devolucion_a_origen_por_rechazo", region: "Rechazadas" },
 ];
 
 /** Abre el modal de confirmación desde la fila indicada y devuelve el diálogo. */
@@ -1099,9 +1099,9 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
 
   it("R35: hay UN botón por fila y su nombre accesible identifica SU orden", () => {
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
-      makeGestion({ gestionId: "g2", resultado: "entregada", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+      makeGestion({ gestionId: "g2", resultado: "entregado", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
     ];
     renderModule({ grupos });
 
@@ -1128,8 +1128,8 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R36: pulsar la acción NO ejecuta el deshacer: pide confirmación explícita", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.devuelta = [
-      makeGestion({ gestionId: "g1", resultado: "devuelta", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.novedad = [
+      makeGestion({ gestionId: "g1", resultado: "novedad", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
@@ -1142,8 +1142,8 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R36: cancelar la confirmación NO invoca la action ni refresca", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
@@ -1157,8 +1157,8 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R36: la confirmación nombra la orden y advierte que la gestión queda anulada con rastro", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
@@ -1172,9 +1172,9 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R37: al confirmar invoca la action con el gestionId de ESA fila (objeto, no string)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.reprogramada = [
-      makeGestion({ gestionId: "g-abc", resultado: "reprogramada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
-      makeGestion({ gestionId: "g-xyz", resultado: "reprogramada", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
+    grupos.reprogramado = [
+      makeGestion({ gestionId: "g-abc", resultado: "reprogramado", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+      makeGestion({ gestionId: "g-xyz", resultado: "reprogramado", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
     ];
     renderModule({ grupos });
 
@@ -1192,8 +1192,8 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R37: éxito → toast de éxito y refresh (la vista relee el estado del servidor)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
@@ -1214,10 +1214,10 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
       motivo: "Esta orden ya fue procesada por la bodega; ya no se puede deshacer.",
     });
     const grupos = emptyGrupos();
-    grupos.devuelta = [
+    grupos.novedad = [
       makeGestion({
         gestionId: "g1",
-        resultado: "devuelta",
+        resultado: "novedad",
         numRemision: "REM-A",
         destinatario: "Ana Pérez",
         pagoMensajero: "1500.00",
@@ -1258,8 +1258,8 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     const user = userEvent.setup();
     deshacerMock.mockResolvedValue({ status: "forbidden" });
     const grupos = emptyGrupos();
-    grupos.rechazada = [
-      makeGestion({ gestionId: "g1", resultado: "rechazada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.devolucion_a_origen_por_rechazo = [
+      makeGestion({ gestionId: "g1", resultado: "devolucion_a_origen_por_rechazo", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
@@ -1278,8 +1278,8 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R38: validation_error → muestra el primer fieldError; unauthenticated → mensaje genérico", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
 
     deshacerMock.mockResolvedValue({
@@ -1313,9 +1313,9 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     // gestión ya fue deshecha" (R3): el estado `deshaciendo` lo cierra.
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
-      makeGestion({ gestionId: "g2", resultado: "entregada", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+      makeGestion({ gestionId: "g2", resultado: "entregado", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
     ];
     renderModule({ grupos });
 
@@ -1340,8 +1340,8 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     const user = userEvent.setup();
     deshacerMock.mockResolvedValue({ status: "conflict", motivo: "Esta gestión ya fue deshecha." });
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-1", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
@@ -1385,10 +1385,10 @@ describe("Feature 213 — desglose de pago en la tabla del cierre del día", () 
 
   function renderEntrega(over: Partial<CierreDetalleGestion>) {
     const grupos = emptyGrupos();
-    grupos.entregada = [
+    grupos.entregado = [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         numRemision: "REM-ENT",
         montoRecibido: "8000.00",
         ...over,
@@ -1476,17 +1476,17 @@ describe("Cierre del día — 237/R41: la gestión que registró la tienda va ma
   /** Dos rechazos en la MISMA sección: uno de la tienda (5555) y uno del mensajero (7777). */
   function renderConLasDos() {
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g-tienda",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numGuia: 5555,
         numRemision: "REM-TIENDA",
         desdeAyudaTienda: true,
       }),
       makeGestion({
         gestionId: "g-mensajero",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numGuia: 7777,
         numRemision: "REM-MENSAJERO",
         desdeAyudaTienda: false,
@@ -1547,19 +1547,19 @@ describe("Cierre del día — 237/R41: la gestión que registró la tienda va ma
     // La 237 declaró dos aristas desde `ayuda_tienda`: `reprogramada` y `rechazada`. Marcar sólo
     // una dejaría la mitad de las gestiones de la tienda indistinguibles de las del mensajero.
     const grupos = emptyGrupos();
-    grupos.reprogramada = [
+    grupos.reprogramado = [
       makeGestion({
         gestionId: "g-repro-tienda",
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         numGuia: 4444,
         desdeAyudaTienda: true,
       }),
     ];
-    grupos.entregada = [
+    grupos.entregado = [
       // El contraste: una entrega NUNCA puede venir de la tienda (no hay arista), y aquí se ve.
       makeGestion({
         gestionId: "g-entrega",
-        resultado: "entregada",
+        resultado: "entregado",
         numGuia: 3333,
         desdeAyudaTienda: false,
       }),
@@ -1605,17 +1605,17 @@ describe("Cierre del día — 237/D3: la gestión de la tienda no se puede devol
   /** Dos rechazos en la MISMA sección: uno de la tienda (5555) y uno del mensajero (7777). */
   function renderConLasDos() {
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g-tienda",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numGuia: 5555,
         numRemision: "REM-TIENDA",
         desdeAyudaTienda: true,
       }),
       makeGestion({
         gestionId: "g-mensajero",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numGuia: 7777,
         numRemision: "REM-MENSAJERO",
         desdeAyudaTienda: false,

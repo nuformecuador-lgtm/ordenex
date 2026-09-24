@@ -41,7 +41,7 @@ const ESTADO_RECIBIDA = "en_bodega_satelite";
 // retorno satelite). REEMPLAZA a `rechazada` (feature 48): con la 139 una rechazada sale de ese
 // estado SOLO al aprobar el cierre, que la deja en `por_devolver`; la accion satelite opera ahora
 // sobre `por_devolver` (accionable por lote). Se listan acotadas a la zona del adminSatelite.
-const ESTADO_POR_DEVOLVER = "por_devolver";
+const ESTADO_POR_DEVOLVER = "por_devolver_a_bodega_central";
 // Feature 139/T2.5/R21: estado INFORMATIVO de las ordenes ya enviadas a central y en transito
 // (`devolviendo_a_bodega_central`). Se listan acotadas a la zona; no accionables desde satelite
 // (la recepcion la hace la central por QR).
@@ -50,14 +50,14 @@ const ESTADO_EN_TRANSITO_CENTRAL = "devolviendo_a_bodega_central";
 // feature 99) elegibles para "Recuperar a bodega" (nuevo intento). Mismo patron que
 // `porDevolver` (48): SIEMPRE acotadas a la zona del adminSatelite. La transicion la
 // ejecuta RecuperacionBodegaService (autz rol + zona); aqui SOLO listado por zona.
-const ESTADO_DEVUELTA = "devuelta";
+const ESTADO_DEVUELTA = "novedad";
 // Feature 149/T6.3/R35: estado de las ordenes de la zona YA ASIGNADAS a un mensajero que aun no
 // las recogio (`por_recoger`), elegibles para la accion por lote "Deshacer asignacion". Mismo
 // patron que `porDevolver` (139) y `devueltas` (100): SIEMPRE acotadas a la zona del
 // adminSatelite por `findRecepcionSateliteByZona(zonaId, ...)`; aqui SOLO listado — la autz de
 // ejecutar la reversion (rol + zona + destino derivado) la impone `DeshacerAsignacionService`.
 // El caso (b) (`en_ruta_bodega_satelite`) NO entra en este bucket (R36): sigue en "Por recibir".
-const ESTADO_ASIGNADA = "por_recoger";
+const ESTADO_ASIGNADA = "mensajero_recogiendo_en_bodega";
 
 // Solo el rol autorizado en el modulo (R3/R17): el adminSatelite, SIEMPRE acotado
 // a su propia zona (R4/R12).

@@ -202,7 +202,7 @@ describeSiHayBase("454/T1.2 — la forma de `orden_evento` y de `job_tipo`, tal 
     return conEscenario(mundo, async (e: Escenario) => {
       const o = await e.sembrarOrden({ estatus: "en_reparto" });
       const g = await e.tx.gestionOrden.create({
-        data: { ordenId: o.ordenId, mensajeroId: e.mensajeroId, resultado: "entregada" },
+        data: { ordenId: o.ordenId, mensajeroId: e.mensajeroId, resultado: "entregado" },
         select: { id: true },
       });
       try {
@@ -230,7 +230,7 @@ describeSiHayBase("454/T1.2 — la forma de `orden_evento` y de `job_tipo`, tal 
     });
   }
 
-  const registrada: Fila = { tipo: "gestion_registrada", familia: "gestion", resultado: "entregada" };
+  const registrada: Fila = { tipo: "gestion_registrada", familia: "gestion", resultado: "entregado" };
 
   it("CONTROL: un `gestion_registrada` bien formado entra", async () => {
     expect(await insertar([registrada])).toBeNull();
@@ -258,15 +258,15 @@ describeSiHayBase("454/T1.2 — la forma de `orden_evento` y de `job_tipo`, tal 
 
   it("resultado y resultado anterior segun el tipo", async () => {
     expect(await insertar([{ ...registrada, resultado: null }])).toContain("orden_evento_resultado_check");
-    expect(await insertar([{ tipo: "gestion_corregida", resultado: "rechazada" }])).toContain(
+    expect(await insertar([{ tipo: "gestion_corregida", resultado: "devolucion_a_origen_por_rechazo" }])).toContain(
       "orden_evento_resultado_anterior_check",
     );
-    expect(await insertar([{ tipo: "ayuda_solicitada", gestion: false, resultadoAnterior: "entregada" }])).toContain(
+    expect(await insertar([{ tipo: "ayuda_solicitada", gestion: false, resultadoAnterior: "entregado" }])).toContain(
       "orden_evento_resultado_anterior_check",
     );
     // CONTROL
     expect(
-      await insertar([{ tipo: "gestion_corregida", resultado: "rechazada", resultadoAnterior: "entregada" }]),
+      await insertar([{ tipo: "gestion_corregida", resultado: "devolucion_a_origen_por_rechazo", resultadoAnterior: "entregado" }]),
     ).toBeNull();
   }, 120_000);
 

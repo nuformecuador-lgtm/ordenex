@@ -33,7 +33,7 @@ const MENSAJERO = "m-zona";
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   en_bodega_satelite: "os-bodega-satelite",
-  por_recoger: "os-espera",
+  mensajero_recogiendo_en_bodega: "os-espera",
 };
 
 type RepoMethods = Pick<
@@ -195,7 +195,7 @@ describe("AsignacionSateliteService.asignar", () => {
     expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
   });
 
-  it("R7/R8: lote OK -> ok, todas por_recoger; escribe con mensajero y NO toca num_guia", async () => {
+  it("R7/R8: lote OK -> ok, todas mensajero_recogiendo_en_bodega; escribe con mensajero y NO toca num_guia", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         transicionRow({ id: "o1" }),
@@ -210,8 +210,8 @@ describe("AsignacionSateliteService.asignar", () => {
     expect(res).toEqual({
       status: "ok",
       resultados: [
-        { ordenId: "o1", estado: "por_recoger" },
-        { ordenId: "o2", estado: "por_recoger" },
+        { ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" },
       ],
     });
     // R8: escribe con estatus origen/destino resueltos, sin num_guia.
@@ -251,7 +251,7 @@ describe("AsignacionSateliteService.asignar", () => {
   it("R10/R12: orden en estado != en_bodega_satelite -> conflict/estado_invalido con el estado actual", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        transicionRow({ id: "o1", estatusValue: "por_recoger" }),
+        transicionRow({ id: "o1", estatusValue: "mensajero_recogiendo_en_bodega" }),
       ]),
     });
     const res = await newService(repo).asignar(
@@ -260,7 +260,7 @@ describe("AsignacionSateliteService.asignar", () => {
     );
     expect(res).toEqual({
       status: "conflict",
-      detalle: [{ ordenId: "o1", motivo: "estado_invalido: por_recoger" }],
+      detalle: [{ ordenId: "o1", motivo: "estado_invalido: mensajero_recogiendo_en_bodega" }],
     });
     expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
   });
@@ -307,7 +307,7 @@ describe("AsignacionSateliteService.asignar", () => {
       // re-lectura tras el count incompleto: o2 ya se movio (carrera).
       .mockResolvedValueOnce([
         transicionRow({ id: "o1" }),
-        transicionRow({ id: "o2", estatusValue: "por_recoger" }),
+        transicionRow({ id: "o2", estatusValue: "mensajero_recogiendo_en_bodega" }),
       ]);
     const repo = fakeRepo({
       findByIdsForTransicion: findByIds,
@@ -331,7 +331,7 @@ describe("AsignacionSateliteService.asignar — bloqueo por reprogramacion (feat
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         transicionRow({ id: "o1" }),
-        transicionRow({ id: "o2", estatusValue: "reprogramada" }),
+        transicionRow({ id: "o2", estatusValue: "reprogramado" }),
       ]),
     });
     const res = await newService(repo).asignar(

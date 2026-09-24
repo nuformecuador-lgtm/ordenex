@@ -72,10 +72,10 @@ const LOS_CINCO = [ENTREGAR, RECHAZAR, REPROGRAMAR, DEVOLVER, INCIDENTE];
 
 /** Rótulo visible de cada `resultado` del contrato. Escrito a mano, a propósito. */
 const ROTULO_POR_RESULTADO: Record<string, string> = {
-  entregada: ENTREGAR,
-  rechazada: RECHAZAR,
-  reprogramada: REPROGRAMAR,
-  devuelta: DEVOLVER,
+  entregado: ENTREGAR,
+  devolucion_a_origen_por_rechazo: RECHAZAR,
+  reprogramado: REPROGRAMAR,
+  novedad: DEVOLVER,
   incidente: INCIDENTE,
 };
 
@@ -134,7 +134,7 @@ function desenlacesVisibles(): string[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "entregada" });
+  gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "entregado" });
 });
 
 afterEach(() => {
@@ -215,7 +215,7 @@ describe("276/R8 — la pantalla lee la lista compartida, no una copia", () => {
     montar({ enElTope: true });
     await screen.findByRole("button", { name: ENTREGAR });
 
-    const negados = (["entregada", "rechazada", "reprogramada", "devuelta", "incidente"] as const)
+    const negados = (["entregado", "devolucion_a_origen_por_rechazo", "reprogramado", "novedad", "incidente"] as const)
       .filter((r) => !permitidoEnElTope(r))
       .map((r) => ROTULO_POR_RESULTADO[r]);
     // Hoy son dos; el día que la lista cambie, este caso y el de arriba se mueven juntos —y el

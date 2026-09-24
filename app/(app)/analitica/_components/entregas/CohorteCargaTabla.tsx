@@ -140,7 +140,7 @@ const CUBOS: readonly CohorteDesenlace[] = [...ESTADOS_TERMINALES, "viva"];
  * queda en pantalla para siempre porque nadie la revisa.
  */
 const ETIQUETA_CUBO: Record<CohorteDesenlace, string> = {
-  entregada: "Entregadas",
+  entregado: "Entregadas",
   devuelta_a_tienda: "Devueltas",
   incidente: "Incidentes",
   /** R32 — columna, no nota al pie: es la medida exacta de lo que la cohorte aun no sabe. */
@@ -153,7 +153,7 @@ const ETIQUETA_CUBO: Record<CohorteDesenlace, string> = {
  * Tipado como `CohorteDesenlace`, asi que si el dominio dejara de tener este estado terminal
  * esto no compilaria en vez de quedarse buscando un cubo que ya no llega.
  */
-const CUBO_DEL_RELOJ: CohorteDesenlace = "entregada";
+const CUBO_DEL_RELOJ: CohorteDesenlace = "entregado";
 
 /* -------------------------------------------------------------------------- */
 /* Formato                                                                     */

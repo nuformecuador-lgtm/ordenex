@@ -149,7 +149,7 @@ describe("262/R42 — la union discriminada del historial", () => {
   it("el `switch` por `clase` estrecha a cada una de las TRES formas", () => {
     const transicion: OrdenHistorialEntradaDTO = {
       clase: "transicion",
-      estatusOrigenValue: "por_recoger",
+      estatusOrigenValue: "mensajero_recogiendo_en_bodega",
       estatusDestinoValue: "en_reparto",
       origenTipo: "recoleccion",
       actorNombre: "Ana Mensajera",
@@ -175,7 +175,7 @@ describe("262/R42 — la union discriminada del historial", () => {
       createdAt: new Date("2026-09-14T14:00:00.000Z"),
     };
 
-    expect(etiquetaDe(transicion)).toBe("por_recoger->en_reparto");
+    expect(etiquetaDe(transicion)).toBe("mensajero_recogiendo_en_bodega->en_reparto");
     expect(etiquetaDe(correccion)).toBe("2026-08-22->2026-08-21 por Ana Perez");
     expect(etiquetaDe(traspaso)).toBe(
       "Andy Cortes->Carlos Eduardo por Coordinadora Ana (admin)",
@@ -185,13 +185,13 @@ describe("262/R42 — la union discriminada del historial", () => {
     const evento: OrdenHistorialEntradaDTO = {
       clase: "evento_orden",
       tipo: "gestion_registrada",
-      resultado: "entregada",
+      resultado: "entregado",
       resultadoAnterior: null,
       actorNombre: "Carlos Eduardo",
       actorRol: "mensajero",
       createdAt: new Date("2026-09-23T15:00:00.000Z"),
     };
-    expect(etiquetaDe(evento)).toBe("gestion_registrada:entregada por Carlos Eduardo (mensajero)");
+    expect(etiquetaDe(evento)).toBe("gestion_registrada:entregado por Carlos Eduardo (mensajero)");
   });
 
   it("el discriminante es EXPLICITO: las dos clases se distinguen por `clase` y no por la presencia de un campo", () => {

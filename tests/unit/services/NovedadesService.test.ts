@@ -46,7 +46,7 @@ function ordenRow(overrides: Partial<NovedadOrdenRow> = {}): NovedadOrdenRow {
     id: "o1",
     numGuia: 100,
     numRemision: "REM-001",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     destinatario: "Ana",
     telefonoDest: "88887777",
     direccion: "Calle 1, casa 2",
@@ -432,7 +432,7 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
       numGuia: 100,
       // El REAL de la orden, NO la etiqueta «Guia N»: esa la pone el front (R9).
       numRemision: "REM-001",
-      estatusValue: "devuelta",
+      estatusValue: "novedad",
       destinatario: "Ana",
       telefonoDest: "88887777",
       direccion: "Calle 1, casa 2",
@@ -716,7 +716,7 @@ describe("236/R37/R38/R40 — `listarCompleto`, una descarga por grupo", () => {
     // ningun camino que mezcle. El predicado en si se prueba en el repo.
     const repo = fakeRepo({
       countNovedadesByTienda: vi.fn(async () => 1),
-      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "d1", estatusValue: "devuelta" })]),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "d1", estatusValue: "novedad" })]),
     });
     const res = await new NovedadesService(repo, intentos).listarCompleto(
       { grupo: "devolucion" },
@@ -734,7 +734,7 @@ describe("236/R37/R38/R40 — `listarCompleto`, una descarga por grupo", () => {
       expect(llamada[1]).toBe("devolucion");
     }
     if (res.status !== "ok") throw new Error("esperaba ok");
-    expect(res.items.map((i) => i.estatusValue)).toEqual(["devuelta"]);
+    expect(res.items.map((i) => i.estatusValue)).toEqual(["novedad"]);
   });
 
   it("misma proyeccion que la pagina, en los dos grupos: el archivo no puede decir otra cosa", async () => {

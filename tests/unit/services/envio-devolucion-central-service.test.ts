@@ -23,7 +23,7 @@ function ordenDTO(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
     numGuia: 10,
     numRemision: "REM-1",
     estatusId: "os-por-devolver",
-    estatusValue: "por_devolver",
+    estatusValue: "por_devolver_a_bodega_central",
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "store-1",
@@ -62,7 +62,7 @@ function buildOrdenRepo(overrides: Partial<OrdenRepoDoble> = {}): OrdenRepoDoble
 }
 
 describe("EnvioDevolucionCentralService · transicion (R13)", () => {
-  it("transiciona por_devolver -> devolviendo_a_bodega_central (adminSatelite de la zona)", async () => {
+  it("transiciona por_devolver_a_bodega_central -> devolviendo_a_bodega_central (adminSatelite de la zona)", async () => {
     const ordenRepo = buildOrdenRepo();
     const r = await new EnvioDevolucionCentralService(ordenRepo).enviarACentral("ord-1", SATELITE_ZONA);
 
@@ -90,14 +90,14 @@ describe("EnvioDevolucionCentralService · transicion (R13)", () => {
 });
 
 describe("EnvioDevolucionCentralService · guardia de estado (R22)", () => {
-  it("estado != por_devolver devuelve conflict, sin escribir ni resolver destino/autz", async () => {
+  it("estado != por_devolver_a_bodega_central devuelve conflict, sin escribir ni resolver destino/autz", async () => {
     const ordenRepo = buildOrdenRepo({
-      findById: vi.fn(async () => ordenDTO({ estatusValue: "rechazada" })),
+      findById: vi.fn(async () => ordenDTO({ estatusValue: "devolucion_a_origen_por_rechazo" })),
     });
     const r = await new EnvioDevolucionCentralService(ordenRepo).enviarACentral("ord-1", SATELITE_ZONA);
 
     expect(r.status).toBe("conflict");
-    if (r.status === "conflict") expect(r.motivo).toContain("por_devolver");
+    if (r.status === "conflict") expect(r.motivo).toContain("por_devolver_a_bodega_central");
     expect(ordenRepo.update).not.toHaveBeenCalled();
     // La guardia corta antes de resolver el destino o la zona del actor.
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalled();

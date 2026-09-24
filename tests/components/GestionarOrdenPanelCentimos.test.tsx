@@ -187,7 +187,7 @@ function linea(metodo: LineaEnEdicion["metodo"], monto: string): LineaEnEdicion 
 
 beforeEach(() => {
   vi.clearAllMocks();
-  gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "entregada" });
+  gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "entregado" });
 });
 
 afterEach(() => {

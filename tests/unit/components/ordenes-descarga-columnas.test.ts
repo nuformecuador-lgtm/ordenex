@@ -13,7 +13,7 @@ function makeOrden(overrides: Partial<OrdenListItemDTO> = {}): OrdenListItemDTO 
     numGuia: 1234,
     numRemision: "REM-001",
     estatusId: "est-uuid",
-    estatusValue: "entregada",
+    estatusValue: "entregado",
     destinatario: "Ana Solís",
     telefonoDest: "0999999999",
     tiendaId: "tienda-uuid",
@@ -31,7 +31,7 @@ function makeOrden(overrides: Partial<OrdenListItemDTO> = {}): OrdenListItemDTO 
     createdAt: new Date("2026-07-15T20:00:00Z"),
     updatedAt: new Date("2026-07-16T10:00:00Z"),
     relaciones: {
-      estatus: { id: "est-uuid", value: "entregada" },
+      estatus: { id: "est-uuid", value: "entregado" },
       tienda: {
         id: "tienda-uuid",
         nombre: "Tienda Relación",

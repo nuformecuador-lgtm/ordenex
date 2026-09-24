@@ -254,7 +254,7 @@ export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
           resultado: input.resultado,
           motivo: input.motivo,
           fechaReprogramacion:
-            input.resultado === "reprogramada" ? input.fechaReprogramacion : null,
+            input.resultado === "reprogramado" ? input.fechaReprogramacion : null,
           evidencias,
         },
       });

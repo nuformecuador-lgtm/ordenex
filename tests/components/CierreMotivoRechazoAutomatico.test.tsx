@@ -74,13 +74,13 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 /** La gestión sintética del cron de plazos vencidos, con la cadena EXACTA de producción. */
 const RECHAZO_AUTOMATICO = makeGestion({
   gestionId: "g-sla",
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   numRemision: "REM-SLA",
   esRechazoSla: true,
   motivo: "escalado SLA wrong_address",
@@ -89,7 +89,7 @@ const RECHAZO_AUTOMATICO = makeGestion({
 /** Un rechazo del mensajero, con su motivo escrito a mano. */
 const RECHAZO_MANUAL = makeGestion({
   gestionId: "g-manual",
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   numRemision: "REM-MAN",
   esRechazoSla: false,
   motivo: MOTIVO_LIBRE,
@@ -125,7 +125,7 @@ describe("R9 — donde está el marcador, la columna «Motivo» no lo repite", (
   it("la celda «Motivo» de un rechazo automático es exactamente «Dirección errada»", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] }}
         onVerEvidencia={() => {}}
       />,
     );
@@ -136,7 +136,7 @@ describe("R9 — donde está el marcador, la columna «Motivo» no lo repite", (
   it("esa celda NO dice «automático» ni repite la nota del marcador", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] }}
         onVerEvidencia={() => {}}
       />,
     );
@@ -153,7 +153,7 @@ describe("R9 — donde está el marcador, la columna «Motivo» no lo repite", (
   it("el dato crudo no queda pintado en ninguna parte de la fila", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] }}
         onVerEvidencia={() => {}}
       />,
     );
@@ -167,7 +167,7 @@ describe("R8 — el marcador de origen sigue diciendo lo que decía", () => {
   it("la fila mantiene el badge «Automático» con su nota accesible completa", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] }}
         onVerEvidencia={() => {}}
       />,
     );
@@ -183,7 +183,7 @@ describe("R8 — el marcador de origen sigue diciendo lo que decía", () => {
   it("un rechazo del mensajero sigue marcado «Manual»", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_MANUAL] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_MANUAL] }}
         onVerEvidencia={() => {}}
       />,
     );
@@ -196,7 +196,7 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
   it("las dos filas conviven: una traducida y la otra literal", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO, RECHAZO_MANUAL] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO, RECHAZO_MANUAL] }}
         onVerEvidencia={() => {}}
       />,
     );
@@ -210,10 +210,10 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
       <DetalleSecciones
         grupos={{
           ...emptyGrupos(),
-          devuelta: [
+          novedad: [
             makeGestion({
               gestionId: "g-dev",
-              resultado: "devuelta",
+              resultado: "novedad",
               numRemision: "REM-DEV",
               motivo: MOTIVO_LIBRE,
             }),
@@ -231,10 +231,10 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
       <DetalleSecciones
         grupos={{
           ...emptyGrupos(),
-          rechazada: [
+          devolucion_a_origen_por_rechazo: [
             makeGestion({
               gestionId: "g-sin",
-              resultado: "rechazada",
+              resultado: "devolucion_a_origen_por_rechazo",
               numRemision: "REM-SIN",
               motivo: null,
             }),

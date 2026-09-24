@@ -28,7 +28,7 @@ describeSiHayBase("454/T1.5 — encolado de webhook_evento (Postgres real)", () 
       data: {
         ordenId,
         mensajeroId: e.mensajeroId,
-        resultado: "devuelta",
+        resultado: "novedad",
         causaDevolucion: "wrong_address",
         motivo: "TEXTO LIBRE QUE NO SE PUBLICA",
       },
@@ -40,7 +40,7 @@ describeSiHayBase("454/T1.5 — encolado de webhook_evento (Postgres real)", () 
         tipo: "gestion_registrada",
         gestionOrdenId: g.id,
         familiaAplicacion: "gestion",
-        resultado: "devuelta",
+        resultado: "novedad",
         mensajeroId: e.mensajeroId,
         actorUsuarioId: e.mensajeroId,
         actorRol: "mensajero",
@@ -134,7 +134,7 @@ describeSiHayBase("454/T1.5 — encolado de webhook_evento (Postgres real)", () 
   it("el lector publica la causa TIPIFICADA, el dueño y el mensajero congelado; nunca el texto libre", () => {
     expect(r.leido).toMatchObject({
       tipo: "gestion_registrada",
-      resultado: "devuelta",
+      resultado: "novedad",
       gestionId: r.ev1.gestionId,
       causa: "wrong_address",
       orden: { tiendaId: r.tiendaId, deletedAt: null },

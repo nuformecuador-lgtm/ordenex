@@ -148,7 +148,7 @@ function gestionConsolidada(): CierreGestionDescargaDTO {
     // FICHA 394 — los del MENSAJERO, y con un valor DISTINTO del de la tienda: dos números
     // iguales dejarían pasar en verde una celda que cogiera el contador equivocado.
     intentosEntrega: 5,
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     montoRecibido: null,
     pagos: [],
     motivo: "Nadie recibió",

@@ -36,15 +36,15 @@ import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadg
 // porque lo que se verifica es "la opción muestra la etiqueta del estado", no un
 // texto concreto. Los literales del mapa los blinda `tests/components/EstatusLabel.test.ts`.
 const OPT_EN_BODEGA = ORDER_STATUS_LABELS.en_bodega_central;
-const OPT_ENTREGADA = ORDER_STATUS_LABELS.entregada;
-const OPT_DEVUELTA = ORDER_STATUS_LABELS.devuelta;
+const OPT_ENTREGADA = ORDER_STATUS_LABELS.entregado;
+const OPT_DEVUELTA = ORDER_STATUS_LABELS.novedad;
 
 // Catálogo con `pendiente` (excluido por default) + 3 estados mostrables.
 const CATALOGO = [
   { id: "est-pendiente", value: "pendiente" },
   { id: "est-en_bodega_central", value: "en_bodega_central" },
-  { id: "est-entregada", value: "entregada" },
-  { id: "est-devuelta", value: "devuelta" },
+  { id: "est-entregada", value: "entregado" },
+  { id: "est-devuelta", value: "novedad" },
 ];
 
 function makeOrden(id: string, numGuia: number): OrdenListItemDTO {
@@ -227,7 +227,7 @@ describe("OrdenesListado — opciones del filtro (R13/R14)", () => {
 
   it("R13: `exclude` por `value` omite exactamente esos estados", async () => {
     const user = userEvent.setup();
-    renderListado(<OrdenesListado exclude={["pendiente", "devuelta"]} />);
+    renderListado(<OrdenesListado exclude={["pendiente", "novedad"]} />);
     await abrirFiltro(user);
 
     expect(opcionesDeCatalogo()).toHaveLength(2);
@@ -376,7 +376,7 @@ describe("OrdenesListado — columna 'Reprogramada para' siempre visible", () =>
   // otros tests (R13/R14), así que `reprogramada` se añade solo aquí.
   const CATALOGO_CON_REPROGRAMADA = [
     ...CATALOGO,
-    { id: "est-reprogramada", value: "reprogramada" },
+    { id: "est-reprogramada", value: "reprogramado" },
   ];
 
   beforeEach(() => {

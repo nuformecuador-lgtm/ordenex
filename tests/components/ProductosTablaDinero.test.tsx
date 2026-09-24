@@ -94,7 +94,7 @@ function fila(parcial: Partial<FilaProductoDTO> & { producto: string }): FilaPro
     unidades: 6,
     ordenes: 5,
     porStatus: [
-      { status: "entregada", conteo: 4 },
+      { status: "entregado", conteo: 4 },
       { status: EN_CURSO, conteo: 1 },
     ],
     ordenesAcompanadas: 3,
@@ -694,7 +694,7 @@ describe("FICHA 347 · el detalle orden por orden (R32/R33/R34)", () => {
             ordenId: "o1",
             guia: "77001",
             destinatario: "Ana Pérez",
-            resultados: ["entregada" as const],
+            resultados: ["entregado" as const],
             estado: "liquidada" as const,
             recaudado: "35000.00",
             ordenex: "6215.00",
@@ -842,10 +842,10 @@ describe("FICHA 347 · la composición de «Otros resultados» (R50/R54/R57)", (
     unidades: 29,
     ordenes: 24,
     porStatus: [
-      { status: "entregada", conteo: 3 },
-      { status: "rechazada", conteo: 2 },
-      { status: "devuelta", conteo: 4 },
-      { status: "reprogramada", conteo: 2 },
+      { status: "entregado", conteo: 3 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 2 },
+      { status: "novedad", conteo: 4 },
+      { status: "reprogramado", conteo: 2 },
       { status: EN_CURSO, conteo: 13 },
     ],
   });
@@ -896,8 +896,8 @@ describe("FICHA 347 · la composición de «Otros resultados» (R50/R54/R57)", (
         fila({
           producto: "Spray Protector",
           porStatus: [
-            { status: "entregada", conteo: 8 },
-            { status: "rechazada", conteo: 6 },
+            { status: "entregado", conteo: 8 },
+            { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
           ],
         }),
       ]),
@@ -946,8 +946,8 @@ describe("FICHA 347/442 · la vista de TELÉFONO lleva lo mismo (R64)", () => {
         fila({
           producto: "Crema Especial MLX",
           porStatus: [
-            { status: "entregada", conteo: 3 },
-            { status: "devuelta", conteo: 4 },
+            { status: "entregado", conteo: 3 },
+            { status: "novedad", conteo: 4 },
             { status: EN_CURSO, conteo: 13 },
           ],
         }),
@@ -1162,7 +1162,7 @@ describe("FICHA 449 · el fulfillment en el detalle de la fila", () => {
             ordenId: "o1",
             guia: "77001",
             destinatario: "Ana Pérez",
-            resultados: ["entregada" as const],
+            resultados: ["entregado" as const],
             estado: "liquidada" as const,
             recaudado: "35000.00",
             ordenex: "6215.00",

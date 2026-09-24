@@ -101,7 +101,7 @@ const DENOMINADOR_GESTIONES: readonly MedidaId[] = [
 const MEDIDA_DE_METRICA: Readonly<Record<string, MedidaId>> = {
   ordenes_creadas: "ordenesCreadas",
   ordenes_por_estado: "ordenesEstadoStock",
-  sin_gestionar: "ordenesEstadoStock",
+  novedad_interna: "ordenesEstadoStock",
   entregas: "entregas",
   devoluciones: "devoluciones",
   rechazos: "rechazos",
@@ -126,7 +126,7 @@ const DESAGREGACION_POR_DEFECTO: Readonly<Record<string, DimensionAnalitica>> = 
 export const SIN_CAUSA_TIPIFICADA = "sin causa tipificada";
 
 /** El `value` del estatus que la metrica `sin_gestionar` proyecta del embudo (D14/R35). */
-const ESTATUS_SIN_GESTIONAR = "sin_gestionar";
+const ESTATUS_SIN_GESTIONAR = "novedad_interna";
 
 function medidasVacias(): Medidas {
   return {
@@ -200,7 +200,7 @@ export class AnaliticaOperativaService implements IAnaliticaOperativaService {
       rango: consulta.rango,
       puntos,
       cobertura,
-      ...(metrica.id === "sin_gestionar" ? { nota: NOTA_SIN_GESTIONAR } : {}),
+      ...(metrica.id === "novedad_interna" ? { nota: NOTA_SIN_GESTIONAR } : {}),
     };
   }
 
@@ -473,7 +473,7 @@ export class AnaliticaOperativaService implements IAnaliticaOperativaService {
   ): Promise<readonly PuntoSerie[]> {
     const metrica = consulta.metrica;
     const relevantes =
-      metrica.id === "sin_gestionar"
+      metrica.id === "novedad_interna"
         ? await this.soloSinGestionar(consulta, cubos)
         : cubos;
 

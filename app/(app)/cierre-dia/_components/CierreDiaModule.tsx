@@ -306,10 +306,10 @@ function deshacerAriaLabel(g: CierreDetalleGestion): string {
 // `cierre-labels`. Ni un texto cambió; lo que cambia es que ya no pueden divergir (R8).
 
 const RESULTADO_VACIO: Record<CierreResultado, string> = {
-  entregada: "No hay entregas.",
-  reprogramada: "No hay reprogramaciones.",
-  devuelta: "No hay devoluciones.",
-  rechazada: "No hay rechazos.",
+  entregado: "No hay entregas.",
+  reprogramado: "No hay reprogramaciones.",
+  novedad: "No hay devoluciones.",
+  devolucion_a_origen_por_rechazo: "No hay rechazos.",
   incidente: "No hay incidentes.", // feature 158/R18
 };
 
@@ -321,10 +321,10 @@ const DESTINO_LABEL: Record<CierreDestinoTipo, string> = DESTINO_TIPO_LABEL;
  * de resultados del panel del mensajero: no es una forma más de terminar la entrega.
  */
 const ORDEN_RESULTADOS: CierreResultado[] = [
-  "entregada",
-  "reprogramada",
-  "devuelta",
-  "rechazada",
+  "entregado",
+  "reprogramado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
   "incidente",
 ];
 
@@ -350,22 +350,22 @@ const DESCARGA_POR_RESULTADO: Record<
     fila: (g: CierreDetalleGestion) => DescargaFila;
   }
 > = {
-  entregada: {
+  entregado: {
     columnas: COLUMNAS_DESCARGA_DIA_ENTREGADAS,
     fila: filaDescargaDiaEntregada,
     ambitoColumnas: AMBITO_DESCARGA_DIA_ENTREGADAS,
   },
-  reprogramada: {
+  reprogramado: {
     columnas: COLUMNAS_DESCARGA_DIA_REPROGRAMADAS,
     fila: filaDescargaDiaReprogramada,
     ambitoColumnas: AMBITO_DESCARGA_DIA_REPROGRAMADAS,
   },
-  devuelta: {
+  novedad: {
     columnas: COLUMNAS_DESCARGA_DIA_DEVUELTAS,
     fila: filaDescargaDiaDevuelta,
     ambitoColumnas: AMBITO_DESCARGA_DIA_DEVUELTAS,
   },
-  rechazada: {
+  devolucion_a_origen_por_rechazo: {
     columnas: COLUMNAS_DESCARGA_DIA_RECHAZADAS,
     fila: filaDescargaDiaRechazada,
     ambitoColumnas: AMBITO_DESCARGA_DIA_RECHAZADAS,
@@ -1182,7 +1182,7 @@ function columnasPara(
       );
     },
   };
-  if (resultado === "entregada") {
+  if (resultado === "entregado") {
     return [
       ...COLUMNAS_COMUNES,
       { id: "monto", value: "Monto", render: (g) => money(g.montoRecibido) },
@@ -1197,7 +1197,7 @@ function columnasPara(
       columnaAcciones,
     ];
   }
-  if (resultado === "reprogramada") {
+  if (resultado === "reprogramado") {
     return [
       ...COLUMNAS_COMUNES,
       {
@@ -1220,7 +1220,7 @@ function columnasPara(
       columnaAcciones,
     ];
   }
-  if (resultado === "devuelta") {
+  if (resultado === "novedad") {
     return [
       ...COLUMNAS_COMUNES,
       {

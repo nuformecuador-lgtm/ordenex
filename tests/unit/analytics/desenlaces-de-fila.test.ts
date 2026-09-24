@@ -28,10 +28,10 @@ function desglose(pares: readonly (readonly [string, number])[]): ConteoDeStatus
 
 /** La captura del 2026-08-29 que abrió la ficha 346, con sus cinco cubos. */
 const CREMA = desglose([
-  ["entregada", 3],
-  ["rechazada", 2],
-  ["devuelta", 4],
-  ["reprogramada", 2],
+  ["entregado", 3],
+  ["devolucion_a_origen_por_rechazo", 2],
+  ["novedad", 4],
+  ["reprogramado", 2],
   [EN_CURSO, 13],
 ]);
 
@@ -65,7 +65,7 @@ describe("FICHA 442 · los tres tramos son una PARTICIÓN del universo de la fil
     // la barra en silencio, que es exactamente el defecto que la ficha 346 reparó.
     const sexto = DESENLACES[DESENLACES.length - 1];
     const soloElSexto = desglose([
-      ["entregada", 1],
+      ["entregado", 1],
       [sexto, 5],
       [EN_CURSO, 2],
     ]);
@@ -107,14 +107,14 @@ describe("FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órd
     // Por eso aquí no hay ninguna regla de morfología del español que pueda equivocarse con un
     // desenlace nuevo: con cantidad 1 se usa el value tal cual.
     const una = desglose([
-      ["entregada", 4],
-      ["rechazada", 1],
-      ["devuelta", 1],
+      ["entregado", 4],
+      ["devolucion_a_origen_por_rechazo", 1],
+      ["novedad", 1],
       [EN_CURSO, 1],
     ]);
     expect(textoDesenlacesDeFila(una)).toBe("4 entregadas · 1 rechazada · 1 devuelta · 1 en proceso");
     // Y el plural sigue intacto con dos.
-    expect(textoDesenlacesDeFila(desglose([["rechazada", 2]]))).toBe("2 rechazadas");
+    expect(textoDesenlacesDeFila(desglose([["devolucion_a_origen_por_rechazo", 2]]))).toBe("2 rechazadas");
     // «en proceso» es invariante: no es un value del catálogo y no se pluralizaba nunca.
     expect(textoDesenlacesDeFila(desglose([[EN_CURSO, 1]]))).toBe("1 en proceso");
   });
@@ -124,8 +124,8 @@ describe("FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órd
     // concordancia viviera sólo en la pantalla, la misma fila diría «1 devuelta» en una y
     // «1 devueltas» en el otro — que es el tipo de diferencia que nadie mira dos veces.
     const una = desglose([
-      ["entregada", 4],
-      ["devuelta", 1],
+      ["entregado", 4],
+      ["novedad", 1],
     ]);
     expect(textoComposicionOtrosResultados(una)).toBe("1 devuelta");
     expect(textoDesenlacesDeFila(una)).toContain("1 devuelta");
@@ -133,7 +133,7 @@ describe("FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órd
 
   it("un cubo en CERO no se nombra: «0 rechazadas» es ruido, no información", () => {
     const sinRechazos = desglose([
-      ["entregada", 4],
+      ["entregado", 4],
       [EN_CURSO, 2],
     ]);
     expect(textoDesenlacesDeFila(sinRechazos)).toBe("4 entregadas · 2 en proceso");
@@ -173,16 +173,16 @@ describe("FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órd
     // la misma frase — que importa porque este texto se lee al lado del archivo descargable.
     const mezclado = desglose([
       [EN_CURSO, 1],
-      ["reprogramada", 2],
-      ["entregada", 9],
-      ["devuelta", 2],
-      ["rechazada", 3],
+      ["reprogramado", 2],
+      ["entregado", 9],
+      ["novedad", 2],
+      ["devolucion_a_origen_por_rechazo", 3],
     ]);
     expect(partesDesenlaceDeFila(mezclado).map((p) => p.clave)).toEqual([
-      "entregada",
-      "rechazada",
-      "devuelta",
-      "reprogramada",
+      "entregado",
+      "devolucion_a_origen_por_rechazo",
+      "novedad",
+      "reprogramado",
       "en_proceso",
     ]);
   });

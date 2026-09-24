@@ -114,7 +114,7 @@ const LABEL_ENTREGA = "Foto de evidencia de entrega";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "rechazada" });
+  gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "devolucion_a_origen_por_rechazo" });
 });
 
 afterEach(() => {
@@ -233,12 +233,12 @@ describe("GestionarOrdenPanel · evidencias múltiples (feature 119)", () => {
     expect(fotos).toHaveLength(2);
     expect(fotos[0]).toBeInstanceOf(File);
     expect(fotos[1]).toBeInstanceOf(File);
-    expect(fd.get("resultado")).toBe("rechazada");
+    expect(fd.get("resultado")).toBe("devolucion_a_origen_por_rechazo");
   });
 
   it("R16: tras recortar y quitar una foto, se puede enviar con las 3 permitidas", async () => {
     const user = userEvent.setup();
-    gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "rechazada" });
+    gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "devolucion_a_origen_por_rechazo" });
     await abrirRama(user, "Rechazar");
 
     await user.upload(screen.getByLabelText(LABEL_RECHAZO), [

@@ -338,7 +338,7 @@ describe("un rechazo dice POR QUÉ, dentro del modal", () => {
     const user = userEvent.setup();
     corregirMock.mockResolvedValue({
       status: "conflict",
-      motivo: msgEstadoNoReprogramada("entregada"),
+      motivo: msgEstadoNoReprogramada("entregado"),
     });
     renderModal();
 

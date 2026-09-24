@@ -128,7 +128,7 @@ const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({
   id: "o1",
   numGuia: 12345,
   numRemision: "REM-90210",
-  estatusValue: "devuelta",
+  estatusValue: "novedad",
   // Pedido humano 2026-08-18: requerido en `NovedadDTO`. El default es "nadie lo ha intentado".
   intentosContacto: 0,
   mensajeroNombre: "Marta Mensajera",
@@ -359,7 +359,7 @@ describe("NovedadesModule", () => {
       <NovedadesModule
         grupo="devolucion"
         items={[
-          novedad({ estatusValue: "devuelta", mensajeroNombre: "Marta Mensajera" }),
+          novedad({ estatusValue: "novedad", mensajeroNombre: "Marta Mensajera" }),
         ]}
         total={1}
         page={1}
@@ -484,7 +484,7 @@ describe("NovedadesModule", () => {
     render(
       <NovedadesModule
         grupo="devolucion"
-        items={[novedad({ causa: "not_found", estatusValue: "devuelta" })]}
+        items={[novedad({ causa: "not_found", estatusValue: "novedad" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -556,7 +556,7 @@ describe("NovedadesModule", () => {
         // ⏳ 2026-09-23 (FICHA 454): era `en_reparto`, que ahora ES el estado de una fila de ayuda
         // (la lista la trae por su ayuda abierta). Un estado que no casa con la lista que lo trajo
         // es `sin_gestionar`.
-        items={[novedad({ causa: null, estatusValue: "sin_gestionar" })]}
+        items={[novedad({ causa: null, estatusValue: "novedad_interna" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -1912,7 +1912,7 @@ describe("NovedadesModule — 237: resolver desde la pestaña de ayuda", () => {
     gestionarDesdeAyudaMock.mockResolvedValue({
       status: "ok",
       ordenId: "o1",
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
     });
     // La relectura es la que quita la fila: el servidor ya no la lista y el total baja a 0. No se
     // filtra en el cliente — es la lección de 236/D8 sobre esta misma card.
@@ -1945,7 +1945,7 @@ describe("NovedadesModule — 237: resolver desde la pestaña de ayuda", () => {
     gestionarDesdeAyudaMock.mockResolvedValue({
       status: "ok",
       ordenId: "o1",
-      resultado: "reprogramada",
+      resultado: "reprogramado",
     });
     listarAyudaMock.mockResolvedValue({
       status: "ok",

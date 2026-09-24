@@ -46,7 +46,7 @@ const AYUDA: OrdenHistorialOrigenTipo = "gestion_tienda_ayuda";
 const RECHAZO_TIENDA: OrdenHistorialOrigenTipo = "rechazo_tienda";
 const REPRO_TIENDA: OrdenHistorialOrigenTipo = "reprogramacion_tienda";
 
-type Resultado = "entregada" | "rechazada" | "reprogramada";
+type Resultado = "entregado" | "devolucion_a_origen_por_rechazo" | "reprogramado";
 
 const INPUT_CIERRE_VACIO = {
   destinoTipo: "bodega_central" as const,
@@ -212,10 +212,10 @@ describeSiHayBase("425/B5 — el cierre incorpora los rechazos de tienda que le 
     const m = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const mensajeroId = await crearMensajero(tx);
-      const calle = await sembrarGestion(tx, mensajeroId, CALLE, "entregada");
-      const ayuda = await sembrarGestion(tx, mensajeroId, AYUDA, "rechazada");
-      const rechazo = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "rechazada");
-      const repro = await sembrarGestion(tx, mensajeroId, REPRO_TIENDA, "reprogramada");
+      const calle = await sembrarGestion(tx, mensajeroId, CALLE, "entregado");
+      const ayuda = await sembrarGestion(tx, mensajeroId, AYUDA, "devolucion_a_origen_por_rechazo");
+      const rechazo = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "devolucion_a_origen_por_rechazo");
+      const repro = await sembrarGestion(tx, mensajeroId, REPRO_TIENDA, "reprogramado");
       const cierreId = await crearCierre(tx, mensajeroId);
       const ids = {
         calle: calle.gestionId,
@@ -249,11 +249,11 @@ describeSiHayBase("425/B5 — el cierre incorpora los rechazos de tienda que le 
     const m = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const mensajeroId = await crearMensajero(tx);
-      const r1 = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "rechazada");
+      const r1 = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "devolucion_a_origen_por_rechazo");
       const c1 = await crearCierre(tx, mensajeroId);
       // El dia siguiente: una gestion de calle y un rechazo NUEVO.
-      await sembrarGestion(tx, mensajeroId, CALLE, "entregada");
-      const r2 = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "rechazada");
+      await sembrarGestion(tx, mensajeroId, CALLE, "entregado");
+      const r2 = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "devolucion_a_origen_por_rechazo");
       const c2 = await crearCierre(tx, mensajeroId);
       if (c1 === null || c2 === null) {
         throw new Error(`los dos cierres tenian que crearse: c1=${c1} c2=${c2}`);
@@ -298,7 +298,7 @@ describeSiHayBase("425/B5 — el cierre incorpora los rechazos de tienda que le 
     const m = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const mensajeroId = await crearMensajero(tx);
-      const r = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "rechazada");
+      const r = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "devolucion_a_origen_por_rechazo");
       const primera = await crearCierre(tx, mensajeroId, "vencido");
       const segunda = await crearCierre(tx, mensajeroId, "vencido");
       return {
@@ -321,7 +321,7 @@ describeSiHayBase("425/B5 — el cierre incorpora los rechazos de tienda que le 
       const mensajeroId = await crearMensajero(tx);
       const ids: string[] = [];
       for (const remision of ["NA-947", "NA-981", "NA-1103"]) {
-        const s = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "rechazada", { remision });
+        const s = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "devolucion_a_origen_por_rechazo", { remision });
         ids.push(s.gestionId);
       }
       // LA SONDA DEL CAMINO REAL: el corte nocturno tiene que SELECCIONARLO. Si no, el arreglo del
@@ -387,7 +387,7 @@ describeSiHayBase("425/B5 — el cierre incorpora los rechazos de tienda que le 
     const m = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const mensajeroId = await crearMensajero(tx);
-      const repro = await sembrarGestion(tx, mensajeroId, REPRO_TIENDA, "reprogramada");
+      const repro = await sembrarGestion(tx, mensajeroId, REPRO_TIENDA, "reprogramado");
       const cierreId = await crearCierre(tx, mensajeroId, "vencido");
       return {
         cierreId,
@@ -406,8 +406,8 @@ describeSiHayBase("425/B5 — el cierre incorpora los rechazos de tienda que le 
     const m = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const mensajeroId = await crearMensajero(tx);
-      await sembrarGestion(tx, mensajeroId, CALLE, "entregada");
-      const cruzada = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "reprogramada");
+      await sembrarGestion(tx, mensajeroId, CALLE, "entregado");
+      const cruzada = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "reprogramado");
       const cierreId = await crearCierre(tx, mensajeroId);
       return {
         cierreId,
@@ -427,8 +427,8 @@ describeSiHayBase("425/B5 — el cierre incorpora los rechazos de tienda que le 
     const m = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const mensajeroId = await crearMensajero(tx);
-      await sembrarGestion(tx, mensajeroId, CALLE, "entregada");
-      const cruzada = await sembrarGestion(tx, mensajeroId, REPRO_TIENDA, "rechazada");
+      await sembrarGestion(tx, mensajeroId, CALLE, "entregado");
+      const cruzada = await sembrarGestion(tx, mensajeroId, REPRO_TIENDA, "devolucion_a_origen_por_rechazo");
       const cierreId = await crearCierre(tx, mensajeroId);
       return {
         cierreId,
@@ -447,13 +447,13 @@ describeSiHayBase("425/B5 — el cierre incorpora los rechazos de tienda que le 
       await serializarEscriturasReales(tx);
       const mensajeroId = await crearMensajero(tx);
       // Se siembra PRIMERO el mas nuevo: el orden de insercion no puede ser lo que decide.
-      const nuevo = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "rechazada", {
+      const nuevo = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "devolucion_a_origen_por_rechazo", {
         remision: "NA-1103",
         createdAt: new Date("2026-09-10T18:00:00.000Z"),
         motivo: "El cliente no la quiere",
         numGuia: null,
       });
-      const viejo = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "rechazada", {
+      const viejo = await sembrarGestion(tx, mensajeroId, RECHAZO_TIENDA, "devolucion_a_origen_por_rechazo", {
         remision: "NA-947",
         createdAt: new Date("2026-08-28T15:00:00.000Z"),
         motivo: null,

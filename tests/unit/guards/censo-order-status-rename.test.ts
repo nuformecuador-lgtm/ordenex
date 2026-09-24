@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import ts from "typescript";
 
-import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
+import { CODIGO_VIGENTE_DE_ANTERIOR, ORDER_STATUS_SEED } from "@/lib/types/order-status";
 
 // Feature 135 (R13) — GUARD de censo case-sensitive de los 6 values ANTIGUOS de
 // order_status renombrados por esta feature. Recorre el arbol de fuentes y tests
@@ -136,6 +137,13 @@ const ALLOWLIST = new Set([
   // (`["en_bodega", "no_entregado"]`): es el MISMO hito firmado de las cuatro entradas de arriba, no
   // el value de `order_status`. Entro rojo con la Fase 0 (`3603d199`), que no corrio el gate completo.
   "rastreo-y-historial-legado.test.ts",
+  // FICHA 455 (2026-09-24, design §1.1, R11): `ESTADO_RETIRADO` en `lib/types/order-status.ts` es la
+  // fuente UNICA del nombre historico de los estados retirados, y una de sus claves es el value que la
+  // 155 retiro: su fila sobrevive en `order_status` donde el historial la cita, y una linea de tiempo
+  // interna la tiene que poder nombrar («En fulfillment (estado retirado)», R11). Nombrarlo es leer
+  // el pasado, no nomenclatura viva; componerlo con `join` seria evadir este censo. OJO: por BASENAME
+  // cubre tambien `lib/actions/order-status.ts`, que no contiene ningun literal antiguo.
+  "order-status.ts",
 ]);
 
 // Feature 153 (R17) — censo de la ETIQUETA antigua. Se busca el literal EXACTO entre
@@ -266,5 +274,229 @@ describe("153/R17 — invariante de censo: la etiqueta antigua “En ruta” no 
     expect(OLD_LABEL_RE.test('"En ruta a bodega <zona>"')).toBe(false);
     expect(OLD_LABEL_RE.test('label: "En ruta"')).toBe(true);
     expect(OLD_LABEL_RE.test('"En reparto"')).toBe(false);
+  });
+});
+
+// =================================================================================================
+// FICHA 455 (T1.10, design §6.1; R13, R40, R44) — G1, EL BRAZO 455: los 7 codigos ANTERIORES.
+//
+// La 455 renombra 7 values (`entregada` -> `entregado`, `devuelta` -> `novedad`, ...). A diferencia de
+// los de la 135/155, cuatro de ellos son PALABRAS del castellano («la orden fue entregada»): un regex
+// sobre el texto crudo, como el de arriba, marcaria miles de comentarios y textos en prosa. Por eso
+// este brazo lee TOKENS con el AST de TypeScript y solo mira donde un codigo es CODIGO:
+//   - un literal de cadena / plantilla IGUAL a un codigo anterior (`"devuelta"`);
+//   - un codigo entre comillas dentro de SQL o de un fuente de fixture (`'devuelta'`, `"devuelta"`
+//     dentro de una plantilla);
+//   - los tres codigos con guion bajo (`por_recoger`, `sin_gestionar`, `por_devolver`) como token en
+//     cualquier cadena: no son prosa. `\bpor_devolver\b` NO marca `por_devolver_a_tienda` ni
+//     `por_devolver_a_bodega_central` (el `_` es caracter de palabra);
+//   - un NOMBRE DE PROPIEDAD igual a un codigo anterior (`{ devuelta: ... }`, `X.rechazada`). Una
+//     variable local que se llame `entregada` no cuenta: es castellano, no un codigo.
+// En `.sql`: `'codigo'` fuera de comentarios. En `.json`: `"codigo"`. En los dos documentos de
+// integradores (R30): el codigo entre backticks o comillas. `db/migrations/**` no se escanea (fotos
+// historicas). Los comentarios no se miran nunca.
+// =================================================================================================
+
+const ANTERIORES = Object.keys(CODIGO_VIGENTE_DE_ANTERIOR);
+const TOKEN_ANTERIOR = new RegExp(`(?<![A-Za-z0-9_])(${ANTERIORES.join("|")})(?![A-Za-z0-9_])`);
+const CON_GUION_BAJO = ANTERIORES.filter((c) => c.includes("_"));
+const TOKEN_GUION_BAJO = new RegExp(`(?<![A-Za-z0-9_])(${CON_GUION_BAJO.join("|")})(?![A-Za-z0-9_])`);
+const ENTRE_COMILLAS_SIMPLES = new RegExp(`'(${ANTERIORES.join("|")})'`);
+const ENTRE_COMILLAS_DOBLES = new RegExp(`"(${ANTERIORES.join("|")})"`);
+const EN_DOCUMENTO = new RegExp(`[\`'"](${ANTERIORES.join("|")})[\`'"]`);
+
+/** Documentos de integradores que R30 exige limpios (ademas del codigo). */
+const DOCS_INTEGRADORES = [
+  "docs/ayuda/oficina/configuracion-api.md",
+  "docs/api/manual-metricas-por-mensajero.md",
+];
+
+/**
+ * Excepciones del brazo 455, por RUTA (no por basename) y con su numero EXACTO de apariciones: una
+ * mas es una infraccion y una menos deja la excepcion caducada (patron de `sin-estados-retirados`).
+ */
+const EXCEPCIONES_455: Record<string, { maximo: number; motivo: string }> = {
+  "lib/types/order-status.ts": {
+    maximo: 7,
+    motivo:
+      "`CODIGO_VIGENTE_DE_ANTERIOR`: la UNICA correspondencia anterior -> vigente del arbol (snapshots, " +
+      "URLs guardadas y el 422 explicativo de la API la leen de aqui)",
+  },
+  // Tests que afirman el TEXTO de una migracion YA APLICADA (o simulan en memoria el catalogo de su
+  // epoca). El texto de una migracion aplicada es inmutable: estos literales son la foto de su dia.
+  "tests/integration/db/gestion-orden-migration.test.ts": {
+    maximo: 4,
+    motivo: "afirma el `CREATE TYPE gestion_resultado` de la feature 36 con sus 4 etiquetas de entonces",
+  },
+  "tests/integration/db/incidente-indemnizacion-migration.test.ts": {
+    maximo: 4,
+    motivo: "afirma que el down de la 158 recrea el enum con las 4 etiquetas de su epoca (design 455 §3.1)",
+  },
+  "tests/integration/db/order-status-enum-migration.test.ts": {
+    maximo: 3,
+    motivo: "foto del enum `order_status` historico (R10 de la 135)",
+  },
+  "tests/integration/db/order-status-rename-nomenclatura-migration.test.ts": {
+    maximo: 4,
+    motivo: "simula en memoria el catalogo de la 135 (vecinos que su WHERE exacto no debia tocar)",
+  },
+  "tests/integration/db/order-status-en-reparto-migration.test.ts": {
+    maximo: 7,
+    motivo: "simula en memoria el catalogo de la 153 (vecinos que su WHERE exacto no debia tocar)",
+  },
+  "tests/integration/db/cierre-sin-gestion-migration.test.ts": {
+    maximo: 1,
+    motivo: "el titulo de un caso que afirma el JOIN historico de la 264 sobre el value de su epoca",
+  },
+};
+
+/** Las apariciones de un codigo anterior como CODIGO en un fuente TS/TSX/JS. */
+export function aparicionesTs(codigo: string, nombre = "fuente.ts"): string[] {
+  const tsx = /\.[jt]sx$/.test(nombre) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const sf = ts.createSourceFile(nombre, codigo, ts.ScriptTarget.Latest, true, tsx);
+  const hallazgos: string[] = [];
+  const anotar = (n: ts.Node, cual: string) => {
+    const { line } = sf.getLineAndCharacterOfPosition(n.getStart(sf));
+    hallazgos.push(`${nombre}:${line + 1} ${cual}`);
+  };
+  const visitar = (n: ts.Node): void => {
+    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) {
+      const exacto = ANTERIORES.includes(n.text) ? n.text : null;
+      const m =
+        exacto ??
+        ENTRE_COMILLAS_SIMPLES.exec(n.text)?.[1] ??
+        (ts.isNoSubstitutionTemplateLiteral(n) ? ENTRE_COMILLAS_DOBLES.exec(n.text)?.[1] : undefined) ??
+        TOKEN_GUION_BAJO.exec(n.text)?.[1];
+      if (m) anotar(n, m);
+    } else if (ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n)) {
+      const m =
+        ENTRE_COMILLAS_SIMPLES.exec(n.text)?.[1] ??
+        ENTRE_COMILLAS_DOBLES.exec(n.text)?.[1] ??
+        TOKEN_GUION_BAJO.exec(n.text)?.[1];
+      if (m) anotar(n, m);
+    } else if (ts.isIdentifier(n) && ANTERIORES.includes(n.text)) {
+      const p = n.parent;
+      const esNombreDePropiedad =
+        ((ts.isPropertyAssignment(p) || ts.isPropertySignature(p) || ts.isPropertyDeclaration(p)) &&
+          p.name === n) ||
+        (ts.isPropertyAccessExpression(p) && p.name === n) ||
+        ts.isShorthandPropertyAssignment(p) ||
+        (ts.isEnumMember(p) && p.name === n);
+      if (esNombreDePropiedad) anotar(n, n.text);
+    }
+    ts.forEachChild(n, visitar);
+  };
+  visitar(sf);
+  return hallazgos;
+}
+
+/** Las apariciones en un `.sql` (`'codigo'` fuera de comentarios `--`). */
+export function aparicionesSql(codigo: string, nombre = "fuente.sql"): string[] {
+  return codigo.split("\n").flatMap((l, i) => {
+    const m = ENTRE_COMILLAS_SIMPLES.exec(l.replace(/--.*$/, ""));
+    return m ? [`${nombre}:${i + 1} ${m[1]}`] : [];
+  });
+}
+
+/** Las apariciones en un `.json` (`"codigo"`) o en un documento de integradores. */
+function aparicionesTexto(codigo: string, nombre: string, re: RegExp): string[] {
+  return codigo.split("\n").flatMap((l, i) => {
+    const m = re.exec(l);
+    return m ? [`${nombre}:${i + 1} ${m[1]}`] : [];
+  });
+}
+
+function aparicionesDe(rel: string, codigo: string): string[] {
+  if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(rel)) return aparicionesTs(codigo, rel);
+  if (rel.endsWith(".sql")) return aparicionesSql(codigo, rel);
+  if (rel.endsWith(".json")) return aparicionesTexto(codigo, rel, ENTRE_COMILLAS_DOBLES);
+  if (rel.endsWith(".md")) return aparicionesTexto(codigo, rel, EN_DOCUMENTO);
+  return [];
+}
+
+function censo455(): { leidos: number; infractores: string[]; porExcepcion: Map<string, string[]> } {
+  const infractores: string[] = [];
+  const porExcepcion = new Map<string, string[]>();
+  let leidos = 0;
+  const rutas = [
+    ...SCAN_DIRS.flatMap((d) => {
+      const base = path.join(REPO_ROOT, d);
+      return fs.existsSync(base) ? walk(base) : [];
+    }),
+    ...DOCS_INTEGRADORES.map((r) => path.join(REPO_ROOT, r)),
+  ];
+  for (const completo of rutas) {
+    const rel = path.relative(REPO_ROOT, completo).split(path.sep).join("/");
+    if (path.basename(rel) === "censo-order-status-rename.test.ts") continue; // este archivo
+    leidos += 1;
+    const hallazgos = aparicionesDe(rel, fs.readFileSync(completo, "utf8"));
+    if (hallazgos.length === 0) continue;
+    if (EXCEPCIONES_455[rel] !== undefined) porExcepcion.set(rel, hallazgos);
+    else infractores.push(...hallazgos);
+  }
+  return { leidos, infractores, porExcepcion };
+}
+
+describe("455/R40 (G1) — el detector de codigos anteriores no esta roto", () => {
+  const [ant, antGuion] = [ANTERIORES[0], CON_GUION_BAJO[0]];
+
+  it("no denuncia comentarios, prosa, variables locales ni los codigos vigentes vecinos", () => {
+    const sano = [
+      `// aqui decia \`${ant}\`: la 455 lo renombro`,
+      `const ${ant} = 1; // variable local: castellano, no un codigo`,
+      `const texto = "la orden fue ${ant} ayer";`,
+      `const vecinos = ["por_devolver_a_tienda", "por_devolver_a_bodega_central", "devuelta_a_tienda"];`,
+      `const vigente = "novedad";`,
+    ].join("\n");
+    expect(aparicionesTs(sano)).toEqual([]);
+    expect(aparicionesSql(`-- '${ant}' en un comentario\nSELECT 1;`)).toEqual([]);
+  });
+
+  it("MUTACION (R44): ve el literal, la clave, el acceso, el SQL y la plantilla de fixture", () => {
+    const infractor = [
+      `const A = "${ant}";`,
+      `const B = { ${ant}: 1 };`,
+      `const C = mapa.${ant};`,
+      "const D = sql`WHERE s.value = '" + ant + "'`;",
+      "const E = `const X = \"" + ant + "\";`;",
+      `const F = "estado=${antGuion}&x=1";`,
+    ].join("\n");
+    expect(aparicionesTs(infractor)).toEqual([
+      `fuente.ts:1 ${ant}`,
+      `fuente.ts:2 ${ant}`,
+      `fuente.ts:3 ${ant}`,
+      `fuente.ts:4 ${ant}`,
+      `fuente.ts:5 ${ant}`,
+      `fuente.ts:6 ${antGuion}`,
+    ]);
+    expect(aparicionesSql(`UPDATE x SET v = '${ant}';`)).toEqual([`fuente.sql:1 ${ant}`]);
+  });
+
+  it("la lista de codigos anteriores es la de la ficha: 7, disjuntos del catalogo vigente", () => {
+    expect(ANTERIORES).toHaveLength(7);
+    for (const a of ANTERIORES) expect((ORDER_STATUS_SEED as readonly string[]).includes(a)).toBe(false);
+  });
+});
+
+describe("455/R40 (G1) — el arbol no tiene codigos anteriores fuera de su excepcion", () => {
+  const { leidos, infractores, porExcepcion } = censo455();
+
+  it("el censo LEYO el arbol (no-vacuidad) y ve cada excepcion", () => {
+    expect(leidos).toBeGreaterThan(3000);
+    expect([...porExcepcion.keys()].sort()).toEqual(Object.keys(EXCEPCIONES_455).sort());
+  });
+
+  it("ningun archivo de app/ lib/ components/ hooks/ scripts/ tests/ e2e/ ni de los docs de integradores usa un codigo anterior", () => {
+    expect(
+      infractores,
+      "un codigo ANTERIOR de la 455 volvio como codigo. Usa el vigente (`lib/types/order-status.ts`); " +
+        "si es para LEER un dato guardado antes de la ficha, traducelo con `codigoVigente`.",
+    ).toEqual([]);
+  });
+
+  it("cada excepcion sigue haciendo falta, con su numero exacto de apariciones", () => {
+    for (const [ruta, { maximo }] of Object.entries(EXCEPCIONES_455)) {
+      expect(porExcepcion.get(ruta) ?? [], `${ruta}: la excepcion caduco o crecio`).toHaveLength(maximo);
+    }
   });
 });

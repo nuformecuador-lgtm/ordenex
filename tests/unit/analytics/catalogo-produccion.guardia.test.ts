@@ -233,9 +233,9 @@ describe("R2 · los terminos de una razon tienen productor", () => {
 /* R3 · `sin_gestionar` la sirve la 126, derivandola del embudo                */
 /* -------------------------------------------------------------------------- */
 
-describe("R3 · sin_gestionar no puede figurar sin productor", () => {
+describe("R3 · novedad_interna no puede figurar sin productor", () => {
   // MUTACION QUE ESTE CASO MATA: volver `sin_gestionar` a `estadoProduccion: "declarada"`.
-  it("`sin_gestionar` declara productor: la 126 la deriva del embudo", () => {
+  it("`novedad_interna` declara productor: la 126 la deriva del embudo", () => {
     // Fuente de verdad de "quien la sirve": el mapa metrica -> medida del rollup de la 126,
     // leido en crudo del servicio (`AnaliticaOperativaService.ts:85-95`). No se importa el
     // servicio: es la capa de servicios y este es un test del modulo puro.
@@ -250,12 +250,12 @@ describe("R3 · sin_gestionar no puede figurar sin productor", () => {
     // Sanidad: si el parseo devolviera un mapa vacio, todo lo de abajo pasaria por vacio.
     expect(servidas.size, "no se parseo ninguna entrada de MEDIDA_DE_METRICA").
       toBeGreaterThanOrEqual(5);
-    expect([...servidas.keys()]).toContain("sin_gestionar");
+    expect([...servidas.keys()]).toContain("novedad_interna");
 
     // La causa, con todas las letras: se sirve de la MISMA medida que el embudo, o sea que
     // no tiene medida propia — se proyecta de `ordenes_por_estado`.
-    expect(servidas.get("sin_gestionar")).toBe(servidas.get("ordenes_por_estado"));
-    expect(getMetrica("sin_gestionar")!.definicion.derivadaDe).toBe("ordenes_por_estado");
+    expect(servidas.get("novedad_interna")).toBe(servidas.get("ordenes_por_estado"));
+    expect(getMetrica("novedad_interna")!.definicion.derivadaDe).toBe("ordenes_por_estado");
 
     // La regla derivada: toda metrica del catalogo que la 126 sirve tiene productor.
     for (const id of servidas.keys()) {

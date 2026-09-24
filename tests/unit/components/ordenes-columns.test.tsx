@@ -322,7 +322,7 @@ describe("ordenesColumns — feature 160 (R17/R19: el numero, siempre, incluido 
           makeOrden({
             id: "o1",
             numRemision: "REM-IC",
-            estatusValue: "devuelta",
+            estatusValue: "novedad",
             intentosEntrega: 3,
           }),
         ]}

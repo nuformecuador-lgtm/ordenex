@@ -46,7 +46,7 @@ const ESTATUS_ESPERADO: Record<GrupoNovedad, string> = {
   // FICHA 454: la orden con ayuda abierta sigue `en_reparto` (antes `ayuda_tienda`); lo que la mete en
   // la pestaña es la DERIVACION, no el estado. Este valor es el de la FILA representativa del grupo.
   ayuda: "en_reparto",
-  devolucion: "devuelta", // feature 239: devolucion ANCLADA (confirmada en el cierre)
+  devolucion: "novedad", // feature 239: devolucion ANCLADA (confirmada en el cierre)
 };
 
 /** Los ids que la derivacion «ayuda abierta» devuelve en esta suite (doble de `$queryRaw`). */
@@ -124,7 +124,7 @@ function casa(where: unknown, fila: FilaDePrueba): boolean {
 }
 
 function fila(overrides: Partial<FilaDePrueba> = {}): FilaDePrueba {
-  return { id: "o-x", tiendaId: "tienda-1", deletedAt: null, estatusValue: "devuelta", ...overrides };
+  return { id: "o-x", tiendaId: "tienda-1", deletedAt: null, estatusValue: "novedad", ...overrides };
 }
 
 /** La fila representativa de `grupo`: la que su pestaña DEBE listar. */
@@ -153,7 +153,7 @@ function prismaRow(overrides: Record<string, unknown> = {}) {
     notas: "Tocar el timbre",
     intentosContacto: 0,
     createdAt: new Date("2026-01-01T00:00:00Z"),
-    estatus: { value: "devuelta" },
+    estatus: { value: "novedad" },
     tienda: { nombre: "Tienda Uno" },
     zona: { nombre: "GAM" },
     provincia: { nombre: "San Jose" },
@@ -202,12 +202,12 @@ async function whereDeCount(grupo: GrupoNovedad, tiendaId = "tienda-1") {
 
 describe("0 — el evaluador de predicados de esta suite no esta roto", () => {
   it("acepta y rechaza lo que debe sobre un predicado sintetico", () => {
-    const sintetico = { tiendaId: "t1", deletedAt: null, estatus: { value: "devuelta" } };
-    expect(casa(sintetico, fila({ tiendaId: "t1", estatusValue: "devuelta" }))).toBe(true);
-    expect(casa(sintetico, fila({ tiendaId: "t2", estatusValue: "devuelta" }))).toBe(false);
-    expect(casa(sintetico, fila({ tiendaId: "t1", estatusValue: "entregada" }))).toBe(false);
+    const sintetico = { tiendaId: "t1", deletedAt: null, estatus: { value: "novedad" } };
+    expect(casa(sintetico, fila({ tiendaId: "t1", estatusValue: "novedad" }))).toBe(true);
+    expect(casa(sintetico, fila({ tiendaId: "t2", estatusValue: "novedad" }))).toBe(false);
+    expect(casa(sintetico, fila({ tiendaId: "t1", estatusValue: "entregado" }))).toBe(false);
     expect(
-      casa(sintetico, fila({ tiendaId: "t1", estatusValue: "devuelta", deletedAt: new Date() })),
+      casa(sintetico, fila({ tiendaId: "t1", estatusValue: "novedad", deletedAt: new Date() })),
     ).toBe(false);
     // FICHA 454: la forma de la derivacion.
     const porIds = { tiendaId: "t1", deletedAt: null, id: { in: ["a"] } };
@@ -225,7 +225,7 @@ describe("0 — el evaluador de predicados de esta suite no esta roto", () => {
         {
           tiendaId: "t1",
           deletedAt: null,
-          OR: [{ estatus: { value: "devuelta" } }, { estatus: { value: "ayuda_tienda" } }],
+          OR: [{ estatus: { value: "novedad" } }, { estatus: { value: "ayuda_tienda" } }],
         },
         fila(),
       ),
@@ -237,13 +237,13 @@ describe("0 — el evaluador de predicados de esta suite no esta roto", () => {
     const claveHermana = ["ayu", "da"].join("");
     expect(() =>
       casa(
-        { tiendaId: "t1", deletedAt: null, estatus: { value: "devuelta" }, [claveHermana]: true },
+        { tiendaId: "t1", deletedAt: null, estatus: { value: "novedad" }, [claveHermana]: true },
         fila(),
       ),
     ).toThrow(/claves inesperadas/);
     // Un `in` en vez de una igualdad:
     expect(() =>
-      casa({ tiendaId: "t1", deletedAt: null, estatus: { value: { in: ["devuelta"] } } }, fila()),
+      casa({ tiendaId: "t1", deletedAt: null, estatus: { value: { in: ["novedad"] } } }, fila()),
     ).toThrow(/igualdad simple/);
   });
 
@@ -328,12 +328,12 @@ describe("236/R9 — una orden de un grupo NO casa el predicado del otro", () =>
     // `en_reparto` con la ayuda CERRADA (rescatada, habilitada o con gestion pendiente) no se lista.
     for (const estatus of [
       "en_reparto", // rescatada: vuelve a la calle y desaparece de la pantalla de la tienda
-      "sin_gestionar", // el corte nocturno la barrio
+      "novedad_interna", // el corte nocturno la barrio
       "en_bodega_central",
       "en_bodega_satelite",
-      "entregada",
+      "entregado",
       "devolucion_por_confirmar", // 239: el pre-estado, que la tienda NO ve
-      "rechazada",
+      "devolucion_a_origen_por_rechazo",
     ]) {
       for (const [grupo, where] of predicados) {
         expect(casa(where, fila({ estatusValue: estatus })), `${estatus} en ${grupo}`).toBe(false);
@@ -526,7 +526,7 @@ describe("OrdenRepository.findNovedadesByTienda (R4/R10)", () => {
 
     expect(rows[0]).toMatchObject({
       numRemision: "REM-001",
-      estatusValue: "devuelta", // proyectado de la relacion, no hardcodeado
+      estatusValue: "novedad", // proyectado de la relacion, no hardcodeado
       direccion: "Calle 1, casa 2",
       notas: "Tocar el timbre",
       tiendaNombre: "Tienda Uno",
@@ -684,7 +684,7 @@ describe("OrdenRepository.findCausasDevueltaVigentes (R6/R7/R8)", () => {
     const arg = prisma.gestionOrden.findMany.mock.calls[0][0];
     expect(arg.where).toEqual({
       ordenId: { in: ["o1", "o2", "o3"] },
-      resultado: "devuelta", // R6: solo devoluciones
+      resultado: "novedad", // R6: solo devoluciones
       anuladaAt: null, // R7: solo vigentes (anuladas no cuentan)
     });
     expect(arg.orderBy).toEqual({ createdAt: "desc" });
@@ -809,8 +809,8 @@ describe("236/R17 — `findFechaSolicitudAyuda`: UNA consulta por pagina, la sol
 describe("239 — la visibilidad no depende de ninguna marca distinta del estado (R18/R20/R30)", () => {
   it("R18: una orden en `devuelta` se lista, sin ninguna condicion adicional", async () => {
     const where = await whereDeCount("devolucion");
-    expect(where.estatus).toEqual({ value: "devuelta" });
-    expect(casa(where, fila({ estatusValue: "devuelta" }))).toBe(true);
+    expect(where.estatus).toEqual({ value: "novedad" });
+    expect(casa(where, fila({ estatusValue: "novedad" }))).toBe(true);
   });
 
   it("R19: una orden en el PRE-ESTADO no casa el predicado (no hay rama que la admita)", async () => {
@@ -825,7 +825,7 @@ describe("239 — la visibilidad no depende de ninguna marca distinta del estado
     // columna valia `false` y CAIA de `/novedades`: el recorte no afectaba solo a las nuevas,
     // borraba de la pantalla las que ya estaban. Al retirarla, se ven SOLAS, sin backfill.
     const prisma = buildPrisma();
-    const historica = prismaRow({ id: "o-vieja", estatus: { value: "devuelta" } });
+    const historica = prismaRow({ id: "o-vieja", estatus: { value: "novedad" } });
     prisma.orden.findMany.mockResolvedValue([historica]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 

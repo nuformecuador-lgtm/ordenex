@@ -58,7 +58,7 @@ import { DESENLACES } from "@/lib/types/conteo-entregas";
 const CON_DESENLACE: ReadonlySet<string> = new Set<string>(DESENLACES);
 
 /** El status `value` del catalogo que cuenta como entrega lograda. Es uno de `DESENLACES`. */
-const ENTREGADA = "entregada";
+const ENTREGADA = "entregado";
 
 /**
  * El otro desenlace que cuenta como GESTION cumplida: el destinatario rechazo el paquete.
@@ -69,7 +69,7 @@ const ENTREGADA = "entregada";
  * reprogramacion o un incidente la orden se queda sin resolver o vuelve, y eso si es gestion
  * pendiente. Es una decision de negocio (2026-08-18), no una propiedad del catalogo.
  */
-const RECHAZADA = "rechazada";
+const RECHAZADA = "devolucion_a_origen_por_rechazo";
 
 /**
  * FICHA 347 (F1) — los desenlaces que YA tienen columna propia en la tabla de productos.

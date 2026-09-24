@@ -210,7 +210,7 @@ describe("Feature 158 · blindaje de la discriminatedUnion (R9/R35)", () => {
       {
         ordenId: "o1",
         ubicacion: UBICACION_193,
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: 1000,
         metodoPago: "efectivo",
         evidencias: [evidenciaValida()],
@@ -219,7 +219,7 @@ describe("Feature 158 · blindaje de la discriminatedUnion (R9/R35)", () => {
       {
         ordenId: "o1",
         ubicacion: UBICACION_193,
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         motivo: "cliente rechazo",
         evidencias: [evidenciaValida()],
         causaIncidente: "robado",
@@ -227,7 +227,7 @@ describe("Feature 158 · blindaje de la discriminatedUnion (R9/R35)", () => {
       {
         ordenId: "o1",
         ubicacion: UBICACION_193,
-        resultado: "devuelta",
+        resultado: "novedad",
         causaDevolucion: "not_found",
         motivo: "no vive aqui",
         evidencias: [evidenciaValida()],
@@ -236,7 +236,7 @@ describe("Feature 158 · blindaje de la discriminatedUnion (R9/R35)", () => {
       {
         ordenId: "o1",
         ubicacion: UBICACION_193,
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         fechaReprogramacion: fechaFuturaISO(),
         motivo: "reagendar",
         causaIncidente: "danado",
@@ -270,7 +270,7 @@ describe("Feature 158 · blindaje de la discriminatedUnion (R9/R35)", () => {
     const entregada = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: 1000,
       metodoPago: "efectivo",
       evidencias: [evidenciaValida()],
@@ -278,21 +278,21 @@ describe("Feature 158 · blindaje de la discriminatedUnion (R9/R35)", () => {
     const rechazada = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       motivo: "cliente rechazo",
       evidencias: [evidenciaValida()],
     });
     const reprogramada = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "reprogramada",
+      resultado: "reprogramado",
       fechaReprogramacion: fechaFuturaISO(),
       motivo: "reagendar",
     });
     const devuelta = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "devuelta",
+      resultado: "novedad",
       causaDevolucion: "not_found",
       motivo: "no vive aqui",
       evidencias: [evidenciaValida()],

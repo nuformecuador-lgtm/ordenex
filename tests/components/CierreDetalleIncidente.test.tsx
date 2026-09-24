@@ -107,7 +107,7 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 function unIncidente(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion {
@@ -141,10 +141,10 @@ describe("R18 — `incidente` es un grupo propio del detalle de admin", () => {
     expect(ORDEN_RESULTADOS[ORDEN_RESULTADOS.length - 1]).toBe("incidente");
     // Los cuatro previos conservan su orden exacto (no regresión, R35).
     expect(ORDEN_RESULTADOS.slice(0, 4)).toEqual([
-      "entregada",
-      "reprogramada",
-      "devuelta",
-      "rechazada",
+      "entregado",
+      "reprogramado",
+      "novedad",
+      "devolucion_a_origen_por_rechazo",
     ]);
   });
 
@@ -216,10 +216,10 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
       <DetalleSecciones
         grupos={{
           ...emptyGrupos(),
-          rechazada: [
+          devolucion_a_origen_por_rechazo: [
             makeGestion({
               gestionId: "gr",
-              resultado: "rechazada",
+              resultado: "devolucion_a_origen_por_rechazo",
               ingresoOrdenex: ingreso(),
               ingresoBodegaRechazo: "5.00",
             }),
@@ -244,7 +244,7 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
 
   it("las columnas del incidente son un conjunto EXPLÍCITO, no la rama por defecto", () => {
     const delIncidente = columnasPara("incidente", () => {}).map((c) => c.id);
-    const delRechazo = columnasPara("rechazada", () => {}).map((c) => c.id);
+    const delRechazo = columnasPara("devolucion_a_origen_por_rechazo", () => {}).map((c) => c.id);
     expect(delIncidente).not.toEqual(delRechazo);
     expect(delIncidente).toEqual([
       "numGuia",
@@ -295,7 +295,7 @@ describe("El dato viaja en el DTO y AHORA SÍ se pinta (T2.3 cerrada el 2026-07-
     expect(typeof g.indemnizacion).toBe("string");
     // `null` cuando no aplica (cierre aún sin aprobar) o cuando el resultado no es incidente.
     expect(unIncidente().indemnizacion).toBeNull();
-    expect(makeGestion({ gestionId: "ge", resultado: "entregada" }).causaIncidente).toBeNull();
+    expect(makeGestion({ gestionId: "ge", resultado: "entregado" }).causaIncidente).toBeNull();
   });
 
   // Este caso nació afirmando lo contrario («las columnas aún NO se pintan»), a propósito, para
@@ -381,7 +381,7 @@ describe("R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero",
   });
 
   it("la columna del monto NO aparece en los otros cuatro resultados", () => {
-    for (const resultado of ["entregada", "reprogramada", "devuelta", "rechazada"] as const) {
+    for (const resultado of ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo"] as const) {
       const ids = columnasPara(resultado, () => {}).map((c) => c.id);
       expect(ids, `${resultado} no debería tener la columna`).not.toContain("indemnizacion");
       expect(ids, `${resultado} no debería tener la columna`).not.toContain("causaIncidente");

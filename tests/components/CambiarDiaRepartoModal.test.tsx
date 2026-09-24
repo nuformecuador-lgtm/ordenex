@@ -324,7 +324,7 @@ describe("R19 — un `conflict` pinta el motivo REAL de cada orden, no un genér
   it("cada orden rechazada se nombra por su remisión y con SU causa", async () => {
     await confirmarCon([
       { ordenId: "o1", motivo: MSG_YA_ES_ESE_DIA },
-      { ordenId: "o2", motivo: msgEstadoSinDiaVivo("entregada") },
+      { ordenId: "o2", motivo: msgEstadoSinDiaVivo("entregado") },
     ]);
 
     const aviso = await screen.findByRole("alert");

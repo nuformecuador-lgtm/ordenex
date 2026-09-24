@@ -24,7 +24,7 @@ const L = ORDER_STATUS_LABELS;
 const CUATRO: OrdenHistorialEntradaDTO[] = [
   {
     clase: "transicion",
-    estatusOrigenValue: "por_recoger",
+    estatusOrigenValue: "mensajero_recogiendo_en_bodega",
     estatusDestinoValue: "en_reparto",
     origenTipo: "recoleccion",
     actorNombre: "Andy Cortes",
@@ -51,7 +51,7 @@ const CUATRO: OrdenHistorialEntradaDTO[] = [
   {
     clase: "evento_orden",
     tipo: "gestion_registrada",
-    resultado: "entregada",
+    resultado: "entregado",
     resultadoAnterior: null,
     actorNombre: "Carlos Eduardo",
     actorRol: "mensajero",
@@ -78,7 +78,7 @@ describe("454/R30 — la línea de tiempo pinta las CUATRO clases", () => {
   it("la gestión registrada dice el resultado con su nombre CANÓNICO, el actor y su rol congelado", () => {
     render(<HistorialOrdenTimeline entradas={CUATRO} />);
     const fila = items()[3];
-    expect(within(fila).getByText(`Resultado: ${L.entregada}`)).toBeTruthy();
+    expect(within(fila).getByText(`Resultado: ${L.entregado}`)).toBeTruthy();
     expect(
       within(fila).getByText(`Por Carlos Eduardo (${ROL_LABELS.mensajero})`),
     ).toBeTruthy();
@@ -94,8 +94,8 @@ describe("454/R30 — la línea de tiempo pinta las CUATRO clases", () => {
           {
             clase: "evento_orden",
             tipo: "gestion_corregida",
-            resultado: "rechazada",
-            resultadoAnterior: "entregada",
+            resultado: "devolucion_a_origen_por_rechazo",
+            resultadoAnterior: "entregado",
             actorNombre: "Ana Solis",
             actorRol: "admin",
             createdAt: new Date("2026-09-23T18:00:00Z"),
@@ -105,7 +105,7 @@ describe("454/R30 — la línea de tiempo pinta las CUATRO clases", () => {
     );
     const fila = items()[0];
     expect(within(fila).getByText("Gestión corregida")).toBeTruthy();
-    expect(within(fila).getByText(`De ${L.entregada} a ${L.rechazada}`)).toBeTruthy();
+    expect(within(fila).getByText(`De ${L.entregado} a ${L.devolucion_a_origen_por_rechazo}`)).toBeTruthy();
   });
 
   it("la anulación, y un resultado `devuelta` se nombra con la etiqueta de su estado", () => {
@@ -115,7 +115,7 @@ describe("454/R30 — la línea de tiempo pinta las CUATRO clases", () => {
           {
             clase: "evento_orden",
             tipo: "gestion_anulada",
-            resultado: "devuelta",
+            resultado: "novedad",
             resultadoAnterior: null,
             actorNombre: "Carlos Eduardo",
             actorRol: "mensajero",
@@ -126,7 +126,7 @@ describe("454/R30 — la línea de tiempo pinta las CUATRO clases", () => {
     );
     const fila = items()[0];
     expect(within(fila).getByText("Gestión anulada")).toBeTruthy();
-    expect(within(fila).getByText(`Resultado: ${L.devuelta}`)).toBeTruthy();
+    expect(within(fila).getByText(`Resultado: ${L.novedad}`)).toBeTruthy();
   });
 
   it("la ayuda: la ida lleva la nota «Ayuda solicitada a la tienda» y la vuelta dice que se cerró", () => {

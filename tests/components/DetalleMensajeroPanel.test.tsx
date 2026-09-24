@@ -392,7 +392,7 @@ describe("Feature 192 · R48 — el lenguaje visual es el del listado", () => {
     leerDetalleMock.mockResolvedValue(
       okDetalle([
         orden({ id: "o-1", resultadoDelDia: null }),
-        orden({ id: "o-2", numGuia: 1002, resultadoDelDia: "reprogramada" }),
+        orden({ id: "o-2", numGuia: 1002, resultadoDelDia: "reprogramado" }),
       ]),
     );
     const usuario = userEvent.setup();

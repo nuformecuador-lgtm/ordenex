@@ -31,12 +31,12 @@ const DATOS: CohorteCargaDTO = {
     {
       fecha: "2026-08-16",
       cargadas: 3,
-      cubos: [{ desenlace: "entregada", n: 3, segundosAcum: 3600, promedioSegundos: 1200 }],
+      cubos: [{ desenlace: "entregado", n: 3, segundosAcum: 3600, promedioSegundos: 1200 }],
     },
   ],
   total: 3,
   totalPorDesenlace: [
-    { desenlace: "entregada", n: 3, segundosAcum: 3600, promedioSegundos: 1200 },
+    { desenlace: "entregado", n: 3, segundosAcum: 3600, promedioSegundos: 1200 },
   ],
   lastSync: "2026-08-17T12:00:00.000Z",
 };

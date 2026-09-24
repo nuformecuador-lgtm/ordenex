@@ -166,7 +166,7 @@ function makeAsignacion(
   return {
     numGuia: 1001,
     numRemision: "REM-001",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1, casa 2",
@@ -356,7 +356,7 @@ beforeEach(() => {
   gestionarMock.mockResolvedValue({
     status: "ok",
     ordenId: "g1",
-    estado: "entregada",
+    estado: "entregado",
   });
   recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1"] });
   liberarMock.mockResolvedValue({ status: "ok" });
@@ -717,7 +717,7 @@ describe("RepartoModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
-    expect(fd.get("resultado")).toBe("entregada");
+    expect(fd.get("resultado")).toBe("entregado");
     expect(fd.get("ordenId")).toBe("g1");
     expect(fd.get("montoRecibido")).toBe("150");
     expect(fd.getAll("pagoMetodo")).toEqual(["efectivo"]);
@@ -743,7 +743,7 @@ describe("RepartoModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
-    expect(fd.get("resultado")).toBe("entregada");
+    expect(fd.get("resultado")).toBe("entregado");
     expect(fd.get("montoRecibido")).toBe("0");
     // Feature 213 (R16): el `"efectivo"` que este panel FORZABA aquí se borró. Una entrega sin
     // cobro son CERO líneas y ningún escalar; el borde ya acepta esa forma (reglas 3 y 4).
@@ -757,7 +757,7 @@ describe("RepartoModule", () => {
     gestionarMock.mockResolvedValue({
       status: "ok",
       ordenId: "g1",
-      estado: "reprogramada",
+      estado: "reprogramado",
     });
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
@@ -776,7 +776,7 @@ describe("RepartoModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
-    expect(fd.get("resultado")).toBe("reprogramada");
+    expect(fd.get("resultado")).toBe("reprogramado");
     expect(fd.get("fechaReprogramacion")).toBe("2030-12-31");
     expect(fd.get("motivo")).toBe("Cliente ausente");
   });
@@ -790,7 +790,7 @@ describe("RepartoModule", () => {
     gestionarMock.mockResolvedValue({
       status: "ok",
       ordenId: "g1",
-      estado: "devuelta",
+      estado: "novedad",
     });
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
@@ -809,7 +809,7 @@ describe("RepartoModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
-    expect(fd.get("resultado")).toBe("devuelta");
+    expect(fd.get("resultado")).toBe("novedad");
     expect(fd.get("causaDevolucion")).toBe("wrong_address");
     expect(fd.get("motivo")).toBe("Rechazo del producto");
     expect(fd.get("evidencia")).toBeInstanceOf(File);
@@ -910,7 +910,7 @@ describe("RepartoModule", () => {
     gestionarMock.mockResolvedValue({
       status: "ok",
       ordenId: "g1",
-      estado: "rechazada",
+      estado: "devolucion_a_origen_por_rechazo",
     });
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
@@ -927,7 +927,7 @@ describe("RepartoModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
-    expect(fd.get("resultado")).toBe("rechazada");
+    expect(fd.get("resultado")).toBe("devolucion_a_origen_por_rechazo");
     expect(fd.get("motivo")).toBe("Dirección inexistente");
     expect(fd.get("evidencia")).toBeInstanceOf(File);
   });

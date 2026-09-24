@@ -36,7 +36,7 @@ const signedUrls: ISignedUrlProvider = {
 function gestionCruda(over: Record<string, unknown> = {}) {
   return {
     id: "g-1",
-    resultado: "entregada",
+    resultado: "entregado",
     evidenciaStoragePath: null,
     evidenciaContentType: null,
     createdAt: new Date("2026-09-02T15:41:07.000Z"),
@@ -59,7 +59,7 @@ function transicionCruda(over: Record<string, unknown> = {}) {
     id: "h-1",
     gestionOrdenId: "g-1",
     createdAt: new Date("2026-09-02T15:41:07.000Z"),
-    estatusDestino: { value: "entregada" },
+    estatusDestino: { value: "entregado" },
     ...over,
   };
 }
@@ -75,7 +75,7 @@ function ordenCruda(over: Record<string, unknown> = {}) {
     direccion: "Calle 1",
     montoCobrar: new Prisma.Decimal(1500),
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
-    estatus: { value: "entregada" },
+    estatus: { value: "entregado" },
     // ⏳ 2026-09-10 (feature 415): lo que el `select` del canal anade a la fila cruda.
     ...FILA_PRISMA_415,
     mensajeroAsignado: null,
@@ -214,7 +214,7 @@ describe("405/R5 — `resultado` viaja como value crudo del enum, sin traducir",
   it("los CINCO values del catalogo salen tal cual, sin etiqueta en español", async () => {
     // La lista se escribe A MANO: si se derivara del catalogo, un renombre del catalogo cambiaria
     // a la vez lo esperado y lo obtenido, y el aserto quedaria siempre verde.
-    const crudos = ["entregada", "reprogramada", "devuelta", "rechazada", "incidente"];
+    const crudos = ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo", "incidente"];
     const { svc } = servicioSobrePrisma(
       ordenCruda({
         gestiones: crudos.map((resultado, i) =>
@@ -230,23 +230,23 @@ describe("405/R5 — `resultado` viaja como value crudo del enum, sin traducir",
     const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 
     expect(res!.gestiones.map((g) => g.resultado)).toEqual([
-      "entregada",
-      "reprogramada",
-      "devuelta",
-      "rechazada",
+      "entregado",
+      "reprogramado",
+      "novedad",
+      "devolucion_a_origen_por_rechazo",
       "incidente",
     ]);
   });
 
   it("no se cuela ninguna etiqueta de presentacion en el cuerpo", async () => {
     const { svc } = servicioSobrePrisma(
-      ordenCruda({ gestiones: [gestionCruda({ resultado: "devuelta" })] }),
+      ordenCruda({ gestiones: [gestionCruda({ resultado: "novedad" })] }),
     );
 
     const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 
     const texto = JSON.stringify(res);
-    expect(texto).toContain('"resultado":"devuelta"');
+    expect(texto).toContain('"resultado":"novedad"');
     // Las traducciones que pinta la UI («Devuelta», «Entregada», «Reprogramada») no salen por el
     // canal: el value es minusculas y sin tilde.
     expect(texto).not.toMatch(/"resultado":"(Devuelta|Entregada|Reprogramada|Rechazada)"/);
@@ -281,7 +281,7 @@ describe("405/R7 — una gestion sin transicion registrada emite `estadoResultan
       ordenCruda({
         gestiones: [gestionCruda({ id: "g-sin-historial" })],
         historialEstados: [
-          transicionCruda({ id: "h-otra", gestionOrdenId: "g-OTRA", estatusDestino: { value: "reprogramada" } }),
+          transicionCruda({ id: "h-otra", gestionOrdenId: "g-OTRA", estatusDestino: { value: "reprogramado" } }),
         ],
       }),
     );
@@ -295,7 +295,7 @@ describe("405/R7 — una gestion sin transicion registrada emite `estadoResultan
     // Contraste del caso de arriba: sin esto, un mapeo que devolviera SIEMPRE `null` pasaria.
     const { svc } = servicioSobrePrisma(
       ordenCruda({
-        gestiones: [gestionCruda({ id: "g-1", resultado: "devuelta" })],
+        gestiones: [gestionCruda({ id: "g-1", resultado: "novedad" })],
         historialEstados: [
           transicionCruda({
             gestionOrdenId: "g-1",
@@ -323,7 +323,7 @@ describe("405/R8 — `motivo` lleva la causa de devolucion en `devuelta`, la de 
     const { svc } = servicioSobrePrisma(
       ordenCruda({
         gestiones: [
-          gestionCruda({ resultado: "devuelta", causaDevolucion: "wrong_address" }),
+          gestionCruda({ resultado: "novedad", causaDevolucion: "wrong_address" }),
         ],
       }),
     );
@@ -353,7 +353,7 @@ describe("405/R8 — `motivo` lleva la causa de devolucion en `devuelta`, la de 
         gestiones: [
           gestionCruda({
             id: "g-dev",
-            resultado: "devuelta",
+            resultado: "novedad",
             causaDevolucion: "not_found",
             causaIncidente: "danado",
             createdAt: new Date("2026-09-02T10:00:00.000Z"),
@@ -377,7 +377,7 @@ describe("405/R8 — `motivo` lleva la causa de devolucion en `devuelta`, la de 
   it("los otros TRES resultados publican `null`, con la clave presente", async () => {
     const { svc } = servicioSobrePrisma(
       ordenCruda({
-        gestiones: ["entregada", "reprogramada", "rechazada"].map((resultado, i) =>
+        gestiones: ["entregado", "reprogramado", "devolucion_a_origen_por_rechazo"].map((resultado, i) =>
           gestionCruda({
             id: `g-${i}`,
             resultado,
@@ -400,7 +400,7 @@ describe("405/R8 — `motivo` lleva la causa de devolucion en `devuelta`, la de 
   it("una `devuelta` SIN causa registrada (historico anterior a la 73) publica `null`", async () => {
     const { svc } = servicioSobrePrisma(
       ordenCruda({
-        gestiones: [gestionCruda({ resultado: "devuelta", causaDevolucion: null })],
+        gestiones: [gestionCruda({ resultado: "novedad", causaDevolucion: null })],
       }),
     );
 

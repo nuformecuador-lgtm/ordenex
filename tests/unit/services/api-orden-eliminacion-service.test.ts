@@ -245,8 +245,8 @@ describe("ApiOrdenEliminacionService — el criterio por INTENTOS (2026-09-04)",
     expect(porEstado).toEqual(porIntentos);
   });
 
-  it("cero intentos sobre un estado nuevo de la lista (`por_recoger`) SI borra", async () => {
-    const repo = repoDoble(ordenEn("por_recoger"));
+  it("cero intentos sobre un estado nuevo de la lista (`mensajero_recogiendo_en_bodega`) SI borra", async () => {
+    const repo = repoDoble(ordenEn("mensajero_recogiendo_en_bodega"));
     expect((await servicio(repo, 0).eliminar(ACTOR, ORDEN_ID)).status).toBe("ok");
   });
 

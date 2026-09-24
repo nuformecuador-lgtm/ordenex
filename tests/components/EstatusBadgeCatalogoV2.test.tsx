@@ -31,10 +31,10 @@ describe("154/R29 — por_recolectar_en_tienda se presenta con etiqueta y varian
     expect(screen.getByText("Por recolectar en tienda")).toBeInTheDocument();
   });
 
-  it("usa la variante de ESPERA: mismo chip que `por_devolver` (warning), sin acento de marca", () => {
+  it("usa la variante de ESPERA: mismo chip que `por_devolver_a_bodega_central` (warning), sin acento de marca", () => {
     const nuevo = classesDe("por_recolectar_en_tienda");
     cleanup();
-    const espera = classesDe("por_devolver");
+    const espera = classesDe("por_devolver_a_bodega_central");
     expect(nuevo).toEqual(espera);
     expect(nuevo).not.toContain("bg-brand-soft");
   });
@@ -42,7 +42,7 @@ describe("154/R29 — por_recolectar_en_tienda se presenta con etiqueta y varian
   it("NO comparte chip con un cierre en error (`rechazada`)", () => {
     const nuevo = classesDe("por_recolectar_en_tienda");
     cleanup();
-    const error = classesDe("rechazada");
+    const error = classesDe("devolucion_a_origen_por_rechazo");
     expect(nuevo).not.toEqual(error);
   });
 });
@@ -57,7 +57,7 @@ describe("154/R30 — incidente se presenta con etiqueta y variante propias", ()
   it("usa la variante de ERROR: mismo chip que `rechazada` (danger), sin acento de marca", () => {
     const nuevo = classesDe("incidente");
     cleanup();
-    const rechazada = classesDe("rechazada");
+    const rechazada = classesDe("devolucion_a_origen_por_rechazo");
     expect(nuevo).toEqual(rechazada);
     expect(nuevo).not.toContain("bg-brand-soft");
   });
@@ -94,14 +94,14 @@ describe("235/R37 -> 454/R40 — `ayuda_tienda` historico: etiqueta y variante f
     expect(screen.getByText("Ayuda solicitada a la tienda")).toBeInTheDocument();
   });
 
-  it("usa la variante de ESPERA (`warning`): mismo chip que `sin_gestionar`, sin acento de marca", () => {
+  it("usa la variante de ESPERA (`warning`): mismo chip que `novedad_interna`, sin acento de marca", () => {
     // `ORDER_STATUS_VARIANT` es privado del modulo, asi que la variante se verifica sobre el DOM
     // y POR COMPARACION con su gemelo semantico — el mismo metodo que usa el resto del archivo.
     // Que comparta chip con `sin_gestionar` es la afirmacion: `danger` diria que algo se rompio y
     // `info` que la orden avanza, y lo que hay es una parada esperando a alguien.
     const ayuda = classesDe("ayuda_tienda");
     cleanup();
-    const espera = classesDe("sin_gestionar");
+    const espera = classesDe("novedad_interna");
     expect(ayuda).toEqual(espera);
     expect(ayuda).not.toContain("bg-brand-soft");
   });
@@ -111,7 +111,7 @@ describe("235/R37 -> 454/R40 — `ayuda_tienda` historico: etiqueta y variante f
     // iguales.
     const ayuda = classesDe("ayuda_tienda");
     cleanup();
-    const error = classesDe("rechazada");
+    const error = classesDe("devolucion_a_origen_por_rechazo");
     expect(ayuda).not.toEqual(error);
   });
 });

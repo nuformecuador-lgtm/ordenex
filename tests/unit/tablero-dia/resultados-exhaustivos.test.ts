@@ -23,10 +23,10 @@ const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 
 /** Los cinco valores tal y como se aprobo esta feature (2026-08-08). Es la foto, no la fuente. */
 const RESULTADOS_CONGELADOS = [
-  "entregada",
-  "reprogramada",
-  "devuelta",
-  "rechazada",
+  "entregado",
+  "reprogramado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
   "incidente",
 ] as const;
 

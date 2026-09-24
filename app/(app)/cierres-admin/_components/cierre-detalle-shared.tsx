@@ -184,10 +184,10 @@ export {
 };
 
 export const RESULTADO_VACIO: Record<CierreResultado, string> = {
-  entregada: "No hay entregas.",
-  reprogramada: "No hay reprogramaciones.",
-  devuelta: "No hay devoluciones.",
-  rechazada: "No hay rechazos.",
+  entregado: "No hay entregas.",
+  reprogramado: "No hay reprogramaciones.",
+  novedad: "No hay devoluciones.",
+  devolucion_a_origen_por_rechazo: "No hay rechazos.",
   incidente: "No hay incidentes.", // feature 158/R18
 };
 
@@ -511,10 +511,10 @@ export const PAGO_SIN_TARIFA_NOTA = `El pago al mensajero de esta entrega se res
  * del mensajero (37) y que el paso de resultados del panel.
  */
 export const ORDEN_RESULTADOS: CierreResultado[] = [
-  "entregada",
-  "reprogramada",
-  "devuelta",
-  "rechazada",
+  "entregado",
+  "reprogramado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
   "incidente",
 ];
 
@@ -1413,7 +1413,7 @@ export function columnasPara(
       COLUMNA_INDEMNIZACION,
     ];
   }
-  if (resultado === "entregada") {
+  if (resultado === "entregado") {
     return [
       ...COLUMNAS_COMUNES,
       COLUMNA_MONTO_COBRAR,
@@ -1435,7 +1435,7 @@ export function columnasPara(
       COLUMNA_PAGO_MENSAJERO,
     ];
   }
-  if (resultado === "reprogramada") {
+  if (resultado === "reprogramado") {
     // Una reprogramación no aporta a ningún concepto (la fórmula devuelve vacío): no se
     // pintan columnas de ingreso que serían "—" en todas las filas.
     return [
@@ -1458,7 +1458,7 @@ export function columnasPara(
       COLUMNA_PAGO_MENSAJERO,
     ];
   }
-  if (resultado === "devuelta") {
+  if (resultado === "novedad") {
     return [
       ...COLUMNAS_COMUNES,
       COLUMNA_MONTO_COBRAR,
@@ -1565,22 +1565,22 @@ const DESCARGA_POR_RESULTADO: Record<
     fila: (g: CierreDetalleGestion) => DescargaFila;
   }
 > = {
-  entregada: {
+  entregado: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS,
     fila: filaDescargaGestionEntregada,
     ambitoColumnas: AMBITO_DESCARGA_GESTIONES_ENTREGADAS,
   },
-  reprogramada: {
+  reprogramado: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_REPROGRAMADAS,
     fila: filaDescargaGestionReprogramada,
     ambitoColumnas: AMBITO_DESCARGA_GESTIONES_REPROGRAMADAS,
   },
-  devuelta: {
+  novedad: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
     fila: filaDescargaGestionDevuelta,
     ambitoColumnas: AMBITO_DESCARGA_GESTIONES_DEVUELTAS,
   },
-  rechazada: {
+  devolucion_a_origen_por_rechazo: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS,
     fila: filaDescargaGestionRechazada,
     ambitoColumnas: AMBITO_DESCARGA_GESTIONES_RECHAZADAS,

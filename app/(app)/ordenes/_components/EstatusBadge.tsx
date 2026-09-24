@@ -18,18 +18,18 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   // texto crudo (R41), abajo en `EstatusBadge`.
   en_bodega_central: "En bodega central", // feature 135 (R8): value legible directo
   en_ruta_bodega_central: "En ruta a bodega central", // feature 135 (R8)
-  entregada: "Entregada",
-  devuelta: "Devuelta",
+  entregado: "Entregada",
+  novedad: "Devuelta",
   devolviendo_a_tienda: "Devolviendo a tienda", // feature 135
-  reprogramada: "Reprogramada",
-  por_recoger: "Por recoger", // feature 17 (renombrado en feature 135)
+  reprogramado: "Reprogramada",
+  mensajero_recogiendo_en_bodega: "Por recoger", // feature 17 (renombrado en feature 135)
   en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30 (R8: value legible directo)
   en_reparto: "En reparto", // feature 36 (renombrado en la 135 y de vuelta en la 153/R9)
-  rechazada: "Rechazada", // feature 36
+  devolucion_a_origen_por_rechazo: "Rechazada", // feature 36
   en_bodega_satelite: "En bodega satélite", // feature 33 (R8: value legible directo)
   devuelta_a_tienda: "Devuelta a tienda", // feature 135: cierre del flujo de devolución, la tienda de origen la recibió
-  sin_gestionar: "Sin gestionar", // feature 109/R25: orden que quedó en en_reparto al pasar de día (congelada hasta aprobar el cierre)
-  por_devolver: "Por devolver", // feature 139/R4: rechazada de bodega satélite tras aprobar el cierre (elegible para "enviar a central")
+  novedad_interna: "Sin gestionar", // feature 109/R25: orden que quedó en en_reparto al pasar de día (congelada hasta aprobar el cierre)
+  por_devolver_a_bodega_central: "Por devolver", // feature 139/R4: rechazada de bodega satélite tras aprobar el cierre (elegible para "enviar a central")
   devolviendo_a_bodega_central: "Devolviendo a bodega central", // feature 139/R4: en tránsito satélite → central
   por_devolver_a_tienda: "Por devolver a tienda", // feature 139/R4: en la central, elegible para "enviar a la tienda"
   por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29: espera en la tienda a que el mensajero la recolecte
@@ -64,24 +64,24 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   en_preparacion: "secondary",
   en_bodega_central: "secondary",
   en_ruta_bodega_central: "info",
-  entregada: "success",
-  devuelta: "warning",
+  entregado: "success",
+  novedad: "warning",
   devolviendo_a_tienda: "danger",
-  reprogramada: "warning",
-  por_recoger: "info", // feature 17
+  reprogramado: "warning",
+  mensajero_recogiendo_en_bodega: "info", // feature 17
   en_ruta_bodega_satelite: "info", // feature 30
   en_reparto: "secondary", // feature 36
-  rechazada: "danger", // feature 36
+  devolucion_a_origen_por_rechazo: "danger", // feature 36
   en_bodega_satelite: "info", // feature 33
   // Terminal y NO error: reusa la variante de `entregada` (success), el otro cierre
   // sano del flujo. `devolviendo_a_tienda` sigue en danger por ser el tránsito.
   devuelta_a_tienda: "success",
   // Feature 109/R25: estado de EXCEPCIÓN (orden sin gestionar, congelada) -> variante de alerta.
-  sin_gestionar: "warning",
+  novedad_interna: "warning",
   // Feature 139/R4: estados del flujo de devolución de rechazadas. Los estados de ESPERA
   // (por devolver / por devolver a tienda) usan `warning` (acción pendiente); el de TRÁNSITO
   // (devolviendo a bodega central) usa `info`, como el resto de estados en ruta.
-  por_devolver: "warning",
+  por_devolver_a_bodega_central: "warning",
   devolviendo_a_bodega_central: "info",
   por_devolver_a_tienda: "warning",
   // Feature 154/R29/R30 (Q5 confirmada por el humano). Mismo criterio que los estados ya
@@ -112,7 +112,7 @@ const ORDER_STATUS_CLASS: Partial<Record<OrderStatusValue, string>> = {
   // fijos para decir "tinta y realce del tema". `foreground` hace lo mismo con un
   // solo token y en claro es el mismo azul (#12233f vs #0b2545).
   en_bodega_central: "text-foreground dark:bg-foreground/10",
-  reprogramada: "border-hivis/60 dark:border-hivis/40",
+  reprogramado: "border-hivis/60 dark:border-hivis/40",
 };
 
 function isKnownStatus(value: string): value is OrderStatusValue {

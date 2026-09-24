@@ -456,7 +456,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
     expect(medido.detalleDespues).toEqual(medido.detalleAntes);
   });
 
-  const NO_ELEGIBLES: GestionResultado[] = ["entregada", "rechazada", "incidente"];
+  const NO_ELEGIBLES: GestionResultado[] = ["entregado", "devolucion_a_origen_por_rechazo", "incidente"];
   it.each(NO_ELEGIBLES)(
     "⭑ R6/R7: una gestion VIGENTE con resultado `%s` deja la orden fuera",
     async (resultado) => {
@@ -488,7 +488,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
     },
   );
 
-  const SI_ELEGIBLES: GestionResultado[] = ["reprogramada", "devuelta"];
+  const SI_ELEGIBLES: GestionResultado[] = ["reprogramado", "novedad"];
   it.each(SI_ELEGIBLES)(
     "⭑ R6: una gestion VIGENTE con resultado `%s` SI se reconcilia (el corte es por resultado)",
     async (resultado) => {
@@ -524,7 +524,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
     const medido = await conEscenario(async (e) => {
       const distrito = await e.crearDistrito([e.zonas.A.id]);
       const orden = await e.crearOrden({ distritoId: distrito, zonaId: e.zonas.B.id });
-      await e.crearGestion(orden, "entregada", { anulada: true });
+      await e.crearGestion(orden, "entregado", { anulada: true });
 
       const res = await e.repo.update(
         e.zonas.A.id,
@@ -871,7 +871,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         zonaId: e.zonas.B.id,
         estatusValue: "en_bodega_central",
       });
-      await e.crearGestion(gestionada, "entregada");
+      await e.crearGestion(gestionada, "entregado");
       const libre = await e.crearOrden({
         distritoId: distrito,
         zonaId: e.zonas.B.id,

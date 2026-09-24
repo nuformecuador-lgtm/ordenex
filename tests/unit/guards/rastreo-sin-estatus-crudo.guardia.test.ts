@@ -219,7 +219,7 @@ describe("R15 — un historial que atraviesa los 20 estatus no publica ningún v
 
     const envio = await proyectar([
       { createdAt: new Date(Date.UTC(2026, 0, 1, 15, 0, 0)), estatusValue: huerfano },
-      { createdAt: new Date(Date.UTC(2026, 0, 2, 15, 0, 0)), estatusValue: "entregada" },
+      { createdAt: new Date(Date.UTC(2026, 0, 2, 15, 0, 0)), estatusValue: "entregado" },
     ]);
 
     expect(JSON.stringify(envio)).not.toContain(huerfano);
@@ -240,13 +240,13 @@ describe("R15 — CONTRAPRUEBA: el detector caza los values que de verdad serian
     expect(delatoras[0]).toContain("en_bodega_satelite");
   });
 
-  it("caza `sin_gestionar`, que es justo el estado que G8 esconde tras «En reparto»", async () => {
+  it("caza `novedad_interna`, que es justo el estado que G8 esconde tras «En reparto»", async () => {
     const envio = await proyectar();
-    const fugado = { ...envio, hitoVigente: "sin_gestionar" };
+    const fugado = { ...envio, hitoVigente: "novedad_interna" };
 
     const delatoras = valuesInternosFiltrados(fugado);
     expect(delatoras).toHaveLength(1);
-    expect(delatoras[0]).toContain("sin_gestionar");
+    expect(delatoras[0]).toContain("novedad_interna");
   });
 
   it("caza un value interno escondido dentro de un texto, no solo como valor exacto", async () => {

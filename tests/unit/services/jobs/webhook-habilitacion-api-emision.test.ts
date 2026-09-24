@@ -28,7 +28,7 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
 // circuito no corta el grifo (403/R5)—, y para eso hace falta una transicion LEGAL hacia
 // `en_reparto`: se usa la de la recoleccion (`por_recoger -> en_reparto`), con la familia de siempre.
 const ORDEN_ID = "o-266";
-const ID_AYUDA = idEstado("por_recoger"); // antes `idEstado("ayuda_tienda")` (ver arriba)
+const ID_AYUDA = idEstado("mensajero_recogiendo_en_bodega"); // antes `idEstado("ayuda_tienda")` (ver arriba)
 const ID_EN_REPARTO = idEstado("en_reparto");
 
 /** La entrada EXACTA que la rama A del service produce via `transicionarAyuda`. */

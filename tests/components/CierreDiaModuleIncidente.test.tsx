@@ -96,7 +96,7 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 const ZERO_TOTALES: CierreTotales = {
@@ -164,7 +164,7 @@ describe("R18 — el incidente es un grupo PROPIO del detalle del mensajero", ()
   it("NO se mezcla con las devoluciones ni con los rechazos", () => {
     renderModule({
       ...emptyGrupos(),
-      devuelta: [makeGestion({ gestionId: "gd", resultado: "devuelta", numRemision: "REM-DEV" })],
+      novedad: [makeGestion({ gestionId: "gd", resultado: "novedad", numRemision: "REM-DEV" })],
       incidente: [incidente()],
     });
 
@@ -231,10 +231,10 @@ describe("R17 — el incidente no muestra dinero en la vista del mensajero", () 
   it("la sección de una ENTREGA sí conserva sus columnas de dinero (no regresión)", () => {
     renderModule({
       ...emptyGrupos(),
-      entregada: [
+      entregado: [
         makeGestion({
           gestionId: "ge",
-          resultado: "entregada",
+          resultado: "entregado",
           montoRecibido: "150.00",
           metodoPago: "efectivo",
           // Feature 213 (T8): desglose COHERENTE con el escalar ya declarado (R23).
@@ -274,7 +274,7 @@ describe("R9 — el mensajero SÍ ve la causa que él mismo reportó", () => {
   it("la columna de causa NO aparece en los otros cuatro resultados", () => {
     renderModule({
       ...emptyGrupos(),
-      devuelta: [makeGestion({ gestionId: "gd", resultado: "devuelta" })],
+      novedad: [makeGestion({ gestionId: "gd", resultado: "novedad" })],
     });
 
     const cabeceras = within(screen.getByRole("table", { name: "Devueltas" }))

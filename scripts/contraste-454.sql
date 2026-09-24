@@ -125,7 +125,7 @@ visita AS (
 -- la ultima transicion enlazada que fija el destino efectivo de la gestion (registro, anclaje o #69)
 hist_ult AS (
   SELECT DISTINCT ON (h.gestion_orden_id) h.gestion_orden_id AS gid,
-         CASE h.destino WHEN 'devolucion_por_confirmar' THEN 'devuelta' ELSE h.destino END AS destino
+         CASE h.destino WHEN 'devolucion_por_confirmar' THEN 'novedad' ELSE h.destino END AS destino
     FROM src_hist h
    WHERE h.gestion_orden_id IS NOT NULL
      AND h.origen_tipo IN ('gestion', 'incidente', 'gestion_tienda_ayuda', 'anclaje_devolucion',
@@ -164,7 +164,7 @@ contables AS (
   SELECT gi.orden_id, gi.cierre_id, gi.created_at, gi.anulada_at, gi.calle, gi.visita_primera,
          ci.resuelto_at AS c_res
     FROM g gi JOIN c ci ON ci.id = gi.cierre_id
-   WHERE gi.resultado IN ('rechazada', 'devuelta', 'reprogramada') AND ci.estado = 'aprobado'
+   WHERE gi.resultado IN ('devolucion_a_origen_por_rechazo', 'novedad', 'reprogramado') AND ci.estado = 'aprobado'
 ),
 
 -- =====================================================================================================
@@ -247,7 +247,7 @@ k3_real AS (
 ),
 k3 AS (
   SELECT (p.orden_id || '@' || p.cierre_id) AS id, p.orden_id, p.cierre_id,
-         CASE WHEN e.destino = 'sin_gestionar'
+         CASE WHEN e.destino = 'novedad_interna'
               THEN CASE WHEN coalesce(i.n, 0) >= pr.umbral THEN 'tope' ELSE 'bodega' END
               ELSE 'ninguna' END AS nuevo,
          coalesce(r.real, 'ninguna') AS real
@@ -268,8 +268,8 @@ k3 AS (
 k4a_g AS (
   SELECT gi.cierre_id,
          sum(gi.ingreso_bodega_rechazo) AS suma,
-         count(*) FILTER (WHERE gi.resultado = 'rechazada' AND gi.ingreso_bodega_rechazo > 0) AS rechazadas_cobradas,
-         count(*) FILTER (WHERE gi.resultado <> 'rechazada' AND gi.ingreso_bodega_rechazo > 0) AS no_rechazadas_cobradas
+         count(*) FILTER (WHERE gi.resultado = 'devolucion_a_origen_por_rechazo' AND gi.ingreso_bodega_rechazo > 0) AS rechazadas_cobradas,
+         count(*) FILTER (WHERE gi.resultado <> 'devolucion_a_origen_por_rechazo' AND gi.ingreso_bodega_rechazo > 0) AS no_rechazadas_cobradas
     FROM g gi WHERE gi.cierre_id IS NOT NULL GROUP BY gi.cierre_id
 ),
 k4a AS (
@@ -374,7 +374,7 @@ k6_g AS (
          (gi.cierre_id IS NOT NULL AND ci.created_at <= e.t
           AND NOT (ci.estado = 'aprobado' AND ci.resuelto_at <= e.t)) AS excluida
     FROM eventos_reloj e
-    JOIN g gi ON gi.orden_id = e.orden_id AND gi.resultado = 'rechazada' AND gi.created_at <= e.t
+    JOIN g gi ON gi.orden_id = e.orden_id AND gi.resultado = 'devolucion_a_origen_por_rechazo' AND gi.created_at <= e.t
              AND (gi.anulada_at IS NULL OR gi.anulada_at > e.t)
     LEFT JOIN c ci ON ci.id = gi.cierre_id
    WHERE e.origen_tipo = 'devolucion_rechazada'
@@ -402,7 +402,7 @@ k7a_g AS (
           AND ( (NOT gi.calle AND NOT coalesce(gi.visita_primera <= e.t, false))
                 OR coalesce(ci.estado = 'aprobado' AND ci.resuelto_at <= e.t, false) )) AS elegible
     FROM eventos_reloj e
-    JOIN g gi ON gi.orden_id = e.orden_id AND gi.resultado = 'reprogramada' AND gi.created_at <= e.t
+    JOIN g gi ON gi.orden_id = e.orden_id AND gi.resultado = 'reprogramado' AND gi.created_at <= e.t
              AND (gi.anulada_at IS NULL OR gi.anulada_at > e.t)
     LEFT JOIN c ci ON ci.id = gi.cierre_id
    WHERE e.origen_tipo = 'liberacion_reprogramada'
@@ -420,7 +420,7 @@ k7b_gd AS (
   SELECT DISTINCT ON (e.id) e.id, gi.id AS gid, gi.causa, gi.calle, gi.created_at AS g_created,
          CASE WHEN gi.calle AND cd.estado = 'aprobado' AND cd.resuelto_at <= e.t THEN cd.resuelto_at END AS ancla_nueva
     FROM k7b_ev e
-    JOIN g gi ON gi.orden_id = e.orden_id AND gi.resultado = 'devuelta' AND gi.created_at <= e.t
+    JOIN g gi ON gi.orden_id = e.orden_id AND gi.resultado = 'novedad' AND gi.created_at <= e.t
              AND (gi.anulada_at IS NULL OR gi.anulada_at > e.t)
     LEFT JOIN c cd ON cd.id = gi.cierre_id
    ORDER BY e.id, gi.created_at DESC, gi.id DESC
@@ -500,12 +500,12 @@ k8_conceptos AS (
       SELECT round(x.monto_cobrar * x.comision_pct / 100, 2) AS comision
     ) cm
     CROSS JOIN LATERAL (VALUES
-      ('ingreso_flete',                CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'entregada' THEN round(x.flete, 2) END),
-      ('ingreso_iva_flete',            CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'entregada' THEN round(x.flete * x.iva_flete_pct / 100, 2) END),
-      ('ingreso_comision_cod',         CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'entregada' AND x.cobra_comision THEN cm.comision END),
-      ('ingreso_iva_comision_cod',     CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'entregada' AND x.cobra_comision THEN round(cm.comision * x.iva_comision_pct / 100, 2) END),
-      ('ingreso_flete_devolucion',     CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'rechazada' THEN round(x.flete_dev, 2) END),
-      ('ingreso_iva_flete_devolucion', CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'rechazada' THEN round(x.flete_dev * x.iva_flete_pct / 100, 2) END)
+      ('ingreso_flete',                CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'entregado' THEN round(x.flete, 2) END),
+      ('ingreso_iva_flete',            CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'entregado' THEN round(x.flete * x.iva_flete_pct / 100, 2) END),
+      ('ingreso_comision_cod',         CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'entregado' AND x.cobra_comision THEN cm.comision END),
+      ('ingreso_iva_comision_cod',     CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'entregado' AND x.cobra_comision THEN round(cm.comision * x.iva_comision_pct / 100, 2) END),
+      ('ingreso_flete_devolucion',     CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'devolucion_a_origen_por_rechazo' THEN round(x.flete_dev, 2) END),
+      ('ingreso_iva_flete_devolucion', CASE WHEN x.tarifa_id IS NOT NULL AND x.resultado = 'devolucion_a_origen_por_rechazo' THEN round(x.flete_dev * x.iva_flete_pct / 100, 2) END)
     ) AS v(concepto, aporte)
    WHERE v.aporte IS NOT NULL
 ),
@@ -690,7 +690,7 @@ SELECT 'T3.3 poblacion legada viva', count(*), NULL,
        array_to_string((array_agg(id ORDER BY id))[1:10], ' ; '),
        format('de calle=%s sinteticas=%s; entregada=%s reprogramada=%s devuelta=%s rechazada=%s incidente=%s',
               count(*) FILTER (WHERE calle), count(*) FILTER (WHERE NOT calle),
-              count(*) FILTER (WHERE resultado = 'entregada'), count(*) FILTER (WHERE resultado = 'reprogramada'),
-              count(*) FILTER (WHERE resultado = 'devuelta'), count(*) FILTER (WHERE resultado = 'rechazada'),
+              count(*) FILTER (WHERE resultado = 'entregado'), count(*) FILTER (WHERE resultado = 'reprogramado'),
+              count(*) FILTER (WHERE resultado = 'novedad'), count(*) FILTER (WHERE resultado = 'devolucion_a_origen_por_rechazo'),
               count(*) FILTER (WHERE resultado = 'incidente'))
   FROM t33;

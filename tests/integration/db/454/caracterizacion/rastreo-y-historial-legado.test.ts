@@ -46,13 +46,13 @@ describeSiHayBase("454/C27 — rastreo publico e historial legado (Postgres real
 
       const o = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 2000 });
       await fila(e, o.ordenId, "en_reparto", 0);
-      await e.gestionarOk(o.ordenId, "entregada", { monto: 2000 });
+      await e.gestionarOk(o.ordenId, "entregado", { monto: 2000 });
       const trasGestionar = await hitos(o.numGuia);
       const cierreId = await e.solicitarCierreOk();
       const aprobacion = await e.aprobar(cierreId);
       const trasAprobar = await hitos(o.numGuia);
 
-      const dev = await e.sembrarOrden({ estatus: "devuelta", montoCobrar: 1000 });
+      const dev = await e.sembrarOrden({ estatus: "novedad", montoCobrar: 1000 });
       await fila(e, dev.ordenId, "en_bodega_central", 0);
       await fila(e, dev.ordenId, "devolucion_por_confirmar", 1);
       const legadoDevolucion = await hitos(dev.numGuia);

@@ -23,21 +23,21 @@ describeSiHayBase("454/C10 — devolucion de rechazadas al aprobar (Postgres rea
 
   /** Orden ya en `devuelta` por un cierre anterior aprobado (fixture de la devolucion anclada). */
   async function devueltaAnclada(e: Escenario) {
-    const o = await e.sembrarOrden({ estatus: "devuelta", montoCobrar: 4000 });
-    await e.sembrarIntentoPasado(o.ordenId, { resultado: "devuelta" });
+    const o = await e.sembrarOrden({ estatus: "novedad", montoCobrar: 4000 });
+    await e.sembrarIntentoPasado(o.ordenId, { resultado: "novedad" });
     return o;
   }
 
   function correr() {
     return conEscenario(mundo, async (e) => {
       const calle = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 3000 });
-      await e.gestionarOk(calle.ordenId, "rechazada");
+      await e.gestionarOk(calle.ordenId, "devolucion_a_origen_por_rechazo");
 
       const escritorio = await devueltaAnclada(e);
       const r240 = await e.s.gestionRepo.rechazarDesdeDevuelta({
         ordenId: escritorio.ordenId,
-        estatusDevueltaId: e.id("devuelta"),
-        estatusRechazadaId: e.id("rechazada"),
+        estatusDevueltaId: e.id("novedad"),
+        estatusRechazadaId: e.id("devolucion_a_origen_por_rechazo"),
         motivo: "La tienda no la recibe",
         actorUsuarioId: e.tiendaId,
       });
@@ -45,8 +45,8 @@ describeSiHayBase("454/C10 — devolucion de rechazadas al aprobar (Postgres rea
       const escalada = await devueltaAnclada(e);
       const r99 = await new DevolucionSlaRepository(e.cliente).escalarDevueltaSla({
         ordenId: escalada.ordenId,
-        estatusDevueltaId: e.id("devuelta"),
-        estatusRechazadaId: e.id("rechazada"),
+        estatusDevueltaId: e.id("novedad"),
+        estatusRechazadaId: e.id("devolucion_a_origen_por_rechazo"),
         mensajeroId: e.mensajeroId,
         motivo: "escalado SLA wrong_address",
       });
@@ -96,8 +96,8 @@ describeSiHayBase("454/C10 — devolucion de rechazadas al aprobar (Postgres rea
     // `calle` SALE de esta invariante y pasa al `[INTERMEDIO]` de abajo (R1). `escritorio` y
     // `escalada` siguen aqui, intactas.
     expect({ escritorio: r.antes.escritorio, escalada: r.antes.escalada }).toEqual({
-      escritorio: "rechazada",
-      escalada: "rechazada",
+      escritorio: "devolucion_a_origen_por_rechazo",
+      escalada: "devolucion_a_origen_por_rechazo",
     });
     expect(r.aprobacion).toBe("ok");
   });

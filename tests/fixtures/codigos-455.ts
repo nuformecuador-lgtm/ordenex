@@ -3,7 +3,7 @@
  *
  * Los tests de caracterizacion de la Fase 0 (`tests/integration/db/455/caracterizacion/**`) NO
  * escriben nunca un codigo de estado ni de resultado: lo piden por su CLAVE SEMANTICA (`C.novedad`,
- * `R.rechazo`). Hoy (Fase 0) cada clave apunta al codigo ANTERIOR; en T1.4 se cambia SOLO ESTE
+ * `R.rechazo`). En la Fase 0 cada clave apuntaba al codigo ANTERIOR; en T1.4 (2026-09-24) se cambio SOLO ESTE
  * ARCHIVO a los codigos vigentes de `specs/455-un-nombre-por-estado/requirements.md` §0.1/§0.2, y los
  * invariantes de C01-C16 se vuelven a correr SIN EDITARLOS. Si un invariante cae tras el cambio, lo
  * que cambio es el comportamiento, no el test.
@@ -18,21 +18,21 @@
  */
 
 export const C = {
-  entregado: "entregada", // cambia -> entregado
-  novedad: "devuelta", // cambia -> novedad
+  entregado: "entregado", // T1.4 (2026-09-24): antes `entregada`
+  novedad: "novedad", // T1.4 (2026-09-24): antes `devuelta`
   devolviendoATienda: "devolviendo_a_tienda",
-  reprogramado: "reprogramada", // cambia -> reprogramado
+  reprogramado: "reprogramado", // T1.4 (2026-09-24): antes `reprogramada`
   enRutaBodegaCentral: "en_ruta_bodega_central",
   enBodegaCentral: "en_bodega_central",
   enPreparacion: "en_preparacion",
-  recogiendo: "por_recoger", // cambia -> mensajero_recogiendo_en_bodega
+  recogiendo: "mensajero_recogiendo_en_bodega", // T1.4 (2026-09-24): antes `por_recoger`
   enRutaBodegaSatelite: "en_ruta_bodega_satelite",
   enReparto: "en_reparto",
-  rechazo: "rechazada", // cambia -> devolucion_a_origen_por_rechazo
+  rechazo: "devolucion_a_origen_por_rechazo", // T1.4 (2026-09-24): antes `rechazada`
   enBodegaSatelite: "en_bodega_satelite",
   devueltaATienda: "devuelta_a_tienda",
-  novedadInterna: "sin_gestionar", // cambia -> novedad_interna
-  porDevolverCentral: "por_devolver", // cambia -> por_devolver_a_bodega_central
+  novedadInterna: "novedad_interna", // T1.4 (2026-09-24): antes `sin_gestionar`
+  porDevolverCentral: "por_devolver_a_bodega_central", // T1.4 (2026-09-24): antes `por_devolver`
   devolviendoABodegaCentral: "devolviendo_a_bodega_central",
   porDevolverATienda: "por_devolver_a_tienda",
   porRecolectarEnTienda: "por_recolectar_en_tienda",
@@ -52,10 +52,10 @@ export const CLAVES_EN_ORDEN_DEL_SEED: readonly ClaveEstado[] = Object.keys(C) a
 
 /** Resultados de gestion (`gestion_resultado`). Mismo codigo que su estado destino tras la 455. */
 export const R = {
-  entregado: "entregada", // cambia -> entregado
-  reprogramado: "reprogramada", // cambia -> reprogramado
-  novedad: "devuelta", // cambia -> novedad
-  rechazo: "rechazada", // cambia -> devolucion_a_origen_por_rechazo
+  entregado: "entregado", // T1.4 (2026-09-24): antes `entregada`
+  reprogramado: "reprogramado", // T1.4 (2026-09-24): antes `reprogramada`
+  novedad: "novedad", // T1.4 (2026-09-24): antes `devuelta`
+  rechazo: "devolucion_a_origen_por_rechazo", // T1.4 (2026-09-24): antes `rechazada`
   incidente: "incidente",
 } as const;
 

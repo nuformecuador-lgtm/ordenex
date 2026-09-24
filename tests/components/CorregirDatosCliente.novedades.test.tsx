@@ -101,7 +101,7 @@ const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({
   id: ORDEN_ID,
   numGuia: 12345,
   numRemision: "REM-90210",
-  estatusValue: "devuelta",
+  estatusValue: "novedad",
   intentosContacto: 0,
   mensajeroNombre: "Marta Mensajera",
   destinatario: DESTINATARIO,
@@ -256,7 +256,7 @@ afterEach(cleanup);
 // de ser el estado `ayuda_tienda`— y su grupo lo pone la lista que las trajo (`grupoDeFila`).
 describe("312/R23 — «Corregir datos» se ofrece en las dos pestañas de `/novedades`", () => {
   it("en una card del grupo DEVOLUCIÓN", () => {
-    montar("devolucion", { estatusValue: "devuelta" });
+    montar("devolucion", { estatusValue: "novedad" });
     expect(screen.getByRole("button", { name: CORREGIR_BOTON })).toBeInTheDocument();
   });
 
@@ -287,7 +287,7 @@ describe("312/R26 — la ventana abre precargada con los datos de esa orden", ()
     "desde el grupo %s, con los cuatro valores dentro",
     async (grupo) => {
       const user = userEvent.setup();
-      montar(grupo, { estatusValue: grupo === "ayuda" ? "en_reparto" : "devuelta" });
+      montar(grupo, { estatusValue: grupo === "ayuda" ? "en_reparto" : "novedad" });
 
       expect(screen.queryByText(CORREGIR_TITULO)).toBeNull();
       await user.click(screen.getByRole("button", { name: CORREGIR_BOTON }));
@@ -443,7 +443,7 @@ describe("327/R32 — los nueve campos, iguales en los dos grupos", () => {
     "desde el grupo %s la ventana ofrece dirección, provincia, cantón, distrito y peso",
     async (grupo) => {
       const user = userEvent.setup();
-      montar(grupo, { estatusValue: grupo === "ayuda" ? "en_reparto" : "devuelta" });
+      montar(grupo, { estatusValue: grupo === "ayuda" ? "en_reparto" : "novedad" });
       await user.click(screen.getByRole("button", { name: CORREGIR_BOTON }));
       await screen.findByText(CORREGIR_TITULO);
       await esperarPrecarga();

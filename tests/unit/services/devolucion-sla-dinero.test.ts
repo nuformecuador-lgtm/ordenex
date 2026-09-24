@@ -37,7 +37,7 @@ function gestion(overrides: Partial<CierreGestionPendienteRow>): CierreGestionPe
     // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
     tiendaId: "tienda-1",
     tiendaNombre: "T",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     montoRecibido: null,
     metodoPago: null,
     motivo: null,
@@ -61,8 +61,8 @@ describe("Feature 99 [💰] · el snapshot de la 56 cobra la gestion sintetica d
     // Escenario del mensajero atribuido: una devolucion previa (intento) + la gestion sintetica
     // del escalado, ambas con cierre_id null, listas para el proximo cierre.
     const gestiones: CierreGestionPendienteRow[] = [
-      gestion({ gestionId: "g-devuelta", resultado: "devuelta", motivo: "ausente" }),
-      gestion({ gestionId: "g-sla", resultado: "rechazada", motivo: "escalado SLA not_found" }),
+      gestion({ gestionId: "g-devuelta", resultado: "novedad", motivo: "ausente" }),
+      gestion({ gestionId: "g-sla", resultado: "devolucion_a_origen_por_rechazo", motivo: "escalado SLA not_found" }),
     ];
 
     const { ingresoByGestionId, total } = derivarIngresoBodega(gestiones, TARIFA);
@@ -76,12 +76,12 @@ describe("Feature 99 [💰] · el snapshot de la 56 cobra la gestion sintetica d
   });
 
   it("R20: la sintetica del escalado produce EXACTAMENTE el mismo ingreso que un rechazo directo", () => {
-    const directo = ingresoBodegaPorResultado("rechazada", TARIFA);
-    const sintetica = ingresoBodegaPorResultado("rechazada", TARIFA); // misma funcion, mismo resultado
+    const directo = ingresoBodegaPorResultado("devolucion_a_origen_por_rechazo", TARIFA);
+    const sintetica = ingresoBodegaPorResultado("devolucion_a_origen_por_rechazo", TARIFA); // misma funcion, mismo resultado
     expect(sintetica).toBe(directo);
     expect(sintetica).toBe("800.00");
     // La `devuelta` que anclo la ventana NO cobra (por eso la 47 dejaba 0.00 en el escalado).
-    expect(ingresoBodegaPorResultado("devuelta", TARIFA)).toBe("0.00");
+    expect(ingresoBodegaPorResultado("novedad", TARIFA)).toBe("0.00");
   });
 
   it("R21: dos gestiones sinteticas (p. ej. si el cron corriera dos veces MAL) cobrarian dos veces —", () => {
@@ -90,8 +90,8 @@ describe("Feature 99 [💰] · el snapshot de la 56 cobra la gestion sintetica d
     // snapshot cobraria doble. La guarda por `estatus_id = devuelta` garantiza UNA sola gestion
     // (verificado en devolucion-sla-repository.test.ts), por eso el circulo cobra exactamente una vez.
     const dos: CierreGestionPendienteRow[] = [
-      gestion({ gestionId: "g-sla-1", resultado: "rechazada" }),
-      gestion({ gestionId: "g-sla-2", resultado: "rechazada" }),
+      gestion({ gestionId: "g-sla-1", resultado: "devolucion_a_origen_por_rechazo" }),
+      gestion({ gestionId: "g-sla-2", resultado: "devolucion_a_origen_por_rechazo" }),
     ];
     const { total } = derivarIngresoBodega(dos, TARIFA);
     expect(total).toBe("1600.00"); // 2 x 800 — el snapshot no deduplica; la idempotencia es del repo
@@ -99,7 +99,7 @@ describe("Feature 99 [💰] · el snapshot de la 56 cobra la gestion sintetica d
 
   it("R23: sin tarifa (gap de datos) el ingreso es 0.00 sin lanzar (money-safe)", () => {
     const { ingresoByGestionId, total } = derivarIngresoBodega(
-      [gestion({ gestionId: "g-sla", resultado: "rechazada" })],
+      [gestion({ gestionId: "g-sla", resultado: "devolucion_a_origen_por_rechazo" })],
       null,
     );
     expect(ingresoByGestionId["g-sla"]).toBe("0.00");

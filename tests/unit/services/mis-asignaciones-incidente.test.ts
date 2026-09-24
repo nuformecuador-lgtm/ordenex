@@ -26,10 +26,10 @@ const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   en_reparto: "os-reparto",
-  entregada: "os-entregada",
-  reprogramada: "os-reprogramada",
-  devuelta: "os-devuelta",
-  rechazada: "os-rechazada",
+  entregado: "os-entregada",
+  reprogramado: "os-reprogramada",
+  novedad: "os-devuelta",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
   incidente: "os-incidente", // feature 154: el value del catalogo; 1:1 con el `resultado`
 };
 
@@ -348,9 +348,9 @@ describe("Feature 158 · R10 — las 1..N evidencias se suben y se persisten", (
 
 describe("Feature 158 · R7 — el reporte se rechaza SIN efectos si la guardia no pasa", () => {
   it.each([
-    ["por_recoger", "aun no la recogio"],
+    ["mensajero_recogiendo_en_bodega", "aun no la recogio"],
     ["en_bodega_central", "la orden esta en bodega"],
-    ["entregada", "ya se gestiono"],
+    ["entregado", "ya se gestiono"],
     ["incidente", "ya es un incidente"],
   ])(
     "R7: la orden en `%s` (no `en_reparto`) -> conflict, sin subir fotos ni escribir (%s)",
@@ -434,7 +434,7 @@ describe("Feature 158 · R35 — los cuatro resultados previos no cambian", () =
     const r = await service.gestionar(
       {
         ordenId: "o1",
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: 100,
         metodoPago: "efectivo",
         pagos: [{ metodo: "efectivo", monto: 100 }], // feature 212: desglose normalizado (R12)
@@ -444,7 +444,7 @@ describe("Feature 158 · R35 — los cuatro resultados previos no cambian", () =
     );
     expect(r.status).toBe("ok");
     const gestion = gestionEmitida(repo);
-    expect(gestion).toMatchObject({ resultado: "entregada", montoRecibido: 100 });
+    expect(gestion).toMatchObject({ resultado: "entregado", montoRecibido: 100 });
     expect(gestion.causaIncidente).toBeUndefined();
   });
 
@@ -454,7 +454,7 @@ describe("Feature 158 · R35 — los cuatro resultados previos no cambian", () =
     const r = await service.gestionar(
       {
         ordenId: "o1",
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         fechaReprogramacion: "2099-01-01",
         motivo: "reagendar",
       },

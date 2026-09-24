@@ -76,8 +76,8 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
           "corpus. Corre `pnpm run db:seed` (y las semillas de zonas) antes de esta suite.",
       );
     }
-    const estatusEntregada = await prisma.orderStatus.findFirst({ where: { value: "entregada" } });
-    const estatusRechazada = await prisma.orderStatus.findFirst({ where: { value: "rechazada" } });
+    const estatusEntregada = await prisma.orderStatus.findFirst({ where: { value: "entregado" } });
+    const estatusRechazada = await prisma.orderStatus.findFirst({ where: { value: "devolucion_a_origen_por_rechazo" } });
     // `en_reparto` es el ORIGEN de la visita real que la orden ya tenia contada. No es decorado:
     // sin esa fila de familia `gestion`, el derivador de intentos (R15) no cuenta nada, y el caso
     // pasaria en verde sin haber medido lo que dice medir.
@@ -172,7 +172,7 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
           data: {
             ordenId: ordenObjetivo.id,
             mensajeroId,
-            resultado: "entregada",
+            resultado: "entregado",
             montoRecibido: new Prisma.Decimal("17700.00"),
             metodoPago: "SINPE",
             evidenciaStoragePath: `evidencias/${SUFIJO}/objetivo.jpg`,
@@ -215,7 +215,7 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
           data: {
             ordenId: ordenOtra.id,
             mensajeroId,
-            resultado: "entregada",
+            resultado: "entregado",
             montoRecibido: new Prisma.Decimal("10000.00"),
             cierreId: cierreAbierto.id,
             // ⚠️ CONGELADO CON OTRA TARIFA (900, no 1500): si el recalculo re-derivara con la
@@ -238,7 +238,7 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
           data: {
             ordenId: ordenRechazo.id,
             mensajeroId,
-            resultado: "rechazada",
+            resultado: "devolucion_a_origen_por_rechazo",
             motivo: "rechazo real del dia",
             cierreId: cierreAbierto.id,
             pagoMensajero: new Prisma.Decimal("0.00"),
@@ -313,7 +313,7 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
           data: {
             ordenId: ordenConsolidada.id,
             mensajeroId,
-            resultado: "entregada",
+            resultado: "entregado",
             montoRecibido: new Prisma.Decimal("5000.00"),
             cierreId: cierreConsolidado.id,
             pagoMensajero: new Prisma.Decimal(COBRO_ENTREGADO),
@@ -392,7 +392,7 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
     });
 
     expect(salida.status).toBe("updated");
-    expect(gestion.resultado).toBe("rechazada"); // R6
+    expect(gestion.resultado).toBe("devolucion_a_origen_por_rechazo"); // R6
     expect(gestion.motivo).toBe(MOTIVO); // R6
     expect(gestion.montoRecibido).toBeNull(); // R6: el cobro NO existio
     expect(gestion.metodoPago).toBeNull(); // R6
@@ -467,7 +467,7 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
         },
       });
       const sumaLineas = gestiones
-        .filter((g) => g.resultado === "entregada")
+        .filter((g) => g.resultado === "entregado")
         .flatMap((g) => g.pagos)
         .reduce((acc, p) => acc.plus(p.monto), new Prisma.Decimal(0));
       const sumaPagos = gestiones.reduce(
@@ -532,22 +532,22 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
         todas,
         original,
         ctxEsperado: {
-          entregada: ctx.estatusEntregadaId,
-          rechazada: ctx.estatusRechazadaId,
+          entregado: ctx.estatusEntregadaId,
+          devolucion_a_origen_por_rechazo: ctx.estatusRechazadaId,
           gestion: ctx.gestionObjetivo,
           actor: ctx.mensajeroId,
         },
       };
     });
 
-    expect(estatusOrdenId).toBe(ctxEsperado.rechazada);
+    expect(estatusOrdenId).toBe(ctxEsperado.devolucion_a_origen_por_rechazo);
     // El historial es APPEND-ONLY: la visita original sigue ahi y la correccion añade UNA fila.
     expect(todas).toBe(2);
     expect(original).toBe(1);
     expect(filas).toHaveLength(1);
     expect(filas[0]).toEqual({
-      estatusOrigenId: ctxEsperado.entregada,
-      estatusDestinoId: ctxEsperado.rechazada,
+      estatusOrigenId: ctxEsperado.entregado,
+      estatusDestinoId: ctxEsperado.devolucion_a_origen_por_rechazo,
       origenTipo: "correccion_resultado_gestion",
       actorUsuarioId: ctxEsperado.actor,
       gestionOrdenId: ctxEsperado.gestion,
@@ -598,8 +598,8 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
     expect(fila.actorRol).not.toBeNull();
     // El importe es el `total_general` NUEVO del cierre, `Decimal`, nunca un `number`.
     expect(fila.monto?.toFixed(2)).toBe("10000.00");
-    expect(fila.valorAnterior).toBe("entregada");
-    expect(fila.valorNuevo).toBe("rechazada");
+    expect(fila.valorAnterior).toBe("entregado");
+    expect(fila.valorNuevo).toBe("devolucion_a_origen_por_rechazo");
     // La etiqueta sale de `etiquetaDeEntidad` y NUNCA lleva el motivo (texto libre, 362/R5).
     expect(fila.entidadEtiqueta).not.toContain(MOTIVO);
     expect(fila.entidadEtiqueta.length).toBeGreaterThan(0);
@@ -635,7 +635,7 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
 
     expect(medido.salida.status).toBe("conflict");
     // Ni una fila tocada: la gestion sigue entregada, con su cobro y su desglose.
-    expect(medido.gestion.resultado).toBe("entregada");
+    expect(medido.gestion.resultado).toBe("entregado");
     expect(medido.gestion.montoRecibido?.toFixed(2)).toBe("5000.00");
     expect(medido.gestion.pagoMensajero?.toFixed(2)).toBe(COBRO_ENTREGADO);
     expect(medido.lineas).toBe(1);
@@ -709,7 +709,7 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
     });
 
     expect(medido.salida.status).toBe("conflict");
-    expect(medido.gestion.resultado).toBe("rechazada");
+    expect(medido.gestion.resultado).toBe("devolucion_a_origen_por_rechazo");
     expect(medido.gestion.motivo).toBe("rechazo real del dia"); // NO se pisa
     expect(medido.gestion.ingresoBodegaRechazo?.toFixed(2)).toBe("1000.00");
     // Y el snapshot del cierre sigue siendo el congelado: no se recalculo nada.
@@ -734,7 +734,7 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
     // que es indistinguible de «se cerro entre medias». Lo que importa —y es lo que se afirma—
     // es que NO se aplico.
     expect(medido.salida.status).not.toBe("updated");
-    expect(medido.resultado).toBe("entregada");
+    expect(medido.resultado).toBe("entregado");
   });
 
   it("R2: una gestion inexistente es `fuera_de_alcance`", async () => {
@@ -943,7 +943,7 @@ describeSiHayBase("💰 398 — corregir el resultado de una gestion con el cier
     // El fallo se PROPAGA: nadie se lo traga.
     expect(medido.lanzo).toBeInstanceOf(Error);
     // Y NINGUNO de los cinco efectos anteriores quedo aplicado.
-    expect(medido.gestion.resultado).toBe("entregada");
+    expect(medido.gestion.resultado).toBe("entregado");
     expect(medido.gestion.montoRecibido?.toFixed(2)).toBe("17700.00");
     expect(medido.gestion.pagoMensajero?.toFixed(2)).toBe(COBRO_ENTREGADO);
     expect(medido.gestion.motivo).toBeNull();

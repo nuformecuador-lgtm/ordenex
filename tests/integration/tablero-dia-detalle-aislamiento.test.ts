@@ -185,34 +185,34 @@ describeSiHayBase("detalle del mensajero — aislamiento (Postgres real)", () =>
   it("trae el resultado del dia de cada orden y el estatus crudo, sin inventar etiquetas (R49)", async () => {
     const resultado = await enTransaccionRevertida(prisma, async (tx) => {
       const base = await sembrarBase(tx);
-      const entregada = await crearOrden(tx, base, {
-        clave: "entregada",
-        estatus: "entregada",
+      const ordenEntregada = await crearOrden(tx, base, {
+        clave: "entregado",
+        estatus: "entregado",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "07:00"),
       });
       // Dos gestiones: gana la ULTIMA vigente, igual que en la tarjeta.
       await crearGestion(tx, {
-        ordenId: entregada,
+        ordenId: ordenEntregada,
         mensajeroId: base.mensajero1,
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         at: instanteCR(FECHA_CR, "09:00"),
       });
       await crearGestion(tx, {
-        ordenId: entregada,
+        ordenId: ordenEntregada,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "13:00"),
       });
       const pendiente = await crearOrden(tx, base, {
         clave: "pendiente",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "08:00"),
       });
 
       return {
-        entregada,
+        ordenEntregada,
         pendiente,
         pagina: await repositorio(tx).listarOrdenesDelDia(
           VENTANA,
@@ -227,13 +227,13 @@ describeSiHayBase("detalle del mensajero — aislamiento (Postgres real)", () =>
     // Orden determinista: `asignado_at` DESC. La de las 08:00 (la pendiente) va primero.
     expect(resultado.pagina.filas.map((f) => f.ordenId)).toEqual([
       resultado.pendiente,
-      resultado.entregada,
+      resultado.ordenEntregada,
     ]);
     // FEATURE 260 — el ESTATUS ya no sale de aqui (lo trae la hidratacion, con el mismo mapeo
     // que el listado). Lo que esta consulta sigue decidiendo, y por eso se sigue afirmando, es
     // el RESULTADO DEL DIA: la ultima gestion vigente de la ventana, con dos gestiones de por
     // medio y ganando la mas reciente.
-    expect(resultado.pagina.filas.map((f) => f.resultadoDelDia)).toEqual([null, "entregada"]);
+    expect(resultado.pagina.filas.map((f) => f.resultadoDelDia)).toEqual([null, "entregado"]);
   });
 
   it("una orden del camino de RECOLECCION aparece en el detalle con un asignadoAt util (R57)", async () => {

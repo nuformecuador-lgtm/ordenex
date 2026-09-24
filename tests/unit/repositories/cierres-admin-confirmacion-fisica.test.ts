@@ -55,11 +55,11 @@ const T0 = new Date("2026-08-19T10:00:00.000Z");
 function gestiones(): GestionFila[] {
   const base = { anuladaAt: null, createdAt: T0, confirmadaFisicaAt: null };
   return [
-    { id: G_DEV, ordenId: "o-dev", cierreId: "c1", resultado: "devuelta", ...base },
-    { id: G_REC, ordenId: "o-rec", cierreId: "c1", resultado: "rechazada", ...base },
-    { id: G_REP, ordenId: "o-rep", cierreId: "c1", resultado: "reprogramada", ...base },
+    { id: G_DEV, ordenId: "o-dev", cierreId: "c1", resultado: "novedad", ...base },
+    { id: G_REC, ordenId: "o-rec", cierreId: "c1", resultado: "devolucion_a_origen_por_rechazo", ...base },
+    { id: G_REP, ordenId: "o-rep", cierreId: "c1", resultado: "reprogramado", ...base },
     { id: G_INC, ordenId: "o-inc", cierreId: "c1", resultado: "incidente", ...base },
-    { id: G_OTRO_CIERRE, ordenId: "o-otro", cierreId: "c2", resultado: "devuelta", ...base },
+    { id: G_OTRO_CIERRE, ordenId: "o-otro", cierreId: "c2", resultado: "novedad", ...base },
   ];
 }
 
@@ -452,7 +452,7 @@ describe("238/R23 — la invariante que cruza 238 y 239 (454: aplicacion)", () =
 
     expect(res).toBe("updated");
     // (1) La aplicacion ocurrio: la orden se movio y dejo su fila de historial.
-    expect(base.ordenes["o-dev"]).toBe(APLICACION_GESTIONES.destinoPorResultado.devuelta);
+    expect(base.ordenes["o-dev"]).toBe(APLICACION_GESTIONES.destinoPorResultado.novedad);
     expect(base.prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
 
     // (2) LA INVARIANTE: las gestiones que produjeron ese anclaje estan TODAS confirmadas. No se

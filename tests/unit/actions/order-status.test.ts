@@ -7,7 +7,7 @@ import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRep
 const CATALOGO: OrderStatusLiteRow[] = [
   { id: "os-1", value: "en_bodega_central" },
   { id: "os-2", value: "en_preparacion" },
-  { id: "os-3", value: "entregada" },
+  { id: "os-3", value: "entregado" },
 ];
 
 function buildDeps(overrides: {

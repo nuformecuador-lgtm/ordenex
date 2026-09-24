@@ -35,21 +35,21 @@ const SCAN_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
  * `ORDER_STATUS_SEED`: es la foto contra la que se compara.
  */
 const CATALOGO_CONGELADO = [
-  "entregada",
-  "devuelta",
+  "entregado",
+  "novedad",
   "devolviendo_a_tienda",
-  "reprogramada",
+  "reprogramado",
   "en_ruta_bodega_central",
   "en_bodega_central",
   "en_preparacion",
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
   "en_ruta_bodega_satelite",
   "en_reparto",
-  "rechazada",
+  "devolucion_a_origen_por_rechazo",
   "en_bodega_satelite",
   "devuelta_a_tienda",
-  "sin_gestionar",
-  "por_devolver",
+  "novedad_interna",
+  "por_devolver_a_bodega_central",
   "devolviendo_a_bodega_central",
   "por_devolver_a_tienda",
   "por_recolectar_en_tienda",
@@ -71,7 +71,7 @@ const ALLOWLIST = new Set([
 ]);
 
 const BUCKETS_RE = /["'](sinRecoger|enReparto)["']/;
-const ESTATUS_RE = /["'](por_recoger|recolectando|en_reparto)["']/;
+const ESTATUS_RE = /["'](mensajero_recogiendo_en_bodega|recolectando|en_reparto)["']/;
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -149,7 +149,7 @@ describe("R46 — censo: la clasificacion estatus -> bucket se declara en un sol
   });
 
   it("el censo no es vacuo: reconoce una segunda tabla paralela si alguien la escribe", () => {
-    const tablaParalela = `const MAPA = { "por_recoger": "sinRecoger" };`;
+    const tablaParalela = `const MAPA = { "mensajero_recogiendo_en_bodega": "sinRecoger" };`;
     expect(BUCKETS_RE.test(tablaParalela) && ESTATUS_RE.test(tablaParalela)).toBe(true);
   });
 

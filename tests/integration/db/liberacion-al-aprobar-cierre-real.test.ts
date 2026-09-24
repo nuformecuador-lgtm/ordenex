@@ -117,7 +117,7 @@ describeSiHayBase("315 — liberar al aprobar el cierre, contra Postgres real", 
           "corpus. Corre `pnpm run db:seed` (y las semillas de zonas) antes de esta suite.",
       );
     }
-    const VALORES = ["reprogramada", "en_bodega_central", "en_bodega_satelite"];
+    const VALORES = ["reprogramado", "en_bodega_central", "en_bodega_satelite"];
     const catalogo = await prisma.orderStatus.findMany({
       where: { value: { in: VALORES } },
       select: { id: true, value: true },
@@ -130,7 +130,7 @@ describeSiHayBase("315 — liberar al aprobar el cierre, contra Postgres real", 
         );
       }
     }
-    const estatusReprogramadaId = idPorValue.get("reprogramada") as string;
+    const estatusReprogramadaId = idPorValue.get("reprogramado") as string;
     const enBodegaCentralId = idPorValue.get("en_bodega_central") as string;
 
     const usuarios = await prisma.usuario.findMany({ select: { id: true }, take: 1 });
@@ -189,7 +189,7 @@ describeSiHayBase("315 — liberar al aprobar el cierre, contra Postgres real", 
             data: {
               ordenId: orden.id,
               mensajeroId,
-              resultado: "reprogramada",
+              resultado: "reprogramado",
               fechaReprogramacion: s.fecha,
               cierreId: s.cierre === "mio" ? cierreMioId : cierreAjenoId,
               anuladaAt: null,
@@ -292,7 +292,7 @@ describeSiHayBase("315 — liberar al aprobar el cierre, contra Postgres real", 
         quietas: quietas.sort(),
         resumen,
         filas,
-        reprogramada: ctx.estatusReprogramadaId,
+        reprogramado: ctx.estatusReprogramadaId,
       };
     });
 

@@ -25,18 +25,18 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 const MAESTRO: Actor = { usuarioId: "adm-maestro", rol: "maestro" };
 
 const ESTATUS_IDS: Record<string, string | null> = {
-  sin_gestionar: "s-sin-gestionar",
+  novedad_interna: "s-sin-gestionar",
   en_bodega_central: "s-en-bodega",
   en_bodega_satelite: "s-en-bodega-sat",
-  rechazada: "s-rechazada",
-  por_devolver: "s-por-devolver",
+  devolucion_a_origen_por_rechazo: "s-rechazada",
+  por_devolver_a_bodega_central: "s-por-devolver",
   por_devolver_a_tienda: "s-por-devolver-a-tienda",
-  devuelta: "s-devuelta",
+  novedad: "s-devuelta",
   // FICHA 454 (T1.7): los de la APLICACION DE GESTIONES (origen + destino de cada resultado).
   // Sin cualquiera de ellos la aprobacion NO ocurre (fallo cerrado, heredado de la 239/R9).
   en_reparto: "s-en-reparto",
-  entregada: "s-entregada",
-  reprogramada: "s-reprogramada",
+  entregado: "s-entregada",
+  reprogramado: "s-reprogramada",
   incidente: "s-incidente",
 };
 
@@ -157,7 +157,7 @@ describe("276/T9 · el bloque falla CERRADO cuando el catalogo no resuelve", () 
     // repositorio ni se llama. Antes: `expect(configDeLaUltimaAprobacion(repo)).toBeUndefined()`.
     const { service, repo } = newService(CierresAdminService, {
       ...ESTATUS_IDS,
-      rechazada: null,
+      devolucion_a_origen_por_rechazo: null,
     });
 
     const r = await service.aprobarCierre("c1", MAESTRO);
@@ -166,10 +166,10 @@ describe("276/T9 · el bloque falla CERRADO cuando el catalogo no resuelve", () 
     expect(repo.resolverCierre).not.toHaveBeenCalled();
   });
 
-  it("sin `sin_gestionar` tampoco se cablea (el comportamiento de siempre, sin cambios)", async () => {
+  it("sin `novedad_interna` tampoco se cablea (el comportamiento de siempre, sin cambios)", async () => {
     const { service, repo } = newService(CierresAdminService, {
       ...ESTATUS_IDS,
-      sin_gestionar: null,
+      novedad_interna: null,
     });
 
     await service.aprobarCierre("c1", MAESTRO);

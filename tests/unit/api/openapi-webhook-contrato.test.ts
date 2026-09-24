@@ -39,8 +39,8 @@ function esEnumDeEstado(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.every((v) => typeof v === "string") &&
-    (value as string[]).includes("entregada") &&
-    (value as string[]).includes("por_recoger")
+    (value as string[]).includes("entregado") &&
+    (value as string[]).includes("mensajero_recogiendo_en_bodega")
   );
 }
 
@@ -174,7 +174,7 @@ describe("268/R29 — el enum de `data.estado` se DERIVA de la politica, no se c
     // ⏳ 2026-08-31 — `en_preparacion` SALE de esta lista de internos: desde el parche de hoy SI se
     // publica, como evento de NACIMIENTO de la rama de fulfillment. Los tres que quedan son los de
     // ruteo satelite, y esos siguen sin viajar nunca en un evento.
-    for (const interno of ["por_recoger", "en_bodega_satelite", "en_ruta_bodega_satelite"]) {
+    for (const interno of ["mensajero_recogiendo_en_bodega", "en_bodega_satelite", "en_ruta_bodega_satelite"]) {
       expect(publicados, `el webhook no emite ${interno}`).not.toContain(interno);
     }
     // Y lleva `incidente` (268) y el del parche del 2026-08-31; `ayuda_tienda` ya NO (454/R34).
@@ -314,7 +314,7 @@ describe("268/R28 — documentar el cuerpo NO añadio un 5.º catalogo de estado
     expect(enumsDeEstado(openApiSpec.components.schemas.WebhookOrdenEstadoActualizado)).toEqual([]);
     // Y la razon concreta: el enum del webhook lleva `entregada` pero no el estado interno de
     // recogida, que es la otra mitad que el predicado exige.
-    expect(dataTs.properties.estado.enum).toContain("entregada");
+    expect(dataTs.properties.estado.enum).toContain("entregado");
     expect(esEnumDeEstado(dataTs.properties.estado.enum)).toBe(false);
   });
 });

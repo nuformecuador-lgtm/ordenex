@@ -87,11 +87,11 @@ describe("bodega satélite · el filtro de estado sale del catálogo compartido"
     // `{value, label}` que vivían en el módulo— devolvía siempre lo mismo daba igual lo que
     // se le pasara, así que no puede pasar estas dos afirmaciones a la vez.
     const tres: OrderStatusLiteRow[] = [
-      { id: "os-entregada", value: "entregada" },
-      { id: "os-devuelta", value: "devuelta" },
-      { id: "os-rechazada", value: "rechazada" },
+      { id: "os-entregada", value: "entregado" },
+      { id: "os-devuelta", value: "novedad" },
+      { id: "os-rechazada", value: "devolucion_a_origen_por_rechazo" },
     ];
-    expect(valoresOfrecidos(tres)).toEqual(["entregada", "devuelta", "rechazada"]);
+    expect(valoresOfrecidos(tres)).toEqual(["entregado", "novedad", "devolucion_a_origen_por_rechazo"]);
 
     // Sin catálogo (primer render, o la lectura falló) el control se declara SIN opciones,
     // exactamente como hace `/ordenes` mientras el suyo viaja. No cae a una lista de reserva.
@@ -105,10 +105,10 @@ describe("bodega satélite · el filtro de estado sale del catálogo compartido"
     // ofrecer un filtro que nunca devuelve nada — y sin la razón honesta que sí tienen los
     // estados vigentes de otras pantallas.
     const conRetirado: OrderStatusLiteRow[] = [
-      { id: "os-devuelta", value: "devuelta" },
+      { id: "os-devuelta", value: "novedad" },
       { id: "os-fulfillment", value: "en_fulfillment_bodega" },
     ];
-    expect(valoresOfrecidos(conRetirado)).toEqual(["devuelta"]);
+    expect(valoresOfrecidos(conRetirado)).toEqual(["novedad"]);
   });
 
   it("las etiquetas son las del catálogo, no los nombres propios de esta pantalla", () => {
@@ -126,16 +126,16 @@ describe("bodega satélite · el filtro de estado sale del catálogo compartido"
       opciones.find((o) => o.value === value)?.label;
     expect(etiquetaDe("en_bodega_satelite")).toBe("En bodega satélite");
     expect(etiquetaDe("en_bodega_satelite")).not.toBe("Recibidas");
-    expect(etiquetaDe("por_recoger")).toBe("Por recoger");
-    expect(etiquetaDe("por_recoger")).not.toBe("Asignadas (por recoger)");
+    expect(etiquetaDe("mensajero_recogiendo_en_bodega")).toBe("Por recoger");
+    expect(etiquetaDe("mensajero_recogiendo_en_bodega")).not.toBe("Asignadas (por recoger)");
     expect(etiquetaDe("devolviendo_a_bodega_central")).toBe(
       "Devolviendo a bodega central",
     );
     expect(etiquetaDe("devolviendo_a_bodega_central")).not.toBe(
       "En tránsito a central",
     );
-    expect(etiquetaDe("devuelta")).toBe("Devuelta");
-    expect(etiquetaDe("devuelta")).not.toBe("Devueltas");
+    expect(etiquetaDe("novedad")).toBe("Devuelta");
+    expect(etiquetaDe("novedad")).not.toBe("Devueltas");
   });
 
   it("los textos del control son los de la central, incluido el del buscador", () => {
@@ -217,9 +217,9 @@ describe("bodega satélite · la selección INTERSECA la lista blanca, nunca la 
 
   it("una selección MEZCLADA se queda con la parte alcanzable", () => {
     const filtro = seleccionAFiltroSatelite({
-      [CLAVE_ESTADO]: ["en_bodega_central", "devuelta", "recolectando"],
+      [CLAVE_ESTADO]: ["en_bodega_central", "novedad", "recolectando"],
     });
-    expect(filtro.estados).toEqual(["devuelta"]);
+    expect(filtro.estados).toEqual(["novedad"]);
     // Hay algo que consultar: la mezcla NO corta la lectura.
     expect(filtroSinResultados(filtro)).toBe(false);
   });
@@ -239,10 +239,10 @@ describe("bodega satélite · la selección INTERSECA la lista blanca, nunca la 
   });
 
   it("nombra los estados inalcanzables para poder explicar el vacío", () => {
-    const seleccion = { [CLAVE_ESTADO]: ["en_bodega_central", "devuelta"] };
+    const seleccion = { [CLAVE_ESTADO]: ["en_bodega_central", "novedad"] };
     expect(estadosFueraDelListado(seleccion)).toEqual(["en_bodega_central"]);
     // Y el CONTROL de la ficha 357: `entregada` ya NO es inalcanzable, así que no se nombra.
-    expect(estadosFueraDelListado({ [CLAVE_ESTADO]: ["entregada"] })).toEqual([]);
+    expect(estadosFueraDelListado({ [CLAVE_ESTADO]: ["entregado"] })).toEqual([]);
     expect(estadosFueraDelListado({ [CLAVE_ESTADO]: [...ESTADOS_BODEGA_SATELITE] })).toEqual(
       [],
     );

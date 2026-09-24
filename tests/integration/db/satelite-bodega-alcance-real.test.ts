@@ -231,8 +231,8 @@ async function sembrar(tx: Tx): Promise<Escenario> {
   });
   const idsPropios = [
     completa,
-    await crearOrden("propia-2", zonaPropia, "por_devolver"),
-    await crearOrden("propia-3", zonaPropia, "devuelta"),
+    await crearOrden("propia-2", zonaPropia, "por_devolver_a_bodega_central"),
+    await crearOrden("propia-3", zonaPropia, "novedad"),
   ];
   for (const id of idsPropios) await sembrarPasoPorBodega(id);
 
@@ -242,7 +242,7 @@ async function sembrar(tx: Tx): Promise<Escenario> {
     data: {
       ordenId: completa,
       mensajeroId: mensajero,
-      resultado: "reprogramada",
+      resultado: "reprogramado",
       fechaReprogramacion: new Date(`${DIA_REPROGRAMADA}T00:00:00.000Z`),
       anuladaAt: null,
     },
@@ -251,7 +251,7 @@ async function sembrar(tx: Tx): Promise<Escenario> {
   // Zona AJENA: dos en la MISMA lista blanca. Si el recorte por zona desapareciera, entrarian.
   const idsAjenos = [
     await crearOrden("ajena-1", zonaAjena, "en_bodega_satelite"),
-    await crearOrden("ajena-2", zonaAjena, "por_recoger", { mensajeroId: mensajero }),
+    await crearOrden("ajena-2", zonaAjena, "mensajero_recogiendo_en_bodega", { mensajeroId: mensajero }),
   ];
   // Pasaron por SU bodega (la ajena): la unica cosa que las deja fuera del listado del actor es
   // el recorte por ZONA. Sin el historial quedarian fuera por el alcance nuevo y el caso «no ve
@@ -265,7 +265,7 @@ async function sembrar(tx: Tx): Promise<Escenario> {
   // custodia de la central.
   const idsFueraDeLaLista = [
     await crearOrden("propia-en-reparto", zonaPropia, "en_reparto", { mensajeroId: mensajero }),
-    await crearOrden("propia-entregada", zonaPropia, "entregada", { mensajeroId: mensajero }),
+    await crearOrden("propia-entregada", zonaPropia, "entregado", { mensajeroId: mensajero }),
     await crearOrden("propia-ayuda", zonaPropia, "ayuda_tienda", { mensajeroId: mensajero }),
   ];
   const enLaCentral = await crearOrden("propia-central", zonaPropia, "en_bodega_central");

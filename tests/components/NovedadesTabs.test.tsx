@@ -64,7 +64,7 @@ function novedad(over: Partial<NovedadDTO> & { id: string }): NovedadDTO {
   return {
     numGuia: 12345,
     numRemision: "REM-001",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     intentosContacto: 0,
     mensajeroNombre: "Marta Mensajera",
     destinatario: "Ana Cliente",
@@ -305,7 +305,7 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
       ayuda: {
         items: [
           novedad({ id: "a1", estatusValue: "en_reparto", destinatario: "Ana Cliente" }),
-          novedad({ id: "o9", estatusValue: "devuelta", destinatario: "Beto Cliente" }),
+          novedad({ id: "o9", estatusValue: "novedad", destinatario: "Beto Cliente" }),
         ],
         total: 2,
         page: 1,
@@ -364,7 +364,7 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
       ayuda: {
         items: [
           novedad({ id: "a1", estatusValue: "en_reparto", destinatario: "Ana Cliente" }),
-          novedad({ id: "o9", estatusValue: "devuelta", destinatario: "Beto Cliente" }),
+          novedad({ id: "o9", estatusValue: "novedad", destinatario: "Beto Cliente" }),
         ],
         total: 2,
         page: 1,

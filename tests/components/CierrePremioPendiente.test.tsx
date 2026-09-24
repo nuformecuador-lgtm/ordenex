@@ -122,7 +122,7 @@ function makeResumen(over: Partial<CierreAdminResumen> & { cierreId: string }): 
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 function zeroIngreso(): TotalesIngresoOrdenex {

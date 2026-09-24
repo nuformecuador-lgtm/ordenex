@@ -168,7 +168,7 @@ function fila(i: number): FilaProductoDTO {
     producto: `Producto ${i}`,
     unidades: 1,
     ordenes: 1,
-    porStatus: [{ status: "entregada", conteo: 1 }],
+    porStatus: [{ status: "entregado", conteo: 1 }],
     ordenesAcompanadas: 0,
     dinero: {
       recaudado: importe.recaudado,

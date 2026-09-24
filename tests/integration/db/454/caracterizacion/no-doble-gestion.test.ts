@@ -37,8 +37,8 @@ describeSiHayBase("454/C07 — no se registra una segunda gestion (Postgres real
     mundo = await prepararMundo();
     secuencial = await conEscenario(mundo, async (e) => {
       const o = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 3000 });
-      const primera = await e.gestionar(o.ordenId, "entregada", { monto: 3000 });
-      const segunda = await e.gestionar(o.ordenId, "rechazada");
+      const primera = await e.gestionar(o.ordenId, "entregado", { monto: 3000 });
+      const segunda = await e.gestionar(o.ordenId, "devolucion_a_origen_por_rechazo");
       const filas = await e.tx.gestionOrden.count({ where: { ordenId: o.ordenId } });
       return { primera: primera.status, segunda: segunda as { status: string; motivo?: string }, filas };
     });
@@ -54,7 +54,7 @@ describeSiHayBase("454/C07 — no se registra una segunda gestion (Postgres real
       const ordenId = s.ordenIds[0];
       const enviar = async (cliente: PrismaClient) => {
         const svc = montarServicios(cliente).misAsignaciones;
-        return (await svc.gestionar(entradaGestion(ordenId, "entregada", { monto: 3000 }), s.actorMensajero))
+        return (await svc.gestionar(entradaGestion(ordenId, "entregado", { monto: 3000 }), s.actorMensajero))
           .status;
       };
       const estados = await Promise.all([enviar(c1), enviar(c2)]);

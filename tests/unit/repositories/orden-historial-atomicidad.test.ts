@@ -171,7 +171,7 @@ describe("R7 · mecanismo updateMany-envuelto (#6 recibir, #10 liberar)", () => 
       repo.liberarOrden({
         ordenId: "o1",
         destinoEstatusId: idEstado("en_bodega_central"),
-        estatusReprogramadaId: idEstado("reprogramada"),
+        estatusReprogramadaId: idEstado("reprogramado"),
         corridaAt: new Date(),
       }),
     ).rejects.toThrow("update boom");
@@ -195,7 +195,7 @@ describe("R7 · mecanismo raw-RETURNING (#7 asignarSatelite, #8 recoger)", () =>
         ["o1"],
         "m",
         "z",
-        idEstado("por_recoger"),
+        idEstado("mensajero_recogiendo_en_bodega"),
         idEstado("en_bodega_satelite"),
         HIST_ASIGNACION,
         // Feature 246 (T3.3): el dia de reparto YA RESUELTO. Este caso mide la atomicidad del
@@ -220,7 +220,7 @@ describe("R7 · mecanismo raw-RETURNING (#7 asignarSatelite, #8 recoger)", () =>
       repo.recogerLote(
         ["o1"],
         "m1",
-        idEstado("por_recoger"),
+        idEstado("mensajero_recogiendo_en_bodega"),
         idEstado("en_reparto"),
         new Date("2026-07-20T00:00:00.000Z"),
       ),

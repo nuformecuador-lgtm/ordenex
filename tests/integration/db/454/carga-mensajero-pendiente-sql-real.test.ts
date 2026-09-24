@@ -62,7 +62,7 @@ describeSiHayBase("454/T1.18 — R56: la gestion pendiente no es carga del mensa
       // La 261 no deja gestionar una orden reservada para otro dia: se trae a hoy, se gestiona por
       // el servicio real y se devuelve a mañana. La gestion queda pendiente (sin cierre).
       await e.tx.orden.update({ where: { id: o.ordenId }, data: { fechaReparto: diaCR(0, now) } });
-      await e.gestionarOk(o.ordenId, "entregada");
+      await e.gestionarOk(o.ordenId, "entregado");
       await e.tx.orden.update({ where: { id: o.ordenId }, data: { fechaReparto: diaCR(1, now) } });
       const estadoTrasGestion = await e.estadoDe(o.ordenId);
 

@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { pathToFileURL } from "node:url";
 import { ROLES_SEED } from "@/lib/types/roles";
-import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
+import { CODIGO_VIGENTE_DE_ANTERIOR, ORDER_STATUS_SEED } from "@/lib/types/order-status";
 import { VEHICULOS_SEED } from "@/lib/types/vehiculos";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 
@@ -41,9 +41,24 @@ export async function seedRoles(
 // (fuente unica de verdad en TS) con upsert por `value`: conserva la fila y su
 // `id` si ya existe, sin duplicar (patron seedRoles). La geografia NO se siembra
 // (R4). Recibe el cliente Prisma por parametro para testear sin conexion real.
+//
+// FICHA 455 (2026-09-24, R20, design §3.3): ANTES de escribir nada comprueba que la base no tenga
+// ningun codigo ANTERIOR de la 455. Sembrar una base sin migrar crearia una SEGUNDA fila
+// (`entregado` junto a `entregada`): dos estados con el mismo nombre visible, y la migracion M1
+// fallaria despues por el choque. Falla con el codigo en el mensaje y sin insertar ninguna fila.
 export async function seedOrderStatus(
   prisma: Pick<PrismaClient, "orderStatus">
 ): Promise<void> {
+  const anterior = await prisma.orderStatus.findFirst({
+    where: { value: { in: Object.keys(CODIGO_VIGENTE_DE_ANTERIOR) } },
+    select: { value: true },
+    orderBy: { value: "asc" },
+  });
+  if (anterior !== null) {
+    throw new Error(
+      `order_status: la base tiene el código anterior '${anterior.value}'; aplica la migración 455 antes de sembrar`,
+    );
+  }
   for (const value of ORDER_STATUS_SEED) {
     await prisma.orderStatus.upsert({
       where: { value },

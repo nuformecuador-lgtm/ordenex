@@ -27,20 +27,20 @@ import { NOMBRE_RESULTADO_PENDIENTE } from "@/lib/types/rastreo-publico";
  */
 
 const RESULTADOS: readonly GestionResultado[] = [
-  "entregada",
-  "reprogramada",
-  "devuelta",
-  "rechazada",
+  "entregado",
+  "reprogramado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
   "incidente",
 ];
 
 describe("454/R31 · el nombre visible del resultado pendiente en el rastreo publico", () => {
   it("contrato: los cinco nombres, escritos a mano", () => {
     expect(NOMBRE_RESULTADO_PENDIENTE).toEqual({
-      entregada: "Entregada",
-      reprogramada: "Reprogramada",
-      devuelta: "Devuelta",
-      rechazada: "Rechazada",
+      entregado: "Entregada",
+      reprogramado: "Reprogramada",
+      novedad: "Devuelta",
+      devolucion_a_origen_por_rechazo: "Rechazada",
       incidente: "Incidente",
     });
   });

@@ -18,20 +18,20 @@ describe("Feature 266 · T2.1 — ESTADOS_HABILITABLES_API (D1)", () => {
   // (`ApiHabilitacionService`, `orden.ayudaAbierta`), no por su estado, que es `en_reparto` — y
   // `en_reparto` a secas sigue sin serlo (caso R13/R31 de abajo).
   it("D1 -> 454: por ESTADO solo es habilitable `devuelta`; la ayuda se habilita por la derivacion", () => {
-    expect(ESTADOS_HABILITABLES_API).toEqual(["devuelta"]);
+    expect(ESTADOS_HABILITABLES_API).toEqual(["novedad"]);
     expect(esEstadoHabilitableApi("ayuda_tienda")).toBe(false);
   });
 
   it("R13-b: `reprogramada` NO es habilitable, aunque el integrador la llame novedad", () => {
-    expect(ESTADOS_HABILITABLES_API as readonly string[]).not.toContain("reprogramada");
-    expect(esEstadoHabilitableApi("reprogramada")).toBe(false);
+    expect(ESTADOS_HABILITABLES_API as readonly string[]).not.toContain("reprogramado");
+    expect(esEstadoHabilitableApi("reprogramado")).toBe(false);
   });
 
-  it("R13/R31: `rechazada`, `incidente`, `sin_gestionar` y `en_reparto` quedan fuera", () => {
+  it("R13/R31: `rechazada`, `incidente`, `novedad_interna` y `en_reparto` quedan fuera", () => {
     // `en_reparto` esta en la lista a proposito: es el estado en el que queda una orden ya
     // habilitada, y que NO sea habilitable es lo que hace que la segunda llamada devuelva
     // `estado_no_habilitable` en vez de un acuse falso (R31 / D3).
-    for (const estado of ["rechazada", "incidente", "sin_gestionar", "en_reparto"]) {
+    for (const estado of ["devolucion_a_origen_por_rechazo", "incidente", "novedad_interna", "en_reparto"]) {
       expect(ESTADOS_HABILITABLES_API as readonly string[]).not.toContain(estado);
       expect(esEstadoHabilitableApi(estado)).toBe(false);
     }

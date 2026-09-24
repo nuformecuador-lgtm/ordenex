@@ -125,15 +125,15 @@ describe("OrdenesListado — flujo de devolución de rechazadas (R9/R15)", () =>
     ).toBeNull();
   });
 
-  it("R9: una orden 'rechazada' NO ofrece salida manual (sin checkbox ni acción por lote)", async () => {
+  it("R9: una orden 'devolucion_a_origen_por_rechazo' NO ofrece salida manual (sin checkbox ni acción por lote)", async () => {
     // IDA Y VUELTA (léase entera): la feature «eliminar orden» (2026-08-26) reexpresó este caso
     // porque entonces "Eliminar" se ofrecía en CUALQUIER estado y la fila sí ganaba casilla. El
     // pedido humano del 2026-08-27 acotó el borrado a las órdenes SIN GESTIÓN: una `rechazada`
     // no lo está, así que vuelve a no tener ninguna acción por lote y vuelve a no tener casilla.
     // El caso recupera su forma original, que es la que dice la verdad hoy.
     renderListado(
-      [{ id: "id-rech", value: "rechazada" }],
-      [makeOrden("REM-RECH", "rechazada")],
+      [{ id: "id-rech", value: "devolucion_a_origen_por_rechazo" }],
+      [makeOrden("REM-RECH", "devolucion_a_origen_por_rechazo")],
     );
 
     // La orden se lista…
@@ -155,11 +155,11 @@ describe("OrdenesListado — flujo de devolución de rechazadas (R9/R15)", () =>
 // marcados), de modo que nunca se ofrece una accion que descartaria parte del lote.
 describe("OrdenesListado — acciones derivadas de la seleccion", () => {
   const ITEMS = [
-    makeOrden("REM-POR-RECOGER", "por_recoger"),
+    makeOrden("REM-POR-RECOGER", "mensajero_recogiendo_en_bodega"),
     makeOrden("REM-EN-BODEGA", "en_bodega_central"),
   ];
   const CATALOGO = [
-    { id: "id-pr", value: "por_recoger" },
+    { id: "id-pr", value: "mensajero_recogiendo_en_bodega" },
     { id: "id-eb", value: "en_bodega_central" },
   ];
 

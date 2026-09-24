@@ -43,7 +43,7 @@ const MENSAJERO_CON_CIERRE = "m-cierre";
 const ZONA_CENTRAL = "z-central";
 
 const ESTATUS_ID: Record<string, string> = {
-  por_recoger: "os-por-recoger",
+  mensajero_recogiendo_en_bodega: "os-por-recoger",
   en_ruta_bodega_satelite: "os-ruta-satelite",
   en_bodega_central: "os-bodega-central",
   en_bodega_satelite: "os-bodega-satelite",
@@ -51,7 +51,7 @@ const ESTATUS_ID: Record<string, string> = {
 
 const ORDEN: OrdenTransicionRow = {
   id: "o1",
-  estatusValue: "por_recoger",
+  estatusValue: "mensajero_recogiendo_en_bodega",
   numGuia: 4321,
   deletedAt: null,
   zonaId: ZONA_CENTRAL,

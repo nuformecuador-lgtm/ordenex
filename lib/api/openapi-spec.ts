@@ -40,18 +40,18 @@ import { EVENTO_PUBLICO_POR_TIPO } from "@/lib/types/orden-evento";
 // `tests/unit/api/openapi-contrato-en-reparto.test.ts` verifica que todo value de aqui exista
 // en `ORDER_STATUS_SEED` y que el `.yaml` sea espejo EXACTO de este literal.
 const ORDER_STATUS_ENUM = [
-  "entregada",
-  "devuelta",
+  "entregado",
+  "novedad",
   "devolviendo_a_tienda",
-  "reprogramada",
+  "reprogramado",
   "por_recolectar_en_tienda", // feature 155/R42: estado de nacimiento del canal por API key
   "en_ruta_bodega_central",
   "en_bodega_central",
   "en_preparacion",
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
   "en_ruta_bodega_satelite",
   "en_reparto",
-  "rechazada",
+  "devolucion_a_origen_por_rechazo",
   "en_bodega_satelite",
   "devuelta_a_tienda",
   // ⏳ 2026-09-23 (FICHA 454, R36/R37): aqui estaba `"ayuda_tienda"` (268/R15). La ayuda deja de ser
@@ -438,7 +438,7 @@ export const openApiSpec = {
                     value: {
                       numGuia: 100234,
                       numRemision: "REM-0001",
-                      estado: "entregada",
+                      estado: "entregado",
                       destinatario: "Juan Pérez",
                       telefonoDest: "88887777",
                       producto: "Camiseta talla M",
@@ -447,7 +447,7 @@ export const openApiSpec = {
                       createdAt: "2026-07-22T14:03:11.000Z",
                       evidencias: [
                         {
-                          resultado: "entregada",
+                          resultado: "entregado",
                           contentType: "image/jpeg",
                           url: "https://<proyecto>.supabase.co/storage/v1/object/sign/gestion-evidencias/...",
                           expiraEnSegundos: 300,
@@ -862,7 +862,7 @@ export const openApiSpec = {
                         {
                           numGuia: 100235,
                           resultado: "habilitada_sin_cambio_de_estado",
-                          estado: "devuelta",
+                          estado: "novedad",
                           ayudaCerrada: false,
                           error: null,
                         },
@@ -998,7 +998,7 @@ export const openApiSpec = {
                 // feature 268/R29: DERIVADO de `EVENTOS_PUBLICOS`, nunca copiado a mano.
                 enum: WEBHOOK_ESTADO_ENUM,
                 description:
-                  "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de ruteo satélite que ese catálogo documenta (`por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. `en_preparacion` SÍ viaja, y solo como evento de NACIMIENTO: es el estado inicial de las órdenes creadas con `fulfillment` (el paquete ya está en bodega), llega una única vez por orden y con `numGuia: null`, porque en esa rama la guía se emite más tarde. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
+                  "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de ruteo satélite que ese catálogo documenta (`mensajero_recogiendo_en_bodega`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. `en_preparacion` SÍ viaja, y solo como evento de NACIMIENTO: es el estado inicial de las órdenes creadas con `fulfillment` (el paquete ya está en bodega), llega una única vez por orden y con `numGuia: null`, porque en esa rama la guía se emite más tarde. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
               },
               motivo: {
                 type: ["string", "null"],
@@ -1131,7 +1131,7 @@ export const openApiSpec = {
             data: {
               numGuia: 100234,
               numRemision: "REM-0001",
-              estado: "devuelta",
+              estado: "novedad",
               motivo: "not_found",
               // ⏳ 2026-09-09 (feature 404/R2): el ejemplo del caso SIN mensajero asignado.
               mensajero: null,
@@ -1269,7 +1269,7 @@ export const openApiSpec = {
               numGuia: 100234,
               numRemision: "REM-0001",
               gestionId: "018f2c31-0000-4000-8000-000000000201",
-              resultado: "devuelta",
+              resultado: "novedad",
               motivo: "not_found",
               mensajero: { id: "018f2c31-0000-4000-8000-0000000000aa", nombre: "Carlos Jiménez Mora" },
               pendienteConfirmacion: true,
@@ -1503,7 +1503,7 @@ export const openApiSpec = {
           "Evidencia de entrega, rechazo o incidente, con URL firmada de corta duración. Las de incidente llegan con `resultado: \"incidente\"` y son las que enlaza el campo `evidenciasUrl` del webhook.",
         required: ["resultado", "contentType", "url", "expiraEnSegundos"],
         properties: {
-          resultado: { type: "string", enum: ["entregada", "rechazada", "incidente"] },
+          resultado: { type: "string", enum: ["entregado", "devolucion_a_origen_por_rechazo", "incidente"] },
           contentType: { type: ["string", "null"], description: "MIME del archivo (p. ej. image/jpeg)." },
           url: { type: "string", format: "uri", description: "URL firmada (vence a los 5 min)." },
           expiraEnSegundos: { type: "integer", description: "TTL de la URL firmada en segundos (300)." },
@@ -1699,8 +1699,8 @@ export const openApiSpec = {
             gestiones: [
               {
                 createdAt: "2026-09-02T15:41:07.000Z",
-                resultado: "reprogramada",
-                estadoResultante: "reprogramada",
+                resultado: "reprogramado",
+                estadoResultante: "reprogramado",
                 motivo: null,
                 mensajero: {
                   id: "018f2c31-0000-4000-8000-0000000000aa",
@@ -1709,8 +1709,8 @@ export const openApiSpec = {
               },
               {
                 createdAt: "2026-09-04T18:02:55.000Z",
-                resultado: "devuelta",
-                estadoResultante: "devuelta",
+                resultado: "novedad",
+                estadoResultante: "novedad",
                 motivo: "wrong_address",
                 mensajero: {
                   id: "018f2c31-0000-4000-8000-0000000000bb",
@@ -1906,7 +1906,7 @@ export const openApiSpec = {
               "en_bodega_central",
               "en_ruta_bodega_central",
               "en_ruta_bodega_satelite",
-              "por_recoger",
+              "mensajero_recogiendo_en_bodega",
             ],
           },
         },

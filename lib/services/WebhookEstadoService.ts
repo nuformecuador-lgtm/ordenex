@@ -43,7 +43,7 @@ export const EVENTO_ESTADO = "orden.estado_actualizado";
  * decidir que publica en `data`. El repositorio no los conoce: el reader siempre responde «cual es
  * la causa vigente» y es AQUI donde se decide que sale al cable (criterio heredado de la 256).
  */
-const ESTADO_DEVUELTA = "devuelta";
+const ESTADO_DEVUELTA = "novedad";
 const ESTADO_INCIDENTE = "incidente";
 
 /**

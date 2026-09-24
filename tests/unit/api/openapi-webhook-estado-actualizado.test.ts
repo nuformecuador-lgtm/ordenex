@@ -230,8 +230,8 @@ function esEnumDeEstado(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.every((v) => typeof v === "string") &&
-    (value as string[]).includes("entregada") &&
-    (value as string[]).includes("por_recoger")
+    (value as string[]).includes("entregado") &&
+    (value as string[]).includes("mensajero_recogiendo_en_bodega")
   );
 }
 
@@ -369,9 +369,9 @@ describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el c
     // se INVIERTE en vez de borrarse, para que el subconjunto siga estando afirmado en las dos
     // direcciones. Los tres internos de ruteo satelite siguen ausentes.
     for (const lista of [estadoTs.enum as string[], estadoYaml.enum as string[]]) {
-      expect(lista).toContain("entregada");
+      expect(lista).toContain("entregado");
       expect(lista).toContain("en_preparacion");
-      expect(lista).not.toContain("por_recoger");
+      expect(lista).not.toContain("mensajero_recogiendo_en_bodega");
       expect(lista).not.toContain("en_bodega_satelite");
       expect(lista).not.toContain("en_ruta_bodega_satelite");
     }

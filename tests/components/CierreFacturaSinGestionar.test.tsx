@@ -75,7 +75,7 @@ const ENTREGA: CierreDetalleGestion = {
   distritoNombre: "Carmen",
   producto: "Caja mediana",
   tiendaNombre: "Tienda X",
-  resultado: "entregada",
+  resultado: "entregado",
   montoRecibido: "8000.00",
   metodoPago: null,
   pagos: [],
@@ -93,10 +93,10 @@ const ENTREGA: CierreDetalleGestion = {
 
 function grupos(): CierreGrupos {
   return {
-    entregada: [ENTREGA],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: [ENTREGA],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 }

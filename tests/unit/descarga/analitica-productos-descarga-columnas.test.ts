@@ -51,8 +51,8 @@ const FILA: FilaProductoDTO = {
   unidades: 19,
   ordenes: 16,
   porStatus: [
-    { status: "entregada", conteo: 8 },
-    { status: "rechazada", conteo: 6 },
+    { status: "entregado", conteo: 8 },
+    { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
     { status: EN_CURSO, conteo: 2 },
   ],
   ordenesAcompanadas: 0,
@@ -155,8 +155,8 @@ describe("FICHA 345 · la proyección de una fila", () => {
       ...FILA,
       ordenes: 29,
       porStatus: [
-        { status: "entregada", conteo: 20 },
-        { status: "devuelta", conteo: 5 },
+        { status: "entregado", conteo: 20 },
+        { status: "novedad", conteo: 5 },
         { status: EN_CURSO, conteo: 4 },
       ],
     });
@@ -170,8 +170,8 @@ describe("FICHA 345 · la proyección de una fila", () => {
     const unTercio = filaDescargaAnaliticaProductos({
       ...FILA,
       porStatus: [
-        { status: "entregada", conteo: 1 },
-        { status: "rechazada", conteo: 2 },
+        { status: "entregado", conteo: 1 },
+        { status: "devolucion_a_origen_por_rechazo", conteo: 2 },
       ],
     });
     expect(unTercio.efectividad).toBe(33.3);
@@ -197,10 +197,10 @@ describe("FICHA 346 · la fila del archivo SUMA", () => {
     unidades: 29,
     ordenes: 24,
     porStatus: [
-      { status: "entregada", conteo: 3 },
-      { status: "rechazada", conteo: 2 },
-      { status: "devuelta", conteo: 4 },
-      { status: "reprogramada", conteo: 2 },
+      { status: "entregado", conteo: 3 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 2 },
+      { status: "novedad", conteo: 4 },
+      { status: "reprogramado", conteo: 2 },
       { status: EN_CURSO, conteo: 13 },
     ],
   };
@@ -567,9 +567,9 @@ describe("FICHA 347 · la proyección con dinero", () => {
       {
         ...FILA_CON_DINERO,
         porStatus: [
-          { status: "entregada", conteo: 3 },
-          { status: "devuelta", conteo: 4 },
-          { status: "reprogramada", conteo: 2 },
+          { status: "entregado", conteo: 3 },
+          { status: "novedad", conteo: 4 },
+          { status: "reprogramado", conteo: 2 },
         ],
       },
       true,
@@ -579,8 +579,8 @@ describe("FICHA 347 · la proyección con dinero", () => {
     expect(fila.otros_resultados_detalle).toBe("4 devueltas · 2 reprogramadas");
     // Y NO hay una columna por desenlace: ni `devuelta`, ni `reprogramada`, ni `incidente`.
     const claves = COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO.map((c) => c.clave);
-    expect(claves).not.toContain("devuelta");
-    expect(claves).not.toContain("reprogramada");
+    expect(claves).not.toContain("novedad");
+    expect(claves).not.toContain("reprogramado");
     expect(claves).not.toContain("incidente");
   });
 });

@@ -62,7 +62,7 @@ const bloqueoMock = vi.mocked(estadoBloqueoMensajero);
 function resultadoBase() {
   return {
     status: "ok" as const,
-    grupos: { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] },
+    grupos: { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] },
     totales: {
       efectivo: "0.00",
       simpe: "0.00",
@@ -93,7 +93,7 @@ function gestionEntregada(): CierreDetalleGestion {
     distritoNombre: null,
     producto: "Caja",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "10.00",
     metodoPago: "efectivo",
     // Feature 212/R31: el DTO gana el desglose y CONSERVA el escalar de arriba (aqui,
@@ -132,10 +132,10 @@ describe("CierreDiaPage — control de acceso por rol (R1)", () => {
     listarMock.mockResolvedValue({
       ...resultadoBase(),
       grupos: {
-        entregada: [gestionEntregada()],
-        reprogramada: [],
-        devuelta: [],
-        rechazada: [],
+        entregado: [gestionEntregada()],
+        reprogramado: [],
+        novedad: [],
+        devolucion_a_origen_por_rechazo: [],
         incidente: [],
       },
     });

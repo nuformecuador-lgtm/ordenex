@@ -62,19 +62,19 @@ import {
  */
 
 export const ESTATUS_454 = [
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
   "en_reparto",
   "ayuda_tienda",
-  "entregada",
-  "reprogramada",
-  "rechazada",
-  "devuelta",
+  "entregado",
+  "reprogramado",
+  "devolucion_a_origen_por_rechazo",
+  "novedad",
   "devolucion_por_confirmar",
   "incidente",
-  "sin_gestionar",
+  "novedad_interna",
   "en_bodega_central",
   "en_bodega_satelite",
-  "por_devolver",
+  "por_devolver_a_bodega_central",
   "por_devolver_a_tienda",
 ] as const;
 export type Estatus454 = (typeof ESTATUS_454)[number];
@@ -168,7 +168,7 @@ const STORAGE: IFileStorage = {
 };
 const FOTO = [{ contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) }];
 
-export type ResultadoGestion = "entregada" | "reprogramada" | "rechazada" | "devuelta" | "incidente";
+export type ResultadoGestion = "entregado" | "reprogramado" | "devolucion_a_origen_por_rechazo" | "novedad" | "incidente";
 
 /** Monta los servicios REALES sobre el cliente dado (la tx del test o un cliente propio). */
 export function montarServicios(cliente: PrismaClient) {
@@ -268,7 +268,7 @@ export function entradaGestion(
   } = {},
 ): GestionarInput {
   switch (resultado) {
-    case "entregada": {
+    case "entregado": {
       const monto = opts.monto ?? 0;
       const pagos = opts.pagos ?? (monto > 0 ? [{ metodo: "efectivo" as const, monto }] : []);
       return {
@@ -281,7 +281,7 @@ export function entradaGestion(
         ubicacionAusencia: "no_disponible",
       } as GestionarInput;
     }
-    case "reprogramada":
+    case "reprogramado":
       return {
         ordenId,
         resultado,
@@ -289,9 +289,9 @@ export function entradaGestion(
         motivo: "No estaba",
         ubicacionAusencia: "no_disponible",
       } as GestionarInput;
-    case "rechazada":
+    case "devolucion_a_origen_por_rechazo":
       return { ordenId, resultado, motivo: "No la quiere", evidencias: FOTO, ubicacionAusencia: "no_disponible" } as GestionarInput;
-    case "devuelta":
+    case "novedad":
       return {
         ordenId,
         resultado,
@@ -516,11 +516,11 @@ export async function crearEscenario(
   /** La TIENDA registra reprogramar/rechazar desde la pestaña de ayuda (237), por el servicio real. */
   async function gestionarDesdeAyuda(
     ordenId: string,
-    resultado: "reprogramada" | "rechazada",
+    resultado: "reprogramado" | "devolucion_a_origen_por_rechazo",
     opts: { fechaReprogramacion?: string; actor?: Actor; now?: Date } = {},
   ) {
     const input =
-      resultado === "rechazada"
+      resultado === "devolucion_a_origen_por_rechazo"
         ? { ordenId, resultado, motivo: "El cliente no la quiere", evidencias: FOTO }
         : {
             ordenId,
@@ -544,7 +544,7 @@ export async function crearEscenario(
   async function sembrarIntentoPasado(
     ordenId: string,
     g: {
-      resultado?: "devuelta" | "reprogramada" | "rechazada";
+      resultado?: "novedad" | "reprogramado" | "devolucion_a_origen_por_rechazo";
       origenTipo?: "gestion" | "escalado_devuelta_sla";
       anulada?: boolean;
       cierreEstado?: "aprobado" | "solicitado";
@@ -552,8 +552,8 @@ export async function crearEscenario(
     } = {},
   ): Promise<{ gestionId: string; cierreId: string }> {
     const en = g.en ?? new Date("2026-09-01T10:00:00.000Z");
-    const resultado = g.resultado ?? "devuelta";
-    if (resultado === "devuelta") await asegurarRetirados();
+    const resultado = g.resultado ?? "novedad";
+    if (resultado === "novedad") await asegurarRetirados();
     const cierre = await tx.cierreDia.create({
       data: {
         mensajeroId,
@@ -578,7 +578,7 @@ export async function crearEscenario(
     await tx.ordenHistorialEstado.create({
       data: {
         ordenId,
-        estatusDestinoId: id(resultado === "devuelta" ? "devolucion_por_confirmar" : resultado),
+        estatusDestinoId: id(resultado === "novedad" ? "devolucion_por_confirmar" : resultado),
         origenTipo: g.origenTipo ?? "gestion",
         gestionOrdenId: gestion.id,
         createdAt: en,

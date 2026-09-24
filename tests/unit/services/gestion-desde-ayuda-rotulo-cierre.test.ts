@@ -33,7 +33,7 @@ function fila(over: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendi
     // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
     tiendaId: "tienda-1",
     tiendaNombre: "T",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     montoRecibido: null,
     metodoPago: null,
     pagos: [],
@@ -154,7 +154,7 @@ describe("R41 — el camino de ADMIN deriva las DOS banderas sin una consulta de
       ({
         id: "g1",
         ordenId: "o1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         montoRecibido: null,
         metodoPago: null,
         motivo: "m",

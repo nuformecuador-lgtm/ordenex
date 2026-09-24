@@ -202,9 +202,9 @@ describe("R29 — 'Por recoger' NO se toca", () => {
   it("conserva su orden de llegada y su secuenciaRuta es siempre null", async () => {
     const r = await listar(
       [
-        row("P2", "por_recoger"),
+        row("P2", "mensajero_recogiendo_en_bodega"),
         row("A", "en_reparto"),
-        row("P1", "por_recoger"),
+        row("P1", "mensajero_recogiendo_en_bodega"),
         row("B", "en_reparto"),
       ],
       ruta({
@@ -287,7 +287,7 @@ describe("bloque `ruta` del resultado y KPIs", () => {
 
   it("los KPIs de la feature 61 NO se alteran por el reordenado", async () => {
     const r = await listar(
-      [row("A", "en_reparto"), row("B", "en_reparto"), row("P", "por_recoger")],
+      [row("A", "en_reparto"), row("B", "en_reparto"), row("P", "mensajero_recogiendo_en_bodega")],
       ruta({ secuenciaPorOrden: new Map([["B", 1]]) }),
     );
 

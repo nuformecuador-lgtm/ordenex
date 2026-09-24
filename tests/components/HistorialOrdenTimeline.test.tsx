@@ -41,7 +41,7 @@ const ENTRADAS: OrdenHistorialEntradaDTO[] = [
   {
     clase: "transicion" as const,
     estatusOrigenValue: "en_reparto",
-    estatusDestinoValue: "reprogramada",
+    estatusDestinoValue: "reprogramado",
     origenTipo: "gestion",
     actorNombre: "Ana Mensajera",
     motivo: "Cliente ausente",
@@ -49,7 +49,7 @@ const ENTRADAS: OrdenHistorialEntradaDTO[] = [
   },
   {
     clase: "transicion" as const,
-    estatusOrigenValue: "reprogramada",
+    estatusOrigenValue: "reprogramado",
     estatusDestinoValue: "en_bodega_central",
     origenTipo: "liberacion_reprogramada",
     actorNombre: null,
@@ -67,13 +67,13 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     expect(screen.getByText(L.en_reparto)).toBeInTheDocument();
     expect(screen.getByText(L.en_bodega_central)).toBeInTheDocument();
     // "reprogramada" aparece 2 veces (destino de la 2.ª entrada, origen de la 3.ª).
-    expect(screen.getAllByText(L.reprogramada)).toHaveLength(2);
+    expect(screen.getAllByText(L.reprogramado)).toHaveLength(2);
 
     // Los values crudos NO se muestran (R30).
     for (const value of [
       "en_preparacion",
       "en_reparto",
-      "reprogramada",
+      "reprogramado",
       "en_bodega_central",
     ]) {
       expect(screen.queryByText(value)).toBeNull();
@@ -121,7 +121,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
       {
         clase: "transicion" as const,
         estatusOrigenValue: "en_reparto",
-        estatusDestinoValue: "rechazada",
+        estatusDestinoValue: "devolucion_a_origen_por_rechazo",
         origenTipo: "gestion",
         actorNombre: "Ana Mensajera",
         motivo: null,
@@ -129,7 +129,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
       },
       {
         clase: "transicion" as const,
-        estatusOrigenValue: "rechazada",
+        estatusOrigenValue: "devolucion_a_origen_por_rechazo",
         estatusDestinoValue: "devolviendo_a_tienda",
         origenTipo: "ajuste_estado",
         actorNombre: "Bodega Central",
@@ -147,7 +147,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     expect(within(retorno).getByText(L.devolviendo_a_tienda)).toBeInTheDocument();
     expect(within(retorno).queryByText("devolviendo_a_tienda")).toBeNull();
     // Origen legible "rechazada" y actor de la bodega que ejecutó el retorno.
-    expect(within(retorno).getByText(L.rechazada)).toBeInTheDocument();
+    expect(within(retorno).getByText(L.devolucion_a_origen_por_rechazo)).toBeInTheDocument();
     expect(within(retorno).getByText(/Bodega Central/)).toBeInTheDocument();
     // Timestamp presente como <time>.
     expect(
@@ -212,7 +212,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     cleanup();
     render(<HistorialOrdenTimeline entradas={[ENTRADAS[1]]} />);
     const transicion = screen.getByRole("listitem");
-    expect(within(transicion).getByText(L.reprogramada)).toBeInTheDocument();
+    expect(within(transicion).getByText(L.reprogramado)).toBeInTheDocument();
     expect(transicion.textContent ?? "").toContain("→");
   });
 
@@ -341,7 +341,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
 
     // ANTI-VACUIDAD: las transiciones no están vacías; cada una se lee por SU propio texto.
     expect(textos[0]).toContain(L.en_preparacion);
-    expect(textos[2]).toContain(L.reprogramada);
+    expect(textos[2]).toContain(L.reprogramado);
 
     // Y el punto de la izquierda no aporta NADA a esta lectura: es decorativo y está oculto al
     // lector de pantalla, así que lo de arriba es literalmente todo lo que se oye.
@@ -406,7 +406,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
       {
         clase: "transicion" as const,
         estatusOrigenValue: "en_reparto",
-        estatusDestinoValue: "entregada",
+        estatusDestinoValue: "entregado",
         origenTipo: "gestion",
         actorNombre: "Ana Mensajera",
         motivo: null,
@@ -434,10 +434,10 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
 
     // Las cinco transiciones siguen leyéndose como siempre, en su sitio (R45 en pantalla).
     expect(within(items[0]).getByText("Creación")).toBeInTheDocument();
-    expect(within(items[1]).getByText(L.reprogramada)).toBeInTheDocument();
+    expect(within(items[1]).getByText(L.reprogramado)).toBeInTheDocument();
     expect(within(items[3]).getByText(L.en_bodega_central)).toBeInTheDocument();
     expect(within(items[5]).getByText(L.en_reparto)).toBeInTheDocument();
-    expect(within(items[6]).getByText(L.entregada)).toBeInTheDocument();
+    expect(within(items[6]).getByText(L.entregado)).toBeInTheDocument();
 
     // R39: ninguna etiqueta del catálogo dentro de las dos correcciones, ni la flecha.
     for (const correccion of conEtiqueta) {
@@ -601,7 +601,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     cleanup();
     render(<HistorialOrdenTimeline entradas={[ENTRADAS[1]]} />);
     const transicion = screen.getByRole("listitem");
-    expect(within(transicion).getByText(L.reprogramada)).toBeInTheDocument();
+    expect(within(transicion).getByText(L.reprogramado)).toBeInTheDocument();
     expect(transicion.textContent ?? "").toContain("→");
   });
 

@@ -53,7 +53,7 @@ function makeAsignacion(
     // Feature 92/R28: sin posicion en la ruta salvo que el test la fije.
     secuenciaRuta: null,
     numRemision: "REM-001",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1, casa 2",

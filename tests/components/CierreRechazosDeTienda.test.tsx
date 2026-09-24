@@ -124,7 +124,7 @@ function entrega(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
     distritoNombre: "Carmen",
     producto: "Caja mediana",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "5000.00",
     metodoPago: null,
     pagos: [],
@@ -145,7 +145,7 @@ function entrega(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
 /** DOS entregas: 5.000 + 3.000 = 8.000, que es el total general de la cabecera. */
 function dosEntregas(): CierreGrupos {
   return {
-    entregada: [
+    entregado: [
       entrega(),
       entrega({
         gestionId: "g2",
@@ -156,15 +156,15 @@ function dosEntregas(): CierreGrupos {
         montoRecibido: "3000.00",
       }),
     ],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 }
 
 function ningunaGestion(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 function rechazo(over: Partial<CierreRechazoDeTienda> = {}): CierreRechazoDeTienda {

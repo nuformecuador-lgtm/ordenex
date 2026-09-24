@@ -36,7 +36,7 @@ export type PushOutcome =
   /** Red, tiempo agotado, 5xx, 429. Reintentable con tope (R34). `detalle` sin endpoint ni claves. */
   | { status: "transitorio"; detalle: string }
   /** 4xx no recuperable (payload, claves VAPID). NO se reintenta y NO se borra la suscripcion. */
-  | { status: "rechazada"; detalle: string };
+  | { status: "devolucion_a_origen_por_rechazo"; detalle: string };
 
 export interface IPushSender {
   /**

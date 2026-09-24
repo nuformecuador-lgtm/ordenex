@@ -35,7 +35,7 @@ function makeAsignacion(
   return {
     numGuia: 1001,
     numRemision: "REM-001",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1",

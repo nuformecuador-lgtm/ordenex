@@ -55,7 +55,7 @@ export const VENTANA_ESCRITURA = {
   // `devuelta` = la devolucion ANCLADA (239). La otra rama de lo que `/novedades` lista —la
   // solicitud de ayuda viva— ya NO es un estatus (FICHA 454, U12): la abre el tercer parametro de
   // `estaEnVentanaDeEscritura`, la DERIVACION «ayuda abierta». Hasta la 454: `"ayuda_tienda"`.
-  adminTienda: ["devuelta"],
+  adminTienda: ["novedad"],
   // `en_reparto` = la orden en la calle, CON o SIN auxilio pedido: desde la 454 la orden con ayuda
   // abierta sigue `en_reparto`, asi que el mensajero puede contestarle a la tienda (R34) y pedir
   // ayuda una SEGUNDA vez para AÑADIR contexto sin que la ventana se cierre. Hasta la 454 esa orden

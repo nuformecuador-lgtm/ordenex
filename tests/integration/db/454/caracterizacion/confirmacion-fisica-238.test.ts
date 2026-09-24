@@ -24,8 +24,8 @@ describeSiHayBase("454/C23 — confirmacion fisica al aprobar (Postgres real)", 
   async function jornada(e: Escenario) {
     const g: Record<string, string> = {};
     const numGuia: Record<string, number> = {};
-    for (const res of ["entregada", "rechazada", "devuelta", "reprogramada", "incidente"] as const) {
-      const o = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: res === "entregada" ? 1000 : 2000 });
+    for (const res of ["entregado", "devolucion_a_origen_por_rechazo", "novedad", "reprogramado", "incidente"] as const) {
+      const o = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: res === "entregado" ? 1000 : 2000 });
       g[res] = await e.gestionarOk(o.ordenId, res, { monto: 1000 });
       numGuia[res] = o.numGuia;
     }
@@ -75,15 +75,15 @@ describeSiHayBase("454/C23 — confirmacion fisica al aprobar (Postgres real)", 
           aplicacionGestiones: {
             enRepartoId: e.id("en_reparto"),
             destinoPorResultado: {
-              entregada: e.id("entregada"),
-              reprogramada: e.id("reprogramada"),
-              rechazada: e.id("rechazada"),
-              devuelta: e.id("devuelta"),
+              entregado: e.id("entregado"),
+              reprogramado: e.id("reprogramado"),
+              devolucion_a_origen_por_rechazo: e.id("devolucion_a_origen_por_rechazo"),
+              novedad: e.id("novedad"),
               incidente: e.id("incidente"),
             },
           },
           indemnizaciones: [{ gestionId: g.incidente, monto: "500.00" }],
-          confirmacionFisica: [{ gestionId: g.rechazada }, { gestionId: g.incidente }],
+          confirmacionFisica: [{ gestionId: g.devolucion_a_origen_por_rechazo }, { gestionId: g.incidente }],
         });
       } catch (err) {
         error = err;
@@ -115,8 +115,8 @@ describeSiHayBase("454/C23 — confirmacion fisica al aprobar (Postgres real)", 
     expect(servicio.aprobacion).toBe("ok");
     expect(servicio.marcadas).toEqual(servicio.esperadas);
     expect(servicio.marcadas).not.toContain(servicio.g.incidente);
-    expect(servicio.marcadas).not.toContain(servicio.g.entregada);
-    expect(servicio.esperadas).toContain(servicio.g.rechazada);
+    expect(servicio.marcadas).not.toContain(servicio.g.entregado);
+    expect(servicio.esperadas).toContain(servicio.g.devolucion_a_origen_por_rechazo);
   });
 
   it("el repositorio, si le llega un incidente en la confirmacion, falla cerrado y no marca nada", () => {

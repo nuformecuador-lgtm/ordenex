@@ -26,7 +26,7 @@ describeSiHayBase("454/C14 — traspaso de ordenes entre mensajeros (Postgres re
       const g = await e.sembrarOrden({ estatus: "en_reparto", zona: "satelite", montoCobrar: 1000 });
       const m = await e.sembrarOrden({ estatus: "en_reparto", zona: "satelite", montoCobrar: 1000 });
       const a = await e.sembrarOrden({ estatus: "en_reparto", zona: "satelite", montoCobrar: 1000 });
-      await e.gestionarOk(g.ordenId, "entregada", { monto: 1000 });
+      await e.gestionarOk(g.ordenId, "entregado", { monto: 1000 });
       const ayuda = await e.pedirAyuda(a.ordenId);
       if (ayuda.status !== "ok") throw new Error(`pedirAyuda: ${JSON.stringify(ayuda)}`);
 

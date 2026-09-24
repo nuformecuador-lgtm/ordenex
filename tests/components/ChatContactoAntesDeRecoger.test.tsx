@@ -141,7 +141,7 @@ const EN_REPARTO = orden("a", "en_reparto", {
 });
 
 /** Asignada, sin recoger, para HOY. */
-const POR_RECOGER_HOY = orden("c", "por_recoger", {
+const POR_RECOGER_HOY = orden("c", "mensajero_recogiendo_en_bodega", {
   numGuia: 17001,
   destinatario: "Carlos Sin Recoger",
   direccion: "Avenida Escazú 100, casa azul",
@@ -149,7 +149,7 @@ const POR_RECOGER_HOY = orden("c", "por_recoger", {
 });
 
 /** Asignada, sin recoger, RESERVADA para el día siguiente. */
-const POR_RECOGER_MANANA = orden("d", "por_recoger", {
+const POR_RECOGER_MANANA = orden("d", "mensajero_recogiendo_en_bodega", {
   numGuia: 17002,
   destinatario: "Diana Para Mañana",
   esParaManana: true,

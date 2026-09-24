@@ -117,7 +117,7 @@ function gestion(
 const NORTE_ENTREGA = gestion(
   "t-norte",
   "Tienda Norte",
-  "entregada",
+  "entregado",
   [{ metodo: "efectivo", monto: "100000.00" }],
   ingreso({
     flete: "2500.00",
@@ -133,7 +133,7 @@ const NORTE_ENTREGA = gestion(
 const NORTE_RECHAZO = gestion(
   "t-norte",
   "Tienda Norte",
-  "rechazada",
+  "devolucion_a_origen_por_rechazo",
   [],
   ingreso({
     fleteDevolucion: "1500.00",
@@ -146,7 +146,7 @@ const NORTE_RECHAZO = gestion(
 const SUR_ENTREGA = gestion(
   "t-sur",
   "Tienda Sur",
-  "entregada",
+  "entregado",
   [{ metodo: "SINPE", monto: "40000.00" }],
   ingreso({
     flete: "2000.00",
@@ -323,7 +323,7 @@ describe("396/R13 — lo recaudado por tienda usa EL MISMO criterio que el total
     const abonoEnReprogramada = gestion(
       "t-sur",
       "Tienda Sur",
-      "reprogramada",
+      "reprogramado",
       [{ metodo: "efectivo", monto: "5000.00" }],
       null,
     );
@@ -344,7 +344,7 @@ describe("396/R9 — la tienda que sólo trajo RECHAZOS entra igual, y cuenta", 
   const ESTE_SOLO_RECHAZO = gestion(
     "t-este",
     "Tienda Este",
-    "rechazada",
+    "devolucion_a_origen_por_rechazo",
     [],
     ingreso({
       fleteDevolucion: "1000.00",
@@ -386,7 +386,7 @@ describe("396/R8 — el orden lo fija el servidor: pagoTienda DESCENDENTE", () =
    * distraiga.
    */
   function soloRecaudo(tiendaId: string, tiendaNombre: string, monto: string): GestionDeTienda {
-    return gestion(tiendaId, tiendaNombre, "entregada", [{ metodo: "efectivo", monto }], null);
+    return gestion(tiendaId, tiendaNombre, "entregado", [{ metodo: "efectivo", monto }], null);
   }
 
   it("100 / 300 / 200 salen 300, 200, 100", () => {
@@ -477,7 +477,7 @@ describe("396 — la gestión SIN tarifa congelada (gap conocido de la feature 6
     const sinTarifa = gestion(
       "t-hueco",
       "Tienda Sin Tarifa",
-      "entregada",
+      "entregado",
       [{ metodo: "transferencia", monto: "7000.00" }],
       null, // `ingresoOrdenex: null` = no había tarifa vigente al solicitar
     );

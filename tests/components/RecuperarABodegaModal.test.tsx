@@ -38,7 +38,7 @@ function makeOrden(
     numGuia: 1001,
     numRemision: "REM-000",
     estatusId: "id-devuelta",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "tienda-uuid",

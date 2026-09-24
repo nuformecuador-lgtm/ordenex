@@ -107,7 +107,7 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 const ZERO_TOTALES: CierreTotales = {
@@ -153,7 +153,7 @@ function celdaDe(seccion: string, numRemision: string, encabezado: string): stri
 /** La gestión sintética del cron, con la cadena EXACTA que hay guardada en producción. */
 const RECHAZO_AUTOMATICO = makeGestion({
   gestionId: "g-sla",
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   numRemision: "REM-SLA",
   motivo: "escalado SLA wrong_address",
 });
@@ -168,7 +168,7 @@ afterEach(() => {
 
 describe("R11 — en el cierre del día, el motivo automático se sostiene solo", () => {
   it("la celda «Motivo» lleva el texto LARGO completo", () => {
-    renderModule({ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] });
+    renderModule({ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] });
 
     expect(celdaDe("Rechazadas", "REM-SLA", "Motivo")).toBe(MOTIVO_LARGO);
   });
@@ -177,7 +177,7 @@ describe("R11 — en el cierre del día, el motivo automático se sostiene solo"
     // Éste es el caso del fallo mudo: con `true` fijo en el llamador, la celda diría
     // «Dirección errada» a secas y nadie vería un error — sólo un mensajero creyendo que ese
     // motivo lo escribió él.
-    renderModule({ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] });
+    renderModule({ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] });
 
     const celda = celdaDe("Rechazadas", "REM-SLA", "Motivo");
     expect(celda).not.toBe(MOTIVO_CORTO);
@@ -186,7 +186,7 @@ describe("R11 — en el cierre del día, el motivo automático se sostiene solo"
   });
 
   it("y sigue sin sigla ni value del enum", () => {
-    renderModule({ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] });
+    renderModule({ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] });
 
     const celda = celdaDe("Rechazadas", "REM-SLA", "Motivo");
     expect(celda).not.toContain("SLA");
@@ -197,7 +197,7 @@ describe("R11 — en el cierre del día, el motivo automático se sostiene solo"
   it("esta pantalla NO tiene columna «Origen»: por eso el texto tiene que decirlo todo", () => {
     // Si algún día apareciera, la decisión de §2 del diseño habría cambiado y este caso lo
     // diría antes de que el texto largo se convirtiera en un eco.
-    renderModule({ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] });
+    renderModule({ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] });
 
     const tabla = screen.getByRole("table", { name: "Rechazadas" });
     const encabezados = within(tabla)
@@ -211,10 +211,10 @@ describe("R2 y R3 en la pantalla del mensajero", () => {
   it("el motivo que él escribió sale intacto", () => {
     renderModule({
       ...emptyGrupos(),
-      rechazada: [
+      devolucion_a_origen_por_rechazo: [
         makeGestion({
           gestionId: "g-man",
-          resultado: "rechazada",
+          resultado: "devolucion_a_origen_por_rechazo",
           numRemision: "REM-MAN",
           motivo: MOTIVO_LIBRE,
         }),
@@ -229,10 +229,10 @@ describe("R2 y R3 en la pantalla del mensajero", () => {
     // es la misma en las cuatro secciones de esta pantalla: ninguna se queda fuera.
     renderModule({
       ...emptyGrupos(),
-      devuelta: [
+      novedad: [
         makeGestion({
           gestionId: "g-dev",
-          resultado: "devuelta",
+          resultado: "novedad",
           numRemision: "REM-DEV",
           motivo: "escalado SLA not_found",
         }),
@@ -247,10 +247,10 @@ describe("R2 y R3 en la pantalla del mensajero", () => {
   it("un motivo ausente sigue pintando el guion", () => {
     renderModule({
       ...emptyGrupos(),
-      rechazada: [
+      devolucion_a_origen_por_rechazo: [
         makeGestion({
           gestionId: "g-sin",
-          resultado: "rechazada",
+          resultado: "devolucion_a_origen_por_rechazo",
           numRemision: "REM-SIN",
           motivo: null,
         }),

@@ -62,7 +62,7 @@ const LINEA_COMPLETA: readonly TransicionRastreoFila[] = [
   transicion("2026-08-10T14:00:00.000Z", "en_preparacion"),
   transicion("2026-08-11T15:00:00.000Z", "en_bodega_central"),
   transicion("2026-08-12T16:00:00.000Z", "en_reparto"),
-  transicion("2026-08-13T17:00:00.000Z", "entregada"),
+  transicion("2026-08-13T17:00:00.000Z", "entregado"),
 ];
 
 describe("R33 — el service se construye con dobles y resuelve sin Prisma ni next/headers", () => {
@@ -203,8 +203,8 @@ describe("R14/R20 — la linea son hitos YA OCURRIDOS y el vigente es el ultimo"
       [...LINEA_COMPLETA],
       [
         transicion("2026-08-10T14:00:00.000Z", "en_preparacion"),
-        transicion("2026-08-11T14:00:00.000Z", "rechazada"),
-        transicion("2026-08-12T14:00:00.000Z", "por_devolver"),
+        transicion("2026-08-11T14:00:00.000Z", "devolucion_a_origen_por_rechazo"),
+        transicion("2026-08-12T14:00:00.000Z", "por_devolver_a_bodega_central"),
         transicion("2026-08-13T14:00:00.000Z", "devuelta_a_tienda"),
       ],
       [
@@ -243,7 +243,7 @@ describe("R18 — colapso de rachas del mismo hito (G9)", () => {
       transicion("2026-08-10T16:00:00.000Z", "recolectando"), // registrado
       transicion("2026-08-11T14:00:00.000Z", "en_bodega_central"), // en_bodega
       transicion("2026-08-11T18:00:00.000Z", "en_bodega_satelite"), // en_bodega
-      transicion("2026-08-12T14:00:00.000Z", "entregada"), // entregado
+      transicion("2026-08-12T14:00:00.000Z", "entregado"), // entregado
     ]);
     const resultado = await service.consultar(4321, "7766");
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
@@ -258,7 +258,7 @@ describe("R18 — colapso de rachas del mismo hito (G9)", () => {
   it("una racha que vuelve al mismo hito mas tarde SI produce dos entradas (solo colapsa lo consecutivo)", async () => {
     const { service } = build(ORDEN_VIVA, [
       transicion("2026-08-10T14:00:00.000Z", "en_reparto"),
-      transicion("2026-08-11T14:00:00.000Z", "reprogramada"),
+      transicion("2026-08-11T14:00:00.000Z", "reprogramado"),
       transicion("2026-08-12T14:00:00.000Z", "en_reparto"),
     ]);
     const resultado = await service.consultar(4321, "7766");
@@ -318,7 +318,7 @@ describe("R19 — dia y hora en el calendario del negocio", () => {
   it("formatea dia y hora en el calendario del negocio para un instante UTC conocido", async () => {
     // 2026-08-15T02:30Z son las 20:30 del DIA ANTERIOR en Costa Rica (UTC-6): el dia
     // cambia, no solo la hora. Un formateo en UTC daria el 15 y mentiria al destinatario.
-    const { service } = build(ORDEN_VIVA, [transicion("2026-08-15T02:30:00.000Z", "entregada")]);
+    const { service } = build(ORDEN_VIVA, [transicion("2026-08-15T02:30:00.000Z", "entregado")]);
     const resultado = await service.consultar(4321, "7766");
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
     expect(resultado.envio.linea[0].fecha).toBe("2026-08-14T20:30-06:00");
@@ -327,7 +327,7 @@ describe("R19 — dia y hora en el calendario del negocio", () => {
   it("la zona sale de la CONFIGURACION: con otra zona, el mismo instante da otra hora", async () => {
     const { service } = build(
       ORDEN_VIVA,
-      [transicion("2026-08-15T02:30:00.000Z", "entregada")],
+      [transicion("2026-08-15T02:30:00.000Z", "entregado")],
       { ...CONFIG, ZONA_HORARIA: "UTC" },
     );
     const resultado = await service.consultar(4321, "7766");

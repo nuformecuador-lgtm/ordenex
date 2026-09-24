@@ -74,7 +74,7 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
         id: "o2",
         numGuia: 5,
         deletedAt: new Date("2026-01-01"),
-        estatus: { value: "entregada" },
+        estatus: { value: "entregado" },
         zonaId: "z-limon",
         zona: { esCentral: false },
       },
@@ -95,7 +95,7 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
       },
       {
         id: "o2",
-        estatusValue: "entregada",
+        estatusValue: "entregado",
         numGuia: 5,
         deletedAt: new Date("2026-01-01"),
         zonaId: "z-limon",
@@ -130,7 +130,7 @@ describe("OrdenRepository.findByNumGuiaForTransicion (QR = num_guia)", () => {
       id: "o2",
       numGuia: 5,
       deletedAt: new Date("2026-01-01"),
-      estatus: { value: "entregada" },
+      estatus: { value: "entregado" },
       zonaId: "z-limon",
       zona: { esCentral: false },
     });
@@ -140,7 +140,7 @@ describe("OrdenRepository.findByNumGuiaForTransicion (QR = num_guia)", () => {
 
     expect(row).toEqual({
       id: "o2",
-      estatusValue: "entregada",
+      estatusValue: "entregado",
       numGuia: 5,
       deletedAt: new Date("2026-01-01"),
       zonaId: "z-limon",
@@ -590,14 +590,14 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
   // hasta la 159), pero el comportamiento del repo se conserva y se sigue verificando. El
   // origen del `tx` se fija a `en_bodega_central` para que el par (origen, destino) sea uno
   // que el grafo declara (#8) y no la arista #4 que esta feature retiro.
-  it("fija estatusId y mensajeroAsignadoId (con mensajero -> por_recoger, R21/R22)", async () => {
+  it("fija estatusId y mensajeroAsignadoId (con mensajero -> mensajero_recogiendo_en_bodega, R21/R22)", async () => {
     const { prisma, tx } = buildPrisma();
     tx.orden.findMany.mockResolvedValue([{ id: "o1", estatusId: idEstado("en_bodega_central") }]);
     tx.orden.update.mockResolvedValue({ numGuia: 7 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const resultados = await repo.generarGuiaLote(
-      [decision({ ordenId: "o1", estatusId: idEstado("por_recoger"), mensajeroAsignadoId: "m1" })],
+      [decision({ ordenId: "o1", estatusId: idEstado("mensajero_recogiendo_en_bodega"), mensajeroAsignadoId: "m1" })],
       HIST_GUIA,
     );
 
@@ -609,7 +609,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
     expect(tx.orden.update).toHaveBeenCalledWith({
       where: { id: "o1" },
       data: {
-        estatusId: idEstado("por_recoger"),
+        estatusId: idEstado("mensajero_recogiendo_en_bodega"),
         mensajeroAsignadoId: "m1",
         asignadoAt: expect.any(Date),
         fechaReparto: expect.any(Date),
@@ -656,7 +656,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
 
     const resultados = await repo.generarGuiaLote(
       [
-        decision({ ordenId: "o1", estatusId: idEstado("por_recoger"), mensajeroAsignadoId: "m1" }),
+        decision({ ordenId: "o1", estatusId: idEstado("mensajero_recogiendo_en_bodega"), mensajeroAsignadoId: "m1" }),
         decision({ ordenId: "o2", mensajeroAsignadoId: null, estatusId: idEstado("en_bodega_central") }),
       ],
       HIST_GUIA,
@@ -687,7 +687,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
 
     await repo.generarGuiaLote(
       [
-        decision({ ordenId: "o1", estatusId: idEstado("por_recoger"), mensajeroAsignadoId: "m1" }),
+        decision({ ordenId: "o1", estatusId: idEstado("mensajero_recogiendo_en_bodega"), mensajeroAsignadoId: "m1" }),
         decision({ ordenId: "o2", estatusId: idEstado("en_bodega_central"), mensajeroAsignadoId: null }),
       ],
       HIST_GUIA,
@@ -699,7 +699,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
       {
         ordenId: "o1",
         estatusOrigenId: idEstado("en_bodega_central"),
-        estatusDestinoId: idEstado("por_recoger"),
+        estatusDestinoId: idEstado("mensajero_recogiendo_en_bodega"),
         actorUsuarioId: "maestro-1",
         origenTipo: "generacion_guia",
         motivo: null,
@@ -747,7 +747,7 @@ describe("OrdenRepository.asignarBodegaLote (R26 · feature 49/#4)", () => {
     const count = await repo.asignarBodegaLote(
       ["o1", "o2"],
       "m1",
-      idEstado("por_recoger"),
+      idEstado("mensajero_recogiendo_en_bodega"),
       HIST_BODEGA,
       FECHA_REPARTO,
     );
@@ -763,7 +763,7 @@ describe("OrdenRepository.asignarBodegaLote (R26 · feature 49/#4)", () => {
     // —indistinguible de una orden anterior a la feature— y el corte de esa noche se lo llevaria.
     expect(arg.data).toEqual({
       mensajeroAsignadoId: "m1",
-      estatusId: idEstado("por_recoger"),
+      estatusId: idEstado("mensajero_recogiendo_en_bodega"),
       asignadoAt: expect.any(Date),
       fechaReparto: FECHA_REPARTO,
       prioridad: false, // feature 101/R5
@@ -778,14 +778,14 @@ describe("OrdenRepository.asignarBodegaLote (R26 · feature 49/#4)", () => {
     tx.orden.updateMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.asignarBodegaLote(["o1"], "m1", idEstado("por_recoger"), HIST_BODEGA, FECHA_REPARTO);
+    await repo.asignarBodegaLote(["o1"], "m1", idEstado("mensajero_recogiendo_en_bodega"), HIST_BODEGA, FECHA_REPARTO);
 
     const arg = tx.ordenHistorialEstado.createMany.mock.calls[0][0];
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
         estatusOrigenId: idEstado("en_bodega_central"),
-        estatusDestinoId: idEstado("por_recoger"),
+        estatusDestinoId: idEstado("mensajero_recogiendo_en_bodega"),
         actorUsuarioId: "maestro-1",
         origenTipo: "asignacion_bodega",
         motivo: null,
@@ -799,7 +799,7 @@ describe("OrdenRepository.asignarBodegaLote (R26 · feature 49/#4)", () => {
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     expect(
-      await repo.asignarBodegaLote([], "m1", idEstado("por_recoger"), HIST_BODEGA, FECHA_REPARTO),
+      await repo.asignarBodegaLote([], "m1", idEstado("mensajero_recogiendo_en_bodega"), HIST_BODEGA, FECHA_REPARTO),
     ).toBe(0);
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(tx.orden.updateMany).not.toHaveBeenCalled();

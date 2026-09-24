@@ -173,7 +173,7 @@ describe("266/R9-R10 — 200 con un resultado por fila, y el estado poblado en l
         {
           numGuia: 2,
           resultado: "habilitada_sin_cambio_de_estado",
-          estado: "devuelta",
+          estado: "novedad",
           ayudaCerrada: false,
           error: null,
         },

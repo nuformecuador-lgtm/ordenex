@@ -127,7 +127,7 @@ function newService(
     // OPCIONAL de la 109/139) siguen resolviendo a `null`, que es lo que esta suite necesita: mide
     // el PENDIENTE, no la liberacion.
     findEstatusIdByValue: vi.fn(async (v: string) =>
-      ["en_reparto", "entregada", "reprogramada", "rechazada", "devuelta", "incidente"].includes(v)
+      ["en_reparto", "entregado", "reprogramado", "devolucion_a_origen_por_rechazo", "novedad", "incidente"].includes(v)
         ? `s-${v}`
         : null,
     ),

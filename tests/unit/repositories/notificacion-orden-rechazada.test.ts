@@ -84,12 +84,12 @@ function buildRegistro(orden: Record<string, unknown> = ORDEN, cola = colaFake()
   return { repo, tx, comprometidas };
 }
 
-function registrar(repo: GestionOrdenRepository, resultado: GestionResultado = "rechazada") {
+function registrar(repo: GestionOrdenRepository, resultado: GestionResultado = "devolucion_a_origen_por_rechazo") {
   return repo.registrarGestionPendiente({
     ordenId: "o-1",
     mensajeroId: "men-1",
     gestion:
-      resultado === "entregada"
+      resultado === "entregado"
         ? { resultado, montoRecibido: 100, metodoPago: "efectivo", evidencias: [] }
         : { resultado, motivo: "no la quiso", evidencias: [] },
   });
@@ -155,7 +155,7 @@ describe("R18 → 454/R35 — registrar un rechazo crea cuatro avisos con su alc
   });
 
   it("CONTROL: registrar un resultado que no es `rechazada` NO avisa ni lee la orden", async () => {
-    for (const resultado of ["entregada", "devuelta", "reprogramada", "incidente"] as const) {
+    for (const resultado of ["entregado", "novedad", "reprogramado", "incidente"] as const) {
       const { repo, tx, comprometidas } = buildRegistro();
       await registrar(repo, resultado);
       expect(comprometidas, resultado).toHaveLength(0);
@@ -186,13 +186,13 @@ describe("R19/R45 → 454/DD — el choke point ya NO emite el aviso, venga de d
   }
   const entrada = (origenTipo: "gestion" | "escalado_devuelta_sla" | "rechazo_tienda") => ({
     ordenId: "o-1",
-    estatusOrigenId: idEstado(origenTipo === "gestion" ? "en_reparto" : "devuelta"),
-    estatusDestinoId: idEstado("rechazada"),
+    estatusOrigenId: idEstado(origenTipo === "gestion" ? "en_reparto" : "novedad"),
+    estatusDestinoId: idEstado("devolucion_a_origen_por_rechazo"),
     actorUsuarioId: origenTipo === "escalado_devuelta_sla" ? null : "x",
     origenTipo,
   });
 
-  it("la transicion `en_reparto -> rechazada` de familia `gestion` (la APLICACION al aprobar) no avisa", async () => {
+  it("la transicion `en_reparto -> devolucion_a_origen_por_rechazo` de familia `gestion` (la APLICACION al aprobar) no avisa", async () => {
     // Es la que antes avisaba. Ahora la escribe la aprobacion, horas despues del hecho: el aviso ya
     // salio al registrar. Si este emisor volviera, el aviso llegaria dos veces.
     const tx = buildChokeTx();
@@ -220,7 +220,7 @@ describe("R19/R45 → 454/DD — el choke point ya NO emite el aviso, venga de d
     await emisorNotificacionReal(
       tx as unknown as ChokePointTx,
       [entrada("gestion")],
-      new Map([[idEstado("rechazada"), "rechazada"]]),
+      new Map([[idEstado("devolucion_a_origen_por_rechazo"), "devolucion_a_origen_por_rechazo"]]),
     );
     expect(tx.orden.findMany).not.toHaveBeenCalled();
     expect(tx.notificacion.create).not.toHaveBeenCalled();
@@ -277,7 +277,7 @@ describe("compatibilidad del choke point con los call-sites existentes", () => {
           {
             ordenId: "o-1",
             estatusOrigenId: idEstado("en_reparto"),
-            estatusDestinoId: idEstado("rechazada"),
+            estatusDestinoId: idEstado("devolucion_a_origen_por_rechazo"),
             actorUsuarioId: "men-1",
             origenTipo: "gestion" as const,
           },

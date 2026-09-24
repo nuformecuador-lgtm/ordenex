@@ -78,19 +78,19 @@ export const HITO_POR_ESTATUS = {
   en_preparacion: "registrado",
   por_recolectar_en_tienda: "registrado",
   recolectando: "registrado", // G6
-  por_recoger: "en_bodega",
+  mensajero_recogiendo_en_bodega: "en_bodega",
   en_bodega_central: "en_bodega",
   en_bodega_satelite: "en_bodega",
   en_ruta_bodega_central: "en_transito",
   en_ruta_bodega_satelite: "en_transito",
   en_reparto: "en_reparto",
-  sin_gestionar: "en_reparto", // G8 — riesgo aceptado (design §5.ter)
-  entregada: "entregado",
-  reprogramada: "reprogramado",
-  devuelta: "no_entregado",
-  rechazada: "no_entregado",
+  novedad_interna: "en_reparto", // G8 — riesgo aceptado (design §5.ter)
+  entregado: "entregado",
+  reprogramado: "reprogramado",
+  novedad: "no_entregado",
+  devolucion_a_origen_por_rechazo: "no_entregado",
   incidente: "no_entregado", // G7
-  por_devolver: "devolucion_en_curso",
+  por_devolver_a_bodega_central: "devolucion_en_curso",
   devolviendo_a_bodega_central: "devolucion_en_curso",
   por_devolver_a_tienda: "devolucion_en_curso",
   devolviendo_a_tienda: "devolucion_en_curso",
@@ -198,10 +198,10 @@ export interface HitoPublicoEntrada {
  * tabla pasa a derivarse de ella.
  */
 export const NOMBRE_RESULTADO_PENDIENTE = {
-  entregada: "Entregada",
-  reprogramada: "Reprogramada",
-  devuelta: "Devuelta",
-  rechazada: "Rechazada",
+  entregado: "Entregada",
+  reprogramado: "Reprogramada",
+  novedad: "Devuelta",
+  devolucion_a_origen_por_rechazo: "Rechazada",
   incidente: "Incidente",
 } as const satisfies Record<GestionResultado, string>;
 

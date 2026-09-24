@@ -141,11 +141,11 @@ const ESTADOS_REABRIBLES: CierreEstado[] = ["vencido", "rechazado"];
 const ESTADOS_ABIERTOS: CierreEstado[] = ["solicitado", "vencido"];
 
 // El unico resultado con desglose que corregir: los otros cuatro no cobran nada (R8/R25).
-const RESULTADO_ENTREGADA = "entregada" as const;
+const RESULTADO_ENTREGADA = "entregado" as const;
 // FICHA 398: el UNICO destino que esta ficha concede. La pareja `entregada -> rechazada` esta
 // escrita con dos constantes y no se acepta como dato: `nuevoResultado` no viaja en la peticion
 // justamente para que aceptar el destino desde el cliente no abra las otras por accidente.
-const RESULTADO_RECHAZADA = "rechazada" as const;
+const RESULTADO_RECHAZADA = "devolucion_a_origen_por_rechazo" as const;
 const ESTADO_SOLICITADO: CierreEstado = "solicitado";
 
 /**
@@ -2071,7 +2071,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
                     data: {
                       ordenId,
                       mensajeroId: cierre.mensajeroId,
-                      resultado: "rechazada",
+                      resultado: "devolucion_a_origen_por_rechazo",
                       cierreId: null,
                       motivo: MOTIVO_RECHAZO_TOPE_INTENTOS,
                     },
@@ -2209,7 +2209,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
                 .map((g) => {
                   // (5) R8 — familia y actor de la transicion aplicada.
                   const registro = g.eventos[0];
-                  if (g.resultado === "devuelta") {
+                  if (g.resultado === "novedad") {
                     // D8: el reloj del plazo de la tienda lee ESTA familia; actor = el aprobador.
                     return {
                       ordenId: g.ordenId,
@@ -2284,7 +2284,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
               const gRechazadas = await tx.gestionOrden.findMany({
                 where: {
                   ordenId: { in: rechazadas.map((o) => o.id) },
-                  resultado: "rechazada",
+                  resultado: "devolucion_a_origen_por_rechazo",
                   anuladaAt: null,
                 },
                 orderBy: [{ ordenId: "asc" }, { createdAt: "desc" }],

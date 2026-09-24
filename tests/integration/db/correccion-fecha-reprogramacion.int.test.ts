@@ -68,7 +68,7 @@ const MENSAJERO = (usuarioId: string): Actor => ({ usuarioId, rol: "mensajero" a
 
 interface OpcionesEscenario {
   /** Estado de la ORDEN. Por defecto `reprogramada`, que es la ventana de la correccion. */
-  estatusOrden?: "reprogramada" | "en_reparto";
+  estatusOrden?: "reprogramado" | "en_reparto";
   /** ¿la gestion vigente nace de una VISITA REAL del mensajero? (puerta 276) */
   visitaReal?: boolean;
   /** Estado del cierre de la gestion vigente; `null` = todavia no entro en ningun cierre. */
@@ -114,19 +114,19 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
     }
     const catalogo = await prisma.orderStatus.findMany({
       where: {
-        value: { in: ["reprogramada", "en_reparto", "en_bodega_central", "en_bodega_satelite"] },
+        value: { in: ["reprogramado", "en_reparto", "en_bodega_central", "en_bodega_satelite"] },
       },
       select: { id: true, value: true },
     });
     const idPorValue = new Map(catalogo.map((c) => [c.value, c.id]));
-    for (const v of ["reprogramada", "en_reparto", "en_bodega_central", "en_bodega_satelite"]) {
+    for (const v of ["reprogramado", "en_reparto", "en_bodega_central", "en_bodega_satelite"]) {
       if (!idPorValue.has(v)) {
         throw new Error(
           `falta el estatus «${v}» en el catalogo \`order_status\`. Corre \`pnpm run db:seed\`.`,
         );
       }
     }
-    const estatusReprogramadaId = idPorValue.get("reprogramada") as string;
+    const estatusReprogramadaId = idPorValue.get("reprogramado") as string;
 
     const usuarios = await prisma.usuario.findMany({ select: { id: true }, take: 1 });
     if (usuarios.length < 1) {
@@ -141,7 +141,7 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
         await serializarEscriturasReales(tx);
         n += 1;
 
-        const estatusOrden = opciones.estatusOrden ?? "reprogramada";
+        const estatusOrden = opciones.estatusOrden ?? "reprogramado";
         const orden = await tx.orden.create({
           data: {
             numGuia: GUIA_BASE + n,
@@ -166,7 +166,7 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
           data: {
             ordenId: orden.id,
             mensajeroId: usuarioId,
-            resultado: "reprogramada",
+            resultado: "reprogramado",
             fechaReprogramacion: FECHA_SENUELO,
             anuladaAt: new Date("2026-09-01T12:00:00.000Z"),
             createdAt: new Date("2026-08-31T10:00:00.000Z"),
@@ -194,7 +194,7 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
           data: {
             ordenId: orden.id,
             mensajeroId: usuarioId,
-            resultado: "reprogramada",
+            resultado: "reprogramado",
             fechaReprogramacion: opciones.fechaVigente ?? FECHA_MALA,
             cierreId,
             anuladaAt: null,
@@ -220,7 +220,7 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
             data: {
               ordenId: orden.id,
               mensajeroId: usuarioId,
-              resultado: "reprogramada",
+              resultado: "reprogramado",
               fechaReprogramacion: opciones.segundaVigente,
               cierreId,
               anuladaAt: null,
@@ -341,7 +341,7 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
       });
       expect(await fechaDe(ctx, ctx.gestionVigenteId)).toBe(FUTURO);
       // La fecha de reprogramacion es un COMPROMISO con el destinatario: una futura NO libera.
-      expect(await estatusDe(ctx)).toBe("reprogramada");
+      expect(await estatusDe(ctx)).toBe("reprogramado");
     });
   });
 
@@ -380,7 +380,7 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
       expect(r).toMatchObject({ status: "ok", liberacion: "espera_cierre" });
       // La correccion SI ocurrio: lo que no ocurre es la liberacion.
       expect(await fechaDe(ctx, ctx.gestionVigenteId)).toBe(HOY_CR);
-      expect(await estatusDe(ctx)).toBe("reprogramada");
+      expect(await estatusDe(ctx)).toBe("reprogramado");
     });
   });
 
@@ -493,7 +493,7 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
 
       expect(r).toEqual({ status: "forbidden" });
       expect(await fechaDe(ctx, ctx.gestionVigenteId)).toBe("2026-09-04");
-      expect(await estatusDe(ctx)).toBe("reprogramada");
+      expect(await estatusDe(ctx)).toBe("reprogramado");
       expect(await rastroDe(ctx)).toEqual([]);
       expect(await historialDe(ctx, ctx.gestionVigenteId)).toEqual([]);
     });
@@ -679,7 +679,7 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
         new CorreccionFechaReprogramacionRepository(cliente),
         {
           findEstatusIdByValue: async (v: string) =>
-            v === "reprogramada" ? ctx.estatusReprogramadaId : null,
+            v === "reprogramado" ? ctx.estatusReprogramadaId : null,
         },
         // El adaptador REAL sobre un servicio de liberacion que revienta: es la unica forma de
         // ejercer el `catch` sin inventarse el desenlace.
@@ -707,7 +707,7 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
       expect(await fechaDe(ctx, ctx.gestionVigenteId)).toBe(HOY_CR);
       expect(await rastroDe(ctx)).toHaveLength(1);
       expect(await historialDe(ctx, ctx.gestionVigenteId)).toHaveLength(1);
-      expect(await estatusDe(ctx)).toBe("reprogramada");
+      expect(await estatusDe(ctx)).toBe("reprogramado");
       expect(avisos[0]).toContain("00:00 CR");
       expect(avisos[0]).not.toContain(ctx.ordenId);
     });

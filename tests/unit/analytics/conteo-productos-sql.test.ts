@@ -171,7 +171,7 @@ describe("La fila que devuelve el repositorio", () => {
         tienda_id: "t1",
         tienda_nombre: "Tienda Uno",
         producto: "1 * Base Dr. 1 * BASE C.",
-        status: "entregada",
+        status: "entregado",
         n: 4,
       },
     ]);
@@ -186,7 +186,7 @@ describe("La fila que devuelve el repositorio", () => {
         tiendaNombre: "Tienda Uno",
         // SIN parsear: el repositorio no interpreta el texto libre.
         producto: "1 * Base Dr. 1 * BASE C.",
-        status: "entregada",
+        status: "entregado",
         n: 4,
       },
     ]);
@@ -201,7 +201,7 @@ describe("La fila que devuelve el repositorio", () => {
 
   it("no inventa filas que la base no devolvio", async () => {
     const { prisma } = prismaFalso([
-      { tienda_id: "t1", tienda_nombre: "T", producto: "1 * A", status: "entregada", n: 1 },
+      { tienda_id: "t1", tienda_nombre: "T", producto: "1 * A", status: "entregado", n: 1 },
     ]);
     const filas = await new ConteoProductosRepository(prisma as never).contarProductos(
       consultaDe({}),

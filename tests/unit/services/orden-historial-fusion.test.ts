@@ -114,7 +114,7 @@ describe("fusionarLineaDeTiempo — R37: las correcciones ESTAN en la linea de t
   it("una orden con dos transiciones y dos correcciones devuelve las CUATRO, intercaladas por instante", () => {
     const t1 = transicion("2026-08-20T10:00:00.000Z");
     const t2 = transicion("2026-08-22T16:00:00.000Z", {
-      estatusOrigenValue: "por_recoger",
+      estatusOrigenValue: "mensajero_recogiendo_en_bodega",
       estatusDestinoValue: "en_reparto",
       origenTipo: "recoleccion",
     });
@@ -241,12 +241,12 @@ describe("fusionarLineaDeTiempo — R45: una orden SIN correcciones se lee igual
     const t1 = transicion("2026-08-20T10:00:00.000Z");
     const t2 = transicion("2026-08-20T15:00:00.000Z", {
       estatusOrigenValue: "en_preparacion",
-      estatusDestinoValue: "por_recoger",
+      estatusDestinoValue: "mensajero_recogiendo_en_bodega",
       origenTipo: "asignacion_bodega",
       actorNombre: "Bodega Central",
     });
     const t3 = transicion("2026-08-21T08:00:00.000Z", {
-      estatusOrigenValue: "por_recoger",
+      estatusOrigenValue: "mensajero_recogiendo_en_bodega",
       estatusDestinoValue: "en_reparto",
       origenTipo: "recoleccion",
       actorNombre: null,
@@ -267,7 +267,7 @@ describe("fusionarLineaDeTiempo — R45: una orden SIN correcciones se lee igual
       {
         clase: "transicion",
         estatusOrigenValue: "en_preparacion",
-        estatusDestinoValue: "por_recoger",
+        estatusDestinoValue: "mensajero_recogiendo_en_bodega",
         origenTipo: "asignacion_bodega",
         actorNombre: "Bodega Central",
         motivo: null,
@@ -275,7 +275,7 @@ describe("fusionarLineaDeTiempo — R45: una orden SIN correcciones se lee igual
       },
       {
         clase: "transicion",
-        estatusOrigenValue: "por_recoger",
+        estatusOrigenValue: "mensajero_recogiendo_en_bodega",
         estatusDestinoValue: "en_reparto",
         origenTipo: "recoleccion",
         actorNombre: null,
@@ -292,7 +292,7 @@ describe("fusionarLineaDeTiempo — R45: una orden SIN correcciones se lee igual
     const a = transicion(MISMO, { estatusDestinoValue: "en_preparacion" });
     const b = transicion(MISMO, {
       estatusOrigenValue: "en_preparacion",
-      estatusDestinoValue: "por_recoger",
+      estatusDestinoValue: "mensajero_recogiendo_en_bodega",
     });
 
     expect(fusionarLineaDeTiempo([a, b], [], [], [])).toEqual([a, b]);
@@ -315,7 +315,7 @@ describe("fusionarLineaDeTiempo — 427/R29: los traspasos salen en su sitio cro
     const x1 = traspaso("2026-09-14T14:00:00.000Z");
     const t2 = transicion("2026-09-14T15:00:00.000Z", {
       estatusOrigenValue: "en_reparto",
-      estatusDestinoValue: "entregada",
+      estatusDestinoValue: "entregado",
       origenTipo: "gestion",
     });
 

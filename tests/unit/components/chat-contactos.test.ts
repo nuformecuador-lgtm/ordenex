@@ -53,8 +53,8 @@ function orden(
 
 const EN_REPARTO = orden("a", "en_reparto", { secuenciaRuta: 1 });
 const CON_AYUDA = orden("b", "ayuda_tienda");
-const POR_RECOGER_HOY = orden("c", "por_recoger");
-const POR_RECOGER_MANANA = orden("d", "por_recoger", {
+const POR_RECOGER_HOY = orden("c", "mensajero_recogiendo_en_bodega");
+const POR_RECOGER_MANANA = orden("d", "mensajero_recogiendo_en_bodega", {
   esParaManana: true,
   fechaRepartoISO: "2026-09-16",
 });
@@ -62,7 +62,7 @@ const POR_RECOGER_MANANA = orden("d", "por_recoger", {
 const ids = (ordenes: MiAsignacionDTO[]) => ordenes.map((o) => o.id);
 
 describe("agruparContactosChat — LA ficha: las asignadas sin recoger son contactos", () => {
-  it("una orden en `por_recoger` entra a la lista de contactos", () => {
+  it("una orden en `mensajero_recogiendo_en_bodega` entra a la lista de contactos", () => {
     const contactos = agruparContactosChat([EN_REPARTO], [], [POR_RECOGER_HOY]);
 
     expect(ids(contactos.todas)).toContain("c");
@@ -122,7 +122,7 @@ describe("los grupos: lo que el mensajero tiene en la mano decide el sitio", () 
     // `esParaManana?` es opcional: una orden servida por un despliegue anterior llega sin el. La
     // regla la pone `separarPorDia` (277/R3) y aqui se comprueba que esta funcion la hereda en
     // vez de inventarse otra.
-    const contactos = agruparContactosChat([], [], [orden("e", "por_recoger")]);
+    const contactos = agruparContactosChat([], [], [orden("e", "mensajero_recogiendo_en_bodega")]);
 
     expect(ids(contactos.porRecogerHoy)).toEqual(["e"]);
     expect(contactos.paraOtroDia).toEqual([]);
@@ -132,16 +132,16 @@ describe("los grupos: lo que el mensajero tiene en la mano decide el sitio", () 
     const contactos = agruparContactosChat(
       [],
       [],
-      [orden("f", "por_recoger", { esParaManana: false })],
+      [orden("f", "mensajero_recogiendo_en_bodega", { esParaManana: false })],
     );
 
     expect(ids(contactos.porRecogerHoy)).toEqual(["f"]);
   });
 
   it("preserva el orden de entrada dentro de cada grupo: agrupar no es reordenar", () => {
-    const uno = orden("1", "por_recoger");
-    const dos = orden("2", "por_recoger");
-    const tres = orden("3", "por_recoger");
+    const uno = orden("1", "mensajero_recogiendo_en_bodega");
+    const dos = orden("2", "mensajero_recogiendo_en_bodega");
+    const tres = orden("3", "mensajero_recogiendo_en_bodega");
 
     const contactos = agruparContactosChat([], [], [tres, uno, dos]);
 

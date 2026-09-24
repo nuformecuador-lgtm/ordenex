@@ -276,7 +276,7 @@ describe("R22 — persistir los montos y emitir el egreso, en la MISMA transacci
     gestiones.push({
       id: "g-devuelta",
       cierreId: "c1",
-      resultado: "devuelta",
+      resultado: "novedad",
       indemnizacion: null,
       orden: { montoCobrar: null },
     });

@@ -173,10 +173,10 @@ function gestion(resultado: CierreResultado, numRemision: string): CierreGestion
 
 /** Un conjunto con los CINCO resultados a la vez: el caso que D3 decidió fundir en una hoja. */
 const LOS_CINCO = [
-  gestion("entregada", "REM-1"),
-  gestion("reprogramada", "REM-2"),
-  gestion("devuelta", "REM-3"),
-  gestion("rechazada", "REM-4"),
+  gestion("entregado", "REM-1"),
+  gestion("reprogramado", "REM-2"),
+  gestion("novedad", "REM-3"),
+  gestion("devolucion_a_origen_por_rechazo", "REM-4"),
   gestion("incidente", "REM-5"),
 ];
 

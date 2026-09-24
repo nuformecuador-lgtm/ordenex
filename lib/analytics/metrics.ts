@@ -227,7 +227,7 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      categorias: ["entregada"],
+      categorias: ["entregado"],
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       sinAsignar: "incluir",
       atribucionZona: "orden",
@@ -247,7 +247,7 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      categorias: ["devuelta"],
+      categorias: ["novedad"],
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       sinAsignar: "incluir",
       atribucionZona: "orden",
@@ -267,7 +267,7 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      categorias: ["rechazada"],
+      categorias: ["devolucion_a_origen_por_rechazo"],
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       sinAsignar: "incluir",
       atribucionZona: "orden",
@@ -287,7 +287,7 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      categorias: ["reprogramada"],
+      categorias: ["reprogramado"],
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       sinAsignar: "incluir",
       atribucionZona: "orden",
@@ -318,10 +318,10 @@ const CATALOGO = [
     },
   },
   {
-    id: "sin_gestionar",
+    id: "novedad_interna",
     etiqueta: "Sin gestionar",
     descripcion:
-      "ORDENES sin gestionar HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus sin_gestionar (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
+      "ORDENES sin gestionar HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus novedad_interna (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -335,7 +335,7 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      estados: ["sin_gestionar"],
+      estados: ["novedad_interna"],
       // D5/R12: `clase: "snapshot"` y `fuente: rollup` se CONSERVAN — si se sirve del rollup,
       // de la columna `ordenes_estado_stock`; lo que faltaba no era la fuente, era decir que
       // no tiene medida propia y que su semantica es la del dia.
@@ -492,7 +492,7 @@ const CATALOGO = [
     definicion: {
       // OJO: `GestionCausaDevolucion` tiene TRES valores en el esquema vigente
       // (`db/schema.prisma`), no cinco como dice de memoria `design.md §3.3`.
-      categorias: ["devuelta", "not_found", "wrong_number", "wrong_address"],
+      categorias: ["novedad", "not_found", "wrong_number", "wrong_address"],
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       atribucionZona: "orden",
     },

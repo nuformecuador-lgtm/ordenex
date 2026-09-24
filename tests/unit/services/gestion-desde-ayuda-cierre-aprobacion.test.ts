@@ -153,7 +153,7 @@ describe("R33/R34 — esta ficha no cambia el bloqueo del cierre ni sus exencion
   // `["por_recoger", "en_reparto", "ayuda_tienda"]`.
   it("R33: una orden con ayuda ABIERTA sigue bloqueando la CREACION (esta `en_reparto`)", async () => {
     const servicioSrc = quitarComentarios(fuente("lib/services/CierreDiaService.ts"));
-    expect(servicioSrc).toMatch(/const ESTADOS_PENDIENTES = \["por_recoger", "en_reparto"\]/);
+    expect(servicioSrc).toMatch(/const ESTADOS_PENDIENTES = \["mensajero_recogiendo_en_bodega", "en_reparto"\]/);
 
     // Y se ejerce: con una orden pendiente, la creacion se rechaza.
     const repo = repoParaSolicitar({});
@@ -172,7 +172,7 @@ describe("R33/R34 — esta ficha no cambia el bloqueo del cierre ni sus exencion
 /* -------------------------------------------------------------------------- */
 
 describe("💰 R35 — el paquete que resolvio la tienda tambien hay que escanearlo (238)", () => {
-  it.each(["reprogramada", "rechazada"] as const)(
+  it.each(["reprogramado", "devolucion_a_origen_por_rechazo"] as const)(
     "`%s` esta en `RESULTADOS_QUE_VUELVEN`, asi que su paquete entra en la ventana de confirmacion",
     (resultado) => {
       // El punto unico de «que paquete vuelve» (238) filtra por RESULTADO, no por origen ni por
@@ -201,7 +201,7 @@ describe("💰 R35 — el paquete que resolvio la tienda tambien hay que escanea
     // entero», sin escapatoria) combinada con esta ficha. Es correcto —el paquete existe y esta en
     // la moto— y se deja escrito antes de que ocurra, en vez de descubrirlo en operacion.
     expect(RESULTADOS_QUE_VUELVEN).toEqual(
-      expect.arrayContaining(["reprogramada", "rechazada"]),
+      expect.arrayContaining(["reprogramado", "devolucion_a_origen_por_rechazo"]),
     );
   });
 });
@@ -253,11 +253,11 @@ describe("R37 — esta ficha NO escribe dentro de la transaccion de aprobacion",
     const i = src.indexOf("if (aplicacionGestiones)");
     expect(i).toBeGreaterThan(-1);
     const bloque = src.slice(i, src.indexOf("if (devolucionRechazadas)", i));
-    expect(bloque).toMatch(/g\.resultado === "devuelta"[\s\S]*?"anclaje_devolucion"/);
+    expect(bloque).toMatch(/g\.resultado === "novedad"[\s\S]*?"anclaje_devolucion"/);
 
     // La otra mitad: `devuelta` no es un desenlace posible desde ayuda. Se lee del CENSO REAL del
     // borde, no de una copia local — una copia local haria este caso verde para siempre.
-    expect([...RESULTADOS_DESDE_AYUDA] as string[]).not.toContain("devuelta");
+    expect([...RESULTADOS_DESDE_AYUDA] as string[]).not.toContain("novedad");
   });
 });
 
@@ -314,7 +314,7 @@ describe("R43/R46 — el evento publico es el mismo, y la familia nueva no se ex
     // `rechazada` y `reprogramada` ya estaban. Esta ficha no añade ningun estado, asi que ninguna
     // superficie exhaustiva de estados cambia.
     const { EVENTOS_PUBLICOS } = await import("@/lib/types/webhook-eventos");
-    expect([...EVENTOS_PUBLICOS] as string[]).toContain("rechazada");
-    expect([...EVENTOS_PUBLICOS] as string[]).toContain("reprogramada");
+    expect([...EVENTOS_PUBLICOS] as string[]).toContain("devolucion_a_origen_por_rechazo");
+    expect([...EVENTOS_PUBLICOS] as string[]).toContain("reprogramado");
   });
 });

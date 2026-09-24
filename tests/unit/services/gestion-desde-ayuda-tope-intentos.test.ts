@@ -31,8 +31,8 @@ const UMBRAL = reintentosConfig.MIN_INTENTOS_ENTREGA;
 
 const CATALOGO: Record<string, string> = {
   ayuda_tienda: "os-ayuda",
-  reprogramada: "os-reprogramada",
-  rechazada: "os-rechazada",
+  reprogramado: "os-reprogramada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
 };
 
 function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
@@ -77,7 +77,7 @@ function foto(n: number) {
 
 const REPROGRAMACION: GestionDesdeAyudaInput = {
   ordenId: "o1",
-  resultado: "reprogramada",
+  resultado: "reprogramado",
   fechaReprogramacion: "2027-01-05",
   motivo: "el cliente pidio otro dia",
   evidencias: [foto(0)],
@@ -85,7 +85,7 @@ const REPROGRAMACION: GestionDesdeAyudaInput = {
 
 const RECHAZO: GestionDesdeAyudaInput = {
   ordenId: "o1",
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   motivo: "el cliente no la quiere",
   evidencias: [foto(0), foto(1)],
 };
@@ -111,7 +111,7 @@ describe("276/T5 · R1/R4 — la tienda tampoco reprograma en el tope", () => {
 
     const r = await service.gestionar(RECHAZO, TIENDA);
 
-    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "rechazada" });
+    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo" });
     expect(gestionRepo.crearGestionDesdeAyuda).toHaveBeenCalledTimes(1);
   });
 
@@ -120,7 +120,7 @@ describe("276/T5 · R1/R4 — la tienda tampoco reprograma en el tope", () => {
 
     const r = await service.gestionar(REPROGRAMACION, TIENDA);
 
-    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "reprogramada" });
+    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "reprogramado" });
     expect(gestionRepo.crearGestionDesdeAyuda).toHaveBeenCalledTimes(1);
   });
 
@@ -185,7 +185,7 @@ describe("276/T5 · R11 — no hay campo del input que abra la puerta", () => {
     const r = await service.gestionar(
       {
         ordenId: "o1",
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         fechaReprogramacion: "2027-12-31",
         motivo: "insistir la semana que viene",
         evidencias: [foto(7)],

@@ -59,10 +59,10 @@ describe("findOrdenesLiberables (R10/R11)", () => {
     const rows = await repoWith(prisma).findOrdenesLiberables(HOY);
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ deletedAt: null, estatus: { value: "reprogramada" } });
+    expect(arg.where).toMatchObject({ deletedAt: null, estatus: { value: "reprogramado" } });
     // gestion vigente = la reprogramada mas reciente.
     expect(arg.select.gestiones).toMatchObject({
-      where: { resultado: "reprogramada" },
+      where: { resultado: "reprogramado" },
       orderBy: { createdAt: "desc" },
       take: 1,
     });
@@ -181,14 +181,14 @@ describe("findOrdenesLiberablesDeCierre (ficha 315)", () => {
     // liberaria ordenes borradas o que ya no estan reprogramadas.
     expect(arg.where).toMatchObject({
       deletedAt: null,
-      estatus: { value: "reprogramada" },
+      estatus: { value: "reprogramado" },
       gestiones: {
-        some: { cierreId: CIERRE, resultado: "reprogramada", anuladaAt: null },
+        some: { cierreId: CIERRE, resultado: "reprogramado", anuladaAt: null },
       },
     });
     // Y la gestion vigente se elige EXACTAMENTE igual que en el camino del reloj.
     expect(arg.select.gestiones).toMatchObject({
-      where: { resultado: "reprogramada", anuladaAt: null },
+      where: { resultado: "reprogramado", anuladaAt: null },
       orderBy: { createdAt: "desc" },
       take: 1,
     });
@@ -258,13 +258,13 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
     const ok = await repoWith(prisma).liberarOrden({
       ordenId: "o1",
       destinoEstatusId: idEstado("en_bodega_central"),
-      estatusReprogramadaId: idEstado("reprogramada"),
+      estatusReprogramadaId: idEstado("reprogramado"),
       corridaAt,
     });
 
     expect(ok).toBe(true);
     const arg = prisma.orden.updateMany.mock.calls[0][0];
-    expect(arg.where).toEqual({ id: "o1", estatusId: idEstado("reprogramada"), deletedAt: null });
+    expect(arg.where).toEqual({ id: "o1", estatusId: idEstado("reprogramado"), deletedAt: null });
     // Feature 110/R1/R6: prioridad=true va DENTRO del mismo data (resto de campos intactos).
     // Feature 246 (T3.5, R9/R10): `fechaReparto: null` entra en la MISMA igualdad EXACTA, y por
     // el mismo motivo que el resto: la invariante es que el dia de reparto solo tiene valor
@@ -289,7 +289,7 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
     await repoWith(prisma).liberarOrden({
       ordenId: "o1",
       destinoEstatusId: idEstado("en_bodega_satelite"),
-      estatusReprogramadaId: idEstado("reprogramada"),
+      estatusReprogramadaId: idEstado("reprogramado"),
       corridaAt: new Date("2026-07-15T06:00:00.000Z"),
     });
 
@@ -307,7 +307,7 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
     await repoWith(prisma).liberarOrden({
       ordenId: "o1",
       destinoEstatusId: idEstado("en_bodega_satelite"),
-      estatusReprogramadaId: idEstado("reprogramada"),
+      estatusReprogramadaId: idEstado("reprogramado"),
       corridaAt: new Date("2026-07-15T06:00:00.000Z"),
     });
 
@@ -316,7 +316,7 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("reprogramada"),
+        estatusOrigenId: idEstado("reprogramado"),
         estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: null, // R21: sistema/cron
         origenTipo: "liberacion_reprogramada",
@@ -326,14 +326,14 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
     ]);
   });
 
-  it("R17/R8: si la orden ya no esta en reprogramada -> 0 filas -> false; no duplica rastro", async () => {
+  it("R17/R8: si la orden ya no esta en reprogramado -> 0 filas -> false; no duplica rastro", async () => {
     const prisma = buildPrisma();
     prisma.orden.updateMany.mockResolvedValue({ count: 0 });
 
     const ok = await repoWith(prisma).liberarOrden({
       ordenId: "o1",
       destinoEstatusId: idEstado("en_bodega_central"),
-      estatusReprogramadaId: idEstado("reprogramada"),
+      estatusReprogramadaId: idEstado("reprogramado"),
       corridaAt: new Date(),
     });
 

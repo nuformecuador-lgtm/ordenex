@@ -176,7 +176,7 @@ describe("carga API: happy path (R10)", () => {
       creadas: 0,
       duplicadas: 1,
       conError: 1,
-      filas: [{ fila: 1, numRemision: "REM-D", resultado: "duplicada", estatus: "entregada" }],
+      filas: [{ fila: 1, numRemision: "REM-D", resultado: "duplicada", estatus: "entregado" }],
       errores: [
         { fila: 2, numRemision: "REM-E", resultado: "error", errores: { provincia: ["no encontrada"] } },
       ],

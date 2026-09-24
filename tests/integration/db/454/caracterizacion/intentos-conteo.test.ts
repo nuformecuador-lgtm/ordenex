@@ -25,7 +25,7 @@ describeSiHayBase("454/C03 — conteo de intentos de entrega (Postgres real)", (
   async function gestionPasada(
     e: Escenario,
     ordenId: string,
-    g: { resultado: "devuelta" | "reprogramada" | "rechazada"; origenTipo: "gestion" | "escalado_devuelta_sla"; anulada?: boolean },
+    g: { resultado: "novedad" | "reprogramado" | "devolucion_a_origen_por_rechazo"; origenTipo: "gestion" | "escalado_devuelta_sla"; anulada?: boolean },
   ) {
     const cierre = await e.tx.cierreDia.create({
       data: {
@@ -54,7 +54,7 @@ describeSiHayBase("454/C03 — conteo de intentos de entrega (Postgres real)", (
     await e.tx.ordenHistorialEstado.create({
       data: {
         ordenId,
-        estatusDestinoId: e.id(g.resultado === "devuelta" ? "devolucion_por_confirmar" : g.resultado),
+        estatusDestinoId: e.id(g.resultado === "novedad" ? "devolucion_por_confirmar" : g.resultado),
         origenTipo: g.origenTipo,
         gestionOrdenId: gestion.id,
         createdAt: new Date("2026-09-01T10:00:00.000Z"),
@@ -66,12 +66,12 @@ describeSiHayBase("454/C03 — conteo de intentos de entrega (Postgres real)", (
     mundo = await prepararMundo();
     r = await conEscenario(mundo, async (e) => {
       const o = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 6000 });
-      await gestionPasada(e, o.ordenId, { resultado: "devuelta", origenTipo: "gestion" });
-      await gestionPasada(e, o.ordenId, { resultado: "reprogramada", origenTipo: "gestion" });
-      await gestionPasada(e, o.ordenId, { resultado: "rechazada", origenTipo: "escalado_devuelta_sla" });
-      await gestionPasada(e, o.ordenId, { resultado: "devuelta", origenTipo: "gestion", anulada: true });
+      await gestionPasada(e, o.ordenId, { resultado: "novedad", origenTipo: "gestion" });
+      await gestionPasada(e, o.ordenId, { resultado: "reprogramado", origenTipo: "gestion" });
+      await gestionPasada(e, o.ordenId, { resultado: "devolucion_a_origen_por_rechazo", origenTipo: "escalado_devuelta_sla" });
+      await gestionPasada(e, o.ordenId, { resultado: "novedad", origenTipo: "gestion", anulada: true });
 
-      await e.gestionarOk(o.ordenId, "rechazada");
+      await e.gestionarOk(o.ordenId, "devolucion_a_origen_por_rechazo");
       const cierreId = await e.solicitarCierreOk();
       const antes = await e.s.historialService.contarIntentos(o.ordenId);
       const aprobacion = await e.aprobar(cierreId);

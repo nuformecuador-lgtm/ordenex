@@ -101,13 +101,13 @@ describe("RecepcionSateliteService.listarIdsVigentesBodega (feature 184, T A.3)"
     // Con el listado filtrado por «devuelta», una marcada `en_bodega_satelite` ya NO pertenece
     // al conjunto que el aviso cuenta: la poda tiene que verla como no vigente.
     const r = await servicio(repo).listarIdsVigentesBodega(
-      { ids: ["a-01", "a-09"], estados: ["devuelta"] },
+      { ids: ["a-01", "a-09"], estados: ["novedad"] },
       SAT_A,
     );
 
     expect(r).toEqual({ status: "ok", ids: ["a-09"] });
     expect(filtros.find((f) => f.metodo === "vigencia")!.filtro.estatusValues).toEqual([
-      "devuelta",
+      "novedad",
     ]);
   });
 
@@ -116,7 +116,7 @@ describe("RecepcionSateliteService.listarIdsVigentesBodega (feature 184, T A.3)"
     // Saltandose el schema del borde: pedir vigencia «de las entregadas» no puede convertir
     // esta comprobacion en una ventana al resto de las ordenes de la zona.
     const r = await servicio(repo).listarIdsVigentesBodega(
-      { ids: ["a-14"], estados: ["entregada"] },
+      { ids: ["a-14"], estados: ["entregado"] },
       SAT_A,
     );
     expect(r).toEqual({ status: "ok", ids: [] });

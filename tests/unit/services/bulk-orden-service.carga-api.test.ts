@@ -505,7 +505,7 @@ describe("cargarViaApi — monto redondeado al colon (feature 299)", () => {
 describe("cargarViaApi — dedup y exito parcial (R7/R11/R12)", () => {
   it("R11: remision existente en DB -> duplicada, sin consumir guia", async () => {
     const repo = buildRepo({
-      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-1", "entregada"]])),
+      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-1", "entregado"]])),
     });
     const r = await buildService(repo).cargarViaApi([row()], APIKEY);
     if (r.status === "ok") {
@@ -601,7 +601,7 @@ describe("cargarViaApi — costoEnvio flete + IVA (feature 98)", () => {
 
   it("R4/R6: filas duplicada y error NO llevan costoEnvio y conservan su shape", async () => {
     const repo = buildRepo({
-      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-DUP", "entregada"]])),
+      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-DUP", "entregado"]])),
     });
     const r = await buildService(repo, buildTarifaRepo(TARIFA)).cargarViaApi(
       [
@@ -618,7 +618,7 @@ describe("cargarViaApi — costoEnvio flete + IVA (feature 98)", () => {
       expect(dup).not.toHaveProperty("costoEnvio");
       expect(err).not.toHaveProperty("costoEnvio");
       // Shape intacto: la duplicada expone `estatus`, la error expone `errores`.
-      expect(dup).toMatchObject({ resultado: "duplicada", estatus: "entregada" });
+      expect(dup).toMatchObject({ resultado: "duplicada", estatus: "entregado" });
       expect(err.errores).toHaveProperty("provincia");
       // Y `ordenes` (una por creada) sí lleva costoEnvio, solo para la creada.
       expect(r.summary.ordenes).toHaveLength(1);
@@ -1012,7 +1012,7 @@ describe("cargarViaApi — lote MIXTO: unas resuelven y otras no (274/R27/R28/R3
   it("summary: `total` = filas recibidas y creadas + duplicadas + conError = total (la degradada no se cuenta dos veces)", async () => {
     const repo = buildRepo({
       ...DOS_ZONAS,
-      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-DUP", "entregada"]])),
+      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-DUP", "entregado"]])),
     });
     const tarifaRepo = buildTarifaRepoPorZona({ z1: TARIFA });
     const rows = [

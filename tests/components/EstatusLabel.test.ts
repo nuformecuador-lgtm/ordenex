@@ -7,24 +7,24 @@ import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 // de presentación: si aserta contra `ORDER_STATUS_LABELS` se vuelve tautológico y
 // deja de proteger nada. Al renombrar una etiqueta, se actualiza aquí a mano.
 const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
-  entregada: "Entregada",
-  devuelta: "Devuelta",
+  entregado: "Entregada",
+  novedad: "Devuelta",
   devolviendo_a_tienda: "Devolviendo a tienda", // feature 135
-  reprogramada: "Reprogramada",
+  reprogramado: "Reprogramada",
   // Feature 155/R27/R28: el estado de fulfillment salio del catalogo, asi que sale de este
   // mapa. Su entrada en `ORDER_STATUS_LABELS` la retira la fase frontend (T6.1); mientras siga
   // ahi es una clave de mas que nadie consulta, porque este test recorre `ORDER_STATUS_SEED`.
   en_ruta_bodega_central: "En ruta a bodega central", // feature 135 (R8)
   en_bodega_central: "En bodega central", // feature 135 (R8)
   en_preparacion: "En preparación",
-  por_recoger: "Por recoger", // feature 17 (renombrado en feature 135)
+  mensajero_recogiendo_en_bodega: "Por recoger", // feature 17 (renombrado en feature 135)
   en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30 (R8)
   en_reparto: "En reparto", // feature 36 (renombrado en la 135 y de vuelta en la 153/R9)
-  rechazada: "Rechazada", // feature 36
+  devolucion_a_origen_por_rechazo: "Rechazada", // feature 36
   en_bodega_satelite: "En bodega satélite", // feature 33 (R8)
   devuelta_a_tienda: "Devuelta a tienda", // feature 135 (R8)
-  sin_gestionar: "Sin gestionar", // feature 109/R25
-  por_devolver: "Por devolver", // feature 139/R4
+  novedad_interna: "Sin gestionar", // feature 109/R25
+  por_devolver_a_bodega_central: "Por devolver", // feature 139/R4
   devolviendo_a_bodega_central: "Devolviendo a bodega central", // feature 139/R4
   por_devolver_a_tienda: "Por devolver a tienda", // feature 139/R4
   por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29 (Q5 confirmada)

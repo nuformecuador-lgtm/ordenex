@@ -23,10 +23,10 @@ import {
 afterEach(() => cleanup());
 
 const ESPERADAS = [
-  ["entregada", "Entregada · pendiente de confirmación"],
-  ["reprogramada", "Reprogramada · pendiente de confirmación"],
-  ["devuelta", "Devuelta · pendiente de confirmación"],
-  ["rechazada", "Rechazada · pendiente de confirmación"],
+  ["entregado", "Entregada · pendiente de confirmación"],
+  ["reprogramado", "Reprogramada · pendiente de confirmación"],
+  ["novedad", "Devuelta · pendiente de confirmación"],
+  ["devolucion_a_origen_por_rechazo", "Rechazada · pendiente de confirmación"],
   ["incidente", "Incidente · pendiente de confirmación"],
 ] as const;
 
@@ -53,7 +53,7 @@ describe("454/R29 — el chip de la nota", () => {
   });
 
   it("si llegaran las dos, gana la gestión (el hecho más reciente)", () => {
-    render(<NotaGestionPendiente resultadoPendiente="rechazada" ayudaAbierta />);
+    render(<NotaGestionPendiente resultadoPendiente="devolucion_a_origen_por_rechazo" ayudaAbierta />);
     expect(screen.getByText("Rechazada · pendiente de confirmación")).toBeInTheDocument();
     expect(screen.queryByText("Ayuda solicitada a la tienda")).toBeNull();
   });

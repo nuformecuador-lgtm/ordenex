@@ -93,7 +93,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
     }
     FKS = fks;
 
-    const valores = ["en_reparto", "devuelta", "ayuda_tienda", ...ESTADOS_SIN_CORRECCION];
+    const valores = ["en_reparto", "novedad", "ayuda_tienda", ...ESTADOS_SIN_CORRECCION];
     const estados = await prisma.orderStatus.findMany({
       where: { value: { in: valores } },
       select: { id: true, value: true },
@@ -399,7 +399,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
   it("⭑ el servicio completo, contra la base: un estado bloqueado no escribe NADA", async () => {
     // El camino de produccion entero (servicio + repositorio real) sobre la ventana de D3.
     const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
-    const r = await conOrden({ estatusValue: "entregada" }, async (ctx) => {
+    const r = await conOrden({ estatusValue: "entregado" }, async (ctx) => {
       const service = new CorregirDatosClienteService(ctx.repo, new TarifaVigenteRepository(ctx.tx));
       const resultado = await service.corregir(
         { ordenId: ctx.ordenId, destinatario: CORREGIDO.destinatario },

@@ -543,12 +543,12 @@ function gestion(i: number, resultado: CierreResultado): CierreDetalleGestion {
     producto: "Caja mediana",
     tiendaNombre: "Tienda X",
     resultado,
-    montoRecibido: resultado === "entregada" ? "1000.10" : null,
-    metodoPago: resultado === "entregada" ? "SINPE" : null,
+    montoRecibido: resultado === "entregado" ? "1000.10" : null,
+    metodoPago: resultado === "entregado" ? "SINPE" : null,
     // Feature 212/R31: el DTO gana el desglose y CONSERVA el escalar de arriba; una entrega
     // de un solo metodo lleva UNA linea, y lo que no se entrego no lleva ninguna.
     pagos:
-      resultado === "entregada" ? [{ metodo: "SINPE" as const, monto: "1000.10" }] : [],
+      resultado === "entregado" ? [{ metodo: "SINPE" as const, monto: "1000.10" }] : [],
     motivo: null,
     fechaReprogramacion: null,
     evidenciaUrl: null,
@@ -564,10 +564,10 @@ function gestion(i: number, resultado: CierreResultado): CierreDetalleGestion {
 
 function gruposCon(n: number): CierreGrupos {
   return {
-    entregada: Array.from({ length: n }, (_, i) => gestion(i, "entregada")),
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: Array.from({ length: n }, (_, i) => gestion(i, "entregado")),
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 }

@@ -406,7 +406,7 @@ describe("0 — el detector de esta guardia no está roto", () => {
     expect(predicado).not.toMatch(new RegExp(["gestion", "Aprobada"].join("")));
     // Y el conjunto que la pantalla lista POR ESTATUS es `devuelta`; la ayuda, por derivación.
     // ⏳ FICHA 454: antes `["ayuda_tienda", "devuelta"]`.
-    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["devuelta"]);
+    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["novedad"]);
     expect(ayudaPorDerivacionEnNovedadWhere(FUENTE_ORDEN_REPO)).toBe(true);
   });
 
@@ -464,40 +464,40 @@ describe("0 — el detector de esta guardia no está roto", () => {
     const repoConLiteral = `
       class OrdenRepository {
         private novedadWhere(tiendaId: string, grupo: GrupoNovedad): Prisma.OrdenWhereInput {
-          return { tiendaId, deletedAt: null, estatus: { value: "devuelta" } };
+          return { tiendaId, deletedAt: null, estatus: { value: "novedad" } };
         }
       }`;
-    expect(literalesDeEstatusEnNovedadWhere(repoConLiteral, "falso.ts")).toEqual(["devuelta"]);
+    expect(literalesDeEstatusEnNovedadWhere(repoConLiteral, "falso.ts")).toEqual(["novedad"]);
     expect(novedadWhereUsaElMapa(repoConLiteral, "falso.ts")).toBe(false);
 
     // (c) El literal escondido detrás de un `const` del módulo — la forma que tenía este archivo
     //     hasta la 236. Sigue siendo un segundo literal, y se ve igual.
     const repoConConst = `
-      const ESTATUS_DEVUELTA = "devuelta";
+      const ESTATUS_DEVUELTA = "novedad";
       class OrdenRepository {
         private novedadWhere(tiendaId: string): Prisma.OrdenWhereInput {
           return { tiendaId, deletedAt: null, estatus: { value: ESTATUS_DEVUELTA } };
         }
       }`;
-    expect(literalesDeEstatusEnNovedadWhere(repoConConst, "falso.ts")).toEqual(["devuelta"]);
+    expect(literalesDeEstatusEnNovedadWhere(repoConConst, "falso.ts")).toEqual(["novedad"]);
 
     // (d) Y el `OR` de ayer, con sus dos ramas: las DOS se ven.
     const repoConOr = `
       class OrdenRepository {
         private novedadWhere(tiendaId: string): Prisma.OrdenWhereInput {
           return { tiendaId, deletedAt: null, OR: [
-            { estatus: { value: "devuelta" } },
+            { estatus: { value: "novedad" } },
             { estatus: { value: "ayuda_tienda" } },
           ] };
         }
       }`;
     expect(literalesDeEstatusEnNovedadWhere(repoConOr, "falso.ts")).toEqual([
       "ayuda_tienda",
-      "devuelta",
+      "novedad",
     ]);
 
     const servicioMutado = `
-      const ORIGEN_RECOGER = "por_recoger";
+      const ORIGEN_RECOGER = "mensajero_recogiendo_en_bodega";
       const ESTADO_EN_REPARTO = "en_reparto";
       class MisAsignacionesService {
         async listarMisAsignaciones(actor: Actor): Promise<R> {
@@ -507,7 +507,7 @@ describe("0 — el detector de esta guardia no está roto", () => {
         }
       }`;
     expect(estatusDelPanelMensajero(servicioMutado, "falso.ts")).toEqual([
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_reparto",
       "recolectando",
     ]);
@@ -597,15 +597,15 @@ describe("227 / R38 — el hilo es bidireccional de hecho", () => {
     ).toEqual(ventana);
   });
 
-  it("227/R38: para el MENSAJERO la propiedad sigue siendo inclusión, y `por_recoger` sobra", () => {
+  it("227/R38: para el MENSAJERO la propiedad sigue siendo inclusión, y `mensajero_recogiendo_en_bodega` sobra", () => {
     // El complemento del caso de arriba, dicho para que su asimetría no se lea como un olvido.
     const ventana = VENTANA_ESCRITURA.mensajero as readonly string[];
     for (const estatus of ventana) {
       expect(PANTALLA_POR_ROL.mensajero.estatus, estatus).toContain(estatus);
     }
     // Y el que su pantalla lista sin ventana, nombrado: la orden aún no salió a reparto.
-    expect(PANTALLA_POR_ROL.mensajero.estatus).toContain("por_recoger");
-    expect(ventana).not.toContain("por_recoger");
+    expect(PANTALLA_POR_ROL.mensajero.estatus).toContain("mensajero_recogiendo_en_bodega");
+    expect(ventana).not.toContain("mensajero_recogiendo_en_bodega");
   });
 });
 
@@ -616,7 +616,7 @@ describe("227 / R38 — el hilo es bidireccional de hecho", () => {
 describe("227 / R36 — el panel del mensajero sigue leyendo lo que leía", () => {
   // ⏳ 2026-09-23 (FICHA 454): el censo vuelve de 3 a 2. La orden con ayuda abierta sigue
   // `en_reparto` y el servicio la separa por la DERIVACION (`findPendientesYAyudas`), no por estado.
-  it("listarMisAsignaciones lee exactamente por_recoger y en_reparto", () => {
+  it("listarMisAsignaciones lee exactamente mensajero_recogiendo_en_bodega y en_reparto", () => {
     // Censo CERRADO, y a propósito: ni uno más ni uno menos. Uno menos rompería R38 (el
     // mensajero se quedaría sin la orden en la que publica); uno de más sería una feature
     // ensanchando el corte de la 167 por la puerta de atrás.
@@ -627,7 +627,7 @@ describe("227 / R36 — el panel del mensajero sigue leyendo lo que leía", () =
     // seguía siendo parada del mapa y gestionable. La propiedad que este censo protege se
     // conserva: sigue siendo CERRADO y `recolectando` SIGUE FUERA, que es exactamente lo que la
     // 167 aisló.
-    expect([...ESTATUS_DEL_PANEL_MENSAJERO].sort()).toEqual(["en_reparto", "por_recoger"]);
+    expect([...ESTATUS_DEL_PANEL_MENSAJERO].sort()).toEqual(["en_reparto", "mensajero_recogiendo_en_bodega"]);
     expect(ESTATUS_DEL_PANEL_MENSAJERO).toHaveLength(2);
     // Lo que la 167 aisló, dicho como negativo para que no se pierda al crecer el censo.
     expect(ESTATUS_DEL_PANEL_MENSAJERO).not.toContain("recolectando");
@@ -650,7 +650,7 @@ describe("227 / R36 — el panel del mensajero sigue leyendo lo que leía", () =
     //
     // ⏳ 2026-09-23 (FICHA 454): la pestaña de ayuda deja de ser una igualdad de estado. Antes:
     // `["ayuda_tienda", "devuelta"]`.
-    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["devuelta"]);
+    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["novedad"]);
     expect(ayudaPorDerivacionEnNovedadWhere(FUENTE_ORDEN_REPO)).toBe(true);
   });
 

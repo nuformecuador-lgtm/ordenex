@@ -276,7 +276,7 @@ function gestion(
 }
 
 function gruposVacios(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 function cierrePasado(i: number): CierrePasadoDTO {
@@ -346,10 +346,10 @@ function ingreso(): IngresoOrdenexDTO {
 function gruposConEvidencia(): CierreGrupos {
   return {
     ...gruposVacios(),
-    entregada: [
+    entregado: [
       gestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: "1000.10",
         metodoPago: "SINPE",
         // Feature 213 (T8): desglose COHERENTE con el escalar ya declarado (R23).
@@ -357,10 +357,10 @@ function gruposConEvidencia(): CierreGrupos {
         ingresoOrdenex: ingreso(),
       }),
     ],
-    rechazada: [
+    devolucion_a_origen_por_rechazo: [
       gestion({
         gestionId: "g2",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         motivo: "Cliente ausente",
         evidenciaUrl: EVIDENCIA_FIRMADA,
         esRechazoSla: true,
@@ -1044,7 +1044,7 @@ describe("Cierres · descarga", () => {
     //  2. y el doble del compuesto está VIVO y trae evidencias FIRMADAS: si la pantalla lo
     //     llamara, respondería. No llamarlo es una decisión de la pantalla, no del arnés.
     const compuesto = await listarCierreDia();
-    expect(compuesto.status === "ok" && compuesto.grupos.rechazada[0].evidenciaUrl).toBe(
+    expect(compuesto.status === "ok" && compuesto.grupos.devolucion_a_origen_por_rechazo[0].evidenciaUrl).toBe(
       EVIDENCIA_FIRMADA,
     );
   });

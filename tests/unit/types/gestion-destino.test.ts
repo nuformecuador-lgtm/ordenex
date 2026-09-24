@@ -23,7 +23,7 @@ import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
 //
 // Los cinco resultados del enum `GestionResultado` (`db/schema.prisma`). Se escriben A MANO: si
 // se derivaran del propio mapa, el test comprobaria que el mapa es igual a si mismo.
-const RESULTADOS = ["entregada", "reprogramada", "devuelta", "rechazada", "incidente"] as const;
+const RESULTADOS = ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo", "incidente"] as const;
 
 const RAIZ = path.resolve(__dirname, "../../..");
 function fuente(rel: string): string {
@@ -46,10 +46,10 @@ describe("ESTATUS_POR_RESULTADO — el mapa `resultado -> estado destino` (239/R
   it("454: los cinco destinos son la IDENTIDAD — el pre-estado de la 239 se retira", () => {
     // Literal A PROPOSITO: es el contrato. Un `devuelta -> devolucion_por_confirmar` de vuelta
     // dejaria ordenes aprobadas en un estado que la 454 retira del catalogo.
-    expect(estatusDestinoDeResultado("entregada")).toBe("entregada");
-    expect(estatusDestinoDeResultado("reprogramada")).toBe("reprogramada");
-    expect(estatusDestinoDeResultado("devuelta")).toBe("devuelta");
-    expect(estatusDestinoDeResultado("rechazada")).toBe("rechazada");
+    expect(estatusDestinoDeResultado("entregado")).toBe("entregado");
+    expect(estatusDestinoDeResultado("reprogramado")).toBe("reprogramado");
+    expect(estatusDestinoDeResultado("novedad")).toBe("novedad");
+    expect(estatusDestinoDeResultado("devolucion_a_origen_por_rechazo")).toBe("devolucion_a_origen_por_rechazo");
     expect(estatusDestinoDeResultado("incidente")).toBe("incidente");
   });
 

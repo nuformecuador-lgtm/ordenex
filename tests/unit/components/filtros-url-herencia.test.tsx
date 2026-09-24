@@ -51,7 +51,7 @@ const base: NovedadDTO = {
   id: "o1",
   numGuia: 1001,
   numRemision: "REM-2026-0001",
-  estatusValue: "devuelta",
+  estatusValue: "novedad",
   intentosContacto: 0,
   mensajeroNombre: "Marta Mensajera",
   destinatario: "Ana Cliente",

@@ -27,10 +27,10 @@ describeSiHayBase("454/C24 — alcance satelite y cierre de bodega (Postgres rea
       const rS = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 7000 });
       const eC = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 5000, mensajeroId: central.mensajeroId });
       const rC = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 7000, mensajeroId: central.mensajeroId });
-      await e.gestionarOk(eS.ordenId, "entregada", { monto: 5000 });
-      await e.gestionarOk(rS.ordenId, "rechazada");
-      await e.gestionarOk(eC.ordenId, "entregada", { monto: 5000, actor: central.actor });
-      await e.gestionarOk(rC.ordenId, "rechazada", { actor: central.actor });
+      await e.gestionarOk(eS.ordenId, "entregado", { monto: 5000 });
+      await e.gestionarOk(rS.ordenId, "devolucion_a_origen_por_rechazo");
+      await e.gestionarOk(eC.ordenId, "entregado", { monto: 5000, actor: central.actor });
+      await e.gestionarOk(rC.ordenId, "devolucion_a_origen_por_rechazo", { actor: central.actor });
       const cierreSat = await e.solicitarCierreOk();
       const cierreCentral = await e.solicitarCierreOk(central.actor);
 
@@ -79,7 +79,7 @@ describeSiHayBase("454/C24 — alcance satelite y cierre de bodega (Postgres rea
   it("el adminSatelite aprueba el de su zona con los MISMOS desenlaces que el maestro en la central", () => {
     expect(r.aprobSat).toBe("ok");
     expect(r.aprobCentral).toBe("ok");
-    expect(r.satelite).toEqual({ e: "entregada", r: "por_devolver_a_tienda" });
+    expect(r.satelite).toEqual({ e: "entregado", r: "por_devolver_a_tienda" });
     expect(r.central).toEqual(r.satelite);
   });
 

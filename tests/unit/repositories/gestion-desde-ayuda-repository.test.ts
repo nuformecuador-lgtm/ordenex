@@ -115,7 +115,7 @@ const INPUT = {
   actorUsuarioId: "tienda-1", // R4: quien la REGISTRA
   diaEnCurso: DIA_CR, // feature 261 (R30): la segunda capa del bloqueo por reserva
   gestion: {
-    resultado: "rechazada" as const,
+    resultado: "devolucion_a_origen_por_rechazo" as const,
     motivo: "el cliente no la quiere",
     evidencias: EVIDENCIAS,
   },
@@ -124,7 +124,7 @@ const INPUT = {
 const INPUT_REPROGRAMADA = {
   ...INPUT,
   gestion: {
-    resultado: "reprogramada" as const,
+    resultado: "reprogramado" as const,
     motivo: "el cliente pidio otro dia",
     fechaReprogramacion: "2027-01-05",
     evidencias: EVIDENCIAS,
@@ -245,7 +245,7 @@ describe("crearGestionDesdeAyuda — la fila que cobra el dinero (R2/R3/R9)", ()
     expect(data).toMatchObject({
       ordenId: "o1",
       mensajeroId: "mensajero-1",
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       motivo: "el cliente no la quiere",
     });
     expect(data.fechaReprogramacion).toBeNull();
@@ -255,7 +255,7 @@ describe("crearGestionDesdeAyuda — la fila que cobra el dinero (R2/R3/R9)", ()
     const { repo, gestionCreate } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT_REPROGRAMADA);
     const data = dataDe(gestionCreate);
-    expect(data.resultado).toBe("reprogramada");
+    expect(data.resultado).toBe("reprogramado");
     expect(data.fechaReprogramacion).toEqual(new Date("2027-01-05T00:00:00.000Z"));
   });
 
@@ -303,7 +303,7 @@ describe("crearGestionDesdeAyuda — el evento dice la verdad (R4/R5; ficha 454)
         // R5: la familia con la que la APROBACION escribira la transicion — la que la hace contar
         // como intento (237/R6) y la que dice «la resolvio la tienda» al deshacer (D3).
         familiaAplicacion: "gestion_tienda_ayuda",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         mensajeroId: "mensajero-1",
         // R4: la UNICA evidencia de quien decidio el rechazo que se le cobra a la tienda.
         actorUsuarioId: "tienda-1",
@@ -316,7 +316,7 @@ describe("crearGestionDesdeAyuda — el evento dice la verdad (R4/R5; ficha 454)
     const { repo, eventoCreate } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT_REPROGRAMADA);
     expect((eventoCreate.mock.calls[0] as unknown[])[0]).toMatchObject({
-      data: { familiaAplicacion: "gestion_tienda_ayuda", resultado: "reprogramada" },
+      data: { familiaAplicacion: "gestion_tienda_ayuda", resultado: "reprogramado" },
     });
   });
 });

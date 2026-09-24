@@ -1448,10 +1448,10 @@ function rotuloOrigen(origen: OrderStatusValue | OrderStatusRetirado): string | 
 
 /** Tono de la píldora de conteo de cada pestaña, por resultado. */
 const TAB_TONO: Record<CierreResultado, "success" | "warning" | "neutral"> = {
-  entregada: "success",
-  reprogramada: "warning",
-  devuelta: "neutral",
-  rechazada: "neutral",
+  entregado: "success",
+  reprogramado: "warning",
+  novedad: "neutral",
+  devolucion_a_origen_por_rechazo: "neutral",
   // Feature 158/R18: `incidente` es un cierre EN ERROR. `EstatusBadge` lo pinta `danger`,
   // pero esta píldora no ofrece ese tono; `warning` es el más cercano y lo separa de las
   // salidas rutinarias (devuelta/rechazada), que sí van en neutro.
@@ -1772,7 +1772,7 @@ function FilaGestion({
                 </Badge>
               </span>
             ) : null}
-            {g.resultado === "rechazada" ? (
+            {g.resultado === "devolucion_a_origen_por_rechazo" ? (
               <>
                 <DatoFila
                   label={INGRESO_BODEGA_RECHAZOS_LABEL}
@@ -1833,7 +1833,7 @@ function FilaGestion({
             {/* Solo donde hay algo que repartir: una ENTREGA que cobró. Los otros resultados no
                 tienen desglose, y una entrega sin cobro no reparte cero colones entre métodos
                 (misma regla que el servidor, que rechaza las dos cosas). */}
-            {onCorregirPagos && g.resultado === "entregada" && g.pagos.length > 0 ? (
+            {onCorregirPagos && g.resultado === "entregado" && g.pagos.length > 0 ? (
               <Button
                 type="button"
                 size="sm"
@@ -1850,7 +1850,7 @@ function FilaGestion({
                 entrega declarada sin dinero también puede no haber ocurrido, y el servidor solo
                 mira el `resultado` (R4). Que el cierre esté ABIERTO lo decide el padre, que es
                 quien conoce su estado: aquí llega como la ausencia del callback. */}
-            {onCorregirResultado && g.resultado === "entregada" ? (
+            {onCorregirResultado && g.resultado === "entregado" ? (
               <Button
                 type="button"
                 size="sm"
@@ -1928,7 +1928,7 @@ function separarParaDevolucion(cuantas: number): string {
  */
 function efectoAlAprobar(cuantas: number): string {
   const central = ORDER_STATUS_LABELS.por_devolver_a_tienda;
-  const satelite = ORDER_STATUS_LABELS.por_devolver;
+  const satelite = ORDER_STATUS_LABELS.por_devolver_a_bodega_central;
   return cuantas === 1
     ? `Al aprobar el cierre, la orden pasa sola a «${central}» (si es de zona satélite, a «${satelite}»).`
     : `Al aprobar el cierre, las ${cuantas} pasan solas a «${central}» (las de zona satélite, a «${satelite}»).`;
@@ -2289,7 +2289,7 @@ export function CierreFacturaDetalle({
   );
   // Arranca en la primera sección CON órdenes: abrir en una pestaña vacía no dice nada.
   const [tab, setTab] = useState<CierreResultado>(
-    ORDEN_RESULTADOS.find((r) => (grupos[r]?.length ?? 0) > 0) ?? "entregada",
+    ORDEN_RESULTADOS.find((r) => (grupos[r]?.length ?? 0) > 0) ?? "entregado",
   );
   const filas = grupos[tab] ?? [];
 
@@ -2567,7 +2567,7 @@ export function CierreFacturaDetalle({
           <b className="font-medium text-foreground tabular-nums">
             {money(cierre.totales.general)}
           </b>{" "}
-          · {grupos.entregada?.length ?? 0} {FOOTER_ENTREGAS_LABEL}
+          · {grupos.entregado?.length ?? 0} {FOOTER_ENTREGAS_LABEL}
         </span>
         {cierre.motivoRechazo ? (
           <span className="text-xs text-muted-foreground">

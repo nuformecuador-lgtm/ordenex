@@ -81,7 +81,7 @@ export const ESTADOS_ELIMINABLES = [
   "en_ruta_bodega_satelite",
   // La orden espera a que alguien la recoja. No hay intento de entrega —si lo hubiera, el conteo
   // lo delataria— y el paquete no esta en manos del cliente.
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
 ] as const satisfies readonly OrderStatusValue[];
 
 /**

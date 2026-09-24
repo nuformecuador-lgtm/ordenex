@@ -53,9 +53,9 @@ const cicloMock = vi.mocked(consultarCicloVida);
  * lectura cuenta otra cosa.
  */
 const PERIODO_DEL_DISENO = [
-  { status: "entregada", conteo: 424 },
-  { status: "rechazada", conteo: 60 },
-  { status: "devuelta", conteo: 41 },
+  { status: "entregado", conteo: 424 },
+  { status: "devolucion_a_origen_por_rechazo", conteo: 60 },
+  { status: "novedad", conteo: 41 },
   { status: "en_reparto", conteo: 265 },
 ];
 

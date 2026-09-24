@@ -21,8 +21,8 @@ describeSiHayBase("454/C17 — cierre rechazado, re-solicitado y aprobado (Postg
     return conEscenario(mundo, async (e) => {
       const ent = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 5000 });
       const rec = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 7000 });
-      await e.gestionarOk(ent.ordenId, "entregada", { monto: 5000 });
-      await e.gestionarOk(rec.ordenId, "rechazada");
+      await e.gestionarOk(ent.ordenId, "entregado", { monto: 5000 });
+      await e.gestionarOk(rec.ordenId, "devolucion_a_origen_por_rechazo");
       const cierreId = await e.solicitarCierreOk();
 
       const dinero = async () =>
@@ -86,7 +86,7 @@ describeSiHayBase("454/C17 — cierre rechazado, re-solicitado y aprobado (Postg
     expect(r.aprobacion).toBe("ok");
     expect(r.trasAprobar.dinero).toBeGreaterThan(0);
     expect(r.trasAprobar.rec).toBe("por_devolver_a_tienda");
-    expect(r.trasAprobar.ent).toBe("entregada");
+    expect(r.trasAprobar.ent).toBe("entregado");
     // ⏳ 2026-09-23 (FICHA 454, cambio autorizado #2): aqui estaba `toBe(r.historialAntes + 1)`.
     // Pasa al `[INTERMEDIO]` (R1 + R8): el numero de filas lo desplaza el cambio de MOMENTO. Que los
     // estados se apliquen UNA vez lo sigue afirmando «re-aprobar no emite … otra vez».

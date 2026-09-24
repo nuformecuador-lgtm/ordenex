@@ -75,7 +75,7 @@ import { derivarIngresoOrden, pagoTiendaOrdenex } from "@/lib/utils/ingreso-orde
  * nada no aporta (misma decision que la 344, ⟨Q2⟩ de aquella ficha).
  */
 export const CRITERIO_RECAUDO_ENTREGA: CriterioDeAporte = {
-  resultados: ["entregada"],
+  resultados: ["entregado"],
   exigeCobraComision: false,
   exigeTarifa: false,
   exigeMontoCobrar: false,

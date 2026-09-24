@@ -20,10 +20,10 @@ const consultarMock = vi.mocked(consultarConteoEntregas);
 /** Los seis buckets, con los que no se nombren en cero. */
 function datos(parcial: Record<string, number>): ConteoEntregasDTO {
   const porDesenlace = {
-    entregada: 0,
-    devuelta: 0,
-    rechazada: 0,
-    reprogramada: 0,
+    entregado: 0,
+    novedad: 0,
+    devolucion_a_origen_por_rechazo: 0,
+    reprogramado: 0,
     incidente: 0,
     otros: 0,
     ...parcial,
@@ -52,7 +52,7 @@ describe("Anillo de entregas — de dónde sale la cifra", () => {
   // UNA consulta, no dos. Y por la Server Action del conteo, no por la de la analítica del
   // rollup: son dos fuentes distintas y mezclarlas daría un total que no cuadra consigo mismo.
   it("consulta `consultarConteoEntregas` una sola vez y por ninguna otra puerta", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregada: 20, otros: 80 }) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 20, otros: 80 }) });
     renderAnillo();
 
     await waitFor(() => expect(consultarMock).toHaveBeenCalledTimes(1));
@@ -64,7 +64,7 @@ describe("Anillo de entregas — de dónde sale la cifra", () => {
   // mutación que mata es volver a un preset por defecto — la primera cifra de cada visita
   // saldría recortada a siete días mientras la barra dice «sin filtrar».
   it("la primera consulta va SIN filtro: nada preestablecido", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregada: 20, otros: 80 }) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 20, otros: 80 }) });
     renderAnillo();
 
     await waitFor(() => expect(consultarMock).toHaveBeenCalled());
@@ -83,10 +83,10 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos({
-        entregada: 20,
-        devuelta: 5,
-        rechazada: 3,
-        reprogramada: 7,
+        entregado: 20,
+        novedad: 5,
+        devolucion_a_origen_por_rechazo: 3,
+        reprogramado: 7,
         incidente: 1,
         otros: 64,
       }),
@@ -109,7 +109,7 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
   it("escribe el porcentaje de cada desenlace junto a su cifra", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
-      datos: datos({ entregada: 3, devuelta: 5, otros: 2 }),
+      datos: datos({ entregado: 3, novedad: 5, otros: 2 }),
     });
     renderAnillo();
 
@@ -121,7 +121,7 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
   // Un desenlace sin órdenes pesa 0 %, y se dice: es una respuesta, no una ausencia. El mismo
   // criterio por el que los seis segmentos se pintan aunque valgan cero.
   it("los desenlaces vacíos pesan 0 %", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregada: 10 }) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 10 }) });
     renderAnillo();
 
     expect(await screen.findByText(/Entregadas: 10\s\(100\s?%\)/)).toBeInTheDocument();
@@ -144,7 +144,7 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
   it("los tres tercios dicen su razón exacta, y la BARRA sigue midiendo 100 %", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
-      datos: datos({ entregada: 1, devuelta: 1, rechazada: 1 }),
+      datos: datos({ entregado: 1, novedad: 1, devolucion_a_origen_por_rechazo: 1 }),
     });
     const { container } = renderAnillo();
 
@@ -174,7 +174,7 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
   // «No entregadas» era el nombre del cubo viejo. Que no vuelva por descuido: ahora ese lado
   // está desglosado y un rótulo que lo resuma otra vez sería una cifra duplicada.
   it("ya no existe el segmento «No entregadas»", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregada: 20, otros: 80 }) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 20, otros: 80 }) });
     renderAnillo();
 
     await screen.findByText(/Entregadas: 20/);
@@ -184,7 +184,7 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
   // Los SEIS salen siempre, también los que valen cero: un anillo al que le falta un segmento
   // según el día se lee como si esa categoría no existiera.
   it("pinta los desenlaces en cero en vez de omitirlos", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregada: 20 }) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 20 }) });
     renderAnillo();
 
     expect(await screen.findByText(/Devueltas: 0/)).toBeInTheDocument();
@@ -197,7 +197,7 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
   // del mismo universo, así que el calificador sobraría — y una nota que ya no describe nada
   // es peor que ninguna: enseña a ignorar las notas.
   it("no arrastra los calificadores de la versión que mezclaba flujo y stock", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregada: 20, otros: 80 }) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 20, otros: 80 }) });
     renderAnillo();
 
     await screen.findByText(/Entregadas: 20/);
@@ -228,7 +228,7 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
 // una linea. Estos casos vigilan que el rotulo se quede fuera mientras esa sea la decision.
 describe("Anillo de entregas — sin sello de frescura", () => {
   it("no pinta la hora de la ultima actualizacion", async () => {
-    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregada: 20, otros: 80 }) });
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregado: 20, otros: 80 }) });
     renderAnillo();
 
     await screen.findByText(/Entregadas: 20/);
@@ -240,7 +240,7 @@ describe("Anillo de entregas — sin sello de frescura", () => {
   it("un lastSync ilegible no pinta nada ni rompe la grafica", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
-      datos: { ...datos({ entregada: 20, otros: 80 }), lastSync: "no es una fecha" },
+      datos: { ...datos({ entregado: 20, otros: 80 }), lastSync: "no es una fecha" },
     });
     renderAnillo();
 

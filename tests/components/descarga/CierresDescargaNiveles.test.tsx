@@ -224,7 +224,7 @@ function gestion(): CierreGestionDescargaDTO {
     intentosContactoTienda: 2,
     // FICHA 394 — los del MENSAJERO, distinto del de la tienda para que un cruce se vea.
     intentosEntrega: 5,
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "1000.10",
     pagos: [],
     motivo: null,

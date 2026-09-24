@@ -189,47 +189,47 @@ const FIXTURES: Record<string, Record<string, Valor>[]> = {
   ],
   gestion: [
     // K1: la gestion dice `entregada` pero su transicion real llevo la orden a `rechazada`.
-    gestion("g1", "o1", "m", "entregada", "c1", "2030-01-01 12:00:00"),
+    gestion("g1", "o1", "m", "entregado", "c1", "2030-01-01 12:00:00"),
     // K2: `devuelta` de calle con solo la fila de anclaje (lo que escribe el modelo nuevo): la via vieja
     // no la cuenta y la nueva si.
-    gestion("g2", "o2", "m", "devuelta", "c1", "2030-01-01 13:00:00"),
+    gestion("g2", "o2", "m", "novedad", "c1", "2030-01-01 13:00:00"),
     // K3/K4b: la sintetica del tope (su fila de historial la hace «tope» real con 0 intentos).
-    gestion("g3s", "o3", "m", "rechazada", null, "2030-01-02 10:00:01", { motivo: TOPE }),
+    gestion("g3s", "o3", "m", "devolucion_a_origen_por_rechazo", null, "2030-01-02 10:00:01", { motivo: TOPE }),
     // K5a: gestion de calle sin cierre ANTES del corte de c3 que barrio su orden.
-    gestion("g5", "o5", "m2", "reprogramada", null, "2030-01-04 15:00:00"),
+    gestion("g5", "o5", "m2", "reprogramado", null, "2030-01-04 15:00:00"),
     // K5b: g6 en c4 (aprobado antes del corte) pero NO era la mas reciente al aprobar (g6b, anulada
     // despues): ni pendiente ni aplicada.
-    gestion("g6", "o6", "m2", "entregada", "c4", "2030-01-04 16:00:00"),
-    gestion("g6b", "o6", "m2", "entregada", null, "2030-01-04 17:30:00", { anulada_at: "2030-01-04 20:00:00" }),
+    gestion("g6", "o6", "m2", "entregado", "c4", "2030-01-04 16:00:00"),
+    gestion("g6b", "o6", "m2", "entregado", null, "2030-01-04 17:30:00", { anulada_at: "2030-01-04 20:00:00" }),
     // K6: `rechazada` de calle en c5 (solicitado) cuando la 139 la devolvio.
-    gestion("g7", "o7", "m5", "rechazada", "c5", "2030-01-05 08:00:00"),
+    gestion("g7", "o7", "m5", "devolucion_a_origen_por_rechazo", "c5", "2030-01-05 08:00:00"),
     // K7a: `reprogramada` de calle vencida hoy, cierre sin aprobar, y aun asi se libero.
-    gestion("g8", "o8", "m5", "reprogramada", "c5", "2030-01-05 08:30:00", { fecha_reprogramacion: "2030-01-07" }),
+    gestion("g8", "o8", "m5", "reprogramado", "c5", "2030-01-05 08:30:00", { fecha_reprogramacion: "2030-01-07" }),
     // K7b/K4c: `devuelta` not_found aprobada a las 10:00 y escalada a las 12:00 (ventana de 24 h viva).
-    gestion("g9", "o9", "m4", "devuelta", "c6", "2030-01-07 20:00:00", { causa: "not_found" }),
-    gestion("g9s", "o9", "m4", "rechazada", null, "2030-01-08 12:00:00"),
+    gestion("g9", "o9", "m4", "novedad", "c6", "2030-01-07 20:00:00", { causa: "not_found" }),
+    gestion("g9s", "o9", "m4", "devolucion_a_origen_por_rechazo", null, "2030-01-08 12:00:00"),
     // K8a..K8e
-    gestion("g10", "o10", "m3", "entregada", "c7", "2030-01-09 07:00:00"),
-    gestion("g11", "o11", "m3", "entregada", "c8", "2030-01-09 07:00:00", { monto_recibido: 5000 }),
-    gestion("g12", "o12", "m3", "entregada", "c9", "2030-01-09 07:00:00", { monto_recibido: 3000 }),
-    gestion("g13", "o13", "m3", "entregada", "c10", "2030-01-09 07:00:00", { pago_mensajero: 1700 }),
+    gestion("g10", "o10", "m3", "entregado", "c7", "2030-01-09 07:00:00"),
+    gestion("g11", "o11", "m3", "entregado", "c8", "2030-01-09 07:00:00", { monto_recibido: 5000 }),
+    gestion("g12", "o12", "m3", "entregado", "c9", "2030-01-09 07:00:00", { monto_recibido: 3000 }),
+    gestion("g13", "o13", "m3", "entregado", "c10", "2030-01-09 07:00:00", { pago_mensajero: 1700 }),
     gestion("g14", "o14", "m3", "incidente", "c11", "2030-01-09 07:00:00", { indemnizacion: 800 }),
   ],
   hist: [
-    hist("h1", "o1", "en_reparto", "rechazada", "gestion", "g1", "2030-01-01 12:00:00"),
-    hist("h2", "o2", "en_reparto", "devuelta", "anclaje_devolucion", "g2", "2030-01-02 10:00:01"),
-    hist("h3a", "o3", "en_reparto", "sin_gestionar", "corte_sin_gestionar", null, "2030-01-01 23:59:00"),
-    hist("h3b", "o3", "sin_gestionar", "rechazada", "rechazo_tope_intentos", "g3s", "2030-01-02 10:00:01"),
-    hist("h5", "o5", "en_reparto", "sin_gestionar", "corte_sin_gestionar", null, "2030-01-05 00:00:00"),
-    hist("h7", "o7", "rechazada", "por_devolver_a_tienda", "devolucion_rechazada", null, "2030-01-06 10:00:00"),
-    hist("h8", "o8", "reprogramada", "en_bodega_central", "liberacion_reprogramada", null, "2030-01-07 06:00:00"),
+    hist("h1", "o1", "en_reparto", "devolucion_a_origen_por_rechazo", "gestion", "g1", "2030-01-01 12:00:00"),
+    hist("h2", "o2", "en_reparto", "novedad", "anclaje_devolucion", "g2", "2030-01-02 10:00:01"),
+    hist("h3a", "o3", "en_reparto", "novedad_interna", "corte_sin_gestionar", null, "2030-01-01 23:59:00"),
+    hist("h3b", "o3", "novedad_interna", "devolucion_a_origen_por_rechazo", "rechazo_tope_intentos", "g3s", "2030-01-02 10:00:01"),
+    hist("h5", "o5", "en_reparto", "novedad_interna", "corte_sin_gestionar", null, "2030-01-05 00:00:00"),
+    hist("h7", "o7", "devolucion_a_origen_por_rechazo", "por_devolver_a_tienda", "devolucion_rechazada", null, "2030-01-06 10:00:00"),
+    hist("h8", "o8", "reprogramado", "en_bodega_central", "liberacion_reprogramada", null, "2030-01-07 06:00:00"),
     hist("h9a", "o9", "en_reparto", "devolucion_por_confirmar", "gestion", "g9", "2030-01-07 20:00:00"),
-    hist("h9b", "o9", "devolucion_por_confirmar", "devuelta", "anclaje_devolucion", "g9", "2030-01-08 10:00:01"),
-    hist("h9c", "o9", "devuelta", "rechazada", "escalado_devuelta_sla", "g9s", "2030-01-08 12:00:00"),
-    hist("h10", "o10", "en_reparto", "entregada", "gestion", "g10", "2030-01-09 07:00:00"),
-    hist("h11", "o11", "en_reparto", "entregada", "gestion", "g11", "2030-01-09 07:00:00"),
-    hist("h12", "o12", "en_reparto", "entregada", "gestion", "g12", "2030-01-09 07:00:00"),
-    hist("h13", "o13", "en_reparto", "entregada", "gestion", "g13", "2030-01-09 07:00:00"),
+    hist("h9b", "o9", "devolucion_por_confirmar", "novedad", "anclaje_devolucion", "g9", "2030-01-08 10:00:01"),
+    hist("h9c", "o9", "novedad", "devolucion_a_origen_por_rechazo", "escalado_devuelta_sla", "g9s", "2030-01-08 12:00:00"),
+    hist("h10", "o10", "en_reparto", "entregado", "gestion", "g10", "2030-01-09 07:00:00"),
+    hist("h11", "o11", "en_reparto", "entregado", "gestion", "g11", "2030-01-09 07:00:00"),
+    hist("h12", "o12", "en_reparto", "entregado", "gestion", "g12", "2030-01-09 07:00:00"),
+    hist("h13", "o13", "en_reparto", "entregado", "gestion", "g13", "2030-01-09 07:00:00"),
     hist("h14", "o14", "en_reparto", "incidente", "incidente", "g14", "2030-01-09 07:00:00"),
   ],
   csg: [

@@ -282,7 +282,7 @@ function gestionEntregada(
     distritoNombre: "Carmen",
     producto: "Caja",
     tiendaNombre: "Tienda Uno",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "8000.00",
     metodoPago,
     pagos,
@@ -417,7 +417,7 @@ function gestionDiaConMotivo(
 describe("FICHA 408 — el motivo del cron en el archivo del cierre del día", () => {
   it("un rechazo automático emite el texto LARGO, no la etiqueta a secas (R6/R11)", () => {
     const fila = filaDescargaDiaRechazada(
-      gestionDiaConMotivo("rechazada", "escalado SLA wrong_address"),
+      gestionDiaConMotivo("devolucion_a_origen_por_rechazo", "escalado SLA wrong_address"),
     );
 
     expect(fila.motivo).toBe(MOTIVO_LARGO_DIRECCION);
@@ -426,7 +426,7 @@ describe("FICHA 408 — el motivo del cron en el archivo del cierre del día", (
 
   it("y en esa celda no queda ni la sigla ni el value del enum (R4)", () => {
     const fila = filaDescargaDiaRechazada(
-      gestionDiaConMotivo("rechazada", "escalado SLA not_found"),
+      gestionDiaConMotivo("devolucion_a_origen_por_rechazo", "escalado SLA not_found"),
     );
 
     expect(fila.motivo).toBe(
@@ -438,7 +438,7 @@ describe("FICHA 408 — el motivo del cron en el archivo del cierre del día", (
 
   it("una DEVUELTA con la plantilla también se traduce, y con el mismo texto largo (R6)", () => {
     const fila = filaDescargaDiaDevuelta(
-      gestionDiaConMotivo("devuelta", "escalado SLA wrong_address"),
+      gestionDiaConMotivo("novedad", "escalado SLA wrong_address"),
     );
 
     expect(fila.motivo).toBe(MOTIVO_LARGO_DIRECCION);
@@ -446,14 +446,14 @@ describe("FICHA 408 — el motivo del cron en el archivo del cierre del día", (
 
   it("el motivo que él escribió sale intacto (R2)", () => {
     const fila = filaDescargaDiaRechazada(
-      gestionDiaConMotivo("rechazada", "El cliente no contesta el timbre"),
+      gestionDiaConMotivo("devolucion_a_origen_por_rechazo", "El cliente no contesta el timbre"),
     );
 
     expect(fila.motivo).toBe("El cliente no contesta el timbre");
   });
 
   it("un motivo AUSENTE deja la celda VACÍA, nunca el guion de pantalla (R3)", () => {
-    const fila = filaDescargaDiaRechazada(gestionDiaConMotivo("rechazada", null));
+    const fila = filaDescargaDiaRechazada(gestionDiaConMotivo("devolucion_a_origen_por_rechazo", null));
 
     expect(fila.motivo).toBeNull();
     expect(fila.motivo).not.toBe("—");

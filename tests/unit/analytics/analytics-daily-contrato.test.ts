@@ -248,12 +248,12 @@ describe("R27 — `ordenes_creadas` existe porque el catalogo la declara como me
 });
 
 describe("R19/R23 — lo que a proposito NO se materializa", () => {
-  it("`sin_gestionar` esta en el catalogo pero NO tiene columna: se deriva del embudo", () => {
-    const m = getMetrica("sin_gestionar");
+  it("`novedad_interna` esta en el catalogo pero NO tiene columna: se deriva del embudo", () => {
+    const m = getMetrica("novedad_interna");
     expect(m).toBeDefined();
     expect(m!.fuente.tipo).toBe("rollup");
     expect(NOMBRES.has(m!.id)).toBe(false);
-    expect([...NOMBRES].some((n) => n.includes("sin_gestionar"))).toBe(false);
+    expect([...NOMBRES].some((n) => n.includes("novedad_interna"))).toBe(false);
   });
 
   it("`primer_intento_ok` es conteo entero pese a declararse `porcentaje` en el catalogo", () => {

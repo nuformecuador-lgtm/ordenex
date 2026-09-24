@@ -22,32 +22,32 @@ import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 
 /** Los 5 valores del enum `GestionResultado` (`db/schema.prisma:654-662`). */
 const GESTION_RESULTADOS = [
-  "entregada",
-  "reprogramada",
-  "devuelta",
-  "rechazada",
+  "entregado",
+  "reprogramado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
   "incidente",
 ] as const;
 
 describe("RESULTADOS_QUE_CUENTAN_COMO_INTENTO — el criterio declarado (215/R1/R2/R33)", () => {
   it("R1: la lista es EXACTAMENTE rechazada, devuelta y reprogramada", () => {
     expect(RESULTADOS_QUE_CUENTAN_COMO_INTENTO).toEqual([
-      "rechazada",
-      "devuelta",
-      "reprogramada",
+      "devolucion_a_origen_por_rechazo",
+      "novedad",
+      "reprogramado",
     ]);
   });
 
   // R1: `rechazada` es la NOVEDAD del criterio. Con el criterio viejo (destinos de transicion)
   // no contaba por ninguna via: su destino no era `devuelta` ni `reprogramada`.
   it("R1: `rechazada` cuenta, y con el criterio viejo no contaba por ninguna via", () => {
-    expect(RESULTADOS_QUE_CUENTAN_COMO_INTENTO).toContain("rechazada");
+    expect(RESULTADOS_QUE_CUENTAN_COMO_INTENTO).toContain("devolucion_a_origen_por_rechazo");
   });
 
   // R2: la entrega lograda no es un intento fallido; el incidente es un desenlace terminal
   // propio (paquete danado/perdido/robado), no una visita mas.
   it("R2: `entregada` e `incidente` NO estan en la lista", () => {
-    expect(RESULTADOS_QUE_CUENTAN_COMO_INTENTO).not.toContain("entregada");
+    expect(RESULTADOS_QUE_CUENTAN_COMO_INTENTO).not.toContain("entregado");
     expect(RESULTADOS_QUE_CUENTAN_COMO_INTENTO).not.toContain("incidente");
   });
 
@@ -59,7 +59,7 @@ describe("RESULTADOS_QUE_CUENTAN_COMO_INTENTO — el criterio declarado (215/R1/
   it("R1: es una lista de INCLUSION — TODOS los demas resultados del enum quedan fuera", () => {
     const dentro = RESULTADOS_QUE_CUENTAN_COMO_INTENTO as readonly string[];
     const fuera = GESTION_RESULTADOS.filter((r) => !dentro.includes(r));
-    expect(fuera).toEqual(["entregada", "incidente"]);
+    expect(fuera).toEqual(["entregado", "incidente"]);
     expect(dentro).toHaveLength(GESTION_RESULTADOS.length - fuera.length);
     // Y todo lo que esta dentro es un valor REAL del enum (el `satisfies` lo fuerza en compile
     // time; aqui se comprueba en runtime para que el caso no dependa solo del tipo).
@@ -72,11 +72,11 @@ describe("RESULTADOS_QUE_CUENTAN_COMO_INTENTO — el criterio declarado (215/R1/
   // automatico no aporta ningun resultado nuevo. Consecuencia aceptada: el agujero que dio
   // origen a la ficha —la orden que sale, la corta el cron, vuelve a bodega y sale otra vez con
   // el mismo contador— SIGUE ABIERTO tras esta feature.
-  it("R33: `sin_gestionar` no esta en la lista y NO PUEDE estar (no es un GestionResultado)", () => {
+  it("R33: `novedad_interna` no esta en la lista y NO PUEDE estar (no es un GestionResultado)", () => {
     expect(RESULTADOS_QUE_CUENTAN_COMO_INTENTO as readonly string[]).not.toContain(
-      "sin_gestionar",
+      "novedad_interna",
     );
-    expect(GESTION_RESULTADOS as readonly string[]).not.toContain("sin_gestionar");
+    expect(GESTION_RESULTADOS as readonly string[]).not.toContain("novedad_interna");
   });
 });
 
@@ -198,13 +198,13 @@ describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (215/R14)", 
     // `gestion` y `gestion_tienda_ayuda` estan en `ORIGEN_TIPOS_VISITA_REAL` (cuentan intento),
     // `reprogramacion_tienda` no (es un tramite de escritorio sobre una orden que ya tiene su
     // `devuelta` contada, y sumarla seria el doble conteo de 160/R2).
-    const aReprogramada = aristas.filter((a) => a.destino === "reprogramada");
+    const aReprogramada = aristas.filter((a) => a.destino === "reprogramado");
     expect(aReprogramada).toHaveLength(3);
     expect(aReprogramada).toEqual(
       expect.arrayContaining([
-        { origen: "en_reparto", destino: "reprogramada", via: "gestion" }, // #13
-        { origen: "devuelta", destino: "reprogramada", via: "reprogramacion_tienda" }, // #22
-        { origen: "en_reparto", destino: "reprogramada", via: "gestion_tienda_ayuda" }, // #71 (454; antes #65 desde `ayuda_tienda`)
+        { origen: "en_reparto", destino: "reprogramado", via: "gestion" }, // #13
+        { origen: "novedad", destino: "reprogramado", via: "reprogramacion_tienda" }, // #22
+        { origen: "en_reparto", destino: "reprogramado", via: "gestion_tienda_ayuda" }, // #71 (454; antes #65 desde `ayuda_tienda`)
       ]),
     );
   });
@@ -247,14 +247,14 @@ describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (215/R14)", 
     // sale del catalogo y la gestion `devuelta` se REGISTRA sin transicion: su intento lo cuenta la
     // SEGUNDA VIA de la 6.ª condicion (el evento `gestion_registrada`, design §10), no una arista.
     const deGestionADevuelta = aristas.filter(
-      (a) => a.destino === "devuelta" && a.via === "gestion",
+      (a) => a.destino === "novedad" && a.via === "gestion",
     );
     expect(deGestionADevuelta).toEqual([]);
 
     // `devuelta` conserva entrada: la del ANCLAJE, con familia PROPIA. Y esa familia NO esta en
     // `ORIGEN_TIPOS_VISITA_REAL`, que es lo que impide que la confirmacion administrativa sume
     // un intento de mas (y con el, un `cobroRechazado` antes de tiempo).
-    const aDevuelta = aristas.filter((a) => a.destino === "devuelta");
+    const aDevuelta = aristas.filter((a) => a.destino === "novedad");
     expect(aDevuelta.length).toBeGreaterThanOrEqual(1);
     expect(aDevuelta.map((a) => a.via)).toContain("anclaje_devolucion");
     expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("anclaje_devolucion");
@@ -281,8 +281,8 @@ describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (215/R14)", 
     ]);
     // Ninguna salida lleva a `devuelta` ni a `reprogramada`: el mapa no se redirigio.
     for (const s of salidas) {
-      expect(s.destino).not.toBe("devuelta");
-      expect(s.destino).not.toBe("reprogramada");
+      expect(s.destino).not.toBe("novedad");
+      expect(s.destino).not.toBe("reprogramado");
     }
   });
 

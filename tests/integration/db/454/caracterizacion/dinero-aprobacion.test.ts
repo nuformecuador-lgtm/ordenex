@@ -43,16 +43,16 @@ describeSiHayBase("454/C11 — dinero de la aprobacion (Postgres real)", () => {
       const dev = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 6000 });
       const rep = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 8000 });
       const inc = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 5000 });
-      await e.gestionarOk(ent.ordenId, "entregada", {
+      await e.gestionarOk(ent.ordenId, "entregado", {
         monto: 10000,
         pagos: [
           { metodo: "efectivo", monto: 6000 },
           { metodo: "SINPE", monto: 4000 },
         ],
       });
-      await e.gestionarOk(rec.ordenId, "rechazada");
-      await e.gestionarOk(dev.ordenId, "devuelta");
-      await e.gestionarOk(rep.ordenId, "reprogramada");
+      await e.gestionarOk(rec.ordenId, "devolucion_a_origen_por_rechazo");
+      await e.gestionarOk(dev.ordenId, "novedad");
+      await e.gestionarOk(rep.ordenId, "reprogramado");
       const gInc = await e.gestionarOk(inc.ordenId, "incidente");
       const cierreId = await e.solicitarCierreOk();
       const c = await e.tx.cierreDia.findUniqueOrThrow({

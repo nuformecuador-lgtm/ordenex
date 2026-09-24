@@ -146,7 +146,7 @@ const SELECT_DETALLE_106 = {
     where: {
       OR: [
         {
-          resultado: { in: ["entregada", "rechazada", "incidente"] }, // 268/R27
+          resultado: { in: ["entregado", "devolucion_a_origen_por_rechazo", "incidente"] }, // 268/R27
           evidenciaStoragePath: { not: null },
         },
         { anuladaAt: null }, // 405/R11

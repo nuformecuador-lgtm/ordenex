@@ -36,7 +36,7 @@ function detalleDe(fila: Fila, overrides: Partial<ApiOrdenDetalleDTO> = {}): Api
   return {
     numGuia: fila.numGuia,
     numRemision: fila.numRemision,
-    estado: "entregada",
+    estado: "entregado",
     destinatario: "Ana",
     telefonoDest: "0999999999",
     producto: "Caja",
@@ -55,7 +55,7 @@ function detalleDe(fila: Fila, overrides: Partial<ApiOrdenDetalleDTO> = {}): Api
     gestiones: [],
     evidencias: [
       {
-        resultado: "entregada",
+        resultado: "entregado",
         contentType: "image/jpeg",
         url: "https://proyecto.supabase.co/storage/v1/object/sign/abc",
         expiraEnSegundos: 300,
@@ -155,7 +155,7 @@ describe("GET /api/ordenes/api-key/orden/{id} — resolucion (R6/R11/R12/R14/R15
     const json = await res.json();
     expect(json.numGuia).toBe(100234);
     expect(json.numRemision).toBe("REM-A");
-    expect(json.evidencias[0]).toMatchObject({ resultado: "entregada", expiraEnSegundos: 300 });
+    expect(json.evidencias[0]).toMatchObject({ resultado: "entregado", expiraEnSegundos: 300 });
     expect(detallePorOrdenId).toHaveBeenCalledWith(ACTOR, "orden-A");
   });
 
@@ -454,7 +454,7 @@ describe("GET /api/ordenes/api-key/orden/{id} — `mensajero` de punta a punta (
 function gestionCruda(over: Record<string, unknown> = {}) {
   return {
     id: "g-1",
-    resultado: "devuelta",
+    resultado: "novedad",
     evidenciaStoragePath: null,
     evidenciaContentType: null,
     createdAt: new Date("2026-09-04T18:02:55.000Z"),
@@ -496,7 +496,7 @@ describe("GET /api/ordenes/api-key/orden/{id} — `gestiones` de punta a punta (
     expect(json.gestiones).toEqual([
       {
         createdAt: "2026-09-04T18:02:55.000Z",
-        resultado: "devuelta",
+        resultado: "novedad",
         estadoResultante: "devolucion_por_confirmar",
         motivo: "wrong_address",
         mensajero: {

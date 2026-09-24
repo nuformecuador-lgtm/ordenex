@@ -28,13 +28,13 @@ describe("398/T3.1 — el borde acepta EXACTAMENTE dos campos", () => {
     const r = corregirResultadoGestionSchema.safeParse({
       gestionId: GESTION,
       motivo: MOTIVO,
-      nuevoResultado: "devuelta",
+      nuevoResultado: "novedad",
     });
     expect(r.success).toBe(false);
   });
 
   it.each([
-    ["resultado", { resultado: "rechazada" }],
+    ["resultado", { resultado: "devolucion_a_origen_por_rechazo" }],
     ["cierreId", { cierreId: GESTION }],
     ["evidencias", { evidencias: [{ storagePath: "x", contentType: "image/jpeg" }] }],
     ["pagoMensajero", { pagoMensajero: "0.00" }],

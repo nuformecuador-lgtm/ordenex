@@ -28,7 +28,7 @@ function ordenDTO(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
     numGuia: 10,
     numRemision: "REM-1",
     estatusId: "os-devuelta",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "store-1",
@@ -49,7 +49,7 @@ function ordenDTO(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
 type OrdenRepoDoble = Pick<IOrdenRepository, "findById" | "findEstatusIdByValue">;
 type GestionRepoDoble = Pick<IGestionOrdenRepository, "reprogramarDesdeDevuelta">;
 
-const ESTATUS: Record<string, string> = { devuelta: "os-devuelta", reprogramada: "os-reprogramada" };
+const ESTATUS: Record<string, string> = { novedad: "os-devuelta", reprogramado: "os-reprogramada" };
 
 function buildOrdenRepo(overrides: Partial<OrdenRepoDoble> = {}): OrdenRepoDoble {
   return {
@@ -128,7 +128,7 @@ describe("ReprogramacionTiendaService · guardia de estado (R7)", () => {
     const r = await service.reprogramar("o1", FECHA, null, TIENDA);
 
     expect(r.status).toBe("conflict");
-    if (r.status === "conflict") expect(r.motivo).toContain("devuelta");
+    if (r.status === "conflict") expect(r.motivo).toContain("novedad");
     expect(gestionRepo.reprogramarDesdeDevuelta).not.toHaveBeenCalled();
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalled();
   });
@@ -158,7 +158,7 @@ describe("ReprogramacionTiendaService · bordes de dominio", () => {
 
   it("catalogo sin `reprogramada` -> config_error, sin escribir", async () => {
     const ordenRepo = buildOrdenRepo({
-      findEstatusIdByValue: vi.fn(async (v: string) => (v === "devuelta" ? "os-devuelta" : null)),
+      findEstatusIdByValue: vi.fn(async (v: string) => (v === "novedad" ? "os-devuelta" : null)),
     });
     const gestionRepo = buildGestionRepo();
     const service = new ReprogramacionTiendaService(ordenRepo, gestionRepo, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);

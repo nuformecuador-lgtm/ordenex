@@ -45,10 +45,10 @@ describe("R5 — los mapas por RESULTADO clasifican `incidente` explicitamente",
     const src = leer(LIB, "services", "MisAsignacionesService.ts");
     const fn = src.slice(src.indexOf("function buildGestionData"));
     const casos: GestionResultado[] = [
-      "entregada",
-      "reprogramada",
-      "devuelta",
-      "rechazada",
+      "entregado",
+      "reprogramado",
+      "novedad",
+      "devolucion_a_origen_por_rechazo",
       "incidente",
     ];
     for (const caso of casos) expect(fn, `falta el case "${caso}"`).toContain(`case "${caso}":`);

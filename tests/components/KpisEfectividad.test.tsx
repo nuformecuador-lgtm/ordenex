@@ -59,8 +59,8 @@ afterEach(cleanup);
 describe("El reparto de la efectividad", () => {
   it("mide entregadas sobre el universo ENTERO, en proceso incluido", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 60 },
-      { status: "devuelta", conteo: 20 },
+      { status: "entregado", conteo: 60 },
+      { status: "novedad", conteo: 20 },
       { status: "en_reparto", conteo: 20 },
     ]);
 
@@ -71,9 +71,9 @@ describe("El reparto de la efectividad", () => {
   // llegó, encontró al destinatario y resolvió la orden — lo que falló fue la venta.
   it("la efectividad de la gestión suma entregadas y rechazadas sobre el MISMO total", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 60 },
-      { status: "rechazada", conteo: 15 },
-      { status: "devuelta", conteo: 5 },
+      { status: "entregado", conteo: 60 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 15 },
+      { status: "novedad", conteo: 5 },
       { status: "en_reparto", conteo: 20 },
     ]);
 
@@ -86,9 +86,9 @@ describe("El reparto de la efectividad", () => {
   // orden se quedó sin resolver o volvió.
   it("solo los rechazos se suman: los otros desenlaces no", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 1 },
-      { status: "devuelta", conteo: 1 },
-      { status: "reprogramada", conteo: 1 },
+      { status: "entregado", conteo: 1 },
+      { status: "novedad", conteo: 1 },
+      { status: "reprogramado", conteo: 1 },
       { status: "incidente", conteo: 1 },
     ]);
 
@@ -100,7 +100,7 @@ describe("El reparto de la efectividad", () => {
   // desaparecería de este KPI en silencio mientras el anillo sí lo contaría en «Otros».
   it("un estado del catálogo que nadie previó cuenta como en proceso", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 5 },
+      { status: "entregado", conteo: 5 },
       { status: "estado_inventado_manana", conteo: 5 },
     ]);
 
@@ -110,9 +110,9 @@ describe("El reparto de la efectividad", () => {
   // Los cinco desenlaces YA no están en proceso, aunque no sean «entregada».
   it("los desenlaces que no son entrega no cuentan como en proceso", () => {
     const r = calcularEfectividad([
-      { status: "devuelta", conteo: 1 },
-      { status: "rechazada", conteo: 1 },
-      { status: "reprogramada", conteo: 1 },
+      { status: "novedad", conteo: 1 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 1 },
+      { status: "reprogramado", conteo: 1 },
       { status: "incidente", conteo: 1 },
     ]);
 
@@ -140,8 +140,8 @@ describe("Las tarjetas de efectividad", () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
-        { status: "entregada", conteo: 60 },
-        { status: "devuelta", conteo: 20 },
+        { status: "entregado", conteo: 60 },
+        { status: "novedad", conteo: 20 },
         { status: "en_reparto", conteo: 20 },
       ]),
     });
@@ -175,7 +175,7 @@ describe("Las tarjetas de efectividad", () => {
   it("consulta el desglose por status una sola vez y sin filtro", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
-      datos: datos([{ status: "entregada", conteo: 40 }]),
+      datos: datos([{ status: "entregado", conteo: 40 }]),
     });
     renderKpis();
 
@@ -213,9 +213,9 @@ describe("Las tarjetas de efectividad", () => {
  * igual lea la cifra que lea, y varios de los casos de abajo no distinguirían nada.
  */
 const CASO_REPORTADO: ConteoDeStatus[] = [
-  { status: "entregada", conteo: 259 },
-  { status: "rechazada", conteo: 80 },
-  { status: "devuelta", conteo: 138 },
+  { status: "entregado", conteo: 259 },
+  { status: "devolucion_a_origen_por_rechazo", conteo: 80 },
+  { status: "novedad", conteo: 138 },
   { status: "incidente", conteo: 20 },
   { status: "en_reparto", conteo: 380 },
 ];
@@ -237,7 +237,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
       status: "ok",
       datos: datosConTotalDescuadrado(
         [
-          { status: "entregada", conteo: 30 },
+          { status: "entregado", conteo: 30 },
           { status: "en_reparto", conteo: 70 },
         ],
         999,
@@ -290,7 +290,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
-        { status: "entregada", conteo: 1000 },
+        { status: "entregado", conteo: 1000 },
         { status: "en_reparto", conteo: 234 },
       ]),
     });
@@ -304,7 +304,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
   it("concuerda en singular con una sola orden", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
-      datos: datos([{ status: "entregada", conteo: 1 }]),
+      datos: datos([{ status: "entregado", conteo: 1 }]),
     });
     renderKpis();
 

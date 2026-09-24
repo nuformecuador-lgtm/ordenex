@@ -39,10 +39,10 @@ describe("Los cinco desenlaces son los del catálogo, no una lista escrita a man
 
   it("son los que se pidieron, y en su orden", () => {
     expect(DESENLACES).toEqual([
-      "entregada",
-      "devuelta",
-      "rechazada",
-      "reprogramada",
+      "entregado",
+      "novedad",
+      "devolucion_a_origen_por_rechazo",
+      "reprogramado",
       "incidente",
     ]);
   });
@@ -51,18 +51,18 @@ describe("Los cinco desenlaces son los del catálogo, no una lista escrita a man
 describe("El pliegue en seis buckets", () => {
   it("cada desenlace nombrado va a su bucket", () => {
     const plegado = plegarEnDesenlaces([
-      { status: "entregada", conteo: 20 },
-      { status: "devuelta", conteo: 5 },
-      { status: "rechazada", conteo: 3 },
-      { status: "reprogramada", conteo: 7 },
+      { status: "entregado", conteo: 20 },
+      { status: "novedad", conteo: 5 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 3 },
+      { status: "reprogramado", conteo: 7 },
       { status: "incidente", conteo: 1 },
     ]);
 
     expect(plegado).toEqual({
-      entregada: 20,
-      devuelta: 5,
-      rechazada: 3,
-      reprogramada: 7,
+      entregado: 20,
+      novedad: 5,
+      devolucion_a_origen_por_rechazo: 3,
+      reprogramado: 7,
       incidente: 1,
       [BUCKET_OTROS]: 0,
     });
@@ -78,7 +78,7 @@ describe("El pliegue en seis buckets", () => {
       { status: "devuelta_a_tienda", conteo: 6 },
     ]);
 
-    expect(plegado.devuelta).toBe(0);
+    expect(plegado.novedad).toBe(0);
     expect(plegado[BUCKET_OTROS]).toBe(10);
   });
 
@@ -110,7 +110,7 @@ describe("El pliegue en seis buckets", () => {
   it("acumula varias filas en el mismo bucket", () => {
     expect(plegarEnDesenlaces([
       { status: "en_reparto", conteo: 3 },
-      { status: "sin_gestionar", conteo: 4 },
+      { status: "novedad_interna", conteo: 4 },
     ])[BUCKET_OTROS]).toBe(7);
   });
 
@@ -118,10 +118,10 @@ describe("El pliegue en seis buckets", () => {
   // del desglose por status, o los dos gráficos de la pantalla dejan de cuadrar.
   it("conserva la suma: el pliegue no pierde ni una orden", () => {
     const filas = [
-      { status: "entregada", conteo: 20 },
-      { status: "devuelta", conteo: 5 },
+      { status: "entregado", conteo: 20 },
+      { status: "novedad", conteo: 5 },
       { status: "en_reparto", conteo: 11 },
-      { status: "sin_gestionar", conteo: 4 },
+      { status: "novedad_interna", conteo: 4 },
     ];
     const plegado = plegarEnDesenlaces(filas);
 
@@ -138,7 +138,7 @@ describe("El repositorio delega en el desglose por status", () => {
     const consulta = consultaDe({ zona_id: ["z1"] });
     const porStatus = {
       contarPorStatus: vi.fn().mockResolvedValue([
-        { status: "entregada", conteo: 20 },
+        { status: "entregado", conteo: 20 },
         { status: "devuelta_a_tienda", conteo: 6 },
       ]),
     };
@@ -146,7 +146,7 @@ describe("El repositorio delega en el desglose por status", () => {
     const resultado = await new ConteoEntregasRepository(porStatus).contar(consulta);
 
     expect(porStatus.contarPorStatus).toHaveBeenCalledWith(consulta);
-    expect(resultado.porDesenlace).toMatchObject({ entregada: 20, [BUCKET_OTROS]: 6 });
+    expect(resultado.porDesenlace).toMatchObject({ entregado: 20, [BUCKET_OTROS]: 6 });
   });
 });
 
@@ -155,10 +155,10 @@ describe("El repositorio delega en el desglose por status", () => {
 // el próximo renombre (ya pasó tres veces: features 135, 153 y 154).
 describe("La etiqueta de un desenlace", () => {
   it("pone en plural y capitaliza los cinco desenlaces", () => {
-    expect(etiquetaDeDesenlace("entregada")).toBe("Entregadas");
-    expect(etiquetaDeDesenlace("devuelta")).toBe("Devueltas");
-    expect(etiquetaDeDesenlace("rechazada")).toBe("Rechazadas");
-    expect(etiquetaDeDesenlace("reprogramada")).toBe("Reprogramadas");
+    expect(etiquetaDeDesenlace("entregado")).toBe("Entregadas");
+    expect(etiquetaDeDesenlace("novedad")).toBe("Devueltas");
+    expect(etiquetaDeDesenlace("devolucion_a_origen_por_rechazo")).toBe("Rechazadas");
+    expect(etiquetaDeDesenlace("reprogramado")).toBe("Reprogramadas");
     expect(etiquetaDeDesenlace("incidente")).toBe("Incidentes");
   });
 

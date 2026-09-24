@@ -82,11 +82,11 @@ describe("Feature 266 · T3.1 — OrdenRepository.findParaHabilitacionApi", () =
     const prisma = buildPrisma({
       id: "orden-2",
       mensajeroAsignadoId: null,
-      estatus: { value: "devuelta" },
+      estatus: { value: "novedad" },
     });
     const res = await repoCon(prisma).findParaHabilitacionApi(NUM_GUIA, OWNER);
     expect(res?.mensajeroAsignadoId).toBeNull();
-    expect(res?.estatusValue).toBe("devuelta");
+    expect(res?.estatusValue).toBe("novedad");
     expect(res?.ayudaAbierta).toBe(false); // la derivacion no la devolvio
   });
 

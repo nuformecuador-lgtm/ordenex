@@ -32,19 +32,19 @@ describeSiHayBase("454/T1.16 — predicado de /novedades de la tienda (Postgres 
     return conEscenario(mundo, async (e) => {
       const nueva = () => e.sembrarOrden({ estatus: "en_reparto" });
       const [a1, a2, a3, a4, a5, a6] = [await nueva(), await nueva(), await nueva(), await nueva(), await nueva(), await nueva()];
-      const d1 = await e.sembrarOrden({ estatus: "devuelta" });
+      const d1 = await e.sembrarOrden({ estatus: "novedad" });
       const pedidas = [];
       for (const o of [a1, a2, a3, a4, a5, a6]) pedidas.push((await e.pedirAyuda(o.ordenId)).status);
 
       const recuperada = (await e.recuperar(a2.ordenId)).status;
-      const gestionada = (await e.gestionarDesdeAyuda(a3.ordenId, "rechazada")).status;
+      const gestionada = (await e.gestionarDesdeAyuda(a3.ordenId, "devolucion_a_origen_por_rechazo")).status;
       // A4: transiciona DESPUES de la solicitud (p. ej. el corte la barre).
-      await e.tx.orden.update({ where: { id: a4.ordenId }, data: { estatusId: e.id("sin_gestionar") } });
+      await e.tx.orden.update({ where: { id: a4.ordenId }, data: { estatusId: e.id("novedad_interna") } });
       await e.tx.ordenHistorialEstado.create({
         data: {
           ordenId: a4.ordenId,
           estatusOrigenId: e.id("en_reparto"),
-          estatusDestinoId: e.id("sin_gestionar"),
+          estatusDestinoId: e.id("novedad_interna"),
           origenTipo: "corte_sin_gestionar",
           createdAt: new Date(Date.now() + 60_000),
         },

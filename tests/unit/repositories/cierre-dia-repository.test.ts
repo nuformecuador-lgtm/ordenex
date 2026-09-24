@@ -40,7 +40,7 @@ function detalleRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "g1",
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: new Prisma.Decimal("12.50"),
     metodoPago: "efectivo",
     motivo: null,
@@ -315,7 +315,7 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
       detalleRow({ pagoMensajero: new Prisma.Decimal("5.00"), ingresoBodegaRechazo: new Prisma.Decimal("3.00") }), // feature 39/56: snapshots presentes
       detalleRow({
         id: "g2",
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         montoRecibido: null,
         metodoPago: null,
         motivo: "cliente ausente",
@@ -333,7 +333,7 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
     expect(rows[0]).toMatchObject({
       gestionId: "g1",
       ordenId: "o1",
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: "12.50", // STRING, no number
       metodoPago: "efectivo",
       zonaNombre: "Cartago",
@@ -346,7 +346,7 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
     expect(typeof rows[0].pagoMensajero).toBe("string");
     expect(typeof rows[0].ingresoBodegaRechazo).toBe("string");
     expect(rows[1]).toMatchObject({
-      resultado: "reprogramada",
+      resultado: "reprogramado",
       montoRecibido: null,
       metodoPago: null,
       motivo: "cliente ausente",
@@ -366,7 +366,7 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
 
     const n = await repo.contarOrdenesPendientesGestion(
       "m1",
-      ["por_recoger", "en_reparto"],
+      ["mensajero_recogiendo_en_bodega", "en_reparto"],
       HOY_CR,
     );
 
@@ -375,7 +375,7 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
     expect(arg.where).toMatchObject({
       mensajeroAsignadoId: "m1",
       deletedAt: null,
-      estatus: { value: { in: ["por_recoger", "en_reparto"] } },
+      estatus: { value: { in: ["mensajero_recogiendo_en_bodega", "en_reparto"] } },
     });
   });
 
@@ -618,7 +618,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
 
   const CORTE = {
     enRepartoEstatusId: idEstado("en_reparto"),
-    sinGestionarEstatusId: idEstado("sin_gestionar"),
+    sinGestionarEstatusId: idEstado("novedad_interna"),
     // Feature 246 (T2.3, R11/R16): OBLIGATORIO, para que un olvido de cableado rompa el typecheck.
     diaCerrado: DIA_CERRADO,
   };
@@ -638,7 +638,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     };
   }
 
-  it("R4/R22: transiciona en_reparto -> sin_gestionar GUARDADO por estatus_id=en_reparto; conserva mensajero", async () => {
+  it("R4/R22: transiciona en_reparto -> novedad_interna GUARDADO por estatus_id=en_reparto; conserva mensajero", async () => {
     const tx = buildCorteTx();
     const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
@@ -667,7 +667,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
       // por la lista de ids se barriera igual.
       OR: OR_NO_RESERVADA,
     });
-    expect(upd.data).toEqual({ estatusId: idEstado("sin_gestionar") });
+    expect(upd.data).toEqual({ estatusId: idEstado("novedad_interna") });
     expect(upd.data).not.toHaveProperty("mensajeroAsignadoId"); // se conserva
     expect(upd.data).not.toHaveProperty("prioridad"); // money-safe: no toca prioridad
   });
@@ -701,7 +701,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
       {
         ordenId: "o1",
         estatusOrigenId: idEstado("en_reparto"),
-        estatusDestinoId: idEstado("sin_gestionar"),
+        estatusDestinoId: idEstado("novedad_interna"),
         actorUsuarioId: null, // R6: sistema/cron
         origenTipo: "corte_sin_gestionar", // R6
         motivo: null,
@@ -710,7 +710,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
       {
         ordenId: "o2",
         estatusOrigenId: idEstado("en_reparto"),
-        estatusDestinoId: idEstado("sin_gestionar"),
+        estatusDestinoId: idEstado("novedad_interna"),
         actorUsuarioId: null,
         origenTipo: "corte_sin_gestionar",
         motivo: null,
@@ -719,7 +719,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     ]);
   });
 
-  it("R8: 0 gestiones vinculadas + >=1 sin_gestionar -> crea el `vencido` money-neutral (no null)", async () => {
+  it("R8: 0 gestiones vinculadas + >=1 novedad_interna -> crea el `vencido` money-neutral (no null)", async () => {
     const tx = buildCorteTx({ vinculadas: 0, movidas: 2 });
     const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
@@ -786,7 +786,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
 
     const upd = tx.orden.updateMany.mock.calls[0][0];
     // Igualdad EXACTA: ni prioridad, ni mensajero, ni ningun total del cierre.
-    expect(upd.data).toEqual({ estatusId: idEstado("sin_gestionar") });
+    expect(upd.data).toEqual({ estatusId: idEstado("novedad_interna") });
     // Y el cierre conserva sus totales tal cual llegaron (money-safe).
     const cierre = tx.cierreDia.create.mock.calls[0][0].data;
     expect(cierre.totalEfectivo.toString()).toBe("0");
@@ -1100,7 +1100,7 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
       id: "g1",
       ordenId: "o1",
       mensajeroId: "m1",
-      resultado: "devuelta",
+      resultado: "novedad",
       cierreId: null,
       anuladaAt: null,
       orden: { deletedAt: null, estatusId: idEstado("en_bodega_central"), estatus: { value: "en_bodega_central" } },
@@ -1114,7 +1114,7 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
       gestionId: "g1",
       ordenId: "o1",
       mensajeroId: "m1", // R9
-      resultado: "devuelta", // R5
+      resultado: "novedad", // R5
       cierreId: null, // R2
       anuladaAt: null, // R3
       orden: { deletedAt: null, estatusId: idEstado("en_bodega_central"), estatusValue: "en_bodega_central" }, // R5/R6
@@ -1137,10 +1137,10 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
         id: "g1",
         ordenId: "o1",
         mensajeroId: "m1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         cierreId: null,
         anuladaAt: null,
-        orden: { deletedAt: null, estatusId: idEstado("rechazada"), estatus: { value: "rechazada" } },
+        orden: { deletedAt: null, estatusId: idEstado("devolucion_a_origen_por_rechazo"), estatus: { value: "devolucion_a_origen_por_rechazo" } },
       });
       (prisma.ordenHistorialEstado.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(
         filaHistorial,
@@ -1202,10 +1202,10 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
       id: "g1",
       ordenId: "o1",
       mensajeroId: "m1",
-      resultado: "entregada",
+      resultado: "entregado",
       cierreId: null,
       anuladaAt: null,
-      orden: { deletedAt: borrada, estatusId: idEstado("entregada"), estatus: { value: "entregada" } },
+      orden: { deletedAt: borrada, estatusId: idEstado("entregado"), estatus: { value: "entregado" } },
     });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
@@ -2386,7 +2386,7 @@ describe("246/R11-R15 — el corte NO barre lo reservado para un dia que aun no 
           destinoZonaId: "z1",
           corteSinGestionar: {
             enRepartoEstatusId: idEstado("en_reparto"),
-            sinGestionarEstatusId: idEstado("sin_gestionar"),
+            sinGestionarEstatusId: idEstado("novedad_interna"),
             diaCerrado: DIA_CERRADO_B,
           },
           totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
@@ -2652,7 +2652,7 @@ describe("264/B3 — crearCierre PERSISTE el vinculo de las ordenes barridas", (
   const DIA_CERRADO = new Date("2026-08-20T00:00:00.000Z");
   const CORTE_264 = {
     enRepartoEstatusId: idEstado("en_reparto"),
-    sinGestionarEstatusId: idEstado("sin_gestionar"),
+    sinGestionarEstatusId: idEstado("novedad_interna"),
     diaCerrado: DIA_CERRADO,
   };
 
@@ -3072,7 +3072,7 @@ describe("425/B3-B4 — crearCierre incorpora los rechazos de tienda sin darles 
       mensajeroId: "m-arnel",
       cierreId: null,
       anuladaAt: null,
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       historialEstados: { some: { origenTipo: "rechazo_tienda" } },
       vinculoRechazoTienda: { is: null },
     });

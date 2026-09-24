@@ -487,7 +487,7 @@ describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", 
     repo = buildRepo({
       list: vi.fn().mockResolvedValue({
         items: [
-          listItem({ id: "o-rech", estatusValue: "rechazada", tiendaId: "store1" }),
+          listItem({ id: "o-rech", estatusValue: "devolucion_a_origen_por_rechazo", tiendaId: "store1" }),
           listItem({ id: "o-dev", estatusValue: "devolviendo_a_tienda", tiendaId: "store1" }),
         ],
         total: 2,
@@ -502,7 +502,7 @@ describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", 
 
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
-      expect(r.items.map((i) => i.estatusValue)).toEqual(["rechazada", "devolviendo_a_tienda"]);
+      expect(r.items.map((i) => i.estatusValue)).toEqual(["devolucion_a_origen_por_rechazo", "devolviendo_a_tienda"]);
     }
     // R12: el alcance server-side es la propia tienda (no un parametro del cliente).
     const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -583,7 +583,7 @@ describe("listar / eliminable (eliminar orden)", () => {
   });
 
   it("orden en un estado que ya no admite borrado -> eliminable false", async () => {
-    const { service } = conPagina([listItem({ id: "o1", estatusValue: "entregada" })]);
+    const { service } = conPagina([listItem({ id: "o1", estatusValue: "entregado" })]);
 
     const r = await service.listar(PAGINA, MAESTRO);
 

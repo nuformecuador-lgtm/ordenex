@@ -201,7 +201,7 @@ describe("Feature 258 · (c) R17 — los mapas van por clave de contador, no por
   });
 
   it("la cláusula NO es vacía: un mapa clavado por estatus SÍ se detecta", () => {
-    const malo = { entregada: "success", en_reparto: "info" };
+    const malo = { entregado: "success", en_reparto: "info" };
     expect(Object.keys(malo).some((clave) => VALUES.includes(clave))).toBe(true);
   });
 });

@@ -41,8 +41,8 @@ function filaCongelada(over: Partial<Record<string, unknown>> = {}) {
     tiendaNombre: "Tienda A",
     orden: {
       gestiones: [
-        { resultado: "entregada", montoRecibido: new Prisma.Decimal("14900.00") },
-        { resultado: "reprogramada", montoRecibido: null },
+        { resultado: "entregado", montoRecibido: new Prisma.Decimal("14900.00") },
+        { resultado: "reprogramado", montoRecibido: null },
       ],
     },
     ...over,
@@ -87,7 +87,7 @@ describe("CierreAporteRepository — la forma de la consulta (R21/R22)", () => {
     expect(where.montoCobrar).toEqual({ gt: 0 });
     // Y el hecho de la GESTION, como un EXISTS acotado al MISMO cierre.
     expect(where.orden).toEqual({
-      gestiones: { some: { cierreId: CIERRE, resultado: { in: ["entregada"] } } },
+      gestiones: { some: { cierreId: CIERRE, resultado: { in: ["entregado"] } } },
     });
 
     // R28: el `count` va con el MISMO `where`, no con uno parecido.
@@ -108,7 +108,7 @@ describe("CierreAporteRepository — la forma de la consulta (R21/R22)", () => {
     expect("cobraComision" in where).toBe(false);
     expect("montoCobrar" in where).toBe(false);
     expect(where.orden).toEqual({
-      gestiones: { some: { cierreId: CIERRE, resultado: { in: ["entregada"] } } },
+      gestiones: { some: { cierreId: CIERRE, resultado: { in: ["entregado"] } } },
     });
   });
 
@@ -125,7 +125,7 @@ describe("CierreAporteRepository — la forma de la consulta (R21/R22)", () => {
       gestiones: {
         some: {
           cierreId: CIERRE,
-          resultado: { in: ["entregada", "reprogramada", "devuelta", "rechazada", "incidente"] },
+          resultado: { in: ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo", "incidente"] },
           montoRecibido: { gt: 0 },
         },
       },
@@ -171,7 +171,7 @@ describe("CierreAporteRepository — la forma de la consulta (R21/R22)", () => {
       whereDe(findMany).orden as { gestiones: { some: Record<string, unknown> } }
     ).gestiones.some;
     expect(Object.keys(some).sort()).toEqual(["cierreId", "resultado"]);
-    expect(some.resultado).toEqual({ in: ["rechazada"] });
+    expect(some.resultado).toEqual({ in: ["devolucion_a_origen_por_rechazo"] });
   });
 
   it("R30: el orden es TOTAL — guia congelada con nulos al final, y `id` como desempate", async () => {
@@ -231,8 +231,8 @@ describe("CierreAporteRepository — la forma de la consulta (R21/R22)", () => {
     expect(pagina.items[0].orden.tarifa?.valorFlete).toBe("1000.00");
     expect(pagina.items[0].orden.tarifa?.comisionCod).toBe("3.50");
     expect(pagina.items[0].gestiones).toEqual([
-      { resultado: "entregada", montoRecibido: "14900.00" },
-      { resultado: "reprogramada", montoRecibido: null },
+      { resultado: "entregado", montoRecibido: "14900.00" },
+      { resultado: "reprogramado", montoRecibido: null },
     ]);
     expect(pagina.total).toBe(7); // el del `count`, no `items.length`
     expect(pagina.items).toHaveLength(1);

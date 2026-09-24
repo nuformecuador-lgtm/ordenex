@@ -51,7 +51,7 @@ function dto(numRemision: string): CierreGestionDescargaDTO {
     intentosContactoTienda: 2,
     // FICHA 394 — los intentos de ENTREGA (los del mensajero), distintos de los de la tienda.
     intentosEntrega: 5,
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "100.00",
     pagos: [{ metodo: "efectivo", monto: "100.00" }],
     motivo: null,

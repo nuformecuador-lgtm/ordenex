@@ -192,9 +192,9 @@ describe("239/R16 — las dos listas de INCLUSION siguen separadas", () => {
 
   it("el criterio de intentos sigue declarandose por RESULTADO, no por instante", () => {
     expect([...RESULTADOS_QUE_CUENTAN_COMO_INTENTO]).toEqual([
-      "rechazada",
-      "devuelta",
-      "reprogramada",
+      "devolucion_a_origen_por_rechazo",
+      "novedad",
+      "reprogramado",
     ]);
   });
 });
@@ -332,7 +332,7 @@ describe("276/R34 — el tope de intentos no acerca las dos derivaciones", () =>
     // por el MISMO motivo queda fuera de la lista de visita real: contarla haria que el propio
     // rechazo sumara un intento a su orden y adelantaria el cobro de OTRAS.
     expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("rechazo_tope_intentos");
-    expect([...RESULTADOS_QUE_CUENTAN_COMO_INTENTO]).not.toContain("sin_gestionar");
+    expect([...RESULTADOS_QUE_CUENTAN_COMO_INTENTO]).not.toContain("novedad_interna");
   });
 
   it("el repositorio del cron SLA sigue SIN nombrar el vocabulario del conteo", () => {

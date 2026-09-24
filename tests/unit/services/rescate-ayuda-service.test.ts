@@ -117,9 +117,9 @@ describe("rescatarOrdenAyuda — la ESCRITURA (R8/R10/R13)", () => {
 describe("rescatarOrdenAyuda — LA GUARDA DE ESTADO, atacada de frente (R9)", () => {
   it.each([
     ["en_reparto"], // la orden ya fue rescatada por el otro lado
-    ["sin_gestionar"], // el corte de la noche la barrio
-    ["entregada"], // otra pestaña la gestiono
-    ["devuelta"], // una devolucion anclada: «Habilitar» tambien pasa por aqui
+    ["novedad_interna"], // el corte de la noche la barrio
+    ["entregado"], // otra pestaña la gestiono
+    ["novedad"], // una devolucion anclada: «Habilitar» tambien pasa por aqui
   ])(
     "R9: rescatar una orden en `%s` SIN ayuda abierta devuelve forbidden y NO escribe nada",
     async (estatusValue) => {

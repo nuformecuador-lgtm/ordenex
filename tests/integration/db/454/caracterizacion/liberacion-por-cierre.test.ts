@@ -77,8 +77,8 @@ describeSiHayBase("454/C09 — la liberacion se acota al cierre aprobado (Postgr
     }
   });
 
-  it("C, barrida por C2, sigue `sin_gestionar` con su mensajero", () => {
-    expect(estatus(r.c)).toBe("sin_gestionar");
+  it("C, barrida por C2, sigue `novedad_interna` con su mensajero", () => {
+    expect(estatus(r.c)).toBe("novedad_interna");
     expect(r.c.mensajeroAsignadoId).toBe(r.mensajeroId);
   });
 });

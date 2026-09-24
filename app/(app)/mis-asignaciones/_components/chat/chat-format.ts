@@ -7,10 +7,10 @@ import type { ChatMensajeDireccion } from "@prisma/client";
 
 /** Familia de estado que el chip de la lista pinta con color. */
 export type ChatEstado =
-  | "por_recoger"
+  | "mensajero_recogiendo_en_bodega"
   | "en_reparto"
-  | "entregada"
-  | "devuelta"
+  | "entregado"
+  | "novedad"
   | "otro";
 
 /** Etiqueta + clases del chip por estado (tokens de marca, no colores crudos). */
@@ -18,20 +18,20 @@ export const ESTADO_CHIP: Record<
   ChatEstado,
   { label: string; className: string }
 > = {
-  por_recoger: { label: "Por recoger", className: "bg-muted text-muted-foreground" },
+  mensajero_recogiendo_en_bodega: { label: "Por recoger", className: "bg-muted text-muted-foreground" },
   en_reparto: { label: "En reparto", className: "bg-info-soft text-info-strong" },
-  entregada: { label: "Entregada", className: "bg-success-soft text-success-strong" },
-  devuelta: { label: "Devuelta", className: "bg-danger-soft text-danger-strong" },
+  entregado: { label: "Entregada", className: "bg-success-soft text-success-strong" },
+  novedad: { label: "Devuelta", className: "bg-danger-soft text-danger-strong" },
   otro: { label: "Asignada", className: "bg-muted text-muted-foreground" },
 };
 
 /** Familia de estado del chip a partir del `estatusValue` de la orden. */
 export function estadoDe(estatusValue: string): ChatEstado {
   switch (estatusValue) {
-    case "por_recoger":
+    case "mensajero_recogiendo_en_bodega":
     case "en_reparto":
-    case "entregada":
-    case "devuelta":
+    case "entregado":
+    case "novedad":
       return estatusValue;
     default:
       return "otro";

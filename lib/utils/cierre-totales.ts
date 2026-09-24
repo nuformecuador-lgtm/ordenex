@@ -110,7 +110,7 @@ export function computeTotales(gestiones: readonly GestionConPagos[]): CierreTot
   let simpe = new Prisma.Decimal(0);
   let transferencia = new Prisma.Decimal(0);
   for (const g of gestiones) {
-    if (g.resultado !== "entregada") continue; // R8/R25
+    if (g.resultado !== "entregado") continue; // R8/R25
     for (const p of g.pagos) {
       const monto = new Prisma.Decimal(p.monto);
       switch (p.metodo) {

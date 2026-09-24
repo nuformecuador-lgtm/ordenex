@@ -45,7 +45,7 @@ describe("454/R29 — el detalle de la orden pinta la nota de la gestión pendie
     const dialogo = await abrirCon(
       ok({
         gestionPendiente: {
-          resultado: "reprogramada",
+          resultado: "reprogramado",
           registradaAt: "2026-09-23T21:00:00.000Z",
         },
       }),

@@ -42,12 +42,12 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
  * `anclaje_devolucion`, R47).
  */
 export const ESTATUS_POR_RESULTADO = {
-  entregada: "entregada",
-  reprogramada: "reprogramada",
-  rechazada: "rechazada",
+  entregado: "entregado",
+  reprogramado: "reprogramado",
+  devolucion_a_origen_por_rechazo: "devolucion_a_origen_por_rechazo",
   incidente: "incidente",
   // FICHA 454: identidad otra vez. Se APLICA solo al aprobar el cierre (no al gestionar).
-  devuelta: "devuelta",
+  novedad: "novedad",
 } as const satisfies Record<GestionResultado, OrderStatusValue>;
 
 /**

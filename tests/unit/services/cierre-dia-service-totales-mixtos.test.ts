@@ -57,7 +57,7 @@ function entregaMixta(): CierreGestionPendienteRow {
       // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
       tiendaId: "tienda-1",
       tiendaNombre: "Tienda X",
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: "8000.00",
       // R19: con dos líneas, la columna deprecada queda NULL. El desglose es la verdad.
       metodoPago: null,

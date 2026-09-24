@@ -111,8 +111,8 @@ const MENSAJERO_POBLADO: MensajeroPoblado = {
 const GESTION_POBLADA: FilaGestionPoblada = {
   // Lo que SI se publica
   createdAt: new Date("2026-09-02T15:41:07.000Z"),
-  resultado: "devuelta",
-  estadoResultante: "devuelta",
+  resultado: "novedad",
+  estadoResultante: "novedad",
   motivo: "wrong_address",
   mensajero: MENSAJERO_POBLADO,
   pendienteConfirmacion: false,
@@ -192,7 +192,7 @@ describe("405/R3 — cada gestion lleva EXACTAMENTE las seis claves publicas (45
       findDetalleByOrdenIdForOwner: vi.fn().mockResolvedValue({
         ...FILA_DETALLE,
         gestiones: [
-          { ...GESTION_POBLADA, resultado: "entregada", motivo: null, estadoResultante: null },
+          { ...GESTION_POBLADA, resultado: "entregado", motivo: null, estadoResultante: null },
         ],
       }),
       findEstatusIdByValue: vi.fn(),
@@ -305,7 +305,7 @@ describe("405/R12 — ningun valor sensible de la gestion cruza al DTO publico",
     expect(serializado).toContain("Carlos Jimenez Mora");
     expect(serializado).toContain("wrong_address");
     // FICHA 454: el fixture publica `estadoResultante: devuelta` (el pre-estado se retira).
-    expect(serializado).toContain('"estadoResultante":"devuelta"');
+    expect(serializado).toContain('"estadoResultante":"novedad"');
     expect(serializado.length).toBeGreaterThan(100);
   });
 

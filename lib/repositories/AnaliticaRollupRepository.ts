@@ -216,11 +216,11 @@ export class AnaliticaRollupRepository implements IAnaliticaRollupRepository {
              o."tienda_id"   AS tienda_id,
              g."mensajero_id" AS mensajero_id,
              e.estatus_id    AS estatus_id,
-             CASE WHEN g."resultado" = 'devuelta' THEN g."causa_devolucion" END AS causa_devolucion,
-             COUNT(*) FILTER (WHERE g."resultado" = 'entregada')::int    AS entregas,
-             COUNT(*) FILTER (WHERE g."resultado" = 'devuelta')::int     AS devoluciones,
-             COUNT(*) FILTER (WHERE g."resultado" = 'rechazada')::int    AS rechazos,
-             COUNT(*) FILTER (WHERE g."resultado" = 'reprogramada')::int AS reprogramaciones,
+             CASE WHEN g."resultado" = 'novedad' THEN g."causa_devolucion" END AS causa_devolucion,
+             COUNT(*) FILTER (WHERE g."resultado" = 'entregado')::int    AS entregas,
+             COUNT(*) FILTER (WHERE g."resultado" = 'novedad')::int     AS devoluciones,
+             COUNT(*) FILTER (WHERE g."resultado" = 'devolucion_a_origen_por_rechazo')::int    AS rechazos,
+             COUNT(*) FILTER (WHERE g."resultado" = 'reprogramado')::int AS reprogramaciones,
              COUNT(*) FILTER (WHERE g."resultado" = 'incidente')::int    AS incidentes
       FROM "gestion_orden" g
       JOIN "orden" o          ON o."id" = g."orden_id"
@@ -262,7 +262,7 @@ export class AnaliticaRollupRepository implements IAnaliticaRollupRepository {
       FROM "gestion_orden" g
       JOIN "orden" o          ON o."id" = g."orden_id"
       JOIN estatus_al_corte e ON e.orden_id = g."orden_id"
-      WHERE g."resultado" = 'entregada'
+      WHERE g."resultado" = 'entregado'
         AND g."anulada_at" IS NULL
         AND o."deleted_at" IS NULL
         AND g."created_at" >= ${ventana.desde}
@@ -372,10 +372,10 @@ export class AnaliticaRollupRepository implements IAnaliticaRollupRepository {
           WHERE o."deleted_at" IS NULL
             AND o."created_at" >= ${desde} AND o."created_at" < ${corte}
             AND ${tieneEstatusAlCorte})                       AS ordenes_creadas,
-        ${gestionesDe("entregada")}                           AS entregas,
-        ${gestionesDe("devuelta")}                            AS devoluciones,
-        ${gestionesDe("rechazada")}                           AS rechazos,
-        ${gestionesDe("reprogramada")}                        AS reprogramaciones,
+        ${gestionesDe("entregado")}                           AS entregas,
+        ${gestionesDe("novedad")}                            AS devoluciones,
+        ${gestionesDe("devolucion_a_origen_por_rechazo")}                           AS rechazos,
+        ${gestionesDe("reprogramado")}                        AS reprogramaciones,
         ${gestionesDe("incidente")}                           AS incidentes,
         (SELECT COUNT(*)::int FROM "orden" o
           WHERE o."deleted_at" IS NULL

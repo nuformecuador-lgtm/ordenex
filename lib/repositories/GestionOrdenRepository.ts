@@ -36,7 +36,7 @@ import type { NotificacionTxClient } from "@/lib/interfaces/repositories/INotifi
 import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
 
 // Feature 61: estado terminal de entrega para el KPI "entregadas" del portal.
-const ESTATUS_ENTREGADA = "entregada";
+const ESTATUS_ENTREGADA = "entregado";
 // Estado de las ordenes que el mensajero lleva encima. El KPI "Total a cobrar" lo EXCLUYE de
 // su parte gestionada porque esa mitad ya la aporta `porCobrar` (ver `gestionadasDelDiaWhere`).
 const ESTADO_EN_REPARTO = "en_reparto";
@@ -54,8 +54,8 @@ const ESTADOS_EN_MANO_DEL_MENSAJERO = [ESTADO_EN_REPARTO];
 // Feature 100 — `resultado` de la gestion que ancla la ventana en `devuelta` (R5: de ahi se deriva
 // el mensajero de la gestion sintetica) y `resultado` de la gestion sintetica de reprogramacion
 // (R3). Valores del catalogo `gestion_resultado` ya sembrados; esta feature NO agrega estados.
-const RESULTADO_DEVUELTA = "devuelta";
-const RESULTADO_REPROGRAMADA = "reprogramada";
+const RESULTADO_DEVUELTA = "novedad";
+const RESULTADO_REPROGRAMADA = "reprogramado";
 
 // 💰 Feature 240 (D1/D8) — el `resultado` y la FAMILIA de la gestion sintetica del RECHAZO MANUAL
 // de la tienda. El `resultado` es EL MISMO que escribe el cron de plazo vencido (99), y esa
@@ -64,13 +64,13 @@ const RESULTADO_REPROGRAMADA = "reprogramada";
 // La FAMILIA, en cambio, es propia y NO `escalado_devuelta_sla`: es lo unico que distingue «lo
 // decidio la tienda» de «se vencio el plazo», y de ella cuelgan la pestaña «Rechazadas por plazo
 // vencido» (102) y `esRechazoSla`.
-const RESULTADO_RECHAZADA = "rechazada";
+const RESULTADO_RECHAZADA = "devolucion_a_origen_por_rechazo";
 const ORIGEN_TIPO_RECHAZO_TIENDA = "rechazo_tienda" satisfies OrdenHistorialOrigenTipo;
 
 // `resultado` de la gestion que ancla los KPIs de entregadas a SU DIA. Homonimo de
 // `ESTATUS_ENTREGADA` pero de otro vocabulario (enum `gestion_resultado`, no el catalogo
 // `order_status`): por eso son dos constantes y no una compartida.
-const RESULTADO_ENTREGADA = "entregada";
+const RESULTADO_ENTREGADA = "entregado";
 
 /**
  * Gestion VIGENTE del mensajero dentro de la ventana del dia. Es el acote comun de los dos

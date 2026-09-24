@@ -169,14 +169,14 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
     }
     const VALUES = [
       "en_reparto",
-      "sin_gestionar",
+      "novedad_interna",
       "en_bodega_central",
       "en_bodega_satelite",
-      "rechazada",
-      "por_devolver",
+      "devolucion_a_origen_por_rechazo",
+      "por_devolver_a_bodega_central",
       "por_devolver_a_tienda",
       "devolucion_por_confirmar",
-      "devuelta",
+      "novedad",
     ];
     const catalogo = await prisma.orderStatus.findMany({
       where: { value: { in: VALUES } },
@@ -230,7 +230,7 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
               telefonoDest: "88880000",
               producto: `Prod ${s.clave}`,
               // Barrida por el corte: en `sin_gestionar` y CON su mensajero.
-              estatusId: estatus.get("sin_gestionar") as string,
+              estatusId: estatus.get("novedad_interna") as string,
               mensajeroAsignadoId: mensajeroId,
               prioridad: false,
               tiendaId: fks.tiendaId,
@@ -276,7 +276,7 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
               data: {
                 ordenId: orden.id,
                 mensajeroId,
-                resultado: "devuelta",
+                resultado: "novedad",
                 cierreId: cierreViejo.id,
                 anuladaAt: anulada ? new Date("2026-08-01T10:00:00.000Z") : null,
               },
@@ -317,16 +317,16 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
                   resueltoPor: adminId,
                   motivoRechazo: null,
                   liberacionSinGestionar: {
-                    sinGestionarEstatusId: estatus.get("sin_gestionar") as string,
+                    sinGestionarEstatusId: estatus.get("novedad_interna") as string,
                     enBodegaEstatusId: estatus.get("en_bodega_central") as string,
                     enBodegaSateliteEstatusId: estatus.get("en_bodega_satelite") as string,
                     centralZonaId: fks.zonaId,
-                    rechazadaEstatusId: estatus.get("rechazada") as string,
+                    rechazadaEstatusId: estatus.get("devolucion_a_origen_por_rechazo") as string,
                     umbralIntentos: UMBRAL,
                   },
                   devolucionRechazadas: {
-                    rechazadaId: estatus.get("rechazada") as string,
-                    porDevolverId: estatus.get("por_devolver") as string,
+                    rechazadaId: estatus.get("devolucion_a_origen_por_rechazo") as string,
+                    porDevolverId: estatus.get("por_devolver_a_bodega_central") as string,
                     porDevolverATiendaId: estatus.get("por_devolver_a_tienda") as string,
                     centralZonaId: fks.zonaId,
                   },
@@ -336,10 +336,10 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
                   aplicacionGestiones: {
                     enRepartoId: estatus.get("en_reparto") as string,
                     destinoPorResultado: {
-                      entregada: estatus.get("entregada") as string,
-                      reprogramada: estatus.get("reprogramada") as string,
-                      rechazada: estatus.get("rechazada") as string,
-                      devuelta: estatus.get("devuelta") as string,
+                      entregado: estatus.get("entregado") as string,
+                      reprogramado: estatus.get("reprogramado") as string,
+                      devolucion_a_origen_por_rechazo: estatus.get("devolucion_a_origen_por_rechazo") as string,
+                      novedad: estatus.get("novedad") as string,
                       incidente: estatus.get("incidente") as string,
                     },
                   },
@@ -413,7 +413,7 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
     // Si el `updateMany` limpiara el mensajero, la orden se quedaria en `rechazada` para siempre.
     expect(orden?.estatusId).toBe(estatus.get("por_devolver_a_tienda"));
     expect(orden?.estatusId).not.toBe(estatus.get("en_bodega_central"));
-    expect(orden?.estatusId).not.toBe(estatus.get("sin_gestionar"));
+    expect(orden?.estatusId).not.toBe(estatus.get("novedad_interna"));
   });
 
   it("1b. su historial tiene las DOS filas, en orden, con la familia PROPIA y el admin como actor (R22)", async () => {
@@ -432,7 +432,7 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
     // 139 no la habria visto y no habria nada que leer.
     expect(historial.map((h) => h.origenTipo)).toEqual(["devolucion_rechazada"]);
     const devolucion = historial[0];
-    expect(devolucion.estatusOrigenId).toBe(estatus.get("rechazada"));
+    expect(devolucion.estatusOrigenId).toBe(estatus.get("devolucion_a_origen_por_rechazo"));
     expect(devolucion.estatusDestinoId).toBe(estatus.get("por_devolver_a_tienda"));
     expect(devolucion.actorUsuarioId).toBe(adminId);
   });
@@ -449,8 +449,8 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
 
     const delTope = filas.filter((f) => f.origenTipo === "rechazo_tope_intentos");
     expect(delTope).toHaveLength(1);
-    expect(delTope[0].estatusOrigenId).toBe(estatus.get("sin_gestionar"));
-    expect(delTope[0].estatusDestinoId).toBe(estatus.get("rechazada"));
+    expect(delTope[0].estatusOrigenId).toBe(estatus.get("novedad_interna"));
+    expect(delTope[0].estatusDestinoId).toBe(estatus.get("devolucion_a_origen_por_rechazo"));
     expect(delTope[0].actorUsuarioId).toBe(adminId); // R22: el admin que aprobo, no el cron
     // ⭑ ENLAZA la gestion sintetica: es lo que permite auditar QUE cobro nacio de QUE aprobacion.
     expect(delTope[0].gestionOrdenId).not.toBeNull();
@@ -469,7 +469,7 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
     });
 
     expect(gestiones).toHaveLength(1);
-    expect(gestiones[0].resultado).toBe("rechazada");
+    expect(gestiones[0].resultado).toBe("devolucion_a_origen_por_rechazo");
     // `cierre_id NULL` es lo que hace que el SIGUIENTE cierre del mensajero la recoja y cobre el
     // `cobroRechazado` (56). Con el id de ESTE cierre, cambiaria sus totales despues de que su
     // snapshot se congelara (R24).
@@ -502,7 +502,7 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
     expect(orden?.prioridad).toBe(true);
     const liberacion = filas.filter((f) => f.origenTipo === "liberacion_sin_gestionar");
     expect(liberacion).toHaveLength(1);
-    expect(liberacion[0].estatusOrigenId).toBe(estatus.get("sin_gestionar"));
+    expect(liberacion[0].estatusOrigenId).toBe(estatus.get("novedad_interna"));
     expect(liberacion[0].estatusDestinoId).toBe(estatus.get("en_bodega_central"));
     expect(liberacion[0].actorUsuarioId).toBe(adminId);
     // Y NINGUNA fila del tope: la orden no llego al umbral.
@@ -584,8 +584,8 @@ describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres
     });
 
     // Las dos siguen exactamente donde el corte las dejo, con su mensajero.
-    expect(tope?.estatusId).toBe(estatus.get("sin_gestionar"));
-    expect(bajo?.estatusId).toBe(estatus.get("sin_gestionar"));
+    expect(tope?.estatusId).toBe(estatus.get("novedad_interna"));
+    expect(bajo?.estatusId).toBe(estatus.get("novedad_interna"));
     expect(tope?.mensajeroAsignadoId).not.toBeNull();
     expect(gestiones).toHaveLength(0);
     expect(filas.filter((f) => f.origenTipo === "rechazo_tope_intentos")).toHaveLength(0);

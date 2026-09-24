@@ -53,7 +53,7 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 // ayuda abierta sigue `en_reparto` y el portal la separa en «con ayuda» por la DERIVACION
 // (`lib/repositories/ayuda-abierta.ts`), no por el estado. El universo del portal vuelve a dos.
 export const ESTADOS_REPARTO_MENSAJERO = [
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
   "en_reparto",
 ] as const satisfies readonly OrderStatusValue[];
 

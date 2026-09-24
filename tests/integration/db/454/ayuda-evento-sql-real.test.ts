@@ -89,7 +89,7 @@ describeSiHayBase("454/T1.15 — la ayuda como evento (Postgres real)", () => {
         where: { ordenId: c.ordenId },
         select: { cambioDeEstado: true, estadoResultante: true },
       });
-      const reprogramada = await e.gestionarDesdeAyuda(d.ordenId, "reprogramada");
+      const reprogramada = await e.gestionarDesdeAyuda(d.ordenId, "reprogramado");
       const gestionD = await e.tx.gestionOrden.findFirstOrThrow({
         where: { ordenId: d.ordenId },
         select: { mensajeroId: true, cierreId: true, eventos: { select: { tipo: true, familiaAplicacion: true } } },
@@ -120,7 +120,7 @@ describeSiHayBase("454/T1.15 — la ayuda como evento (Postgres real)", () => {
       await e.tx.ordenHistorialEstado.create({
         data: {
           ordenId: f.ordenId,
-          estatusOrigenId: e.id("sin_gestionar"),
+          estatusOrigenId: e.id("novedad_interna"),
           estatusDestinoId: e.id("en_reparto"),
           origenTipo: "ajuste_estado",
           createdAt: new Date(Date.now() + 60_000),
@@ -136,7 +136,7 @@ describeSiHayBase("454/T1.15 — la ayuda como evento (Postgres real)", () => {
         habilitada: habilitada.status,
         api: api.resultados,
         filaApi,
-        reprogramada: reprogramada.status,
+        reprogramado: reprogramada.status,
         gestionD,
         traspaso: traspaso.status,
         trasSalidas,
@@ -168,7 +168,7 @@ describeSiHayBase("454/T1.15 — la ayuda como evento (Postgres real)", () => {
     expect(r.punteroAntes).toBe(r.ids.a);
     expect(r.recuperada).toBe("ok");
     expect(r.habilitada).toBe("ok");
-    expect(r.reprogramada).toBe("ok");
+    expect(r.reprogramado).toBe("ok");
     expect(r.traspaso).toBe("ok");
   });
 
@@ -210,8 +210,8 @@ describeSiHayBase("454/T1.15 — la ayuda como evento (Postgres real)", () => {
     expect(r.eventos.e).toEqual(["ayuda_solicitada:mensajero:mensajero"]);
   });
 
-  it("R26/R27: el corte la barre a `sin_gestionar` y la ayuda se cierra sola", () => {
-    expect(r.trasCorte).toEqual({ estadoF: "sin_gestionar", abiertaF: 0 });
+  it("R26/R27: el corte la barre a `novedad_interna` y la ayuda se cierra sola", () => {
+    expect(r.trasCorte).toEqual({ estadoF: "novedad_interna", abiertaF: 0 });
   });
 
   it("R26: un ciclo NUEVO en `en_reparto` no reabre la ayuda", () => {

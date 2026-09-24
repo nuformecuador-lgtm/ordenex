@@ -101,7 +101,7 @@ describe("DevolucionOrigenService · guardia de estado (R22/R9)", () => {
 
   it("R9: una orden `rechazada` YA NO es elegible aqui -> conflict (su unica salida es el cierre)", async () => {
     const ordenRepo = buildOrdenRepo({
-      findById: vi.fn(async () => ordenDTO({ estatusValue: "rechazada", estatusId: "os-rechazada" })),
+      findById: vi.fn(async () => ordenDTO({ estatusValue: "devolucion_a_origen_por_rechazo", estatusId: "os-rechazada" })),
     });
     const r = await new DevolucionOrigenService(ordenRepo).devolverATienda("ord-1", MAESTRO);
     expect(r.status).toBe("conflict");

@@ -40,7 +40,7 @@ interface GestionFila {
   id: string;
   ordenId: string;
   cierreId: string | null;
-  resultado: "entregada" | "reprogramada" | "rechazada" | "devuelta" | "incidente";
+  resultado: "entregado" | "reprogramado" | "devolucion_a_origen_por_rechazo" | "novedad" | "incidente";
   anuladaAt: Date | null;
   createdAt: Date;
   mensajeroId: string;
@@ -52,7 +52,7 @@ interface GestionFila {
 function fila(p: Partial<GestionFila> & Pick<GestionFila, "id" | "ordenId">): GestionFila {
   return {
     cierreId: "c1",
-    resultado: "entregada",
+    resultado: "entregado",
     anuladaAt: null,
     createdAt: T0,
     mensajeroId: "m1",
@@ -302,15 +302,15 @@ describe("resolverCierre — APLICACION de las gestiones de calle (454/R7/R8/R14
   it("R7: cada gestion de calle de ESTE cierre lleva su orden de `en_reparto` a su destino, en la misma tx", async () => {
     const { prisma, ordenes } = buildBase(
       [
-        fila({ id: "g1", ordenId: "o1", resultado: "entregada" }),
-        fila({ id: "g2", ordenId: "o2", resultado: "devuelta" }),
-        fila({ id: "g3", ordenId: "o3", resultado: "rechazada", motivo: "no quiso" }),
+        fila({ id: "g1", ordenId: "o1", resultado: "entregado" }),
+        fila({ id: "g2", ordenId: "o2", resultado: "novedad" }),
+        fila({ id: "g3", ordenId: "o3", resultado: "devolucion_a_origen_por_rechazo", motivo: "no quiso" }),
         // Testigo 1: OTRO cierre. Sin la guardia `cierreId`, aprobar c1 la aplicaria tambien.
-        fila({ id: "g9", ordenId: "o9", cierreId: "c2", resultado: "entregada" }),
+        fila({ id: "g9", ordenId: "o9", cierreId: "c2", resultado: "entregado" }),
         // Testigo 2 (R14): gestion LEGADA del mismo cierre — ya transiciono al registrarse.
-        fila({ id: "gL", ordenId: "oL", resultado: "entregada", registro: null }),
+        fila({ id: "gL", ordenId: "oL", resultado: "entregado", registro: null }),
       ],
-      { o1: EN_REPARTO, o2: EN_REPARTO, o3: EN_REPARTO, o9: EN_REPARTO, oL: idEstado("entregada") },
+      { o1: EN_REPARTO, o2: EN_REPARTO, o3: EN_REPARTO, o9: EN_REPARTO, oL: idEstado("entregado") },
     );
     const repo = makeRepo(prisma as unknown as Record<string, unknown>);
 
@@ -318,11 +318,11 @@ describe("resolverCierre — APLICACION de las gestiones de calle (454/R7/R8/R14
 
     expect(r).toBe("updated");
     expect(ordenes).toEqual({
-      o1: idEstado("entregada"),
-      o2: idEstado("devuelta"),
-      o3: idEstado("rechazada"),
+      o1: idEstado("entregado"),
+      o2: idEstado("novedad"),
+      o3: idEstado("devolucion_a_origen_por_rechazo"),
       o9: EN_REPARTO,
-      oL: idEstado("entregada"),
+      oL: idEstado("entregado"),
     });
     // La primera consulta: gestiones de calle VIGENTES de ESTE cierre (`cierreId` como GUARDIA).
     expect(prisma.gestionOrden.findMany.mock.calls[0][0].where).toEqual({
@@ -333,7 +333,7 @@ describe("resolverCierre — APLICACION de las gestiones de calle (454/R7/R8/R14
   });
 
   it("MONEY-NEUTRAL: el UPDATE escribe SOLO `estatus_id`, guardado por `en_reparto`", async () => {
-    const { prisma } = buildBase([fila({ id: "g1", ordenId: "o1", resultado: "rechazada" })], {
+    const { prisma } = buildBase([fila({ id: "g1", ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo" })], {
       o1: EN_REPARTO,
     });
     const repo = makeRepo(prisma as unknown as Record<string, unknown>);
@@ -355,8 +355,8 @@ describe("resolverCierre — APLICACION de las gestiones de calle (454/R7/R8/R14
   it("R8: familia y actor por resultado, enlazando la gestion", async () => {
     const { prisma } = buildBase(
       [
-        fila({ id: "gE", ordenId: "oE", resultado: "entregada" }),
-        fila({ id: "gD", ordenId: "oD", resultado: "devuelta", motivo: "no estaba" }),
+        fila({ id: "gE", ordenId: "oE", resultado: "entregado" }),
+        fila({ id: "gD", ordenId: "oD", resultado: "novedad", motivo: "no estaba" }),
         fila({
           id: "gI",
           ordenId: "oI",
@@ -367,7 +367,7 @@ describe("resolverCierre — APLICACION de las gestiones de calle (454/R7/R8/R14
         fila({
           id: "gT",
           ordenId: "oT",
-          resultado: "reprogramada",
+          resultado: "reprogramado",
           motivo: "otro dia",
           registro: { familia: "gestion_tienda_ayuda", actor: "u-tienda" },
         }),
@@ -384,7 +384,7 @@ describe("resolverCierre — APLICACION de las gestiones de calle (454/R7/R8/R14
     expect(porOrden.oE).toEqual({
       ordenId: "oE",
       estatusOrigenId: EN_REPARTO,
-      estatusDestinoId: idEstado("entregada"),
+      estatusDestinoId: idEstado("entregado"),
       actorUsuarioId: "m1", // el mensajero de la gestion
       origenTipo: "gestion",
       motivo: null,
@@ -393,7 +393,7 @@ describe("resolverCierre — APLICACION de las gestiones de calle (454/R7/R8/R14
     expect(porOrden.oD).toEqual({
       ordenId: "oD",
       estatusOrigenId: EN_REPARTO,
-      estatusDestinoId: idEstado("devuelta"),
+      estatusDestinoId: idEstado("novedad"),
       actorUsuarioId: "adm-maestro", // D8: el APROBADOR — el reloj del plazo lee esta familia
       origenTipo: "anclaje_devolucion",
       motivo: null,
@@ -407,7 +407,7 @@ describe("resolverCierre — APLICACION de las gestiones de calle (454/R7/R8/R14
       gestionOrdenId: "gI",
     });
     expect(porOrden.oT).toMatchObject({
-      estatusDestinoId: idEstado("reprogramada"),
+      estatusDestinoId: idEstado("reprogramado"),
       actorUsuarioId: "u-tienda", // la PERSONA de la tienda que la registro
       origenTipo: "gestion_tienda_ayuda",
       motivo: "otro dia",
@@ -417,8 +417,8 @@ describe("resolverCierre — APLICACION de las gestiones de calle (454/R7/R8/R14
 
   it("R14: un cierre con SOLO gestiones legadas no aplica nada — una consulta y fuera", async () => {
     const { prisma } = buildBase(
-      [fila({ id: "gL", ordenId: "oL", resultado: "entregada", registro: null })],
-      { oL: idEstado("entregada") },
+      [fila({ id: "gL", ordenId: "oL", resultado: "entregado", registro: null })],
+      { oL: idEstado("entregado") },
     );
     const repo = makeRepo(prisma as unknown as Record<string, unknown>);
 
@@ -436,8 +436,8 @@ describe("resolverCierre — LA CARRERA DE LOS DOS CIERRES (454/R7/R9, heredera 
   // rechaza o queda abierto; la gestion se deshace y se vuelve a gestionar (g2, cierre C2). Si
   // aprobar C1 aplicara g1, la orden recibiria el estado de una gestion que YA NO es la vigente.
   const GESTIONES: GestionFila[] = [
-    fila({ id: "g1", ordenId: "o1", cierreId: "c1", resultado: "devuelta", createdAt: T0 }),
-    fila({ id: "g2", ordenId: "o1", cierreId: "c2", resultado: "devuelta", createdAt: T1 }),
+    fila({ id: "g1", ordenId: "o1", cierreId: "c1", resultado: "novedad", createdAt: T0 }),
+    fila({ id: "g2", ordenId: "o1", cierreId: "c2", resultado: "novedad", createdAt: T1 }),
   ];
 
   it("R9: aprobar el cierre VIEJO no aplica (su gestion ya no es la vigente mas reciente)", async () => {
@@ -458,7 +458,7 @@ describe("resolverCierre — LA CARRERA DE LOS DOS CIERRES (454/R7/R9, heredera 
 
     await aprobar(repo, "c2");
 
-    expect(ordenes).toEqual({ o1: idEstado("devuelta") });
+    expect(ordenes).toEqual({ o1: idEstado("novedad") });
     const entradas = entradasHistorial(prisma);
     expect(entradas).toHaveLength(1);
     expect(entradas[0].gestionOrdenId).toBe("g2");
@@ -486,12 +486,12 @@ describe("resolverCierre — LA CARRERA DE LOS DOS CIERRES (454/R7/R9, heredera 
   it("una gestion ANULADA no cuenta como la mas reciente (no roba la aplicacion)", async () => {
     const { prisma, ordenes } = buildBase(
       [
-        fila({ id: "g1", ordenId: "o1", cierreId: "c1", resultado: "devuelta", createdAt: T0 }),
+        fila({ id: "g1", ordenId: "o1", cierreId: "c1", resultado: "novedad", createdAt: T0 }),
         fila({
           id: "g2",
           ordenId: "o1",
           cierreId: "c2",
-          resultado: "devuelta",
+          resultado: "novedad",
           anuladaAt: T1,
           createdAt: T1,
         }),
@@ -502,20 +502,20 @@ describe("resolverCierre — LA CARRERA DE LOS DOS CIERRES (454/R7/R9, heredera 
 
     await aprobar(repo, "c1");
 
-    expect(ordenes).toEqual({ o1: idEstado("devuelta") });
+    expect(ordenes).toEqual({ o1: idEstado("novedad") });
     expect(entradasHistorial(prisma)[0].gestionOrdenId).toBe("g1");
   });
 
   it("con DOS ordenes en el cierre, se aplica la que toca y solo esa", async () => {
     const { prisma, ordenes } = buildBase(
-      [...GESTIONES, fila({ id: "g3", ordenId: "o2", cierreId: "c1", resultado: "devuelta" })],
+      [...GESTIONES, fila({ id: "g3", ordenId: "o2", cierreId: "c1", resultado: "novedad" })],
       { o1: EN_REPARTO, o2: EN_REPARTO },
     );
     const repo = makeRepo(prisma as unknown as Record<string, unknown>);
 
     await aprobar(repo, "c1");
 
-    expect(ordenes).toEqual({ o1: EN_REPARTO, o2: idEstado("devuelta") });
+    expect(ordenes).toEqual({ o1: EN_REPARTO, o2: idEstado("novedad") });
     const updates = updatesDeAplicacion(prisma);
     expect(updates).toHaveLength(1);
     expect((updates[0][2] as { values: string[] }).values).toEqual(["o2"]);
@@ -526,7 +526,7 @@ describe("resolverCierre — LA CARRERA DE LOS DOS CIERRES (454/R7/R9, heredera 
 describe("resolverCierre — la aplicacion NO ocurre cuando no debe (454/R9/R12/R13)", () => {
   it("R13: RECHAZAR un cierre no mueve ninguna orden ni registra transicion", async () => {
     const { prisma, ordenes } = buildBase(
-      [fila({ id: "g1", ordenId: "o1", resultado: "devuelta" })],
+      [fila({ id: "g1", ordenId: "o1", resultado: "novedad" })],
       { o1: EN_REPARTO },
     );
     const repo = makeRepo(prisma as unknown as Record<string, unknown>);
@@ -549,7 +549,7 @@ describe("resolverCierre — la aplicacion NO ocurre cuando no debe (454/R9/R12/
 
   it("R12: una SEGUNDA aprobacion no aplica otra vez ni escribe una segunda fila", async () => {
     const { prisma, ordenes } = buildBase(
-      [fila({ id: "g1", ordenId: "o1", resultado: "devuelta" })],
+      [fila({ id: "g1", ordenId: "o1", resultado: "novedad" })],
       { o1: EN_REPARTO },
     );
     const repo = makeRepo(prisma as unknown as Record<string, unknown>);
@@ -561,14 +561,14 @@ describe("resolverCierre — la aplicacion NO ocurre cuando no debe (454/R9/R12/
 
     // La GUARDA `estatus_id = en_reparto` no encuentra nada -> sin append. La idempotencia la da
     // el WHERE, no un codigo aparte.
-    expect(ordenes).toEqual({ o1: idEstado("devuelta") });
+    expect(ordenes).toEqual({ o1: idEstado("novedad") });
     expect(updatesDeAplicacion(prisma)).toHaveLength(2); // se INTENTA las dos veces
     expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1); // y escribe una
   });
 
   it("R9: una orden que YA no esta `en_reparto` no se toca (la guarda la deja fuera)", async () => {
     const { prisma, ordenes } = buildBase(
-      [fila({ id: "g1", ordenId: "o1", resultado: "entregada" })],
+      [fila({ id: "g1", ordenId: "o1", resultado: "entregado" })],
       { o1: idEstado("en_bodega_central") },
     );
     const repo = makeRepo(prisma as unknown as Record<string, unknown>);
@@ -582,7 +582,7 @@ describe("resolverCierre — la aplicacion NO ocurre cuando no debe (454/R9/R12/
 
   it("count=0 (conflict): el cierre no transiciona, asi que nada se aplica", async () => {
     const { prisma, ordenes } = buildBase(
-      [fila({ id: "g1", ordenId: "o1", resultado: "devuelta" })],
+      [fila({ id: "g1", ordenId: "o1", resultado: "novedad" })],
       { o1: EN_REPARTO },
     );
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });

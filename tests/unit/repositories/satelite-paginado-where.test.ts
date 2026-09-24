@@ -160,7 +160,7 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     await repo.findRecepcionSatelitePaginada(
       {
         zonaId: "z-a",
-        estatusValues: ["en_bodega_satelite", "devuelta"],
+        estatusValues: ["en_bodega_satelite", "novedad"],
         cantonIds: ["c-escazu", "c-barva"],
         distritoIds: ["d-san-rafael"],
       },
@@ -182,7 +182,7 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
       ...ESTADOS_CUSTODIA_SATELITE,
       ...ESTADOS_CUSTODIA_SATELITE,
       "en_bodega_satelite",
-      "devuelta",
+      "novedad",
       "c-escazu",
       "c-barva",
       "d-san-rafael",
@@ -196,7 +196,7 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     const { repo, consultas } = clienteFalso(["o-1"], 1);
 
     await repo.findRecepcionSatelitePaginada(
-      { zonaId: "z-a", estatusValues: ["entregada"] },
+      { zonaId: "z-a", estatusValues: ["entregado"] },
       RANGO,
     );
 
@@ -216,13 +216,13 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     const conjunto = clienteFalso(["o-1"], 1);
     await conjunto.repo.findRecepcionSateliteCompleta({
       zonaId: "z-a",
-      estatusValues: ["entregada"],
+      estatusValues: ["entregado"],
     });
     expect(texto(conjunto.consultas[0]!)).toContain('FROM "orden_historial_estado" h');
 
     const vigencia = clienteFalso(["o-1"], 1);
     await vigencia.repo.findIdsVigentesEnBodega(
-      { zonaId: "z-a", estatusValues: ["entregada"] },
+      { zonaId: "z-a", estatusValues: ["entregado"] },
       ["o-1"],
     );
     expect(texto(vigencia.consultas[0]!)).toContain('FROM "orden_historial_estado" h');
@@ -402,7 +402,7 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     const { repo, consultas } = clienteFalso(["o-1"], 2);
 
     await repo.findRecepcionSatelitePaginada(
-      { zonaId: "z-a", estatusValues: ["devuelta"] },
+      { zonaId: "z-a", estatusValues: ["novedad"] },
       RANGO,
     );
 
@@ -418,7 +418,7 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     const r = await repo.findRecepcionSatelitePaginada(
       {
         zonaId: "z-a",
-        estatusValues: ["devuelta"],
+        estatusValues: ["novedad"],
         cantonIds: ["c-escazu"],
         distritoIds: ["d-san-rafael"],
       },

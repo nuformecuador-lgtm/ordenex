@@ -242,10 +242,10 @@ describe("/ordenes — 'Rutear a bodega satélite' vuelve a tener superficie (ho
             id: "o1",
             numRemision: "REM-PR-1",
             estatusId: "id-pr",
-            estatusValue: "por_recoger",
+            estatusValue: "mensajero_recogiendo_en_bodega",
           }),
         ],
-        [{ id: "id-pr", value: "por_recoger" }],
+        [{ id: "id-pr", value: "mensajero_recogiendo_en_bodega" }],
       );
 
       await user.click(
@@ -366,7 +366,7 @@ describe("/ordenes — 'Asignar mensajero' desde bodega solo lleva órdenes GAM 
     const user = userEvent.setup();
     asignarMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "o-gam", estado: "por_recoger" }],
+      resultados: [{ ordenId: "o-gam", estado: "mensajero_recogiendo_en_bodega" }],
     });
 
     await renderPageComo(
@@ -415,7 +415,7 @@ describe("/ordenes — 'Asignar mensajero' desde bodega solo lleva órdenes GAM 
     const user = userEvent.setup();
     asignarMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "o-gam", estado: "por_recoger" }],
+      resultados: [{ ordenId: "o-gam", estado: "mensajero_recogiendo_en_bodega" }],
     });
 
     await renderPageComo(

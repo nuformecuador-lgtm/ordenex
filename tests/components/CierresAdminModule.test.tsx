@@ -143,7 +143,7 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 /**
@@ -517,10 +517,10 @@ describe("CierresAdminModule", () => {
   it("el desglose por orden se despliega y muestra la tarifa congelada con su fórmula", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
+    grupos.entregado = [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         numRemision: "REM-123",
         destinatario: "Ana Pérez",
         montoRecibido: "25000.00",
@@ -627,8 +627,8 @@ describe("CierresAdminModule", () => {
   it("sin ingresoOrdenex (cierre sin snapshot) no se pinta el botón de desglose", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-9" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-9" }),
     ];
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
@@ -660,10 +660,10 @@ describe("CierresAdminModule", () => {
   it("R6/R9: una entrega expone su monto (string) y método en el detalle", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
+    grupos.entregado = [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: "1250.50",
         metodoPago: "SINPE",
         // Feature 213 (T8): desglose COHERENTE con el escalar que este caso ya declaraba.
@@ -706,10 +706,10 @@ describe("CierresAdminModule", () => {
   it("feature 56/R23 (Q6): el badge 'Sin tarifa' se muestra por el flag tarifaFaltante en ENTREGAS", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
+    grupos.entregado = [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         numRemision: "REM-SINTARIFA",
         montoRecibido: "1000.00",
         metodoPago: "efectivo",
@@ -749,10 +749,10 @@ describe("CierresAdminModule", () => {
   it("feature 56/R23 (Q6): SIN flag tarifaFaltante NO se muestra el badge, aun con pago 0.00 (entrega y rechazo)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
+    grupos.entregado = [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         numRemision: "REM-ENT",
         montoRecibido: "1000.00",
         metodoPago: "efectivo",
@@ -761,10 +761,10 @@ describe("CierresAdminModule", () => {
         tarifaFaltante: false,
       }),
     ];
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g2",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numRemision: "REM-REC",
         pagoMensajero: "0.00",
         tarifaFaltante: false,
@@ -809,10 +809,10 @@ describe("CierresAdminModule", () => {
   it("feature 56/R23 (Q6): el badge 'Sin tarifa' se muestra por el flag tarifaFaltante también en RECHAZOS", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numRemision: "REM-REC",
         pagoMensajero: "0.00",
         tarifaFaltante: true,
@@ -849,10 +849,10 @@ describe("CierresAdminModule", () => {
   it("feature 56/R12: una gestión rechazada expone su ingreso de bodega por rechazos (string, money-safe)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numRemision: "REM-REC",
         motivo: "Cliente rechazó",
         ingresoBodegaRechazo: "3500.00",
@@ -934,10 +934,10 @@ describe("CierresAdminModule", () => {
   it("feature 102/R9: cada fila rechazada se marca como SLA (cron) o Manual (mensajero) según esRechazoSla", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g-sla",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numRemision: "REM-SLA",
         destinatario: "Cliente SLA",
         ingresoBodegaRechazo: "6000.00",
@@ -946,7 +946,7 @@ describe("CierresAdminModule", () => {
       }),
       makeGestion({
         gestionId: "g-man",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numRemision: "REM-MAN",
         destinatario: "Cliente Manual",
         ingresoBodegaRechazo: "3200.00",
@@ -994,10 +994,10 @@ describe("CierresAdminModule", () => {
   it("R7: la evidencia se muestra vía URL firmada en el visor (nunca el path crudo)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         motivo: "Dirección inexistente",
         evidenciaUrl: "https://signed.example/evidencia.jpg?token=abc",
       }),

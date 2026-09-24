@@ -538,8 +538,8 @@ describe("R54/R57/R58 — la reversion DERIVA su destino, no lo hardcodea", () =
 
   it.each([
     ["en_reparto (es el camino del MENSAJERO, no el del admin)", "en_reparto"],
-    ["entregada", "entregada"],
-    ["devuelta", "devuelta"],
+    ["entregado", "entregado"],
+    ["novedad", "novedad"],
     ["en_preparacion", "en_preparacion"],
     ["un value RETIRADO del catalogo que el historial aun cita", VALUE_RETIRADO_155],
   ])("R58: un origen fuera del conjunto cerrado (%s) -> conflict, fallo CERRADO", async (_c, origen) => {
@@ -557,7 +557,7 @@ describe("R54/R57/R58 — la reversion DERIVA su destino, no lo hardcodea", () =
   it("R58: si el catalogo no resuelve el origen derivado -> validation_error sin mover nada", async () => {
     const { service, repo } = build({
       porId: fila({ reportadoPor: "u-maestro" }),
-      origenReversion: "por_recoger",
+      origenReversion: "mensajero_recogiendo_en_bodega",
       estatusIds: { incidente: "os-incidente" }, // `por_recoger` no resuelve
     });
 

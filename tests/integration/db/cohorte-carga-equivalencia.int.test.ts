@@ -73,7 +73,7 @@ describeSiHayBase("411/T4.7 — la suma de los cubos es el conteo de la serie he
 
       // Dia D: tres ordenes, una entregada, una devuelta a tienda, una viva.
       const d1 = await cargar("D-entregada", D, "09:00");
-      await agregarTransicion(tx, base, d1, { at: instanteCR(D, "18:00"), destino: "entregada" });
+      await agregarTransicion(tx, base, d1, { at: instanteCR(D, "18:00"), destino: "entregado" });
       const d2 = await cargar("D-devuelta", D, "10:00");
       await agregarTransicion(tx, base, d2, {
         at: instanteCR(D_MAS_2, "18:00"),
@@ -90,14 +90,14 @@ describeSiHayBase("411/T4.7 — la suma de los cubos es el conteo de la serie he
       const e2 = await cargar("D1-devuelta", D_MAS_1, "10:00");
       await agregarTransicion(tx, base, e2, {
         at: instanteCR(D_MAS_1, "18:00"),
-        destino: "devuelta",
+        destino: "novedad",
       });
 
       // Dia D+2: una sola, entregada. Y una BORRADA, que no debe contar en ninguna de las dos.
       const f1 = await cargar("D2-entregada", D_MAS_2, "09:00");
       await agregarTransicion(tx, base, f1, {
         at: instanteCR(D_MAS_2, "20:00"),
-        destino: "entregada",
+        destino: "entregado",
       });
       await cargar("D2-borrada", D_MAS_2, "09:30", true);
 

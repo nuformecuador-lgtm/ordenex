@@ -23,10 +23,10 @@ import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
 export const RESULTADO_LABEL: Record<CierreResultado, string> = {
-  entregada: "Entregadas",
-  reprogramada: "Reprogramadas",
-  devuelta: "Devueltas",
-  rechazada: "Rechazadas",
+  entregado: "Entregadas",
+  reprogramado: "Reprogramadas",
+  novedad: "Devueltas",
+  devolucion_a_origen_por_rechazo: "Rechazadas",
   incidente: "Incidentes", // feature 158/R18
 };
 
@@ -43,10 +43,10 @@ export const RESULTADO_LABEL: Record<CierreResultado, string> = {
  * R45 exige que la celda sea SIEMPRE esta etiqueta y jamas el value del enum.
  */
 export const RESULTADO_FILA_LABEL: Record<CierreResultado, string> = {
-  entregada: "Entregada",
-  reprogramada: "Reprogramada",
-  devuelta: "Devuelta",
-  rechazada: "Rechazada",
+  entregado: "Entregada",
+  reprogramado: "Reprogramada",
+  novedad: "Devuelta",
+  devolucion_a_origen_por_rechazo: "Rechazada",
   incidente: "Incidente",
 };
 

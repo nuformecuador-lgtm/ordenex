@@ -53,7 +53,7 @@ describeSiHayBase("454/T1.19 — rastreo publico con gestion pendiente (Postgres
       const p = await e.sembrarOrden({ estatus: "en_reparto" });
       await enReparto(p.ordenId);
       const antes = await consultar(p.numGuia);
-      const gP = await e.gestionarOk(p.ordenId, "entregada");
+      const gP = await e.gestionarOk(p.ordenId, "entregado");
       const conPendiente = await consultar(p.numGuia);
       const deshacer = await e.s.cierreDia.deshacerGestion(gP, e.actorMensajero);
       const trasDeshacer = await consultar(p.numGuia);
@@ -62,7 +62,7 @@ describeSiHayBase("454/T1.19 — rastreo publico con gestion pendiente (Postgres
       const central = await e.mensajeroCentral();
       const c = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 4000, mensajeroId: central.mensajeroId });
       await enReparto(c.ordenId);
-      const gC = await e.gestionarOk(c.ordenId, "entregada", { monto: 4000, actor: central.actor });
+      const gC = await e.gestionarOk(c.ordenId, "entregado", { monto: 4000, actor: central.actor });
       const cierreId = await e.solicitarCierreOk(central.actor);
       const conCierreSolicitado = await consultar(c.numGuia);
       const correccion = await e.s.cierresAdmin.corregirResultadoGestion(
@@ -80,8 +80,8 @@ describeSiHayBase("454/T1.19 — rastreo publico con gestion pendiente (Postgres
       // X — gestion pendiente, pero la orden la MOVIO otra via (ya no esta `en_reparto`): sin marca.
       const x = await e.sembrarOrden({ estatus: "en_reparto" });
       await enReparto(x.ordenId);
-      await e.gestionarOk(x.ordenId, "devuelta");
-      await e.tx.orden.update({ where: { id: x.ordenId }, data: { estatusId: e.id("sin_gestionar") } });
+      await e.gestionarOk(x.ordenId, "novedad");
+      await e.tx.orden.update({ where: { id: x.ordenId }, data: { estatusId: e.id("novedad_interna") } });
       const movidaX = await consultar(x.numGuia);
       return {
         nuevoCicloC,

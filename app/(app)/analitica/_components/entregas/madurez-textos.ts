@@ -82,7 +82,7 @@ const SUELO = formatearValor(MINIMO_BASE_PORCENTAJE, "conteo");
 
 /** «424 entregadas», concordando en singular. La cifra pasa por el formateador de la analitica. */
 function contarEntregadas(n: number): string {
-  return `${formatearValor(n, "conteo")} ${n === 1 ? "entregada" : "entregadas"}`;
+  return `${formatearValor(n, "conteo")} ${n === 1 ? "entregado" : "entregadas"}`;
 }
 
 /**

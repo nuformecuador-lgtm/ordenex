@@ -158,7 +158,7 @@ describeSiHayBase("443 — el heroe cuenta lo de CADA rol, y nada mas (SQL real)
         await crearGestion(tx, {
           ordenId: id,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: instanteCR(D, "17:00"),
         });
       }
@@ -201,7 +201,7 @@ describeSiHayBase("443 — el heroe cuenta lo de CADA rol, y nada mas (SQL real)
     // Las seis de GAM y la de la tienda vecina EXISTEN en la base y esta consulta las alcanza.
     // Sin esta comprobacion, «el satelite no ve el bucket `entregada`» podria significar
     // simplemente que el fixture no llego a insertarlas: un verde que no mide nada.
-    expect(delta("entregada"), "las seis de GAM no estan en la base").toBe(GAM_ENTREGADAS);
+    expect(delta("entregado"), "las seis de GAM no estan en la base").toBe(GAM_ENTREGADAS);
     expect(delta("incidente"), "la orden de la tienda vecina no esta en la base").toBe(1);
     expect(totalDe(ahora) - totalDe(antes), "el fixture no sembro las 34 ordenes").toBe(
       PUNTARENAS_CARGADAS + GAM_ENTREGADAS + 1,
@@ -216,7 +216,7 @@ describeSiHayBase("443 — el heroe cuenta lo de CADA rol, y nada mas (SQL real)
     // ORDENES de GAM —las unicas del fixture con desenlace `entregada`— y no sobre un total: un
     // conteo no distingue «se colo una ajena» de «se perdio una propia».
     expect(
-      buckets.get("entregada"),
+      buckets.get("entregado"),
       "entraron ordenes de OTRA zona (las seis entregadas de GAM)",
     ).toBeUndefined();
     expect(
@@ -240,7 +240,7 @@ describeSiHayBase("443 — el heroe cuenta lo de CADA rol, y nada mas (SQL real)
     // Y la otra mitad, que es lo que impide que el caso de arriba pase por el motivo equivocado:
     // las seis de GAM son SUYAS aunque esten en otra zona, asi que tienen que entrar. Un recorte
     // que tapara tambien estas estaria recortando por zona, no por tienda.
-    expect(buckets.get("entregada"), "se perdieron seis ordenes propias por estar en otra zona").toBe(
+    expect(buckets.get("entregado"), "se perdieron seis ordenes propias por estar en otra zona").toBe(
       GAM_ENTREGADAS,
     );
     expect(cargadas(tienda)).toBe(PUNTARENAS_CARGADAS + GAM_ENTREGADAS);
@@ -302,7 +302,7 @@ describeSiHayBase("443 — el heroe cuenta lo de CADA rol, y nada mas (SQL real)
       await crearGestion(tx, {
         ordenId: propia,
         mensajeroId: base.mensajero1,
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         at: instanteCR(D, "15:00"),
       });
 
@@ -315,7 +315,7 @@ describeSiHayBase("443 — el heroe cuenta lo de CADA rol, y nada mas (SQL real)
       await crearGestion(tx, {
         ordenId: ajena,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(D, "16:00"),
       });
 
@@ -347,7 +347,7 @@ describeSiHayBase("443 — el heroe cuenta lo de CADA rol, y nada mas (SQL real)
     // Mutacion que mata: recortar por la `zona_id` DEL USUARIO mensajero. Esta orden es de zonaA
     // y su unica gestion la hizo alguien de zonaB: con ese recorte, desaparece.
     expect(
-      buckets.get("rechazada"),
+      buckets.get("devolucion_a_origen_por_rechazo"),
       "se perdio una orden de SU zona por haberla gestionado un mensajero de otra",
     ).toBe(1);
   });
@@ -358,7 +358,7 @@ describeSiHayBase("443 — el heroe cuenta lo de CADA rol, y nada mas (SQL real)
     // La otra mitad del bicondicional. Con el recorte por la zona del mensajero, esta SI entraria
     // (mensajero1 es de zonaB... y tambien lo seria si el recorte fuera por el mensajero a secas).
     expect(
-      buckets.get("entregada"),
+      buckets.get("entregado"),
       "entro una orden de OTRA zona porque la gestiono el mismo mensajero",
     ).toBeUndefined();
 

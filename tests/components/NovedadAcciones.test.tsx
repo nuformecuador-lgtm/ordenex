@@ -45,7 +45,7 @@ function novedad(over: Partial<NovedadDTO> = {}): NovedadDTO {
     id: "o1",
     numGuia: 12345,
     numRemision: "REM-001",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     intentosContacto: 0,
     mensajeroNombre: "Marta Mensajera",
     destinatario: DESTINATARIO,
@@ -92,7 +92,7 @@ const handlers = {
  */
 function renderAcciones(over: Partial<NovedadDTO> = {}, grupoListado?: GrupoNovedad) {
   const fila = novedad(over);
-  const grupo = grupoListado ?? (fila.estatusValue === "devuelta" ? "devolucion" : "ayuda");
+  const grupo = grupoListado ?? (fila.estatusValue === "novedad" ? "devolucion" : "ayuda");
   return render(<NovedadAcciones novedad={fila} grupoListado={grupo} {...handlers} />);
 }
 
@@ -153,7 +153,7 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
   // grupos (R23, P2) con la MISMA clave, así que aparece en este censo y en el de arriba — y que
   // aparezca en los dos es lo que hace visible la decisión.
   it("240/R33 + 312/R23: la fila de DEVOLUCIÓN ofrece cinco controles, sin «Habilitar»", () => {
-    renderAcciones({ estatusValue: "devuelta" });
+    renderAcciones({ estatusValue: "novedad" });
 
     // El espejo del caso de arriba. Es lo que convierte las ausencias de cada uno en afirmaciones:
     // «no hay Reprogramar en ayuda» sólo dice algo si hay un sitio donde SÍ lo hay.
@@ -170,7 +170,7 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
     // La ausencia, emparejada con su presencia EN EL MISMO CASO. Dicha sola, «no hay Habilitar en
     // la devolución» pasaría igual si el panel no renderizara nada — que es cómo se colaron casos
     // en la 235, la 236 y la 238.
-    renderAcciones({ estatusValue: "devuelta" });
+    renderAcciones({ estatusValue: "novedad" });
     expect(
       screen.queryByRole("button", { name: "Habilitar la orden de Ana Cliente" }),
       "el paquete de una orden en la devolución anclada YA volvió a la bodega y YA se escaneó al " +
@@ -197,7 +197,7 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
     // se inventará botones para ella.
     // ⏳ 2026-09-23 (FICHA 454): antes era `en_reparto` a secas; ahora `en_reparto` ES el estado de
     // una fila de ayuda, así que el caso usa un estado que no casa con la lista que lo trajo.
-    renderAcciones({ estatusValue: "sin_gestionar" }, "ayuda");
+    renderAcciones({ estatusValue: "novedad_interna" }, "ayuda");
 
     expect(censoDeBotones()).toEqual([
       "Llamar a Ana Cliente",
@@ -211,8 +211,8 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
     const censos: string[][] = [];
     for (const [estatus, grupo] of [
       ["en_reparto", "ayuda"],
-      ["devuelta", "devolucion"],
-      ["sin_gestionar", "ayuda"],
+      ["novedad", "devolucion"],
+      ["novedad_interna", "ayuda"],
     ] as const) {
       cleanup();
       renderAcciones({ estatusValue: estatus }, grupo);
@@ -269,7 +269,7 @@ describe("NovedadAcciones — cada control llama a SU handler (236/R27)", () => 
 
   it("312/R23: y el MISMO handler desde el grupo de DEVOLUCIÓN", async () => {
     const user = userEvent.setup();
-    renderAcciones({ id: "o-devuelta", estatusValue: "devuelta" });
+    renderAcciones({ id: "o-devuelta", estatusValue: "novedad" });
 
     await user.click(
       screen.getByRole("button", {
@@ -383,7 +383,7 @@ describe("NovedadAcciones — 237: la ayuda resuelve por su propia puerta", () =
     // El par positivo/negativo. Sin él, «no se llamó a `onReprogramar`» del primer caso pasaría
     // igual si alguien borrara la acción de la devolución entera.
     const user = userEvent.setup();
-    renderAcciones({ id: "o-devuelta", estatusValue: "devuelta" });
+    renderAcciones({ id: "o-devuelta", estatusValue: "novedad" });
 
     await user.click(
       screen.getByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),
@@ -400,7 +400,7 @@ describe("NovedadAcciones — 237: la ayuda resuelve por su propia puerta", () =
   // `toast.info`. Se reescribe contra `onRechazar`, que abre la ventana que dispara la operación.
   it("240/R27: «Rechazar» de la fila de DEVOLUCIÓN abre SU ventana, con la orden", async () => {
     const user = userEvent.setup();
-    renderAcciones({ id: "o-devuelta", estatusValue: "devuelta" });
+    renderAcciones({ id: "o-devuelta", estatusValue: "novedad" });
 
     await user.click(
       screen.getByRole("button", { name: "Rechazar la orden de Ana Cliente" }),

@@ -475,6 +475,9 @@ model OrderStatus {
   //   renombro uno mas a `en_reparto` (id/FK preservados por UPDATE de catalogo, sin ALTER TYPE).
   //   Feature 154 apendio dos values (18 -> 20): por_recolectar_en_tienda e incidente
   //   (INSERT idempotente, `20260729120000_order_status_v2_por_recolectar_incidente`).
+  //   FICHA 455 (2026-09-24): 7 values cambian de codigo por UPDATE de catalogo (id/FK
+  //   preservados, `20260924120000_order_status_nombre_unico`); la correspondencia vive en
+  //   `CODIGO_VIGENTE_DE_ANTERIOR` (lib/types/order-status.ts).
 
   ordenes Orden[]
 
@@ -1050,11 +1053,16 @@ enum MetodoPagoValue {
 }
 
 // Feature 36 (R6, decision F1.4-d): discriminador del resultado de una gestion.
+// FICHA 455 (2026-09-24, R15, design DC): cada resultado se llama IGUAL que su estado destino en
+// `order_status` (antes: entregada, reprogramada, devuelta, rechazada). SIN `@map` por valor: el
+// codigo de TypeScript, de Prisma y de Postgres es el mismo. La migracion
+// `20260924120100_gestion_resultado_nombre_unico` hace `ALTER TYPE ... RENAME VALUE` (OID
+// preservado, ninguna fila cambia) y su down renombra al reves SIN recrear el tipo.
 enum GestionResultado {
-  entregada
-  reprogramada
-  devuelta
-  rechazada
+  entregado
+  reprogramado
+  novedad
+  devolucion_a_origen_por_rechazo
   incidente // feature 158 (R1): paquete danado/perdido/robado. TERMINAL, se indemniza.
 
   @@map("gestion_resultado")

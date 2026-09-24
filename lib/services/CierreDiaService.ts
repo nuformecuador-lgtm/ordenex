@@ -69,7 +69,7 @@ const ROL_AUTORIZADO = "mensajero";
 // ayuda abierta sigue `en_reparto` y por eso SIGUE BLOQUEANDO (R22). Lo que ya NO bloquea es una
 // orden `en_reparto` con su gestion PENDIENTE de confirmar: esa exclusion vive en el repositorio
 // (`contarOrdenesPendientesGestion`, predicado unico).
-const ESTADOS_PENDIENTES = ["por_recoger", "en_reparto"];
+const ESTADOS_PENDIENTES = ["mensajero_recogiendo_en_bodega", "en_reparto"];
 
 // Mensajes accionables del gate/precondicion (R10/R11) y del ruteo (R12/R16).
 const MSG_PENDIENTES = "Tenes ordenes sin gestionar; gestionalas antes de cerrar."; // R10
@@ -124,9 +124,9 @@ const ESTADO_EN_REPARTO = "en_reparto";
  *     en `incidente` es que alguien la saco por un camino que esta feature no declara -> conflict.
  */
 const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
-  entregada: ["entregada"],
-  reprogramada: ["reprogramada"],
-  rechazada: ["rechazada"],
+  entregado: ["entregado"],
+  reprogramado: ["reprogramado"],
+  devolucion_a_origen_por_rechazo: ["devolucion_a_origen_por_rechazo"],
   // Feature 239 (T1.5, R24) — `devolucion_por_confirmar` va PRIMERO y es una CORRECCION DE
   // REGRESION, no una asercion que se actualiza: desde la 239 una gestion `devuelta` deja la
   // orden en el PRE-ESTADO (`ESTATUS_POR_RESULTADO`, `lib/types/gestion-destino.ts`), asi que
@@ -140,11 +140,11 @@ const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
   // 2026-09-23): sale el pre-estado de la 239. Su estado se retira del catalogo y M3 lleva toda
   // orden que estuviera en el a `en_reparto` con su gestion registrada (rama NUEVA del deshacer),
   // asi que ninguna gestion legada puede estar ya ahi.
-  devuelta: [
+  novedad: [
     "en_bodega_central",
     "en_bodega_satelite",
-    "rechazada",
-    "devuelta",
+    "devolucion_a_origen_por_rechazo",
+    "novedad",
   ],
   incidente: ["incidente"], // feature 158 (Q-D): el incidente SI se puede deshacer
 };
@@ -318,10 +318,10 @@ export class CierreDiaService implements ICierreDiaService {
     // pago DERIVADO en vivo (override del snapshot, que aqui es null: gestion sin cerrar).
     // Feature 158/R16/R18: 5 claves — el `incidente` es un grupo PROPIO del detalle.
     const grupos: CierreGrupos = {
-      entregada: [],
-      reprogramada: [],
-      devuelta: [],
-      rechazada: [],
+      entregado: [],
+      reprogramado: [],
+      novedad: [],
+      devolucion_a_origen_por_rechazo: [],
       incidente: [],
     };
     for (const g of gestiones) {
@@ -412,10 +412,10 @@ export class CierreDiaService implements ICierreDiaService {
     }
 
     const grupos: CierreGrupos = {
-      entregada: [],
-      reprogramada: [],
-      devuelta: [],
-      rechazada: [],
+      entregado: [],
+      reprogramado: [],
+      novedad: [],
+      devolucion_a_origen_por_rechazo: [],
       incidente: [],
     };
     for (const g of found.gestiones) {

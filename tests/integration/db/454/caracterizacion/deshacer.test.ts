@@ -24,20 +24,20 @@ describeSiHayBase("454/C21 — deshacer una gestion (Postgres real)", () => {
       const o2 = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 2000 });
       const o3 = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000 });
 
-      const g1 = await e.gestionarOk(o1.ordenId, "entregada", { monto: 5000 });
+      const g1 = await e.gestionarOk(o1.ordenId, "entregado", { monto: 5000 });
       const deshacer1 = await e.s.cierreDia.deshacerGestion(g1, e.actorMensajero);
       const trasDeshacer = {
         g1: await e.tx.gestionOrden.findUniqueOrThrow({ where: { id: g1 }, select: { anuladaAt: true } }),
         estado: await e.estadoDe(o1.ordenId),
       };
       // La orden vuelve a ser gestionable: se registra de nuevo, ahora como rechazada.
-      const regestion = await e.gestionar(o1.ordenId, "rechazada");
+      const regestion = await e.gestionar(o1.ordenId, "devolucion_a_origen_por_rechazo");
 
-      const g2 = await e.gestionarOk(o2.ordenId, "entregada", { monto: 2000 });
+      const g2 = await e.gestionarOk(o2.ordenId, "entregado", { monto: 2000 });
 
       const pedida = await e.pedirAyuda(o3.ordenId);
       if (pedida.status !== "ok") throw new Error(`pedirAyuda: ${JSON.stringify(pedida)}`);
-      const tienda = await e.gestionarDesdeAyuda(o3.ordenId, "rechazada");
+      const tienda = await e.gestionarDesdeAyuda(o3.ordenId, "devolucion_a_origen_por_rechazo");
       if (tienda.status !== "ok") throw new Error(`gestionarDesdeAyuda: ${JSON.stringify(tienda)}`);
       const g3 = (
         await e.tx.gestionOrden.findFirstOrThrow({ where: { ordenId: o3.ordenId }, select: { id: true } })

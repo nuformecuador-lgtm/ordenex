@@ -51,7 +51,7 @@ function fila(parcial: Partial<FilaProductoDTO> & { producto: string }): FilaPro
     tienda: "Tienda Uno",
     unidades: 1,
     ordenes: 1,
-    porStatus: [{ status: "entregada", conteo: 1 }],
+    porStatus: [{ status: "entregado", conteo: 1 }],
     ordenesAcompanadas: 0,
     dinero: null,
     ...parcial,
@@ -424,8 +424,8 @@ describe("FICHA 345 · las columnas (R46)", () => {
 
   it("R28 — la fila pinta EXACTAMENTE lo que devuelve `calcularEfectividad`", async () => {
     const porStatus = [
-      { status: "entregada", conteo: 8 },
-      { status: "rechazada", conteo: 6 },
+      { status: "entregado", conteo: 8 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
       { status: EN_CURSO, conteo: 2 },
     ];
     consultarMock.mockResolvedValue({
@@ -469,8 +469,8 @@ describe("FICHA 345 · las columnas (R46)", () => {
           producto: "Spray Protector",
           ordenes: 16,
           porStatus: [
-            { status: "entregada", conteo: 8 },
-            { status: "rechazada", conteo: 6 },
+            { status: "entregado", conteo: 8 },
+            { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
             { status: EN_CURSO, conteo: 2 },
           ],
         }),
@@ -518,10 +518,10 @@ describe("FICHA 346/442 · «En qué terminaron» suma la columna «Órdenes»",
     unidades: 29,
     ordenes: 24,
     porStatus: [
-      { status: "entregada", conteo: 3 },
-      { status: "rechazada", conteo: 2 },
-      { status: "devuelta", conteo: 4 },
-      { status: "reprogramada", conteo: 2 },
+      { status: "entregado", conteo: 3 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 2 },
+      { status: "novedad", conteo: 4 },
+      { status: "reprogramado", conteo: 2 },
       { status: EN_CURSO, conteo: 13 },
     ],
   });

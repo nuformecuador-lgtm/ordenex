@@ -127,7 +127,7 @@ function etiqueta(i: number): string {
 
 /** Página 1 (1-3): en bodega. Página 2 (4-6): por devolver. */
 function estadoDe(i: number): string {
-  return i <= PAGE_SIZE ? "en_bodega_satelite" : "por_devolver";
+  return i <= PAGE_SIZE ? "en_bodega_satelite" : "por_devolver_a_bodega_central";
 }
 
 function orden(i: number): RecepcionSateliteDTO {

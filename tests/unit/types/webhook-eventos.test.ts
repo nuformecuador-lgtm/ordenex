@@ -40,8 +40,8 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
     // El integrador sigue recibiendo el mismo evento con el mismo nombre. La 239 lo retrasa
     // hasta la aprobacion del cierre, que es cuando la orden entra de verdad en `devuelta`
     // (R27). Es un cambio de contrato OBSERVABLE y hay que avisar antes de desplegar (T0.3).
-    expect(EVENTOS_PUBLICOS.has("devuelta")).toBe(true);
-    expect(esEventoPublico("devuelta")).toBe(true);
+    expect(EVENTOS_PUBLICOS.has("novedad")).toBe(true);
+    expect(esEventoPublico("novedad")).toBe(true);
   });
 
   it("la lista es EXACTAMENTE estos 12 values (454: sale `ayuda_tienda`)", () => {
@@ -68,10 +68,10 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
         "en_ruta_bodega_central",
         "en_bodega_central",
         "en_reparto",
-        "entregada",
-        "reprogramada",
-        "devuelta",
-        "rechazada",
+        "entregado",
+        "reprogramado",
+        "novedad",
+        "devolucion_a_origen_por_rechazo",
         "devolviendo_a_tienda",
         "devuelta_a_tienda",
         // Los DOS que trajo la 268. `ayuda_tienda` (R1) SALE con la 454 (R34).
@@ -169,7 +169,7 @@ describe("268 — la exencion por familia queda VACIA, pero el MECANISMO sigue e
     // hoy es evento publico. Se sustituye por otro interno de ruteo satelite, que es lo que el caso
     // quiere ejercitar (un destino no publico), no `en_preparacion` en particular.
     expect(esTransicionEmitible("en_bodega_satelite", "gestion")).toBe(false);
-    expect(esTransicionEmitible("por_recoger", "recoleccion")).toBe(false);
+    expect(esTransicionEmitible("mensajero_recogiendo_en_bodega", "recoleccion")).toBe(false);
   });
 
   // 268/R7 — MIENTRAS la lista este vacia, `esTransicionEmitible` es EQUIVALENTE a
@@ -180,14 +180,14 @@ describe("268 — la exencion por familia queda VACIA, pero el MECANISMO sigue e
     const ESTADOS_MUESTRA = [
       // publicos (incluidos los dos que trae la 268)
       "en_reparto",
-      "entregada",
+      "entregado",
       "ayuda_tienda",
       "incidente",
       "devuelta_a_tienda",
       // NO publicos
       "en_preparacion",
-      "por_recoger",
-      "sin_gestionar",
+      "mensajero_recogiendo_en_bodega",
+      "novedad_interna",
       "devolucion_por_confirmar",
       "en_bodega_satelite",
     ] as const;
@@ -245,7 +245,7 @@ describe("268 — la exencion por familia queda VACIA, pero el MECANISMO sigue e
 
   it("un estado NO publico sigue sin emitir, venga de la familia que venga", () => {
     // 268/R13: el corte de la noche (`ayuda_tienda -> sin_gestionar`) sigue en silencio.
-    expect(esTransicionEmitible("sin_gestionar", "corte_sin_gestionar")).toBe(false);
+    expect(esTransicionEmitible("novedad_interna", "corte_sin_gestionar")).toBe(false);
     expect(esTransicionEmitible("devolucion_por_confirmar", "gestion")).toBe(false);
   });
 });

@@ -28,19 +28,19 @@ const TABLA_FIRMADA: Record<OrderStatusValue, HitoPublico> = {
   en_preparacion: "registrado",
   por_recolectar_en_tienda: "registrado",
   recolectando: "registrado",
-  por_recoger: "en_bodega",
+  mensajero_recogiendo_en_bodega: "en_bodega",
   en_bodega_central: "en_bodega",
   en_bodega_satelite: "en_bodega",
   en_ruta_bodega_central: "en_transito",
   en_ruta_bodega_satelite: "en_transito",
   en_reparto: "en_reparto",
-  sin_gestionar: "en_reparto",
-  entregada: "entregado",
-  reprogramada: "reprogramado",
-  devuelta: "no_entregado",
-  rechazada: "no_entregado",
+  novedad_interna: "en_reparto",
+  entregado: "entregado",
+  reprogramado: "reprogramado",
+  novedad: "no_entregado",
+  devolucion_a_origen_por_rechazo: "no_entregado",
   incidente: "no_entregado",
-  por_devolver: "devolucion_en_curso",
+  por_devolver_a_bodega_central: "devolucion_en_curso",
   devolviendo_a_bodega_central: "devolucion_en_curso",
   por_devolver_a_tienda: "devolucion_en_curso",
   devolviendo_a_tienda: "devolucion_en_curso",
@@ -70,7 +70,7 @@ describe("R16 — el mapeo de hitos cubre el catalogo vigente entero", () => {
     }
   });
 
-  it("los 20 values del catalogo tienen hito publico asignado y coinciden con la tabla firmada (incluidos recolectando→registrado, incidente→no_entregado y sin_gestionar→en_reparto)", () => {
+  it("los 20 values del catalogo tienen hito publico asignado y coinciden con la tabla firmada (incluidos recolectando→registrado, incidente→no_entregado y novedad_interna→en_reparto)", () => {
     const sinHito = ORDER_STATUS_SEED.filter((value) => !(value in HITO_POR_ESTATUS));
     expect(sinHito).toEqual([]);
 
@@ -82,7 +82,7 @@ describe("R16 — el mapeo de hitos cubre el catalogo vigente entero", () => {
     // cambio no pase como "un value mas del bucle".
     expect(hitoDeEstatus("recolectando")).toBe("registrado"); // G6
     expect(hitoDeEstatus("incidente")).toBe("no_entregado"); // G7
-    expect(hitoDeEstatus("sin_gestionar")).toBe("en_reparto"); // G8, riesgo aceptado
+    expect(hitoDeEstatus("novedad_interna")).toBe("en_reparto"); // G8, riesgo aceptado
   });
 
   it("el mapa no inventa estatus que no esten en el catalogo vigente", () => {

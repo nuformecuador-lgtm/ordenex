@@ -25,7 +25,7 @@ type OrdenRepo = Pick<IOrdenRepository, "findUsuarioVehiculoId" | "findEstatusId
 
 // Feature 109 (R4): estados del catalogo que consume la transicion del corte diario.
 const ESTADO_EN_REPARTO = "en_reparto";
-const ESTADO_SIN_GESTIONAR = "sin_gestionar";
+const ESTADO_SIN_GESTIONAR = "novedad_interna";
 // FICHA 454 (T1.10): aqui vivia `ESTADO_AYUDA = "ayuda_tienda"` (235/R26). La ayuda deja de ser
 // estado: una orden con ayuda abierta sigue `en_reparto` y la barre el MISMO bloque (R27).
 // Reusa la 37: gestiones pendientes del mensajero + creacion transaccional del cierre

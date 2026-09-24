@@ -489,7 +489,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(
       await admin.$executeRawUnsafe(
         `INSERT INTO "${esquema}"."historial_accion"
            ("id","accion","entidad_tipo","valor_anterior","valor_nuevo")
-         VALUES ('a1','${VALOR_ACCION}','gestion_orden','entregada','rechazada')`,
+         VALUES ('a1','${VALOR_ACCION}','gestion_orden','entregado','devolucion_a_origen_por_rechazo')`,
       );
     }, 120_000);
 
@@ -530,8 +530,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(
       expect(historial.origen).toBe(VALOR_ORIGEN);
       expect(accion.n).toBe(1);
       expect(accion.accion).toBe(VALOR_ACCION);
-      expect(accion.anterior).toBe("entregada");
-      expect(accion.nuevo).toBe("rechazada");
+      expect(accion.anterior).toBe("entregado");
+      expect(accion.nuevo).toBe("devolucion_a_origen_por_rechazo");
     });
   },
 );

@@ -34,9 +34,9 @@ describeSiHayBase("454/T1.22 — SF-001: cierre de bodega sobre aprobados del mo
       const ef = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 6000 });
       const sp = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 4000 });
       const re = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 9000 });
-      await e.gestionarOk(ef.ordenId, "entregada", { monto: 6000 });
-      await e.gestionarOk(sp.ordenId, "entregada", { monto: 4000, pagos: [{ metodo: "SINPE", monto: 4000 }] });
-      await e.gestionarOk(re.ordenId, "rechazada");
+      await e.gestionarOk(ef.ordenId, "entregado", { monto: 6000 });
+      await e.gestionarOk(sp.ordenId, "entregado", { monto: 4000, pagos: [{ metodo: "SINPE", monto: 4000 }] });
+      await e.gestionarOk(re.ordenId, "devolucion_a_origen_por_rechazo");
       const cierreId = await e.solicitarCierreOk();
       const aprobacion = await e.aprobar(cierreId);
 
@@ -109,7 +109,7 @@ describeSiHayBase("454/T1.22 — SF-001: cierre de bodega sobre aprobados del mo
   });
 
   it("R64: los estados del mensajero ya estan APLICADOS antes de la bodega (entregada x2; la rechazada ya salio por la 139)", () => {
-    expect(r.antes.estados).toEqual(["entregada", "entregada", "por_devolver_a_tienda"]);
+    expect(r.antes.estados).toEqual(["entregado", "entregado", "por_devolver_a_tienda"]);
   });
 
   it("R61/R64: la bodega lleva exactamente los totales del cierre del mensajero", () => {

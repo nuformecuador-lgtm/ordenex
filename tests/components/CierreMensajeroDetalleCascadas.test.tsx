@@ -176,10 +176,10 @@ function vaAntes(a: HTMLElement, b: HTMLElement): boolean {
 // ---------------------------------------------------------------------------
 
 const GRUPOS_VACIOS: CierreGrupos = {
-  entregada: [],
-  reprogramada: [],
-  devuelta: [],
-  rechazada: [],
+  entregado: [],
+  reprogramado: [],
+  novedad: [],
+  devolucion_a_origen_por_rechazo: [],
   incidente: [],
 };
 

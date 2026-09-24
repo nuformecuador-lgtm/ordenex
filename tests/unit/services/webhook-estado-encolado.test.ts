@@ -22,7 +22,7 @@ import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHi
 
 /** Mapa estatusDestinoId -> value del catalogo. */
 const VALUE_POR_ID: Record<string, string> = {
-  "s-entregada": "entregada", // publico
+  "s-entregada": "entregado", // publico
   "s-en-reparto": "en_reparto", // publico
   // ⏳ 2026-08-31 — `s-fulfillment` era el ejemplo de estado NO publico, y ya no sirve como tal:
   // `en_preparacion` pasa a ser publico (evento de NACIMIENTO de la rama de fulfillment). Se anade
@@ -33,7 +33,7 @@ const VALUE_POR_ID: Record<string, string> = {
   // Feature 268: los dos values que la 268 hace publicos, y uno que sigue NO siendolo.
   "s-ayuda-tienda": "ayuda_tienda", // publico desde la 268/R1
   "s-incidente": "incidente", // publico desde la 268/R2
-  "s-sin-gestionar": "sin_gestionar", // NO publico (corte de la noche, 268/R13)
+  "s-sin-gestionar": "novedad_interna", // NO publico (corte de la noche, 268/R13)
 };
 
 function buildTx(ordenesElegibles: Set<string>): WebhookEmisorTx {
@@ -234,7 +234,7 @@ describe("268 — el ciclo de AYUDA emite en sus DOS mitades, y los reingresos l
     expect(payload.estatusDestinoId).toBe("s-en-reparto");
   });
 
-  it("268/R13: `ayuda_tienda -> sin_gestionar` via `corte_sin_gestionar` NO encola", async () => {
+  it("268/R13: `ayuda_tienda -> novedad_interna` via `corte_sin_gestionar` NO encola", async () => {
     // El corte de la noche sigue en silencio, y por la razon de siempre: el estado DESTINO no es
     // publico. No hace falta ninguna exencion por familia para eso — que es justo por lo que la
     // exencion pudo quedar vacia sin perder este comportamiento.

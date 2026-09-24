@@ -87,7 +87,7 @@ describe("formato de cada tipo de dato", () => {
 
   it("el estatus se traduce al vocabulario PUBLICO, nunca el value interno", () => {
     expect(valorDeCampo("estatus", DATOS)).toBe("En reparto");
-    const interno = datosPlantillaFixture({ orden: { estatusValue: "sin_gestionar" } });
+    const interno = datosPlantillaFixture({ orden: { estatusValue: "novedad_interna" } });
     expect(valorDeCampo("estatus", interno)).toBe("En reparto");
     expect(valorDeCampo("estatus", interno)).not.toContain("_");
   });

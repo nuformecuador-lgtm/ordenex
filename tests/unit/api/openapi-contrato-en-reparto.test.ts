@@ -30,8 +30,8 @@ function esEnumDeEstado(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.every((v) => typeof v === "string") &&
-    (value as string[]).includes("entregada") &&
-    (value as string[]).includes("por_recoger")
+    (value as string[]).includes("entregado") &&
+    (value as string[]).includes("mensajero_recogiendo_en_bodega")
   );
 }
 
@@ -194,10 +194,10 @@ describe("153/R13 — eventos publicos de webhook", () => {
       "en_ruta_bodega_central",
       "en_bodega_central",
       "en_reparto",
-      "entregada",
-      "reprogramada",
-      "devuelta",
-      "rechazada",
+      "entregado",
+      "reprogramado",
+      "novedad",
+      "devolucion_a_origen_por_rechazo",
       "devolviendo_a_tienda",
       "devuelta_a_tienda",
       "por_recolectar_en_tienda",
@@ -281,7 +281,7 @@ describe("268/R31 — `Evidencia.resultado` admite `incidente`, en el TS y en el
   const resultadoTs = openApiSpec.components.schemas.Evidencia.properties.resultado;
 
   it("el enum del objeto TS son exactamente los tres resultados, con `incidente` al final", () => {
-    expect(resultadoTs.enum).toEqual(["entregada", "rechazada", "incidente"]);
+    expect(resultadoTs.enum).toEqual(["entregado", "devolucion_a_origen_por_rechazo", "incidente"]);
     // Y NO es el catalogo de estados: no contiene `por_recoger`, asi que `esEnumDeEstado` no lo
     // cuenta y los cuatro bloques del guard de arriba siguen siendo cuatro.
     expect(esEnumDeEstado(resultadoTs.enum)).toBe(false);
@@ -294,6 +294,6 @@ describe("268/R31 — `Evidencia.resultado` admite `incidente`, en el TS y en el
       .split("\n")
       .filter((l) => l.trim() !== "")
       .map((l) => l.trim().replace(/^-\s+/, ""));
-    expect(values).toEqual(["entregada", "rechazada", "incidente"]);
+    expect(values).toEqual(["entregado", "devolucion_a_origen_por_rechazo", "incidente"]);
   });
 });

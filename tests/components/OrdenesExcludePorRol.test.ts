@@ -36,7 +36,7 @@ describe("EXCLUDE_POR_ROL — visibilidad de los estados del flujo de devolució
       expect(excluidos).not.toContain(estado);
     }
     // Cordura: sí sigue excluyendo lo que NO es del flujo de devolución de rechazadas.
-    expect(excluidos).toContain("devuelta");
+    expect(excluidos).toContain("novedad");
     expect(excluidos).toContain("en_bodega_central");
   });
 });
@@ -68,6 +68,6 @@ describe("454/R37 — los dos estados retirados no se ofrecen a NINGUN rol como 
       for (const retirado of RETIRADOS) expect(lista).not.toContain(retirado);
     }
     // La exclusion del adminTienda que SI sigue siendo una decision: `devuelta`.
-    expect(EXCLUDE_POR_ROL[RolValue.adminTienda]).toContain("devuelta");
+    expect(EXCLUDE_POR_ROL[RolValue.adminTienda]).toContain("novedad");
   });
 });

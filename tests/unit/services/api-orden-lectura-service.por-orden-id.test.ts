@@ -33,7 +33,7 @@ function row(overrides: Partial<ApiOrdenRow> = {}): ApiOrdenRow {
   return {
     numGuia: 10234,
     numRemision: "REM-1",
-    estatusValue: "entregada",
+    estatusValue: "entregado",
     destinatario: "Ana",
     telefonoDest: "0991234567",
     producto: "Caja",
@@ -81,7 +81,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
   it("R16: orden propia con evidencias -> DTO con URLs firmadas al TTL de la 106, sin storagePath", async () => {
     const filaConEvidencia: ApiOrdenDetalleRow = detalleRow({
       evidencias: [
-        { resultado: "entregada", storagePath: "ordenes/o1/e.jpg", contentType: "image/jpeg" },
+        { resultado: "entregado", storagePath: "ordenes/o1/e.jpg", contentType: "image/jpeg" },
       ],
     });
     const repo = fakeRepo(filaConEvidencia);
@@ -94,10 +94,10 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
       ["ordenes/o1/e.jpg"],
       gestionConfig.SIGNED_URL_TTL_SECONDS,
     );
-    expect(res).toMatchObject({ numGuia: 10234, estado: "entregada" });
+    expect(res).toMatchObject({ numGuia: 10234, estado: "entregado" });
     expect(res!.evidencias).toEqual([
       {
-        resultado: "entregada",
+        resultado: "entregado",
         contentType: "image/jpeg",
         url: "https://signed/e.jpg",
         expiraEnSegundos: gestionConfig.SIGNED_URL_TTL_SECONDS,

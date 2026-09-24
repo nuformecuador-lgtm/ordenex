@@ -63,14 +63,14 @@ describe("OrdenRepository.findExistingRemisiones (R25)", () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
       { numRemision: "REM-1", estatus: { value: "en_bodega_central" } },
-      { numRemision: "REM-2", estatus: { value: "entregada" } },
+      { numRemision: "REM-2", estatus: { value: "entregado" } },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const map = await repo.findExistingRemisiones(["REM-1", "REM-2", "REM-3"], "tienda-1");
 
     expect(map.get("REM-1")).toBe("en_bodega_central");
-    expect(map.get("REM-2")).toBe("entregada");
+    expect(map.get("REM-2")).toBe("entregado");
     expect(map.has("REM-3")).toBe(false);
 
     const arg = prisma.orden.findMany.mock.calls[0][0];

@@ -134,7 +134,7 @@ describe("TableroDiaRepository.listarOrdenesDelDia — el SQL", () => {
     const { prisma } = espiar([
       {
         orden_id: "o1",
-        resultado_del_dia: "entregada",
+        resultado_del_dia: "entregado",
         asignado_at: asignadoAt,
         total: BigInt(7),
       },
@@ -152,7 +152,7 @@ describe("TableroDiaRepository.listarOrdenesDelDia — el SQL", () => {
     expect(pagina.filas).toEqual([
       {
         ordenId: "o1",
-        resultadoDelDia: "entregada",
+        resultadoDelDia: "entregado",
         asignadoAt: asignadoAt.toISOString(),
       },
     ]);

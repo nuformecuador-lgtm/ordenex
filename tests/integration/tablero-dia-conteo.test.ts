@@ -74,14 +74,14 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
     const filas = await conteo(async (tx, base) => {
       const orden = await crearOrden(tx, base, {
         clave: "reintentada",
-        estatus: "entregada",
+        estatus: "entregado",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "07:00"),
       });
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         at: instanteCR(FECHA_CR, "09:00"),
       });
       await crearGestion(tx, {
@@ -93,7 +93,7 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "13:00"),
       });
     });
@@ -109,7 +109,7 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
   it("una orden SIN gestion cae en el bucket que le toca por su estatus (R21/R43/R44)", async () => {
     const filas = await conteo(async (tx, base) => {
       for (const [clave, estatus] of [
-        ["a", "por_recoger"],
+        ["a", "mensajero_recogiendo_en_bodega"],
         ["b", "recolectando"],
         ["c", "en_reparto"],
         ["d", "por_recolectar_en_tienda"],
@@ -149,14 +149,14 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "09:00"),
         anuladaAt: instanteCR(FECHA_CR, "10:00"),
       });
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "devuelta",
+        resultado: "novedad",
         at: instanteCR(FECHA_CR, "11:00"),
         anuladaAt: instanteCR(FECHA_CR, "12:00"),
       });
@@ -170,20 +170,20 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
     const filas = await conteo(async (tx, base) => {
       const orden = await crearOrden(tx, base, {
         clave: "mixta",
-        estatus: "entregada",
+        estatus: "entregado",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "07:00"),
       });
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "09:00"),
       });
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "devuelta",
+        resultado: "novedad",
         at: instanteCR(FECHA_CR, "15:00"),
         anuladaAt: instanteCR(FECHA_CR, "16:00"),
       });
@@ -205,14 +205,14 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR("2001-06-16", "00:30"),
       });
       // Y 23:00 CR del dia ANTERIOR, por el otro extremo.
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "devuelta",
+        resultado: "novedad",
         at: instanteCR("2001-06-14", "23:00"),
       });
     });
@@ -232,7 +232,7 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
       await crearGestion(tx, {
         ordenId: dentro,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: new Date(VENTANA.hasta.getTime() - 1),
       });
 
@@ -245,7 +245,7 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
       await crearGestion(tx, {
         ordenId: fuera,
         mensajeroId: base.mensajero2,
-        resultado: "entregada",
+        resultado: "entregado",
         at: VENTANA.hasta,
       });
     });
@@ -273,7 +273,7 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
     const filas = await conteo(async (tx, base) => {
       await crearOrden(tx, base, {
         clave: "madrugada",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "00:30"),
       });
@@ -286,7 +286,7 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
     const filas = await conteo(async (tx, base) => {
       const orden = await crearOrden(tx, base, {
         clave: "gestionada-por-otro",
-        estatus: "entregada",
+        estatus: "entregado",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "07:00"),
       });
@@ -296,7 +296,7 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero2,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "10:00"),
       });
     });
@@ -322,11 +322,11 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
   it("un escenario mixto reparte los ocho cubos y la identidad se cumple en cada tarjeta (R25)", async () => {
     const filas = await conteo(async (tx, base) => {
       const casos = [
-        { clave: "e1", estatus: "entregada", resultado: "entregada" as const },
-        { clave: "e2", estatus: "entregada", resultado: "entregada" as const },
-        { clave: "r1", estatus: "reprogramada", resultado: "reprogramada" as const },
-        { clave: "d1", estatus: "devuelta", resultado: "devuelta" as const },
-        { clave: "x1", estatus: "rechazada", resultado: "rechazada" as const },
+        { clave: "e1", estatus: "entregado", resultado: "entregado" as const },
+        { clave: "e2", estatus: "entregado", resultado: "entregado" as const },
+        { clave: "r1", estatus: "reprogramado", resultado: "reprogramado" as const },
+        { clave: "d1", estatus: "novedad", resultado: "novedad" as const },
+        { clave: "x1", estatus: "devolucion_a_origen_por_rechazo", resultado: "devolucion_a_origen_por_rechazo" as const },
         { clave: "i1", estatus: "incidente", resultado: "incidente" as const },
       ];
       for (const caso of casos) {
@@ -344,7 +344,7 @@ describeSiHayBase("tablero del dia — el conteo (Postgres real)", () => {
         });
       }
       for (const [clave, estatus] of [
-        ["p1", "por_recoger"],
+        ["p1", "mensajero_recogiendo_en_bodega"],
         ["p2", "en_reparto"],
         ["p3", "en_bodega_satelite"],
       ] as const) {

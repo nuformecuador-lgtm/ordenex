@@ -86,11 +86,11 @@ const FECHAS = { hoy: "2026-09-03", manana: "2026-09-04" };
  * negativos —dos con acciones propias, uno en bodega y uno terminal—.
  */
 const CATALOGO = [
-  { id: "est-reprogramada", value: "reprogramada" },
-  { id: "est-por_recoger", value: "por_recoger" },
+  { id: "est-reprogramada", value: "reprogramado" },
+  { id: "est-mensajero_recogiendo_en_bodega", value: "mensajero_recogiendo_en_bodega" },
   { id: "est-en_reparto", value: "en_reparto" },
   { id: "est-en_bodega_central", value: "en_bodega_central" },
-  { id: "est-entregada", value: "entregada" },
+  { id: "est-entregada", value: "entregado" },
 ];
 
 function makeOrden(over: Partial<OrdenListItemDTO> & { id: string }): OrdenListItemDTO {
@@ -98,7 +98,7 @@ function makeOrden(over: Partial<OrdenListItemDTO> & { id: string }): OrdenListI
     numGuia: 49906911,
     numRemision: `REM-${over.id}`,
     estatusId: "est-reprogramada",
-    estatusValue: "reprogramada",
+    estatusValue: "reprogramado",
     fechaReprogramacion: "2026-09-04",
     fechaRepartoISO: null,
     destinatario: "Destino",
@@ -197,10 +197,10 @@ describe("`/ordenes` ofrece la corrección sobre una orden `reprogramada`", () =
 // Los controles negativos
 // ---------------------------------------------------------------------------
 describe("la corrección NO se ofrece en ningún otro estado", () => {
-  it("no aparece en `por_recoger`, que tiene sus propias acciones", async () => {
+  it("no aparece en `mensajero_recogiendo_en_bodega`, que tiene sus propias acciones", async () => {
     const user = userEvent.setup();
     renderOrdenes([
-      makeOrden({ id: "o2", estatusId: "est-por_recoger", estatusValue: "por_recoger" }),
+      makeOrden({ id: "o2", estatusId: "est-mensajero_recogiendo_en_bodega", estatusValue: "mensajero_recogiendo_en_bodega" }),
     ]);
 
     await seleccionarFila(user, "REM-o2");
@@ -242,7 +242,7 @@ describe("la corrección NO se ofrece en ningún otro estado", () => {
 
   it("no aparece en `entregada`: mover esa fecha sería escribir un dato muerto", async () => {
     renderOrdenes([
-      makeOrden({ id: "o5", estatusId: "est-entregada", estatusValue: "entregada" }),
+      makeOrden({ id: "o5", estatusId: "est-entregada", estatusValue: "entregado" }),
     ]);
 
     await screen.findByText("REM-o5");

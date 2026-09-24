@@ -240,7 +240,7 @@ describe("Cohorte de carga (R32) — las siete columnas, con `Vivas` entre ellas
       fecha: "2026-09-08",
       cargadas: 10,
       cubos: [
-        cubo("entregada", 4, 691_200),
+        cubo("entregado", 4, 691_200),
         cubo("devuelta_a_tienda", 2, 259_200),
         cubo("incidente", 1, 86_400),
         cubo("viva", 3),
@@ -292,7 +292,7 @@ describe("Cohorte de carga (R32) — las siete columnas, con `Vivas` entre ellas
           fecha: "2026-09-08",
           cargadas: 4,
           // `viva` NO viene: todas cerraron. La columna tiene que decir 0, no quedarse vacia.
-          cubos: [cubo("entregada", 4, 345_600)],
+          cubos: [cubo("entregado", 4, 345_600)],
         },
       ]),
     });
@@ -399,7 +399,7 @@ describe("Cohorte de carga (R33) — la cifra va con su denominador", () => {
           fecha: "2026-09-08",
           cargadas: 10,
           // 4 entregadas que acumulan 8 dias: dos dias de media.
-          cubos: [cubo("entregada", 4, 691_200), cubo("viva", 6)],
+          cubos: [cubo("entregado", 4, 691_200), cubo("viva", 6)],
         },
       ]),
     });
@@ -419,7 +419,7 @@ describe("Cohorte de carga (R33) — la cifra va con su denominador", () => {
         {
           fecha: "2026-09-08",
           cargadas: 2,
-          cubos: [cubo("entregada", 1, 86_400), cubo("viva", 1)],
+          cubos: [cubo("entregado", 1, 86_400), cubo("viva", 1)],
         },
       ]),
     });
@@ -461,7 +461,7 @@ describe("Cohorte de carga (R33) — la cifra va con su denominador", () => {
           fecha: "2026-09-08",
           cargadas: 10,
           cubos: [
-            cubo("entregada", 4, 691_200),
+            cubo("entregado", 4, 691_200),
             cubo("devuelta_a_tienda", 2, 259_200),
             cubo("viva", 4),
           ],

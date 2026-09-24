@@ -34,8 +34,8 @@ describeSiHayBase("454/C13 — listas, mapa y paradas del portal (Postgres real)
           { rutaId: ruta.id, ordenId: a.ordenId, secuencia: 2 },
         ],
       });
-      await e.gestionarOk(g.ordenId, "entregada", { monto: 1000 });
-      await e.gestionarOk(rj.ordenId, "rechazada");
+      await e.gestionarOk(g.ordenId, "entregado", { monto: 1000 });
+      await e.gestionarOk(rj.ordenId, "devolucion_a_origen_por_rechazo");
       const ayuda = await e.pedirAyuda(a.ordenId);
       if (ayuda.status !== "ok") throw new Error(`pedirAyuda: ${JSON.stringify(ayuda)}`);
 

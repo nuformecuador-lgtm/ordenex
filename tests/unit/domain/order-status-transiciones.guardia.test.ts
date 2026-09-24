@@ -88,14 +88,14 @@ describe("454/R37 — los dos estados retirados no existen en el grafo", () => {
   it("454: las salidas de `en_reparto`, enumeradas enteras (destino y familia)", () => {
     const salidas = TRANSICIONES.en_reparto.map((d) => `${d.to} (${d.via})`).sort();
     expect(salidas).toEqual([
-      "devuelta (anclaje_devolucion)",
-      "entregada (gestion)",
+      "devolucion_a_origen_por_rechazo (gestion)",
+      "devolucion_a_origen_por_rechazo (gestion_tienda_ayuda)",
+      "entregado (gestion)",
       "incidente (incidente)",
-      "rechazada (gestion)",
-      "rechazada (gestion_tienda_ayuda)",
-      "reprogramada (gestion)",
-      "reprogramada (gestion_tienda_ayuda)",
-      "sin_gestionar (corte_sin_gestionar)",
+      "novedad (anclaje_devolucion)",
+      "novedad_interna (corte_sin_gestionar)",
+      "reprogramado (gestion)",
+      "reprogramado (gestion_tienda_ayuda)",
     ]);
   });
 });
@@ -111,50 +111,50 @@ describe("454/R37 — los dos estados retirados no existen en el grafo", () => {
 // agujero que obligo a corregir a mano la base de produccion el 2026-09-08.
 // ---------------------------------------------------------------------------------------------
 describe("398 — la correccion en sitio: `entregada` gana UNA salida, y ni una mas", () => {
-  it("398/R9: `entregada -> rechazada` es LEGAL (#69, la correccion del maestro/admin)", () => {
-    expect(() => assertTransicionValida("entregada", "rechazada")).not.toThrow();
+  it("398/R9: `entregado -> devolucion_a_origen_por_rechazo` es LEGAL (#69, la correccion del maestro/admin)", () => {
+    expect(() => assertTransicionValida("entregado", "devolucion_a_origen_por_rechazo")).not.toThrow();
   });
 
   it("las salidas de `entregada` son EXACTAMENTE dos, enumeradas enteras", () => {
     // Censo CERRADO sobre el mapa real: una salida de mas aqui es una arista sin productor (el
     // fallo de la 154); una de menos deja la correccion sin poder escribir su historial.
-    const salidas = TRANSICIONES.entregada.map((d) => `${d.to} (${d.via})`).sort();
+    const salidas = TRANSICIONES.entregado.map((d) => `${d.to} (${d.via})`).sort();
     expect(salidas).toEqual([
+      "devolucion_a_origen_por_rechazo (correccion_resultado_gestion)",
       "en_reparto (deshacer_gestion)",
-      "rechazada (correccion_resultado_gestion)",
     ]);
   });
 
-  it("398: la INVERSA `rechazada -> entregada` sigue siendo ILEGAL (fuera de alcance)", () => {
+  it("398: la INVERSA `devolucion_a_origen_por_rechazo -> entregado` sigue siendo ILEGAL (fuera de alcance)", () => {
     // La 398 corrige UNA pareja. La vuelta atras reintroduciria el cobro, y su via es rechazar el
     // cierre. Si alguien la abre sin productor, este caso lo dice por su nombre.
-    expect(() => assertTransicionValida("rechazada", "entregada")).toThrow(TransicionIlegalError);
+    expect(() => assertTransicionValida("devolucion_a_origen_por_rechazo", "entregado")).toThrow(TransicionIlegalError);
   });
 
   it("398: `entregada` sigue siendo TERMINAL y el resto del catalogo sigue ilegal desde ahi", () => {
     // Barrido completo, como el de `incidente`: solo las DOS salidas declaradas pasan.
-    const permitidos = new Set<OrderStatusValue>(["en_reparto", "rechazada"]);
+    const permitidos = new Set<OrderStatusValue>(["en_reparto", "devolucion_a_origen_por_rechazo"]);
     for (const value of ORDER_STATUS_SEED) {
       if (permitidos.has(value)) continue;
       expect(
-        () => assertTransicionValida("entregada", value),
-        `salida no declarada aceptada: entregada -> ${value}`,
+        () => assertTransicionValida("entregado", value),
+        `salida no declarada aceptada: entregado -> ${value}`,
       ).toThrow(TransicionIlegalError);
     }
-    expect([...ESTADOS_TERMINALES]).toContain("entregada");
+    expect([...ESTADOS_TERMINALES]).toContain("entregado");
   });
 });
 
 describe("R6 — la guardia rechaza los pares que no estan en TRANSICIONES", () => {
   it.each([
-    ["entregada", "devuelta_a_tienda"],
-    ["en_preparacion", "entregada"],
+    ["entregado", "devuelta_a_tienda"],
+    ["en_preparacion", "entregado"],
     ["devuelta_a_tienda", "en_reparto"],
     // Feature 149: `por_recoger -> en_bodega_satelite` SALE de esta lista porque paso a ser
     // LEGAL (#47). Se sustituye por `por_recoger -> en_preparacion`, que sigue siendo ilegal
     // (D3': la reversion normaliza a un estado de BODEGA, nunca vuelve a un estado pre-guia).
-    ["por_recoger", "en_preparacion"],
-    ["sin_gestionar", "en_reparto"],
+    ["mensajero_recogiendo_en_bodega", "en_preparacion"],
+    ["novedad_interna", "en_reparto"],
     ["devolviendo_a_bodega_central", "devuelta_a_tienda"],
   ] as const)("lanza TransicionIlegalError en %s -> %s", (origen, destino) => {
     expect(() => assertTransicionValida(origen, destino)).toThrow(TransicionIlegalError);
@@ -162,8 +162,8 @@ describe("R6 — la guardia rechaza los pares que no estan en TRANSICIONES", () 
 
   // --- REGRESION 149 (R27/R28) ------------------------------------------------------------
   it("REGRESION 149/R27: las TRES aristas de `deshacer_asignacion` (#45/#46/#47) son LEGALES", () => {
-    expect(() => assertTransicionValida("por_recoger", "en_bodega_central")).not.toThrow(); // #46
-    expect(() => assertTransicionValida("por_recoger", "en_bodega_satelite")).not.toThrow(); // #47
+    expect(() => assertTransicionValida("mensajero_recogiendo_en_bodega", "en_bodega_central")).not.toThrow(); // #46
+    expect(() => assertTransicionValida("mensajero_recogiendo_en_bodega", "en_bodega_satelite")).not.toThrow(); // #47
     expect(() =>
       assertTransicionValida("en_ruta_bodega_satelite", "en_bodega_central"),
     ).not.toThrow(); // #45
@@ -177,10 +177,10 @@ describe("R6 — la guardia rechaza los pares que no estan en TRANSICIONES", () 
     // es INEXPRESABLE -- el compilador lo rechaza antes de que este test pueda ejecutarse, que
     // es una garantia mas fuerte que la de un assert en runtime. Lo que sigue vivo es la
     // prohibicion hacia `en_preparacion`, que si es un estado alcanzable.
-    ["por_recoger", "en_preparacion"],
+    ["mensajero_recogiendo_en_bodega", "en_preparacion"],
     ["en_ruta_bodega_satelite", "en_preparacion"],
     // Ya recogida / ya recibida: el deshacer no reabre estos caminos (R16).
-    ["en_reparto", "por_recoger"],
+    ["en_reparto", "mensajero_recogiendo_en_bodega"],
     ["en_reparto", "en_bodega_central"],
     ["en_bodega_satelite", "en_ruta_bodega_satelite"],
   ] as const)(
@@ -190,13 +190,13 @@ describe("R6 — la guardia rechaza los pares que no estan en TRANSICIONES", () 
     },
   );
 
-  it("REGRESION 139/R9: rechazada -> devolviendo_a_tienda es ILEGAL (arista #27 retirada)", () => {
-    expect(() => assertTransicionValida("rechazada", "devolviendo_a_tienda")).toThrow(
+  it("REGRESION 139/R9: devolucion_a_origen_por_rechazo -> devolviendo_a_tienda es ILEGAL (arista #27 retirada)", () => {
+    expect(() => assertTransicionValida("devolucion_a_origen_por_rechazo", "devolviendo_a_tienda")).toThrow(
       TransicionIlegalError,
     );
     // La unica salida de `rechazada` hacia la devolucion es la aprobacion del cierre.
-    expect(() => assertTransicionValida("rechazada", "por_devolver")).not.toThrow();
-    expect(() => assertTransicionValida("rechazada", "por_devolver_a_tienda")).not.toThrow();
+    expect(() => assertTransicionValida("devolucion_a_origen_por_rechazo", "por_devolver_a_bodega_central")).not.toThrow();
+    expect(() => assertTransicionValida("devolucion_a_origen_por_rechazo", "por_devolver_a_tienda")).not.toThrow();
   });
 
   it("rechaza el auto-lazo de cualquier estado (X -> X nunca esta declarado)", () => {
@@ -210,10 +210,10 @@ describe("R6 — la guardia rechaza los pares que no estan en TRANSICIONES", () 
   it("R9/Q3: no existe override ANY -> ANY; el ajuste administrativo pasa por el mismo mapa", () => {
     // Las 3 aristas de `ajuste_estado` declaradas (#28/#40/#42) pasan...
     expect(() => assertTransicionValida("devolviendo_a_tienda", "devuelta_a_tienda")).not.toThrow();
-    expect(() => assertTransicionValida("por_devolver", "devolviendo_a_bodega_central")).not.toThrow();
+    expect(() => assertTransicionValida("por_devolver_a_bodega_central", "devolviendo_a_bodega_central")).not.toThrow();
     expect(() => assertTransicionValida("por_devolver_a_tienda", "devolviendo_a_tienda")).not.toThrow();
     // ...y un "rescate" administrativo arbitrario NO pasa, aunque lo pida un maestro/admin.
-    expect(() => assertTransicionValida("sin_gestionar", "entregada")).toThrow(
+    expect(() => assertTransicionValida("novedad_interna", "entregado")).toThrow(
       TransicionIlegalError,
     );
     expect(() => assertTransicionValida("devuelta_a_tienda", "en_preparacion")).toThrow(
@@ -254,7 +254,7 @@ describe("R12 — el error de dominio es distinguible y no filtra PII", () => {
   it("es asertable por instanceof y conserva origen/destino", () => {
     let capturado: unknown;
     try {
-      assertTransicionValida("entregada", "devuelta_a_tienda");
+      assertTransicionValida("entregado", "devuelta_a_tienda");
     } catch (error) {
       capturado = error;
     }
@@ -262,22 +262,22 @@ describe("R12 — el error de dominio es distinguible y no filtra PII", () => {
     expect(capturado).toBeInstanceOf(Error);
     const error = capturado as TransicionIlegalError;
     expect(error.name).toBe("TransicionIlegalError");
-    expect(error.origen).toBe("entregada");
+    expect(error.origen).toBe("entregado");
     expect(error.destino).toBe("devuelta_a_tienda");
   });
 
   it("el mensaje menciona SOLO los dos value del catalogo", () => {
-    const mensaje = new TransicionIlegalError("entregada", "devuelta_a_tienda").message;
-    expect(mensaje).toBe("transicion ilegal: entregada -> devuelta_a_tienda");
+    const mensaje = new TransicionIlegalError("entregado", "devuelta_a_tienda").message;
+    expect(mensaje).toBe("transicion ilegal: entregado -> devuelta_a_tienda");
     // El mensaje se compone EXACTAMENTE de los dos `value`: nada de ids, ordenes ni actores.
     const tokens = mensaje.replace("transicion ilegal: ", "").split(" -> ");
-    expect(tokens).toEqual(["entregada", "devuelta_a_tienda"]);
+    expect(tokens).toEqual(["entregado", "devuelta_a_tienda"]);
     expect(mensaje).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i); // sin UUIDs
   });
 
   it("el mensaje de la creacion ilegal no expone ids ni el actor", () => {
-    const mensaje = new TransicionIlegalError(null, "entregada").message;
-    expect(mensaje).toBe("transicion ilegal: creacion -> entregada");
+    const mensaje = new TransicionIlegalError(null, "entregado").message;
+    expect(mensaje).toBe("transicion ilegal: creacion -> entregado");
     expect(mensaje).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i); // sin UUIDs (ids de orden/estado)
   });
 });
@@ -344,7 +344,7 @@ describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
       "en_bodega_satelite", // #55
       "en_ruta_bodega_central", // #56
       "en_ruta_bodega_satelite", // #57
-      "por_recoger", // #58
+      "mensajero_recogiendo_en_bodega", // #58
     ];
     for (const destino of SALIDAS_DECLARADAS) {
       expect(
@@ -375,14 +375,14 @@ describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
   // RECUPERACION MANUAL saquen la orden de ahi. Eso no lo garantiza el mapa —el par es el mismo—
   // sino la FAMILIA: ver el caso siguiente.
   it.each([
-    ["liberacion al aprobar el cierre", "sin_gestionar"],
-    ["devolucion a la tienda", "por_devolver"],
+    ["liberacion al aprobar el cierre", "novedad_interna"],
+    ["devolucion a la tienda", "por_devolver_a_bodega_central"],
     ["devolucion a la tienda (central)", "por_devolver_a_tienda"],
     ["ajuste administrativo generico", "devolviendo_a_tienda"],
-    ["escalado a rechazada", "rechazada"],
-    ["marcar entregada a mano", "entregada"],
+    ["escalado a rechazada", "devolucion_a_origen_por_rechazo"],
+    ["marcar entregada a mano", "entregado"],
     ["continuar el flujo de devolucion", "devolviendo_a_bodega_central"],
-    ["marcar devuelta a mano", "devuelta"],
+    ["marcar devuelta a mano", "novedad"],
   ] as const)("158/R13: %s NO puede sacar una orden de `incidente` (-> %s)", (_via, destino) => {
     expect(() => assertTransicionValida("incidente", destino)).toThrow(TransicionIlegalError);
   });
@@ -444,7 +444,7 @@ describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
 // ---------------------------------------------------------------------------------------------
 describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea a satelite", () => {
   it.each([
-    ["154/R18 = #4", "en_preparacion", "por_recoger"],
+    ["154/R18 = #4", "en_preparacion", "mensajero_recogiendo_en_bodega"],
     ["154/R19 = #6 y #7c", "en_preparacion", "en_ruta_bodega_satelite"],
   ] as const)("%s: %s -> %s ya NO es legal (lo retiro la 156)", (_r, origen, destino) => {
     expect(() => assertTransicionValida(origen, destino)).toThrow(TransicionIlegalError);
@@ -523,7 +523,7 @@ describe("155/R27/R28 — BAJAS EJECUTADAS: el estado de fulfillment sale del gr
   });
 
   it.each([
-    ["154/R20 = #1", "por_recoger"],
+    ["154/R20 = #1", "mensajero_recogiendo_en_bodega"],
     ["#2 (del inventario del apendice A)", "en_bodega_central"],
     ["154/R21 = #3/#7b", "en_ruta_bodega_satelite"],
   ] as const)(
@@ -577,8 +577,8 @@ describe("154 — SUPERVIVIENTES que el spec fija explicitamente (R22/R23)", () 
 
   it.each([
     ["en_bodega_central", "en_ruta_bodega_satelite"],
-    ["en_bodega_central", "por_recoger"],
-    ["en_bodega_satelite", "por_recoger"],
+    ["en_bodega_central", "mensajero_recogiendo_en_bodega"],
+    ["en_bodega_satelite", "mensajero_recogiendo_en_bodega"],
   ] as const)("R23: la asignacion %s -> %s sigue legal", (origen, destino) => {
     expect(() => assertTransicionValida(origen, destino)).not.toThrow();
   });
@@ -586,10 +586,10 @@ describe("154 — SUPERVIVIENTES que el spec fija explicitamente (R22/R23)", () 
 
 describe("154/R24 — el error de transicion ilegal no filtra nada del cliente", () => {
   it("el mensaje de un par ilegal cita SOLO los dos value del catalogo", () => {
-    const mensaje = new TransicionIlegalError("incidente", "entregada").message;
-    expect(mensaje).toBe("transicion ilegal: incidente -> entregada");
+    const mensaje = new TransicionIlegalError("incidente", "entregado").message;
+    expect(mensaje).toBe("transicion ilegal: incidente -> entregado");
     const tokens = mensaje.replace("transicion ilegal: ", "").split(" -> ");
-    expect(tokens).toEqual(["incidente", "entregada"]);
+    expect(tokens).toEqual(["incidente", "entregado"]);
     expect(mensaje).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i); // sin UUIDs
   });
 
@@ -599,9 +599,9 @@ describe("154/R24 — el error de transicion ilegal no filtra nada del cliente",
       // (#53, el deshacer). Se sustituye por `incidente -> entregada`, que sigue siendo ilegal
       // —marcar entregada una orden con el paquete perdido es justo lo que no puede pasar— y
       // conserva la propiedad que el caso mide: un par ilegal CON el value nuevo.
-      ["incidente", "entregada"],
-      ["por_recolectar_en_tienda", "entregada"],
-      ["entregada", "por_recolectar_en_tienda"],
+      ["incidente", "entregado"],
+      ["por_recolectar_en_tienda", "entregado"],
+      ["entregado", "por_recolectar_en_tienda"],
     ];
     for (const [origen, destino] of pares) {
       let capturado: unknown;
@@ -657,7 +657,7 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
       "en_bodega_satelite",
       "en_ruta_bodega_central",
       "en_ruta_bodega_satelite",
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
     ];
     const pares = INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino} (${a.via})`);
     for (const origen of ORIGENES_ADMIN) {
@@ -719,29 +719,29 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
 // escritura del bloque de la aprobacion y REVIERTE LA APROBACION ENTERA del cierre — con su
 // dinero. Sin el productor, seria una arista muerta (el error de la 154).
 // ---------------------------------------------------------------------------------------------
-describe("276/R21/R22 — `sin_gestionar -> rechazada` es legal, y por su familia propia", () => {
+describe("276/R21/R22 — `novedad_interna -> devolucion_a_origen_por_rechazo` es legal, y por su familia propia", () => {
   it("el par es LEGAL y no lanza", () => {
-    expect(() => assertTransicionValida("sin_gestionar", "rechazada")).not.toThrow();
+    expect(() => assertTransicionValida("novedad_interna", "devolucion_a_origen_por_rechazo")).not.toThrow();
   });
 
-  it("`sin_gestionar -> entregada` SIGUE siendo ilegal", () => {
+  it("`novedad_interna -> entregado` SIGUE siendo ilegal", () => {
     // El contrapunto obligatorio: si la arista se hubiera declarado con un comodin, o si el mapa
     // hubiera dejado de validar `sin_gestionar`, este caso lo delata. Una orden que nadie gestiono
     // no puede acabar entregada por la aprobacion de un cierre.
-    expect(() => assertTransicionValida("sin_gestionar", "entregada")).toThrow(
+    expect(() => assertTransicionValida("novedad_interna", "entregado")).toThrow(
       TransicionIlegalError,
     );
   });
 
   it("la arista viaja con la familia `rechazo_tope_intentos`, no con `liberacion_sin_gestionar`", () => {
-    const salidas = INVENTARIO_FLUJO.filter((a) => a.origen === "sin_gestionar");
+    const salidas = INVENTARIO_FLUJO.filter((a) => a.origen === "novedad_interna");
     // Las TRES salidas, y solo tres.
     expect(salidas.map((a) => a.destino).sort()).toEqual([
+      "devolucion_a_origen_por_rechazo",
       "en_bodega_central",
       "en_bodega_satelite",
-      "rechazada",
     ]);
-    const aRechazada = salidas.find((a) => a.destino === "rechazada");
+    const aRechazada = salidas.find((a) => a.destino === "devolucion_a_origen_por_rechazo");
     expect(aRechazada?.via).toBe("rechazo_tope_intentos");
     // Y NO reusa la familia de la liberacion: si lo hiciera, las dos poblaciones —la que vuelve a
     // bodega y la que se termina— serian indistinguibles en el historial, que es su unica
@@ -758,19 +758,19 @@ describe("276/R21/R22 — `sin_gestionar -> rechazada` es legal, y por su famili
 // vuelve el cobro prematuro que esta feature cierra (la ventana de SLA arranca sin que la tienda
 // haya podido ver la novedad). Por eso se afirma que LANZA, no que "no se usa".
 // ---------------------------------------------------------------------------------------------
-describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto -> devuelta`", () => {
+describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto -> novedad`", () => {
   // ⏳ 2026-09-23 (FICHA 454, design §2 y §16 «rojos esperados»): el par vuelve a ser LEGAL, pero
   // NO por la #14 (la gestion del mensajero llevando a `devuelta` al instante, el cobro prematuro
   // que la 239 cerro): lo declara UNA sola arista, #70, de familia `anclaje_devolucion`, cuyo unico
   // productor es la aprobacion del cierre. Antes: el par era ilegal y no lo declaraba nadie.
-  it("R2/R29 → 454: `en_reparto -> devuelta` es legal SOLO por la aplicacion al aprobar (#70)", () => {
-    expect(() => assertTransicionValida("en_reparto", "devuelta")).not.toThrow();
+  it("R2/R29 → 454: `en_reparto -> novedad` es legal SOLO por la aplicacion al aprobar (#70)", () => {
+    expect(() => assertTransicionValida("en_reparto", "novedad")).not.toThrow();
     const aristas = INVENTARIO_FLUJO.filter(
-      (a) => a.origen === "en_reparto" && a.destino === "devuelta",
+      (a) => a.origen === "en_reparto" && a.destino === "novedad",
     );
     // UNA, con la familia del anclaje: ninguna de `gestion` (la #14 no vuelve).
     expect(aristas.map((a) => [a.n, a.via])).toEqual([["70", "anclaje_devolucion"]]);
-    const enMapa = TRANSICIONES.en_reparto.filter((d) => d.to === "devuelta");
+    const enMapa = TRANSICIONES.en_reparto.filter((d) => d.to === "novedad");
     expect(enMapa.map((d) => d.via)).toEqual(["anclaje_devolucion"]);
   });
 
@@ -782,13 +782,13 @@ describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto ->
   // `en_reparto` hasta aprobar); su ausencia en el grafo la afirma «454/R37» al principio del
   // archivo. Lo que SIGUE siendo verdad de la 239 se afirma aqui:
   it("454: el anclaje conserva su familia PROPIA (`anclaje_devolucion`) y lo produce la aprobacion", () => {
-    const anclaje = TRANSICIONES.en_reparto.find((d) => d.to === "devuelta");
+    const anclaje = TRANSICIONES.en_reparto.find((d) => d.to === "novedad");
     // El cron del SLA busca EXACTAMENTE esta familia para saber en que instante arranco el reloj.
     expect(anclaje?.via).toBe("anclaje_devolucion");
     expect(anclaje?.rol).toContain("admin");
     // Y ninguna arista hacia `devuelta` sale ya de un pre-estado.
     const origenesDeDevuelta = Object.entries(TRANSICIONES)
-      .filter(([, ds]) => ds.some((d) => d.to === "devuelta"))
+      .filter(([, ds]) => ds.some((d) => d.to === "novedad"))
       .map(([o]) => o);
     expect(origenesDeDevuelta).toEqual(["en_reparto"]);
   });
@@ -806,17 +806,17 @@ describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto ->
     // ⚠️ ESTE LITERAL ES EL CONTRATO (R7): es el censo CERRADO de lo que se puede hacer con una
     // devolucion anclada. Se actualiza a mano cuando alguien decide una alta, y JAMAS se sustituye
     // por una derivacion de `TRANSICIONES.devuelta` — eso quedaria verde para siempre.
-    expect(TRANSICIONES.devuelta).toHaveLength(8);
-    expect(TRANSICIONES.devuelta.map((d) => `${d.to}:${d.via}`).sort()).toEqual(
+    expect(TRANSICIONES.novedad).toHaveLength(8);
+    expect(TRANSICIONES.novedad.map((d) => `${d.to}:${d.via}`).sort()).toEqual(
       [
         "en_bodega_central:liberacion_devuelta_sla",
         "en_bodega_central:recuperacion_manual",
         "en_bodega_satelite:liberacion_devuelta_sla",
         "en_bodega_satelite:recuperacion_manual",
         "en_reparto:deshacer_gestion",
-        "rechazada:escalado_devuelta_sla",
-        "reprogramada:reprogramacion_tienda",
-        "rechazada:rechazo_tienda", // #67 (240): la tienda dueña decide, sin esperar al plazo
+        "devolucion_a_origen_por_rechazo:escalado_devuelta_sla",
+        "reprogramado:reprogramacion_tienda",
+        "devolucion_a_origen_por_rechazo:rechazo_tienda", // #67 (240): la tienda dueña decide, sin esperar al plazo
       ].sort(),
     );
   });
@@ -830,7 +830,7 @@ describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto ->
         .filter((d) => d.via === "rechazo_tienda")
         .map((d) => `${origen} -> ${d.to}`),
     );
-    expect(conEstaVia).toEqual(["devuelta -> rechazada"]);
+    expect(conEstaVia).toEqual(["novedad -> devolucion_a_origen_por_rechazo"]);
   });
 
   it("240/R26: el rechazo manual NO es el del cron — el par se comparte, la familia no", () => {
@@ -838,7 +838,7 @@ describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto ->
     // unico que distingue «lo decidio una persona» de «se vencio el plazo». Si alguien las
     // fusionara, la pestaña «Rechazadas por plazo vencido» (102) —cuyo predicado ES
     // `escalado_devuelta_sla`— listaria rechazos que no vencieron ningun plazo.
-    const aRechazada = TRANSICIONES.devuelta.filter((d) => d.to === "rechazada");
+    const aRechazada = TRANSICIONES.novedad.filter((d) => d.to === "devolucion_a_origen_por_rechazo");
     expect(aRechazada.map((d) => d.via).sort()).toEqual([
       "escalado_devuelta_sla",
       "rechazo_tienda",

@@ -35,13 +35,13 @@ async function otroCierreAbierto(e: Escenario, estado: "solicitado" | "vencido" 
 
 /** Orden YA `rechazada` (legada o aplicada antes) con su gestion `rechazada` en `cierreId`. */
 async function rechazadaCon(e: Escenario, gestiones: { cierreId: string; en: Date }[]) {
-  const o = await e.sembrarOrden({ estatus: "rechazada" });
+  const o = await e.sembrarOrden({ estatus: "devolucion_a_origen_por_rechazo" });
   for (const g of gestiones) {
     await e.tx.gestionOrden.create({
       data: {
         ordenId: o.ordenId,
         mensajeroId: e.mensajeroId,
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         cierreId: g.cierreId,
         createdAt: g.en,
       },
@@ -57,15 +57,15 @@ describeSiHayBase("454/T1.8 — seleccion de la devolucion de rechazadas (Postgr
   function correr() {
     return conEscenario(mundo, async (e) => {
       const abierto = await otroCierreAbierto(e);
-      const aprobadoViejo = (await e.sembrarIntentoPasado((await e.sembrarOrden({ estatus: "entregada" })).ordenId, {
-        resultado: "rechazada",
+      const aprobadoViejo = (await e.sembrarIntentoPasado((await e.sembrarOrden({ estatus: "entregado" })).ordenId, {
+        resultado: "devolucion_a_origen_por_rechazo",
       })).cierreId;
       const T1 = new Date("2026-09-01T10:00:00.000Z");
       const T2 = new Date("2026-09-10T10:00:00.000Z");
 
       // (a) la de CALLE de ESTE cierre: se aplica a `rechazada` y se devuelve en la MISMA aprobacion.
       const calle = await e.sembrarOrden({ estatus: "en_reparto" });
-      await e.gestionarOk(calle.ordenId, "rechazada");
+      await e.gestionarOk(calle.ordenId, "devolucion_a_origen_por_rechazo");
       // (b) su gestion rechazada vive en OTRO cierre ABIERTO: se queda.
       const enOtroAbierto = await rechazadaCon(e, [{ cierreId: abierto, en: T1 }]);
       // (c) su gestion rechazada vive en un cierre YA APROBADO: se devuelve (legada).
@@ -106,12 +106,12 @@ describeSiHayBase("454/T1.8 — seleccion de la devolucion de rechazadas (Postgr
     expect(r.aprobacion).toBe("ok");
   });
 
-  it("R51/R10: la `rechazada` de ESTE cierre sale a `por_devolver*` en la misma aprobacion", () => {
+  it("R51/R10: la `rechazada` de ESTE cierre sale a `por_devolver_a_bodega_central*` en la misma aprobacion", () => {
     expect(r.calle).toBe("por_devolver_a_tienda");
   });
 
   it("R51: la que tiene su gestion en OTRO cierre sin aprobar NO se mueve", () => {
-    expect(r.enOtroAbierto).toBe("rechazada");
+    expect(r.enOtroAbierto).toBe("devolucion_a_origen_por_rechazo");
   });
 
   it("R51: la que tiene su gestion en un cierre YA aprobado SI se devuelve", () => {
@@ -119,7 +119,7 @@ describeSiHayBase("454/T1.8 — seleccion de la devolucion de rechazadas (Postgr
   });
 
   it("R51: decide la gestion MAS RECIENTE — en el abierto se queda, en el aprobado sale", () => {
-    expect(r.recienteAbierta).toBe("rechazada");
+    expect(r.recienteAbierta).toBe("devolucion_a_origen_por_rechazo");
     expect(r.recienteAprobada).toBe("por_devolver_a_tienda");
   });
 });

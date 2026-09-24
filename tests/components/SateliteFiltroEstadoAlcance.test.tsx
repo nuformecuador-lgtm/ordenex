@@ -98,7 +98,7 @@ const ERROR_CARGA = "No se pudieron cargar las órdenes de la bodega.";
 
 /** Etiqueta del estado tal como la dice el catálogo compartido (la MISMA que `/ordenes`). */
 const EN_BODEGA = ORDER_STATUS_LABELS.en_bodega_satelite;
-const DEVUELTA = ORDER_STATUS_LABELS.devuelta;
+const DEVUELTA = ORDER_STATUS_LABELS.novedad;
 /**
  * FICHA 357 — el estado que este listado NO puede alcanzar. `en_bodega_central` es custodia de
  * la bodega central: una orden ahí ya no es de la satélite, ni ahora ni de vuelta atrás.
@@ -121,7 +121,7 @@ function orden(i: number): RecepcionSateliteDTO {
     id: `o-${i}`,
     numGuia: 1000 + i,
     numRemision: etiqueta(i),
-    estatusValue: i <= 6 ? "en_bodega_satelite" : "devuelta",
+    estatusValue: i <= 6 ? "en_bodega_satelite" : "novedad",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1, casa 2",
@@ -289,7 +289,7 @@ describe("bodega satélite · el desplegable de estado es el de la central", () 
 
     // Lo que el humano señaló en la captura de la central y no estaba aquí: el catálogo.
     expect(opciones).toContain(INALCANZABLE);
-    expect(opciones).toContain(ORDER_STATUS_LABELS.entregada);
+    expect(opciones).toContain(ORDER_STATUS_LABELS.entregado);
     // ⏳ 2026-09-23 (FICHA 454, R37): aqui se afirmaba que el desplegable ofrecia la ayuda a la
     // tienda y el pre-estado de la devolucion. Salen del catalogo: ya no se ofrecen.
     expect(opciones).not.toContain(ORDER_STATUS_LABELS_RETIRADOS.ayuda_tienda);
@@ -389,7 +389,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
     );
     expect(
       (paginadoMock.mock.calls.at(-1)?.[0] as { estados?: string[] })?.estados,
-    ).toEqual(["devuelta"]);
+    ).toEqual(["novedad"]);
 
     // Y la pantalla dice por qué «Entregada» no aporta nada, para que el resultado no se lea
     // como un filtro que se ignoró en silencio.

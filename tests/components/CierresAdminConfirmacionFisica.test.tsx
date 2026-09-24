@@ -162,7 +162,7 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 function zeroIngreso(): TotalesIngresoOrdenex {
@@ -186,7 +186,7 @@ function zeroIngreso(): TotalesIngresoOrdenex {
 // con retornables en el mismo cierre (2 de 12), así que la línea de exclusión de R34 se ve.
 const DEV_1 = makeGestion({
   gestionId: "g-dev-1",
-  resultado: "devuelta",
+  resultado: "novedad",
   numGuia: 7001,
   numRemision: "REM-DEV-1",
   destinatario: "Delia Vargas",
@@ -194,7 +194,7 @@ const DEV_1 = makeGestion({
 });
 const REC_1 = makeGestion({
   gestionId: "g-rec-1",
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   numGuia: 7002,
   numRemision: "REM-REC-1",
   destinatario: "Rita Solano",
@@ -202,7 +202,7 @@ const REC_1 = makeGestion({
 });
 const REP_1 = makeGestion({
   gestionId: "g-rep-1",
-  resultado: "reprogramada",
+  resultado: "reprogramado",
   numGuia: 7003,
   numRemision: "REM-REP-1",
   destinatario: "Rodrigo Pérez",
@@ -210,7 +210,7 @@ const REP_1 = makeGestion({
 });
 const ENT_1 = makeGestion({
   gestionId: "g-ent-1",
-  resultado: "entregada",
+  resultado: "entregado",
   numGuia: 7004,
   numRemision: "REM-ENT-1",
   destinatario: "Elena Castro",
@@ -344,7 +344,7 @@ afterEach(() => {
 describe("T4.1/R16 — un cierre SIN nada que devolver se aprueba de un click, como hoy", () => {
   it("no abre ninguna ventana y manda `{ cierreId }` sin campos nuevos", async () => {
     const user = userEvent.setup();
-    conGrupos({ entregada: [ENT_1] });
+    conGrupos({ entregado: [ENT_1] });
     await pulsarAprobar(user);
 
     expect(screen.queryByRole("dialog", { name: VENTANA })).toBeNull();
@@ -359,7 +359,7 @@ describe("T4.1/R16 — un cierre SIN nada que devolver se aprueba de un click, c
     // Sin esta pareja, el caso de arriba estaría verde también si la ventana no existiera o si
     // el módulo hubiera dejado de renderizar. Es la lección de la marca de ruta de la 235.
     const user = userEvent.setup();
-    conGrupos({ entregada: [ENT_1], devuelta: [DEV_1] });
+    conGrupos({ entregado: [ENT_1], novedad: [DEV_1] });
     await pulsarAprobar(user);
 
     expect(await screen.findByRole("dialog", { name: VENTANA })).toBeInTheDocument();
@@ -370,7 +370,7 @@ describe("T4.1/R16 — un cierre SIN nada que devolver se aprueba de un click, c
 describe("T4.1/R7 — con paquetes que vuelven, aprobar pasa SIEMPRE por la ventana", () => {
   it("abre la ventana y NO aprueba todavía", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], rechazada: [REC_1], reprogramada: [REP_1] });
+    conGrupos({ novedad: [DEV_1], devolucion_a_origen_por_rechazo: [REC_1], reprogramado: [REP_1] });
     const dialog = await abrirVentana(user);
 
     expect(dialog).toBeInTheDocument();
@@ -401,7 +401,7 @@ describe("T4.2 — la ventana dice, con palabras, qué acto físico se está pid
     // El literal va ESCRITO A MANO, con sus tildes, y NO importado de `CONFIRMACION_DETALLE`:
     // compararlo contra la constante que lo produce estaría siempre verde y no vigilaría nada.
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1] });
+    conGrupos({ novedad: [DEV_1] });
     const dialog = await abrirVentana(user);
 
     const DESCRIPCION =
@@ -420,7 +420,7 @@ describe("T4.2 — la ventana dice, con palabras, qué acto físico se está pid
     // tarjeta, su título, su descripción y la etiqueta del botón— tampoco tenían literal, y son
     // tan visibles como los demás. Todos escritos a mano, ninguno importado.
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1] });
+    conGrupos({ novedad: [DEV_1] });
     const dialog = await abrirVentana(user);
 
     // El nombre accesible dice que escanear y teclear son EL MISMO acto en la misma tarjeta; si
@@ -446,10 +446,10 @@ describe("T4.2/R33 — cada fila muestra guía, remisión, destinatario, resulta
   it("las tres filas del conjunto esperado, agrupadas por resultado", async () => {
     const user = userEvent.setup();
     conGrupos({
-      devuelta: [DEV_1],
-      rechazada: [REC_1],
-      reprogramada: [REP_1],
-      entregada: [ENT_1],
+      novedad: [DEV_1],
+      devolucion_a_origen_por_rechazo: [REC_1],
+      reprogramado: [REP_1],
+      entregado: [ENT_1],
     });
     const dialog = await abrirVentana(user);
 
@@ -475,7 +475,7 @@ describe("T4.2/R33 — cada fila muestra guía, remisión, destinatario, resulta
 
   it("una fila confirmada cambia su estado a «Confirmada» (la otra sigue pendiente)", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], rechazada: [REC_1] });
+    conGrupos({ novedad: [DEV_1], devolucion_a_origen_por_rechazo: [REC_1] });
     const dialog = await abrirVentana(user);
 
     await teclear(user, dialog, "7001");
@@ -488,7 +488,7 @@ describe("T4.2/R33 — cada fila muestra guía, remisión, destinatario, resulta
 describe("T4.2/R36 — la cámara no se queda montada detrás de nada", () => {
   it("con la ventana CERRADA la tarjeta de escaneo no está en el árbol; abierta, sí", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1] });
+    conGrupos({ novedad: [DEV_1] });
     const cola = paginaInicial([makeResumen({ cierreId: "c1" })]);
     vi.mocked(listarPendientesCierresAdminPaginado).mockResolvedValue({
       status: "ok",
@@ -550,7 +550,7 @@ describe("T4.2/R36 — la cámara no se queda montada detrás de nada", () => {
 describe("T4.3/R29 — un código que no se puede interpretar como guía", () => {
   it("avisa, no marca ninguna fila y no manda nada al servidor", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], rechazada: [REC_1] });
+    conGrupos({ novedad: [DEV_1], devolucion_a_origen_por_rechazo: [REC_1] });
     const dialog = await abrirVentana(user);
 
     await escanear(user, dialog, "esto-no-es-una-url");
@@ -567,7 +567,7 @@ describe("T4.3/R29 — un código que no se puede interpretar como guía", () =>
 describe("T4.3/R30 — una guía que no pertenece a este cierre", () => {
   it("lo dice con su mensaje propio, no marca nada y no manda nada", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], rechazada: [REC_1] });
+    conGrupos({ novedad: [DEV_1], devolucion_a_origen_por_rechazo: [REC_1] });
     const dialog = await abrirVentana(user);
 
     await escanear(user, dialog, qrDeGuia(9999));
@@ -585,7 +585,7 @@ describe("T4.3/R30 — una guía que no pertenece a este cierre", () => {
 describe("T4.3/R31 — una guía del cierre cuyo paquete NO vuelve a bodega", () => {
   it("el incidente recibe un mensaje PROPIO, distinto del de la guía ajena", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], incidente: [INC_1] });
+    conGrupos({ novedad: [DEV_1], incidente: [INC_1] });
     const dialog = await abrirVentana(user);
 
     await escanear(user, dialog, qrDeGuia(INC_1.numGuia ?? 0));
@@ -604,7 +604,7 @@ describe("T4.3/R31 — una guía del cierre cuyo paquete NO vuelve a bodega", ()
 
   it("una `entregada` del cierre recibe el mismo mensaje, con su resultado", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], entregada: [ENT_1] });
+    conGrupos({ novedad: [DEV_1], entregado: [ENT_1] });
     const dialog = await abrirVentana(user);
 
     await teclear(user, dialog, String(ENT_1.numGuia));
@@ -619,7 +619,7 @@ describe("T4.3/R31 — una guía del cierre cuyo paquete NO vuelve a bodega", ()
 describe("T4.3/R32 — una guía ya confirmada en esta sesión", () => {
   it("lo dice y NO la cuenta dos veces", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], rechazada: [REC_1] });
+    conGrupos({ novedad: [DEV_1], devolucion_a_origen_por_rechazo: [REC_1] });
     const dialog = await abrirVentana(user);
 
     await teclear(user, dialog, "7001");
@@ -646,7 +646,7 @@ describe("T4.3/R32 — una guía ya confirmada en esta sesión", () => {
 describe("T4.4/R28 — se confirma por cámara o por número tecleado", () => {
   it("por CÁMARA: el QR de la etiqueta confirma esa gestión", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1] });
+    conGrupos({ novedad: [DEV_1] });
     const dialog = await abrirVentana(user);
 
     await escanear(user, dialog, qrDeGuia(7001));
@@ -664,7 +664,7 @@ describe("T4.4/R28 — se confirma por cámara o por número tecleado", () => {
 
   it("por NÚMERO TECLEADO: el mismo número confirma la misma gestión", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1] });
+    conGrupos({ novedad: [DEV_1] });
     const dialog = await abrirVentana(user);
 
     await teclear(user, dialog, "7001");
@@ -682,7 +682,7 @@ describe("T4.4/R28 — se confirma por cámara o por número tecleado", () => {
 
   it("un número tecleado que no son dígitos se queda en el campo para corregirlo", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1] });
+    conGrupos({ novedad: [DEV_1] });
     const dialog = await abrirVentana(user);
 
     await teclear(user, dialog, "70O1"); // una «O» donde va un cero
@@ -702,7 +702,7 @@ describe("T4.4/R28 — se confirma por cámara o por número tecleado", () => {
 describe("T4.5/R27 — el bloqueo se dice con texto, no sólo con un botón apagado", () => {
   it("dice cuántas faltan y qué hacer si un paquete no llegó", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], rechazada: [REC_1], reprogramada: [REP_1] });
+    conGrupos({ novedad: [DEV_1], devolucion_a_origen_por_rechazo: [REC_1], reprogramado: [REP_1] });
     const dialog = await abrirVentana(user);
 
     // Se lee el TEXTO, no el `disabled`: un botón apagado y mudo se lee como una app rota.
@@ -734,7 +734,7 @@ describe("T4.5/R27 — el bloqueo se dice con texto, no sólo con un botón apag
 
   it("con una guía sin confirmar, forzar el botón no llama a la Server Action", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], rechazada: [REC_1] });
+    conGrupos({ novedad: [DEV_1], devolucion_a_origen_por_rechazo: [REC_1] });
     const dialog = await abrirVentana(user);
 
     await teclear(user, dialog, "7001");
@@ -751,12 +751,12 @@ describe("T4.5/R27 — el bloqueo se dice con texto, no sólo con un botón apag
     const user = userEvent.setup();
     const sinGuia = makeGestion({
       gestionId: "g-dev-2",
-      resultado: "devuelta",
+      resultado: "novedad",
       numGuia: null,
       numRemision: "REM-DEV-2",
       destinatario: "Sara Vega",
     });
-    conGrupos({ devuelta: [DEV_1, sinGuia] });
+    conGrupos({ novedad: [DEV_1, sinGuia] });
     const dialog = await abrirVentana(user);
 
     expect(fila(dialog, "g-dev-2")).toContain(
@@ -770,7 +770,7 @@ describe("T4.5/R27 — el bloqueo se dice con texto, no sólo con un botón apag
 describe("T4.5/R34 — los incidentes aparecen nombrados como excluidos, con su razón", () => {
   it("los nombra uno a uno y dice por qué no se escanean", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], incidente: [INC_1] });
+    conGrupos({ novedad: [DEV_1], incidente: [INC_1] });
     const dialog = await abrirVentana(user);
 
     const seccion = within(dialog).getByRole("region", {
@@ -791,7 +791,7 @@ describe("T4.5/R34 — los incidentes aparecen nombrados como excluidos, con su 
 
   it("PAREJA de la ausencia: sin incidentes, la línea de exclusión no se pinta", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1] });
+    conGrupos({ novedad: [DEV_1] });
     const dialog = await abrirVentana(user);
 
     expect(
@@ -812,7 +812,7 @@ describe("T4.5/R34 — los incidentes aparecen nombrados como excluidos, con su 
 describe("T4.6/R35 — cerrar la ventana sin completarla no envía nada", () => {
   it("cancelar no llama a `aprobarCierre` y conserva lo ya escaneado al reabrir", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], rechazada: [REC_1] });
+    conGrupos({ novedad: [DEV_1], devolucion_a_origen_por_rechazo: [REC_1] });
     const dialog = await abrirVentana(user);
     await teclear(user, dialog, "7001");
 
@@ -831,7 +831,7 @@ describe("T4.6/R35 — cerrar la ventana sin completarla no envía nada", () => 
 
   it("cerrar el DETALLE descarta lo confirmado: el siguiente cierre arranca de cero", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], rechazada: [REC_1] });
+    conGrupos({ novedad: [DEV_1], devolucion_a_origen_por_rechazo: [REC_1] });
     const dialog = await abrirVentana(user);
     await teclear(user, dialog, "7001");
     await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
@@ -855,7 +855,7 @@ describe("T4.6/R35 — cerrar la ventana sin completarla no envía nada", () => 
 describe("T4.6/R37 — con incidentes y retornables, la confirmación va ANTES que los montos", () => {
   it("primero la ventana, después el sub-modal de montos, y el payload lleva las dos listas", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], incidente: [INC_1] });
+    conGrupos({ novedad: [DEV_1], incidente: [INC_1] });
     const dialog = await abrirVentana(user);
 
     // Paso 1: la confirmación física. Los montos todavía no se piden — si falta un paquete, no
@@ -900,7 +900,7 @@ describe("T4.6/R37 — con incidentes y retornables, la confirmación va ANTES q
 describe("T4.7 — un `validation_error` con clave de gestión se pinta en SU fila", () => {
   it("la ventana sigue abierta y el error aparece en la fila de esa gestión", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], rechazada: [REC_1] });
+    conGrupos({ novedad: [DEV_1], devolucion_a_origen_por_rechazo: [REC_1] });
     // El servidor discute UNA de las dos: es su mensaje real (`MSG_CONFIRMACION_GUIA_DISTINTA`).
     aprobarMock.mockResolvedValue({
       status: "validation_error",
@@ -930,7 +930,7 @@ describe("T4.7 — un `validation_error` con clave de gestión se pinta en SU fi
     // los dos conjuntos son disjuntos por construcción: un incidente no vuelve a bodega.
     // Sin el reparto, un error de monto reabriría la ventana de escaneo, que no arregla nada.
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DEV_1], incidente: [INC_1] });
+    conGrupos({ novedad: [DEV_1], incidente: [INC_1] });
     aprobarMock.mockResolvedValue({
       status: "validation_error",
       fieldErrors: { "g-inc-1": ["Falta el monto de indemnización de este incidente."] },
@@ -983,7 +983,7 @@ describe("T4.7 — un `validation_error` con clave de gestión se pinta en SU fi
 const DUP_A = makeGestion({
   gestionId: "g-dup-a",
   ordenId: "o-dup",
-  resultado: "devuelta",
+  resultado: "novedad",
   numGuia: 7010,
   numRemision: "REM-DUP",
   destinatario: "Dora Quesada",
@@ -991,7 +991,7 @@ const DUP_A = makeGestion({
 const DUP_B = makeGestion({
   gestionId: "g-dup-b",
   ordenId: "o-dup",
-  resultado: "devuelta",
+  resultado: "novedad",
   numGuia: 7010,
   numRemision: "REM-DUP",
   destinatario: "Dora Quesada",
@@ -1000,7 +1000,7 @@ const DUP_B = makeGestion({
 describe("guía repetida — una lectura confirma TODAS las filas de ese paquete", () => {
   it("las dos filas quedan confirmadas, el botón se habilita y el cierre se aprueba", async () => {
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DUP_A, DUP_B], rechazada: [REC_1] });
+    conGrupos({ novedad: [DUP_A, DUP_B], devolucion_a_origen_por_rechazo: [REC_1] });
     const dialog = await abrirVentana(user);
 
     // Dos bultos: el repetido (dos filas) y el rechazo. Las TRES filas están en la lista.
@@ -1050,7 +1050,7 @@ describe("guía repetida — una lectura confirma TODAS las filas de ese paquete
     // R32 no se ablanda, se corrige: el aviso es para cuando esa guía YA NO CUBRE NADA. Antes
     // saltaba con una fila todavía pendiente, y ahí era donde mentía.
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DUP_A, DUP_B], rechazada: [REC_1] });
+    conGrupos({ novedad: [DUP_A, DUP_B], devolucion_a_origen_por_rechazo: [REC_1] });
     const dialog = await abrirVentana(user);
 
     await teclear(user, dialog, "7010");
@@ -1077,7 +1077,7 @@ describe("guía repetida — una lectura confirma TODAS las filas de ese paquete
     const ENT_DUP = makeGestion({
       gestionId: "g-ent-dup",
       ordenId: "o-mix",
-      resultado: "entregada",
+      resultado: "entregado",
       numGuia: 7020,
       numRemision: "REM-MIX",
       destinatario: "Eva Mixta",
@@ -1085,12 +1085,12 @@ describe("guía repetida — una lectura confirma TODAS las filas de ese paquete
     const DEV_DUP = makeGestion({
       gestionId: "g-dev-dup",
       ordenId: "o-mix",
-      resultado: "devuelta",
+      resultado: "novedad",
       numGuia: 7020,
       numRemision: "REM-MIX",
       destinatario: "Eva Mixta",
     });
-    conGrupos({ entregada: [ENT_DUP], devuelta: [DEV_DUP] });
+    conGrupos({ entregado: [ENT_DUP], novedad: [DEV_DUP] });
     const dialog = await abrirVentana(user);
 
     await teclear(user, dialog, "7020");
@@ -1115,7 +1115,7 @@ describe("el contador dice PAQUETES y cuenta paquetes, no filas", () => {
     // sola lectura movería el contador de dos en dos, que a quien escanea se le lee como un
     // error de la app.
     const user = userEvent.setup();
-    conGrupos({ devuelta: [DUP_A, DUP_B], rechazada: [REC_1] });
+    conGrupos({ novedad: [DUP_A, DUP_B], devolucion_a_origen_por_rechazo: [REC_1] });
     const dialog = await abrirVentana(user);
 
     expect(progreso(dialog)).toBe("Paquetes confirmados: 0 de 2.");
@@ -1145,19 +1145,19 @@ describe("el contador dice PAQUETES y cuenta paquetes, no filas", () => {
     const user = userEvent.setup();
     const SIN_GUIA_1 = makeGestion({
       gestionId: "g-sin-1",
-      resultado: "devuelta",
+      resultado: "novedad",
       numGuia: null,
       numRemision: "REM-SIN-1",
       destinatario: "Sara Vega",
     });
     const SIN_GUIA_2 = makeGestion({
       gestionId: "g-sin-2",
-      resultado: "devuelta",
+      resultado: "novedad",
       numGuia: null,
       numRemision: "REM-SIN-2",
       destinatario: "Saúl Ruiz",
     });
-    conGrupos({ devuelta: [DEV_1, SIN_GUIA_1, SIN_GUIA_2] });
+    conGrupos({ novedad: [DEV_1, SIN_GUIA_1, SIN_GUIA_2] });
     const dialog = await abrirVentana(user);
 
     expect(progreso(dialog)).toBe("Paquetes confirmados: 0 de 3.");

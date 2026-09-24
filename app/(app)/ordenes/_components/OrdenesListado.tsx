@@ -185,7 +185,7 @@ const DEFAULT_EXCLUDE = [...EXCLUDE_ESTADO_DEFAULT];
 // memorización de cualquier hijo que llegue a compararlas.
 const SIN_FECHAS_DIA_REPARTO: FechasDiaReparto = { hoy: "", manana: "" };
 
-const ESTADO_DEVUELTA = "devuelta";
+const ESTADO_DEVUELTA = "novedad";
 const MOTIVO_DEVUELTA_NO_CENTRAL =
   "Orden de zona satélite: la recupera el admin de la bodega satélite de su zona.";
 
@@ -732,7 +732,7 @@ export function OrdenesListado({
         ];
       case "en_preparacion":
         return [{ key: "guia", label: "Generar guía", onRun: abrirGenerarGuia }];
-      case "por_recoger":
+      case "mensajero_recogiendo_en_bodega":
         // Feature 149/R34: caso (a) — la orden sigue en la bodega, sin recoger.
         return [
           { key: "etiquetas", label: "Imprimir etiquetas", onRun: abrirEtiquetas },
@@ -782,7 +782,7 @@ export function OrdenesListado({
       // NO se le ofrece "Cambiar día de reparto": son dos columnas distintas —aquélla mueve el día
       // en que el mensajero sale a repartir, ésta la fecha a la que la orden está retenida— y
       // mezclarlas dejaría al coordinador corrigiendo la que no es.
-      case "reprogramada":
+      case "reprogramado":
         return [accionCorregirFechaReprogramacion];
       case "en_bodega_central":
         return [
@@ -831,7 +831,7 @@ export function OrdenesListado({
             onRun: abrirEnviarTienda,
           },
         ];
-      case "devuelta":
+      case "novedad":
         // Feature 100/T4.2 (R12): recuperar a bodega las devueltas de la zona central.
         return [
           { key: "recuperar", label: "Recuperar a bodega", onRun: abrirRecuperar },

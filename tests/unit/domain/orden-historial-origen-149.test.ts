@@ -61,6 +61,6 @@ describe("R26 — `deshacer_asignacion` NO entra en ORIGEN_TIPOS_CON_GESTION", (
       "en_bodega_satelite",
       "por_recolectar_en_tienda",
     ]);
-    expect(destinos).not.toContain("devuelta");
+    expect(destinos).not.toContain("novedad");
   });
 });

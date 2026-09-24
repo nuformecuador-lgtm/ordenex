@@ -31,7 +31,7 @@ import { DESENLACES } from "@/lib/types/conteo-entregas";
 const EN_CURSO = ["en_reparto", "en_preparacion"] as const;
 
 /** Los dos desenlaces que YA tienen columna propia en la tabla de productos. */
-const CON_COLUMNA = ["entregada", "rechazada"] as const;
+const CON_COLUMNA = ["entregado", "devolucion_a_origen_por_rechazo"] as const;
 
 /** Un desglose con `conteo` órdenes en cada uno de los `status` dados. */
 function desglose(pares: readonly (readonly [string, number])[]) {
@@ -54,17 +54,17 @@ describe("FICHA 347 · la composición dice DE QUÉ se compone «Otros resultado
     // exactamente lo que esta composición nombra.
     const r = composicionOtrosResultados(
       desglose([
-        ["entregada", 3],
-        ["rechazada", 2],
-        ["devuelta", 4],
-        ["reprogramada", 2],
+        ["entregado", 3],
+        ["devolucion_a_origen_por_rechazo", 2],
+        ["novedad", 4],
+        ["reprogramado", 2],
         [EN_CURSO[0], 13],
       ]),
     );
 
     expect(r).toEqual([
-      { status: "devuelta", conteo: 4 },
-      { status: "reprogramada", conteo: 2 },
+      { status: "novedad", conteo: 4 },
+      { status: "reprogramado", conteo: 2 },
     ]);
   });
 
@@ -73,8 +73,8 @@ describe("FICHA 347 · la composición dice DE QUÉ se compone «Otros resultado
     // «8 entregadas» debajo del cubo que, por definición, no las incluye.
     const r = composicionOtrosResultados(
       desglose([
-        ["entregada", 8],
-        ["rechazada", 6],
+        ["entregado", 8],
+        ["devolucion_a_origen_por_rechazo", 6],
         ["incidente", 1],
       ]),
     );
@@ -90,28 +90,28 @@ describe("FICHA 347 · la composición dice DE QUÉ se compone «Otros resultado
       desglose([
         [EN_CURSO[0], 9],
         [EN_CURSO[1], 4],
-        ["devuelta", 1],
+        ["novedad", 1],
       ]),
     );
 
-    expect(r).toEqual([{ status: "devuelta", conteo: 1 }]);
+    expect(r).toEqual([{ status: "novedad", conteo: 1 }]);
   });
 
   it("un conteo en CERO no se nombra: «0 devueltas» no es composición, es ruido", () => {
     const r = composicionOtrosResultados(
       desglose([
-        ["devuelta", 0],
-        ["reprogramada", 3],
+        ["novedad", 0],
+        ["reprogramado", 3],
       ]),
     );
 
-    expect(r).toEqual([{ status: "reprogramada", conteo: 3 }]);
+    expect(r).toEqual([{ status: "reprogramado", conteo: 3 }]);
   });
 
   it("R54 — sin ningún otro resultado, la composición está VACÍA y el texto también", () => {
     const porStatus = desglose([
-      ["entregada", 8],
-      ["rechazada", 6],
+      ["entregado", 8],
+      ["devolucion_a_origen_por_rechazo", 6],
       [EN_CURSO[0], 2],
     ]);
 
@@ -147,8 +147,8 @@ describe("FICHA 347 · la composición cuadra con el cubo «Otros resultados» (
     "con el desenlace `%s` la suma de la composición es el cubo `otrosDesenlaces`",
     (desenlace) => {
       const porStatus = desglose([
-        ["entregada", 3],
-        ["rechazada", 2],
+        ["entregado", 3],
+        ["devolucion_a_origen_por_rechazo", 2],
         [desenlace, 7],
         [EN_CURSO[0], 5],
       ]);
@@ -192,7 +192,7 @@ describe("FICHA 347 · un desenlace NUEVO del catálogo entra solo (R51/R52)", (
 
     const modulo = await import("@/app/(app)/analitica/_components/entregas/otros-resultados");
     const porStatus = desglose([
-      ["entregada", 3],
+      ["entregado", 3],
       [SEXTO, 5],
       [EN_CURSO[0], 2],
     ]);
@@ -207,7 +207,7 @@ describe("FICHA 347 · un desenlace NUEVO del catálogo entra solo (R51/R52)", (
     // La contraparte, para que el caso anterior no se lea como que cualquier cosa entra: un
     // status que el catálogo no nombra está en proceso, y «En proceso» no se compone.
     const porStatus = desglose([
-      ["entregada", 3],
+      ["entregado", 3],
       ["custodiada_en_puerto", 5],
       [EN_CURSO[0], 2],
     ]);
@@ -225,29 +225,29 @@ describe("FICHA 347 · el texto de la composición (R55/R56)", () => {
   it("R55 — nombra cada desenlace con su etiqueta legible, NUNCA con el value crudo", () => {
     const texto = textoComposicionOtrosResultados(
       desglose([
-        ["devuelta", 3],
-        ["reprogramada", 2],
+        ["novedad", 3],
+        ["reprogramado", 2],
       ]),
     );
 
     expect(texto).toBe("3 devueltas · 2 reprogramadas");
     // Y las etiquetas salen del MECANISMO QUE YA EXISTE, no de una tabla escrita en la ficha:
     // `etiquetaDeDesenlace` pluraliza y capitaliza el value del catálogo.
-    expect(texto).toContain(etiquetaDeDesenlace("devuelta").toLowerCase());
-    expect(texto).toContain(etiquetaDeDesenlace("reprogramada").toLowerCase());
+    expect(texto).toContain(etiquetaDeDesenlace("novedad").toLowerCase());
+    expect(texto).toContain(etiquetaDeDesenlace("reprogramado").toLowerCase());
   });
 
   it("R56 — el orden es conteo DESCENDENTE y, a igualdad, `status` ascendente", () => {
     const r = composicionOtrosResultados(
       desglose([
-        ["reprogramada", 2],
+        ["reprogramado", 2],
         ["incidente", 9],
-        ["devuelta", 2],
+        ["novedad", 2],
       ]),
     );
 
     // 9 primero; entre los dos empatados a 2, `devuelta` antes que `reprogramada`.
-    expect(r.map((t) => t.status)).toEqual(["incidente", "devuelta", "reprogramada"]);
+    expect(r.map((t) => t.status)).toEqual(["incidente", "novedad", "reprogramado"]);
   });
 
   it("R56 — la MISMA fila produce siempre el MISMO texto, venga como venga el desglose", () => {
@@ -255,9 +255,9 @@ describe("FICHA 347 · el texto de la composición (R55/R56)", () => {
     // él: dos usuarios con la misma fila tienen que leer lo mismo, y sobre todo el archivo
     // descargable tiene que ser el mismo byte a byte.
     const pares: readonly (readonly [string, number])[] = [
-      ["devuelta", 4],
+      ["novedad", 4],
       ["incidente", 4],
-      ["reprogramada", 7],
+      ["reprogramado", 7],
     ];
     const directo = textoComposicionOtrosResultados(desglose(pares));
     const alReves = textoComposicionOtrosResultados(desglose([...pares].reverse()));
@@ -269,14 +269,14 @@ describe("FICHA 347 · el texto de la composición (R55/R56)", () => {
   it("el número va CRUDO, sin separador de miles: el texto viaja al archivo", () => {
     // `Intl` pondría «1.234» con el locale del repo y «1,234» con otro. Un archivo que dice
     // cosas distintas según la máquina que lo generó es peor que uno feo.
-    expect(textoComposicionOtrosResultados(desglose([["devuelta", 1234]]))).toBe(
+    expect(textoComposicionOtrosResultados(desglose([["novedad", 1234]]))).toBe(
       "1234 devueltas",
     );
   });
 
   it("la etiqueta se puede INYECTAR, y el cálculo no cambia", () => {
     // El módulo es puro y no depende de nada de UI: quien quiera otro idioma pasa su función.
-    const texto = textoComposicionOtrosResultados(desglose([["devuelta", 3]]), () => "RETURNED");
+    const texto = textoComposicionOtrosResultados(desglose([["novedad", 3]]), () => "RETURNED");
     expect(texto).toBe("3 returned");
   });
 });

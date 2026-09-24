@@ -105,15 +105,15 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
     // Literal a mano: si se comparara contra `ESTATUS_POR_RESULTADO` —de donde se deriva— el
     // aserto estaria siempre verde.
     expect((propsGestion.resultado as Nodo).enum).toEqual([
-      "devuelta",
-      "entregada",
+      "novedad",
+      "entregado",
       "incidente",
-      "rechazada",
-      "reprogramada",
+      "devolucion_a_origen_por_rechazo",
+      "reprogramado",
     ]);
     // No contiene `por_recoger`, asi que `esEnumDeEstado` de `openapi-contrato-en-reparto` NO lo
     // cuenta y los bloques de catalogo siguen siendo CUATRO.
-    expect((propsGestion.resultado as Nodo).enum).not.toContain("por_recoger");
+    expect((propsGestion.resultado as Nodo).enum).not.toContain("mensajero_recogiendo_en_bodega");
   });
 
   it("R20: hay un EJEMPLO de respuesta del detalle con al menos un elemento de `gestiones`", () => {
@@ -324,8 +324,8 @@ describe("405/R16 — el cuerpo del listado y el del webhook no ganan ninguna cl
     const evidencia = schemas.Evidencia;
     expect(evidencia.required).toEqual(["resultado", "contentType", "url", "expiraEnSegundos"]);
     expect(((evidencia.properties as Nodo).resultado as Nodo).enum).toEqual([
-      "entregada",
-      "rechazada",
+      "entregado",
+      "devolucion_a_origen_por_rechazo",
       "incidente",
     ]);
   });

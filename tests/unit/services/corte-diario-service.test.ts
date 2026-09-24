@@ -44,7 +44,7 @@ function gestion(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGest
     // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
     tiendaId: "tienda-1",
     tiendaNombre: "T",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "10.00",
     metodoPago: "efectivo",
     motivo: null,
@@ -71,7 +71,7 @@ const ESTATUS_IDS: Record<string, string | null> = {
   // `CorteSinGestionarInput`, asi que sin este id el input no se arma y el barrido se omitiria
   // entero — de ahi que el fake lo conozca.
   ayuda_tienda: "s-ayuda",
-  sin_gestionar: "s-sin-gestionar",
+  novedad_interna: "s-sin-gestionar",
 };
 
 function build(opts: {
@@ -148,7 +148,7 @@ describe("CorteDiarioService.ejecutarCorte", () => {
       gestionesByMensajero: {
         m1: [
           gestion({ gestionId: "a", montoRecibido: "12.50", metodoPago: "efectivo" }),
-          gestion({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+          gestion({ gestionId: "b", resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null, metodoPago: null }),
         ],
       },
     });
@@ -218,7 +218,7 @@ describe("CorteDiarioService.ejecutarCorte", () => {
   // Feature 109 (R5): la transicion aplica EXCLUSIVAMENTE a `en_reparto`. El service resuelve y
   // pasa el id de `en_reparto` como `enRepartoEstatusId` (guarda del updateMany en el repo); NUNCA
   // resuelve/pasa `por_recoger` -> una orden en ese estado no puede transicionar.
-  it("R5: el corte solo apunta a `en_reparto` (nunca `por_recoger`)", async () => {
+  it("R5: el corte solo apunta a `en_reparto` (nunca `mensajero_recogiendo_en_bodega`)", async () => {
     const { service, crearCierre, findEstatusIdByValue } = build({
       mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
     });
@@ -227,13 +227,13 @@ describe("CorteDiarioService.ejecutarCorte", () => {
 
     const pedidos = findEstatusIdByValue.mock.calls.map((c) => c[0]);
     expect(pedidos).toContain("en_reparto");
-    expect(pedidos).toContain("sin_gestionar");
+    expect(pedidos).toContain("novedad_interna");
     // Feature 235 (R26) resolvia tambien el estatus de la ayuda. ⏳ FICHA 454: ya no existe como
     // estado de origen del barrido — no se resuelve.
     expect(pedidos).not.toContain("ayuda_tienda");
     // Y lo que R5 protege sigue igual: `por_recoger` NUNCA se resuelve, asi que una orden que el
     // mensajero ni siquiera recogio no puede transicionar.
-    expect(pedidos).not.toContain("por_recoger");
+    expect(pedidos).not.toContain("mensajero_recogiendo_en_bodega");
     expect(crearCierre.mock.calls[0][0].corteSinGestionar.enRepartoEstatusId).toBe("s-reparto");
   });
 
@@ -243,7 +243,7 @@ describe("CorteDiarioService.ejecutarCorte", () => {
   it("454: catalogo sin `ayuda_tienda` -> el corte barre igual (ya no es un origen)", async () => {
     const { service, crearCierre } = build({
       mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
-      estatusIds: { en_reparto: "s-reparto", ayuda_tienda: null, sin_gestionar: "s-sin-gestionar" },
+      estatusIds: { en_reparto: "s-reparto", ayuda_tienda: null, novedad_interna: "s-sin-gestionar" },
     });
 
     await service.ejecutarCorte();
@@ -254,7 +254,7 @@ describe("CorteDiarioService.ejecutarCorte", () => {
   it("catalogo sin `en_reparto` -> crearCierre SIN corteSinGestionar (fallback 109)", async () => {
     const { service, crearCierre } = build({
       mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
-      estatusIds: { en_reparto: null, sin_gestionar: "s-sin-gestionar" },
+      estatusIds: { en_reparto: null, novedad_interna: "s-sin-gestionar" },
     });
 
     await service.ejecutarCorte();
@@ -264,10 +264,10 @@ describe("CorteDiarioService.ejecutarCorte", () => {
 
   // Feature 109 (defensivo): catalogo sin `sin_gestionar` (seed pendiente) -> no se pasa
   // corteSinGestionar; el corte se comporta como la 41 (solo `vencido` por gestiones).
-  it("catalogo sin `sin_gestionar` -> crearCierre SIN corteSinGestionar (fallback 41)", async () => {
+  it("catalogo sin `novedad_interna` -> crearCierre SIN corteSinGestionar (fallback 41)", async () => {
     const { service, crearCierre } = build({
       mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
-      estatusIds: { en_reparto: "s-reparto", ayuda_tienda: "s-ayuda", sin_gestionar: null },
+      estatusIds: { en_reparto: "s-reparto", ayuda_tienda: "s-ayuda", novedad_interna: null },
     });
 
     await service.ejecutarCorte();

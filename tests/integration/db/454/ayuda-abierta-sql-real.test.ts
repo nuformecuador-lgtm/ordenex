@@ -63,9 +63,9 @@ const CASOS: Caso[] = [
     abierta: false,
   },
   {
-    nombre: "el corte (transicion posterior, estado sin_gestionar) la cierra",
-    estatus: "sin_gestionar",
-    pasos: [{ evento: "ayuda_solicitada", en: 10 }, { historial: "sin_gestionar", en: 11 }],
+    nombre: "el corte (transicion posterior, estado novedad_interna) la cierra",
+    estatus: "novedad_interna",
+    pasos: [{ evento: "ayuda_solicitada", en: 10 }, { historial: "novedad_interna", en: 11 }],
     abierta: false,
   },
   {
@@ -73,7 +73,7 @@ const CASOS: Caso[] = [
     estatus: "en_reparto",
     pasos: [
       { evento: "ayuda_solicitada", en: 10 },
-      { historial: "sin_gestionar", en: 11 },
+      { historial: "novedad_interna", en: 11 },
       { historial: "en_bodega_central", en: 12 },
       { historial: "en_reparto", en: 13 },
     ],
@@ -81,7 +81,7 @@ const CASOS: Caso[] = [
   },
   {
     nombre: "fuera de en_reparto no hay ayuda abierta aunque nada la cerrara",
-    estatus: "entregada",
+    estatus: "entregado",
     pasos: [{ evento: "ayuda_solicitada", en: 10 }],
     abierta: false,
   },
@@ -117,7 +117,7 @@ describeSiHayBase("454/T1.3 — ayuda abierta (Postgres real)", () => {
         });
       } else {
         const g = await e.tx.gestionOrden.create({
-          data: { ordenId: o.ordenId, mensajeroId: e.mensajeroId, resultado: "rechazada", createdAt: T(p.en) },
+          data: { ordenId: o.ordenId, mensajeroId: e.mensajeroId, resultado: "devolucion_a_origen_por_rechazo", createdAt: T(p.en) },
           select: { id: true },
         });
         await e.tx.ordenEvento.create({
@@ -126,7 +126,7 @@ describeSiHayBase("454/T1.3 — ayuda abierta (Postgres real)", () => {
             tipo: "gestion_registrada",
             gestionOrdenId: g.id,
             familiaAplicacion: "gestion_tienda_ayuda",
-            resultado: "rechazada",
+            resultado: "devolucion_a_origen_por_rechazo",
             mensajeroId: e.mensajeroId,
             actorUsuarioId: e.tiendaId,
             actorRol: "adminTienda",

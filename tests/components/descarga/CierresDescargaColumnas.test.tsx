@@ -334,37 +334,37 @@ function gestion(
  */
 function gruposCompletos(): CierreGrupos {
   return {
-    entregada: [
+    entregado: [
       gestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: "1000.10",
         metodoPago: "SINPE",
         pagos: [{ metodo: "SINPE", monto: "1000.10" }],
         ingresoOrdenex: ingreso(),
       }),
     ],
-    reprogramada: [
+    reprogramado: [
       gestion({
         gestionId: "g2",
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         fechaReprogramacion: "2026-07-20",
         motivo: "El cliente pidió otro día",
         ingresoOrdenex: ingreso(),
       }),
     ],
-    devuelta: [
+    novedad: [
       gestion({
         gestionId: "g3",
-        resultado: "devuelta",
+        resultado: "novedad",
         motivo: "Dirección inexistente",
         ingresoOrdenex: ingreso(),
       }),
     ],
-    rechazada: [
+    devolucion_a_origen_por_rechazo: [
       gestion({
         gestionId: "g4",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         motivo: "Cliente ausente",
         esRechazoSla: true,
         ingresoBodegaRechazo: "5.00",

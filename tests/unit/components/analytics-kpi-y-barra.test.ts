@@ -35,7 +35,7 @@ import { BUCKET_OTROS, DESENLACES } from "@/lib/types/conteo-entregas";
 
 /** Los seis segmentos de «Detalle gestión», en el orden en que `ConteoEntregasAnillo` los pinta. */
 const SEGMENTOS: readonly string[] = [...DESENLACES, BUCKET_OTROS];
-const ENTREGADAS = SEGMENTOS.indexOf("entregada");
+const ENTREGADAS = SEGMENTOS.indexOf("entregado");
 
 type Fila = { readonly status: string; readonly conteo: number };
 

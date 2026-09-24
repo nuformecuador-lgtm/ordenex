@@ -25,9 +25,9 @@ describeSiHayBase("454/C12 — KPI del portal del mensajero (Postgres real)", ()
       await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 3000 });
       await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 4000 });
       const ay = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 2000 });
-      await e.gestionarOk(e1.ordenId, "entregada", { monto: 10000 });
-      await e.gestionarOk(e2.ordenId, "entregada", { monto: 5000 });
-      await e.gestionarOk(rj.ordenId, "rechazada");
+      await e.gestionarOk(e1.ordenId, "entregado", { monto: 10000 });
+      await e.gestionarOk(e2.ordenId, "entregado", { monto: 5000 });
+      await e.gestionarOk(rj.ordenId, "devolucion_a_origen_por_rechazo");
       const a = await e.pedirAyuda(ay.ordenId);
       if (a.status !== "ok") throw new Error(`pedirAyuda: ${JSON.stringify(a)}`);
       const lista = await e.s.misAsignaciones.listarMisAsignaciones(e.actorMensajero);

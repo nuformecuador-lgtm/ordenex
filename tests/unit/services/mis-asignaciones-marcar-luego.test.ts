@@ -121,7 +121,7 @@ describe("R17 — el DTO refleja marcar_luego del mensajero", () => {
   });
 
   it("R17: la marca tambien viaja en 'Por recoger' (dato de la pareja mensajero/orden)", async () => {
-    const rows = [row({ id: "o3", estatusValue: "por_recoger" })];
+    const rows = [row({ id: "o3", estatusValue: "mensajero_recogiendo_en_bodega" })];
     const { service } = build(rows, new Set(["o3"]));
     const r = await service.listarMisAsignaciones(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");

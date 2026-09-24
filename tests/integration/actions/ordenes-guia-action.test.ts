@@ -221,7 +221,7 @@ describe("asignarDesdeBodega — passthrough de `partial` (368/R15-R16)", () => 
   it("devuelve exactamente el objeto `partial` del service, sin envolverlo ni alterarlo", async () => {
     const partial = {
       status: "partial" as const,
-      resultados: [{ ordenId: "o2", estado: "por_recoger" }],
+      resultados: [{ ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" }],
       bloqueadas: [{ ordenId: "o1", motivo: "direccion_no_geocodificable" }],
     };
     const service = fakeGuiaService({
@@ -371,7 +371,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
     });
 
     // Cara REPARTO: censo cerrado, con el estatus de la ayuda dentro.
-    expect(findMensajerosConOrdenesEn).toHaveBeenCalledWith(["m1"], ["por_recoger", "en_reparto"]);
+    expect(findMensajerosConOrdenesEn).toHaveBeenCalledWith(["m1"], ["mensajero_recogiendo_en_bodega", "en_reparto"]);
     // Cara RECOLECCION: intacta. `ayuda_tienda` no es una recoleccion.
     expect(findMensajerosConOrdenesEn).toHaveBeenCalledWith(["m1"], ["por_recolectar_en_tienda"]);
   });

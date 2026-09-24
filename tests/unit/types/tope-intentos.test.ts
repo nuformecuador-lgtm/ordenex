@@ -32,10 +32,10 @@ import {
  * de decidir si entra o no en el tope.
  */
 const TODOS_LOS_RESULTADOS: GestionResultado[] = [
-  "entregada",
-  "reprogramada",
-  "devuelta",
-  "rechazada",
+  "entregado",
+  "reprogramado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
   "incidente",
 ];
 
@@ -44,12 +44,12 @@ describe("276/T1 · `RESULTADOS_PERMITIDOS_EN_EL_TOPE` (R3)", () => {
     // ⚠️ LITERAL A PROPOSITO, y no derivado de su propia fuente: ESTE es el contrato. Ensanchar la
     // lista —añadir `reprogramada` o `devuelta`— vuelve a abrir la vuelta a circulacion que la
     // ficha 276 existe para cerrar, y tiene que costar un rojo aqui antes de costar dinero alla.
-    expect([...RESULTADOS_PERMITIDOS_EN_EL_TOPE]).toEqual(["entregada", "rechazada", "incidente"]);
+    expect([...RESULTADOS_PERMITIDOS_EN_EL_TOPE]).toEqual(["entregado", "devolucion_a_origen_por_rechazo", "incidente"]);
   });
 
   it("2. los DOS que devuelven la orden a circulacion NO estan permitidos", () => {
-    expect(permitidoEnElTope("reprogramada")).toBe(false);
-    expect(permitidoEnElTope("devuelta")).toBe(false);
+    expect(permitidoEnElTope("reprogramado")).toBe(false);
+    expect(permitidoEnElTope("novedad")).toBe(false);
   });
 
   it("3. es una lista de INCLUSION: todo value del enum fuera de ella da `false`", () => {

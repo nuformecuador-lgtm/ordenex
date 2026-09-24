@@ -173,7 +173,7 @@ describe("R38 — el ranking diario no cuenta el incidente del admin", () => {
           mensajeroId: MENSAJERO,
           cierreId: null,
           anuladaAt: null,
-          resultado: "entregada",
+          resultado: "entregado",
           createdAt: HOY,
           zonaId: "z1",
         },
@@ -196,7 +196,7 @@ describe("R38 — el ranking diario no cuenta el incidente del admin", () => {
     expect(rows.map((r) => r.mensajeroId)).not.toContain(AUTOR_ADMIN);
     const where = (prisma.gestionOrden.groupBy.mock.calls[0][0] as { where: { resultado: string } })
       .where;
-    expect(where.resultado).toBe("entregada");
+    expect(where.resultado).toBe("entregado");
   });
 });
 

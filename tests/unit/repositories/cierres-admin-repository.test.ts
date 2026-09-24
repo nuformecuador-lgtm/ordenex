@@ -201,7 +201,7 @@ function gestionRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "g1",
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: new Prisma.Decimal("12.50"),
     metodoPago: "efectivo",
     motivo: null,
@@ -361,11 +361,11 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
       // Rechazo SLA: trae una fila de historial (ya acotada al origen `escalado_devuelta_sla`).
       gestionRow({
         id: "g-sla",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         historialEstados: [{ origenTipo: "escalado_devuelta_sla" }],
       }),
       // Rechazo manual: sin fila de historial de ese origen -> NO-SLA (R2).
-      gestionRow({ id: "g-man", resultado: "rechazada", historialEstados: [] }),
+      gestionRow({ id: "g-man", resultado: "devolucion_a_origen_por_rechazo", historialEstados: [] }),
     ]);
     prisma.cierreDetail.findMany.mockResolvedValue([detalleRow()]);
     const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
@@ -406,7 +406,7 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
   it("deriva el desglose del ingreso de Ordenex de la TARIFA CONGELADA, con la fórmula de las wallets", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
-    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow({ resultado: "entregada" })]);
+    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow({ resultado: "entregado" })]);
     prisma.cierreDetail.findMany.mockResolvedValue([
       detalleRow({
         montoCobrar: new Prisma.Decimal("25000.00"),
@@ -456,7 +456,7 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
   it("un rechazo deriva flete de devolución + su IVA, y NUNCA comisión (no hubo recaudo)", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
-    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow({ resultado: "rechazada" })]);
+    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow({ resultado: "devolucion_a_origen_por_rechazo" })]);
     prisma.cierreDetail.findMany.mockResolvedValue([
       detalleRow({
         montoCobrar: new Prisma.Decimal("25000.00"),
@@ -1185,15 +1185,15 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
 // SOLO en la rama `aprobado` de resolverCierre; molde de recuperarABodega (guardado por estado).
 // ============================================================================
 
-describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestionar` (feature 109/R16-R20)", () => {
+describe("CierresAdminRepository.resolverCierre — liberación de `novedad_interna` (feature 109/R16-R20)", () => {
   const LIBERACION = {
-    sinGestionarEstatusId: idEstado("sin_gestionar"),
+    sinGestionarEstatusId: idEstado("novedad_interna"),
     enBodegaEstatusId: idEstado("en_bodega_central"),
     enBodegaSateliteEstatusId: idEstado("en_bodega_satelite"),
     centralZonaId: "z-central",
     // FEATURE 276 (T9): destino del rechazo por tope + umbral inyectado. Con el corpus de esta
     // suite ninguna barrida llega al umbral, asi que la rama nueva es un no-op aqui.
-    rechazadaEstatusId: idEstado("rechazada"),
+    rechazadaEstatusId: idEstado("devolucion_a_origen_por_rechazo"),
     umbralIntentos: 3,
   };
 
@@ -1279,7 +1279,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     // R16/R19: pre-SELECT de las `sin_gestionar` del mensajero del cierre.
     expect(prisma.orden.findMany.mock.calls[0][0].where).toEqual({
       mensajeroAsignadoId: "m1",
-      estatusId: idEstado("sin_gestionar"),
+      estatusId: idEstado("novedad_interna"),
       deletedAt: null,
     });
     // dos updateMany (uno por destino), cada uno GUARDADO por estatus_id=sin_gestionar.
@@ -1292,8 +1292,8 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     expect(calls).toHaveLength(2); // exactamente las dos de la liberacion: ni una escritura mas
     const central = calls.find((c) => c.data.estatusId === idEstado("en_bodega_central"));
     const sat = calls.find((c) => c.data.estatusId === idEstado("en_bodega_satelite"));
-    expect(central.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("sin_gestionar"), deletedAt: null });
-    expect(sat.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("sin_gestionar"), deletedAt: null });
+    expect(central.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("novedad_interna"), deletedAt: null });
+    expect(sat.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("novedad_interna"), deletedAt: null });
     // R16/R17: limpia mensajero/asignado_at + prioridad=true en la MISMA escritura.
     for (const c of [central, sat]) {
       expect(c.data).toMatchObject({
@@ -1314,7 +1314,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     expect(entradas).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("sin_gestionar"),
+        estatusOrigenId: idEstado("novedad_interna"),
         estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: "adm-maestro", // R18: el admin que aprobo
         origenTipo: "liberacion_sin_gestionar", // R18
@@ -1324,7 +1324,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     ]);
   });
 
-  it("R19/R20: cierre NORMAL (0 `sin_gestionar`) -> no-op: no updateMany de orden ni append", async () => {
+  it("R19/R20: cierre NORMAL (0 `novedad_interna`) -> no-op: no updateMany de orden ni append", async () => {
     const prisma = buildLiberacionPrisma([]); // el mensajero no tiene ordenes congeladas
     const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
