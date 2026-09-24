@@ -7,6 +7,7 @@ import useSWR, { useSWRConfig } from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { InfoEstado } from "@/components/shared/EstadoInfo";
 import { Modal } from "@/components/shared/Modal";
 import {
   DataTable,
@@ -736,18 +737,24 @@ export function CierreDiaModule({
         if (filas.length === 0) return null;
         const { columnas, fila, ambitoColumnas } =
           DESCARGA_POR_RESULTADO[resultado];
+        // FICHA 456 (T3.4, R10): el título de la sección es un recuento («<nombre> (N)») y las filas
+        // no repiten el resultado: su botón de información va junto al título, FUERA del `<h2>`.
+        const nombreSeccion = RESULTADO_LABEL[resultado];
         return (
           <section
             key={resultado}
             aria-label={RESULTADO_LABEL[resultado]}
             className="flex flex-col gap-3"
           >
-            <h2 className="text-lg font-semibold">
-              {RESULTADO_LABEL[resultado]}{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                ({filas.length})
-              </span>
-            </h2>
+            <div className="flex items-center gap-1">
+              <h2 className="text-lg font-semibold">
+                {nombreSeccion}{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  ({filas.length})
+                </span>
+              </h2>
+              <InfoEstado codigo={resultado} />
+            </div>
             <div className="overflow-x-auto">
               <DataTable
                 columns={columnasPara(

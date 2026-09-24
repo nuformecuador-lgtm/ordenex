@@ -583,3 +583,19 @@ describe("Feature 158 (T2.8) — lo que NO se reusa de los cierres, y por qué",
     expect(screen.queryByText(RECHAZADO_BLOQUEANTE_LABEL)).toBeNull();
   });
 });
+
+// FICHA 456 (T3.4, design §5.1 fila 5; R9) — el estado de la orden del detalle lleva su botón.
+describe("456 — «Estado de la orden» con su botón de información", () => {
+  it("el botón está junto al estado y abre la explicación de «Incidente»", async () => {
+    const user = userEvent.setup();
+    const i = makeIncidente({ incidenteId: "i1" });
+    montar({ pendientes: [i] });
+    await abrirDetalle(user, i);
+    const datos = screen.getByRole("region", { name: "Datos del incidente" });
+    await user.click(within(datos).getByRole("button", { name: "Qué significa «Incidente»" }));
+    const explicacion = await screen.findByRole("dialog", { name: "Incidente" });
+    expect(explicacion).toHaveAccessibleDescription(
+      "El paquete se dañó, se perdió o fue robado. Quedó reportado para su revisión.",
+    );
+  });
+});

@@ -27,6 +27,7 @@ import { serializarFiltroEntregas } from "@/app/(app)/_components/entregas-filtr
 import { useFiltroEntregas } from "@/app/(app)/_components/filtro-entregas";
 import { formatearValor } from "@/components/private/analytics/formato";
 import { GraficaRanking } from "@/components/private/analytics/GraficaRanking";
+import { LeyendaEstadosConInfo, TITULO_LEYENDA_ESTADOS } from "@/components/shared/EstadoInfo";
 import { nombreDeEstado } from "@/lib/types/order-status";
 import { consultarConteoPorStatus } from "@/lib/actions/conteo-por-status";
 import type { ResultadoConteoPorStatus } from "@/lib/types/conteo-por-status";
@@ -146,6 +147,15 @@ export function ConteoPorStatusDona() {
         cargando={isLoading}
         error={mensaje}
       />
+      {/* FICHA 456 (T3.12, design §5.1 fila 16; R14/R37): la lista de `GraficaRanking` es
+          `aria-hidden` y no admite controles, así que la explicación de cada estado va en una
+          leyenda PROPIA debajo, en el mismo orden que las barras. La gráfica no se toca. */}
+      {hayDato ? (
+        <LeyendaEstadosConInfo
+          codigos={datos.porStatus.map((fila) => fila.status)}
+          titulo={TITULO_LEYENDA_ESTADOS}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { NOTA_AYUDA_SOLICITADA } from "@/components/shared/nota-pendiente-confirmacion";
+import { EstadoConInfo, InfoEstado, NotaAyudaConInfo } from "@/components/shared/EstadoInfo";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
 import type { OrdenEventoTipo } from "@/lib/types/orden-evento";
 import type {
@@ -10,7 +10,7 @@ import {
   textoCorreccionDiaReparto,
 } from "@/lib/utils/dia-reparto-textos";
 
-import { estatusLabel, resultadoLabel } from "./estatus-label";
+import { resultadoLabel } from "./estatus-label";
 import { motivoVisible } from "./motivo-historial";
 
 // Feature 49 (T6.1, R29/R30) — linea de tiempo de PRESENTACION pura del historial de una
@@ -97,11 +97,14 @@ function textoTraspasoMensajero(anterior: string, nuevo: string): string {
  * La de la ayuda es la MISMA nota que acompaña a la orden en las pantallas (decisión del humano,
  * `NOTA_AYUDA_SOLICITADA`), no un sinónimo. Ninguna nombra un estado: un evento NO lo cambia.
  */
-const ETIQUETA_EVENTO: Record<OrdenEventoTipo, string> = {
+//
+// FICHA 456 (T3.3, R12): la de la ayuda es `null` porque se pinta con `NotaAyudaConInfo` (el texto
+// «Ayuda solicitada a la tienda» y su botón de información), no con un rótulo suelto.
+const ETIQUETA_EVENTO: Record<OrdenEventoTipo, string | null> = {
   gestion_registrada: "Gestión registrada",
   gestion_anulada: "Gestión anulada",
   gestion_corregida: "Gestión corregida",
-  ayuda_solicitada: NOTA_AYUDA_SOLICITADA,
+  ayuda_solicitada: null,
   ayuda_rescatada: "Ayuda cerrada: la orden vuelve a gestionarse",
   ayuda_habilitada_api: "Ayuda cerrada por la integración de la tienda",
 };
@@ -161,7 +164,6 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
         switch (entrada.clase) {
           case "transicion": {
             const esCreacion = entrada.estatusOrigenValue === null; // R20: origen vacio = creacion
-            const destinoLabel = estatusLabel(entrada.estatusDestinoValue);
             const actor = entrada.actorNombre ?? ACTOR_SISTEMA;
 
             return (
@@ -174,10 +176,16 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
                   className="absolute top-1.5 -left-[5px] size-2 rounded-full bg-primary"
                 />
                 {/* R30: origen -> destino con etiquetas legibles; en la creacion, "Creación · destino". */}
+                {/* FICHA 456 (T3.3, R9/R15): origen y destino con su botón de información;
+                    «Creación» no es un estado y un retirado sale sin botón. */}
                 <p className="flex flex-wrap items-center gap-1 text-sm font-medium">
-                  <span>{esCreacion ? "Creación" : estatusLabel(entrada.estatusOrigenValue)}</span>
+                  {entrada.estatusOrigenValue === null ? (
+                    <span>Creación</span>
+                  ) : (
+                    <EstadoConInfo codigo={entrada.estatusOrigenValue} />
+                  )}
                   <span aria-hidden="true">{esCreacion ? "·" : "→"}</span>
-                  <span>{destinoLabel}</span>
+                  <EstadoConInfo codigo={entrada.estatusDestinoValue} />
                 </p>
                 {sello}
                 <p className="text-xs text-muted-foreground">Por {actor}</p>
@@ -296,8 +304,20 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
                   aria-hidden="true"
                   className="absolute top-1.5 -left-[6px] size-2.5 rounded-full border-2 border-primary bg-popover"
                 />
-                <p className="text-sm font-medium">{ETIQUETA_EVENTO[entrada.tipo]}</p>
-                {resultado !== null ? <p className="text-sm">{resultado}</p> : null}
+                <p className="text-sm font-medium">
+                  {entrada.tipo === "ayuda_solicitada" ? <NotaAyudaConInfo /> : ETIQUETA_EVENTO[entrada.tipo]}
+                </p>
+                {/* FICHA 456 (T3.3, R10): el resultado nombra un estado; su botón va al final de
+                    la línea (en la corrección, uno por cada resultado, en el orden del texto). */}
+                {resultado !== null ? (
+                  <p className="flex flex-wrap items-center gap-1 text-sm">
+                    <span>{resultado}</span>
+                    {entrada.tipo === "gestion_corregida" && entrada.resultadoAnterior !== null ? (
+                      <InfoEstado codigo={entrada.resultadoAnterior} />
+                    ) : null}
+                    {entrada.resultado !== null ? <InfoEstado codigo={entrada.resultado} /> : null}
+                  </p>
+                ) : null}
                 {sello}
                 <p className="text-xs text-muted-foreground">
                   Por {entrada.actorNombre} ({rolLabel})

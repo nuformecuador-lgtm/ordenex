@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, act } from "@testing-library/react";
+import { render, screen, cleanup, act, fireEvent } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
 import { ToastProvider } from "@/providers/ToastProvider";
@@ -128,5 +128,16 @@ describe("ChatConversacion - icono de llamada", () => {
     expect(
       screen.queryByRole("link", { name: /Llamar por WhatsApp/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+// FICHA 456 (T3.7, design §5.1 fila 11; R9) — la cabecera de la conversación nombra el estado de la
+// orden con su botón de información.
+describe("456 — cabecera de la conversación con el botón de información", () => {
+  it("el estado lleva su botón y abre la explicación aprobada", async () => {
+    await montar(ORDEN);
+    fireEvent.click(screen.getByRole("button", { name: "Qué significa «En reparto»" }));
+    const explicacion = await screen.findByRole("dialog", { name: "En reparto" });
+    expect(explicacion.textContent).toContain("El mensajero tiene el paquete y lo lleva al destinatario.");
   });
 });

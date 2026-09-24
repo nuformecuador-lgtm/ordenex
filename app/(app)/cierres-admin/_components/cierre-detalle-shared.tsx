@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { InfoEstado } from "@/components/shared/EstadoInfo";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/shared/Modal";
 import {
@@ -1626,18 +1627,25 @@ export function DetalleSecciones({
         const tituloDescarga = contexto
           ? `${RESULTADO_LABEL[resultado]} · ${contexto}`
           : RESULTADO_LABEL[resultado];
+        // Título de la sección (recuento, con su cifra al lado); su botón va FUERA del `<h4>`.
+        const nombreSeccion = RESULTADO_LABEL[resultado];
         return (
           <section
             key={resultado}
             aria-label={RESULTADO_LABEL[resultado]}
             className="flex flex-col gap-3"
           >
-            <h4 className="text-sm font-semibold">
-              {RESULTADO_LABEL[resultado]}{" "}
-              <span className="text-xs font-normal text-muted-foreground">
-                ({filas.length})
-              </span>
-            </h4>
+            {/* FICHA 456 (T3.4, R10): las filas de la sección no repiten el resultado, así que su
+                explicación va junto al título, FUERA del `<h4>` (su nombre accesible no cambia). */}
+            <div className="flex items-center gap-1">
+              <h4 className="text-sm font-semibold">
+                {nombreSeccion}{" "}
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({filas.length})
+                </span>
+              </h4>
+              <InfoEstado codigo={resultado} />
+            </div>
             <div className="overflow-x-auto">
               <DataTable
                 columns={columnasPara(resultado, onVerEvidencia)}

@@ -9,6 +9,7 @@ import {
   type Column,
   type DescargaFilasResult,
 } from "@/components/shared/DataTable";
+import { InfosEstado } from "@/components/shared/EstadoInfo";
 import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useAnchoDelScrollHorizontal } from "@/hooks/useAnchoDelScrollHorizontal";
@@ -161,7 +162,13 @@ const COLUMNS: Column<OrdenAporteDTO>[] = [
     id: "resultado",
     value: DETALLE_MI_MOVIMIENTO_COLUMNAS.resultado,
     // R13: la etiqueta legible del catálogo, nunca el valor del enum.
-    render: (o) => resultadosTexto(o.resultados),
+    // FICHA 456 (T3.13, R10): la línea no se parte; sus botones de información van al lado.
+    render: (o) => (
+      <span className="inline-flex items-center gap-1">
+        <span>{resultadosTexto(o.resultados)}</span>
+        <InfosEstado codigos={o.resultados} />
+      </span>
+    ),
   },
   {
     id: "aporte",
@@ -191,7 +198,10 @@ const COLUMNS_MOVIL: Column<OrdenAporteDTO>[] = [
         <EnlaceOrden guia={o.guia} />
         <span>{o.destinatario}</span>
         {/* R13: la etiqueta legible del catálogo, nunca el valor del enum. */}
-        <span className="text-xs text-muted-foreground">{resultadosTexto(o.resultados)}</span>
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <span>{resultadosTexto(o.resultados)}</span>
+          <InfosEstado codigos={o.resultados} />
+        </span>
       </div>
     ),
   },

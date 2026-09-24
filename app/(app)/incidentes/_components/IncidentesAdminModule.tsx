@@ -39,7 +39,7 @@ import {
   moneyTope,
   EstadoCierreBadge,
 } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
-import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import {
   IncidentesHistoricoTabla,
   type IncidentesHistoricoPagina,
@@ -485,7 +485,10 @@ export function IncidentesAdminModule({
               <Dato label="Reportado el">{detalle.createdAt.slice(0, 10)}</Dato>
               <Dato label="Nº Guía">{detalle.numGuia ?? "—"}</Dato>
               <Dato label="Zona">{detalle.zonaNombre}</Dato>
-              <Dato label="Estado de la orden">{estatusLabel(detalle.estatusValue)}</Dato>
+              {/* FICHA 456 (T3.4, R9): el estado de la orden con su botón de información. */}
+              <Dato label="Estado de la orden">
+                <EstadoConInfo codigo={detalle.estatusValue} />
+              </Dato>
               <Dato
                 label="Indemnización"
                 nota={detalle.indemnizacion === null ? INDEMNIZACION_PENDIENTE_NOTA : undefined}

@@ -125,6 +125,9 @@ export function opcionesEstado(
     // La etiqueta sale de `ORDER_STATUS_LABELS` vía `estatusLabel`, el MISMO mapa que pinta el
     // chip de la tabla: el desplegable y la fila no pueden llamar distinto al mismo estado.
     label: estatusLabel(s.value),
+    // FICHA 456 (R13, design §4.4): el codigo del estado, para que el filtro pinte su boton de
+    // informacion junto a la opcion y junto al filtro aplicado (patron de hermano).
+    codigoEstado: s.value,
   }));
 }
 

@@ -41,6 +41,11 @@ export interface FilterOption {
   /** Grupo al que pertenece la opcion (R28). Puro contrato de opciones. */
   group?: string;
   /**
+   * FICHA 456 (R13): codigo de ESTADO de la opcion, si lo es. `MultiSelectFilter` pinta con el el boton
+   * de informacion junto a la opcion; el componente no sabe que es un estado.
+   */
+  codigoEstado?: string;
+  /**
    * Solo en `dateRange`: el RANGO de fechas calendario (`YYYY-MM-DD`) que este atajo
    * representa. El control no lo calcula ni lo interpreta: pinta ese rango en el
    * calendario y emite sus dos extremos. Sin el, el atajo no se ofrece.

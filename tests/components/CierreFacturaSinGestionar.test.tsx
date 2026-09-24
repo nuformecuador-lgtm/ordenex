@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import {
   CierreFacturaDetalle,
@@ -381,11 +382,16 @@ describe("feature 264 — la sección es de consulta y no rellena lo que no sabe
   it("R31: ni un botón, ni un enlace, ni un desplegable dentro de la sección", () => {
     pintar();
     const s = seccion();
-    expect(within(s).queryAllByRole("button")).toHaveLength(0);
+    // ⏳ 2026-09-24 (FICHA 456, T3.4/R9): el estado de origen lleva su botón de información («Qué
+    // significa «…»»), que solo abre la explicación. Ese botón se descuenta; cualquier OTRO control
+    // sigue prohibido. Y el de información tiene que estar (no es un verde por vacío).
+    const esInfo = (b: Element) => (b.getAttribute("aria-label") ?? "").startsWith("Qué significa «");
+    expect(within(s).queryAllByRole("button").filter((b) => !esInfo(b))).toHaveLength(0);
+    expect(within(s).queryAllByRole("button").filter(esInfo).length).toBeGreaterThan(0);
     expect(within(s).queryAllByRole("link")).toHaveLength(0);
     expect(s.querySelectorAll("a")).toHaveLength(0);
-    expect(s.querySelectorAll("[aria-expanded]")).toHaveLength(0);
-    expect(s.querySelectorAll("button")).toHaveLength(0);
+    expect([...s.querySelectorAll("[aria-expanded]")].filter((b) => !esInfo(b))).toHaveLength(0);
+    expect([...s.querySelectorAll("button")].filter((b) => !esInfo(b))).toHaveLength(0);
   });
 
   it("R32: el estado de origen se pinta traducido cuando consta", () => {
@@ -544,5 +550,31 @@ describe("feature 264 — el dinero del comprobante no se mueve por la sección 
       "Devolución a origen por rechazo0",
       "Incidente0",
     ]);
+  });
+});
+
+// ── FICHA 456 (T3.4, design §5.1 fila 6 y §5.2; R9, R15, R16, R30) ─────────────────────────────
+
+describe("456 — botón de información en el comprobante", () => {
+  it("R9/R15 — el origen de una barrida lleva su botón; un origen retirado, no", async () => {
+    const user = userEvent.setup();
+    pintar();
+    const s = seccion();
+    const desdeReparto = within(s).getByText("Beto Mora").closest('[role="listitem"]') as HTMLElement;
+    const desdeAyuda = within(s).getByText("Carla Vega").closest('[role="listitem"]') as HTMLElement;
+    expect(within(desdeAyuda).queryByRole("button")).toBeNull();
+    await user.click(within(desdeReparto).getByRole("button", { name: "Qué significa «En reparto»" }));
+    expect(await screen.findByRole("dialog")).toHaveAccessibleName("En reparto");
+  });
+
+  it("R16/R30 — las pestañas con cifra no llevan botón, y abrir una explicación no cambia la pestaña", async () => {
+    const user = userEvent.setup();
+    pintar();
+    const pestanas = screen.getAllByRole("tab");
+    expect(pestanas.length).toBeGreaterThan(0);
+    for (const t of pestanas) expect(within(t).queryByRole("button")).toBeNull();
+    const activa = pestanas.find((t) => t.getAttribute("aria-selected") === "true");
+    await user.click(within(seccion()).getByRole("button", { name: "Qué significa «En reparto»" }));
+    expect(screen.getAllByRole("tab").find((t) => t.getAttribute("aria-selected") === "true")).toBe(activa);
   });
 });

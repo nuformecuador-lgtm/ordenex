@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MessageSquareDot, Search } from "lucide-react";
 
+import { InfoEstado } from "@/components/shared/EstadoInfo";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
@@ -64,101 +65,110 @@ function OrdenFila({
   onSeleccionar: (id: string) => void;
 }) {
   const chip = chipDeEstado(orden.estatusValue);
+  // FICHA 456 (T3.7, design §4.3; R9/R30/R32): PATRÓN DE HERMANO. La fila es un `<button>` entero y
+  // un botón no anida otro: el de información va FUERA, a su derecha. El contenido de la fila, su
+  // nombre accesible y `aria-current` no cambian; tocar el botón de información no abre la
+  // conversación (no está dentro de la fila).
   return (
-    <button
-      type="button"
-      onClick={() => onSeleccionar(orden.id)}
-      aria-current={seleccionada ? "true" : undefined}
-      className={cn(
-        "flex w-full items-center gap-3 px-3 py-3 text-left transition-colors",
-        "hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        seleccionada && "bg-accent",
-      )}
-    >
-      <div className="relative shrink-0">
-        <div
-          className="flex size-11 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground"
-          aria-hidden="true"
-        >
-          {iniciales(orden.destinatario)}
-        </div>
-        {noLeidos > 0 ? (
-          // Mismos tokens que el distintivo del botón flotante y que la campana: `-strong` es
-          // la variante contrast-safe (AA) del semántico, con `text-background` acompañando su
-          // giro entre temas. Va sobre el avatar, que es el ancla visual de la fila.
-          <span
-            data-testid={`chat-no-leidos-${orden.id}`}
-            className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-card bg-danger-strong px-1 text-[11px] font-semibold leading-none text-background"
+    <div className={cn("flex items-center", seleccionada && "bg-accent")}>
+      <button
+        type="button"
+        onClick={() => onSeleccionar(orden.id)}
+        aria-current={seleccionada ? "true" : undefined}
+        className={cn(
+          "flex w-full min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left transition-colors",
+          "hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          seleccionada && "bg-accent",
+        )}
+      >
+        <div className="relative shrink-0">
+          <div
+            className="flex size-11 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground"
+            aria-hidden="true"
           >
-            {noLeidos > BADGE_MAX ? `+${BADGE_MAX}` : noLeidos}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {orden.destinatario}
-          </p>
-          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-            {orden.numRemision}
-          </span>
-        </div>
-
-        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-          {orden.numGuia !== null ? (
-            <span className="font-mono text-[11px] text-muted-foreground">
-              {orden.numGuia}
+            {iniciales(orden.destinatario)}
+          </div>
+          {noLeidos > 0 ? (
+            // Mismos tokens que el distintivo del botón flotante y que la campana: `-strong` es
+            // la variante contrast-safe (AA) del semántico, con `text-background` acompañando su
+            // giro entre temas. Va sobre el avatar, que es el ancla visual de la fila.
+            <span
+              data-testid={`chat-no-leidos-${orden.id}`}
+              className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-card bg-danger-strong px-1 text-[11px] font-semibold leading-none text-background"
+            >
+              {noLeidos > BADGE_MAX ? `+${BADGE_MAX}` : noLeidos}
             </span>
           ) : null}
-          <span
-            className={cn(
-              "rounded-full px-2 py-0.5 text-[10px] font-medium leading-none",
-              chip.className,
-            )}
-          >
-            {chip.label}
-          </span>
-          {/* FICHA 430 (punto 3) — LA MARCA DEL DÍA VA EN LA FILA, no sólo en el grupo. El grupo
-              ordena la lista; la fila es lo que el mensajero lee cuando el buscador la ha sacado de
-              su sitio, y es lo que entra en el nombre accesible del botón. Cuelga de
-              `esParaManana` y NO del grupo a propósito: una orden ya recogida puede quedar marcada
-              para un día posterior (pasó en producción el 2026-08-21 con un `UPDATE` a mano), y así
-              la marca no se le cae por estar en «En reparto».
-              Mismo `Badge variant="info"` con el que la pintan las tres cards del portal: un solo
-              lenguaje para un solo dato. */}
-          {orden.esParaManana ? (
-            <Badge variant="info">{ETIQUETA_PARA_MANANA}</Badge>
-          ) : null}
         </div>
 
-        <p className="mt-1 truncate text-xs text-muted-foreground">
-          {zonaCorta(orden)}
-        </p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {orden.destinatario}
+            </p>
+            <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+              {orden.numRemision}
+            </span>
+          </div>
 
-        {/* FICHA 430 (punto 3) — Y CON PALABRAS, no sólo con el badge. Si el mensajero escribe el
-            día antes, el cliente le va a pedir que se la lleve hoy: tiene que saber, antes de
-            prometer nada, que el sistema se lo va a impedir y DESDE QUÉ DÍA podrá. El literal sale
-            de la fuente única (`avisoReservaParaOtroDia`, 261/R15) con la fecha ya resuelta por el
-            servidor (`fechaRepartoISO`, R14): aquí no se construye ninguna fecha.
-            Es un `<span>` de bloque y no un `<p role="note">` como en la card: dentro de un
-            `<button>` el texto se pliega al nombre accesible de la fila, así que un rol propio no
-            se anunciaría — y un `<p>` más dentro del botón tampoco mejora nada. */}
-        {orden.esParaManana ? (
-          <span className="mt-1 block text-[11px] font-semibold text-muted-foreground">
-            {avisoReservaParaOtroDia(orden.fechaRepartoISO)}
-          </span>
-        ) : null}
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+            {orden.numGuia !== null ? (
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {orden.numGuia}
+              </span>
+            ) : null}
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-medium leading-none",
+                chip.className,
+              )}
+            >
+              {chip.label}
+            </span>
+            {/* FICHA 430 (punto 3) — LA MARCA DEL DÍA VA EN LA FILA, no sólo en el grupo. El grupo
+                ordena la lista; la fila es lo que el mensajero lee cuando el buscador la ha sacado de
+                su sitio, y es lo que entra en el nombre accesible del botón. Cuelga de
+                `esParaManana` y NO del grupo a propósito: una orden ya recogida puede quedar marcada
+                para un día posterior (pasó en producción el 2026-08-21 con un `UPDATE` a mano), y así
+                la marca no se le cae por estar en «En reparto».
+                Mismo `Badge variant="info"` con el que la pintan las tres cards del portal: un solo
+                lenguaje para un solo dato. */}
+            {orden.esParaManana ? (
+              <Badge variant="info">{ETIQUETA_PARA_MANANA}</Badge>
+            ) : null}
+          </div>
 
-        {/* El distintivo de arriba es una cifra suelta sobre el avatar: fuera de contexto no
-            dice de qué es. El nombre accesible del botón lo dice con palabras. */}
-        {noLeidos > 0 ? (
-          <span className="sr-only">
-            {noLeidos === 1 ? "1 mensaje sin leer" : `${noLeidos} mensajes sin leer`}
-          </span>
-        ) : null}
-      </div>
-    </button>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {zonaCorta(orden)}
+          </p>
+
+          {/* FICHA 430 (punto 3) — Y CON PALABRAS, no sólo con el badge. Si el mensajero escribe el
+              día antes, el cliente le va a pedir que se la lleve hoy: tiene que saber, antes de
+              prometer nada, que el sistema se lo va a impedir y DESDE QUÉ DÍA podrá. El literal sale
+              de la fuente única (`avisoReservaParaOtroDia`, 261/R15) con la fecha ya resuelta por el
+              servidor (`fechaRepartoISO`, R14): aquí no se construye ninguna fecha.
+              Es un `<span>` de bloque y no un `<p role="note">` como en la card: dentro de un
+              `<button>` el texto se pliega al nombre accesible de la fila, así que un rol propio no
+              se anunciaría — y un `<p>` más dentro del botón tampoco mejora nada. */}
+          {orden.esParaManana ? (
+            <span className="mt-1 block text-[11px] font-semibold text-muted-foreground">
+              {avisoReservaParaOtroDia(orden.fechaRepartoISO)}
+            </span>
+          ) : null}
+
+          {/* El distintivo de arriba es una cifra suelta sobre el avatar: fuera de contexto no
+              dice de qué es. El nombre accesible del botón lo dice con palabras. */}
+          {noLeidos > 0 ? (
+            <span className="sr-only">
+              {noLeidos === 1 ? "1 mensaje sin leer" : `${noLeidos} mensajes sin leer`}
+            </span>
+          ) : null}
+        </div>
+      </button>
+      <span className="shrink-0 pr-3">
+        <InfoEstado codigo={orden.estatusValue} />
+      </span>
+    </div>
   );
 }
 

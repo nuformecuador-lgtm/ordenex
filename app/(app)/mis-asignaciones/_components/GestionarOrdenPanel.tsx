@@ -66,6 +66,7 @@ import {
 } from "@/lib/utils/aviso-ubicacion-denegada";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
@@ -842,7 +843,9 @@ export function GestionarOrdenPanel({
   const causaError = firstError(fieldErrors, "causaDevolucion");
   const causaIncidenteError = firstError(fieldErrors, "causaIncidente"); // feature 158/R9
 
-  const resultadoLabel =
+  // FICHA 456: renombrada (antes `resultadoLabel`, homónima del alias de la 455): es el rótulo del
+  // BOTÓN de acción elegido («Entregar», «Reprogramar»…), no el nombre de un estado.
+  const tituloAccionElegida =
     RESULTADO_BOTONES.find((b) => b.value === resultado)?.label ?? "";
 
   // Feature 276 (T11, R8/R10): el juego de desenlaces que esta orden admite. `enElTope` llega YA
@@ -870,9 +873,12 @@ export function GestionarOrdenPanel({
               : `Parada ${orden.secuenciaRuta} de ${count}`}
           </p>
         </div>
-        <span className="shrink-0 rounded-full bg-warning/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-warning-strong">
-          {estatusLabel(orden.estatusValue)}
-        </span>
+        {/* FICHA 456 (T3.6, R9): el estado en la cabecera del panel, con su botón de información. */}
+        <EstadoConInfo
+          codigo={orden.estatusValue}
+          className="shrink-0"
+          chipClassName="rounded-full bg-warning/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-warning-strong"
+        />
       </header>
 
       <div className="flex flex-col gap-4 px-4 py-4">
@@ -1109,7 +1115,7 @@ export function GestionarOrdenPanel({
       {paso === "formulario" ? (
         <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 duration-300 animate-in fade-in slide-in-from-bottom-2">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-base font-semibold">{resultadoLabel}</h3>
+            <h3 className="text-base font-semibold">{tituloAccionElegida}</h3>
             <Button
               type="button"
               variant="ghost"

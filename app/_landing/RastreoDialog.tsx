@@ -11,7 +11,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { EstadoConInfo, SenalPendienteConInfo } from "@/components/shared/EstadoInfo";
 import { textoPendienteConfirmacion } from "@/components/shared/nota-pendiente-confirmacion";
+import { codigoDeNombre } from "@/lib/types/order-status";
 import { consultarRastreoPublico } from "@/lib/actions/rastreo-publico";
 import { PARAM_GUIA } from "./guia-en-url";
 import type {
@@ -79,9 +81,26 @@ function textoEntrada(entrada: EntradaLineaPublica): string {
 }
 
 /** La cabecera: el estado vigente, o —si la última entrada está pendiente— su mismo texto (R20). */
-function textoCabecera(envio: Pick<RastreoPublicoDTO, "nombreVigente" | "linea">): string {
+function entradaCabecera(envio: Pick<RastreoPublicoDTO, "nombreVigente" | "linea">): EntradaLineaPublica {
   const ultima = envio.linea.at(-1);
-  return ultima?.pendiente === true ? textoEntrada(ultima) : envio.nombreVigente;
+  return ultima?.pendiente === true ? ultima : { nombre: envio.nombreVigente, fecha: ultima?.fecha ?? "" };
+}
+
+/**
+ * FICHA 456 (T3.9, design DF; R9/R11/R15/R28/R36) — una entrada con su botón de información. El
+ * servidor publica NOMBRES (455/R32, la frontera pública no cambia); el cliente los traduce a código
+ * con la inversa de `NOMBRE_ESTADO` para buscar su explicación. Un nombre que no es de un estado
+ * vigente («Estado no reconocido») se pinta tal cual, sin botón (R15). El popup lleva la paleta clara
+ * de la landing (`superficie="landing"`, R28).
+ */
+function EstadoPublico({ entrada }: { entrada: EntradaLineaPublica }) {
+  const codigo = codigoDeNombre(entrada.nombre);
+  if (codigo === null) return <>{textoEntrada(entrada)}</>;
+  return entrada.pendiente === true ? (
+    <SenalPendienteConInfo resultado={codigo} superficie="landing" />
+  ) : (
+    <EstadoConInfo codigo={codigo} superficie="landing" />
+  );
 }
 
 /**
@@ -288,7 +307,7 @@ export function RastreoDialog({ className, children, guiaInicial = null }: Rastr
               <span className="text-base font-semibold text-navy-deep">
                 {/* FICHA 454 (R31): el hito vigente ES la última entrada de la línea (R20); si esa
                     entrada está pendiente, la cabecera lo dice igual que la línea. */}
-                {textoCabecera(envio)}
+                <EstadoPublico entrada={entradaCabecera(envio)} />
               </span>
             </div>
 
@@ -306,7 +325,7 @@ export function RastreoDialog({ className, children, guiaInicial = null }: Rastr
                   />
                   <span className="flex flex-col">
                     <span className="text-sm font-medium text-asfalto-9">
-                      {textoEntrada(entrada)}
+                      <EstadoPublico entrada={entrada} />
                     </span>
                     <time dateTime={entrada.fecha} className="text-xs text-asfalto-5">
                       {fechaLegible(entrada.fecha)}

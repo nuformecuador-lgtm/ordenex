@@ -314,3 +314,27 @@ describe("el fixture de este archivo NO esta vacio", () => {
     expect(fila.relaciones?.tienda?.tarifa?.fulfillment).toBe(CENTINELAS.tarifa);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* FICHA 456 (T3.10, design §5.1 fila 14; R9, R10) — botón de información       */
+/* -------------------------------------------------------------------------- */
+
+describe("456 · «Resultado del día» y «Estado» con su botón de información", () => {
+  it("R10 — el resultado lleva su botón; `null` es «—» sin botón", () => {
+    const { tabla } = pintar("zona", ordenDelDetalle({ id: "o1", resultadoDelDia: "reprogramado" }));
+    const columna = idsMontados("zona").indexOf(COLUMNA_RESULTADO_ID);
+    const celda = tabla.querySelectorAll("tbody td")[columna] as HTMLElement;
+    expect(within(celda).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Qué significa «Reprogramado»",
+    ]);
+    cleanup();
+    const vacio = pintar("zona", ordenDelDetalle({ id: "o1", resultadoDelDia: null })).tabla;
+    const celdaVacia = vacio.querySelectorAll("tbody td")[columna] as HTMLElement;
+    expect(within(celdaVacia).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("R9 — la columna «Estado» (heredada de `/ordenes`) también lleva el botón", () => {
+    const { tabla } = pintar("zona");
+    expect(within(tabla).getAllByRole("button", { name: /^Qué significa «/ }).length).toBeGreaterThan(0);
+  });
+});

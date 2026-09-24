@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Minus, X } from "lucide-react";
 
+import { InfoEstado, SELECTOR_POPUP_ESTADO_INFO } from "@/components/shared/EstadoInfo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,13 @@ export interface MultiSelectOption {
    * feature (sin regresion para el filtro de estado de la 63).
    */
   group?: string;
+  /**
+   * FICHA 456 (R13, design §4.4): código de ESTADO de la opción, si la opción es un estado. El control
+   * no sabe qué es un estado: si la opción lo trae, pinta a su lado el botón de información
+   * (`InfoEstado`) como HERMANO de la opción —nunca dentro: un control no anida otro— y, si es la
+   * única marcada, otro junto a la X del filtro aplicado. Sin él, la opción es exactamente la de antes.
+   */
+  codigoEstado?: string;
 }
 
 export interface MultiSelectFilterProps {
@@ -78,8 +86,16 @@ export function MultiSelectFilter({
     if (!open) return;
     function onPointerDown(e: MouseEvent | TouchEvent) {
       const nodo = contenedorRef.current;
-      if (nodo && !nodo.contains(e.target as Node)) setOpen(false);
+      const objetivo = e.target as Node;
+      // FICHA 456 (R31, design §4.4): la explicación de un estado se PORTALEA fuera del panel. Un
+      // clic dentro de ella no es «fuera»: sin esto, leer la explicación cerraría el filtro.
+      if (objetivo instanceof Element && objetivo.closest(SELECTOR_POPUP_ESTADO_INFO)) return;
+      if (nodo && !nodo.contains(objetivo)) setOpen(false);
     }
+    // FICHA 456 (R31): con una explicación abierta, Escape cierra SOLO la explicación. No hace falta
+    // código aquí: Base UI consume ese Escape antes de que llegue a `document` (medido: la mutación
+    // que añadía aquí un «si hay explicación abierta, no cierres» no cambiaba nada, en jsdom y en
+    // el navegador; ver `progress/impl_456.md`, C2b).
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
@@ -174,8 +190,11 @@ export function MultiSelectFilter({
   /** Una opcion de la lista. Identica con y sin grupos: `role="option"` + `aria-selected`. */
   function renderOpcion(opcion: MultiSelectOption) {
     const marcada = seleccion.has(opcion.value);
+    const conInfo = opcion.codigoEstado !== undefined;
     return (
-      <li key={opcion.value}>
+      // FICHA 456 (R13/R31): con `codigoEstado`, el `<li>` alinea la opción y su botón de información
+      // como hermanos. El botón no está dentro de la opción, así que no la marca por construcción.
+      <li key={opcion.value} className={conInfo ? "flex items-center gap-1 pr-1" : undefined}>
         {/* `option` como boton: un clic marca/desmarca sin cerrar el
             panel (seleccion multiple encadenada). */}
         <button
@@ -186,6 +205,7 @@ export function MultiSelectFilter({
             "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
             "hover:bg-accent hover:text-accent-foreground",
             marcada && "font-medium",
+            conInfo && "min-w-0 flex-1",
           )}
           onClick={() => alternar(opcion.value)}
         >
@@ -200,9 +220,15 @@ export function MultiSelectFilter({
           </span>
           <span className="truncate">{opcion.label}</span>
         </button>
+        {conInfo ? <InfoEstado codigo={opcion.codigoEstado as string} /> : null}
       </li>
     );
   }
+
+  // FICHA 456 (R13): el filtro aplicado nombra UN estado cuando hay una sola opción marcada y es un
+  // estado. Con N marcadas dice «N seleccionados» y no nombra ninguno: sin botón.
+  const codigoAplicado =
+    value.length === 1 ? options.find((o) => o.value === value[0])?.codigoEstado : undefined;
 
   return (
     <div ref={contenedorRef} className={cn("relative", className)}>
@@ -223,6 +249,10 @@ export function MultiSelectFilter({
           </span>
           {/* Con seleccion, el hueco de la derecha lo ocupa la X que limpia; sin ella,
               la flecha que anuncia el desplegable. */}
+          {codigoAplicado !== undefined ? (
+            // Hueco del botón de información del filtro aplicado (va superpuesto, como la X).
+            <span className="h-4 w-4 shrink-0" aria-hidden />
+          ) : null}
           {value.length > 0 ? (
             <span className="h-4 w-4 shrink-0" aria-hidden />
           ) : (
@@ -231,6 +261,13 @@ export function MultiSelectFilter({
         </Button>
         {/* La X NO puede vivir dentro del disparador (un boton no anida otro): va
             superpuesta sobre su borde derecho, dentro del mismo control. */}
+        {codigoAplicado !== undefined ? (
+          // FICHA 456 (R13): el botón del filtro aplicado, superpuesto junto a la X con la misma
+          // técnica (un botón no anida otro).
+          <span className="absolute right-8 inline-flex">
+            <InfoEstado codigo={codigoAplicado} />
+          </span>
+        ) : null}
         {value.length > 0 ? (
           <Button
             type="button"

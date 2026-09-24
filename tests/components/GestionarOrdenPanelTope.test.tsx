@@ -23,7 +23,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { render, screen, within, cleanup } from "@testing-library/react";
+import { render, screen, within, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { GestionarOrdenPanel } from "@/app/(app)/mis-asignaciones/_components/GestionarOrdenPanel";
@@ -282,5 +282,18 @@ describe("276/R10 — la nota no lleva el número del umbral, ni de lejos", () =
     expect(fuente).not.toContain("reintentosConfig");
     expect(fuente).not.toContain("MIN_INTENTOS_ENTREGA");
     expect(fuente).not.toContain("lib/config/reintentos");
+  });
+});
+
+// FICHA 456 (T3.6, design §5.1 fila 9; R9) — la cabecera del panel «Gestionar orden» nombra el
+// estado de la orden con su botón de información.
+describe("456 — cabecera del panel con el botón de información", () => {
+  it("el estado de la cabecera lleva su botón y abre la explicación aprobada", async () => {
+    montar();
+    const cabecera = document.querySelector("header") as HTMLElement;
+    const boton = within(cabecera).getByRole("button", { name: "Qué significa «En reparto»" });
+    fireEvent.click(boton);
+    const explicacion = await screen.findByRole("dialog", { name: "En reparto" });
+    expect(explicacion.textContent).toContain("El mensajero tiene el paquete y lo lleva al destinatario.");
   });
 });

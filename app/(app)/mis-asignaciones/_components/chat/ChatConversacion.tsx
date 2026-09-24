@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import useSWR from "swr";
 
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
@@ -644,14 +645,14 @@ export function ChatConversacion({
             <span className="font-mono text-[11px] text-muted-foreground">
               {guiaVisible(orden)}
             </span>
-            <span
-              className={cn(
+            {/* FICHA 456 (T3.7, R9): el estado de la conversación con su botón de información. */}
+            <EstadoConInfo
+              codigo={orden.estatusValue}
+              chipClassName={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-medium leading-none",
                 chip.className,
               )}
-            >
-              {chip.label}
-            </span>
+            />
             {/* FICHA 430 (punto 3): la marca del día acompaña al estado también AQUÍ, que es la
                 pantalla donde el mensajero está escribiendo. Mismo `Badge variant="info"` y mismo
                 literal que las cards del portal y que la fila de la lista. */}

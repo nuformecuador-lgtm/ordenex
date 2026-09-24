@@ -2,6 +2,7 @@
 
 import { PackageCheck } from "lucide-react";
 
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import { Badge } from "@/components/ui/badge";
 import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { extractNumGuiaFromScan } from "@/lib/utils/paquete-url";
@@ -15,7 +16,7 @@ import type {
   CierreResultado,
 } from "@/lib/interfaces/services/ICierreDiaService";
 
-import { RESULTADO_LABEL, RESULTADO_FILA_LABEL } from "./cierre-labels";
+import { RESULTADO_LABEL, RESULTADO_FILA_LABEL, tituloResultadoConCifra } from "./cierre-labels";
 
 // Feature 238 (T4.2-T4.5, design §5.2/§5.3) — el CUERPO de la ventana de confirmación física:
 // lo que bodega ve mientras confirma, guía a guía, que tiene delante cada paquete que vuelve.
@@ -462,7 +463,7 @@ export function ConfirmacionFisicaCuerpo({
             {agruparRetornables(retornables).map(({ resultado, gestiones }) => (
               <section key={resultado} aria-label={RESULTADO_LABEL[resultado]}>
                 <h3 className="mb-1.5 text-sm font-semibold">
-                  {`${RESULTADO_LABEL[resultado]} (${gestiones.length})`}
+                  {tituloResultadoConCifra(resultado, gestiones.length)}
                 </h3>
                 <ul className="flex flex-col gap-2">
                   {gestiones.map((g) => {
@@ -480,9 +481,11 @@ export function ConfirmacionFisicaCuerpo({
                             {`Nº Guía ${g.numGuia ?? "—"} · ${g.numRemision}`}
                           </p>
                           <div className="flex items-center gap-1.5">
-                            <Badge variant="outline">
-                              {RESULTADO_FILA_LABEL[g.resultado]}
-                            </Badge>
+                            {/* FICHA 456 (T3.4, R10): el resultado de la fila con su botón. */}
+                            <EstadoConInfo
+                              codigo={g.resultado}
+                              chip={(nombre) => <Badge variant="outline">{nombre}</Badge>}
+                            />
                             <Badge variant={confirmada ? "success" : "warning"}>
                               {confirmada ? FILA_CONFIRMADA : FILA_PENDIENTE}
                             </Badge>

@@ -1,5 +1,4 @@
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
-import { nombreDeEstado } from "@/lib/types/order-status";
 
 // POS card · configuración de PRESENTACIÓN del chip de estado y de las marcas de la card,
 // compartida por las tres vistas (grande, mosaico y detalle) para que pinten EXACTAMENTE el
@@ -38,10 +37,12 @@ export function claseChipEstado(estatusValue: string): string {
   return CLASE_CHIP_POR_CODIGO[estatusValue] ?? CLASE_CHIP_POR_DEFECTO;
 }
 
-/** El texto del chip: el nombre visible del estado de la orden (R7, R8). */
-export function textoChipEstado(orden: Pick<MiAsignacionDTO, "estatusValue">): string {
-  return nombreDeEstado(orden.estatusValue);
-}
+// FICHA 456 (T3.6, R9): aquí vivía `textoChipEstado` (el nombre del estado ya resuelto). Las tres
+// vistas pintan ahora el chip con `EstadoConInfo` desde `orden.estatusValue`, que calcula el nombre
+// y le pone su botón de información; este módulo solo decide el COLOR (`claseChipEstado`).
+
+/** Clases de la nota de ayuda de la 454 (la misma familia que `CLASE_NOTA`). */
+export const CLASE_NOTA_AYUDA = "bg-warning-soft text-warning-strong";
 
 /** Las condiciones de la INTERFAZ que la card anuncia fuera del chip (R8). */
 export type MarcaTarjeta = "activa" | "detalle";

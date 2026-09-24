@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
-import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { AvisoSinZonaSatelite } from "./AvisoSinZonaSatelite";
 import { EscanerRecepcion } from "./EscanerRecepcion";
 import { SateliteOrderCard } from "./SateliteOrderCard";
@@ -49,16 +48,8 @@ export interface PorRecibirModuleProps {
   sinZona: boolean;
 }
 
-/**
- * Estado legible de la tarjeta: el nombre visible EXACTO del estado de la orden (R9 de la 33).
- *
- * FICHA 455 (2026-09-24, R2): antes interpolaba la zona («En ruta a bodega satélite de <zona>»). El
- * nombre de un estado no lleva datos dentro: la zona ya está a la vista en la franja de ubicación de
- * la tarjeta (`SateliteOrderCard`).
- */
-function estadoLegible(orden: RecepcionSateliteDTO): string {
-  return estatusLabel(orden.estatusValue);
-}
+// FICHA 456 (T3.5): aquí vivía `estadoLegible` (el nombre del estado ya resuelto para la tarjeta).
+// La tarjeta lo pinta ahora desde `orden.estatusValue` con su botón de información.
 
 export function PorRecibirModule({
   porRecibir,
@@ -93,10 +84,7 @@ export function PorRecibirModule({
         vacio="No hay órdenes por recibir."
         listClassName="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
         renderItem={(orden) => (
-          <SateliteOrderCard
-            orden={orden}
-            estadoLegible={estadoLegible(orden)}
-          />
+          <SateliteOrderCard orden={orden} />
         )}
       />
     </div>

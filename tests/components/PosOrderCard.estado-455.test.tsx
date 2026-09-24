@@ -143,7 +143,9 @@ describe("455/R12 · R8 — presentación indexada por código y marcas que no s
   it("la cabecera de la card grande pinta chip y marcas en el mismo bloque", () => {
     render(<PosOrderCard orden={makeOrden()} total={1} esActiva onGestionar={() => {}} nota="Esperando tu respuesta" />);
     const chip = screen.getByText("En reparto");
-    const bloque = chip.parentElement as HTMLElement;
+    // FICHA 456 (2026-09-24, T3.6): el chip va dentro de `EstadoConInfo` (junto a su botón de
+    // información); el bloque de la cabecera es el padre de ese envoltorio.
+    const bloque = chip.parentElement?.parentElement as HTMLElement;
     expect(within(bloque).getByText("Gestionando ahora")).toBeInTheDocument();
     expect(within(bloque).getByText("Esperando tu respuesta")).toBeInTheDocument();
   });
