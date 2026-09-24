@@ -1,9 +1,9 @@
 ---
-titulo: Por recoger
+titulo: Recoger en bodega
 modulo: mis-asignaciones
 pantalla: /mis-asignaciones/recoger
 roles: [mensajero]
-actualizado: 2026-09-15
+actualizado: 2026-09-24
 fuentes:
   - app/(app)/mis-asignaciones/_components/RecogerModule.tsx
   - app/(app)/mis-asignaciones/_components/recoger-grupos.ts
@@ -14,9 +14,10 @@ fuentes:
   - lib/services/MisAsignacionesService.ts
 ---
 
-# Por recoger
+# Recoger en bodega
 
-Acá están los paquetes que **te asignaron pero todavía no tenés encima**. Cuando recogés uno, se pasa
+Acá están los paquetes que **te asignaron pero todavía no tenés encima**: su estado es **Mensajero
+recogiendo en la bodega**. Cuando recogés uno, se pasa
 solo a **Reparto**, que es donde vas a trabajarlo.
 
 ## Recoger un paquete

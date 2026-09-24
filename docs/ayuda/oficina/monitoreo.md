@@ -3,7 +3,7 @@ titulo: Monitoreo
 modulo: monitoreo
 pantalla: /monitoreo
 roles: [maestro, admin, adminSatelite]
-actualizado: 2026-09-15
+actualizado: 2026-09-24
 fuentes:
   - app/(app)/monitoreo/_components/TableroDiaModule.tsx
   - app/(app)/monitoreo/_components/TableroDiaControles.tsx
@@ -19,8 +19,10 @@ Si sos administrador de una satélite, ves los mensajeros de tu zona.
 
 ## Qué muestra
 
-Una tarjeta por mensajero con sus cifras del día: **asignadas**, **entregadas**, **devueltas** y cómo se
-reparte lo que lleva.
+Una tarjeta por mensajero con sus cifras del día: cuántas gestiones terminaron en cada resultado
+—**Entregado**, **Reprogramado**, **Novedad**, **Devolución a origen por rechazo**, **Incidente**— y cómo
+se reparte lo que todavía no tiene gestión: **Todavía no sale a reparto**, **En reparto** y **Otros
+estados**.
 
 Arriba tenés la **composición del día** — el total sumado de todos —, y cuando filtrás, la
 **composición de lo filtrado**, para comparar una parte contra el conjunto.

@@ -48,6 +48,10 @@ usuario no tendría cómo detectarlo.
 
 - **En el idioma de quien lee**, no en el nuestro. Para el mensajero: «la entregaste», no «gestión
   entregada». Nada de siglas ni jerga interna.
+- **Cada estado por su nombre exacto** (ficha 455), el mismo que se ve en pantalla: «Entregado»,
+  «Novedad», «Mensajero recogiendo en la bodega»… sin plural ni abreviaturas («bodega» siempre
+  entera). Los nombres viejos no se usan como nombre de estado: los lista y los
+  caza `tests/unit/guards/nombres-estado-retirados.guardia.test.ts`.
 - **Cada documento termina en «Lo que esta pantalla NO hace».** De ahí sale la mitad de las preguntas
   reales: «¿por qué no puedo recoger acá?», «¿dónde veo mi plata?».
 - **Los avisos de riesgo se destacan.** Si una acción mueve dinero o corta el acceso de alguien, se
