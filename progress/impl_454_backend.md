@@ -321,4 +321,21 @@ Antes del gate (esta tanda): `pnpm run typecheck` → `tsc --noEmit` sin errores
 vacio). `pnpm exec vitest run tests/unit` → `Test Files 1330 passed (1330)` · `Tests 20539 passed (20539)`.
 `pnpm exec vitest run tests/integration/db/454` → `Test Files 45 passed (45)` · `Tests 227 passed (227)`.
 
-Gate completo: ver `progress/gate_454_backend.log` (`INIT_EXIT` dentro del log) y el parrafo final.
+Gate completo (`bash ./init.sh > progress/gate_454_backend.log 2>&1; echo "INIT_EXIT=$?" >> …`), cuatro corridas:
+
+1. `gate_454_backend_1.log` — `INIT_EXIT=1`, 2 rojos MIOS: `orden-traspaso-migration` (el censo de
+   posteriores de la 427 no declaraba M3 → declarada con su motivo) y `retiro-estados-migration` (d)
+   (`count()` global de `jobs` movido por tests en paralelo: `{ jobs: 90 }` vs `{ jobs: 92 }` → se cuenta
+   por `xmin = pg_current_xact_id()::xid`; mutacion M-M7 «la migracion encola un job» lo pone ROJO).
+   Arreglados en `b4f6be95`.
+2. `gate_454_backend_2.log` — `INIT_EXIT=1`, 1 rojo ajeno: `liquidacion-reparto-migration` bloque B,
+   `40P01 deadlock` en su `aplicarDdl` (9 skipped por su `beforeAll`). Aislado 3/3 verde (24/24).
+3. `gate_454_backend_3.log` — `INIT_EXIT=1`, 1 rojo ajeno: `recuperar-contrasena-form.test.tsx`
+   (formulario de login, no encuentra el texto bajo carga). Aislado 3/3 verde (11/11).
+4. **`gate_454_backend.log` (definitiva)** — typecheck y lint en verde; `Test Files 2119 passed (2119)` ·
+   `Tests 30393 passed | 26 skipped (30419)`; los 26 skipped son `tests/components/Analitica{Page,Shell}`,
+   **0 skipped en `integration/db`**; `✓ tests: sin rojos nuevos`; `== init OK ==`; **`INIT_EXIT=0`**.
+
+**Veredicto:** backend de la 454 hecho y verde (T1.1-T1.26 salvo la retirada de los dos valores del tipo y
+la clase `evento_orden` de la linea de tiempo, que exigen UI: §BLOQUEO-2 y §BLOQUEO-3), con la red de la
+Fase 0 en 28/28 y C07 ya `it`.
