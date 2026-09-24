@@ -13,6 +13,11 @@ aislarlo y documentarlo, sin bloquear el resto.
 - 455 (un nombre por estado): pendiente. Nombres decididos en su `status_note`.
 - 456 (tooltip): textos aprobados en `specs/456-tooltip-estados/textos-aprobados.md`.
 
+### Wallet (2026-09-24, tarde)
+
+- Fichas 457 (la tienda paga a Ordenex), 458 (rediseño de la wallet) y 459 (la caja muestra el dinero real): specs APROBADOS por el humano, con orden de implementar sin pedir mas aprobacion. Orden: 459 -> 457 -> 458 (hijas). Nada a prod sin su orden; la reclasificacion de los 203 cobros historicos de Nuform no se aplica en prod sin que el humano revise la lista.
+- Hallazgos de caja CONFIRMADOS (progress/verificacion_caja.md): F1 faltan 25.769.034,50 de salidas (pagos por cuenta de Nuform) y F2 doble conteo de 8.070.773,47. Saldos de tiendas, ganancia y mensajeros estan bien. No hay saldo real de banco: la tarjeta pasa a mostrar el flujo desde el 25 de agosto.
+
 ### Avance de la noche (se actualiza al cerrar cada ficha)
 
 - **454 HECHA, en dev** (PR #819, merge f4b3ebed). Contraste en prod: dinero 0 diferencias en 8 controles (165 cierres). Recorrido por rol en navegador OK. Revisión APROBADA. Gate completo verde. Deuda anotada para la release en su status_note.
