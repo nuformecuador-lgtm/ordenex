@@ -53,7 +53,9 @@ describe("153/R9 — etiqueta del catalogo de presentacion", () => {
 describe("153/R10/R11 — variante y acento de marca preservados byte a byte", () => {
   function classesDe(value: string): string[] {
     const { container } = render(<EstatusBadge value={value} />);
-    const el = container.firstElementChild as HTMLElement;
+    // FICHA 456 (2026-09-24, T2.3): el chip ya no es el primer hijo: va dentro de `EstadoConInfo`,
+    // junto a su botón de información. Se localiza por su `data-slot`; las aserciones de clase no cambian.
+    const el = container.querySelector('[data-slot="badge"]') as HTMLElement;
     return el.className.split(/\s+/).filter(Boolean);
   }
 

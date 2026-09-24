@@ -1,11 +1,11 @@
 import type { VariantProps } from "class-variance-authority";
 
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import { Badge, badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   esOrderStatusRetirado,
   NOMBRE_ESTADO,
-  nombreDeEstado,
   type OrderStatusValue,
 } from "@/lib/types/order-status";
 
@@ -97,9 +97,15 @@ function isKnownStatus(value: string): value is OrderStatusValue {
  * FICHA 455 (2026-09-24, R2): se retira la derivación «En ruta a bodega <zona>» de la feature 30:
  * el nombre del estado no interpola ningún dato. La zona es columna propia en los listados.
  */
+/*
+ * FICHA 456 (T2.3, design §3; R9/R32) — el chip va SIEMPRE con su botón de información: se pinta
+ * dentro de `EstadoConInfo`, que calcula el nombre y pone el botón como HERMANO del `Badge`. El
+ * `Badge` conserva texto, variante y clases (R32). Sin prop para apagarlo (design §10-I): sus
+ * consumidores —`/ordenes`, el detalle del día de `/monitoreo`, la bodega satélite, la carga
+ * masiva— lo heredan. Un retirado o desconocido sale sin botón (R15).
+ */
 export function EstatusBadge({ value }: { value: string }) {
   const known = isKnownStatus(value);
-  const label = nombreDeEstado(value);
   // Estado retirado por la 454 (fila histórica, R40) -> la variante `warning` que tenían; el de la
   // 155 y cualquier desconocido -> variante neutra (no rompe la UI ante datos inesperados).
   const variant = known
@@ -110,8 +116,13 @@ export function EstatusBadge({ value }: { value: string }) {
   const extra = known ? ORDER_STATUS_CLASS[value] : undefined;
 
   return (
-    <Badge variant={variant} className={cn(extra)}>
-      {label}
-    </Badge>
+    <EstadoConInfo
+      codigo={value}
+      chip={(nombre) => (
+        <Badge variant={variant} className={cn(extra)}>
+          {nombre}
+        </Badge>
+      )}
+    />
   );
 }

@@ -758,3 +758,62 @@ describe("Feature 226 — el anillo de foco del Button cumple 1.4.11 en los dos 
     expect(token("oscuro", "ring")).toBe(token("oscuro", "primary"));
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// FICHA 456 (T2.4, design §7; R27) — el botón de información: icono y anillo, 3:1 o más
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * FICHA 456 — el icono del botón de información (`text-muted-foreground`) es un indicador NO textual
+ * y su anillo de foco es el opaco `ring-ring`: los dos tienen que medir 3:1 o más (WCAG 1.4.11)
+ * contra las seis superficies y en los dos temas. En la landing (rastreo público, paleta clara fija)
+ * el icono es `text-asfalto-5` sobre `kraft-inset`/`kraft-card` y el anillo es el `--ring` claro.
+ *
+ * Suelos medidos al cerrar la ficha (2026-09-24): si un token cambia a peor, esto cae; a mejor, se
+ * sube el suelo a mano.
+ */
+const SUELO_456: Record<string, number> = {
+  "claro:icono": 6.8,
+  "oscuro:icono": 6.4,
+  "claro:anillo": 3.68,
+  "oscuro:anillo": 5.57,
+  "landing:icono": 6.99,
+  "landing:anillo": 3.78,
+};
+
+describe("Ficha 456 — el botón de información cumple 1.4.11 (guardia)", () => {
+  const fuente = quitarComentarios(
+    readFileSync(path.join(RAIZ, "components", "shared", "EstadoInfo.tsx"), "utf8"),
+  );
+
+  it("las clases medidas son las que el componente usa (icono, anillo opaco, landing)", () => {
+    expect(fuente).toContain("text-muted-foreground");
+    expect(fuente).toContain("focus-visible:ring-ring");
+    expect(fuente).toContain("focus-visible:ring-3");
+    expect(fuente).toContain("text-asfalto-5");
+    // Ni el anillo con alfa de la deuda 324 (`ring-ring/50`) ni ningún otro alfa.
+    expect(fuente).not.toMatch(/ring-ring\/\d+/);
+  });
+
+  const peorSobre = (color: string, superficies: { hex: string }[]) =>
+    Math.min(...superficies.map((s) => contraste(color, s.hex)));
+
+  it.each(["claro", "oscuro"] as const)("tema %s: icono y anillo, 3:1 o más sobre las seis superficies", (tema) => {
+    const icono = peorSobre(token(tema, "muted-foreground"), superficiesDe(tema));
+    const anillo = peorSobre(token(tema, "ring"), superficiesDe(tema));
+    expect(icono).toBeGreaterThanOrEqual(NO_TEXTO_1411);
+    expect(anillo).toBeGreaterThanOrEqual(NO_TEXTO_1411);
+    expect(icono).toBeGreaterThanOrEqual(SUELO_456[`${tema}:icono`] - EPSILON);
+    expect(anillo).toBeGreaterThanOrEqual(SUELO_456[`${tema}:anillo`] - EPSILON);
+  });
+
+  it("landing (rastreo público): `asfalto-5` y el anillo claro, 3:1 o más sobre `kraft-inset` y `kraft-card`", () => {
+    const superficies = [{ hex: paleta("kraft-inset") }, { hex: paleta("kraft-card") }];
+    const icono = peorSobre(paleta("asfalto-5"), superficies);
+    const anillo = peorSobre(token("claro", "ring"), superficies);
+    expect(icono).toBeGreaterThanOrEqual(NO_TEXTO_1411);
+    expect(anillo).toBeGreaterThanOrEqual(NO_TEXTO_1411);
+    expect(icono).toBeGreaterThanOrEqual(SUELO_456["landing:icono"] - EPSILON);
+    expect(anillo).toBeGreaterThanOrEqual(SUELO_456["landing:anillo"] - EPSILON);
+  });
+});
