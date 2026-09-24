@@ -92,7 +92,13 @@ describeSiHayBase("454/C10 — devolucion de rechazadas al aprobar (Postgres rea
   it("precondicion: las tres ordenes estan en `rechazada` antes de aprobar", () => {
     expect(r.r240).toBe(true);
     expect(r.r99).toBe(true);
-    expect(r.antes).toEqual({ calle: "rechazada", escritorio: "rechazada", escalada: "rechazada" });
+    // ⏳ 2026-09-23 (FICHA 454, cambio autorizado #1 de progress/impl_454_backend.md): la clave
+    // `calle` SALE de esta invariante y pasa al `[INTERMEDIO]` de abajo (R1). `escritorio` y
+    // `escalada` siguen aqui, intactas.
+    expect({ escritorio: r.antes.escritorio, escalada: r.antes.escalada }).toEqual({
+      escritorio: "rechazada",
+      escalada: "rechazada",
+    });
     expect(r.aprobacion).toBe("ok");
   });
 
@@ -104,5 +110,14 @@ describeSiHayBase("454/C10 — devolucion de rechazadas al aprobar (Postgres rea
     });
     expect(r.filas139).toHaveLength(3);
     expect(r.filas139.every((f) => f.actorUsuarioId === r.adminId)).toBe(true);
+  });
+
+  describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
+    // ⏳ 2026-09-23 (FICHA 454, R1): AQUI DECIA `calle: "rechazada"` (dentro de la precondicion de
+    // arriba). Con la 454 la gestion del mensajero NO mueve la orden: sigue `en_reparto`, con su
+    // gestion `rechazada` pendiente de confirmar, hasta que la aprobacion la aplica.
+    it("antes de aprobar, la rechazada de CALLE sigue `en_reparto` (pendiente de confirmar)", () => {
+      expect(r.antes.calle).toBe("en_reparto");
+    });
   });
 });

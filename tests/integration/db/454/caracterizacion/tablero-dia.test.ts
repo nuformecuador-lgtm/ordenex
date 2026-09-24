@@ -68,8 +68,12 @@ describeSiHayBase("454/C25 — tablero del dia (Postgres real)", () => {
   });
 
   describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
-    it("hoy la orden con ayuda (estado `ayuda_tienda`) cae en `otros`, no en `enReparto`", () => {
-      expect(fila).toMatchObject({ enReparto: 1, otros: 1 });
+    // ⏳ 2026-09-23 (FICHA 454, R62/R22): AQUI DECIA «hoy la orden con ayuda (estado `ayuda_tienda`)
+    // cae en `otros`, no en `enReparto`» con `{ enReparto: 1, otros: 1 }`. La ayuda ya no es estado:
+    // la orden sigue `en_reparto` sin resultado y cae en `enReparto`, como la que esta en mano. Las
+    // cinco gestionadas siguen fuera de los buckets «sin resultado» (su resultado del dia existe).
+    it("la orden con ayuda (sigue `en_reparto`) cuenta en `enReparto`; `otros` queda en cero", () => {
+      expect(fila).toMatchObject({ enReparto: 2, otros: 0 });
     });
   });
 });

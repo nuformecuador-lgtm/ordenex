@@ -141,8 +141,11 @@ describeSiHayBase("454/C06 — correccion de resultado #69 en cierre abierto (Po
   });
 
   describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
-    it("hoy, justo tras corregir, la orden ya esta en `rechazada` (transicion #69)", () => {
-      expect(r.estadoTrasCorregir).toBe("rechazada");
+    // ⏳ 2026-09-23 (FICHA 454, R18): AQUI DECIA «hoy, justo tras corregir, la orden ya esta en `rechazada`
+    // (transicion #69)». La gestion corregida esta pendiente de confirmar: la orden sigue `en_reparto`
+    // y el resultado corregido se aplica al aprobar (R19, afirmado por las invariantes de arriba).
+    it("justo tras corregir, la orden sigue `en_reparto` (sin transicion #69)", () => {
+      expect(r.estadoTrasCorregir).toBe("en_reparto");
     });
   });
 });

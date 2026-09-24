@@ -237,6 +237,9 @@ const ORIGEN_RECHAZO_DEL_DESTINATARIO = "gestion";
 // (139). Afirmado con su CONTROL POSITIVO en
 // `tests/unit/repositories/notificacion-orden-rechazada.test.ts`.
 
+/** FICHA 454 (DD): el aviso N1 sale al REGISTRAR la gestion, no desde el choke point. */
+const EMISOR_N1_DESDE_CHOKE_POINT_RETIRADO = true;
+
 /**
  * Emisor REAL usado por defecto en `appendCambioEstado` (design §4.1). Filtra el lote por
  * `destino === "rechazada" && origenTipo === "gestion"`: el escalado por SLA
@@ -252,6 +255,14 @@ export const emisorNotificacionReal: NotificacionEmisor = async (
   entradas,
   valuePorEstatusId,
 ) => {
+  // ⏳ 2026-09-23 (FICHA 454, design DD; R35) — EL DISPARO DESDE EL CHOKE POINT SE RETIRA. Con la
+  // 454 la gestion del mensajero ya no transiciona al registrarse: la transicion `en_reparto ->
+  // rechazada` (familia `gestion`) la escribe la APROBACION del cierre. Si este emisor siguiera
+  // vivo, el aviso saldria al aprobar —tarde— y ademas por SEGUNDA vez, porque desde la 454 lo emite
+  // `GestionOrdenRepository.registrarGestionPendiente` en el instante del registro, que es el mismo
+  // instante que hoy (cero regresion de tiempo). El filtro de abajo se conserva como documentacion
+  // de QUE disparaba; ya no se evalua.
+  if (EMISOR_N1_DESDE_CHOKE_POINT_RETIRADO) return;
   const rechazos = entradas.filter(
     (e) =>
       e.origenTipo === ORIGEN_RECHAZO_DEL_DESTINATARIO &&

@@ -90,6 +90,17 @@ export function esRolConHilo(rol: RolValue): rol is RolConHilo {
  * pertenencia se comprueba antes y por separado (`autorizarSobreHilo`), asi que lo unico que abre
  * es la ventana TEMPORAL sobre una orden que ya era de ese actor.
  */
-export function estaEnVentanaDeEscritura(rol: RolConHilo, estatusValue: string): boolean {
+/**
+ * FICHA 454 (T1.16, U12/R22): el tercer parametro es la DERIVACION «ayuda abierta». La ayuda deja
+ * de ser el estatus `ayuda_tienda` y pasa a ser un hecho sobre una orden que sigue `en_reparto`:
+ * el `adminTienda` dueño escribe en el hilo mientras la ayuda este ABIERTA, como hoy mientras la
+ * orden esta en `ayuda_tienda`. OBLIGATORIO a proposito: un llamador que no lo resuelva no compila.
+ */
+export function estaEnVentanaDeEscritura(
+  rol: RolConHilo,
+  estatusValue: string,
+  ayudaAbierta: boolean,
+): boolean {
+  if (rol === "adminTienda" && ayudaAbierta) return true;
   return (VENTANA_ESCRITURA[rol] as readonly string[]).includes(estatusValue);
 }

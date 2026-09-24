@@ -644,6 +644,8 @@ export interface OrdenParaHabilitacionApi {
    * mensajero). De ahi salen las dos ramas.
    */
   mensajeroAsignadoId: string | null;
+  /** FICHA 454 (R24): la orden tiene ayuda ABIERTA (derivacion unica): rama A. */
+  ayudaAbierta: boolean;
 }
 
 /**
@@ -1232,6 +1234,11 @@ export interface ApiOrdenGestionRow {
    */
   estadoResultante: string | null;
   /**
+   * FICHA 454 (R32): `true` = gestion de calle registrada con el modelo nuevo y TODAVIA pendiente de
+   * confirmar (su `estadoResultante` es `null` porque aun no transiciono). `false` en el resto.
+   */
+  pendienteConfirmacion: boolean;
+  /**
    * R8 — la causa TIPIFICADA, y JAMAS el texto libre. `causa_devolucion` cuando el resultado es
    * `devuelta`, `causa_incidente` cuando es `incidente`, `null` en el resto y tambien cuando la
    * causa no esta registrada (historico anterior a la 73 / la 158).
@@ -1788,6 +1795,13 @@ export interface IOrdenRepository {
    * Ordenadas por `createdAt asc`, que es el criterio de recorte de R38.
    */
   findParadasEnReparto(mensajeroId: string): Promise<ParadaRutaRow[]>;
+
+  /**
+   * FICHA 454 (R54/R55): de `ids`, las ordenes `en_reparto` con una gestion PENDIENTE de confirmar
+   * (predicado unico). Lectura optimista para el motivo del traspaso y del cambio de dia; la barrera
+   * que gana las carreras es la re-lectura bajo el `FOR UPDATE` de sus escrituras.
+   */
+  findIdsConGestionPendiente(ids: string[]): Promise<Set<string>>;
   /**
    * Feature 33 (QR por guia): fila de transicion resuelta por `num_guia` (UNIQUE en
    * `orden`). Como `findByIdsForTransicion`, INCLUYE borradas (`deletedAt !== null`)
@@ -2416,7 +2430,27 @@ export interface IOrdenRepository {
    * MONEY-SAFE (R13): el `data` toca UNICAMENTE `estatusId` — ni montos, ni prioridad, ni el
    * mensajero asignado (R6).
    */
-  transicionarAyuda(input: TransicionAyudaInput): Promise<boolean>;
+  //
+  // ⏳ 2026-09-23 (FICHA 454, T1.15): `transicionarAyuda` SE RETIRA. La ayuda deja de ser estado; sus
+  // dos mitades son HECHOS (`orden_evento`) escritos por los dos metodos de abajo, sin transicion.
+
+  /** FICHA 454 (R21): la IDA — evento `ayuda_solicitada` bajo candado. `false` = no admitia. */
+  registrarAyudaSolicitada(input: {
+    ordenId: string;
+    mensajeroId: string;
+    actorRol: RolValue;
+  }): Promise<boolean>;
+
+  /**
+   * FICHA 454 (R23/R24): la VUELTA — `ayuda_rescatada` (Recuperar / Habilitar) o
+   * `ayuda_habilitada_api`, guardada por «ayuda abierta» bajo candado. `false` = ya no lo estaba.
+   */
+  registrarAyudaResuelta(input: {
+    ordenId: string;
+    tipo: "ayuda_rescatada" | "ayuda_habilitada_api";
+    actorUsuarioId: string;
+    actorRol: RolValue;
+  }): Promise<boolean>;
 
   /**
    * Feature 266 (T3.1, design §4.2, R3/R4) — LECTURA, y solo lectura, de la orden `numGuia` del

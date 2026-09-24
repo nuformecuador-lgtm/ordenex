@@ -86,7 +86,10 @@ describeSiHayBase("454/C07 — no se registra una segunda gestion (Postgres real
    * se convierte en `it` normal (con nota fechada) — es la señal de que R4 quedo cumplido.
    */
   describe("[INTERMEDIO] defecto medido hoy que R4 cambia", () => {
-    it.fails(`doble envio concurrente (${REPETICIONES} repeticiones): exactamente UNA gestion`, () => {
+    // ⏳ 2026-09-23 (FICHA 454, T1.4, R4): era `it.fails` — el defecto medido en la Fase 0 (dos gestiones en 10
+    // de 10). El candado de la fila de `orden` + la re-lectura de `registrarGestionPendiente` lo cierra:
+    // pasa a `it` normal.
+    it(`doble envio concurrente (${REPETICIONES} repeticiones): exactamente UNA gestion`, () => {
       expect(concurrente).toHaveLength(REPETICIONES);
       for (const c of concurrente) expect(c.filas).toBe(1);
     });

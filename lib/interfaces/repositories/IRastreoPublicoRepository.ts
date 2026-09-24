@@ -28,6 +28,12 @@ export interface TransicionRastreoFila {
   readonly estatusValue: string;
 }
 
+/** FICHA 454 (R31): lo UNICO que el rastreo lee de una gestion pendiente. */
+export interface GestionPendienteRastreoFila {
+  readonly resultado: string;
+  readonly createdAt: Date;
+}
+
 export interface IRastreoPublicoRepository {
   /** La orden de esa guia, o `null`. Sin filtrar por `deletedAt`: decidir es del service. */
   buscarPorGuia(numGuia: number): Promise<OrdenRastreoFila | null>;
@@ -38,4 +44,11 @@ export interface IRastreoPublicoRepository {
    * transicion.
    */
   listarTransiciones(ordenId: string): Promise<readonly TransicionRastreoFila[]>;
+
+  /**
+   * FICHA 454 (T1.19, design §12.3; R31): la gestion PENDIENTE de confirmar mas reciente de la orden,
+   * con SOLO su resultado y su instante — ni actor, ni motivo, ni mensajero (frontera de la 229).
+   * `null` si no la tiene.
+   */
+  buscarGestionPendiente(ordenId: string): Promise<GestionPendienteRastreoFila | null>;
 }

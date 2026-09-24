@@ -709,6 +709,18 @@ export async function limpiarComprometido(
   const gestiones = (
     await prisma.gestionOrden.findMany({ where: { ordenId: { in: s.ordenIds } }, select: { id: true } })
   ).map((g) => g.id);
+  // FICHA 454 (T1.4, 2026-09-23, cambio autorizado #5 de la bitacora del backend): desde la Fase 1
+  // registrar una gestion escribe `orden_evento` (FK RESTRICT a orden, gestion y usuario) y puede
+  // encolar su job `webhook_evento`. Se borran PRIMERO, o el resto de la limpieza choca con la FK.
+  const eventos = (
+    await prisma.ordenEvento.findMany({ where: { ordenId: { in: s.ordenIds } }, select: { id: true } })
+  ).map((e) => e.id);
+  for (const ordenEventoId of eventos) {
+    await prisma.job.deleteMany({
+      where: { tipo: "webhook_evento", payload: { path: ["ordenEventoId"], equals: ordenEventoId } },
+    });
+  }
+  await prisma.ordenEvento.deleteMany({ where: { ordenId: { in: s.ordenIds } } });
   await prisma.ordenHistorialEstado.deleteMany({ where: { ordenId: { in: s.ordenIds } } });
   await prisma.cierreSinGestion.deleteMany({ where: { cierreId: { in: cierres } } });
   await prisma.cierreDetail.deleteMany({ where: { cierreId: { in: cierres } } });

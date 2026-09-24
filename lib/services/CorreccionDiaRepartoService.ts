@@ -53,7 +53,15 @@ import {
  * deciden sobre «lo que el mensajero lleva encima» y exige que incluyan `ayuda_tienda` con su razon
  * escrita. Quitar `ayuda_tienda` de aqui pone esa guardia ROJA (M-s).
  */
-const ESTADOS_CON_DIA_DE_REPARTO_VIVO = ["por_recoger", "en_reparto", "ayuda_tienda"];
+//
+// FICHA 454 (T1.17, R55): `ayuda_tienda` sale porque deja de ser estado (la orden con ayuda abierta
+// sigue `en_reparto`, que sigue aqui). Lo que ya no admite el cambio de dia es la orden con gestion
+// PENDIENTE de confirmar: guarda de abajo y re-lectura bajo candado en `corregirDiaRepartoLote`.
+const ESTADOS_CON_DIA_DE_REPARTO_VIVO = ["por_recoger", "en_reparto"];
+
+/** FICHA 454 (R55): el dia de una orden ya gestionada no decide nada. */
+const MSG_GESTION_PENDIENTE =
+  "la orden ya esta gestionada y pendiente de confirmar: su dia de reparto no se cambia";
 
 const ROL_SATELITE = "adminSatelite";
 
@@ -78,6 +86,7 @@ export type CorreccionDiaRepartoRepo = Pick<
   | "findByIdsForTransicion"
   | "findEstatusIdByValue"
   | "corregirDiaRepartoLote"
+  | "findIdsConGestionPendiente" // ficha 454 (R55)
 >;
 
 export class CorreccionDiaRepartoService implements ICorreccionDiaRepartoService {
@@ -148,6 +157,13 @@ export class CorreccionDiaRepartoService implements ICorreccionDiaRepartoService
       }
       const motivo = this.motivoDeRechazo(orden, fechaTexto);
       if (motivo !== null) detalle.push({ ordenId: id, motivo });
+    }
+    // FICHA 454 (R55): una orden gestionada (pendiente de confirmar) no cambia de dia.
+    if (detalle.length === 0) {
+      const pendientes = await this.repo.findIdsConGestionPendiente(ordenIds);
+      for (const id of ordenIds) {
+        if (pendientes.has(id)) detalle.push({ ordenId: id, motivo: MSG_GESTION_PENDIENTE });
+      }
     }
     // R8: una sola rechazada aborta el lote ENTERO y SIN EFECTOS — ni una escritura, ni una fila de
     // rastro, ni una llamada al repositorio de escritura.

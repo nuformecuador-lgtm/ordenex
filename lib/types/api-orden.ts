@@ -246,6 +246,11 @@ export interface ApiOrdenGestionDTO {
   createdAt: Date; // R4: instante del registro, misma serializacion que el `createdAt` de la orden
   resultado: GestionResultado; // R5: value CRUDO de `gestion_resultado`, sin traducir
   estadoResultante: string | null; // R6/R7: destino de la PRIMERA transicion; `null` si no hubo
+  /**
+   * FICHA 454 (R32, contrato nuevo): `true` mientras la gestion esta PENDIENTE de confirmar (el
+   * estado se aplica al aprobar el cierre; hasta entonces `estadoResultante` es `null`).
+   */
+  pendienteConfirmacion: boolean;
   motivo: CausaDevolucion | CausaIncidente | null; // R8: causa TIPIFICADA; NUNCA el texto libre
   /**
    * R9 — el MISMO tipo que declara la feature 404 para el mensajero asignado, importado y no

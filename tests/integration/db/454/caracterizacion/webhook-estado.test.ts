@@ -70,8 +70,10 @@ describeSiHayBase("454/C26 — webhook de estado de una entrega (Postgres real)"
   });
 
   describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
-    it("hoy el job nace AL GESTIONAR, no al aprobar", () => {
-      expect(r.trasGestionar).toHaveLength(1);
+    // ⏳ 2026-09-23 (FICHA 454, R33): AQUI DECIA «hoy el job nace AL GESTIONAR, no al aprobar». El estado se
+    // aplica al aprobar, y con el su `orden.estado_actualizado`: al gestionar no hay ninguno.
+    it("al gestionar NO nace ningun `orden.estado_actualizado`: nace al aprobar", () => {
+      expect(r.trasGestionar).toHaveLength(0);
     });
   });
 });

@@ -116,8 +116,10 @@ describeSiHayBase("454/C05 — el plazo de la devolucion se ancla en la aprobaci
   });
 
   describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
-    it("hoy, tras gestionar la devolucion, la orden queda en el pre-estado `devolucion_por_confirmar`", () => {
-      expect(r.estadoTrasGestionar).toBe("devolucion_por_confirmar");
+    // ⏳ 2026-09-23 (FICHA 454, R1): AQUI DECIA que tras gestionar la devolucion la orden quedaba en el pre-estado
+    // `devolucion_por_confirmar`. El pre-estado muere: la orden sigue `en_reparto` hasta aprobar.
+    it("tras gestionar la devolucion, la orden sigue `en_reparto` (pendiente de confirmar)", () => {
+      expect(r.estadoTrasGestionar).toBe("en_reparto");
     });
   });
 });

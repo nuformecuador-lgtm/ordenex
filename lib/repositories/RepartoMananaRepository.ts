@@ -1,3 +1,4 @@
+import { whereOrdenSinGestionPendiente } from "@/lib/repositories/gestion-pendiente";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import type {
@@ -97,6 +98,8 @@ export class RepartoMananaRepository implements IRepartoMananaRepository {
       deletedAt: null,
       estatus: { value: { in: [...ESTADOS_REPARTO_MENSAJERO] } },
       fechaReparto: { gt: diaEnCurso },
+      // FICHA 454 (T1.18, R56): el mismo universo que el portal, que no lista las gestionadas.
+      ...whereOrdenSinGestionPendiente(),
     };
   }
 }

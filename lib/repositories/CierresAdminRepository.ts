@@ -1,6 +1,8 @@
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
 import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
-import { Prisma, type EstadoUsuario, type PrismaClient } from "@prisma/client";
+import { Prisma, type EstadoUsuario, type PrismaClient, type RolValue } from "@prisma/client";
+import type { JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
+import { encolarWebhookEvento } from "@/lib/services/jobs/webhook-evento-encolado";
 import { ESTADOS_USUARIO_NO_ASIGNABLES } from "@/lib/constants/estado-usuario-asignable";
 import type {
   ActualizarPagosGestionInput,
@@ -65,6 +67,10 @@ import {
   ORIGENES_GESTION_DE_LA_TIENDA,
 } from "@/lib/utils/gestion-de-la-tienda-flag";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import {
+  SELECT_REGISTRO_DE_CALLE,
+  whereTieneRegistroDeCalle,
+} from "@/lib/repositories/gestion-pendiente";
 // 💰 FEATURE 276 (T9, R21/R33): el PREDICADO UNICO del conteo de intentos, IMPORTADO y no
 // reescrito. R33 prohibe que esta ficha toque el criterio; importarlo es lo que hace imposible
 // tener aqui una segunda definicion que divergiera del numero que ven las demas superficies.
@@ -547,6 +553,17 @@ export class IndemnizacionNoAplicableError extends Error {
  * Mensaje SIN PII (R44, patron `IndemnizacionNoAplicableError`): solo el id del cierre — ni
  * gestiones, ni guias, ni destinatarios, ni actores.
  */
+/**
+ * FICHA 454 (T1.7) — la aprobacion llego sin la configuracion de APLICACION DE GESTIONES. Fallo
+ * cerrado: se lanza dentro de la transaccion y no queda nada de la aprobacion (R11).
+ */
+export class AplicacionGestionesAusenteError extends Error {
+  constructor(cierreId: string) {
+    super(`aprobacion sin configuracion de aplicacion de gestiones (cierre ${cierreId})`);
+    this.name = "AplicacionGestionesAusenteError";
+  }
+}
+
 export class ConfirmacionFisicaNoAplicableError extends Error {
   constructor(readonly cierreId: string) {
     super(`confirmacion fisica no aplicable a una gestion del cierre ${cierreId}`);
@@ -1589,6 +1606,9 @@ export class CierresAdminRepository implements ICierresAdminRepository {
         select: {
           cierreId: true,
           orden: { select: { id: true, numGuia: true, numRemision: true } },
+          // FICHA 454 (T1.14): el evento de registro decide la RAMA de la correccion.
+          ...SELECT_REGISTRO_DE_CALLE,
+          mensajeroId: true,
           cierre: {
             select: {
               // La zona CONGELADA del cierre (la del mensajero al solicitarlo), no la viva.
@@ -1604,6 +1624,11 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       }
       const cierreId = previa.cierreId;
       const ordenId = previa.orden.id;
+      // FICHA 454 (T1.14, design §11 D10; R18-R20) — DOS RAMAS. Con evento `gestion_registrada` la
+      // gestion esta PENDIENTE de confirmar: la orden sigue `en_reparto` y la correccion es SOLO el
+      // sello sobre la gestion (+ evento `gestion_corregida` + webhook), sin transicion: al aprobar
+      // se aplicara el resultado corregido (R19). Sin evento es LEGADA: la de siempre, con la #69.
+      const esPendiente = previa.eventos.length > 0;
 
       // 💰 Los DOS snapshots POR GESTION (design §2.2).
       //
@@ -1667,28 +1692,51 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       // lineas, que es una de las tres identidades que el humano verifico a mano el 2026-09-08.
       await tx.gestionOrdenPago.deleteMany({ where: { gestionId } });
 
-      // (3) LA ORDEN, al estado destino del resultado nuevo. Guardada por su estatus de ORIGEN:
-      // si otra via la movio entre medias, esto afecta 0 filas y la transaccion entera revierte.
-      const movida = await tx.orden.updateMany({
-        where: { id: ordenId, estatusId: estatusEntregadaId, deletedAt: null },
-        data: { estatusId: estatusRechazadaId },
-      });
-      if (movida.count !== 1) throw new Error("orden no transicionada por la correccion");
+      if (!esPendiente) {
+        // (3) LA ORDEN, al estado destino del resultado nuevo. Guardada por su estatus de ORIGEN:
+        // si otra via la movio entre medias, esto afecta 0 filas y la transaccion entera revierte.
+        const movida = await tx.orden.updateMany({
+          where: { id: ordenId, estatusId: estatusEntregadaId, deletedAt: null },
+          data: { estatusId: estatusRechazadaId },
+        });
+        if (movida.count !== 1) throw new Error("orden no transicionada por la correccion");
 
-      // (4) EL HISTORIAL DE ESTADOS, por el choke point (que ademas valida la transicion contra
-      // `TRANSICIONES` y es de fallo cerrado). Familia PROPIA: quien decidio el rechazo fue un
-      // admin desde una oficina, no el mensajero en la calle, y esta fila es la unica evidencia.
-      await appendCambioEstado(tx, [
-        {
-          ordenId,
-          estatusOrigenId: estatusEntregadaId,
-          estatusDestinoId: estatusRechazadaId,
-          actorUsuarioId: corregidoPor,
-          origenTipo: "correccion_resultado_gestion",
-          motivo,
-          gestionOrdenId: gestionId,
-        },
-      ]);
+        // (4) EL HISTORIAL DE ESTADOS, por el choke point (que ademas valida la transicion contra
+        // `TRANSICIONES` y es de fallo cerrado). Familia PROPIA: quien decidio el rechazo fue un
+        // admin desde una oficina, no el mensajero en la calle, y esta fila es la unica evidencia.
+        await appendCambioEstado(tx, [
+          {
+            ordenId,
+            estatusOrigenId: estatusEntregadaId,
+            estatusDestinoId: estatusRechazadaId,
+            actorUsuarioId: corregidoPor,
+            origenTipo: "correccion_resultado_gestion",
+            motivo,
+            gestionOrdenId: gestionId,
+          },
+        ]);
+      } else {
+        // (3'/4') FICHA 454 — rama nueva: sin transicion. El evento `gestion_corregida` es el rastro
+        // visible (linea de tiempo, rastreo, webhook) con el resultado anterior y el nuevo; quien
+        // decidio queda con su rol congelado. `motivo` es el texto del admin: vive en el evento
+        // (no sale por el webhook, que solo publica la causa tipificada).
+        const actor = await resolverActorCongelado(tx, corregidoPor);
+        const evento = await tx.ordenEvento.create({
+          data: {
+            ordenId,
+            tipo: "gestion_corregida",
+            gestionOrdenId: gestionId,
+            resultado: RESULTADO_RECHAZADA,
+            resultadoAnterior: RESULTADO_ENTREGADA,
+            mensajeroId: previa.mensajeroId,
+            actorUsuarioId: corregidoPor,
+            actorRol: (actor.actorRol ?? "admin") as RolValue,
+            motivo,
+          },
+          select: { id: true },
+        });
+        await encolarWebhookEvento(tx as unknown as JobTxClient, { ordenEventoId: evento.id, ordenId });
+      }
 
       // (5) LOS SEIS TOTALES DEL SNAPSHOT, sobre las gestiones VIGENTES de ESE cierre leidas
       // DESPUES del paso 1.
@@ -1766,10 +1814,11 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       devolucionRechazadas,
       indemnizaciones,
     } = input;
-    // Feature 239 (T2.1/T2.2): presente SOLO en la rama `aprobado` de la union discriminada.
-    // Se lee aqui, fuera de la tx, para que el bloque de abajo no vuelva a estrechar el tipo.
-    const anclajeDevolucion =
-      input.nuevoEstado === "aprobado" ? input.anclajeDevolucion : undefined;
+    // FICHA 454 (T1.7): presente SOLO en la rama `aprobado` de la union discriminada (sustituye al
+    // `anclajeDevolucion` de la 239). Se lee aqui, fuera de la tx, para que el bloque de abajo no
+    // vuelva a estrechar el tipo.
+    const aplicacionGestiones =
+      input.nuevoEstado === "aprobado" ? input.aplicacionGestiones : undefined;
     // Feature 238 (T3.2/T3.3): igual que el anclaje, solo existe en la rama `aprobado`. Al
     // rechazar queda `[]` y el bloque de abajo no corre — que es R24 sostenido por el tipo, no
     // por un `if` que alguien pueda mover.
@@ -2098,6 +2147,112 @@ export class CierresAdminRepository implements ICierresAdminRepository {
           }
         }
 
+        // ------------------------------------------------------------------------------------
+        // FICHA 454 (T1.7, design §7; R7-R12, R14, R19, R57, R59) — APLICACION DE GESTIONES.
+        //
+        // Desde la 454 la gestion de calle NO mueve la orden al registrarse: la orden se queda
+        // `en_reparto` y el estado real se aplica AQUI, dentro de la transaccion de la aprobacion
+        // (generalizacion del anclaje de la 239 a los cinco resultados).
+        //
+        // VA DESPUES de los cinco feeds de dinero y de la liberacion `sin_gestionar`/tope, y ANTES de
+        // la devolucion de `rechazada` (139): una orden que queda `rechazada` en esta aprobacion
+        // tiene que llegar a `por_devolver*` en ESTA misma aprobacion (R10). Money-neutral: su `data`
+        // lleva SOLO `estatus_id` y ningun feed lee `orden.estatus_id`, asi que no mueve ninguna
+        // asercion de orden de `cierres-admin-caja-cod.test.ts`.
+        //
+        // Liberacion y aplicacion son independientes: una orden barrida no tiene gestion pendiente de
+        // este cierre (el corte no barre ordenes con gestion pendiente, T1.10).
+        {
+          // FALLO CERRADO (239/R9): sin la configuracion de aplicacion, la aprobacion NO ocurre. El
+          // tipo ya lo exige; esto es la red para quien llegue sin tipos (un doble, un `as never`).
+          if (aplicacionGestiones === undefined) throw new AplicacionGestionesAusenteError(cierreId);
+          const { enRepartoId, destinoPorResultado } = aplicacionGestiones;
+          // (1) Las gestiones de CALLE (con evento de registro) vigentes de ESTE cierre. `cierreId`
+          // es la GUARDIA (R59: nada de otro cierre). Las LEGADAS (sin evento) quedan fuera: ya
+          // transicionaron al registrarse (R14). Vacio → no-op sin mas consultas.
+          const delCierre = await tx.gestionOrden.findMany({
+            where: { cierreId, anuladaAt: null, ...whereTieneRegistroDeCalle() },
+            select: {
+              id: true,
+              ordenId: true,
+              resultado: true,
+              mensajeroId: true,
+              motivo: true,
+              ...SELECT_REGISTRO_DE_CALLE,
+            },
+          });
+          if (delCierre.length > 0) {
+            // (2) R57 — solo se aplica la gestion de calle vigente MAS RECIENTE de su orden. Una
+            // consulta ordenada y el recorte en memoria (patron del anclaje de la 239).
+            const ordenIds = [...new Set(delCierre.map((g) => g.ordenId))];
+            const vigentes = await tx.gestionOrden.findMany({
+              where: { ordenId: { in: ordenIds }, anuladaAt: null, ...whereTieneRegistroDeCalle() },
+              orderBy: [{ ordenId: "asc" }, { createdAt: "desc" }],
+              select: { id: true, ordenId: true },
+            });
+            const masRecientePorOrden = new Map<string, string>();
+            for (const g of vigentes) {
+              if (!masRecientePorOrden.has(g.ordenId)) masRecientePorOrden.set(g.ordenId, g.id);
+            }
+            // (3)
+            const aplicables = delCierre.filter((g) => masRecientePorOrden.get(g.ordenId) === g.id);
+            // (4) Por destino: `UPDATE … WHERE estatus_id = en_reparto … RETURNING`. La guarda de
+            // estado ES la idempotencia (R9/R12): una orden que ya salio de reparto, o una segunda
+            // aprobacion, no encuentran nada. `RETURNING` y no `updateMany`: cada fila de historial
+            // corresponde a una orden REALMENTE movida.
+            const porDestino = new Map<string, typeof aplicables>();
+            for (const g of aplicables) {
+              const destino = destinoPorResultado[g.resultado];
+              const arr = porDestino.get(destino);
+              if (arr) arr.push(g);
+              else porDestino.set(destino, [g]);
+            }
+            for (const [destinoId, gestiones] of porDestino) {
+              const movidas = await tx.$queryRaw<{ id: string }[]>`
+                UPDATE "orden" SET "estatus_id" = ${destinoId}
+                 WHERE "id" IN (${Prisma.join(gestiones.map((g) => g.ordenId))})
+                   AND "estatus_id" = ${enRepartoId}
+                   AND "deleted_at" IS NULL
+                RETURNING "id"`;
+              const movidasSet = new Set(movidas.map((m) => m.id));
+              const entradas = gestiones
+                .filter((g) => movidasSet.has(g.ordenId))
+                .map((g) => {
+                  // (5) R8 — familia y actor de la transicion aplicada.
+                  const registro = g.eventos[0];
+                  if (g.resultado === "devuelta") {
+                    // D8: el reloj del plazo de la tienda lee ESTA familia; actor = el aprobador.
+                    return {
+                      ordenId: g.ordenId,
+                      estatusOrigenId: enRepartoId,
+                      estatusDestinoId: destinoId,
+                      actorUsuarioId: resueltoPor,
+                      origenTipo: "anclaje_devolucion" as const,
+                      gestionOrdenId: g.id,
+                    };
+                  }
+                  const deLaTienda = registro?.familiaAplicacion === "gestion_tienda_ayuda";
+                  return {
+                    ordenId: g.ordenId,
+                    estatusOrigenId: enRepartoId,
+                    estatusDestinoId: destinoId,
+                    // La visita la hizo el mensajero (y cuenta intento por eso); en la 237 la
+                    // registro la persona de la tienda, que es quien firma la transicion.
+                    actorUsuarioId: deLaTienda ? (registro?.actorUsuarioId ?? g.mensajeroId) : g.mensajeroId,
+                    origenTipo: deLaTienda
+                      ? ("gestion_tienda_ayuda" as const)
+                      : g.resultado === "incidente"
+                        ? ("incidente" as const)
+                        : ("gestion" as const),
+                    motivo: g.motivo ?? null,
+                    gestionOrdenId: g.id,
+                  };
+                });
+              if (entradas.length > 0) await appendCambioEstado(tx, entradas);
+            }
+          }
+        }
+
         // Feature 139 (T1.3, R5/R6/R7/R8/R11): DISPARA la devolucion de las `rechazada` del
         // mensajero del cierre, DESPUES de la liberacion `sin_gestionar` y EN LA MISMA tx
         // `aprobado` (atomico con la transicion del cierre + wallets + liberacion, R6). Un RECHAZO
@@ -2117,7 +2272,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
             const { rechazadaId, porDevolverId, porDevolverATiendaId, centralZonaId } =
               devolucionRechazadas;
             // R5: `rechazada` del mensajero del cierre (guarda por estatus + propiedad).
-            const rechazadas = await tx.orden.findMany({
+            let rechazadas = await tx.orden.findMany({
               where: {
                 mensajeroAsignadoId: cierreDev.mensajeroId,
                 estatusId: rechazadaId,
@@ -2125,6 +2280,36 @@ export class CierresAdminRepository implements ICierresAdminRepository {
               },
               select: { id: true, zonaId: true },
             });
+            // FICHA 454 (T1.8, design §8, DG; R51) — LA SELECCION PASA A SER POR GESTION. Se excluye
+            // la `rechazada` cuya gestion `rechazada` vigente MAS RECIENTE pertenece a OTRO cierre que
+            // aun NO esta aprobado (el fallo mudo M7 de la 271, en su forma de la 139): esa se devuelve
+            // cuando se apruebe SU cierre. Entran las aplicadas en esta aprobacion, las del tope, los
+            // rechazos de escritorio (240) y los escalados (sin cierre), y las legadas de cierres ya
+            // aprobados. `mensajeroAsignadoId` se CONSERVA como guarda de propiedad.
+            //
+            // Dentro de esta tx ESTE cierre ya esta `aprobado` (el `updateMany` del principio), asi
+            // que «cierre no aprobado» no puede ser el propio.
+            if (rechazadas.length > 0) {
+              const gRechazadas = await tx.gestionOrden.findMany({
+                where: {
+                  ordenId: { in: rechazadas.map((o) => o.id) },
+                  resultado: "rechazada",
+                  anuladaAt: null,
+                },
+                orderBy: [{ ordenId: "asc" }, { createdAt: "desc" }],
+                select: { ordenId: true, cierreId: true, cierre: { select: { estado: true } } },
+              });
+              const enOtroCierreAbierto = new Set<string>();
+              const vistas = new Set<string>();
+              for (const g of gRechazadas) {
+                if (vistas.has(g.ordenId)) continue; // solo la mas reciente de cada orden
+                vistas.add(g.ordenId);
+                if (g.cierreId !== null && g.cierreId !== cierreId && g.cierre?.estado !== "aprobado") {
+                  enOtroCierreAbierto.add(g.ordenId);
+                }
+              }
+              rechazadas = rechazadas.filter((o) => !enOtroCierreAbierto.has(o.id));
+            }
             if (rechazadas.length > 0) {
               // R5: destino por ZONA de la ORDEN (misma regla 99/100): central ->
               // por_devolver_a_tienda; satelite -> por_devolver.
@@ -2214,109 +2399,11 @@ export class CierresAdminRepository implements ICierresAdminRepository {
         // `count !== ids.length`.
         // ------------------------------------------------------------------------------------
 
-        // ------------------------------------------------------------------------------------
-        // Feature 239 (T2.2, design §3, R4-R10) — EL ANCLAJE DE LA DEVOLUCION.
-        //
-        // LA APROBACION DEL CIERRE **ES** LA TRANSICION `devolucion_por_confirmar -> devuelta`.
-        // No enciende una marca ni deja una fecha: mueve el estado. Con ese movimiento la
-        // devolucion (a) se vuelve visible para la tienda en `/novedades` y (b) arranca su
-        // ventana de SLA. Las dos mitades pasan a mirar el MISMO hecho, que es lo que el fallo
-        // de `progress/auditoria_ayuda_tienda.md` §1 no tenia: alli la visibilidad dependia de
-        // una columna y el reloj de la fecha de la gestion, y por eso se cobraban rechazos de
-        // ordenes que la tienda no habia podido ver nunca.
-        //
-        // VA AL FINAL de la rama `aprobado`, DESPUES de `devolucionRechazadas`, y eso no es
-        // estetico: `cierres-admin-caja-cod.test.ts` MIDE EL ORDEN de las llamadas dentro de la
-        // transaccion, porque los feeds de dinero se leen unos a otros (la caja lee lo que el
-        // ledger acaba de escribir). Este bloque es money-neutral —su `data` lleva SOLO
-        // `estatusId`— y ningun feed lee `orden.estatus_id`, asi que colocarlo aqui no mueve
-        // ninguna asercion de orden. Insertarlo entre medias tampoco romperia el dinero, pero
-        // moveria esas aserciones sin ninguna ganancia.
-        //
-        // `cierre_dia.resuelto_at` NO se usa, NUNCA: se escribe IGUAL al rechazar (unas lineas
-        // mas arriba, fuera de esta rama) y `forzarSolicitudVencido` reabre un cierre sin
-        // limpiarla. Cualquier derivacion que la use lleva `estado = 'aprobado'` pegado o
-        // miente. El anclaje no lee fechas del cierre: ES una transicion con su propia fila de
-        // historial, y esa fila es la que el cron lee.
-        if (anclajeDevolucion) {
-          const { preEstadoId, devueltaId } = anclajeDevolucion;
-
-          // (1) Las gestiones `devuelta` VIGENTES de ESTE cierre. `cierreId` es la GUARDIA (sin
-          // el, aprobar un cierre anclaria devoluciones de otro) y `anuladaAt: null` descarta
-          // las deshechas. Sin ninguna, el bloque es un no-op y no cuesta ni una consulta mas.
-          const gestionesDelCierre = await tx.gestionOrden.findMany({
-            where: { cierreId, resultado: "devuelta", anuladaAt: null },
-            select: { id: true, ordenId: true },
-          });
-
-          if (gestionesDelCierre.length > 0) {
-            const ordenIds = [...new Set(gestionesDelCierre.map((g) => g.ordenId))];
-
-            // (2) LA CARRERA QUE CUESTA DINERO (design §4, carrera 1). Secuencia real: el
-            // mensajero devuelve (gestion g1, cierre C1 sin aprobar) -> un admin recupera la
-            // orden a bodega -> se reasigna -> otro mensajero la vuelve a devolver (gestion g2,
-            // cierre C2) -> la orden esta en el pre-estado POR g2. Si ahora se aprueba C1 y se
-            // anclara sin mirar, la devolucion NUEVA quedaria anclada con una aprobacion
-            // ANTERIOR al hecho: el reloj arrancaria antes, el escalado ocurriria antes y se
-            // cobraria el rechazo ANTES DE TIEMPO.
-            //
-            // Por eso se comprueba, DENTRO de la transaccion, que la gestion de este cierre sea
-            // la gestion `devuelta` vigente MAS RECIENTE de su orden (R4c/R5). Una sola
-            // consulta ordenada y el recorte en memoria: un `findFirst` por orden seria un N+1
-            // dentro de la transaccion mas caliente y mas cara del sistema.
-            const vigentes = await tx.gestionOrden.findMany({
-              where: { ordenId: { in: ordenIds }, resultado: "devuelta", anuladaAt: null },
-              orderBy: [{ ordenId: "asc" }, { createdAt: "desc" }],
-              select: { id: true, ordenId: true },
-            });
-            const masRecientePorOrden = new Map<string, string>();
-            for (const g of vigentes) {
-              // La primera fila de cada `ordenId` es la mas reciente (orden del `orderBy`).
-              if (!masRecientePorOrden.has(g.ordenId)) masRecientePorOrden.set(g.ordenId, g.id);
-            }
-
-            // (3) Solo las ordenes cuya gestion vigente MAS RECIENTE es la de ESTE cierre. El
-            // resto no se ancla y no deja rastro de anclaje (R5).
-            const anclables = gestionesDelCierre.filter(
-              (g) => masRecientePorOrden.get(g.ordenId) === g.id,
-            );
-
-            if (anclables.length > 0) {
-              const idsAnclables = anclables.map((g) => g.ordenId);
-              // (4) UPDATE GUARDADO por el pre-estado (R4a) — y esa guarda ES la idempotencia
-              // (R8): una segunda aprobacion encuentra las ordenes ya en `devuelta`, devuelve
-              // `count = 0` y no appendea nada. No hay codigo de idempotencia porque no hace
-              // falta; la hay por construccion, igual que en los otros dos bloques.
-              //
-              // MONEY-NEUTRAL (R10): el `data` lleva EXACTAMENTE `estatusId` y nada mas. No
-              // toca montos, ni mensajero, ni `prioridad` — a diferencia de la liberacion 109,
-              // que si limpia mensajero porque su orden va a re-reparto. Aqui la devolucion se
-              // queda donde esta; lo unico que cambia es que ya esta confirmada.
-              const movidas = await tx.orden.updateMany({
-                where: { id: { in: idsAnclables }, estatusId: preEstadoId, deletedAt: null },
-                data: { estatusId: devueltaId },
-              });
-
-              // (5) Historial por el MISMO punto unico de escritura que el resto de
-              // transiciones (R7), y SOLO si algo se movio. `gestionOrdenId` enlaza la gestion
-              // que ancla: no es decorativo, es lo que permite auditar QUE devolucion se
-              // confirmo con QUE aprobacion sin volver a derivarlo.
-              if (movidas.count > 0) {
-                await appendCambioEstado(
-                  tx,
-                  anclables.map((g) => ({
-                    ordenId: g.ordenId,
-                    estatusOrigenId: preEstadoId,
-                    estatusDestinoId: devueltaId,
-                    actorUsuarioId: resueltoPor, // R7: el admin que aprobo
-                    origenTipo: "anclaje_devolucion", // R7: familia propia (P8)
-                    gestionOrdenId: g.id, // la gestion ancla
-                  })),
-                );
-              }
-            }
-          }
-        }
+        // FICHA 454 (T1.7, 2026-09-23): AQUI VIVIA EL ANCLAJE DE LA 239 (`devolucion_por_confirmar ->
+        // devuelta`). Se GENERALIZA a los cinco resultados y se muda ANTES de la 139 (R10): es el
+        // bloque «APLICACION DE GESTIONES» de mas arriba. La devolucion se sigue aplicando con la
+        // familia `anclaje_devolucion` y el aprobador de actor, asi que el reloj del plazo de la tienda
+        // (D8) sigue leyendo la misma fila. El pre-estado muere con la ficha.
       }
 
       // ═══════════════════════════════════════════════════════════════════════════════════════

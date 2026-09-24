@@ -45,6 +45,19 @@ export function whereTieneRegistroDeCalle(): Prisma.GestionOrdenWhereInput {
   return { eventos: { some: { tipo: "gestion_registrada" } } };
 }
 
+/**
+ * Proyeccion del evento de registro de una gestion (a lo sumo uno, por el unico parcial): la
+ * FAMILIA con la que se aplicara y la PERSONA que la registro (R8). Para la aplicacion al aprobar y
+ * para el deshacer/correccion, que tienen que distinguir la rama nueva de la legada.
+ */
+export const SELECT_REGISTRO_DE_CALLE = {
+  eventos: {
+    where: { tipo: "gestion_registrada" },
+    select: { id: true, familiaAplicacion: true, actorUsuarioId: true },
+    take: 1,
+  },
+} as const satisfies Prisma.GestionOrdenSelect;
+
 /** Forma Prisma, nivel GESTION. */
 export function whereGestionPendiente(): Prisma.GestionOrdenWhereInput {
   return {
@@ -96,3 +109,29 @@ export function sqlExisteGestionPendiente(
 
 /** Fragmento SQL crudo, negado: la orden `"o"` NO tiene gestion pendiente. */
 export const SQL_ORDEN_SIN_GESTION_PENDIENTE: Prisma.Sql = Prisma.sql`NOT ${sqlExisteGestionPendiente()}`;
+
+/**
+ * Consulta SQL: la gestion PENDIENTE MAS RECIENTE de la orden `ordenId`, proyectando SOLO su
+ * `resultado` y su `created_at` (el rastreo publico no puede leer nada mas: frontera de la 229).
+ * Mismo predicado que `whereGestionPendiente`, mas la orden `en_reparto` (nivel orden). A lo sumo
+ * una fila.
+ */
+export function sqlUltimaGestionPendienteDeOrden(ordenId: string): Prisma.Sql {
+  return Prisma.sql`
+    SELECT "gp"."resultado"::text AS "resultado", "gp"."created_at" AS "created_at"
+      FROM "gestion_orden" "gp"
+      JOIN "orden" "go" ON "go"."id" = "gp"."orden_id"
+      JOIN "order_status" "gs" ON "gs"."id" = "go"."estatus_id"
+      LEFT JOIN "cierre_dia" "gpc" ON "gpc"."id" = "gp"."cierre_id"
+     WHERE "gp"."orden_id" = ${ordenId}
+       AND "gs"."value" = ${ESTATUS_CON_GESTION_PENDIENTE}
+       AND "gp"."anulada_at" IS NULL
+       AND EXISTS (
+         SELECT 1 FROM "orden_evento" "gpe"
+          WHERE "gpe"."gestion_orden_id" = "gp"."id"
+            AND "gpe"."tipo" = 'gestion_registrada'
+       )
+       AND ("gp"."cierre_id" IS NULL OR "gpc"."estado" <> 'aprobado')
+     ORDER BY "gp"."created_at" DESC
+     LIMIT 1`;
+}

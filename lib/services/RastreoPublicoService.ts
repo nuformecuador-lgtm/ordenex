@@ -1,3 +1,4 @@
+import { ESTATUS_POR_RESULTADO } from "@/lib/types/gestion-destino";
 import { loadRastreoPublicoConfig, type RastreoPublicoConfig } from "@/lib/config/rastreo-publico";
 import type {
   IRastreoPublicoRepository,
@@ -102,6 +103,23 @@ export class RastreoPublicoService implements IRastreoPublicoService {
     // R21 — UNA sola lectura del historial por consulta.
     const transiciones = await this.repo.listarTransiciones(fila.id);
     const linea = this.proyectarLinea(transiciones);
+    // FICHA 454 (T1.19, design §12.3; R31): la gestion PENDIENTE de confirmar se ve AL INSTANTE,
+    // como ultimo hito, marcada. Sin actor, sin motivo, sin mensajero: solo el hito de su resultado
+    // (mapa de aplicacion `ESTATUS_POR_RESULTADO` -> tabla firmada de hitos) y su instante. Al
+    // anularse desaparece; al corregirse muestra el corregido (la gestion lleva el resultado
+    // sellado); al aprobarse la sustituye el hito confirmado de la fila de historial.
+    const pendiente = await this.repo.buscarGestionPendiente(fila.id);
+    if (pendiente !== null) {
+      const resultado = pendiente.resultado as keyof typeof ESTATUS_POR_RESULTADO;
+      const destino = ESTATUS_POR_RESULTADO[resultado];
+      if (destino !== undefined) {
+        linea.push({
+          hito: hitoDeEstatus(destino),
+          fecha: formatearEnZona(pendiente.createdAt, this.config.ZONA_HORARIA),
+          pendiente: true,
+        });
+      }
+    }
 
     // Sin transiciones no hay nada OCURRIDO que contar (G10) y `hitoVigente` no podria
     // derivarse de la misma linea (R20). Se responde como los demas casos sin envio.

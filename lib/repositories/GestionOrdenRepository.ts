@@ -8,6 +8,7 @@ import type {
   RechazarDesdeDevueltaInput,
   ReprogramarDesdeDevueltaInput,
   VentanaDia,
+  BloqueoDeGestion,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import { SinGestionDevueltaError } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
@@ -20,6 +21,16 @@ import {
   encolarOptimizacionInmediata,
 } from "@/lib/services/jobs/optimizacion-ruta-encolado";
 import { loadRouteOptimizationConfig } from "@/lib/config/route-optimization";
+// FICHA 454 (T1.4): los predicados UNICOS de «gestion pendiente» y «ayuda abierta», el encolado del
+// webhook del hecho y el aviso N1 (que desde la 454 sale al REGISTRAR, no al aprobar).
+import {
+  sqlExisteGestionPendiente,
+  whereOrdenConGestionPendiente,
+} from "@/lib/repositories/gestion-pendiente";
+import { conAyudaAbiertaDe, sqlAyudaAbierta } from "@/lib/repositories/ayuda-abierta";
+import { encolarWebhookEvento } from "@/lib/services/jobs/webhook-evento-encolado";
+import { emitirOrdenRechazada } from "@/lib/notificaciones/emitir";
+import { NotificacionRepository } from "@/lib/repositories/NotificacionRepository";
 // Feature 261 (B5): el dia de reparto entra al SQL crudo como texto `YYYY-MM-DD` con `::date`.
 // NO se importa `startOfDayCR`: este repositorio NO resuelve ningun dia, lo RECIBE resuelto.
 import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
@@ -80,7 +91,11 @@ function entregadasDelDiaWhere(mensajeroId: string, dia: VentanaDia) {
   return {
     mensajeroAsignadoId: mensajeroId,
     deletedAt: null,
-    estatus: { value: ESTATUS_ENTREGADA },
+    // FICHA 454 (T1.12, R53): desde la 454 una entrega de hoy sigue `en_reparto` (pendiente de
+    // confirmar) hasta que se aprueba su cierre. El KPI cuenta la entrega DEL DIA igual que antes:
+    // la condicion que decide es la gestion `entregada` vigente de hoy; el estado solo admite los dos
+    // sitios donde esa entrega puede estar (aplicada o pendiente).
+    estatus: { value: { in: [ESTATUS_ENTREGADA, ESTADO_EN_REPARTO] } },
     gestiones: { some: { ...gestionDelDia(mensajeroId, dia), resultado: RESULTADO_ENTREGADA } },
   } satisfies Prisma.OrdenWhereInput;
 }
@@ -117,7 +132,14 @@ function gestionadasDelDiaWhere(mensajeroId: string, dia: VentanaDia) {
   return {
     mensajeroAsignadoId: mensajeroId,
     deletedAt: null,
-    estatus: { value: { notIn: ESTADOS_EN_MANO_DEL_MENSAJERO } },
+    // FICHA 454 (T1.12, R53): «no esta en la mano» = fuera de los estados de reparto O con una
+    // gestion PENDIENTE de confirmar (que sigue `en_reparto` pero ya no es trabajo por hacer y el
+    // portal ya no la cuenta en `porCobrar`). Disjunto del otro sumando por construccion: aquel es
+    // `porGestionar ∪ conAyuda`, que excluye justo las pendientes.
+    OR: [
+      { estatus: { value: { notIn: ESTADOS_EN_MANO_DEL_MENSAJERO } } },
+      whereOrdenConGestionPendiente(),
+    ],
     gestiones: { some: gestionDelDia(mensajeroId, dia) },
   } satisfies Prisma.OrdenWhereInput;
 }
@@ -218,6 +240,9 @@ type GestionPrismaClient = Pick<
   // Feature 119 (R1/R9): + `gestionOrdenEvidencia` para insertar las N filas hijas dentro de
   // la MISMA transaccion que crea la gestion y transiciona la orden.
   "orden" | "usuario" | "gestionOrden" | "gestionOrdenEvidencia" | "$transaction"
+  // FICHA 454: la derivacion de «ayuda abierta» es SQL crudo (el ULTIMO evento no cabe en un filtro
+  // relacional de Prisma).
+  | "$queryRaw"
 >;
 
 // Proyeccion de "mis asignaciones": la orden + nombres legibles via relaciones ya
@@ -535,6 +560,36 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     }));
   }
 
+  /**
+   * FICHA 454 (R3, design §3/§4.1): por que una orden `en_reparto` NO es gestionable aunque su
+   * estado lo parezca — tiene una gestion pendiente de confirmar, o una ayuda abierta a la tienda.
+   * Lectura OPTIMISTA para que el servicio responda con un motivo en palabras antes de subir fotos;
+   * la barrera real es la re-lectura bajo candado de `registrarGestionPendiente`.
+   */
+  async findPendientesYAyudas(ordenIds: string[]): Promise<{
+    conGestionPendiente: Set<string>;
+    conAyudaAbierta: Set<string>;
+  }> {
+    if (ordenIds.length === 0) return { conGestionPendiente: new Set(), conAyudaAbierta: new Set() };
+    const pendientes = await this.prisma.orden.findMany({
+      where: { id: { in: ordenIds }, ...whereOrdenConGestionPendiente() },
+      select: { id: true },
+    });
+    return {
+      conGestionPendiente: new Set(pendientes.map((o) => o.id)),
+      conAyudaAbierta: await conAyudaAbiertaDe(this.prisma, ordenIds),
+    };
+  }
+
+  async findBloqueoDeGestion(ordenId: string): Promise<BloqueoDeGestion> {
+    const pendiente = await this.prisma.orden.count({
+      where: { id: ordenId, ...whereOrdenConGestionPendiente() },
+    });
+    if (pendiente > 0) return "gestion_pendiente";
+    const ayuda = await conAyudaAbiertaDe(this.prisma, [ordenId]);
+    return ayuda.has(ordenId) ? "ayuda_abierta" : null;
+  }
+
   /** R20: puntero de bloqueo 1-a-1 del mensajero. */
   async getOrdenEnGestion(mensajeroId: string): Promise<string | null> {
     const row = await this.prisma.usuario.findUnique({
@@ -656,88 +711,102 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     });
   }
 
-  /** R23/R26/R28/R30: INSERT gestion + UPDATE estatus + limpiar puntero, atomico. */
-  async crearGestionYTransicionar(input: {
+  /**
+   * FICHA 454 (design §5/§6, T1.4; R1-R5) — REGISTRA una gestion de CALLE del mensajero SIN
+   * transicionar la orden. Sustituye a `crearGestionYTransicionar`, cuyo nombre prometia una
+   * transicion que ya no se hace: la orden SE QUEDA `en_reparto` y el estado real se aplica al
+   * APROBAR el cierre (`CierresAdminRepository.resolverCierre`, R7).
+   *
+   * En UNA transaccion, y el orden es el protocolo de §5:
+   *   1. `SELECT … FOR UPDATE` sobre la fila de `orden`: dos registros concurrentes (doble envio, dos
+   *      pestañas) y el corte nocturno compiten por el MISMO candado.
+   *   2. SENTENCIA NUEVA que re-lee las condiciones de gestionable (en READ COMMITTED ve todo lo
+   *      confirmado antes de ella): `en_reparto`, asignada a este mensajero, no borrada, SIN gestion
+   *      pendiente y SIN ayuda abierta (R3). Si no pasa → `null` SIN NINGUN EFECTO (R4): ni gestion,
+   *      ni evidencia enlazada, ni evento, ni job. El servicio responde `conflict` y compensa las
+   *      evidencias ya subidas.
+   *   3. La gestion y sus hijas (`insertarGestionConHijas`, sin cambios).
+   *   4. El evento `gestion_registrada` (R2), con la familia con la que se APLICARA (R8), el actor y
+   *      su rol congelado.
+   *   5. Libera el puntero 1-a-1 (R5, como hoy).
+   *   6. Webhook `orden.gestion_registrada` (outbox, R33) y, si es `rechazada`, el aviso N1 AHORA,
+   *      una sola vez (R35, design DD): la aprobacion ya no lo emite.
+   *   7. Reoptimizacion inmediata de la ruta (R5, como hoy): la orden deja de ser parada (R6).
+   *
+   * NO hay `orden.update` ni `appendCambioEstado`: `orden_historial_estado` no gana ninguna fila (R1).
+   */
+  async registrarGestionPendiente(input: {
     ordenId: string;
     mensajeroId: string;
     gestion: GestionOrdenData;
-    nuevoEstatusId: string;
-  }): Promise<string> {
-    const { ordenId, mensajeroId, gestion, nuevoEstatusId } = input;
+  }): Promise<{ gestionId: string; ordenEventoId: string } | null> {
+    const { ordenId, mensajeroId, gestion } = input;
     return this.prisma.$transaction(async (tx) => {
-      // Feature 49/#9 (R20): estatus de ORIGEN (en_reparto) pre-leido dentro de la tx.
-      const actual = await tx.orden.findFirst({
-        where: { id: ordenId },
-        select: { estatusId: true },
-      });
-      // Feature 237 (T5.1): el INSERT de la gestion + sus filas hijas se EXTRAJO a un helper
-      // privado, compartido con `crearGestionDesdeAyuda`. `gestion_orden_evidencia` se inserta
-      // desde UN solo sitio; lo que cambia entre los dos caminos es el actor, la familia de
-      // origen y las guardas, no la forma de la fila (237/R2: «la misma forma que la del
-      // mensajero»).
-      const gestionCreadaId = await insertarGestionConHijas(tx, ordenId, mensajeroId, gestion);
-      await tx.orden.update({
-        where: { id: ordenId },
-        data: { estatusId: nuevoEstatusId },
-      });
-      // R19: libera el bloqueo 1-a-1 dentro de la misma transaccion.
-      await tx.usuario.update({
-        where: { id: mensajeroId },
-        data: { ordenEnGestionId: null },
-      });
-      // Feature 49/#9 (R17/R22/R20): registra la transicion (destino = resultado, actor = el
-      // mensajero, `origenTipo` = gestion, `gestion_orden_id` = la gestion recien creada,
-      // `motivo` = motivo de la gestion si aplica) en la MISMA tx que crea la gestion.
-      //
-      // Feature 158 (Q-G, R8): la rama `incidente` escribe la familia `incidente`, NO `gestion`.
-      // La 154 dio de alta ese valor del enum y lo dejo «declarado SIN PRODUCTOR hasta la 158»
-      // (`lib/types/orden-historial.ts`); esta es la linea que lo produce.
-      //
-      // Feature 215 (R25/R28) — CORREGIDO: aqui se leia que era inocuo porque «el derivador de
-      // intentos de entrega (67/160) filtra por `estatus_destino_id IN (devuelta, reprogramada)`».
-      // ESE DERIVADOR YA NO EXISTE. La 215 lo sustituyo por el conteo de CIERRES APROBADOS sobre
-      // `gestion_orden` (`whereIntentosVigentes`, `lib/repositories/OrdenHistorialRepository.ts`),
-      // que no mira NINGUN destino de transicion. Sigue siendo inocuo, pero por dos razones
-      // independientes y ninguna de ellas el destino:
-      //   (a) por el RESULTADO: `incidente` no esta en `RESULTADOS_QUE_CUENTAN_COMO_INTENTO`
-      //       (lista de INCLUSION, 215/R2) — un desenlace terminal no es una visita fallida mas;
-      //   (b) por el ORIGEN: la familia `incidente` no esta en `ORIGEN_TIPOS_VISITA_REAL`
-      //       (215/R34), la sexta condicion del predicado.
-      // Con cualquiera de las dos basta: esta fila no cuenta como intento, no adelanta el
-      // escalado del cron SLA (99) y no adelanta por esa via el `cobroRechazado` de la 56. Y NO
-      // hace falta anadir `incidente` a `ORIGEN_TIPOS_CON_GESTION`: ese conjunto solo desambigua
-      // filas SIN enlace a gestion, y esta nace CON `gestion_orden_id` poblado.
-      await appendCambioEstado(tx, [
-        {
+      // (1) El candado de la fila. Sin el, un registro concurrente que solo INSERTA en
+      // `gestion_orden` no competiria con nadie (design §5).
+      await tx.$queryRaw`SELECT "id" FROM "orden" WHERE "id" = ${ordenId} FOR UPDATE`;
+      // (2) Re-lectura en una sentencia POSTERIOR al candado.
+      const gestionable = await tx.$queryRaw<{ id: string }[]>`
+        SELECT "o"."id"
+          FROM "orden" "o"
+          JOIN "order_status" "s" ON "s"."id" = "o"."estatus_id"
+         WHERE "o"."id" = ${ordenId}
+           AND "s"."value" = ${ESTADO_EN_REPARTO}
+           AND "o"."mensajero_asignado_id" = ${mensajeroId}
+           AND "o"."deleted_at" IS NULL
+           AND NOT ${sqlExisteGestionPendiente()}
+           AND NOT ${sqlAyudaAbierta("o")}`;
+      if (gestionable.length === 0) return null;
+
+      // (3)
+      const gestionId = await insertarGestionConHijas(tx, ordenId, mensajeroId, gestion);
+      // (4) Familia de APLICACION (R8): `incidente` para el incidente; `gestion` para el resto
+      // (la `devuelta` se registra con `gestion` y se aplica con `anclaje_devolucion`, que la
+      // aprobacion decide por el resultado).
+      const evento = await tx.ordenEvento.create({
+        data: {
           ordenId,
-          estatusOrigenId: actual?.estatusId ?? null,
-          estatusDestinoId: nuevoEstatusId,
-          actorUsuarioId: mensajeroId, // R21
-          origenTipo: gestion.resultado === "incidente" ? "incidente" : "gestion", // R23 / 158 Q-G
-          motivo: gestion.motivo ?? null, // R22
-          gestionOrdenId: gestionCreadaId,
+          tipo: "gestion_registrada",
+          gestionOrdenId: gestionId,
+          familiaAplicacion: gestion.resultado === "incidente" ? "incidente" : "gestion",
+          resultado: gestion.resultado,
+          mensajeroId,
+          actorUsuarioId: mensajeroId,
+          actorRol: "mensajero",
+          // Solo la causa TIPIFICADA; el texto libre del mensajero se queda en la gestion.
+          motivo: gestion.causaDevolucion ?? gestion.causaIncidente ?? null,
         },
-      ]);
-      // Feature 99 (R1/R29): la rama `devuelta` YA NO aplica una transicion de seguimiento
-      // inmediata. La orden REPOSA en `devuelta` (destino = `nuevoEstatusId`) y el cron SLA
-      // (`DevolucionSlaService`/`DevolucionSlaRepository`) decide el reintento a bodega o el
-      // escalado a `rechazada` al vencer la ventana. Antes, aqui vivia un segundo `orden.update`
-      // + append (feature 47); se relocalizo al cron.
-      // Feature 92 (R19): la gestion SACA la orden de `en_reparto` -> reoptimizacion
-      // INMEDIATA (sin delay), dentro de esta misma transaccion (outbox).
-      //
-      // ⚠️ Este encolado usa el namespace `:inmediato:`, DISJUNTO del `:debounce:`. Si
-      // compartieran espacio de claves, un debounce en vuelo del mismo mensajero lo
-      // tragaria EN SILENCIO via el `ON CONFLICT DO NOTHING` y la ruta no se recalcularia
-      // tras la entrega. El `eventoId` es el id de la gestion recien creada: unico por
-      // evento, disponible aqui sin generar nada nuevo.
+        select: { id: true },
+      });
+      // (5)
+      await tx.usuario.update({ where: { id: mensajeroId }, data: { ordenEnGestionId: null } });
+      // (6)
+      await encolarWebhookEvento(tx as unknown as JobTxClient, { ordenEventoId: evento.id, ordenId });
+      if (gestion.resultado === RESULTADO_RECHAZADA) {
+        const orden = await tx.orden.findUniqueOrThrow({
+          where: { id: ordenId },
+          select: { tiendaId: true, zonaId: true, numGuia: true, numRemision: true },
+        });
+        await emitirOrdenRechazada(
+          new NotificacionRepository(tx),
+          {
+            ordenId,
+            tiendaId: orden.tiendaId,
+            zonaId: orden.zonaId ?? null,
+            numGuia: orden.numGuia ?? null,
+            numRemision: orden.numRemision,
+          },
+          tx,
+        );
+      }
+      // (7) Namespace `:inmediato:` disjunto del `:debounce:` (ver `encolarOptimizacionInmediata`).
       await encolarOptimizacionInmediata(
         this.jobRepo,
         tx as unknown as JobTxClient,
         mensajeroId,
-        gestionCreadaId,
+        gestionId,
       );
-      return gestionCreadaId;
+      return { gestionId, ordenEventoId: evento.id };
     });
   }
 
@@ -908,43 +977,29 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
    * carrera la perdio la tienda y no queda NI UN efecto (R25). El service compensa las evidencias.
    */
   async crearGestionDesdeAyuda(input: CrearGestionDesdeAyudaInput): Promise<string | null> {
+    const diaTexto = fechaRepartoComoTexto(input.diaEnCurso);
     return this.prisma.$transaction(async (tx) => {
-      // 1) R23/R24 — LA BARRERA. La comprobacion del estado de origen viaja EN LA MISMA SENTENCIA
-      //    que lo muta, asi que entre comprobar y escribir no hay ventana. `data` toca UNICAMENTE
-      //    `estatusId`: money-safe, sin rozar montos, mensajero asignado ni prioridad (R10/R11).
-      const result = await tx.orden.updateMany({
-        where: {
-          id: input.ordenId,
-          estatusId: input.estatusAyudaId, // guarda de carrera (mensajero / corte) e idempotencia
-          deletedAt: null,
-          // FEATURE 261 (B17, R30) — LA SEGUNDA CAPA DEL BLOQUEO POR RESERVA. La primera es el
-          // paso 5-bis del service, que rechaza ANTES de subir fotos (R29); esta es la que gana
-          // la carrera: si la reserva cambia entre aquella comprobacion y esta escritura, la
-          // orden NO transiciona. Predicado COPIADO del corte, no reinventado
-          // (`CorteDiarioRepository` / `crearCierre`): `NULL` entra por la primera rama y se
-          // resuelve igual que siempre, y `lte` —no `lt`— porque una orden reservada para HOY es
-          // de hoy.
-          OR: [{ fechaReparto: null }, { fechaReparto: { lte: input.diaEnCurso } }],
-        },
-        data: { estatusId: input.estatusDestinoId },
-      });
-      // R25/R28: la orden ya salio de ayuda -> ni gestion, ni evidencias, ni historial. Y con esto
-      // la idempotencia del doble envio sale por construccion, sin un segundo mecanismo que
-      // pudiera divergir de este.
-      //
-      // Feature 261 (R30): este MISMO `null` cubre ahora tambien «la orden paso a estar reservada
-      // para un dia posterior». No hay camino de fallo nuevo: el service ya compensa las
-      // evidencias subidas y responde `conflict` — solo cambia el motivo que devuelve.
-      if (result.count === 0) return null;
+      // 1) FICHA 454 (T1.15, design §4.2/§5; R25) — LA BARRERA. La orden ya no esta en un estatus de
+      //    ayuda: sigue `en_reparto` con la ayuda ABIERTA. Candado de la fila + re-lectura en una
+      //    sentencia posterior: la ayuda sigue abierta (el mensajero no la recupero, el corte no la
+      //    barrio, no hay otra gestion pendiente), la orden es de ESE mensajero y —FEATURE 261 (B17,
+      //    R30), predicado copiado del corte— no esta reservada para un dia posterior.
+      //    `null` = ya no estaba esperando a la tienda: ni gestion, ni evidencias, ni evento (R25/R28,
+      //    idempotencia del doble envio por construccion).
+      await tx.$queryRaw`SELECT "id" FROM "orden" WHERE "id" = ${input.ordenId} FOR UPDATE`;
+      const admite = await tx.$queryRaw<{ id: string }[]>`
+        SELECT "o"."id"
+          FROM "orden" "o"
+         WHERE "o"."id" = ${input.ordenId}
+           AND "o"."deleted_at" IS NULL
+           AND "o"."mensajero_asignado_id" = ${input.mensajeroId}
+           AND ("o"."fecha_reparto" IS NULL OR "o"."fecha_reparto" <= ${diaTexto}::date)
+           AND ${sqlAyudaAbierta("o")}`;
+      if (admite.length === 0) return null;
 
-      // 2/3) R2/R3/R9 — la gestion y sus N evidencias, por el helper COMPARTIDO con el camino del
-      //    mensajero: misma forma de fila para el mismo resultado. `mensajeroId` es EL MENSAJERO
-      //    (💰 R3: es lo unico que hace que `crearCierre` la vincule y que el dinero salga solo) y
-      //    `cierreId` queda NULO por el default de la columna, para que la vincule EL MISMO
-      //    mecanismo que vincula las suyas (R9), sin camino propio.
-      //
-      //    La ubicacion NO se escribe (R18): `GestionOrdenData` la trae opcional y este camino no
-      //    la puebla — la tienda gestiona desde un escritorio y no hay presencia que registrar.
+      // 2/3) R2/R3/R9 (237) — la gestion y sus N evidencias, por el helper COMPARTIDO con el camino
+      //    del mensajero: misma forma de fila. `mensajeroId` es EL MENSAJERO (💰 R3: es lo que hace
+      //    que `crearCierre` la vincule) y `cierreId` queda NULO. Sin ubicacion (R18).
       const gestionId = await insertarGestionConHijas(
         tx,
         input.ordenId,
@@ -952,25 +1007,32 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         input.gestion,
       );
 
-      // 4) R4/R5 — el choke point, con su guardia de transicion de fallo cerrado. Actor = LA
-      //    TIENDA (la unica evidencia de quien decidio) y familia PROPIA `gestion_tienda_ayuda`,
-      //    que es la que hace que esta gestion cuente como intento (R6) sin que el historial
-      //    mienta sobre quien la registro. Origen = el estatus de ayuda, fijado por la guarda del
-      //    paso 1: no se re-lee, se sabe.
-      await appendCambioEstado(tx, [
-        {
+      // 4) FICHA 454 (R25) — SIN TRANSICION. La gestion queda PENDIENTE de confirmar, atribuida al
+      //    mensajero, con su evento `gestion_registrada` de familia `gestion_tienda_ayuda` y actor
+      //    LA TIENDA (la unica evidencia de quien decidio). La aprobacion del cierre del mensajero la
+      //    aplica con esa familia (R8), que es la que la hace contar como intento (237/R6). La ayuda
+      //    deja de estar abierta por construccion: ahora hay una gestion pendiente.
+      const evento = await tx.ordenEvento.create({
+        data: {
           ordenId: input.ordenId,
-          estatusOrigenId: input.estatusAyudaId,
-          estatusDestinoId: input.estatusDestinoId,
-          actorUsuarioId: input.actorUsuarioId, // R4: el adminTienda
-          origenTipo: "gestion_tienda_ayuda", // R5
-          motivo: input.gestion.motivo ?? null,
+          tipo: "gestion_registrada",
           gestionOrdenId: gestionId,
+          familiaAplicacion: "gestion_tienda_ayuda",
+          resultado: input.gestion.resultado,
+          mensajeroId: input.mensajeroId,
+          actorUsuarioId: input.actorUsuarioId,
+          actorRol: "adminTienda",
         },
-      ]);
+        select: { id: true },
+      });
+      // Webhook del hecho (R33). El aviso N1 NO se emite: rechazo de la tienda (237/D4, R35).
+      await encolarWebhookEvento(tx as unknown as JobTxClient, {
+        ordenEventoId: evento.id,
+        ordenId: input.ordenId,
+      });
 
-      // NO se encola reoptimizacion de ruta: la orden salio de la ruta al entrar en ayuda y
-      // `transicionarAyuda` (235) tampoco encola. Paridad deliberada, no olvido.
+      // NO se encola reoptimizacion de ruta: la orden salio de la ruta al pedir ayuda. Paridad
+      // deliberada con la 237.
       return gestionId;
     });
   }

@@ -1,3 +1,4 @@
+import { whereTieneRegistroDeCalle } from "@/lib/repositories/gestion-pendiente";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CambioEstadoEntrada,
@@ -211,9 +212,20 @@ export function whereIntentosVigentes(
     // es el MISMO filtro de fuera, repetido a proposito para que el `EXISTS` entre por
     // `@@index([ordenId, createdAt])` (ver el bloque de rendimiento del JSDoc). `in`, jamas
     // `none`/`notIn`: lista de INCLUSION (R34-c).
-    historialEstados: {
-      some: { ordenId, origenTipo: { in: [...ORIGEN_TIPOS_VISITA_REAL] } },
-    },
+    //
+    // ⏳ 2026-09-23 (FICHA 454, design §10, DA) — LA 6.ª CONDICION GANA UNA SEGUNDA VIA DE INCLUSION.
+    // Con la 454 la gestion de calle NO escribe historial al registrarse; la transicion se escribe al
+    // APROBAR y la de una `devuelta` lleva la familia `anclaje_devolucion`, que NO puede entrar en
+    // `ORIGEN_TIPOS_VISITA_REAL` (la guardia 239/R16 lo prohibe con razon). Sin esta segunda via, las
+    // `devuelta` nuevas dejarian de contar: el conteo caeria, nadie llegaria al tope y no se cobraria.
+    // La segunda via es el evento `gestion_registrada`, que SOLO escriben las dos vias de CALLE (el
+    // mensajero y la tienda desde una ayuda): sigue siendo LISTA DE INCLUSION y ninguna sintetica lo
+    // tiene (`sinteticas-sin-evento-registro.guardia.test.ts`). Las otras cinco condiciones no se tocan:
+    // antes de aprobarse su cierre una gestion no cuenta — el mismo numero que hoy en todo instante.
+    OR: [
+      { historialEstados: { some: { ordenId, origenTipo: { in: [...ORIGEN_TIPOS_VISITA_REAL] } } } },
+      whereTieneRegistroDeCalle(),
+    ],
   };
 }
 

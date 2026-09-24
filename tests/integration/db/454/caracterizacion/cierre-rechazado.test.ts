@@ -76,7 +76,9 @@ describeSiHayBase("454/C17 — cierre rechazado, re-solicitado y aprobado (Postg
     expect(r.rechazo).toBe("ok");
     expect(r.trasRechazo.dinero).toBe(0);
     expect(r.trasRechazo.historial).toBe(r.historialAntes);
-    expect(r.trasRechazo.rec).toBe("rechazada");
+    // ⏳ 2026-09-23 (FICHA 454, cambio autorizado #2): aqui estaba `expect(r.trasRechazo.rec)
+    // .toBe("rechazada")`. Pasa al `[INTERMEDIO]` de abajo (R13). Dinero = 0 e historial sin cambios
+    // siguen siendo la invariante.
   });
 
   it("re-solicitar y aprobar emite el dinero y aplica la devolucion de la rechazada", () => {
@@ -85,7 +87,9 @@ describeSiHayBase("454/C17 — cierre rechazado, re-solicitado y aprobado (Postg
     expect(r.trasAprobar.dinero).toBeGreaterThan(0);
     expect(r.trasAprobar.rec).toBe("por_devolver_a_tienda");
     expect(r.trasAprobar.ent).toBe("entregada");
-    expect(r.trasAprobar.historial).toBe(r.historialAntes + 1);
+    // ⏳ 2026-09-23 (FICHA 454, cambio autorizado #2): aqui estaba `toBe(r.historialAntes + 1)`.
+    // Pasa al `[INTERMEDIO]` (R1 + R8): el numero de filas lo desplaza el cambio de MOMENTO. Que los
+    // estados se apliquen UNA vez lo sigue afirmando «re-aprobar no emite … otra vez».
   });
 
   it("re-aprobar no emite dinero ni estados otra vez", () => {
@@ -94,8 +98,20 @@ describeSiHayBase("454/C17 — cierre rechazado, re-solicitado y aprobado (Postg
   });
 
   describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
-    it("hoy, tras el rechazo, la entregada sigue en `entregada` (se aplico al gestionar)", () => {
-      expect(r.trasRechazo.ent).toBe("entregada");
+    // ⏳ 2026-09-23 (FICHA 454, R13): AQUI DECIA «hoy, tras el rechazo, la entregada sigue en
+    // `entregada` (se aplico al gestionar)». Con la 454 nada se aplica al gestionar: tras rechazar el
+    // cierre las dos siguen `en_reparto`, con su gestion pendiente de confirmar.
+    it("tras el rechazo, la entregada y la rechazada siguen `en_reparto` (pendientes de confirmar)", () => {
+      expect(r.trasRechazo.ent).toBe("en_reparto");
+      expect(r.trasRechazo.rec).toBe("en_reparto");
+    });
+
+    // ⏳ 2026-09-23 (FICHA 454, R1 + R8): antes `historialAntes + 1` (dos transiciones al gestionar +
+    // la 139 al aprobar). Ahora al gestionar no hay ninguna y al aprobar hay TRES: las dos
+    // aplicaciones (`en_reparto -> entregada`, `en_reparto -> rechazada`) y la 139.
+    it("gestionar no escribe historial y aprobar escribe TRES filas (dos aplicaciones + la 139)", () => {
+      expect(r.historialAntes).toBe(0);
+      expect(r.trasAprobar.historial).toBe(r.historialAntes + 3);
     });
   });
 });

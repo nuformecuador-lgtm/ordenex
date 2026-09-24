@@ -26,6 +26,13 @@ export interface OrdenParaHilo {
   /** Feature 159: unica fuente de verdad del mensajero de la orden (R11). */
   mensajeroAsignadoId: string | null;
   estatusValue: string;
+  /**
+   * FICHA 454 (T1.16, U12): la orden tiene ayuda ABIERTA (derivacion `ayuda-abierta.ts`). Vuelve a
+   * viajar porque la ventana del `adminTienda` deja de depender solo del estatus: la ayuda ya no es
+   * `ayuda_tienda`, es un hecho sobre una orden que sigue `en_reparto`. Es una DERIVACION, no una
+   * columna: nada que apagar (la razon por la que la 235 retiro la bandera `ayuda`).
+   */
+  ayudaAbierta: boolean;
   // Feature 235 (T6.1, R36/R40): aqui viajaba `ayuda: boolean`, y viajaba porque la ventana de
   // escritura del `adminTienda` habia dejado de depender solo del estatus. Vuelve a depender solo
   // de el, asi que el campo se retira con la columna: `estatusValue` es todo lo que la ventana

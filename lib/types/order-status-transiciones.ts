@@ -218,6 +218,12 @@ export const TRANSICIONES = {
     // `lib/types/gestion-destino.ts`, que ya apunta al pre-estado—, que es la convencion del
     // repo. Reintroducir #14 reabre el cobro prematuro que la 239 cierra.
     { to: "devolucion_por_confirmar", via: "gestion", rol: "mensajero" }, // #59 (239)
+    // FICHA 454 (design §2) — ALTA de `en_reparto -> devuelta`, familia `anclaje_devolucion`. Es el
+    // PAR de la vieja #14, pero NO la reabre: la #14 era la gestion del mensajero llevando a
+    // `devuelta` al instante (cobro prematuro); esta la produce SOLO la aprobacion del cierre
+    // (`CierresAdminRepository.resolverCierre`, bloque «APLICACION DE GESTIONES»), que es lo que la
+    // 239 pedia. Productor en el mismo commit.
+    { to: "devuelta", via: "anclaje_devolucion", rol: "admin (aprobar cierre)" }, // #70 (454)
     { to: "rechazada", via: "gestion", rol: "mensajero" }, // #15
     { to: "sin_gestionar", via: "corte_sin_gestionar", rol: "sistema/cron" }, // #16
     // #44 (154, con el `via` REALINEADO por la 158/Q-G el 2026-07-30): resultado `incidente`

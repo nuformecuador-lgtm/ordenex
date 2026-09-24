@@ -24,7 +24,6 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { GestionResultado } from "@prisma/client";
 import { descargaConfig } from "@/lib/config/descarga";
-import { ESTATUS_DEVOLUCION_POR_CONFIRMAR } from "@/lib/types/gestion-destino";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import {
@@ -65,7 +64,12 @@ const ROL_AUTORIZADO = "mensajero";
 //
 // Por que debe bloquear: el paquete sigue EN LA MANO del mensajero. Cerrar el dia con una orden
 // suya sin desenlace dejaria el paquete fuera de todo cuadre.
-const ESTADOS_PENDIENTES = ["por_recoger", "en_reparto", "ayuda_tienda"];
+//
+// FICHA 454 (T1.13, R52): `ayuda_tienda` SALE de la lista porque deja de ser estado — una orden con
+// ayuda abierta sigue `en_reparto` y por eso SIGUE BLOQUEANDO (R22). Lo que ya NO bloquea es una
+// orden `en_reparto` con su gestion PENDIENTE de confirmar: esa exclusion vive en el repositorio
+// (`contarOrdenesPendientesGestion`, predicado unico).
+const ESTADOS_PENDIENTES = ["por_recoger", "en_reparto"];
 
 // Mensajes accionables del gate/precondicion (R10/R11) y del ruteo (R12/R16).
 const MSG_PENDIENTES = "Tenes ordenes sin gestionar; gestionalas antes de cerrar."; // R10
@@ -131,8 +135,12 @@ const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
   // detras se conservan intactos: siguen siendo los sitios donde una devolucion YA ANCLADA
   // puede estar cuando alguien intenta deshacerla (reintento a bodega o escalado del cron, mas
   // `devuelta` por defensa ante filas anteriores a la 47/239).
+  //
+  // FICHA 454 (T1.11): esta tabla solo la usa ya la rama LEGADA. Se CONSERVA el pre-estado de la
+  // 239 como literal: una devolucion legada todavia sin anclar estaria ahi (M3 las lleva todas a
+  // `en_reparto` con su registro, asi que en la practica ya no hay ninguna).
   devuelta: [
-    ESTATUS_DEVOLUCION_POR_CONFIRMAR,
+    "devolucion_por_confirmar",
     "en_bodega_central",
     "en_bodega_satelite",
     "rechazada",
@@ -752,7 +760,12 @@ export class CierreDiaService implements ICierreDiaService {
     // 8) R5: la orden debe seguir EXACTAMENTE en el estado que dejo esa gestion. Si avanzo por
     // otra via (bodega, cron de liberacion, devolucion a la tienda de origen, ajuste admin),
     // arrancarla de ahi es peligroso -> conflict con mensaje accionable.
-    if (!ESTADOS_ESPERADOS[gestion.resultado].includes(gestion.orden.estatusValue)) {
+    //    FICHA 454: solo en la rama LEGADA. En la nueva la orden no se movio al gestionar (sigue
+    //    `en_reparto`), y su propia guarda va mas abajo.
+    if (
+      !gestion.registradaComoPendiente &&
+      !ESTADOS_ESPERADOS[gestion.resultado].includes(gestion.orden.estatusValue)
+    ) {
       return { status: "conflict", motivo: MSG_ORDEN_MOVIDA };
     }
 
@@ -761,6 +774,28 @@ export class CierreDiaService implements ICierreDiaService {
     if (estatusEnRepartoId === null) {
       return { status: "validation_error", fieldErrors: { estatus: [MSG_CATALOGO] } };
     }
+
+    // FICHA 454 (T1.11, design §11 U4; R15/R20) — LA RAMA NUEVA. Una gestion con su evento
+    // `gestion_registrada` no movio la orden al registrarse (sigue `en_reparto`, pendiente de
+    // confirmar), asi que deshacerla es ANULARLA: sin transicion, con evento `gestion_anulada` y
+    // webhook. Las guardias 1-7 de arriba ya corrieron IGUAL que en la legada (bloqueo, propiedad,
+    // «la registro la tienda», ventana `cierre_id IS NULL`, ya anulada, borrada, la ultima).
+    if (gestion.registradaComoPendiente) {
+      if (gestion.orden.estatusValue !== ESTADO_EN_REPARTO) {
+        return { status: "conflict", motivo: MSG_ORDEN_MOVIDA };
+      }
+      const anulada = await this.repo.anularGestionPendiente({
+        gestionId: gestion.gestionId,
+        ordenId: gestion.ordenId,
+        mensajeroId: gestion.mensajeroId,
+        actorUsuarioId: actor.usuarioId,
+        estatusEnRepartoId,
+      });
+      if (!anulada) return { status: "conflict", motivo: MSG_ORDEN_MOVIDA };
+      return { status: "ok", ordenId: gestion.ordenId };
+    }
+    // LA RAMA LEGADA (design DH, R20): la gestion ya transiciono al registrarse; se deshace con las
+    // aristas de siempre (#31/#32/#33/#53). Se retira cuando su poblacion sea cero (otra ficha).
 
     // R11/R18-R23: UNICA escritura, atomica. `false` = una guardia del WHERE perdio la carrera
     // dentro de la tx (p. ej. `solicitarCierre` vinculo la gestion primero, o la bodega movio

@@ -125,8 +125,10 @@ describeSiHayBase("454/C01 — el corte no barre las ordenes gestionadas (Postgr
   });
 
   describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
-    it("hoy, justo tras gestionar, la orden ya esta en el estado del resultado", () => {
-      expect(r.estadoTrasGestionar).toEqual({ o1: "entregada", o2: "rechazada" });
+    // ⏳ 2026-09-23 (FICHA 454, R1): AQUI DECIA «hoy, justo tras gestionar, la orden ya esta en el estado del
+    // resultado» con `{ o1: "entregada", o2: "rechazada" }`. Con la 454 la gestion no mueve la orden.
+    it("justo tras gestionar, las dos siguen `en_reparto` (pendientes de confirmar)", () => {
+      expect(r.estadoTrasGestionar).toEqual({ o1: "en_reparto", o2: "en_reparto" });
     });
   });
 });

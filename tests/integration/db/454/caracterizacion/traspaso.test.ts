@@ -75,8 +75,10 @@ describeSiHayBase("454/C14 — traspaso de ordenes entre mensajeros (Postgres re
   });
 
   describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
-    it("hoy la orden con ayuda sigue en `ayuda_tienda` tras el traspaso", () => {
-      expect(estatus(r.a)).toBe("ayuda_tienda");
+    // ⏳ 2026-09-23 (FICHA 454, R28): AQUI DECIA «hoy la orden con ayuda sigue en `ayuda_tienda` tras el
+    // traspaso». La ayuda ya no es estado: la orden sigue `en_reparto` (con su ayuda abierta).
+    it("la orden con ayuda sigue `en_reparto` tras el traspaso", () => {
+      expect(estatus(r.a)).toBe("en_reparto");
     });
   });
 });

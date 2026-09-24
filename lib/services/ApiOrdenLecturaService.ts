@@ -234,6 +234,7 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
       createdAt: g.createdAt,
       resultado: g.resultado,
       estadoResultante: g.estadoResultante,
+      pendienteConfirmacion: g.pendienteConfirmacion, // ficha 454 (R32)
       motivo: g.motivo,
       // Las DOS claves del mensajero, tambien copiadas y no reenviadas por referencia: si la fila
       // del repositorio trajera una tercera, no cruzaria. Y si `ApiMensajeroDTO` ganara un campo

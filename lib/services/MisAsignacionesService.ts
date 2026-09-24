@@ -31,7 +31,6 @@ import {
   subirEvidenciasCompensadas,
   type EvidenciaSubida,
 } from "@/lib/services/evidencias-compensadas";
-import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 // FEATURE 276 (T4/T11, R1/R3/R7): la regla del tope vive en UN modulo puro, importable tambien
 // desde el navegador, para que la guarda del servidor y el filtro de botones de la pantalla no
 // puedan divergir. El umbral NO viaja con el: sale de `reintentosConfig`, aqui, en el servidor.
@@ -101,18 +100,20 @@ function estaReservadaParaOtroDia(fechaReparto: Date | null, diaEnCurso: Date): 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER: EstadoRepartoMensajero = "por_recoger";
 const ESTADO_EN_REPARTO: EstadoRepartoMensajero = "en_reparto";
-/**
- * Feature 235 (R18/R19): el estatus de la SOLICITUD DE AYUDA viva. El panel lo LEE -esas ordenes
- * siguen siendo del mensajero y las tiene que ver- pero en un grupo APARTE, cortado aqui y no en
- * el cliente.
- */
-const ESTADO_AYUDA: EstadoRepartoMensajero = "ayuda_tienda";
+// FICHA 454 (T1.12/T1.15): aqui vivia `ESTADO_AYUDA = "ayuda_tienda"` (235/R18). La ayuda deja de
+// ser estado; el grupo «con ayuda» se corta por la derivacion `ayuda-abierta.ts` (ver el bucle).
 // Unico estado de origen valido para gestionar los 4 resultados (R18).
 //
 // Feature 235 (R16): que siga siendo `en_reparto` -y no una lista- es lo que hace que una orden en
 // `ayuda_tienda` deje de ser gestionable SIN escribir ninguna guarda nueva: `cargarOrdenGestionable`
 // la rechaza con `conflict` sola. Antes pasaba, porque con la bandera la orden seguia en reparto.
 const ORIGEN_GESTION = "en_reparto";
+
+// FICHA 454 (R3/R4): los motivos del `conflict` cuando la orden esta en reparto pero NO es
+// gestionable. Sin PII.
+const MSG_GESTION_PENDIENTE = "esta orden ya tiene una gestion pendiente de confirmar";
+const MSG_AYUDA_ABIERTA = "esta orden esta esperando la ayuda de la tienda";
+const MSG_YA_NO_GESTIONABLE = "la orden ya no se puede gestionar (otra gestion llego antes)";
 
 // El `value` de order_status destino coincide 1:1 con el `resultado` de la
 // gestion (entregada/reprogramada/devuelta/rechazada).
@@ -256,7 +257,6 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         this.repo.findMisAsignaciones(actor.usuarioId, [
           ORIGEN_RECOGER,
           ESTADO_EN_REPARTO,
-          ESTADO_AYUDA,
         ]), // R9/R13
         this.repo.contarEntregadas(actor.usuarioId, dia), // Feature 61: KPI entregadas (HOY)
         this.repo.sumMontoCobrarGestionadas(actor.usuarioId, dia), // "Total a cobrar" (parte gestionada HOY)
@@ -276,6 +276,13 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // las ordenes YA acotadas al mensajero actor (`findMisAsignaciones(actor.usuarioId, ...)`).
     // Sin asignaciones -> 0 consultas al historial (R13).
     const intentos = await this.historial.contarIntentosEnLote(rows.map((r) => r.id));
+    // FICHA 454 (T1.12; R6, R22): de las ordenes `en_reparto`, cuales tienen una gestion PENDIENTE
+    // de confirmar (ya gestionadas: NO se listan, ni en el mapa ni como parada) y cuales tienen una
+    // ayuda ABIERTA (grupo «con ayuda», sin posicion de ruta). Una consulta, sobre las ya acotadas al
+    // mensajero actor. Los predicados son los UNICOS (`gestion-pendiente.ts`, `ayuda-abierta.ts`).
+    const { conGestionPendiente, conAyudaAbierta } = await this.repo.findPendientesYAyudas(
+      rows.filter((r) => r.estatusValue === ESTADO_EN_REPARTO).map((r) => r.id),
+    );
 
     const porRecoger: MiAsignacionDTO[] = [];
     const porGestionar: MiAsignacionDTO[] = [];
@@ -315,11 +322,15 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
         porRecoger.push(dto);
       } else if (row.estatusValue === ESTADO_EN_REPARTO) {
+        // FICHA 454 (R6): gestionada y pendiente de confirmar → ya no es trabajo del mensajero.
+        if (conGestionPendiente.has(row.id)) continue;
+        // FICHA 454 (R22): la ayuda abierta es un HECHO sobre una orden que sigue en reparto: va
+        // al grupo «con ayuda», SIN posicion de ruta (misma regla que tenia `ayuda_tienda`).
+        if (conAyudaAbierta.has(row.id)) {
+          conAyuda.push(dto);
+          continue;
+        }
         porGestionar.push({ ...dto, secuenciaRuta: secuencias.get(row.id) ?? null });
-      } else if (row.estatusValue === ESTADO_AYUDA) {
-        // R15: SIN `secuenciaRuta`. Una orden detenida esperando a la tienda no es parada de
-        // ninguna ruta optimizada, asi que no lleva posicion ni entra en `paradasSinOptimizar`.
-        conAyuda.push(dto);
       }
     }
 
@@ -648,22 +659,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       }
     }
 
-    // Feature 239 (T1.3, R2/R3): el destino de la gestion sale de un MAPA EXPLICITO, no de la
-    // coincidencia de nombre entre el vocabulario de `resultado` y el de `order_status`. Hasta
-    // aqui se pasaba `input.resultado` directamente, y funcionaba solo porque los cinco
-    // resultados se llamaban igual que su estado. La 239 rompe esa identidad para `devuelta`:
-    // gestionar una devolucion deja la orden en `devolucion_por_confirmar`, y es la APROBACION
-    // DEL CIERRE la que la lleva a `devuelta` (R4). Volver a `findEstatusIdByValue(input.
-    // resultado)` reabre el cobro prematuro que esta feature cierra.
-    const nuevoEstatusId = await this.ordenRepo.findEstatusIdByValue(
-      estatusDestinoDeResultado(input.resultado),
-    );
-    if (nuevoEstatusId === null) {
-      return {
-        status: "validation_error",
-        fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
-      };
-    }
+    // FICHA 454 (T1.4, R1): AQUI se resolvia el ESTADO DESTINO de la gestion (`estatusDestinoDeResultado`)
+    // para transicionar la orden al registrarla. Ya no hay transicion al gestionar: la orden se queda
+    // `en_reparto` y el destino lo resuelve la APROBACION del cierre (`ESTATUS_POR_RESULTADO`, §7).
 
     // Feature 119 (R9/R10): subida SECUENCIAL y determinista de las N evidencias ANTES de la
     // transaccion, acumulando los paths ya subidos para poder COMPENSAR (storage.remove) ante
@@ -703,24 +701,28 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
     const gestion = buildGestionData(input, evidencias);
 
+    let registrada: Awaited<ReturnType<IGestionOrdenRepository["registrarGestionPendiente"]>>;
     try {
-      // R23/R26/R28/R30 + R9: INSERT gestion + N filas de evidencia + UPDATE estatus + limpiar
-      // puntero, TODO en una unica transaccion (todo-o-nada).
-      // Feature 99 (R1/R29): la rama `devuelta` transiciona la orden a `devuelta` y la DEJA
-      // ahi (sin transicion de seguimiento inmediata: ni reintento a bodega ni escalado). La
-      // devolucion se contabiliza como intento (R2) por el append a `devuelta` del choke
-      // point; el cron SLA (`DevolucionSlaService`) decide al vencer la ventana.
-      await this.repo.crearGestionYTransicionar({
+      // FICHA 454 (T1.4; R1-R5): gestion + hijas + evento `gestion_registrada` + puntero liberado +
+      // webhook del hecho + N1 si es `rechazada` + reoptimizacion, en UNA transaccion, bajo el
+      // candado de la fila y con la re-lectura de «gestionable». La orden NO cambia de estado.
+      registrada = await this.repo.registrarGestionPendiente({
         ordenId: input.ordenId,
         mensajeroId: actor.usuarioId,
         gestion,
-        nuevoEstatusId,
       });
     } catch (error) {
       // R11: la transaccion fallo DESPUES de subir -> borrar las N evidencias subidas
       // (best-effort) y propagar; no queda ninguna fila persistida.
       await compensarEvidencias(this.storage, uploaded);
       throw error;
+    }
+    if (registrada === null) {
+      // FICHA 454 (R4): otra gestion (doble envio, dos pestañas, la tienda) o el corte ganaron el
+      // candado. SIN efectos: se compensan las fotos ya subidas (patron 237/R25) y se responde
+      // `conflict`, como la guarda de arriba.
+      await compensarEvidencias(this.storage, uploaded);
+      return { status: "conflict", motivo: MSG_YA_NO_GESTIONABLE };
     }
 
     // Feature 92 (R23): igual que en `recogerAsignaciones`, tras la transaccion.
@@ -768,6 +770,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     if (orden.estatusValue !== ORIGEN_GESTION) {
       return { status: "conflict", motivo: `solo se gestiona desde ${ORIGEN_GESTION}` }; // R18
     }
+    // FICHA 454 (R3): `en_reparto` ya no basta. Una orden con gestion PENDIENTE de confirmar sigue
+    // en reparto, y gestionarla otra vez seria dinero doble; una con ayuda ABIERTA espera a la
+    // tienda. La barrera que gana las carreras es la re-lectura bajo candado del repositorio.
+    const bloqueo = await this.repo.findBloqueoDeGestion(ordenId);
+    if (bloqueo === "gestion_pendiente") return { status: "conflict", motivo: MSG_GESTION_PENDIENTE };
+    if (bloqueo === "ayuda_abierta") return { status: "conflict", motivo: MSG_AYUDA_ABIERTA };
     return { status: "ok", orden };
   }
 }

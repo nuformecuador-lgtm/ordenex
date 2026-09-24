@@ -186,8 +186,10 @@ describeSiHayBase("454/C22 — ciclo de la ayuda a la tienda (Postgres real)", (
   });
 
   describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
-    it("hoy, pedir ayuda mueve la orden al estado `ayuda_tienda`", () => {
-      expect(corte.estadoConAyuda).toBe("ayuda_tienda");
+    // ⏳ 2026-09-23 (FICHA 454, R21): AQUI DECIA «hoy, pedir ayuda mueve la orden al estado `ayuda_tienda`». La
+    // ayuda es un hecho (`orden_evento`): la orden sigue `en_reparto`.
+    it("pedir ayuda NO cambia el estado: la orden sigue `en_reparto`", () => {
+      expect(corte.estadoConAyuda).toBe("en_reparto");
     });
   });
 });

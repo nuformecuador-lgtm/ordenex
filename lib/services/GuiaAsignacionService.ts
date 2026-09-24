@@ -137,7 +137,11 @@ const GAM_NO_CONFIGURADA: Record<string, string[]> = {
 // entregar. La 235 movio la orden de `en_reparto` a un estatus propio y esta lista no se entero —
 // la cazó la revision, no la suite—. La guardia `carga-del-mensajero.guardia.test.ts` existe para
 // que la proxima vez la cace un test.
-const ESTADOS_REPARTO_PENDIENTE = ["por_recoger", "en_reparto", "ayuda_tienda"];
+//
+// FICHA 454 (T1.18, R56): `ayuda_tienda` sale porque deja de ser estado — una orden con ayuda abierta
+// sigue `en_reparto` y SIGUE contando como carga. Lo que ya NO cuenta es una orden `en_reparto` con
+// gestion PENDIENTE de confirmar: esa exclusion vive en `findMensajerosConOrdenesEn` (predicado unico).
+const ESTADOS_REPARTO_PENDIENTE = ["por_recoger", "en_reparto"];
 // Lo que ocupa a un mensajero es la recoleccion que TIENE ASIGNADA (`recolectando`); las que
 // esperan sin dueño no son de nadie y por tanto no bloquean a nadie.
 const ESTADOS_RECOLECCION_PENDIENTE = [ESTATUS_RECOLECTANDO];

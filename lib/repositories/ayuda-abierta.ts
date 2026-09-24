@@ -106,3 +106,23 @@ export async function conAyudaAbiertaDe(
     await idsConAyudaAbierta(cliente, Prisma.sql`"o"."id" IN (${Prisma.join([...ordenIds])})`),
   );
 }
+
+/**
+ * FICHA 454 (T1.16, D7/R17 de la 236) — el instante de la ULTIMA solicitud de ayuda de cada orden
+ * de `ordenIds`: ordena la pestaña de ayuda de `/novedades` (la que lleva mas esperando, primero).
+ * Sustituye a la lectura de la fila de historial `solicitud_ayuda_tienda`, que la 454 deja de
+ * producir. Vive aqui porque es una lectura de `ayuda_solicitada` (ver la guardia de fuente unica).
+ */
+export async function fechasSolicitudAyuda(
+  cliente: ClienteSqlAyuda,
+  ordenIds: readonly string[],
+): Promise<Map<string, Date>> {
+  if (ordenIds.length === 0) return new Map();
+  const filas = await cliente.$queryRaw<{ orden_id: string; en: Date }[]>(Prisma.sql`
+    SELECT "orden_id", MAX("created_at") AS "en"
+      FROM "orden_evento"
+     WHERE "tipo" = 'ayuda_solicitada'
+       AND "orden_id" IN (${Prisma.join([...ordenIds])})
+     GROUP BY "orden_id"`);
+  return new Map(filas.map((f) => [f.orden_id, f.en]));
+}

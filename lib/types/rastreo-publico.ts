@@ -160,6 +160,13 @@ export interface HitoPublicoEntrada {
   readonly hito: HitoPublico;
   /** Dia Y hora (G12) en la zona horaria del negocio, resuelta por configuracion (R19). */
   readonly fecha: string;
+  /**
+   * FICHA 454 (design §12.3; R31) — SOLO en la ULTIMA entrada, y solo cuando la orden tiene una
+   * gestion pendiente de confirmar: el hito de su resultado todavia no esta confirmado. La pagina lo
+   * pinta como «<hito> — pendiente de confirmacion». AUSENTE (no `false`) en las entradas
+   * confirmadas, para que su forma siga siendo exactamente `{ hito, fecha }`.
+   */
+  readonly pendiente?: true;
 }
 
 /**

@@ -19,8 +19,37 @@ describeSiHayBase("454/C16 — dos gestiones vivas: solo aplica la mas reciente 
 
   function correr() {
     return conEscenario(mundo, async (e) => {
-      const o = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 4000 });
-      const g1 = await e.gestionarOk(o.ordenId, "devuelta");
+      // ⏳ 2026-09-23 (FICHA 454, cambio autorizado #3 de progress/impl_454_backend.md): AQUI g1 nacia
+      // por el portal (`gestionarOk`). Con la 454 eso es IMPOSIBLE: g1 quedaria PENDIENTE de confirmar
+      // y el segundo `gestionarOk` sobre la misma orden responde `conflict` (R3) — la prohibicion de
+      // dos pendientes NUEVAS la cubren C07 (`no-doble-gestion`) y el R3 de la guardia de
+      // gestionabilidad. La poblacion viva de «dos gestiones vivas» es LEGADA (design §7.3, fila 1),
+      // asi que g1 se siembra LEGADA: gestion `devuelta` con su fila de historial de familia `gestion`
+      // y SIN evento `gestion_registrada`, sobre una orden en el pre-estado de la 239. Las tres
+      // aserciones no cambian.
+      const o = await e.sembrarOrden({ estatus: "devolucion_por_confirmar", montoCobrar: 4000 });
+      const g1 = (
+        await e.tx.gestionOrden.create({
+          data: {
+            ordenId: o.ordenId,
+            mensajeroId: e.mensajeroId,
+            resultado: "devuelta",
+            causaDevolucion: "not_found",
+            motivo: "No aparece",
+          },
+          select: { id: true },
+        })
+      ).id;
+      await e.tx.ordenHistorialEstado.create({
+        data: {
+          ordenId: o.ordenId,
+          estatusOrigenId: e.id("en_reparto"),
+          estatusDestinoId: e.id("devolucion_por_confirmar"),
+          actorUsuarioId: e.mensajeroId,
+          origenTipo: "gestion",
+          gestionOrdenId: g1,
+        },
+      });
       const c1 = await e.solicitarCierreOk();
       // FIXTURE: la orden vuelve a la mano del mismo mensajero sin anular g1.
       await e.tx.orden.update({ where: { id: o.ordenId }, data: { estatusId: e.id("en_reparto") } });
@@ -74,8 +103,11 @@ describeSiHayBase("454/C16 — dos gestiones vivas: solo aplica la mas reciente 
   });
 
   describe("[INTERMEDIO] lo que la 454 cambia por diseno", () => {
-    it("hoy, tras aprobar el viejo, la orden sigue en el pre-estado `devolucion_por_confirmar`", () => {
-      expect(r.trasC1).toBe("devolucion_por_confirmar");
+    // ⏳ 2026-09-23 (FICHA 454, R1/R57): AQUI DECIA «hoy, tras aprobar el viejo, la orden sigue en el
+    // pre-estado `devolucion_por_confirmar`». El pre-estado muere con la ficha: la orden esta
+    // `en_reparto` (con g2 pendiente) y aprobar el cierre de g1 (legada) no la mueve.
+    it("tras aprobar el viejo, la orden sigue `en_reparto` con la gestion mas reciente pendiente", () => {
+      expect(r.trasC1).toBe("en_reparto");
     });
   });
 });

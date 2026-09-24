@@ -52,7 +52,8 @@ const ORDER_STATUS_ENUM = [
   "rechazada",
   "en_bodega_satelite",
   "devuelta_a_tienda",
-  "ayuda_tienda", // feature 268/R15: la IDA del ciclo de ayuda, ya emitida como evento publico
+  // ⏳ 2026-09-23 (FICHA 454, R36/R37): aqui estaba `"ayuda_tienda"` (268/R15). La ayuda deja de ser
+  // un estado de la orden: la ida y la vuelta se publican como eventos de orden propios.
   "incidente", // feature 268/R15: desenlace terminal de la gestion, ya emitido como evento publico
 ];
 

@@ -69,7 +69,19 @@ describeSiHayBase("454/C23 — confirmacion fisica al aprobar (Postgres real)", 
           nuevoEstado: "aprobado",
           resueltoPor: e.adminSateliteId,
           motivoRechazo: null,
-          anclajeDevolucion: { preEstadoId: e.id("devolucion_por_confirmar"), devueltaId: e.id("devuelta") },
+          // ⏳ 2026-09-23 (FICHA 454, cambio autorizado #4): aqui viajaba `anclajeDevolucion` (239). El
+          // design §7.2 lo sustituye por `aplicacionGestiones`, OBLIGATORIO. Solo cambia el argumento;
+          // las tres aserciones de abajo son las de siempre.
+          aplicacionGestiones: {
+            enRepartoId: e.id("en_reparto"),
+            destinoPorResultado: {
+              entregada: e.id("entregada"),
+              reprogramada: e.id("reprogramada"),
+              rechazada: e.id("rechazada"),
+              devuelta: e.id("devuelta"),
+              incidente: e.id("incidente"),
+            },
+          },
           indemnizaciones: [{ gestionId: g.incidente, monto: "500.00" }],
           confirmacionFisica: [{ gestionId: g.rechazada }, { gestionId: g.incidente }],
         });
