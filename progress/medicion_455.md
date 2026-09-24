@@ -53,3 +53,18 @@ barridos secuenciales. Produccion se vacio el 2026-08-25, el volumen es pequeño
 2. `notificacion.descripcion`: textos ya emitidos (fuera de alcance por requirements).
 3. `historial_accion.valor_*`: el snapshot de la 398 (R23, C16) — confirmado como unica fuente de
    codigos en texto con lector de pantalla.
+
+## Resultados en PRODUCCIÓN (leader, MCP Supabase, solo lectura, 2026-09-24)
+
+| Bloque | Producción |
+|---|---|
+| (a) órdenes | `entregada` 1745 · `devuelta` 65 · `reprogramada` 65 · `por_devolver` 61 · `rechazada` 46 · `por_recoger` 22 (18 vivas) · `sin_gestionar` 0 |
+| (a') gestiones | `entregada` 1766 (1745 vig.) · `devuelta` 894 (888) · `rechazada` 744 (733) · `reprogramada` 707 (703) · `incidente` 1. `orden_evento` no existe en prod (la 454 no está desplegada). |
+| (b) FK a `order_status` | las mismas 5 columnas; **0 filas** apuntan a `en_fulfillment` o `pendiente` en todas → **en prod M3 BORRA los dos huérfanos** (en local los conserva: 47 filas de historial) |
+| (b') catálogo | 24 filas: 20 vigentes + `ayuda_tienda`, `devolucion_por_confirmar` (aún vivos en prod: la 454 no está desplegada) + `en_fulfillment`, `pendiente` |
+| (c) barrido | `gestion_orden_evidencia.storage_path` 3821 · `gestion_orden.evidencia_storage_path` 3371 · `notificacion.descripcion` 2500 · `jobs.last_error` 136 · `order_status.value` 7 · `chat_mensaje.cuerpo` 1. Ningún JSON de vistas, jobs ni webhooks guarda códigos. |
+| (d) audiencia | webhooks: **1 activa** (de 1) · API keys: **4 activas** · cargas por API key en 30 días: **0** (las lecturas GET no se registran) |
+
+Lectura: el renombre de códigos rompe como mucho a **1 suscripción de webhook** y a quien lea por las 4 keys
+activas; ninguna cargó órdenes en 30 días. Las rutas de evidencia y los textos ya emitidos (notificaciones,
+chat, errores de jobs) llevan códigos viejos como texto histórico: fuera de alcance, no se reescriben.

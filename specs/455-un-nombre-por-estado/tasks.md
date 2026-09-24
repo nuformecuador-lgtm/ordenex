@@ -35,7 +35,7 @@ Cada test afirma sus precondiciones antes del resultado: nada de `if (!x) return
   códigos **anteriores**; en T1.4 se cambia **solo este archivo**. Los tests de la Fase 0 usan `C`/`R`, nunca un
   literal. Dep: T0.0. **Hecho:** test de humo que siembra una orden por cada `C.*` contra Postgres real.
 
-- [ ] **T0.2 — (2026-09-24: local medido y SQL de prod listo en `progress/medicion_455.md`; FALTA correrlo en produccion por el MCP) Medición (solo lectura; producción por el MCP de Supabase, memoria «DATABASE_URL de prod es
+- [x] **T0.2 — (2026-09-24: local medido y SQL de prod listo en `progress/medicion_455.md`; FALTA correrlo en produccion por el MCP) Medición (solo lectura; producción por el MCP de Supabase, memoria «DATABASE_URL de prod es
   sensitive»)** `[P]` con T0.3. Anotar en `progress/medicion_455.md`:
   (a) órdenes vivas por cada uno de los 7 estados que cambian y gestiones por cada resultado;
   (b) referencias a `en_fulfillment` y `pendiente` en **toda** FK a `order_status` (lista sacada de
