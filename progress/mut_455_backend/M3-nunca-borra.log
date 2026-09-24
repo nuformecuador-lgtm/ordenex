@@ -1,0 +1,47 @@
+# MUTACION M3-nunca-borra
+archivo: db/migrations/20260924120200_order_status_retiro_huerfanos/migration.sql
+linea: 44
+- "IF NOT v_referencia THEN"
++ "IF false THEN"
+tests: tests/integration/db/455/migracion.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 15 passed (16)
+FAIL  tests/integration/db/455/migracion.test.ts > 455/T1.3 — M1-M3 contra Postgres real (up → up → down → up) > R18: M3 conserva el huerfano citado y borra el que nadie cita; las FK salen de information_schema
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/db/455/migracion.test.ts (16 tests | 1 failed) 745ms
+     × R18: M3 conserva el huerfano citado y borra el que nadie cita; las FK salen de information_schema 5ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+   Start at  05:43:51
+   Duration  3.27s (transform 886ms, setup 54ms, import 2.26s, tests 745ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/migracion.test.ts > 455/T1.3 — M1-M3 contra Postgres real (up → up → down → up) > R18: M3 conserva el huerfano citado y borra el que nadie cita; las FK salen de information_schema
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/integration/db/455/migracion.test.ts:433:37
+    431|     // Sin ninguna cita en ninguna de esas FK: se BORRA.
+    432|     expect(sinCitar.refs.pendiente).toBe(0);
+    433|     expect(sinCitar.pendienteQueda).toBe(false);
+       |                                     ^
+    434|     // El del estado de fulfillment sigue la misma regla con lo que es…
+    435|     for (const x of [citado, sinCitar]) expect(x.fulfillmentQueda).toB…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

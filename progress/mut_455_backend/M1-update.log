@@ -1,0 +1,126 @@
+# MUTACION M1-update
+archivo: db/migrations/20260924120000_order_status_nombre_unico/migration.sql
+linea: 56
+- "  UPDATE \"order_status\" SET \"value\" = 'novedad'                         WHERE \"value\" = 'devuelta';\n"
++ ""
+tests: tests/integration/db/455/migracion.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  2 failed | 14 passed (16)
+FAIL  tests/integration/db/455/migracion.test.ts > 455/T1.3 — M1-M3, leidas del archivo > M1 y su down cubren los 7 codigos de `CODIGO_VIGENTE_DE_ANTERIOR`, por igualdad exacta
+FAIL  tests/integration/db/455/migracion.test.ts > 455/T1.3 — M1-M3 contra Postgres real (up → up → down → up) > R14: el up conserva el `id` de cada fila y aplica la correspondencia exacta
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/db/455/migracion.test.ts (16 tests | 2 failed) 536ms
+     × M1 y su down cubren los 7 codigos de `CODIGO_VIGENTE_DE_ANTERIOR`, por igualdad exacta 7ms
+     × R14: el up conserva el `id` de cada fila y aplica la correspondencia exacta 2ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 14 passed (16)
+   Start at  05:43:04
+   Duration  3.05s (transform 892ms, setup 54ms, import 2.26s, tests 536ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/migracion.test.ts > 455/T1.3 — M1-M3, leidas del archivo > M1 y su down cubren los 7 codigos de `CODIGO_VIGENTE_DE_ANTERIOR`, por igualdad exacta
+AssertionError: expected '-- FICHA 455 (design §3.1 · M1; R13, …' to contain 'SET "value" = \'novedad\''
+
+- Expected
++ Received
+
+- SET "value" = 'novedad'
++ -- FICHA 455 (design §3.1 · M1; R13, R14, R16, R19) — UN SOLO NOMBRE POR ESTADO: renombre en sitio de
++ -- 7 values del catalogo `order_status`.
++ --
++ -- QUE HACE. `UPDATE` por igualdad EXACTA del `value` (patron 135, `20260724120000`): el `id` de cada
++ -- fila NO cambia, asi que toda FK (`orden.estatus_id`, las dos de `orden_historial_estado`,
++ -- `cierre_sin_gestion.estatus_origen_id`, `analytics_daily.estatus_id`), toda vista de filtro guardada
++ -- (453, guarda ids) y todo job `webhook_estado` pendiente (guarda `estatusDestinoId`) siguen apuntando
++ -- al mismo estado. La correspondencia es la de `CODIGO_VIGENTE_DE_ANTERIOR`
++ -- (`lib/types/order-status.ts`) y la tabla §0.1 del spec:
++ --   entregada     -> entregado
++ --   devuelta      -> novedad
++ --   reprogramada  -> reprogramado
++ --   por_recoger   -> mensajero_recogiendo_en_bodega
++ --   rechazada     -> devolucion_a_origen_por_rechazo
++ --   sin_gestionar -> novedad_interna
++ --   por_devolver  -> por_devolver_a_bodega_central
++ -- Ningun codigo vigente coincide con un codigo anterior: el orden de los UPDATE es indiferente.
++ --
++ -- FALLA RUIDOSAMENTE (R20) si ya existe una fila con el codigo vigente Y otra con el anterior: serian
++ -- dos filas para un mismo estado (la dejaria un sembrado corrido antes de migrar) y renombrar chocaria
++ -- con el UNIQUE de `value`. No se adivina cual conservar.
++ --
++ -- IDEMPOTENTE (R16): una segunda pasada no encuentra ningun codigo anterior y no escribe nada.
++ -- SIN webhooks, notificaciones, jobs ni historial (R19): SQL puro, no pasa por `appendCambioEstado`;
++ -- la base no tiene triggers.
++ --
++ -- UN SOLO BLOQUE `DO` (todo o nada; el test `tests/integration/db/455/migracion.test.ts` lo ejecuta tal
++ -- cual dentro de una transaccion revertida). EL TIMESTAMP SE ESCRIBE A MANO (P3006). JAMAS RENUMERAR.
++
++ DO $$
++ DECLARE
++   v_par     record;
++   v_choques text := '';
++ BEGIN
++   FOR v_par IN
++     SELECT * FROM (VALUES
++       ('entregada', 'entregado'),
++       ('devuelta', 'novedad'),
++       ('reprogramada', 'reprogramado'),
++       ('por_recoger', 'mensajero_recogiendo_en_bodega'),
++       ('rechazada', 'devolucion_a_origen_por_rechazo'),
++       ('sin_gestionar', 'novedad_interna'),
++       ('por_devolver', 'por_devolver_a_bodega_central')
++     ) AS t("anterior", "vigente")
++   LOOP
++     IF EXISTS (SELECT 1 FROM "order_status" WHERE "value" = v_par."anterior")
++        AND EXISTS (SELECT 1 FROM "order_status" WHERE "value" = v_par."vigente") THEN
++       v_choques := v_choques || ' ' || v_par."anterior" || '/' || v_par."vigente";
++     END IF;
++   END LOOP;
++   IF v_choques <> '' THEN
++     RAISE EXCEPTION 'migracion 455: el catalogo tiene a la vez el codigo anterior y el vigente:%', v_choques;
++   END IF;
++
++   UPDATE "order_status" SET "value" = 'entregado'                       WHERE "value" = 'entregada';
++   UPDATE "order_status" SET "value" = 'reprogramado'                    WHERE "value" = 'reprogramada';
++   UPDATE "order_status" SET "value" = 'mensajero_recogiendo_en_bodega'  WHERE "value" = 'por_recoger';
++   UPDATE "order_status" SET "value" = 'devolucion_a_origen_por_rechazo' WHERE "value" = 'rechazada';
++   UPDATE "order_status" SET "value" = 'novedad_interna'                 WHERE "value" = 'sin_gestionar';
++   UPDATE "order_status" SET "value" = 'por_devolver_a_bodega_central'   WHERE "value" = 'por_devolver';
++ END $$;
++
+
+ ❯ tests/integration/db/455/migracion.test.ts:82:25
+     80|   it("M1 y su down cubren los 7 codigos de `CODIGO_VIGENTE_DE_ANTERIOR…
+     81|     for (const [anterior, vigente] of Object.entries(CODIGO_VIGENTE_DE…
+     82|       expect(SQL.m1.up).toContain(`SET "value" = '${vigente}'`);
+       |                         ^
+     83|       expect(SQL.m1.up).toMatch(new RegExp(`WHERE "value" = '${anterio…
+     84|       expect(SQL.m1.down).toContain(`SET "value" = '${anterior}'`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/integration/db/455/migracion.test.ts > 455/T1.3 — M1-M3 contra Postgres real (up → up → down → up) > R14: el up conserva el `id` de cada fila y aplica la correspondencia exacta
+AssertionError: expected 'devuelta' to be 'novedad' // Object.is equality
+
+Expected: "novedad"
+Received: "devuelta"
+
+ ❯ tests/integration/db/455/migracion.test.ts:370:23
+    368|     for (const c of sinHuerfanos(r.f1).catalogo) {
+    369|       expect(valorPorIdF0.has(c.id), `el id ${c.id} (${c.value}) no ex…
+    370|       expect(c.value).toBe(codigoVigente(valorPorIdF0.get(c.id)!));
+       |                       ^
+    371|     }
+    372|     // Las FK de las ordenes y del historial siguen apuntando a la MIS…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
