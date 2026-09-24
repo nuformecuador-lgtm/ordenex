@@ -26,3 +26,11 @@ Consecuencias:
    cantidad, salvo que esos pagos se hicieran desde una cuenta que no es la caja (a confirmar con el humano).
 3. Falta un tipo de movimiento: **«Pago por cuenta de una tienda»** (sale dinero de terceros de la caja,
    baja el saldo de la tienda, con beneficiario libre: «Facebook», «Jet Cargo»…). Va al catálogo de la 458.
+
+## Decisión del humano sobre los 203 (2026-09-24)
+«Salieron de la cuenta de Ordenex, y si no estoy mal todos para Nuform». Se aprueban los 203 para reclasificar
+como «Pago por cuenta de una tienda» (Nuform) con su egreso de caja en la `fecha_movimiento` original. Lista:
+`progress/459_reclasificacion_aprobada.csv` (solo id, fecha y monto; sacada de producción; 203 filas, 203 ids,
+total 25.769.034,50, comprobado). Queda ANOTADO como a confirmar: los servicios tecnológicos (Vercel, OpenAI,
+Atlassian, Incognition, Effisystems, Zadarma) podrían ser de Ordenex; si se confirma, se corrige con un movimiento
+nuevo, sin borrar nada.
