@@ -78,6 +78,10 @@ const CONSULTAS_DEL_DETALLE = [
   "orden_historial_estado", //   8. 405: el historial de la ORDEN
   "orden_incidente", //   9. `incidentesAdmin` (feature 268)
   "usuario", //  10. 405: `gestiones.mensajero`
+  // ⭑ 11b. FICHA 454 (R32, 2026-09-23): `gestiones.eventos` — el evento de registro de CALLE de
+  //   cada gestion (take 1), que deriva `pendienteConfirmacion`. UNA consulta para todas las
+  //   gestiones (sin N+1); por eso el detalle pasa de DOCE a TRECE.
+  "orden_evento",
   "order_status", //  11. 405: `historialEstados.estatusDestino`
   "orden_incidente_evidencia", //  12. la portada del incidente del admin (268)
 ];
@@ -591,13 +595,13 @@ describeSiHayBase("ficha 415 — zona y costo por orden, contra Postgres real", 
     expect(m.detalles.zonaMovida!.costoReal).toEqual(COSTO_REAL_ESPERADO);
   });
 
-  it("R8/R31: el DETALLE emite EXACTAMENTE 12 consultas, y son estas doce", async () => {
+  it("R8/R31 (+454): el DETALLE emite EXACTAMENTE 13 consultas, y son estas trece", async () => {
     const m = await escenario();
 
     // El espia esta midiendo de verdad: una lista vacia significaria que el `log: query` no llego.
     expect(m.tablasDetalle.length).toBeGreaterThan(0);
     expect(m.tablasDetalle).toEqual(CONSULTAS_DEL_DETALLE);
-    expect(m.tablasDetalle).toHaveLength(12);
+    expect(m.tablasDetalle).toHaveLength(13); // ficha 454: +`orden_evento` (R32)
   });
 
   it("R8/R24/R31: el LISTADO emite 8 consultas, y NO cambia entre `limit=1` y `limit=50`", async () => {

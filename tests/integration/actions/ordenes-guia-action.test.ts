@@ -349,7 +349,9 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
   // mensajero con el paquete encima aparecio SELECCIONABLE. Se repone aqui, y la guardia
   // `carga-del-mensajero.guardia.test.ts` cruza las dos listas para que no vuelvan a separarse.
   // ===============================================================================================
-  it("235: pregunta por los TRES estados que ocupan al mensajero, `ayuda_tienda` incluido", async () => {
+  // ⏳ 2026-09-23 (FICHA 454, R37): `ayuda_tienda` sale — la orden con ayuda abierta sigue
+  // `en_reparto`, que ya esta en la lista. Antes: TRES estados.
+  it("235 → 454: pregunta por los DOS estados que ocupan al mensajero (la ayuda vive en `en_reparto`)", async () => {
     const findCentralZonaId = vi.fn().mockResolvedValue("z-gam");
     const findMensajerosByZona = vi
       .fn()
@@ -369,22 +371,19 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
     });
 
     // Cara REPARTO: censo cerrado, con el estatus de la ayuda dentro.
-    expect(findMensajerosConOrdenesEn).toHaveBeenCalledWith(
-      ["m1"],
-      ["por_recoger", "en_reparto", "ayuda_tienda"],
-    );
+    expect(findMensajerosConOrdenesEn).toHaveBeenCalledWith(["m1"], ["por_recoger", "en_reparto"]);
     // Cara RECOLECCION: intacta. `ayuda_tienda` no es una recoleccion.
     expect(findMensajerosConOrdenesEn).toHaveBeenCalledWith(["m1"], ["por_recolectar_en_tienda"]);
   });
 
-  it("235: el mensajero con una orden en `ayuda_tienda` sale marcado en `conRepartoIds`", async () => {
+  it("235 → 454: el mensajero con una orden con ayuda ABIERTA (`en_reparto`) sale marcado en `conRepartoIds`", async () => {
     const findCentralZonaId = vi.fn().mockResolvedValue("z-gam");
     const findMensajerosByZona = vi
       .fn()
       .mockResolvedValue([{ id: "m1", nombre: "Ana" }]);
     // El doble responde como la query real: ocupado si se le pregunta por el estatus de ayuda.
     const findMensajerosConOrdenesEn = vi.fn(async (_ids: string[], estados: string[]) =>
-      estados.includes("ayuda_tienda") ? new Set(["m1"]) : new Set<string>(),
+      estados.includes("en_reparto") ? new Set(["m1"]) : new Set<string>(),
     );
 
     const r = await listarMensajerosParaAsignacion({

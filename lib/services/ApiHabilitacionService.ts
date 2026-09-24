@@ -205,13 +205,13 @@ export class ApiHabilitacionService implements IApiHabilitacionService {
       estadoResultante: ESTATUS_EN_REPARTO,
     });
 
-    // R24 (454): la respuesta dice las DOS cosas que pasaron — NO hubo cambio de estado (el
-    // discriminador de la 266 para eso es `habilitada_sin_cambio_de_estado`, el mismo de la rama B)
-    // y la ayuda quedo CERRADA (`ayudaCerrada: true`, lo nuevo del contrato, R36). `habilitada`
-    // queda sin productor: significaba «la orden volvio a `en_reparto`», y ya nunca sale de ahi.
+    // R24 (454, design §4.2: «la respuesta HTTP GANA `ayudaCerrada`»): `resultado: "habilitada"` y
+    // `estado: "en_reparto"` se CONSERVAN —son el discriminador que el integrador ya lee y la
+    // caracterizacion C22 los fija como invariante— y la clave NUEVA dice lo que cambio: la ayuda
+    // quedo CERRADA. Que no hubo transicion lo registra la bitacora (`cambioDeEstado: false`).
     return {
       numGuia,
-      resultado: "habilitada_sin_cambio_de_estado",
+      resultado: "habilitada",
       estado: ESTATUS_EN_REPARTO,
       ayudaCerrada: true,
       error: null,

@@ -380,7 +380,10 @@ describeSiHayBase("262/B13 — las ausencias y las consecuencias, contra Postgre
       setOrdenEnGestion: vi.fn(async () => true),
       liberarOrdenEnGestion: vi.fn(async () => true),
       recogerLote: vi.fn(async (ids: string[]) => ids.length),
-      crearGestionYTransicionar: vi.fn(async () => "g1"),
+      // FICHA 454 (T1.4): el registro sin transicion y la guarda de gestionabilidad (sin gestion
+      // pendiente ni ayuda abierta). Aqui la orden no tiene ninguna de las dos.
+      registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev1" })),
+      findBloqueoDeGestion: vi.fn(async () => null),
       reprogramarDesdeDevuelta: vi.fn(async () => true),
       crearGestionDesdeAyuda: vi.fn(async () => "g-ayuda"),
       rechazarDesdeDevuelta: vi.fn(async () => true),

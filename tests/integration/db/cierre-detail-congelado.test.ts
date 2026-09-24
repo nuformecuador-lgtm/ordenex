@@ -252,6 +252,7 @@ function makeDb() {
             resultado?: string;
             anuladaAt?: Date | null;
             ordenId?: { in?: string[] };
+            eventos?: unknown;
           };
         }) =>
           gestiones
@@ -260,7 +261,10 @@ function makeDb() {
                 (where.cierreId === undefined || g.cierreId === where.cierreId) &&
                 (where.resultado === undefined || g.resultado === where.resultado) &&
                 (where.anuladaAt === undefined || g.anuladaAt === where.anuladaAt) &&
-                (where.ordenId?.in === undefined || where.ordenId.in.includes(g.ordenId)),
+                (where.ordenId?.in === undefined || where.ordenId.in.includes(g.ordenId)) &&
+                // FICHA 454 (T1.7): la APLICACION al aprobar pide gestiones de CALLE con evento de
+                // registro. Las de este escenario son LEGADAS: no casa ninguna.
+                where.eventos === undefined,
             )
             .map((g) => ({
               ...g,

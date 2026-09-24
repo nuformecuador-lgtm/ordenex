@@ -20,10 +20,10 @@ import { TOPE_CARACTERES_NOTA_HABILITAR } from "@/lib/config/habilitacion-api";
 // ⏳ 2026-09-23 (FICHA 454, T1.15, R24) — LA AYUDA DEJA DE SER ESTADO. «En ayuda» es ahora la
 // derivacion `ayudaAbierta` sobre una orden que SIGUE `en_reparto`. La rama A ya no transiciona:
 // registra el hecho `ayuda_habilitada_api` (`registrarAyudaResuelta`, guardado por «ayuda abierta»
-// bajo candado) y la fila de bitacora con `cambioDeEstado: false`, y responde
-// `habilitada_sin_cambio_de_estado` + `ayudaCerrada: true` (R24: «indicando que no hubo cambio de
-// estado y que la ayuda quedo cerrada»). `habilitada` queda sin productor. Sin catalogo que resolver,
-// el fallo cerrado de R19 (266) desaparece. Lo que NO cambia: el owner opaco, R7/R8, la guarda del
+// bajo candado) y la fila de bitacora con `cambioDeEstado: false`, y responde como hasta hoy
+// —`habilitada` + `estado: en_reparto`, el discriminador que el integrador ya lee y que la
+// caracterizacion C22 fija como invariante— GANANDO la clave `ayudaCerrada: true` (design §4.2,
+// R24/R36). Sin catalogo que resolver, el fallo cerrado de R19 (266) desaparece. Lo que NO cambia: el owner opaco, R7/R8, la guarda del
 // llamador, el orden hecho -> bitacora y el punto unico de escritura.
 
 const ACTOR: Actor = { usuarioId: "store-1", rol: "apiKey" };
@@ -208,11 +208,10 @@ describe("266/R11 — la salida conserva orden y cardinalidad de la entrada", ()
     const res = await service.habilitarLote(ACTOR, [fila(11), fila(22), fila(33)]);
     expect(res.resultados).toHaveLength(3);
     expect(res.resultados.map((r) => r.numGuia)).toEqual([11, 22, 33]);
-    // FICHA 454 (R24): la rama A tampoco cambia el estado.
     expect(res.resultados.map((r) => r.resultado)).toEqual([
       "habilitada_sin_cambio_de_estado",
       "error",
-      "habilitada_sin_cambio_de_estado",
+      "habilitada",
     ]);
     expect(res.resultados.map((r) => r.ayudaCerrada)).toEqual([false, false, true]);
   });
@@ -222,12 +221,10 @@ describe("266/R9-R10 — el resumen cuadra y el estado viaja en los dos desenlac
   it("total = habilitadas + habilitadasSinCambioDeEstado + conError, con un lote de los tres tipos", async () => {
     const { service } = build([enAyuda("m1"), orden("devuelta", null, "o2"), null]);
     const res = await service.habilitarLote(ACTOR, [fila(11), fila(22), fila(33)]);
-    // ⏳ 2026-09-23 (FICHA 454, R24): antes `habilitadas: 1, habilitadasSinCambioDeEstado: 1`. La
-    // rama A ya no cambia el estado, asi que cuenta como «sin cambio de estado».
     expect(res.resumen).toEqual({
       total: 3,
-      habilitadas: 0,
-      habilitadasSinCambioDeEstado: 2,
+      habilitadas: 1,
+      habilitadasSinCambioDeEstado: 1,
       conError: 1,
     });
     const { total, habilitadas, habilitadasSinCambioDeEstado, conError } = res.resumen;
@@ -248,7 +245,7 @@ describe("266/R9-R10 — el resumen cuadra y el estado viaja en los dos desenlac
 // EL DISCRIMINADOR (R12) Y LAS DOS RAMAS
 // =================================================================================================
 describe("266/R12-R16 → 454/R24 — rama A: ayuda ABIERTA con mensajero: se cierra la ayuda", () => {
-  it("registra UNA vez el cierre de la ayuda, por el punto unico, y responde sin cambio de estado", async () => {
+  it("registra UNA vez el cierre de la ayuda, por el punto unico, y responde `habilitada` + `ayudaCerrada`", async () => {
     const { service, registrarAyudaResuelta } = build([enAyuda("m1")]);
     const res = await service.habilitarLote(ACTOR, [fila(100234)]);
     expect(registrarAyudaResuelta).toHaveBeenCalledTimes(1);
@@ -260,7 +257,7 @@ describe("266/R12-R16 → 454/R24 — rama A: ayuda ABIERTA con mensajero: se ci
     });
     expect(res.resultados[0]).toEqual({
       numGuia: 100234,
-      resultado: "habilitada_sin_cambio_de_estado",
+      resultado: "habilitada",
       estado: "en_reparto",
       ayudaCerrada: true,
       error: null,
@@ -402,7 +399,7 @@ describe("266/R15 (T4.3) — toda escritura pasa por `registrarAyudaResuelta`, u
       enAyuda("m3", "o3"),
     ]);
     const res = await service.habilitarLote(ACTOR, [fila(11), fila(22), fila(33)]);
-    expect(res.resumen.habilitadasSinCambioDeEstado).toBe(3);
+    expect(res.resumen.habilitadas).toBe(3);
     expect(registrarAyudaResuelta).toHaveBeenCalledTimes(3);
     expect(
       registrarAyudaResuelta.mock.calls.map((c) => (c[0] as { ordenId: string }).ordenId),

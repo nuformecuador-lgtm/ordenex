@@ -64,6 +64,12 @@ function colaFake() {
   };
 }
 
+// ⏳ 2026-09-23 (FICHA 454, T1.15, R25): la ayuda deja de ser el estado `ayuda_tienda`. La orden se
+// siembra `en_reparto` con su evento `ayuda_solicitada` (ayuda ABIERTA), y la gestion de la tienda
+// ya NO transiciona: queda PENDIENTE de confirmar (su evento `gestion_registrada`) y el estado real
+// lo aplica la aprobacion del cierre del mensajero. La guarda del DIA (261/R30) sigue viviendo en la
+// escritura, ahora en la re-lectura bajo candado. Lo que estos casos miden no cambia: la base, y no
+// el servicio, rechaza la orden reservada para otro dia.
 describeSiHayBase("261/B18 — el `where` del `updateMany` de la tienda, contra Postgres", () => {
   let prisma: PrismaClient;
 
@@ -74,7 +80,7 @@ describeSiHayBase("261/B18 — el `where` del `updateMany` de la tienda, contra 
       ordenId: string;
       tiendaId: string;
       mensajeroId: string;
-      ayudaId: string;
+      ayudaId: string; // FICHA 454: el id de `en_reparto` (donde vive la ayuda abierta)
       rechazadaId: string;
     }) => Promise<T>,
   ) => Promise<T>;
@@ -89,14 +95,14 @@ describeSiHayBase("261/B18 — el `where` del `updateMany` de la tienda, contra 
       );
     }
     const estados = await prisma.orderStatus.findMany({
-      where: { value: { in: ["ayuda_tienda", "rechazada"] } },
+      where: { value: { in: ["en_reparto", "rechazada"] } },
       select: { id: true, value: true },
     });
-    const ayudaId = estados.find((e) => e.value === "ayuda_tienda")?.id;
+    const ayudaId = estados.find((e) => e.value === "en_reparto")?.id;
     const rechazadaId = estados.find((e) => e.value === "rechazada")?.id;
     if (!ayudaId || !rechazadaId) {
       throw new Error(
-        "el catalogo `order_status` no tiene `ayuda_tienda` y/o `rechazada`: sin ellos no hay " +
+        "el catalogo `order_status` no tiene `en_reparto` y/o `rechazada`: sin ellos no hay " +
           "transicion que medir. Corre el seed del catalogo.",
       );
     }
@@ -124,6 +130,17 @@ describeSiHayBase("261/B18 — el `where` del `updateMany` de la tienda, contra 
             fechaReparto,
           },
           select: { id: true },
+        });
+        // FICHA 454: la ayuda ABIERTA es este evento (la orden sigue `en_reparto`).
+        await tx.ordenEvento.create({
+          data: {
+            ordenId: orden.id,
+            tipo: "ayuda_solicitada",
+            mensajeroId,
+            actorUsuarioId: mensajeroId,
+            actorRol: "mensajero",
+            createdAt: new Date("2026-08-21T20:00:00.000Z"),
+          },
         });
         return fn({
           tx: tx as unknown as PrismaClient,
@@ -223,7 +240,7 @@ describeSiHayBase("261/B18 — el `where` del `updateMany` de la tienda, contra 
     expect(r.retiradas[0][0]).toHaveLength(2);
   });
 
-  it("la mitad positiva: sin reserva, la MISMA llamada SI transiciona y crea la gestion", async () => {
+  it("la mitad positiva: sin reserva, la MISMA llamada SI crea la gestion (454: pendiente, sin transicion)", async () => {
     // Sin esto, el caso de arriba pasaria tambien con un servicio que no hiciera nada nunca.
     const r = await conOrden(null, async (ctx) => {
       const { service, storage, actor } = montarServicio(ctx, null);
@@ -237,15 +254,20 @@ describeSiHayBase("261/B18 — el `where` del `updateMany` de la tienda, contra 
       return {
         resultado,
         estatusDespues: fila.estatusId,
-        rechazadaId: ctx.rechazadaId,
+        enRepartoId: ctx.ayudaId,
         gestiones: await ctx.tx.gestionOrden.count({ where: { ordenId: ctx.ordenId } }),
+        registros: await ctx.tx.ordenEvento.count({
+          where: { ordenId: ctx.ordenId, tipo: "gestion_registrada" },
+        }),
         retiradas: (storage.remove as ReturnType<typeof vi.fn>).mock.calls.length,
       };
     });
 
     expect(r.resultado.status).toBe("ok");
-    expect(r.estatusDespues).toBe(r.rechazadaId);
+    // ⏳ FICHA 454 (R25): la orden NO se mueve (antes: `rechazada`); la gestion queda pendiente.
+    expect(r.estatusDespues).toBe(r.enRepartoId);
     expect(r.gestiones).toBe(1);
+    expect(r.registros).toBe(1);
     expect(r.retiradas).toBe(0); // nada que compensar
   });
 
