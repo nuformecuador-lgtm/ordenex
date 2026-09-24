@@ -136,3 +136,12 @@ oscuro 5,57. Landing: `asfalto-5` 6,99 y anillo 3,78 sobre `kraft-inset`/`kraft-
   `MultiSelectFilter` de antes, no de la 456. No se abre ficha (design §10-D exigía un fallo serio NUEVO).
 - `LogoutButton` lanza «useToast debe usarse dentro de un ToastProvider» en `/dashboard` y la tabla de la
   satélite tiene un desajuste de hidratación de fecha: preexistentes, ajenos a la ficha.
+
+## T4.1 — Gate completo
+
+- Intento 1 (`progress/gate_456_intento1.log`, `INIT_EXIT=1`): 2 rojos. (1) Red 455 C16
+  (`snapshot-correccion`): la celda del registro ahora devuelve un elemento; se ajustó SOLO la extracción
+  (lee el texto visible), la aserción literal no cambia — commit `cff0b6d6`. (2)
+  `financiera-cubo-temporal` («semana»): ajeno; 3 corridas aisladas en verde (7/7 cada una).
+- Intento 2 (`progress/gate_456.log`): **2176/2176 archivos, 30 816 tests, 26 skipped (los preexistentes
+  de la 455), `== init OK ==`, `INIT_EXIT=0`.**
