@@ -129,4 +129,14 @@ commiteado.
 
 ## Gate
 
-(se completa abajo tras la corrida)
+`./init.sh` COMPLETO contra `ordenex_455`, sin `tail`, `INIT_EXIT` escrito dentro del log.
+
+- **Corrida 1** (`progress/gate_455_frontend_corrida1.log`, sobre `27a369ac`): typecheck ✓, lint 0
+  errores / 216 warnings (los mismos 216 preexistentes), tests `1 failed | 2160 passed (2161)` →
+  `INIT_EXIT=1`. El rojo es AJENO a la ficha: `tests/integration/repositories/historico-conversaciones.int.test.ts`
+  › «R36: un termino que no casa nada devuelve la lista vacia» (recibió una fila; base local compartida).
+  Tres corridas aisladas del archivo: `27 passed (27)` las tres.
+- **Corrida 2** (`progress/gate_455_frontend.log`, mismo árbol): typecheck ✓, lint ✓ (0 errores, 216
+  warnings), **`Test Files 2161 passed (2161)` · `Tests 30634 passed | 26 skipped (30660)`,
+  `INIT_EXIT=0`**. Los 26 skipped son los `describe.skip` preexistentes de `AnaliticaPage` (17) y
+  `AnaliticaShell` (9): **`integration/db` skipped = 0** (68 archivos de las redes 454/455 en verde).
