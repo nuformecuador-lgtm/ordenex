@@ -82,6 +82,46 @@ export const NATURALEZA_POR_CATEGORIA: Record<WalletMovimientoCategoria, Natural
   ingreso_reverso_pago_tienda: "terceros",
 };
 
+/**
+ * Ficha 459 (design §2.2, R1/R9) — si un concepto de la caja es dinero que entro o salio DE
+ * VERDAD (`efectivo`) o un CARGO A UNA TIENDA: la parte de Ordenex (flete, flete por rechazo,
+ * comision de contra-entrega y el impuesto de cada uno) que se DESCUENTA del saldo de la tienda.
+ *
+ * Un cargo no es una entrada de efectivo: es un traspaso de dinero que ya esta en la caja (el
+ * contra-entrega, que es de la tienda) al bolsillo de Ordenex; o, si la orden no tuvo
+ * contra-entrega, una deuda de la tienda que se cobra reduciendo su saldo. En los dos casos la
+ * ganancia sube, «De las tiendas» baja lo mismo y el efectivo no cambia — exactamente lo que el
+ * libro de las tiendas ya registra con su debito espejo (`MAPEO_CONCEPTO_TIENDA`).
+ *
+ * `Record` TOTAL por el mismo motivo que `NATURALEZA_POR_CATEGORIA`: un concepto nuevo de la caja
+ * no compila hasta que alguien decide si es efectivo o un cargo. La guardia
+ * `tests/unit/guards/caja-clasificacion-459.guardia.test.ts` afirma que el conjunto
+ * `cargo_a_tienda` ES `WALLET_INGRESO_CONCEPTO_SEED` y que todos son ingresos propios.
+ */
+export type LiquidezMovimiento = "efectivo" | "cargo_a_tienda";
+
+export const LIQUIDEZ_POR_CATEGORIA: Record<WalletMovimientoCategoria, LiquidezMovimiento> = {
+  // CARGOS A UNA TIENDA: los seis conceptos del feed del cierre (y del cobro por rechazo).
+  ingreso_flete: "cargo_a_tienda",
+  ingreso_flete_devolucion: "cargo_a_tienda",
+  ingreso_comision_cod: "cargo_a_tienda",
+  ingreso_iva_flete: "cargo_a_tienda",
+  ingreso_iva_flete_devolucion: "cargo_a_tienda",
+  ingreso_iva_comision_cod: "cargo_a_tienda",
+  // EFECTIVO: todo lo demas entra o sale de verdad.
+  ingreso_ajuste: "efectivo",
+  ingreso_cod_recaudado: "efectivo",
+  ingreso_reverso_pago_tienda: "efectivo",
+  egreso_pago_tienda: "efectivo",
+  egreso_pago_mensajero: "efectivo",
+  egreso_gasto: "efectivo",
+  egreso_sueldo: "efectivo",
+  egreso_ajuste: "efectivo",
+  egreso_gasto_fijo: "efectivo",
+  egreso_gasto_variable: "efectivo",
+  egreso_indemnizacion: "efectivo",
+};
+
 /** Las seis sumas que hacen falta: por tipo y, dentro de cada tipo, por naturaleza. */
 type Acumulado = {
   entradas: Prisma.Decimal;
