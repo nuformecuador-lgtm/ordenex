@@ -10,7 +10,7 @@
 ## Veredicto
 
 **Fase 2 hecha, BLOQUEO-1 y BLOQUEO-2 resueltos.** `PENDIENTES_FASE_2` de G2 y G3 VACÍAS. Redes
-`tests/integration/db/454` y `455` en verde. 19 mutaciones, 19 rojas (una sobrevivió en la primera
+`tests/integration/db/454` y `455` en verde. 18 mutaciones, 18 rojas (una, F2, sobrevivió en la primera
 pasada y obligó a añadir un caso: F2). Gate completo: §Gate.
 
 ## Entorno
@@ -84,7 +84,7 @@ el leader/humano lo confirme.**
 ## Mutaciones (salida íntegra en `progress/mut_455_frontend/<id>.log`)
 
 Método: `mutar.py` aplica un reemplazo literal (comprueba que se aplicó), corre los tests, restaura el
-archivo BYTE A BYTE y comprueba `git diff --quiet` del archivo (limpio en las 19). Sobre el árbol
+archivo BYTE A BYTE y comprueba `git diff --quiet` del archivo (limpio en las 18). Sobre el árbol
 commiteado.
 
 | Id | Archivo | Mutación | Cae |
