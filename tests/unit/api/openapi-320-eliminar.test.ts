@@ -219,10 +219,16 @@ describe("FICHA 320 — lo que el contrato NO gana", () => {
     // publica como el schema `WebhookOrdenEstadoActualizado`. La afirmacion es la misma —borrar no
     // emite nada—, medida donde ahora viven los eventos.
     const schemas = openApiSpec.components.schemas as unknown as Record<string, unknown>;
+    //
+    // ⏳ 2026-09-23 (FICHA 454, R33/R36): entra el SEGUNDO schema de evento, `WebhookOrdenEvento`
+    // (los hechos de orden que NO son un cambio de estado: gestion registrada/anulada/corregida y la
+    // ayuda). Es un alta firmada por el spec, no un gancho «por si acaso».
     expect(Object.keys(schemas).filter((n) => n.startsWith("Webhook"))).toEqual([
       "WebhookOrdenEstadoActualizado",
+      "WebhookOrdenEvento",
     ]);
     expect(JSON.stringify(schemas.WebhookOrdenEstadoActualizado)).not.toContain("eliminada");
+    expect(JSON.stringify(schemas.WebhookOrdenEvento)).not.toContain("eliminada");
     expect(yaml).not.toContain("orden.eliminada");
   });
 });

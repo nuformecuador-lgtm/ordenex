@@ -63,7 +63,9 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
     });
   });
 
-  it("`OrdenGestion` declara EXACTAMENTE las cinco claves de R3, todas requeridas", () => {
+  // ⏳ 2026-09-23 (FICHA 454, R32/R36): SEIS claves — entra `pendienteConfirmacion`, al FINAL y
+  // requerida (el DTO la emite siempre, `false` en las gestiones ya aplicadas y en las legadas).
+  it("`OrdenGestion` declara EXACTAMENTE las seis claves (5 de R3 + 454/R32), todas requeridas", () => {
     // Escritas a mano y en el orden del contrato: una clave de mas o de menos se ve.
     expect(Object.keys(propsGestion)).toEqual([
       "createdAt",
@@ -71,6 +73,7 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
       "estadoResultante",
       "motivo",
       "mensajero",
+      "pendienteConfirmacion",
     ]);
     expect(gestion.required).toEqual([
       "createdAt",
@@ -78,6 +81,7 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
       "estadoResultante",
       "motivo",
       "mensajero",
+      "pendienteConfirmacion",
     ]);
     // Ninguna propiedad opcional, y nada fuera de la lista.
     expect(gestion.additionalProperties).toBe(false);

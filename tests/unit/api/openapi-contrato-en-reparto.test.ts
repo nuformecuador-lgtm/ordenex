@@ -176,8 +176,13 @@ describe("153/R13 — eventos publicos de webhook", () => {
   // de fulfillment, que hasta hoy no producian NINGUN evento hasta llegar a `en_bodega_central` al
   // emitirse la guia. Misma razon que la 155/R43 para `por_recolectar_en_tienda`. La igualdad value
   // a value que ACOMPAÑA a este conteo vive en `tests/unit/types/webhook-eventos.test.ts`.
-  it("EVENTOS_PUBLICOS tiene 13 elementos (los 12 de la 268 + `en_preparacion`)", () => {
-    expect(EVENTOS_PUBLICOS.size).toBe(13);
+  //
+  // ⏳ 2026-09-23 — FICHA 454 (R34): pasa de 13 a 12. SALE `ayuda_tienda`, y es la UNICA baja: la
+  // ayuda deja de ser un estado (la orden sigue `en_reparto`) y el integrador recibe la ida y la
+  // vuelta como eventos propios (`orden.ayuda_solicitada`/`orden.ayuda_resuelta`, R33). El aviso
+  // vive en `docs/api/CHANGELOG.md` (2026-09-23).
+  it("EVENTOS_PUBLICOS tiene 12 elementos (sale `ayuda_tienda`, 454/R34)", () => {
+    expect(EVENTOS_PUBLICOS.size).toBe(12);
     // El value nuevo, afirmado aqui tambien: el conteo solo no distingue un alta de un intercambio.
     expect(EVENTOS_PUBLICOS.has("en_preparacion")).toBe(true);
   });
@@ -201,9 +206,9 @@ describe("153/R13 — eventos publicos de webhook", () => {
     }
     // 268/R1 y 268/R2: las dos altas, junto a los previos y no en un test aparte, para que la
     // lista completa se lea de un vistazo.
-    for (const nuevo of ["ayuda_tienda", "incidente"] as const) {
-      expect(EVENTOS_PUBLICOS.has(nuevo), `no entro en la politica: ${nuevo}`).toBe(true);
-    }
+    // ⏳ FICHA 454 (R34): de las dos altas de la 268 queda `incidente`; `ayuda_tienda` sale.
+    expect(EVENTOS_PUBLICOS.has("incidente"), "no entro en la politica: incidente").toBe(true);
+    expect(EVENTOS_PUBLICOS.has("ayuda_tienda")).toBe(false);
     // 268/R4: `devolucion_por_confirmar` SIGUE FUERA (239/P2, firmada). No entra «por simetria».
     expect(EVENTOS_PUBLICOS.has("devolucion_por_confirmar")).toBe(false);
   });
@@ -236,17 +241,18 @@ describe("153/R13 — eventos publicos de webhook", () => {
 // este archivo custodia (los 4 bloques y su espejo). El archivo nuevo custodia la seccion
 // `webhooks:`, que es otra cosa.
 // ---------------------------------------------------------------------------------------------
-describe("268/R15/R16 — los dos values nuevos estan publicados en los 4 enums y en el .yaml", () => {
+// ⏳ 2026-09-23 (FICHA 454, R36/R37): de los dos values que la 268 publico, `ayuda_tienda` SALE de
+// los 4 enums (la ayuda deja de ser un estado) e `incidente` se queda, AL FINAL, tras
+// `devuelta_a_tienda`. El espejo del .yaml se compara posicionalmente.
+describe("268/R15/R16 → 454 — `incidente` sigue publicado en los 4 enums; `ayuda_tienda` sale", () => {
   const enumsTs = enumsDeEstado(openApiSpec);
 
-  it("los 4 enums del objeto TS documentan `ayuda_tienda` e `incidente`", () => {
+  it("los 4 enums del objeto TS documentan `incidente` y ya NO `ayuda_tienda`", () => {
     expect(enumsTs).toHaveLength(4);
     for (const lista of enumsTs) {
-      expect(lista).toContain("ayuda_tienda");
+      expect(lista).not.toContain("ayuda_tienda");
       expect(lista).toContain("incidente");
-      // Van AL FINAL, tras `devuelta_a_tienda`: el espejo del .yaml se compara posicionalmente,
-      // asi que la posicion es parte del contrato, no un detalle de estilo.
-      expect(lista.slice(-2)).toEqual(["ayuda_tienda", "incidente"]);
+      expect(lista.slice(-2)).toEqual(["devuelta_a_tienda", "incidente"]);
     }
   });
 
@@ -254,14 +260,15 @@ describe("268/R15/R16 — los dos values nuevos estan publicados en los 4 enums 
     const enumsYaml = enumsDelYaml(yaml);
     expect(enumsYaml).toHaveLength(4);
     for (let i = 0; i < enumsYaml.length; i++) {
-      expect(enumsYaml[i].slice(-2)).toEqual(["ayuda_tienda", "incidente"]);
+      expect(enumsYaml[i].slice(-2)).toEqual(["devuelta_a_tienda", "incidente"]);
       expect(enumsYaml[i]).toEqual(enumsTs[i]);
     }
+    // Y ninguna linea del .yaml publica ya `ayuda_tienda` como value de un enum.
+    expect(yaml.split(/\r?\n/).filter((l) => /^\s*-\s+ayuda_tienda\s*$/.test(l))).toEqual([]);
   });
 
-  it("268/R17: los dos values nuevos existen en ORDER_STATUS_SEED (sin estados fantasma)", () => {
+  it("268/R17: `incidente` existe en ORDER_STATUS_SEED (sin estados fantasma)", () => {
     const catalogo = new Set<string>(ORDER_STATUS_SEED);
-    expect(catalogo.has("ayuda_tienda")).toBe(true);
     expect(catalogo.has("incidente")).toBe(true);
   });
 });

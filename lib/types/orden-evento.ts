@@ -76,3 +76,21 @@ export const FAMILIAS_APLICACION = [
 ] as const satisfies readonly OrdenHistorialOrigenTipo[];
 
 export type FamiliaAplicacion = (typeof FAMILIAS_APLICACION)[number];
+
+/**
+ * Nombre PUBLICO del evento por tipo de hecho (design §12.1, DC; R33). Los dos tipos de vuelta de
+ * la ayuda publican el MISMO evento (`orden.ayuda_resuelta`) y se distinguen por `data.via`.
+ * `Record` exhaustivo: un tipo nuevo en el SEED no compila sin decidir su nombre publico.
+ *
+ * Vive aqui (y no en `WebhookEventoOrdenService`) porque lo leen DOS capas: el servicio que entrega
+ * el webhook y el contrato OpenAPI (`lib/api/openapi-spec.ts`), que DERIVA de aqui su `enum` de
+ * eventos en vez de copiarlo.
+ */
+export const EVENTO_PUBLICO_POR_TIPO: Record<OrdenEventoTipo, string> = {
+  gestion_registrada: "orden.gestion_registrada",
+  gestion_anulada: "orden.gestion_anulada",
+  gestion_corregida: "orden.gestion_corregida",
+  ayuda_solicitada: "orden.ayuda_solicitada",
+  ayuda_rescatada: "orden.ayuda_resuelta",
+  ayuda_habilitada_api: "orden.ayuda_resuelta",
+};

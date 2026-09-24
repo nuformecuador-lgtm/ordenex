@@ -11,6 +11,8 @@ import { PENUMBRA } from "@/lib/types/analitica-operativa";
 import { ESTATUS_POR_RESULTADO } from "@/lib/types/gestion-destino";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 import { CAUSA_INCIDENTE_SEED } from "@/lib/types/causa-incidente";
+// FICHA 454 (R33/R36): el nombre publico de cada evento de ORDEN, fuente unica.
+import { EVENTO_PUBLICO_POR_TIPO } from "@/lib/types/orden-evento";
 
 // Feature 106 — Fuente de verdad del contrato OpenAPI 3.1 del canal integrador por API key.
 // Este objeto es lo que sirve `GET /api/docs/openapi` (como JSON) y lo que renderiza Swagger UI
@@ -82,6 +84,11 @@ const WEBHOOK_ESTADO_ENUM = [...EVENTOS_PUBLICOS].sort();
 // NO cuenta como «enum de estado» para `openapi-contrato-en-reparto.test.ts`: contiene
 // `entregada` pero NO `por_recoger`, asi que los bloques de catalogo siguen siendo CUATRO.
 const GESTION_RESULTADO_ENUM = Object.keys(ESTATUS_POR_RESULTADO).sort();
+
+// FICHA 454 (R33/R36) — los eventos de ORDEN que NO son un cambio de estado (webhook
+// `webhook_evento`). Se DERIVA de `EVENTO_PUBLICO_POR_TIPO` —sin duplicados: las dos vueltas de la
+// ayuda publican el mismo nombre— y se ordena para que el espejo `.yaml` sea comparable.
+const WEBHOOK_EVENTO_ORDEN_ENUM = [...new Set(Object.values(EVENTO_PUBLICO_POR_TIPO))].sort();
 
 // ⏳ 2026-09-10 (feature 405/R21) — enum de `OrdenGestion.motivo`: las DOS causas tipificadas y
 // `null`. Derivado de los MISMOS seeds de los que sale la lista del webhook
@@ -849,18 +856,21 @@ export const openApiSpec = {
                           numGuia: 100234,
                           resultado: "habilitada",
                           estado: "en_reparto",
+                          ayudaCerrada: true,
                           error: null,
                         },
                         {
                           numGuia: 100235,
                           resultado: "habilitada_sin_cambio_de_estado",
                           estado: "devuelta",
+                          ayudaCerrada: false,
                           error: null,
                         },
                         {
                           numGuia: 999999,
                           resultado: "error",
                           estado: null,
+                          ayudaCerrada: false,
                           error: {
                             codigo: "no_encontrada",
                             mensaje: "no existe una orden viva con esa guia",
@@ -1151,6 +1161,134 @@ export const openApiSpec = {
           },
         ],
       },
+      // FICHA 454 (T1.20, R33/R36) — PAYLOAD de los eventos de ORDEN que NO son un cambio de estado.
+      //
+      // Desde la 454 la gestion del mensajero ya no mueve la orden al registrarse (el estado real se
+      // aplica al APROBAR el cierre, y eso SI sale como `orden.estado_actualizado`), y la ayuda a la
+      // tienda deja de ser un estado. Estos hechos se entregan por el MISMO canal y con la MISMA
+      // firma, en un cuerpo propio. Se publica la FORMA, igual que el de estado: no es una operacion.
+      WebhookOrdenEvento: {
+        type: "object",
+        description:
+          "Cuerpo de los eventos de orden que NO son un cambio de estado. Llegan al MISMO callback y con la MISMA firma que `orden.estado_actualizado`. Ramificá por `evento`.",
+        required: ["evento", "eventoId", "ocurridoAt", "data"],
+        properties: {
+          evento: {
+            type: "string",
+            enum: WEBHOOK_EVENTO_ORDEN_ENUM,
+            description: [
+              "Nombre del evento. Estables:",
+              "",
+              "- `orden.gestion_registrada` — el mensajero (o la tienda, desde una ayuda) registró una",
+              "  gestión. Queda **pendiente de confirmar**: el estado de la orden NO cambia todavía; el",
+              "  real llega como `orden.estado_actualizado` cuando se aprueba el cierre del mensajero.",
+              "- `orden.gestion_anulada` — esa gestión pendiente se deshizo antes de entrar en un cierre.",
+              "- `orden.gestion_corregida` — se corrigió el resultado de una gestión pendiente dentro de",
+              "  un cierre abierto (`resultadoAnterior` → `resultado`).",
+              "- `orden.ayuda_solicitada` — el mensajero pidió ayuda a la tienda. La orden sigue `en_reparto`.",
+              "- `orden.ayuda_resuelta` — la ayuda se cerró (`data.via` dice por dónde).",
+              "",
+              "La lista puede CRECER de forma aditiva, siempre con aviso previo: tratá un evento desconocido como «ignorar».",
+            ].join("\n"),
+          },
+          eventoId: {
+            type: "string",
+            description:
+              "Identificador ÚNICO del hecho (`webhook_evento:<id>`). Dos entregas del mismo hecho lo repiten: deduplicá por este valor.",
+          },
+          ocurridoAt: {
+            type: "string",
+            format: "date-time",
+            description: "Instante del hecho (ISO 8601, UTC).",
+          },
+          data: {
+            type: "object",
+            description:
+              "`numGuia`, `numRemision`, `motivo` y `mensajero` están SIEMPRE presentes (`null` cuando no aplica, nunca omitidos). El resto de claves se OMITE cuando el evento no las lleva: `gestionId` y `resultado` en los tres eventos de gestión, `resultadoAnterior` solo en `orden.gestion_corregida`, `pendienteConfirmacion` en `orden.gestion_registrada` y `orden.gestion_corregida`, y `via` solo en `orden.ayuda_resuelta`.",
+            required: ["numGuia", "numRemision", "motivo", "mensajero"],
+            properties: {
+              numGuia: {
+                type: ["integer", "null"],
+                description: "Número de guía de la orden (null si aún no está asignado).",
+              },
+              numRemision: {
+                type: "string",
+                description: "Remisión de la orden (la que envió el integrador).",
+              },
+              gestionId: {
+                type: "string",
+                description: "Identificador de la gestión. Solo en los tres eventos de gestión.",
+              },
+              resultado: {
+                type: "string",
+                enum: GESTION_RESULTADO_ENUM,
+                description:
+                  "Resultado de la gestión, con el MISMO value crudo que publica `OrdenGestion.resultado`. En `orden.gestion_corregida`, el resultado NUEVO.",
+              },
+              resultadoAnterior: {
+                type: "string",
+                enum: GESTION_RESULTADO_ENUM,
+                description: "Solo en `orden.gestion_corregida`: el resultado que tenía antes de la corrección.",
+              },
+              motivo: {
+                type: ["string", "null"],
+                enum: MOTIVO_CAUSA_ENUM,
+                description:
+                  "Causa TIPIFICADA de la gestión, con los MISMOS values que `OrdenGestion.motivo`. `null` en los eventos de ayuda y cuando la gestión no tiene causa. NUNCA es el texto libre del mensajero.",
+              },
+              mensajero: {
+                type: ["object", "null"],
+                required: ["id", "nombre"],
+                additionalProperties: false,
+                properties: {
+                  id: { type: "string", description: "Identificador ESTABLE del mensajero (UUID en texto)." },
+                  nombre: { type: "string", description: "Nombre completo, para mostrar. Puede cambiar: agrupá por `id`." },
+                },
+                description: "Mensajero atribuido al hecho (la MISMA forma que en `orden.estado_actualizado`), o `null`.",
+              },
+              pendienteConfirmacion: {
+                type: "boolean",
+                description:
+                  "`true`: el estado de la orden todavía NO refleja esta gestión; se aplicará al aprobar el cierre del mensajero, y entonces llegará `orden.estado_actualizado`.",
+              },
+              via: {
+                type: "string",
+                enum: ["mensajero", "tienda", "api"],
+                description:
+                  "Solo en `orden.ayuda_resuelta`: quién cerró la ayuda — el mensajero («Recuperar»), la tienda («Habilitar») o el canal por API key (`POST /api/ordenes/api-key/habilitar`).",
+              },
+            },
+          },
+        },
+        examples: [
+          {
+            evento: "orden.gestion_registrada",
+            eventoId: "webhook_evento:018f2c31-0000-4000-8000-000000000101",
+            ocurridoAt: "2026-09-23T15:10:00.000Z",
+            data: {
+              numGuia: 100234,
+              numRemision: "REM-0001",
+              gestionId: "018f2c31-0000-4000-8000-000000000201",
+              resultado: "devuelta",
+              motivo: "not_found",
+              mensajero: { id: "018f2c31-0000-4000-8000-0000000000aa", nombre: "Carlos Jiménez Mora" },
+              pendienteConfirmacion: true,
+            },
+          },
+          {
+            evento: "orden.ayuda_resuelta",
+            eventoId: "webhook_evento:018f2c31-0000-4000-8000-000000000102",
+            ocurridoAt: "2026-09-23T16:00:00.000Z",
+            data: {
+              numGuia: 100235,
+              numRemision: "REM-0002",
+              motivo: null,
+              mensajero: { id: "018f2c31-0000-4000-8000-0000000000aa", nombre: "Carlos Jiménez Mora" },
+              via: "api",
+            },
+          },
+        ],
+      },
       Error: {
         type: "object",
         description: "Shape uniforme de error del manejador global. `status` siempre `\"error\"`.",
@@ -1417,7 +1555,8 @@ export const openApiSpec = {
         type: "object",
         description:
           "Un desenlace registrado sobre la orden: quién lo registró, cuándo y en qué dejó la orden. El array completo permite medir cuántas veces se visitó la orden y cuánto pasó entre una vez y la siguiente.",
-        required: ["createdAt", "resultado", "estadoResultante", "motivo", "mensajero"],
+        // FICHA 454 (R32): `pendienteConfirmacion` entra AL FINAL (aditivo).
+        required: ["createdAt", "resultado", "estadoResultante", "motivo", "mensajero", "pendienteConfirmacion"],
         additionalProperties: false,
         properties: {
           createdAt: {
@@ -1442,9 +1581,10 @@ export const openApiSpec = {
               "aquella lista todavía no enumera. Tratá un value desconocido como texto, no como",
               "error.",
               "",
-              "⚠️ **No lo deduzcas del `resultado`**: una gestión `devuelta` deja la orden en",
-              "`devolucion_por_confirmar`, no en `devuelta`; solo la aprobación posterior del cierre",
-              "la mueve ahí.",
+              "⚠️ **No lo deduzcas del `resultado`**: una gestión se REGISTRA sin mover la orden; el",
+              "estado se aplica cuando se APRUEBA el cierre del mensajero. Mientras tanto la gestión",
+              "está `pendienteConfirmacion: true` y este campo es `null`. En gestiones anteriores al",
+              "2026-09-23, una `devuelta` puede mostrar `devolucion_por_confirmar`.",
               "",
               "Es `null` en gestiones ANTIGUAS, anteriores a que existiera la línea de tiempo de",
               "estados: no hay ninguna transición registrada que las respalde. No es un fallo del",
@@ -1496,6 +1636,12 @@ export const openApiSpec = {
               "atribuidas al mensajero de la última devolución. En este array se ven idénticas a una",
               "visita de calle.",
             ].join("\n"),
+          },
+          // FICHA 454 (R32) — la clave NUEVA, al final.
+          pendienteConfirmacion: {
+            type: "boolean",
+            description:
+              "`true` mientras la gestión está PENDIENTE de confirmar: se registró, pero el estado que produce todavía no se aplicó (se aplica al aprobar el cierre del mensajero; hasta entonces `estadoResultante` es `null`). `false` en las gestiones ya aplicadas y en las anteriores al 2026-09-23.",
           },
         },
       },
@@ -2129,7 +2275,10 @@ export const openApiSpec = {
         required: ["total", "habilitadas", "habilitadasSinCambioDeEstado", "conError"],
         properties: {
           total: { type: "integer", description: "Filas recibidas." },
-          habilitadas: { type: "integer", description: "Volvieron a `en_reparto`." },
+          habilitadas: {
+            type: "integer",
+            description: "Órdenes con la ayuda abierta cuya ayuda quedó cerrada (`ayudaCerrada: true`).",
+          },
           habilitadasSinCambioDeEstado: {
             type: "integer",
             description: "Se registró la habilitación y el estado NO cambió.",
@@ -2139,7 +2288,7 @@ export const openApiSpec = {
       },
       HabilitacionRowResult: {
         type: "object",
-        required: ["numGuia", "resultado", "estado", "error"],
+        required: ["numGuia", "resultado", "estado", "ayudaCerrada", "error"],
         properties: {
           numGuia: {
             description: "La guía tal como se envió (si la fila era inválida, puede no ser entero).",
@@ -2148,11 +2297,17 @@ export const openApiSpec = {
             type: "string",
             enum: ["habilitada", "habilitada_sin_cambio_de_estado", "error"],
             description:
-              "`habilitada`: la orden volvió a `en_reparto`. `habilitada_sin_cambio_de_estado`: se registró y el estado NO cambió (SIEMPRE el caso de una `devuelta`). `error`: la fila no se procesó.",
+              "`habilitada`: la orden tenía la ayuda abierta y la ayuda quedó CERRADA; la orden sigue `en_reparto` con su mensajero y vuelve a ser gestionable (desde el 2026-09-23 no hay cambio de estado: mirá `ayudaCerrada`). `habilitada_sin_cambio_de_estado`: se registró y el estado NO cambió (SIEMPRE el caso de una `devuelta`). `error`: la fila no se procesó.",
           },
           estado: {
             type: ["string", "null"],
             description: "Estado en el que la orden quedó; `null` cuando la fila falló.",
+          },
+          // FICHA 454 (R24/R36) — la clave NUEVA.
+          ayudaCerrada: {
+            type: "boolean",
+            description:
+              "`true` si esta fila CERRÓ una ayuda abierta (el mensajero puede volver a gestionar la orden). `false` en cualquier otro caso, incluidas las filas con error.",
           },
           error: {
             type: ["object", "null"],
@@ -2167,7 +2322,7 @@ export const openApiSpec = {
                   "estado_no_habilitable",
                 ],
                 description:
-                  "`fila_invalida`: `num_guia`/`nota` no cumplen. `duplicada_en_lote`: la guía ya apareció antes en el mismo lote. `no_encontrada`: no hay orden viva con esa guía para esta key (no distingue «no existe» de «es de otro dueño»). `estado_no_habilitable`: el estado actual no es `ayuda_tienda` ni `devuelta` —incluye `reprogramada` y la segunda habilitación de una orden ya en `en_reparto`—.",
+                  "`fila_invalida`: `num_guia`/`nota` no cumplen. `duplicada_en_lote`: la guía ya apareció antes en el mismo lote. `no_encontrada`: no hay orden viva con esa guía para esta key (no distingue «no existe» de «es de otro dueño»). `estado_no_habilitable`: la orden no tiene una ayuda abierta ni está `devuelta` —incluye `reprogramada` y la segunda habilitación de una orden cuya ayuda ya se cerró—.",
               },
               mensaje: { type: "string" },
             },

@@ -30,21 +30,11 @@ import {
 import { WebhookEntregaFallidaError } from "@/lib/services/WebhookEstadoService";
 import { dedupeKeyWebhookEvento } from "@/lib/services/jobs/webhook-evento-encolado";
 import type { ApiMensajeroDTO } from "@/lib/types/api-orden";
-import type { OrdenEventoTipo } from "@/lib/types/orden-evento";
+import { EVENTO_PUBLICO_POR_TIPO } from "@/lib/types/orden-evento";
 
-/**
- * Nombre PUBLICO del evento por tipo de hecho (design §12.1, DC). Los dos tipos de vuelta de la
- * ayuda publican el MISMO evento (`orden.ayuda_resuelta`) y se distinguen por `data.via`.
- * `Record` exhaustivo: un tipo nuevo en el SEED no compila sin decidir su nombre publico.
- */
-export const EVENTO_PUBLICO_POR_TIPO: Record<OrdenEventoTipo, string> = {
-  gestion_registrada: "orden.gestion_registrada",
-  gestion_anulada: "orden.gestion_anulada",
-  gestion_corregida: "orden.gestion_corregida",
-  ayuda_solicitada: "orden.ayuda_solicitada",
-  ayuda_rescatada: "orden.ayuda_resuelta",
-  ayuda_habilitada_api: "orden.ayuda_resuelta",
-};
+// El mapa `tipo -> nombre publico` vive en `lib/types/orden-evento.ts` (lo lee tambien el contrato
+// OpenAPI). Se re-exporta aqui para los consumidores que ya lo importaban de este modulo.
+export { EVENTO_PUBLICO_POR_TIPO };
 
 /** Por donde se resolvio la ayuda (`orden.ayuda_resuelta`). */
 export type ViaAyuda = "mensajero" | "tienda" | "api";

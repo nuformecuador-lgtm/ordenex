@@ -266,15 +266,22 @@ describe("404/R24 — el espejo `docs/api/api-key-openapi.yaml` refleja el cambi
       .filter((l) => /^\s+mensajero:\s*$/.test(l))
       .map((l) => l.length - l.trimStart().length)
       .sort((a, b) => a - b);
-    expect(comoClave).toEqual([8, 8, 12, 12, 14, 14]);
+    //
+    // ⏳ 2026-09-23 (FICHA 454): SEIS -> NUEVE. Las seis de antes siguen; las tres nuevas son del
+    // schema `WebhookOrdenEvento`: su propiedad `data.mensajero` y los DOS ejemplos (todas a 12).
+    expect(comoClave).toEqual([8, 8, 12, 12, 12, 12, 12, 14, 14]);
   });
 
   it("mete `mensajero` en los DOS bloques `required` y no toca `evidenciasUrl`", () => {
     // ⏳ 2026-09-10 (feature 405): eran DOS bloques `required` con `- mensajero` (el `data` del
     // webhook y `OrdenListItem`) y ahora son TRES: `OrdenGestion` tambien lo exige. Lo que este
     // caso protege de verdad —que `evidenciasUrl` siga SIN ser requerida— no cambia.
+    //
+    // ⏳ 2026-09-23 (FICHA 454): TRES -> CINCO lineas `- mensajero`. Una es el `required` del `data`
+    // de `WebhookOrdenEvento`; la otra NO es un `required`: es el value `mensajero` del enum de
+    // `data.via` de ese mismo schema. Se dice para que nadie cuente cinco bloques `required`.
     const enRequired = yamlTexto.split("\n").filter((l) => /^\s+- mensajero\s*$/.test(l));
-    expect(enRequired).toHaveLength(3);
+    expect(enRequired).toHaveLength(5);
     expect(yamlTexto).not.toContain("- evidenciasUrl");
   });
 
