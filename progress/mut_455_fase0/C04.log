@@ -1,0 +1,24 @@
+=== MUTACION C04 — 2026-09-24T04:50:50-05:00
+archivo: lib/repositories/TableroDiaRepository.ts
+perl: s/  devuelta: "devueltas",/  rechazada: "devueltas",/
+--- diff aplicado:
+diff --git a/lib/repositories/TableroDiaRepository.ts b/lib/repositories/TableroDiaRepository.ts
+index 95eff515..a9c3a393 100644
+--- a/lib/repositories/TableroDiaRepository.ts
++++ b/lib/repositories/TableroDiaRepository.ts
+@@ -102 +102 @@ export const CONTADOR_POR_RESULTADO = {
+-  devuelta: "devueltas",
++  rechazada: "devueltas",
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts
+ × tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > invariantes > los contadores por RESULTADO del dia: dos de cada, y 16 asignadas 8ms
+   → expected { asignadas: 16, entregadas: 2, …(7) } to match object { asignadas: 16, entregadas: 2, …(4) }
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > invariantes > los buckets sin resultado: 2 sin recoger, 3 en reparto, 1 en otros 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R5/R6) > los rotulos de los ocho contadores, hoy 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > invariantes > los contadores por RESULTADO del dia: dos de cada, y 16 asignadas
+AssertionError: expected { asignadas: 16, entregadas: 2, …(7) } to match object { asignadas: 16, entregadas: 2, …(4) }
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

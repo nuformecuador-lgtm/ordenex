@@ -1,0 +1,25 @@
+=== MUTACION C14 — 2026-09-24T04:52:17-05:00
+archivo: lib/types/novedad-grupo.ts
+perl: s/devolucion: \{ tipo: "estatus", estatus: "devuelta" \},/devolucion: { tipo: "estatus", estatus: "rechazada" },/
+--- diff aplicado:
+diff --git a/lib/types/novedad-grupo.ts b/lib/types/novedad-grupo.ts
+index f57fcad3..413f60b8 100644
+--- a/lib/types/novedad-grupo.ts
++++ b/lib/types/novedad-grupo.ts
+@@ -77 +77 @@ export const PREDICADO_POR_GRUPO = {
+-  devolucion: { tipo: "estatus", estatus: "devuelta" },
++  devolucion: { tipo: "estatus", estatus: "rechazada" },
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts
+ ✓ tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts > 455/C14 — pestañas de novedades y ayuda de la tienda (Postgres real) > invariantes > precondicion: las tres ayudas se piden, A2 se recupera y la tienda gestiona A3 2ms
+ × tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts > 455/C14 — pestañas de novedades y ayuda de la tienda (Postgres real) > invariantes > la pestaña de devolucion de la tienda lista D1 y D2 (ni X1, ni X2, ni la ajena) 6ms
+   → expected [ 'X1' ] to deeply equal [ 'D1', 'D2' ]
+ ✓ tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts > 455/C14 — pestañas de novedades y ayuda de la tienda (Postgres real) > invariantes > la pestaña de ayuda lista solo la ayuda abierta (A1) 0ms
+ ✓ tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts > 455/C14 — pestañas de novedades y ayuda de la tienda (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R5/R6) > los rotulos de las dos pestañas, hoy 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts > 455/C14 — pestañas de novedades y ayuda de la tienda (Postgres real) > invariantes > la pestaña de devolucion de la tienda lista D1 y D2 (ni X1, ni X2, ni la ajena)
+AssertionError: expected [ 'X1' ] to deeply equal [ 'D1', 'D2' ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

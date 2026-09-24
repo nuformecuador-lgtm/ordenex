@@ -1,0 +1,23 @@
+=== MUTACION C04b — 2026-09-24T04:50:55-05:00
+archivo: lib/types/tablero-dia.ts
+perl: s/  por_recoger: "sinRecoger",\n//
+--- diff aplicado:
+diff --git a/lib/types/tablero-dia.ts b/lib/types/tablero-dia.ts
+index decb2eaf..0d6cd9b5 100644
+--- a/lib/types/tablero-dia.ts
++++ b/lib/types/tablero-dia.ts
+@@ -71 +70,0 @@ export const BUCKET_POR_ESTATUS = {
+-  por_recoger: "sinRecoger",
+lineas cambiadas: 1
+--- tests: tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > invariantes > los contadores por RESULTADO del dia: dos de cada, y 16 asignadas 3ms
+ × tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > invariantes > los buckets sin resultado: 2 sin recoger, 3 en reparto, 1 en otros 8ms
+   → expected { asignadas: 16, entregadas: 2, …(7) } to match object { sinRecoger: 2, enReparto: 3, …(1) }
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R5/R6) > los rotulos de los ocho contadores, hoy 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > invariantes > los buckets sin resultado: 2 sin recoger, 3 en reparto, 1 en otros
+AssertionError: expected { asignadas: 16, entregadas: 2, …(7) } to match object { sinRecoger: 2, enReparto: 3, …(1) }
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

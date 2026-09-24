@@ -1,0 +1,24 @@
+=== MUTACION C06 — 2026-09-24T04:51:21-05:00
+archivo: lib/repositories/AvisoAgregadoRepository.ts
+perl: s/const ESTATUS_REPRESADA: OrderStatusValue = "por_devolver";/const ESTATUS_REPRESADA: OrderStatusValue = "devuelta";/
+--- diff aplicado:
+diff --git a/lib/repositories/AvisoAgregadoRepository.ts b/lib/repositories/AvisoAgregadoRepository.ts
+index 0b3d9a7f..212b268b 100644
+--- a/lib/repositories/AvisoAgregadoRepository.ts
++++ b/lib/repositories/AvisoAgregadoRepository.ts
+@@ -41 +41 @@ const RESULTADO_DEVUELTA = "devuelta";
+-const ESTATUS_REPRESADA: OrderStatusValue = "por_devolver";
++const ESTATUS_REPRESADA: OrderStatusValue = "devuelta";
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > aviso de novedades: la tienda tiene 3 en novedad (N1 con su causa, N2 y P3 sin gestion) y X no cuenta 1ms
+ × tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > represadas de la zona: solo P1 (anclada antes del umbral) 6ms
+   → expected +0 to be 1 // Object.is equality
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > el corte crea UN vencido y barre solo E1 a novedadInterna, vinculada con origen enReparto 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > represadas de la zona: solo P1 (anclada antes del umbral)
+AssertionError: expected +0 to be 1 // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

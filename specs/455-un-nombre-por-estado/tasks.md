@@ -24,18 +24,18 @@ integración»):
 4. `git diff --stat` vacío en `lib/` y `app/` tras revertir.
 Cada test afirma sus precondiciones antes del resultado: nada de `if (!x) return;`.
 
-- [ ] **T0.0 — Preparación.** 454 mergeada en `dev`; base local migrada (`prisma migrate status` en verde,
+- [x] **T0.0 — Preparación.** 454 mergeada en `dev`; base local migrada (`prisma migrate status` en verde,
   host local); `.env` presente; `pnpm vitest run tests/integration/db --reporter=verbose` con `skipped = 0` en
   una suite de control. Aviso en `progress/current.md` antes de migrar la base local compartida.
   **Hecho:** salidas pegadas en `progress/impl_455_fase0.md`.
 
-- [ ] **T0.1 — Interruptor de códigos** `tests/fixtures/codigos-455.ts`. Exporta `C` con claves semánticas
+- [x] **T0.1 — Interruptor de códigos** `tests/fixtures/codigos-455.ts`. Exporta `C` con claves semánticas
   (`C.entregado`, `C.novedad`, `C.reprogramado`, `C.recogiendo`, `C.rechazo`, `C.novedadInterna`,
   `C.porDevolverCentral`, y los 13 que no cambian) y `R` para los 5 resultados. En la Fase 0 apuntan a los
   códigos **anteriores**; en T1.4 se cambia **solo este archivo**. Los tests de la Fase 0 usan `C`/`R`, nunca un
   literal. Dep: T0.0. **Hecho:** test de humo que siembra una orden por cada `C.*` contra Postgres real.
 
-- [ ] **T0.2 — Medición (solo lectura; producción por el MCP de Supabase, memoria «DATABASE_URL de prod es
+- [ ] **T0.2 — (2026-09-24: local medido y SQL de prod listo en `progress/medicion_455.md`; FALTA correrlo en produccion por el MCP) Medición (solo lectura; producción por el MCP de Supabase, memoria «DATABASE_URL de prod es
   sensitive»)** `[P]` con T0.3. Anotar en `progress/medicion_455.md`:
   (a) órdenes vivas por cada uno de los 7 estados que cambian y gestiones por cada resultado;
   (b) referencias a `en_fulfillment` y `pendiente` en **toda** FK a `order_status` (lista sacada de
@@ -47,7 +47,7 @@ Cada test afirma sus precondiciones antes del resultado: nada de `if (!x) return
   (f) si `sin_gestionar` es una métrica publicada por `lib/analytics/publicacion-api-key.ts`.
   **Hecho:** seis bloques con consulta exacta, host (`prisma migrate status` o ref del MCP) y resultado.
 
-- [ ] **T0.3 — Inventario clasificado** `[P]` con T0.2. Ejecutar G1 y G2 (§6.1, §6.2) en **modo informe** sobre
+- [x] **T0.3 — Inventario clasificado** `[P]` con T0.2. Ejecutar G1 y G2 (§6.1, §6.2) en **modo informe** sobre
   el árbol de `dev` y clasificar cada aparición con la regla de `design.md` §2.0 en
   `progress/inventario_455.md`: archivo, línea, texto, clase (1 orden concreta / 2 un estado / 3 grupo-acción-UI
   / 4 mensaje), decisión. Incluir: chips sin `estatusValue` en su DTO (recolección), parámetros de URL internos
@@ -80,7 +80,7 @@ con nota fechada.
 | C15 | `plantilla-estatus` | La variable `{{estatus}}` se resuelve para una orden en cada estado sin fallar. | El texto producido. | `transform` que devuelve `""`. | R35 |
 | C16 | `snapshot-correccion` | La corrección de un resultado (398) escribe `historial_accion` con valor anterior/nuevo y se lee en su pantalla. | El texto mostrado. | Escribir `valor_nuevo` vacío. | R23 |
 
-- [ ] **T0.4 — Cierre de la Fase 0.** 16 filas en verde sobre el código actual, cada una con su rojo registrado;
+- [ ] **T0.4 — (2026-09-24: C01-C16 verdes con su rojo en `progress/impl_455_fase0.md`; se cierra al completar T0.2 en prod) Cierre de la Fase 0.** 16 filas en verde sobre el código actual, cada una con su rojo registrado;
   T0.2 y T0.3 completos. Dep: T0.1-T0.3, C01-C16. **Hecho:** `progress/impl_455_fase0.md` con los 16 bloques;
   commit `test(455): caracterizacion antes del renombre`.
 
