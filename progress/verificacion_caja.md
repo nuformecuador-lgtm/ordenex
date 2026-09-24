@@ -153,3 +153,17 @@ exacto del hueco depende de los dos puntos abiertos.
 - Importe pendiente de pago a mensajeros: ABIERTO (F3, punto 1).
 - Si algún `egreso_sueldo` duplica un cobro «PAGO SALARIO» de Nuform: ABIERTO (F3, punto 2).
 - Que los 203 pagos salieran de la plata de Ordenex se toma como dato (lo confirmó el humano).
+
+## Cierre de los ABIERTOS (leader, producción solo lectura, 2026-09-24)
+
+- **ABIERTO 2 — CERRADO, no hay doble registro.** El cruce por monto y ±3 días entre `egreso_sueldo` y los
+  `cobro_manual` de Nuform da 6 coincidencias, todas de personas o conceptos distintos con el mismo importe:
+  «PAGO SALARIO MARIALE ORDENEX» vs «PAGO SALARIO LEIDY NUFORM» (113.894, dos veces), la comisión bancaria
+  fija de 1.371 (Cinthya vs Gerlin/Daniela) y 200.000 de «AVANCE LIQUIDACION MÓNICA» vs «ALQUILER CASA
+  LABORATORIO»/«ALQUILER BODEGA». F1 se mantiene en 25.769.034,50.
+- **ABIERTO 1 — CERRADO, efecto despreciable.** `pago_mensajero_movimiento`: devengado 3.439.700 (152) y
+  pagado en efectivo 3.432.300 (149). Solo 7.400 siguen pendientes con los mensajeros: la caja corregida
+  seria −9.178.820,50 en el mejor caso.
+- **F3 queda así:** con F1 y F2 corregidos la caja registrada es ≈ −9,18 M. Como el efectivo real no puede
+  ser negativo, faltan ENTRADAS que la app no registra (saldo inicial al vaciarse producción el 2026-08-25,
+  capital aportado u otros ingresos). Se valida con el saldo real que dé el humano.
