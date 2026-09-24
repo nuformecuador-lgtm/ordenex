@@ -98,10 +98,15 @@ const ABREVIATURA_BODEGA = /(?<![A-Za-zÁÉÍÓÚáéíóúÑñ])B\.\s/;
 // permitido); ahora el hallazgo tiene que ser EXACTAMENTE uno de `textos`, y todos tienen que estar.
 const EXCEPCIONES: Record<string, { textos: readonly string[]; motivo: string }> = {
   "lib/types/order-status.ts": {
-    textos: ["Devolución por confirmar", "Ayuda solicitada a la tienda"],
+    // FICHA 456 (2026-09-24, reconciliacion R-456-3 de `progress/impl_456.md`): «sin gestionar» es la
+    // frase del texto APROBADO por el humano para explicar «Novedad interna» («El mensajero terminó el
+    // día sin gestionar el paquete.», `DESCRIPCION_ESTADO.novedad_interna`). Es prosa (verbo + objeto),
+    // no el nombre de un estado, y la tabla aprobada no se edita.
+    textos: ["Devolución por confirmar", "Ayuda solicitada a la tienda", "sin gestionar"],
     motivo:
       "`ESTADO_RETIRADO.nombreHistorico`: el nombre que tenian los estados retirados, que R11 obliga a " +
-      "mostrar como «<historico> (estado retirado)» en las filas historicas",
+      "mostrar como «<historico> (estado retirado)» en las filas historicas; y la frase «sin gestionar» " +
+      "del texto aprobado de la 456 para «Novedad interna» (`DESCRIPCION_ESTADO`)",
   },
   // FASE 2 (2026-09-24): no es un pendiente que se arregla, es una excepcion que SE QUEDA, y se
   // declara aqui y no escondida. requirements §0.3 retira «Ayuda solicitada a la tienda» COMO ESTADO;
