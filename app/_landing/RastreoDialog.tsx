@@ -11,10 +11,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { textoPendienteConfirmacion } from "@/components/shared/nota-pendiente-confirmacion";
 import { consultarRastreoPublico } from "@/lib/actions/rastreo-publico";
 import { PARAM_GUIA } from "./guia-en-url";
 import {
   ETIQUETA_POR_HITO,
+  type HitoPublicoEntrada,
   type ResultadoRastreoPublico,
 } from "@/lib/types/rastreo-publico";
 
@@ -63,6 +65,19 @@ const CLASE_CAMPO =
 
 const CLASE_ENVIAR =
   "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-md border border-brand bg-brand px-4 text-sm font-semibold text-white transition hover:border-brand-dark hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60";
+
+/**
+ * FICHA 454 (T2.4, R31) — el texto de una entrada de la línea. Si el servidor la marca `pendiente`
+ * (la gestión ya se registró y su cierre no se aprobó), se lee «<hito> · pendiente de
+ * confirmación», con el formato único de `nota-pendiente-confirmacion.ts` (decisión del humano). El
+ * nombre es el del HITO público, que es el vocabulario de esta superficie: el modal no conoce
+ * ningún `order_status.value` ni ningún resultado interno, y no empieza a conocerlos aquí. Tampoco
+ * decide nada: solo lee la marca que el servidor puso.
+ */
+function textoEntrada(entrada: HitoPublicoEntrada): string {
+  const etiqueta = ETIQUETA_POR_HITO[entrada.hito];
+  return entrada.pendiente === true ? textoPendienteConfirmacion(etiqueta) : etiqueta;
+}
 
 /**
  * La fecha que llega del servidor es ISO-8601 completa, ya en la zona del negocio y con su
@@ -266,7 +281,11 @@ export function RastreoDialog({ className, children, guiaInicial = null }: Rastr
                 Guía {envio.numGuia}
               </span>
               <span className="text-base font-semibold text-navy-deep">
-                {ETIQUETA_POR_HITO[envio.hitoVigente]}
+                {/* FICHA 454 (R31): el hito vigente ES la última entrada de la línea (R20); si esa
+                    entrada está pendiente, la cabecera lo dice igual que la línea. */}
+                {envio.linea.at(-1)?.pendiente === true
+                  ? textoPendienteConfirmacion(ETIQUETA_POR_HITO[envio.hitoVigente])
+                  : ETIQUETA_POR_HITO[envio.hitoVigente]}
               </span>
             </div>
 
@@ -279,7 +298,7 @@ export function RastreoDialog({ className, children, guiaInicial = null }: Rastr
                   />
                   <span className="flex flex-col">
                     <span className="text-sm font-medium text-asfalto-9">
-                      {ETIQUETA_POR_HITO[entrada.hito]}
+                      {textoEntrada(entrada)}
                     </span>
                     <time dateTime={entrada.fecha} className="text-xs text-asfalto-5">
                       {fechaLegible(entrada.fecha)}
