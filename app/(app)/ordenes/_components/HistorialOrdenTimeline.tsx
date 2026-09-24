@@ -1,11 +1,16 @@
+import { NOTA_AYUDA_SOLICITADA } from "@/components/shared/nota-pendiente-confirmacion";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
-import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
+import type { OrdenEventoTipo } from "@/lib/types/orden-evento";
+import type {
+  OrdenHistorialEntradaDTO,
+  OrdenHistorialEventoDTO,
+} from "@/lib/types/orden-historial";
 import {
   ETIQUETA_CORRECCION_DIA,
   textoCorreccionDiaReparto,
 } from "@/lib/utils/dia-reparto-textos";
 
-import { estatusLabel } from "./estatus-label";
+import { estatusLabel, resultadoLabel } from "./estatus-label";
 
 // Feature 49 (T6.1, R29/R30) — linea de tiempo de PRESENTACION pura del historial de una
 // orden. Recibe las entradas ya resueltas por PROPS (R28: no fetchea por si mismo) y las
@@ -81,6 +86,36 @@ const ETIQUETA_TRASPASO = "Traspaso a otro mensajero";
 /** R29: «de quien a quien», con los dos nombres que el servidor ya resolvio. */
 function textoTraspasoMensajero(anterior: string, nuevo: string): string {
   return `De ${anterior} a ${nuevo}`;
+}
+
+/**
+ * FICHA 454 (T2.3, R30) — la primera línea de cada HECHO sin transición (`orden_evento`): dice QUÉ
+ * pasó, en lenguaje claro y sin siglas. Indexado por el tipo con `Record` exhaustivo: un tipo nuevo
+ * del enum no compila hasta que alguien decida cómo se lee.
+ *
+ * La de la ayuda es la MISMA nota que acompaña a la orden en las pantallas (decisión del humano,
+ * `NOTA_AYUDA_SOLICITADA`), no un sinónimo. Ninguna nombra un estado: un evento NO lo cambia.
+ */
+const ETIQUETA_EVENTO: Record<OrdenEventoTipo, string> = {
+  gestion_registrada: "Gestión registrada",
+  gestion_anulada: "Gestión anulada",
+  gestion_corregida: "Gestión corregida",
+  ayuda_solicitada: NOTA_AYUDA_SOLICITADA,
+  ayuda_rescatada: "Ayuda cerrada: la orden vuelve a gestionarse",
+  ayuda_habilitada_api: "Ayuda cerrada por la integración de la tienda",
+};
+
+/**
+ * FICHA 454 (R30) — la segunda línea: el RESULTADO de la gestión, con su nombre canónico
+ * (`resultadoLabel`, el mismo mapa que el chip de estado). En la corrección, «de A a B». Los hechos
+ * de la ayuda no llevan segunda línea (`null`).
+ */
+function textoResultadoEvento(entrada: OrdenHistorialEventoDTO): string | null {
+  if (entrada.resultado === null) return null;
+  if (entrada.tipo === "gestion_corregida" && entrada.resultadoAnterior !== null) {
+    return `De ${resultadoLabel(entrada.resultadoAnterior)} a ${resultadoLabel(entrada.resultado)}`;
+  }
+  return `Resultado: ${resultadoLabel(entrada.resultado)}`;
 }
 
 function formatFechaHora(fecha: Date): string {
@@ -236,6 +271,34 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
                   Por {entrada.actorNombre} ({rolLabel})
                 </p>
                 <p className="text-sm">Motivo: {entrada.motivo}</p>
+              </li>
+            );
+          }
+          case "evento_orden": {
+            // FICHA 454 (T2.3, R30) — LA CUARTA CLASE: un hecho SIN transición. Igual que la
+            // corrección del día y el traspaso: NO se llama a `estatusLabel` sobre un origen ni se
+            // pinta la flecha, porque la orden no cambió de estado (sigue `en_reparto` hasta que
+            // se apruebe el cierre). Se distingue por TEXTO (la primera línea dice qué pasó) y por
+            // la misma marca de FORMA que sus dos hermanas (anillo hueco + filo discontinuo), sin
+            // tono nuevo. El rol que se pinta es el CONGELADO de la fila (427/R26).
+            const rolLabel = ROL_LABELS[entrada.actorRol] ?? entrada.actorRol;
+            const resultado = textoResultadoEvento(entrada);
+
+            return (
+              <li
+                key={key}
+                className="relative flex flex-col gap-1 border-l-2 border-dashed border-border pl-4"
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute top-1.5 -left-[6px] size-2.5 rounded-full border-2 border-primary bg-popover"
+                />
+                <p className="text-sm font-medium">{ETIQUETA_EVENTO[entrada.tipo]}</p>
+                {resultado !== null ? <p className="text-sm">{resultado}</p> : null}
+                {sello}
+                <p className="text-xs text-muted-foreground">
+                  Por {entrada.actorNombre} ({rolLabel})
+                </p>
               </li>
             );
           }

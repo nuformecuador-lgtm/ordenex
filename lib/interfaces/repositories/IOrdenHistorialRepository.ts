@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type {
+  OrdenHistorialEventoDTO,
   OrdenHistorialTransicionDTO,
   OrdenHistorialOrigenTipo,
 } from "@/lib/types/orden-historial";
@@ -92,6 +93,12 @@ export interface IOrdenHistorialRepository {
    * trae las correcciones del dia de reparto. La FUSION de las dos fuentes es del servicio (R41).
    */
   findHistorialByOrden(ordenId: string): Promise<OrdenHistorialTransicionDTO[]>;
+  /**
+   * FICHA 454 (T1.21, design §12.4; R30) — los HECHOS sin transicion de UNA orden (`orden_evento`),
+   * `created_at asc, id asc`, con el nombre del actor ya resuelto y su rol CONGELADO. Solo lee esa
+   * tabla (tipo estrecho, igual que `findHistorialByOrden`); la fusion es del servicio.
+   */
+  findEventosByOrden(ordenId: string): Promise<OrdenHistorialEventoDTO[]>;
   /**
    * Feature 215 (R1/R3/R5/R8/R29/R30/R31/R32) — cuenta los INTENTOS DE ENTREGA de `ordenId`.
    *

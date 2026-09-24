@@ -13,6 +13,7 @@ import {
 import {
   ORIGEN_TIPOS_VISITA_REAL,
   RESULTADOS_QUE_CUENTAN_COMO_INTENTO,
+  type OrdenHistorialEventoDTO,
   type OrdenHistorialTransicionDTO,
 } from "@/lib/types/orden-historial";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
@@ -27,9 +28,10 @@ import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre
 // cero churn en los 11 call-sites; moverlos a un modulo propio es deuda NOMBRADA para otro PR,
 // porque mezclar el cambio de significado con un refactor de superficie deja al reviewer sin
 // diff legible).
+// FICHA 454 (T1.21): + `ordenEvento`, la cuarta fuente de la linea de tiempo (solo lectura).
 type OrdenHistorialPrismaClient = Pick<
   PrismaClient,
-  "ordenHistorialEstado" | "gestionOrden" | "$queryRaw"
+  "ordenHistorialEstado" | "gestionOrden" | "ordenEvento" | "$queryRaw"
 >;
 
 // Fila cruda de `findOrigenesReversion`. `value` NULL = la fila de historial mas reciente con
@@ -298,6 +300,34 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
     entradas: CambioEstadoEntrada[],
   ): Promise<void> {
     await appendCambioEstado(tx, entradas);
+  }
+
+  /**
+   * FICHA 454 (T1.21, R30): los hechos sin transicion de la orden, para la linea de tiempo. Usa el
+   * indice `(orden_id, created_at)` de `orden_evento`. No expone `motivo` ni el mensajero.
+   */
+  async findEventosByOrden(ordenId: string): Promise<OrdenHistorialEventoDTO[]> {
+    const filas = await this.prisma.ordenEvento.findMany({
+      where: { ordenId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        tipo: true,
+        resultado: true,
+        resultadoAnterior: true,
+        actorRol: true,
+        createdAt: true,
+        actor: { select: NOMBRE_USUARIO_SELECT },
+      },
+    });
+    return filas.map((fila) => ({
+      clase: "evento_orden" as const,
+      tipo: fila.tipo,
+      resultado: fila.resultado,
+      resultadoAnterior: fila.resultadoAnterior,
+      actorNombre: nombreCompletoUsuario(fila.actor),
+      actorRol: fila.actorRol, // 427/R26: el CONGELADO de la fila
+      createdAt: fila.createdAt,
+    }));
   }
 
   /** R26/R5: linea de tiempo de la orden, orden cronologico (created_at asc), con labels. */

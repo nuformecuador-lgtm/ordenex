@@ -199,5 +199,10 @@ export function prismaGestionSobreFilas(filas: FilaGestionFake[]) {
       findFirst: vi.fn(async () => null),
       createMany: vi.fn(),
     },
+    // FICHA 454 (T1.21, 2026-09-23): la linea de tiempo lee tambien `orden_evento`. Sin hechos en
+    // este doble: lo que se mide aqui es el conteo de intentos, no la linea.
+    ordenEvento: {
+      findMany: vi.fn(async () => []),
+    },
   };
 }
