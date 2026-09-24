@@ -35,7 +35,7 @@ Cada test afirma sus precondiciones antes del resultado: nada de `if (!x) return
   códigos **anteriores**; en T1.4 se cambia **solo este archivo**. Los tests de la Fase 0 usan `C`/`R`, nunca un
   literal. Dep: T0.0. **Hecho:** test de humo que siembra una orden por cada `C.*` contra Postgres real.
 
-- [x] **T0.2 — (2026-09-24: local medido y SQL de prod listo en `progress/medicion_455.md`; FALTA correrlo en produccion por el MCP) Medición (solo lectura; producción por el MCP de Supabase, memoria «DATABASE_URL de prod es
+- [x] **T0.2 — (2026-09-24: local medido y SQL de prod listo en `progress/medicion_455.md`; prod medido por el leader el 2026-09-24) Medición (solo lectura; producción por el MCP de Supabase, memoria «DATABASE_URL de prod es
   sensitive»)** `[P]` con T0.3. Anotar en `progress/medicion_455.md`:
   (a) órdenes vivas por cada uno de los 7 estados que cambian y gestiones por cada resultado;
   (b) referencias a `en_fulfillment` y `pendiente` en **toda** FK a `order_status` (lista sacada de
@@ -80,7 +80,7 @@ con nota fechada.
 | C15 | `plantilla-estatus` | La variable `{{estatus}}` se resuelve para una orden en cada estado sin fallar. | El texto producido. | `transform` que devuelve `""`. | R35 |
 | C16 | `snapshot-correccion` | La corrección de un resultado (398) escribe `historial_accion` con valor anterior/nuevo y se lee en su pantalla. | El texto mostrado. | Escribir `valor_nuevo` vacío. | R23 |
 
-- [ ] **T0.4 — (2026-09-24: C01-C16 verdes con su rojo en `progress/impl_455_fase0.md`; se cierra al completar T0.2 en prod) Cierre de la Fase 0.** 16 filas en verde sobre el código actual, cada una con su rojo registrado;
+- [x] **T0.4 — (2026-09-24: C01-C16 verdes con su rojo en `progress/impl_455_fase0.md`; se cierra al completar T0.2 en prod) Cierre de la Fase 0.** 16 filas en verde sobre el código actual, cada una con su rojo registrado;
   T0.2 y T0.3 completos. Dep: T0.1-T0.3, C01-C16. **Hecho:** `progress/impl_455_fase0.md` con los 16 bloques;
   commit `test(455): caracterizacion antes del renombre`.
 
