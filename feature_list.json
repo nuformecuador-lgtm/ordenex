@@ -5483,11 +5483,12 @@
       "title": "la caja muestra el dinero real",
       "description": "Corregir como se calcula la caja y registrar lo que nunca paso por ella, para que Dinero en caja sea el dinero real de Ordenex.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "alta",
       "depends_on": null,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-24 («procede con la implementacion»). PRIORITARIA: la pantalla de caja de prod muestra cifras equivocadas hoy. Hallazgos CONFIRMADOS por verificacion adversaria (progress/verificacion_caja.md, progress/medicion_457.md): F1 faltan salidas por 25.769.034,50 (203 cobro_manual de Nuform que son pagos por su cuenta con plata de Ordenex, confirmado por el humano); F2 derivarCaja cuenta dos veces los ingresos propios (8.070.773,47). Saldos de tiendas, ganancia y mensajeros ESTAN BIEN y no se tocan. || ALCANCE: corregir la formula (solo derivacion, ninguna fila cambia); tipo nuevo «Pago por cuenta de una tienda» (egreso de terceros + debito tienda, beneficiario libre; absorbe la 458-1b); reclasificar los 203 historicos con su egreso en fecha original, lista revisada por el humano antes de aplicar en prod; movimiento de saldo inicial / aporte de capital (la cifra la da el humano). Validacion final: la caja de la app contra el saldo real que de el humano."
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-24 («procede con la implementacion»). PRIORITARIA: la pantalla de caja de prod muestra cifras equivocadas hoy. Hallazgos CONFIRMADOS por verificacion adversaria (progress/verificacion_caja.md, progress/medicion_457.md): F1 faltan salidas por 25.769.034,50 (203 cobro_manual de Nuform que son pagos por su cuenta con plata de Ordenex, confirmado por el humano); F2 derivarCaja cuenta dos veces los ingresos propios (8.070.773,47). Saldos de tiendas, ganancia y mensajeros ESTAN BIEN y no se tocan. || ALCANCE: corregir la formula (solo derivacion, ninguna fila cambia); tipo nuevo «Pago por cuenta de una tienda» (egreso de terceros + debito tienda, beneficiario libre; absorbe la 458-1b); reclasificar los 203 historicos con su egreso en fecha original, lista revisada por el humano antes de aplicar en prod; movimiento de saldo inicial / aporte de capital (la cifra la da el humano). Validacion final: la caja de la app contra el saldo real que de el humano.",
+      "branch": "feature/459-caja-dinero-real"
     }
   ]
 }
