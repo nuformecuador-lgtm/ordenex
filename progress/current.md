@@ -1,3 +1,20 @@
+# Estado — sesión del 2026-09-23 (nocturna, autónoma)
+
+## AUTORIZACIÓN DEL HUMANO — lee esto primero
+
+El 2026-09-23 por la noche Carlos dejó dicho: **«debes terminar todas las fases sin mí, te apruebo
+las specs que hagan falta»**. Alcance: fichas **454 → 455 → 456** completas (spec, implementación,
+revisión, gate, recorrido) y merge a `dev`. **NO incluye desplegar**: salen a `prod` junto con SF-001
+y solo cuando él lo ordene. Si algo de dinero no encaja con lo aprobado: camino conservador o
+aislarlo y documentarlo, sin bloquear el resto.
+
+- 454 (estado al aprobar el cierre): spec aprobado, Fase 0 hecha (`3603d199`), Fase 1 backend en
+  `feature/454-backend`.
+- 455 (un nombre por estado): pendiente. Nombres decididos en su `status_note`.
+- 456 (tooltip): textos aprobados en `specs/456-tooltip-estados/textos-aprobados.md`.
+
+---
+
 # Estado — sesión del 2026-09-21
 
 ## CIERRE DE LA SESIÓN — lee esto primero
