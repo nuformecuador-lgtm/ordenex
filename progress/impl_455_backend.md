@@ -42,7 +42,7 @@ derivan texto del CODIGO y que la Fase 2 reescribe (§BLOQUEO-2). Resultado del 
 | T1.8 | Hecha | `ORDER_STATUS_ENUM = [...ORDER_STATUS_SEED]`; `schemaNombre()`; `.yaml` espejo verificado ESTRUCTURALMENTE (js-yaml contra el objeto TS: quedan 4 diferencias PREEXISTENTES en `CotizacionEscenarioDevuelto`, ajenas, no tocadas); Postman; CHANGELOG (RUPTURA); `configuracion-api.md`; `manual-metricas-por-mensajero.md`. |
 | T1.9 | **BLOQUEO-1** | Ver abajo. |
 | T1.10 | Hecha | G1 (brazo 455 del censo), G2, G3, G4 (+ G5 en T1.8), cada una con su mutacion en el archivo y una mutacion de arbol registrada. G2/G3 llevan `PENDIENTES_FASE_2` (conteo exacto por archivo). |
-| T1.11 | Hecha | `{{estatus}}`, notificacion de rechazo, etiqueta de la analitica operativa, metrica `novedad_interna` («Novedad interna»). `lib/services/mensajes-*.ts` NO cambian: llevan el CODIGO a proposito porque la UI lo parsea y lo traduce (`*-error-messages.ts`, Fase 2 T2.7). |
+| T1.11 | Hecha | `{{estatus}}`, notificacion de rechazo, etiqueta de la analitica operativa, prosa de `metrics.ts` sin codigos anteriores. La ETIQUETA «Sin gestionar» de la metrica `novedad_interna` se quedo: cambia JUNTO con su panel (UI) en la Fase 2 (guardia `etiquetas-visibles`). `lib/services/mensajes-*.ts` NO cambian: llevan el CODIGO a proposito porque la UI lo parsea y lo traduce (`*-error-messages.ts`, Fase 2 T2.7). |
 | T1.12 | Hecha (parte lib) | Lector de `historial_accion.valor_*` traduce al leer (`codigoVigente`); filtros por URL traducen un codigo anterior. La COLUMNA que pinta el valor (`historial-acciones-columnas.ts`) es UI: el `[INTERMEDIO]` de C16 queda para la Fase 2. |
 | T1.13 | Ver §Gate | |
 
@@ -70,7 +70,8 @@ backend: es exactamente lo que la Fase 2 (T2.6) sustituye por `nombreDeEstado`. 
 ## Toques de UI hechos (solo CODIGOS, ningun texto)
 
 T1.4 incluye el reemplazo mecanico en `app/` «solo tipos/logica, no textos». Estos 18 archivos de
-`app/` cambian UNICAMENTE codigos (claves de mapas, comparaciones, `case`), nunca un texto visible:
+`app/` cambian UNICAMENTE codigos (claves de mapas, comparaciones, `case`) — con UNA excepcion involuntaria,
+`madurez-textos.ts:85` (el singular `"entregada"` era texto y quedo `"entregado"`; ver §BLOQUEO-2):
 `analitica/_components/entregas/{CohorteCargaTabla.tsx, desenlaces-de-fila.ts, efectividad.ts,
 madurez-textos.ts}`, `analitica/_components/operativo/catalogo-paneles.ts`,
 `cierre-dia/_components/CierreDiaModule.tsx`, `cierres-admin/_components/{CorregirResultadoDialog.tsx,
@@ -96,7 +97,10 @@ cierre-detalle-shared.tsx, cierre-factura.tsx, cierre-labels.ts, cierres-gestion
    `estado` (R27). La ASERCION no se toco. Nota fechada en el archivo.
 5. **Rutas de evidencias** (`${resultado}-…`): las nuevas llevan el codigo vigente; nadie parsea el
    prefijo (confirmado). Los tests que fijaban la ruta se actualizaron.
-6. **`CargaRowResult.estado` sin `enum`** en el contrato: con `enum` seria un QUINTO bloque de catalogo y
+6. **M2 acotada al esquema** (`current_schema()` + `JOIN pg_namespace`): la guardia
+   `catalogo-postgres-acota-esquema` lo pidio para el test y la migracion tenia el mismo agujero (la suite crea
+   esquemas temporales con el mismo enum). Solo estaba aplicada en `ordenex_455` (checksum actualizado alli).
+7. **`CargaRowResult.estado` sin `enum`** en el contrato: con `enum` seria un QUINTO bloque de catalogo y
    `openapi-contrato-en-reparto` cuenta cuatro; su descripcion remite al catalogo de `OrdenListItem.estado`.
 
 ## Mutaciones (una por pieza de logica; salida integra en `progress/mut_455_backend/<id>.log`)
