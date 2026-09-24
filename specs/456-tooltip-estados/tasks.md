@@ -202,42 +202,46 @@ Superficies. Son `[P]` entre sí y cada una lleva su test de §8. **Hecho** com�
 
 ## Trazabilidad R → test
 
+Mapa rehecho el 2026-09-24 contra los archivos reales (hallazgo 1 de `progress/review_456.md`): cada
+archivo va con su ruta completa, y un script comprobó que todos existen (ver
+`progress/impl_456.md` › «Mapa R → test»). Los casos se citan por su título en el archivo.
+
 | R | Test (archivo › caso) |
 |---|---|
-| R1 | `tests/unit/types/descripcion-estado.test.ts` › «20 estados, 20 explicaciones» |
-| R2 | `descripcion-estado.test.ts` › «cada explicación es la fila de la tabla aprobada» |
-| R3 | typecheck del gate + `descripcion-estado.test.ts` › «@ts-expect-error con 19 claves» |
-| R4 | `descripcion-estado.test.ts` › «Novedad usa los plazos de la configuración» |
-| R5 | `descripcion-estado.test.ts` › «plazos de la configuración» + «fila aprobada» (cae con 7 días) |
-| R6 | `descripcion-estado.test.ts` › «Novedad no da el número de intentos» |
-| R7 | `EstadoInfo.test.tsx` › «el texto no depende de la superficie» + recorrido T4.3 |
-| R8 | `descripcion-estado.test.ts` › «nota de ayuda igual a la sección pendiente de visto bueno» |
-| R9 | `EstatusBadgeInfo`, `HistorialOrdenTimelineInfo`, `PosOrderCardInfoEstado`, `ChatOrdenesListaInfoEstado`, `SateliteOrderCardInfo`, `GestionarOrdenPanelInfo`, `IncidentesAdminInfo`, `CierreFacturaInfo`, `ChatConversacionInfo`, `RastreoDialogInfoEstado` + recorrido |
-| R10 | `CierreFacturaInfo` › «filas de resultado con botón»; `DetalleColumnasResultadoInfo`; `HistorialOrdenTimelineInfo` › «eventos registrado y corregido» |
-| R11 | `SenalPendienteConInfo.test.tsx` |
-| R12 | `NotaAyudaConInfo.test.tsx` + tests de T3.2/T3.6 |
-| R13 | `MultiSelectFilterInfoEstado.test.tsx` › «opción con botón», «filtro aplicado con un estado», «con N, sin botón» |
-| R14 | `ConteoPorStatusDonaInfo.test.tsx`, `LeyendaEstadosConInfo.test.tsx` y los de T3.12 |
-| R15 | `EstadoInfo.test.tsx` › «retirado y desconocido sin botón»; `HistorialOrdenTimelineInfo` › «retirado» |
-| R16 | Tests de T3.15 › «contadores, pestañas y KPI: 0 botones» |
-| R17 | Tests de columnas de descarga › «columnas idénticas» |
-| R18 | `tests/unit/guards/estado-con-info.guardia.test.ts` › brazos (a)-(d) |
-| R19 | `estado-con-info.guardia.test.ts` › «cinco fuentes sintéticas» + T3.14 + T4.2 (4) |
-| R20 | `EstadoInfo.test.tsx` › «hover abre» |
-| R21 | `EstadoInfo.test.tsx` › «clic abre y sigue abierto; fuera, segundo clic y Escape cierran» + recorrido (tap) |
-| R22 | `EstadoInfo.test.tsx` › «teclado» |
-| R23 | `EstadoInfo`, `SenalPendienteConInfo` y `NotaAyudaConInfo` › «nombre accesible» |
-| R24 | `EstadoInfo.test.tsx` › «nombre y descripción del popup» |
-| R25 | `EstadoInfo.test.tsx` › «abrir otro cierra el primero» |
-| R26 | `EstadoInfo.test.tsx` › «clases de área» + recorrido |
-| R27 | `contraste-tokens.guardia.test.ts` › «EstadoInfo 3:1 o más» |
-| R28 | `RastreoDialogInfoEstado.test.tsx` › «tema-claro con .dark» |
-| R29 | `EstadoInfo.test.tsx` › «sin fetch» |
-| R30 | `PosOrderCardInfoEstado`, `ChatOrdenesListaInfoEstado`, `CierreFacturaInfo` › «no cambia la pestaña», `DataTable` con casilla + T4.2 (1) |
-| R31 | `MultiSelectFilterInfoEstado.test.tsx` › «el botón y la explicación no marcan ni cierran» + T4.2 (2) |
-| R32 | `EstatusBadgeInfo`; `ChatOrdenesListaInfoEstado` › «nombre accesible intacto»; tests `EstatusBadge*` y del filtro sin editar |
-| R33 | Recorrido T4.3 › las cinco alturas iguales a T0.4 |
-| R34 | `MultiSelectFilterInfoEstado` › «opciones, nombres y orden idénticos» + C01/C02 de la 455 |
-| R35 | `RastreoDialogInfoEstado.test.tsx` › «no cierra el diálogo» |
-| R36 | `rastreo-sin-estatus-crudo.guardia` y `rastreo-frontera.guardia` sin editar; `menu-visibility.test.ts` |
-| R37 | `ConteoPorStatusDonaInfo` › «cifras y barras idénticas»; test existente de la gráfica sin editar |
+| R1 | `tests/unit/types/descripcion-estado.test.ts` › «R1 — 20 estados, 20 explicaciones…» |
+| R2 | `tests/unit/types/descripcion-estado.test.ts` › «R2/R5 — «%s»: la explicación es la fila de la tabla aprobada» (20 casos, lee el `.md`) + `tests/components/EstadoInfo.test.tsx` › «%s: nombre visible, nombre accesible exacto y, abierto, un diálogo…» (20 casos) |
+| R3 | typecheck del gate (borrar una clave de `DESCRIPCION_ESTADO` → TS1360) + `tests/unit/types/descripcion-estado.test.ts` › «R3 — el tipo es exhaustivo: 19 claves no compilan» |
+| R4 | `tests/unit/types/descripcion-estado.test.ts` › «R4/R5 — «Novedad» usa los plazos de la configuración…» |
+| R5 | `tests/unit/types/descripcion-estado.test.ts` › «R4/R5 …» + «R2/R5 …» (fila aprobada; cae con 7 días) |
+| R6 | `tests/unit/types/descripcion-estado.test.ts` › «R6 — «Novedad» no da el número de intentos…» |
+| R7 | `tests/components/EstadoInfo.test.tsx` › «R7 — el texto no depende de la superficie…» + recorrido T4.3 |
+| R8 | `tests/unit/types/descripcion-estado.test.ts` › «R8 — la nota de ayuda es igual a la sección «Pendiente de visto bueno del humano»» |
+| R9 | `tests/components/EstatusBadgeInfo.test.tsx`; `tests/components/HistorialOrdenTimelineInfo.test.tsx` › «R9 — transición…»; `tests/components/PosOrderCardInfoEstado.test.tsx` › «R9/R32 …» (3 vistas); `tests/components/SateliteOrderCardInfo.test.tsx` › «R9 …»; `tests/components/IncidentesAdminModule.test.tsx` › bloque «456 — «Estado de la orden»…»; `tests/components/GestionarOrdenPanelTope.test.tsx` › bloque «456 — cabecera del panel…»; `tests/components/ChatConversacionLlamada.test.tsx` › bloque «456 — cabecera de la conversación…»; `tests/components/CierreFacturaSinGestionar.test.tsx` › «R9/R15 …»; `tests/components/RastreoDialogInfoEstado.test.tsx` › «R9/R11/R15 …»; `tests/unit/components/detalle-columnas.test.tsx` › «R9 — la columna «Estado»…»; `tests/components/HistorialAccionesValorInfo.test.tsx` (registro de acciones) |
+| R10 | `tests/unit/components/detalle-columnas.test.tsx` › «R10 — el resultado lleva su botón…»; `tests/components/HistorialOrdenTimelineInfo.test.tsx` › «R10 — gestión registrada…»; `tests/components/EstadoInfo.test.tsx` › «InfosEstado: un botón por código distinto…»; `tests/components/HistorialAccionesValorInfo.test.tsx` › «R10 — «Valor anterior» y «Valor nuevo»…» |
+| R11 | `tests/components/EstadoInfo.test.tsx` › «%s pendiente: «<resultado> · pendiente de confirmación»…» (5 resultados); `tests/components/NotaGestionPendiente.test.tsx` › bloque «456 …»; `tests/components/RastreoDialogInfoEstado.test.tsx` › «R11 …» |
+| R12 | `tests/components/EstadoInfo.test.tsx` › «la nota de ayuda con su explicación…»; `tests/components/PosOrderCardInfoEstado.test.tsx` › «R12 …»; `tests/components/HistorialOrdenTimelineInfo.test.tsx` › «R12 …»; `tests/components/NotaGestionPendiente.test.tsx` › bloque «456 …» |
+| R13 | `tests/components/MultiSelectFilterInfoEstado.test.tsx` › «R13 — cada opción…», «con UN estado…», «con VARIOS estados…» |
+| R14 | `tests/components/ConteoPorStatusDonaInfo.test.tsx` › «R14/R37 …»; `tests/components/EstadoInfo.test.tsx` › «la leyenda es una lista con nombre y un botón por código…» |
+| R15 | `tests/components/EstadoInfo.test.tsx` › «%s: se pinta el nombre de la 455 SIN botón» (4 casos); `tests/components/EstatusBadgeInfo.test.tsx` › «R15 …»; `tests/components/HistorialOrdenTimelineInfo.test.tsx` › «R15 …»; `tests/components/RastreoDialogInfoEstado.test.tsx` › «R9/R11/R15 …»; `tests/unit/types/descripcion-estado.test.ts` › «R15 …» |
+| R16 | `tests/components/NoRegresion456.test.tsx` › «contadores del tablero del día…»; `tests/components/NovedadesTabs.test.tsx` › bloque «456 …»; `tests/components/CierreFacturaSinGestionar.test.tsx` › «R16/R30 …»; `tests/unit/guards/estado-con-info.guardia.test.ts` › «(extra) un nombre en un ATRIBUTO…» |
+| R17 | `tests/unit/components/ordenes-descarga-columnas.test.ts` y `tests/unit/components/historial-acciones-descarga-columnas.test.ts` sin editar y verdes (ningún `*-descarga-columnas` en el diff); `tests/components/HistorialAccionesValorInfo.test.tsx` › «R17 — la DESCARGA de la misma fila lleva el nombre…» |
+| R18 | `tests/unit/guards/estado-con-info.guardia.test.ts` › brazos (a)–(d), anti-vacío y «la excepción `descarga` del registro de acciones…» |
+| R19 | `tests/unit/guards/estado-con-info.guardia.test.ts` › «mutaciones sintéticas» 1–5, 4b y los tres «(extra)» (incluido el helper `valorLegible` en un `render`) |
+| R20 | `tests/components/EstadoInfo.test.tsx` › «R20 — pasar el puntero abre tras el retraso» |
+| R21 | `tests/components/EstadoInfo.test.tsx` › «R21 — clic abre y sigue abierto…», «R21 — pulsar fuera cierra» + recorrido (tap) |
+| R22 | `tests/components/EstadoInfo.test.tsx` › «R22 — Enter y Espacio abren…», «R22/R23 — el botón es alcanzable con Tab» |
+| R23 | `tests/components/EstadoInfo.test.tsx` › «%s: nombre visible, nombre accesible exacto…» (20) + «R22/R23 …» + los de la señal y la nota |
+| R24 | `tests/components/EstadoInfo.test.tsx` › «%s: … un diálogo con nombre y descripción aprobados» (20) |
+| R25 | `tests/components/EstadoInfo.test.tsx` › «R25 — abrir otro cierra el primero» |
+| R26 | `tests/components/EstadoInfo.test.tsx` › «R26/R27/R33 — caja de 16 px, área activable de 24…» + recorrido |
+| R27 | `tests/unit/guards/contraste-tokens.guardia.test.ts` › bloque «Ficha 456 — el botón de información cumple 1.4.11» |
+| R28 | `tests/components/RastreoDialogInfoEstado.test.tsx` › «R28 …»; `tests/components/EstadoInfo.test.tsx` › «R28 …» |
+| R29 | `tests/components/EstadoInfo.test.tsx` › «R29 — cerrado, el texto no está en el DOM…» |
+| R30 | `tests/components/PosOrderCardInfoEstado.test.tsx` › «R30 …» (3 vistas); `tests/components/ChatOrdenesListaInfoEstado.test.tsx` › «R30 …»; `tests/components/SateliteOrderCardInfo.test.tsx` › «R30 …»; `tests/components/NoRegresion456.test.tsx` › «abrir la explicación no marca la casilla…»; `tests/components/CierreFacturaSinGestionar.test.tsx` › «R16/R30 …»; `tests/components/EstadoInfo.test.tsx` › «R30 …» |
+| R31 | `tests/components/MultiSelectFilterInfoEstado.test.tsx` › «R31 — pulsar el botón no marca…» |
+| R32 | `tests/components/EstatusBadgeInfo.test.tsx` › «R32 …»; `tests/components/ChatOrdenesListaInfoEstado.test.tsx` › «R32 …»; `tests/components/EstatusBadgeCatalogoV2.test.tsx`, `tests/components/EstatusBadgeEnReparto.test.tsx`, `tests/components/EstatusBadgeRetiroFulfillment.test.tsx` (aserciones de clase intactas) |
+| R33 | Recorrido T4.3 (alturas antes/después en `progress/impl_456.md`), como fija el spec |
+| R34 | `tests/components/MultiSelectFilterInfoEstado.test.tsx` › «R34 — mismas opciones, mismos nombres y mismo orden…» |
+| R35 | `tests/components/RastreoDialogInfoEstado.test.tsx` › «R35 — tocar dentro de la explicación no cierra el diálogo…» |
+| R36 | `tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts`, `tests/unit/guards/rastreo-frontera.guardia.test.ts` y `tests/unit/auth/menu-visibility.test.ts`, sin editar y verdes |
+| R37 | `tests/components/ConteoPorStatusDona.test.tsx` sin editar y verde + `tests/components/ConteoPorStatusDonaInfo.test.tsx` › «R14/R37 …» |

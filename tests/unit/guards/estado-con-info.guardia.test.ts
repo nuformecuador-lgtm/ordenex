@@ -61,6 +61,11 @@ export const SIMBOLOS_VIGILADOS: ReadonlySet<string> = new Set([
   "etiquetaDeDesenlace",
   "chipDeEstado",
   "etiquetaEstado",
+  // Helpers de `app/` que DEVUELVEN un nombre de estado (hallazgo 2 de `progress/review_456.md`): el
+  // brazo (a) solo ve el símbolo vigilado DIRECTO en el `render`, así que un helper que envuelve
+  // `nombreDeEstado` y se llama desde un `render` pasaba verde (medido: el registro de acciones
+  // devuelto a su versión previa a la 456 no caía). Vigilado, ese revert cae por el brazo (a).
+  "valorLegible",
 ]);
 
 /** El texto de la nota de ayuda como literal (R12): solo puede escribirse en su módulo. */
@@ -199,13 +204,15 @@ export const USOS_PERMITIDOS: Readonly<Record<string, UsoPermitido>> = {
   "app/(app)/analitica/_components/entregas/analitica-productos-descarga-columnas.ts": { clase: D, motivo: "encabezados de la descarga de productos" },
   "app/(app)/ranking/_components/ranking-descarga-columnas.ts": { clase: D, motivo: "encabezado de la descarga del ranking" },
   "app/(app)/cierres-admin/_components/cierres-gestiones-fundida-descarga-columnas.ts": { clase: D, motivo: "celda «Resultado» de la hoja fundida de gestiones" },
-  "app/(app)/historico/acciones/_components/historial-acciones-columnas.ts": { clase: D, motivo: "`valorLegible` alimenta la descarga del registro; la celda de pantalla usa `EstadoConInfo`" },
+  "app/(app)/historico/acciones/_components/historial-acciones-columnas.ts": { clase: D, motivo: "DEFINE `valorLegible`, que da el nombre del resultado a la descarga del registro; en pantalla `celdaValor` pinta el resultado con `EstadoConInfo` y solo llama a `valorLegible` para las acciones que NO guardan un resultado. Lo comprueban `tests/components/HistorialAccionesValorInfo.test.tsx` (botón en pantalla, nombre en la descarga) y el caso «la excepción `descarga` del registro de acciones» de esta guardia" },
+  "app/(app)/historico/acciones/_components/historial-acciones-descarga-columnas.ts": { clase: D, motivo: "celdas «Valor anterior/nuevo» de la descarga del registro (`valorLegible`)" },
   // ── Recuentos (design §5.2) ──
   "app/(app)/monitoreo/_components/contadores.ts": { clase: R, motivo: "contadores del tablero del día (resultados y cubos)" },
   "app/(app)/cierres-admin/_components/cierre-labels.ts": { clase: R, motivo: "`RESULTADO_LABEL`: pestañas con cifra del cierre, títulos «<nombre> (N)» y textos vacíos" },
   "app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx": { clase: R, motivo: "título «<nombre> (N)» de cada sección y su nombre accesible; el botón va junto al título (`InfoEstado`)" },
   "app/(app)/cierre-dia/_components/CierreDiaModule.tsx": { clase: R, motivo: "título «<nombre> (N)» de cada sección del cierre del mensajero, su nombre accesible y el de la descarga; el botón va junto al título (`InfoEstado`)" },
   "app/(app)/mis-asignaciones/_components/KpisMensajero.tsx": { clase: R, motivo: "KPI del periodo" },
+  "app/(app)/analitica/_components/entregas/desenlaces-de-fila.ts": { clase: R, motivo: "frase «Entregado: 4 · …» de la columna «En qué terminaron» de `ProductosTabla`: cada trozo es un nombre con la cifra de órdenes del producto que acabaron así (agrega varias órdenes). No tiene botón al lado: el `InfosEstado` de `DineroProductoDetalle` es de OTRA lista (hallazgo 3 de `progress/review_456.md`)" },
   "app/(app)/analitica/_components/entregas/KpisEfectividad.tsx": { clase: R, motivo: "KPI del periodo y su ayuda" },
   "app/(app)/analitica/_components/entregas/madurez-textos.ts": { clase: R, motivo: "KPI del periodo y sus textos" },
   "app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx": { clase: R, motivo: "encabezados de columnas numéricas de la tabla de cohortes" },
@@ -218,7 +225,6 @@ export const USOS_PERMITIDOS: Readonly<Record<string, UsoPermitido>> = {
   "app/(app)/mis-asignaciones/_components/chat/ChatConversacion.tsx": { clase: H, motivo: "usa `chipDeEstado` solo por su color; el nombre lo pinta `EstadoConInfo`" },
   "app/(app)/analitica/_components/entregas/ConteoPorStatusDona.tsx": { clase: H, motivo: "categorías de `GraficaRanking` (lista `aria-hidden`); leyenda propia debajo (design §5.1 fila 16)" },
   "app/(app)/analitica/_components/entregas/ConteoEntregasAnillo.tsx": { clase: H, motivo: "categorías de `GraficaReparto` (leyenda `aria-hidden`); leyenda propia debajo (fila 17)" },
-  "app/(app)/analitica/_components/entregas/desenlaces-de-fila.ts": { clase: H, motivo: "categorías de la barra de desenlaces por fila de productos", hermanoEn: ["app/(app)/analitica/_components/entregas/DineroProductoDetalle.tsx"] },
   "app/(app)/wallet/_components/detalle-movimiento-labels.ts": { clase: H, motivo: "`resultadosTexto`: la línea «Entregado · Reprogramado» de cada orden del movimiento (también la descarga); la pantalla pone los botones a su lado", hermanoEn: ["app/(app)/wallet/_components/DetalleMovimientoCierre.tsx"] },
   "app/(app)/mi-wallet/_components/detalle-mi-movimiento-labels.ts": { clase: H, motivo: "`resultadosTexto`: la línea de resultados de cada orden del movimiento (también la descarga); la pantalla pone los botones a su lado", hermanoEn: ["app/(app)/mi-wallet/_components/DetalleMiMovimientoCierre.tsx"] },
   "app/(app)/ordenes/_components/HistorialOrdenTimeline.tsx": { clase: H, motivo: "«Resultado: X» / «De A a B» es una línea de texto: los botones van al final de la línea, uno por resultado" },
@@ -239,6 +245,7 @@ function listar(dir: string, acc: string[] = []): string[] {
 
 const rel = (abs: string) => path.relative(RAIZ, abs).split(path.sep).join("/");
 const ARCHIVOS = [...listar(path.join(RAIZ, "app")), ...listar(path.join(RAIZ, "components"))].map(rel);
+const ARCHIVOS_TEST = new Set(listar(path.join(RAIZ, "tests", "components")).map(rel));
 const ANALISIS = new Map(ARCHIVOS.map((f) => [f, analizar(readFileSync(path.join(RAIZ, f), "utf8"), f)] as const));
 
 /** Todos los hallazgos del árbol con una tabla de excepciones dada (para el test y el informe). */
@@ -292,6 +299,16 @@ describe("456 · guardia — ningún nombre de estado sin su botón de informaci
 
   it("(d) nadie arma un tooltip o popover propio junto a un nombre de estado", () => {
     expect(h.d).toEqual([]);
+  });
+
+  it("la excepción `descarga` del registro de acciones: su motivo se cumple (la pantalla pinta con el botón)", () => {
+    // Hallazgo 2: el motivo decía «la celda de pantalla usa `EstadoConInfo`» y nada lo comprobaba.
+    // Se exige que el archivo USE el botón (no solo lo importe) y que exista el test de componente
+    // que fija la celda con botón y la descarga con el nombre.
+    const f = "app/(app)/historico/acciones/_components/historial-acciones-columnas.ts";
+    expect(USOS_PERMITIDOS[f]?.clase).toBe("descarga");
+    expect(ANALISIS.get(f)?.tieneHermano, "la celda de pantalla ya no usa `EstadoConInfo`").toBe(true);
+    expect(ARCHIVOS_TEST.has("tests/components/HistorialAccionesValorInfo.test.tsx")).toBe(true);
   });
 
   it("las clases son las cuatro cerradas de design §6", () => {
@@ -367,6 +384,16 @@ describe("456 · guardia — las mutaciones sintéticas (R19)", () => {
     expect(h1.a).toHaveLength(1);
     const h2 = hallazgos(mapa(`import { Popover } from "@/components/ui/popover";\nimport { estatusLabel } from "./e";\nexport const t = (v: string) => estatusLabel(v);\nvoid Popover;`, f), { [f]: { clase: "frase", motivo: "m" } });
     expect(h2.d).toEqual([f]);
+  });
+
+  it("(extra) un helper vigilado (`valorLegible`) llamado desde el `render` de una columna → brazo (a)", () => {
+    // La mutación X2 del revisor, en sintético: la versión previa a la 456 del registro de acciones.
+    const f = "app/(app)/x/registro-columnas.ts";
+    const h = hallazgos(
+      mapa(`import { valorLegible } from "./v";\nexport const c = [{ id: "anterior", render: (o: { a: string; v: string | null }) => valorLegible(o.a, o.v) ?? "—" }];`, f),
+      { [f]: { clase: "descarga", motivo: "m" } },
+    );
+    expect(h.a).toHaveLength(1);
   });
 
   it("(extra) un nombre en un ATRIBUTO (nombre accesible) no es render (R16)", () => {
