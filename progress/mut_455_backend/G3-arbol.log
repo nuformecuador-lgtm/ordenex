@@ -1,0 +1,49 @@
+# MUTACION G3-arbol
+archivo: lib/types/gestion-resultado.ts
+linea: 16
+- "export const RESULTADO_ES_ESTADO: ResultadoEsEstado = true;"
++ "export const RESULTADO_ES_ESTADO: ResultadoEsEstado = true;\nexport const MUTACION_G3 = { entregado: \"Entregado\", novedad: \"Novedad\" };"
+tests: tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 4 passed (5)
+FAIL  tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts > 455/R42 · R3 · R12 (G3) — el arbol > ninguna segunda fuente de nombres ni humanizacion fuera de lo pendiente de la Fase 2
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts (5 tests | 1 failed) 11ms
+     × ninguna segunda fuente de nombres ni humanizacion fuera de lo pendiente de la Fase 2 5ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  06:28:58
+   Duration  2.23s (transform 141ms, setup 54ms, import 1.96s, tests 11ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts > 455/R42 · R3 · R12 (G3) — el arbol > ninguna segunda fuente de nombres ni humanizacion fuera de lo pendiente de la Fase 2
+AssertionError: otro modulo declara nombres de estado o humaniza un codigo. El nombre sale de `nombreDeEstado` (`lib/types/order-status.ts`); los colores y variantes, de un mapa indexado por CODIGO.: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "lib/types/gestion-resultado.ts:17 mapa codigo->texto",
++ ]
+
+ ❯ tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts:199:7
+    197|       "otro modulo declara nombres de estado o humaniza un codigo. El …
+    198|         "(`lib/types/order-status.ts`); los colores y variantes, de un…
+    199|     ).toEqual([]);
+       |       ^
+    200|   });
+    201|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
