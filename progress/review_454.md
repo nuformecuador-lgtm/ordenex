@@ -9,7 +9,7 @@
 > devuelve 0): índice rancio para esta rama. Todo se leyó en el archivo real con `grep`/lectura directa.
 > El recorrido en navegador (T4.2) lo hace otro agente y no se esperó.
 
-## Veredicto: **RECHAZADO**
+## Veredicto de la primera revisión (sobre `edff9ccf`): RECHAZADO — ver «Re-revisión» al final para el veredicto FINAL
 
 Tres bloqueantes, todos con arreglo pequeño y ninguno en el código de producción que ya está:
 el gate completo está ROJO por un archivo de la 454, R56 no tiene ningún test que lo verifique y la
@@ -196,3 +196,36 @@ el archivo del índice y se confirmó que el árbol de `lib`/`app` quedaba limpi
 2. B2: test de R56 contra Postgres real (pendiente no cuenta + control positivo), con MUT-R10 en ROJO.
 3. B3: endurecer `detalle` en `senales-gestion-lectores-sql-real` para que MUT-R6 dé ROJO.
 4. (menores) marcar `tasks.md`, consolidar el mapa R→test, declarar R65 como no aplicable medido.
+
+---
+
+# Re-revisión (2026-09-24) — `origin/feature/454-gate-final` @ `d82d91bc`
+
+Alcance pedido por el coordinador: solo B1–B3 y los menores. Checkout `--detach d82d91bc`; `origin/dev`
+(`f05b7c3f`) es ancestro. Diff `edff9ccf..d82d91bc` en `lib app scripts db`: **vacío**. El arreglo toca
+solo tests, specs y progress; el código de producción revisado no cambió. Leídos
+`progress/impl_454_fix_review.md` e `impl_454_gate_final.md`.
+
+## Veredicto FINAL: **APROBADO**
+
+Sujeto a una condición de release que no bloquea la ficha: el gate completo sobre esta rama
+(`gate_454_gate_final.log`, lo corre el leader) queda con `INIT_EXIT=1` SOLO por 4 casos de 3 archivos
+ajenos (downs de `notificacion_evento`), cuya causa son 3 filas locales de `notificacion` creadas
+fuera de los tests el 2026-09-24. Se probó causalmente y fallan igual en `dev` limpio (lo medí en la
+primera revisión). Antes de la release, esas filas se borran de la base local o se miden en el baseline
+con su motivo.
+
+| Punto | Comprobación (ejecutada por mí) | Resultado |
+|---|---|---|
+| B1 | `caja-173-alcance.guardia` + `rutas-336-retiradas.guardia` | **verdes** (en la misma corrida de 4 archivos: 65/65). El gate lo corre el leader; su log muestra los dos verdes y solo los 4 casos ajenos rojos |
+| B2 (R56) | Test nuevo `454/carga-mensajero-pendiente-sql-real` verde (5/5). **Mi MUT-R10 exacta** (fuera `...whereOrdenSinGestionPendiente()` en `OrdenRepository.ts:5186` y `RepartoMananaRepository.ts:102`, las dos a la vez) | **ROJO 2/5** («R56 ocupado/Generar guía» y «R56 reparto de mañana»). Revertida, árbol limpio |
+| B3 (detalle) | `454/senales-gestion-lectores-sql-real` verde. **Mi MUT-R6 exacta** (`OrdenHistorialService.ts:162` devuelve las señales también si la autorización no es `ok`) | **ROJO 3/20** (tienda ajena, «alcance (servicio)», «alcance (Server Action)»). Antes sobrevivía 18/18. Revertida, árbol limpio |
+| m1 | Tabla «Trazabilidad R → test» de `tasks.md`: cada ruta resuelta contra sus prefijos (`tests/integration/db/`, `tests/`, `progress/`, spec) | **80 rutas citadas (74 de test + docs), 0 inexistentes**; **R1–R65 tienen todas su fila**. 40 tareas `[x]`; siguen abiertas T4.x y la Fase 5, como corresponde |
+| m2 (R65) | Nota de vacuidad en `requirements.md` bajo R65 y búsqueda (grep) de «ayuda» en HEAD sobre `app/api/cron/avisos-diarios`, `AvisosDiariosService`, `AvisoAgregadoRepository`, `config/avisos-diarios` | **0 líneas**. La vacuidad está declarada y medida |
+| m4 (base nueva) | `_escenario.ts`: `prepararMundo` ya no exige los dos retirados; `asegurarRetirados()` los siembra dentro de la tx revertida, bajo demanda, y falla ruidosamente en un escenario comprometido. En caracterización solo se añaden 2 líneas de fixture, ninguna aserción | Correcto por lectura. La medición en una base nueva (`48 failed → 48 passed`) es del implementador; **no la re-medí** (habría que crear otra base en el Postgres compartido) |
+| Red 454 completa | `pnpm exec vitest run tests/integration/db/454` | **48 archivos, 250 tests, 0 skipped, verde** |
+
+Menores que quedan (no bloquean): m3, m5, m7 y m8 de la primera revisión siguen como estaban
+(cobertura por un único test en R57/R45, R11 sin afirmar jobs, un comentario inexacto, desempate por
+`id`). Y la fragilidad de los controles de down de `notificacion_evento` ante valores posteriores es deuda
+de otras fichas, no de la 454.
