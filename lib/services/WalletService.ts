@@ -84,6 +84,15 @@ export class WalletService implements IWalletService {
     };
   }
 
+  /**
+   * Ficha 459 (R14) — ¿hay un saldo inicial vigente?
+   * TODO(459-B): la tabla `aporte_capital` llega con el bloque B; hasta entonces no puede haber
+   * ninguno. La guardia de T B.12 prohibe dejar este TODO.
+   */
+  private async haySaldoInicialVigente(): Promise<boolean> {
+    return false;
+  }
+
   async listarMovimientos(
     input: ListarMovimientosInput,
     actor: Actor,
@@ -173,9 +182,18 @@ export class WalletService implements IWalletService {
 
     const filtros = this.construirFiltros(input);
     const filas = await this.repo.agregarPorCategoriaYTipo(filtros);
+    // Ficha 459 (design §2.5, R14/R15) — dos datos de la CONSULTA, leidos SIN filtros: si hay un
+    // saldo inicial vigente (decide el estado de la caja) y el dia del primer movimiento (el
+    // «desde» del flujo registrado). El numero no cambia con ellos; cambia el rotulo.
+    const haySaldoInicialVigente = await this.haySaldoInicialVigente();
+    const primerDia = await this.repo.primerDiaDeLaCaja();
     return {
       status: "ok",
-      resumen: derivarCaja(filas, { periodoFiltrado: hayFiltros(filtros) }),
+      resumen: derivarCaja(filas, {
+        periodoFiltrado: hayFiltros(filtros),
+        haySaldoInicialVigente,
+        primerDia,
+      }),
       composicion: derivarComposicionGanancia(filas),
     };
   }

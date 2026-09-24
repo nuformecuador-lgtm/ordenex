@@ -51,6 +51,7 @@ function buildRepo(original: WalletMovimientoDTO | null): IWalletMovimientoRepos
       indemnizacion: "0.00",
     })),
     obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
+    primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: este camino no lo usa
     // ficha 362: el escritor de los movimientos que nacen de una DECISION humana; registra la
     // accion en su propia transaccion. Los feeds automaticos siguen entrando por `crearMovimientos`.
     crearMovimientoRegistrado: vi.fn().mockResolvedValue(1),

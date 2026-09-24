@@ -96,6 +96,7 @@ function buildMovRepo(
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
     obtenerPorOrigen: vi.fn().mockResolvedValue(movimiento()),
+    primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: este camino no lo usa
     crearMovimientoRegistrado: vi.fn().mockResolvedValue(1), // ficha 362
 
     ...overrides,

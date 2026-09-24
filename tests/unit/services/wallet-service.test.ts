@@ -101,6 +101,7 @@ function buildRepo(): IWalletMovimientoRepository {
       .fn()
       .mockResolvedValue({ gastoFijo: "0.00", gastoVariable: "0.00", sueldo: "0.00" }),
     obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
+    primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: el dia del primer movimiento
     // FICHA 362: el escritor de los movimientos que nacen de una DECISION humana. Abre su PROPIA
     // transaccion y escribe ademas la fila de auditoria; los feeds automaticos —los ~34 asientos
     // que emite aprobar un cierre— siguen entrando por `crearMovimientos` y NO dejan rastro.
@@ -178,6 +179,30 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
     expect(repo.crearMovimientoRegistrado).not.toHaveBeenCalled();
     // …y `forbidden` viaja SOLO: ni una cifra colgando de la respuesta.
     expect(Object.keys(r)).toEqual(["status"]);
+    // Ficha 459: tampoco el primer dia de la caja.
+    expect(repo.primerDiaDeLaCaja).not.toHaveBeenCalled();
+  });
+
+  it("459/R14/R15: estado «flujo» y `flujoDesde` = el dia del primer movimiento, leido SIN filtros", async () => {
+    const repo = buildRepo();
+    repo.primerDiaDeLaCaja = vi.fn(async () => "2026-08-25");
+    const svc = new WalletService(repo, writeClient);
+
+    const r = await svc.verResumenCaja({ page: 1, pageSize: 20, tipo: "ingreso" }, MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperado ok");
+    expect(r.resumen.estado).toBe("flujo");
+    expect(r.resumen.flujoDesde).toBe("2026-08-25");
+    // Sin filtros ni la opcion de excluir el capital: es el «desde» del flujo, no del periodo.
+    expect(repo.primerDiaDeLaCaja).toHaveBeenCalledWith();
+  });
+
+  it("459/R15: con el libro vacio, `flujoDesde` es null", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+    const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
+    if (r.status !== "ok") throw new Error("esperado ok");
+    expect(r.resumen.flujoDesde).toBeNull();
   });
 
   it("feature 94: admin -> ok (paridad con maestro)", async () => {
@@ -196,20 +221,30 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
+    // Ficha 459 (reescrito A PROPOSITO): el ingreso propio de 1 000 es un CARGO a la tienda
+    // (flete/comision), no efectivo: «Entro» es el contra-entrega (5 000) y «De las tiendas» baja
+    // lo que Ordenex se queda de el (5 000 − 1 000 = 4 000). La ganancia no cambia (700).
     expect(r.resumen).toEqual({
-      entradas: "6000.00",
+      entradas: "5000.00",
       salidas: "300.00",
-      enCaja: "5700.00",
+      enCaja: "4700.00",
       signoEnCaja: "positivo",
       ingresosPropios: "1000.00",
       egresosPropios: "300.00",
       ganancia: "700.00",
       signoGanancia: "positivo",
-      deTerceros: "5000.00",
+      deTerceros: "4000.00",
       periodoFiltrado: false,
-      // Feature 231 (R9/R10/R14): 5 000 / 5 700 x 100 = 87.719… -> "87.72".
-      porcentajeTiendas: "87.72",
+      // 4 000 / 4 700 x 100 = 85.106… -> "85.11".
+      porcentajeTiendas: "85.11",
       modoComposicion: "dos_bolsillos",
+      capital: "0.00",
+      signoCapital: "cero",
+      deOrdenex: "700.00",
+      signoDeTerceros: "positivo",
+      deTercerosAbsoluto: "4000.00",
+      estado: "flujo",
+      flujoDesde: null,
     });
     // Lo que la feature existe para conseguir: los ₡5000 de contra-entrega estan en la caja y
     // NO estan en la ganancia. Si `verResumenCaja` ignorara la naturaleza, serian iguales.
@@ -323,6 +358,16 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
       // deba limitarse a repetir.
       if (clave === "modoComposicion") {
         expect(["dos_bolsillos", "solo_tiendas", "solo_ordenex", "sin_reparto"]).toContain(valor);
+        continue;
+      }
+      // Ficha 459 (R14/R15): el ESTADO es un cuarto enum cerrado y `flujoDesde` una fecha (o
+      // null). Tampoco son prosa: el rotulo lo redacta la pantalla.
+      if (clave === "estado") {
+        expect(["flujo", "saldo"]).toContain(valor);
+        continue;
+      }
+      if (clave === "flujoDesde") {
+        expect(valor === null || /^\d{4}-\d{2}-\d{2}$/.test(String(valor))).toBe(true);
         continue;
       }
       expect(valor).toMatch(/^-?\d+\.\d{2}$/);

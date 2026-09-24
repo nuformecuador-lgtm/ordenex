@@ -352,7 +352,7 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     expect(prisma.walletMovimiento.groupBy.mock.calls[0][0].where).toEqual({});
   });
 
-  it("R47: la superficie del repositorio son SIETE metodos — ni update, ni delete, ni el viejo", () => {
+  it("R47: la superficie del repositorio son OCHO metodos — ni update, ni delete, ni el viejo", () => {
     const metodos = Object.getOwnPropertyNames(WalletMovimientoRepository.prototype)
       .filter((m) => m !== "constructor")
       .sort();
@@ -376,6 +376,8 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
       "listar",
       "obtenerPorId",
       "obtenerPorOrigen",
+      // Ficha 459 (R15/R71): LECTURA del dia del primer movimiento. No es una mutacion.
+      "primerDiaDeLaCaja",
     ]);
     expect(metodos.some((m) => /update|delete|actualizar|eliminar|borrar/i.test(m))).toBe(false);
   });

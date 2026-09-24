@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Prisma } from "@prisma/client";
 import {
+  LIQUIDEZ_POR_CATEGORIA,
   NATURALEZA_POR_CATEGORIA,
   derivarCaja,
   type NaturalezaMovimiento,
@@ -43,7 +44,7 @@ describe("NATURALEZA_POR_CATEGORIA — clasificacion exhaustiva (R2/R3)", () => 
     // ademas la direccion contraria: una clave en el mapa que ya no exista en el catalogo.
     for (const categoria of WALLET_MOVIMIENTO_CATEGORIA_SEED) {
       expect(NATURALEZA_POR_CATEGORIA[categoria], `categoria ${categoria}`).toBeDefined();
-      expect(["propio", "terceros"]).toContain(NATURALEZA_POR_CATEGORIA[categoria]);
+      expect(["propio", "terceros", "capital"]).toContain(NATURALEZA_POR_CATEGORIA[categoria]);
     }
     expect(Object.keys(NATURALEZA_POR_CATEGORIA).sort()).toEqual(
       [...WALLET_MOVIMIENTO_CATEGORIA_SEED].sort(),
@@ -54,7 +55,7 @@ describe("NATURALEZA_POR_CATEGORIA — clasificacion exhaustiva (R2/R3)", () => 
     for (const categoria of WALLET_MOVIMIENTO_CATEGORIA_SEED) {
       const naturaleza: NaturalezaMovimiento = NATURALEZA_POR_CATEGORIA[categoria];
       expect(typeof naturaleza).toBe("string");
-      expect(naturaleza === "propio" || naturaleza === "terceros").toBe(true);
+      expect(["propio", "terceros", "capital"]).toContain(naturaleza); // ficha 459: tres dueños
     }
   });
 
@@ -99,9 +100,11 @@ describe("derivarCaja — las dos cifras (R1/R4/R5)", () => {
       fila("egreso_sueldo", "500.00"), // propio
     ]);
 
-    expect(r.entradas).toBe("11000.00"); // 10000 + 1000
+    // Ficha 459 (R2, reescrito): el flete es un CARGO a la tienda, no dinero que entra aparte del
+    // contra-entrega (F2). «Entro» = solo el contra-entrega.
+    expect(r.entradas).toBe("10000.00"); // 10000 (el flete de 1000 no es efectivo)
     expect(r.salidas).toBe("6500.00"); // 6000 + 500
-    expect(r.enCaja).toBe("4500.00");
+    expect(r.enCaja).toBe("3500.00");
     expect(r.signoEnCaja).toBe("positivo");
   });
 
@@ -128,10 +131,12 @@ describe("derivarCaja — las dos cifras (R1/R4/R5)", () => {
     ]);
 
     expect(r.enCaja).not.toBe(r.ganancia);
-    expect(r.enCaja).toBe("4500.00");
+    expect(r.enCaja).toBe("3500.00");
     expect(r.ganancia).toBe("500.00");
-    // Y la diferencia entre ambas es, exactamente, el dinero de terceros que sigue en la caja.
-    expect(r.deTerceros).toBe("4000.00"); // 10000 cobrado − 6000 ya entregado
+    // Y la diferencia entre ambas es, exactamente, lo que se les debe a las tiendas.
+    // Ficha 459 (R5, reescrito): 10000 cobrado − 6000 ya entregado − 1000 de flete que Ordenex se
+    // queda de ese contra-entrega = 3000.
+    expect(r.deTerceros).toBe("3000.00");
     expect(new Prisma.Decimal(r.ganancia).add(r.deTerceros).toFixed(2)).toBe(r.enCaja);
   });
 
@@ -146,8 +151,9 @@ describe("derivarCaja — las dos cifras (R1/R4/R5)", () => {
 
     expect(conCod.ganancia).toBe(sinCod.ganancia); // <- mutacion obligatoria: rojo si es «propio»
     expect(conCod.ganancia).toBe("500.00");
-    expect(conCod.enCaja).toBe("10500.00");
-    expect(sinCod.enCaja).toBe("500.00");
+    // Ficha 459 (R2, reescrito): el flete no entra aparte; la caja es el contra-entrega − el sueldo.
+    expect(conCod.enCaja).toBe("9500.00");
+    expect(sinCod.enCaja).toBe("-500.00");
   });
 
   it("R26/R30: pagar a la tienda y anular deja el dinero en caja igual y la ganancia intacta", () => {
@@ -159,9 +165,10 @@ describe("derivarCaja — las dos cifras (R1/R4/R5)", () => {
     const b = derivarCaja(trasPagar);
     const c = derivarCaja(trasAnular);
 
-    expect(b.enCaja).toBe("5000.00");
+    // Ficha 459 (R2, reescrito): el flete de 1000 no es efectivo; la caja parte de 10000.
+    expect(b.enCaja).toBe("4000.00");
     expect(c.enCaja).toBe(a.enCaja); // el dinero vuelve EXACTAMENTE al importe previo
-    expect(c.enCaja).toBe("11000.00");
+    expect(c.enCaja).toBe("10000.00");
     // Y la ganancia es identica en los TRES momentos: anular no es ingresar.
     expect(a.ganancia).toBe("1000.00");
     expect(b.ganancia).toBe("1000.00");
@@ -173,8 +180,11 @@ describe("derivarCaja — las dos cifras (R1/R4/R5)", () => {
       fila("egreso_gasto_fijo", "300.00"),
       fila("ingreso_flete", "100.00"),
     ]);
-    expect(negativa.enCaja).toBe("-200.00");
+    // Ficha 459 (reescrito): el flete (100) es un cargo a la tienda, no efectivo: la caja baja los
+    // 300 del gasto fijo y «De las tiendas» baja 100 (la tienda debe ese flete).
+    expect(negativa.enCaja).toBe("-300.00");
     expect(negativa.signoEnCaja).toBe("negativo");
+    expect(negativa.deTerceros).toBe("-100.00");
     expect(negativa.ganancia).toBe("-200.00");
     expect(negativa.signoGanancia).toBe("negativo");
 
@@ -206,6 +216,15 @@ describe("derivarCaja — las dos cifras (R1/R4/R5)", () => {
       // enuncia porcentaje alguno. El caso vacio cae en la tercera fila de la tabla.
       porcentajeTiendas: "0.00",
       modoComposicion: "sin_reparto",
+      // Ficha 459 (§2.6): capital en cero, «De Ordenex» en cero, estado «flujo» y, con el libro
+      // vacio, sin dia de arranque.
+      capital: "0.00",
+      signoCapital: "cero",
+      deOrdenex: "0.00",
+      signoDeTerceros: "cero",
+      deTercerosAbsoluto: "0.00",
+      estado: "flujo",
+      flujoDesde: null,
     });
   });
 
@@ -220,13 +239,31 @@ describe("derivarCaja — las dos cifras (R1/R4/R5)", () => {
       fila("egreso_pago_tienda", "1000.00"),
     ]);
 
-    expect(r.entradas).toBe("5489.00"); // 300 + 150 + 39 + 5000
+    // Ficha 459 (reescrito): los tres ingresos propios (489) son CARGOS a la tienda.
+    expect(r.entradas).toBe("5000.00"); // solo el contra-entrega es efectivo
     expect(r.salidas).toBe("1250.00"); // 200 + 50 + 1000
-    expect(r.ingresosPropios).toBe("489.00"); // 300 + 150 + 39
+    expect(r.ingresosPropios).toBe("489.00"); // 300 + 150 + 39 (para la ganancia siguen contando)
     expect(r.egresosPropios).toBe("250.00"); // 200 + 50 (el pago a tienda es de terceros)
-    expect(r.enCaja).toBe("4239.00");
+    expect(r.enCaja).toBe("3750.00"); // 5000 − 1250
     expect(r.ganancia).toBe("239.00");
-    expect(r.deTerceros).toBe("4000.00"); // 5000 − 1000
+    expect(r.deTerceros).toBe("3511.00"); // 5000 − 1000 − 489
+  });
+
+  it("459/R7: cifra principal = ganancia + «De las tiendas» + capital, al centimo", () => {
+    const r = derivarCaja([
+      fila("ingreso_flete", "300.00"),
+      fila("ingreso_comision_cod", "150.37"),
+      fila("ingreso_cod_recaudado", "5000.00"),
+      fila("egreso_pago_tienda", "1000.00"),
+      fila("egreso_sueldo", "20.11"),
+    ]);
+    // A mano: Entro 5000,00; Salio 1020,11; cifra 3979,89. Ganancia 450,37 − 20,11 = 430,26.
+    // De las tiendas 5000 − 1000 − 450,37 = 3549,63. Capital 0. 430,26 + 3549,63 = 3979,89.
+    expect(r.enCaja).toBe("3979.89");
+    expect(r.ganancia).toBe("430.26");
+    expect(r.deTerceros).toBe("3549.63");
+    expect(r.capital).toBe("0.00");
+    expect(r.deOrdenex).toBe("430.26");
   });
 });
 
@@ -234,8 +271,12 @@ describe("derivarCaja — sin dinero de terceros, las dos cifras COINCIDEN (R6)"
   // Es la retrocompatibilidad conceptual de la feature: hoy no existe ni una fila de terceros,
   // asi que el numero que el maestro lleva viendo desde la 42 no cambia de VALOR, cambia de
   // NOMBRE. La cifra que aparece de cero es la otra.
+  //
+  // Ficha 459 (reescrito): la coincidencia vale para lo propio que es EFECTIVO. Los seis cargos a
+  // una tienda son propios pero no efectivo: suben la ganancia sin entrar a la caja (bajan «De las
+  // tiendas»), asi que ya no pueden estar en este conjunto. Ver el caso nuevo de abajo.
   const SOLO_PROPIAS = WALLET_MOVIMIENTO_CATEGORIA_SEED.filter(
-    (c) => NATURALEZA_POR_CATEGORIA[c] === "propio",
+    (c) => NATURALEZA_POR_CATEGORIA[c] === "propio" && LIQUIDEZ_POR_CATEGORIA[c] === "efectivo",
   );
 
   it("R6: un conjunto con TODAS las categorias propias del catalogo da enCaja === ganancia", () => {
@@ -259,8 +300,19 @@ describe("derivarCaja — sin dinero de terceros, las dos cifras COINCIDEN (R6)"
     expect(r.enCaja).toBe(balanceDeSiempre.balance);
   });
 
+  it("459/R4/R5: un CARGO a la tienda sube la ganancia y baja «De las tiendas»; la caja no se mueve", () => {
+    const r = derivarCaja([fila("ingreso_flete", "1000.00")]);
+    expect(r.enCaja).toBe("0.00");
+    expect(r.entradas).toBe("0.00");
+    expect(r.ganancia).toBe("1000.00");
+    expect(r.deTerceros).toBe("-1000.00");
+    expect(r.signoDeTerceros).toBe("negativo");
+    expect(r.deTercerosAbsoluto).toBe("1000.00");
+  });
+
   it("R6: basta UNA fila de terceros para que las dos cifras se separen", () => {
-    const propias = [fila("ingreso_flete", "1000.00"), fila("egreso_sueldo", "400.00")];
+    // Ficha 459 (reescrito): con un ajuste (propio y EFECTIVO) en vez del flete, que es un cargo.
+    const propias = [fila("ingreso_ajuste", "1000.00"), fila("egreso_sueldo", "400.00")];
     expect(derivarCaja(propias).enCaja).toBe(derivarCaja(propias).ganancia);
 
     const conUnaDeTerceros = [...propias, fila("ingreso_cod_recaudado", "0.01")];
@@ -291,10 +343,14 @@ describe("derivarCaja — money-safe y frontera (R7/R10)", () => {
       expect(typeof r[clave], clave).toBe("string");
       expect(r[clave], clave).toMatch(/^-?\d+\.\d{2}$/);
     }
-    expect(r.entradas).toBe("8.50");
-    expect(r.enCaja).toBe("6.50");
+    // Ficha 459 (reescrito): el flete (1,5) es un cargo — no entra, y baja «De las tiendas».
+    expect(r.entradas).toBe("7.00");
+    expect(r.enCaja).toBe("5.00");
     expect(r.ganancia).toBe("1.50");
-    expect(r.deTerceros).toBe("5.00");
+    expect(r.deTerceros).toBe("3.50");
+    for (const clave of ["capital", "deOrdenex", "deTercerosAbsoluto"] as const) {
+      expect(r[clave], clave).toMatch(/^-?\d+\.\d{2}$/);
+    }
   });
 
   it("R7: el signo es EXPLICITO y solo puede ser uno de los tres valores", () => {
@@ -304,9 +360,10 @@ describe("derivarCaja — money-safe y frontera (R7/R10)", () => {
   });
 
   it("R7: money-safe — 0.10 + 0.20 da 0.30 exacto, no 0.30000000000000004", () => {
+    // Ficha 459 (reescrito): con dos ingresos EFECTIVO (el flete y la comision son cargos).
     const r = derivarCaja([
-      fila("ingreso_flete", "0.10"),
-      fila("ingreso_comision_cod", "0.20"),
+      fila("ingreso_ajuste", "0.10"),
+      fila("ingreso_cod_recaudado", "0.20"),
       fila("egreso_sueldo", "0.30"),
     ]);
     expect(r.entradas).toBe("0.30");

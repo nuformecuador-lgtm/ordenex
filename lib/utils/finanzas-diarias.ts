@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
+import { LIQUIDEZ_POR_CATEGORIA, NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 import { derivarBalance } from "@/lib/utils/wallet-balance";
 import type { AgregadoDiarioCajaRow } from "@/lib/interfaces/repositories/IFinanzasDiarioRepository";
 import type { FinanzasDeUnDia } from "@/lib/types/finanzas-diario";
@@ -84,7 +84,12 @@ export function derivarFinanzasDiarias(
     const esPropio = NATURALEZA_POR_CATEGORIA[fila.categoria] === "propio";
 
     if (fila.tipo === "ingreso") {
-      dia.entradas = dia.entradas.add(monto);
+      // Ficha 459 (R13): los ingresos del dia son las ENTRADAS DE EFECTIVO, como el «Entro» de la
+      // caja. Un cargo a la tienda (flete, comision, IVA) no entra aparte del contra-entrega: sale
+      // de el. Sigue sumando a la ganancia (abajo), que no cambia.
+      if (LIQUIDEZ_POR_CATEGORIA[fila.categoria] === "efectivo") {
+        dia.entradas = dia.entradas.add(monto);
+      }
       if (esPropio) dia.ingresosPropios = dia.ingresosPropios.add(monto);
     } else {
       dia.salidas = dia.salidas.add(monto);

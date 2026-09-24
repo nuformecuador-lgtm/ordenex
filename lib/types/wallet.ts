@@ -210,7 +210,11 @@ export type ComposicionFilaId = (typeof COMPOSICION_FILA_SEED)[number];
  * obligaria a `lib/types/` a importar de `lib/utils/`, invirtiendo la direccion de la
  * dependencia. La clasificacion en si (`NATURALEZA_POR_CATEGORIA`) NO se mueve.
  */
-export type NaturalezaMovimiento = "propio" | "terceros";
+//
+// Ficha 459 (design §2.2, P1): tercer dueño, `capital` — el saldo inicial y los aportes de capital.
+// Es dinero de Ordenex que NO es ganancia: suma a la cifra principal y a «De Ordenex», nunca a la
+// ganancia ni a «De las tiendas».
+export type NaturalezaMovimiento = "propio" | "terceros" | "capital";
 
 // ── Contratos I/O (frontera Server Action -> cliente). Montos SIEMPRE STRING (R4/R25) ──
 
@@ -265,8 +269,10 @@ export interface AgregadoCajaRow {
 //  - `enCaja`   = entradas - salidas, sin distinguir de quien es el dinero (R4).
 //  - `ganancia` = ingresos propios - egresos propios (R5). Es, numero por numero, lo que hoy
 //                 se rotula «Balance general»: no cambia de valor, cambia de nombre.
-//  - `deTerceros` [P6] = la diferencia entre ambas. NO es la deuda con las tiendas (R34): es
-//                 MAYOR, porque de ese dinero Ordenex aun descuenta flete, comision e IVA.
+//  - `deTerceros` [P6] = «De las tiendas». Ficha 459 (R5/R8): desde esta ficha SI es lo que
+//                 Ordenex les debe a las tiendas — ya descontados flete, comision e IVA (los
+//                 cargos a la tienda) —, salvo los cobros de un costo que no pasan por la caja.
+//  - `entradas` (ficha 459, R2): solo el EFECTIVO; los cargos a la tienda no entran aparte.
 export type CajaResumenDTO = {
   entradas: string;
   salidas: string;
@@ -295,7 +301,23 @@ export type CajaResumenDTO = {
    * comparando los DOS importes derivados; la pantalla no compara nada.
    */
   modoComposicion: ModoComposicionCaja;
+  // ── Ficha 459 (design §2.6) — todo STRING salvo el estado ──
+  /** R6 — saldos iniciales y aportes vigentes, menos sus anulaciones. */
+  capital: string;
+  signoCapital: WalletBalanceSigno;
+  /** R11 — ganancia + capital: el bolsillo de Ordenex de la barra. */
+  deOrdenex: string;
+  signoDeTerceros: WalletBalanceSigno;
+  /** |deTerceros|, para «Las tiendas le deben ₡X» sin aritmetica en el navegador (R23, R28). */
+  deTercerosAbsoluto: string;
+  /** R14 — «saldo» si hay un saldo inicial vigente; «flujo» en cualquier otro caso. */
+  estado: EstadoCaja;
+  /** R15 — YYYY-MM-DD (Costa Rica) del primer movimiento de la caja; null con el libro vacio. */
+  flujoDesde: string | null;
 };
+
+/** Ficha 459 (R14) — el estado de la caja lo decide el servidor. */
+export type EstadoCaja = "flujo" | "saldo";
 
 // Feature 231 (design §3.1) — los CUATRO estados posibles del reparto de la caja. Seed
 // primero para que la pantalla pueda montar un `Record` TOTAL sobre ellos (design §4.2): un

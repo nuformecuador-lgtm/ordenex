@@ -580,7 +580,8 @@ const LIBRO_R15: Partial<DatosFinancieros> = {
  * LOS TOTALES ESCRITOS A MANO sobre `LIBRO_R15`, con la misma aritmetica que la 127:
  *   bruto    = Σ de todo lo agregado, SIN signo ⟨D1(c)⟩ = 9730.00 para las seis de caja;
  *   egresos  = Σ ingreso (1000+130+5000+200) − Σ egreso (400+3000) = 2930.00;
- *   enCaja   = lo mismo, por `derivarCaja`                          = 2930.00;
+ *   enCaja   = por `derivarCaja` (ficha 459: flete e IVA son CARGOS, no efectivo)
+ *            = (5000+200) − (400+3000)                             = 1800.00;
  *   ganancia = (1000+130) − 400, sin el dinero de terceros          =  730.00.
  */
 const TOTALES_ESPERADOS: Readonly<Record<string, ImporteAnalitico>> = {
@@ -588,7 +589,7 @@ const TOTALES_ESPERADOS: Readonly<Record<string, ImporteAnalitico>> = {
   ingreso_comision_cod: { forma: "solo_bruto", bruto: "9730.00", moneda: MONEDA },
   ingreso_iva: { forma: "solo_bruto", bruto: "9730.00", moneda: MONEDA },
   egresos: { forma: "bruto_y_neto", bruto: "9730.00", neto: "2930.00", moneda: MONEDA },
-  dinero_en_caja: { forma: "bruto_y_neto", bruto: "9730.00", neto: "2930.00", moneda: MONEDA },
+  dinero_en_caja: { forma: "bruto_y_neto", bruto: "9730.00", neto: "1800.00", moneda: MONEDA },
   ganancia_ordenex: { forma: "bruto_y_neto", bruto: "9730.00", neto: "730.00", moneda: MONEDA },
   cod_recaudado__por_metodo: {
     forma: "bruto_y_neto",

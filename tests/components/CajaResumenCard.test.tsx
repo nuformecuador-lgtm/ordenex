@@ -39,6 +39,14 @@ const RESUMEN: CajaResumenDTO = {
   // Feature 231 (R9/R10): 10 000 / 12 000 x 100 = 83.333… -> "83.33".
   porcentajeTiendas: "83.33",
   modoComposicion: "dos_bolsillos",
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  capital: "0.00",
+  signoCapital: "cero",
+  deOrdenex: "2000.00",
+  signoDeTerceros: "positivo",
+  deTercerosAbsoluto: "10000.00",
+  estado: "flujo",
+  flujoDesde: "2026-08-25",
 };
 
 /** Vocabulario que NO puede aparecer en esta pantalla: es de contador, no del maestro. */

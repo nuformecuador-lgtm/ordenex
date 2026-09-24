@@ -61,6 +61,14 @@ const RESUMEN: CajaResumenDTO = {
   // Feature 231 (R9/R10): 5000 / 5700 x 100 = 87.719… -> "87.72", con las dos cifras > 0.
   porcentajeTiendas: "87.72",
   modoComposicion: "dos_bolsillos",
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  capital: "0.00",
+  signoCapital: "cero",
+  deOrdenex: "700.00",
+  signoDeTerceros: "positivo",
+  deTercerosAbsoluto: "5000.00",
+  estado: "flujo",
+  flujoDesde: "2026-08-25",
 };
 
 /**

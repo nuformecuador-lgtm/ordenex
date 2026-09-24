@@ -666,7 +666,7 @@ const CATALOGO = [
     id: "dinero_en_caja",
     etiqueta: "Dinero en caja",
     descripcion:
-      "TESORERIA: todo lo que entro menos todo lo que salio de la caja principal, sin distinguir de quien es el dinero — incluye el contra-entrega cobrado a nombre de las tiendas y aun no entregado. NO es lo que Ordenex gano (eso es ganancia_ordenex) ni lo que les debe a las tiendas (es MAYOR: de ese dinero Ordenex aun descuenta flete, comision e IVA). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "TESORERIA: el flujo de dinero registrado de la caja principal — el dinero que entro de verdad menos todo lo que salio, sin distinguir de quien es: incluye el contra-entrega cobrado a nombre de las tiendas, los reversos y los ajustes. NO suma aparte el flete, la comision ni sus impuestos: son la parte de Ordenex que se descuenta del contra-entrega de la tienda (o una deuda de la tienda), no dinero que entre a la caja. Es la misma cifra principal de la tarjeta de la caja; solo es el saldo real si hay un saldo inicial registrado. NO es lo que Ordenex gano (eso es ganancia_ordenex). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",

@@ -96,6 +96,8 @@ const DUENO_PUNTO: Record<NaturalezaMovimiento, string> = {
   // de composicion de la tarjeta reparte la caja: es el mismo reparto, fila a fila.
   propio: "bg-muted-foreground",
   terceros: "bg-warning",
+  // Ficha 459 (design §5): capital de Ordenex (saldo inicial y aportes), token semantico existente.
+  capital: "bg-info",
 };
 
 function DuenoCelda({ dueno }: { dueno: NaturalezaMovimiento }) {

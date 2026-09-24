@@ -382,20 +382,34 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
   // comentario. Hoy la caja suma como entrada el contra-entrega Y ADEMAS los cargos a la tienda
   // que salen de el (F2), y «De terceros» los lleva dentro.
   // ───────────────────────────────────────────────────────────────────────────────────────────
-  describe("lo que esta ficha cambia a proposito (cifras de HOY)", () => {
-    it("«Entro», «Dinero en caja» y «De terceros» de hoy", () => {
-      // Entro = propios 63 970,93 + contra-entrega 31 517,00 + reverso del pago a tienda 5 000,00
-      //       = 100 487,93
-      // Dinero en caja = 100 487,93 − 161 845,77 = −61 357,84
-      // De terceros    = 31 517,00 + 5 000,00 − 8 000,00 = 28 517,00
+  //
+  // T A.3 (ficha 459): REESCRITO con la formula nueva. Las cifras de ANTES (fase 0, sobre
+  // `6280fdbb`) eran: entradas 100 487,93 · enCaja −61 357,84 · deTerceros 28 517,00.
+  describe("lo que esta ficha cambia a proposito (cifras con la formula de la 459)", () => {
+    it("«Entro», la cifra principal, «De las tiendas», capital y «De Ordenex»", () => {
+      // Cargos a tiendas del escenario (los seis conceptos del feed y del cobro por rechazo):
+      //   flete 8 000 + IVA flete 1 040 + comision 978,47 + IVA comision 127,21
+      //   + devolucion 2 500 + IVA devolucion 325 = 12 970,68
+      // Entro = efectivo: contra-entrega 31 517,00 + reverso del pago a tienda 5 000,00
+      //       + ajustes 51 000,25 (reverso del sueldo 45 000 + manual 1 000,25 + reverso del
+      //         premio 5 000) = 87 517,25        (= 100 487,93 de antes − 12 970,68)
+      // Cifra principal = 87 517,25 − 161 845,77 = −74 328,52
+      // De las tiendas  = 31 517,00 + 5 000,00 − 8 000,00 − 12 970,68 = 15 546,32
+      //                 = Σ saldos (7 530,70 + 5 515,12) + cobro de un costo 2 500,50  → R8
+      // Capital 0,00 ; De Ordenex = ganancia −89 874,84 + 0 = −89 874,84
+      // R7: −89 874,84 + 15 546,32 + 0 = −74 328,52 ✓
       expect({
         entradas: delta(foto(), (l) => l.resumen.entradas),
         enCaja: delta(foto(), (l) => l.resumen.enCaja),
         deTerceros: delta(foto(), (l) => l.resumen.deTerceros),
+        capital: delta(foto(), (l) => l.resumen.capital),
+        deOrdenex: delta(foto(), (l) => l.resumen.deOrdenex),
       }).toEqual({
-        entradas: "100487.93",
-        enCaja: "-61357.84",
-        deTerceros: "28517.00",
+        entradas: "87517.25",
+        enCaja: "-74328.52",
+        deTerceros: "15546.32",
+        capital: "0.00",
+        deOrdenex: "-89874.84",
       });
     });
   });

@@ -195,6 +195,8 @@ export function composicionCajaNombreAccesible(resumen: CajaResumenDTO): string 
 export const DUENO_LABEL: Record<NaturalezaMovimiento, string> = {
   propio: "Ordenex",
   terceros: "Tienda",
+  // Ficha 459 (design §5) — el saldo inicial y los aportes de capital.
+  capital: "Ordenex (capital)",
 };
 
 /** Etiqueta legible del origen de un movimiento. */

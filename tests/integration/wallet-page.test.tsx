@@ -184,6 +184,14 @@ const RESUMEN_OK = {
     // Feature 231 (R9/R10): 10 000 / 11 500 x 100 = 86.9565… -> "86.96".
     porcentajeTiendas: "86.96",
     modoComposicion: "dos_bolsillos" as const,
+    // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+    capital: "0.00",
+    signoCapital: "cero" as const,
+    deOrdenex: "1500.00",
+    signoDeTerceros: "positivo" as const,
+    deTercerosAbsoluto: "10000.00",
+    estado: "flujo" as const,
+    flujoDesde: "2026-08-25",
   },
   // Feature 231 (design §2.4): la composición viaja HERMANA del resumen, no anidada dentro —
   // por eso el barrido de STRING sobre `props.resumen` sigue afirmando lo mismo que hoy.

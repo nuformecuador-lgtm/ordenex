@@ -293,6 +293,14 @@ const CAJA_CON_CENTIMOS: CajaResumenDTO = {
   periodoFiltrado: false,
   porcentajeTiendas: "80.54",
   modoComposicion: "dos_bolsillos",
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  capital: "0.00",
+  signoCapital: "cero",
+  deOrdenex: "2415.92",
+  signoDeTerceros: "positivo",
+  deTercerosAbsoluto: "10000.00",
+  estado: "flujo",
+  flujoDesde: "2026-08-25",
 };
 
 describe("ficha 359 · B1 — «Dinero en caja»: las tres identidades de la tarjeta", () => {

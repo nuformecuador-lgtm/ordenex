@@ -111,6 +111,14 @@ const RESUMEN: CajaResumenDTO = {
   periodoFiltrado: false,
   porcentajeTiendas: "77.74",
   modoComposicion: "dos_bolsillos",
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  capital: "0.00",
+  signoCapital: "cero",
+  deOrdenex: "3519.00",
+  signoDeTerceros: "positivo",
+  deTercerosAbsoluto: "12290.25",
+  estado: "flujo",
+  flujoDesde: "2026-08-25",
 };
 
 function pintar({

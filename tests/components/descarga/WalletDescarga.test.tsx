@@ -194,6 +194,14 @@ const RESUMEN = {
   // Feature 231 (R9/R10): sin dinero de terceros la porcion de las tiendas es 0.
   porcentajeTiendas: "0.00",
   modoComposicion: "dos_bolsillos" as const,
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  capital: "0.00",
+  signoCapital: "cero" as const,
+  deOrdenex: "1.00",
+  signoDeTerceros: "cero" as const,
+  deTercerosAbsoluto: "0.00",
+  estado: "flujo" as const,
+  flujoDesde: "2026-08-25",
 };
 // Feature 231 (T6.3): el módulo monta ahora la tarjeta de la ganancia, que recibe la
 // composición hermana del resumen. Este archivo mide la DESCARGA y el FILTRO, no esa tarjeta;
