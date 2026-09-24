@@ -279,8 +279,8 @@ describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el c
     // la firma se calcula sobre el string serializado. Lo que la 256 fijaba sigue intacto: sus
     // cuatro claves conservan nombre, posicion y presencia, y `evidenciasUrl` sigue siendo la
     // UNICA opcional. El aserto no se relaja: siguen siendo dos igualdades de contenido.
-    const SEIS = ["numGuia", "numRemision", "estado", "motivo", "mensajero", "evidenciasUrl"];
-    const CINCO_REQUIRED = ["numGuia", "numRemision", "estado", "motivo", "mensajero"];
+    const SEIS = ["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero", "evidenciasUrl"];
+    const CINCO_REQUIRED = ["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero"];
 
     // (1) Las SEIS propiedades, en el orden real del objeto. Un intercambio se ve.
     expect(Object.keys(dataTs.properties)).toEqual(SEIS);
@@ -401,10 +401,10 @@ describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el c
     for (const descripcion of [descripcionTs, descripcionYaml]) {
       // Rama A: el estado no es NINGUNO de los dos tipificados -> `null`.
       expect(descripcion).toContain(
-        "Es `null` en todo evento cuyo `estado` NO sea `devuelta` ni `incidente`",
+        "Es `null` en todo evento cuyo `estado` NO sea `novedad` ni `incidente`",
       );
       // Rama B: el estado SI es uno de los dos, pero no hay causa registrada -> `null` igual.
-      expect(descripcion).toContain("una `devuelta` (o un `incidente`) sin causa registrada");
+      expect(descripcion).toContain("una `novedad` (o un `incidente`) sin causa registrada");
       // En las dos ramas la clave viaja: `null` es un value, no una omision.
       expect(descripcion).toContain("el campo NUNCA se omite");
       // R15: motivo vigente al entregar, no una foto del instante del cambio de estado.
@@ -420,7 +420,7 @@ describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el c
     // con `mensajero`. Se enmienda el literal, no se afloja: la segunda mitad —que `evidenciasUrl`
     // sigue siendo la UNICA opcional— es exactamente lo que hay que seguir protegiendo.
     expect(dataTs.description).toContain(
-      "Las cinco claves `numGuia`, `numRemision`, `estado`, `motivo` y `mensajero` están SIEMPRE presentes",
+      "Las seis claves `numGuia`, `numRemision`, `estado`, `estadoNombre`, `motivo` y `mensajero` están SIEMPRE presentes",
     );
     expect(dataTs.description).toContain("UNA clave OPCIONAL, `evidenciasUrl`");
   });

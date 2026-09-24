@@ -207,7 +207,7 @@ describe("268/R28 — `evidenciasUrl` es OPCIONAL y las otras cuatro siguen REQU
   // `evidenciasUrl` siga siendo la UNICA fuera de `required`.
   it("`data.required` son EXACTAMENTE numGuia, numRemision, estado, motivo y mensajero", () => {
     expect([...dataTs.required].sort()).toEqual(
-      ["estado", "mensajero", "motivo", "numGuia", "numRemision"].sort(),
+      ["estado", "estadoNombre", "mensajero", "motivo", "numGuia", "numRemision"].sort(),
     );
     expect(dataTs.required).not.toContain("evidenciasUrl");
     // Y dicho de la otra forma, que es la que se rompe si alguien añade una segunda opcional:
@@ -295,7 +295,7 @@ describe("268/R30 — el .yaml publica el MISMO bloque que el objeto TS", () => 
     const requeridas = requiredDelBloque(DATA_YAML);
     // ⏳ 2026-09-09 (feature 404/R24): el espejo textual gana `mensajero` en `required`, en el
     // mismo orden que el objeto TS. `evidenciasUrl` sigue fuera.
-    expect(requeridas).toEqual(["numGuia", "numRemision", "estado", "motivo", "mensajero"]);
+    expect(requeridas).toEqual(["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero"]);
     expect(requeridas).not.toContain("evidenciasUrl");
   });
 });

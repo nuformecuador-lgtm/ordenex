@@ -1,0 +1,53 @@
+# MUTACION R29-enum-a-mano
+archivo: lib/api/openapi-spec.ts
+linea: 48
+- "const ORDER_STATUS_ENUM: string[] = [...ORDER_STATUS_SEED];"
++ "const ORDER_STATUS_ENUM: string[] = ORDER_STATUS_SEED.filter((v) => v !== \"recolectando\");"
+tests: tests/unit/api/openapi-nombres-455.guardia.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 5 passed (6)
+FAIL  tests/unit/api/openapi-nombres-455.guardia.test.ts > 455/R24 · R25 · R29 (G5) — el contrato publicado > R29: el catalogo publicado es EXACTAMENTE el vigente, en su orden, y el resultado los cinco
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/api/openapi-nombres-455.guardia.test.ts (6 tests | 1 failed) 13ms
+     × R29: el catalogo publicado es EXACTAMENTE el vigente, en su orden, y el resultado los cinco 5ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  06:14:16
+   Duration  507ms (transform 157ms, setup 52ms, import 230ms, tests 13ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/api/openapi-nombres-455.guardia.test.ts > 455/R24 · R25 · R29 (G5) — el contrato publicado > R29: el catalogo publicado es EXACTAMENTE el vigente, en su orden, y el resultado los cinco
+AssertionError: expected [ 'entregado', 'novedad', …(17) ] to deeply equal [ 'entregado', 'novedad', …(18) ]
+
+- Expected
++ Received
+
+@@ -16,7 +16,6 @@
+    "por_devolver_a_bodega_central",
+    "devolviendo_a_bodega_central",
+    "por_devolver_a_tienda",
+    "por_recolectar_en_tienda",
+    "incidente",
+-   "recolectando",
+  ]
+
+ ❯ tests/unit/api/openapi-nombres-455.guardia.test.ts:107:48
+    105|
+    106|   it("R29: el catalogo publicado es EXACTAMENTE el vigente, en su orde…
+    107|     expect(props("OrdenListItem").estado.enum).toEqual([...ORDER_STATU…
+       |                                                ^
+    108|     expect(props("OrdenGestion").resultado.enum).toEqual([
+    109|       "devolucion_a_origen_por_rechazo",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

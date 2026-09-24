@@ -70,7 +70,9 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
     expect(Object.keys(propsGestion)).toEqual([
       "createdAt",
       "resultado",
+      "resultadoNombre",
       "estadoResultante",
+      "estadoResultanteNombre",
       "motivo",
       "mensajero",
       "pendienteConfirmacion",
@@ -78,7 +80,9 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
     expect(gestion.required).toEqual([
       "createdAt",
       "resultado",
+      "resultadoNombre",
       "estadoResultante",
+      "estadoResultanteNombre",
       "motivo",
       "mensajero",
       "pendienteConfirmacion",
@@ -104,11 +108,12 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
   it("R5: el enum de `resultado` son los CINCO values crudos, y NO es el catalogo de estados", () => {
     // Literal a mano: si se comparara contra `ESTATUS_POR_RESULTADO` —de donde se deriva— el
     // aserto estaria siempre verde.
+    // 455 (T1.8): codigos vigentes, en orden alfabetico (se deriva con `.sort()`).
     expect((propsGestion.resultado as Nodo).enum).toEqual([
-      "novedad",
+      "devolucion_a_origen_por_rechazo",
       "entregado",
       "incidente",
-      "devolucion_a_origen_por_rechazo",
+      "novedad",
       "reprogramado",
     ]);
     // No contiene `por_recoger`, asi que `esEnumDeEstado` de `openapi-contrato-en-reparto` NO lo
@@ -128,7 +133,9 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
       expect(Object.keys(g)).toEqual([
         "createdAt",
         "resultado",
+        "resultadoNombre",
         "estadoResultante",
+        "estadoResultanteNombre",
         "motivo",
         "mensajero",
       ]);
@@ -277,6 +284,7 @@ describe("405/R16 — el cuerpo del listado y el del webhook no ganan ninguna cl
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "destinatario",
       "telefonoDest",
       "producto",
@@ -306,6 +314,7 @@ describe("405/R16 — el cuerpo del listado y el del webhook no ganan ninguna cl
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
       "evidenciasUrl",
@@ -314,15 +323,16 @@ describe("405/R16 — el cuerpo del listado y el del webhook no ganan ninguna cl
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
     ]);
     expect(Object.keys(dataWebhook.properties as Nodo)).not.toContain("gestiones");
   });
 
-  it("`Evidencia` no cambia: los mismos cuatro campos y los mismos tres values", () => {
+  it("`Evidencia`: los mismos cuatro campos + `resultadoNombre` (455/R24) y los mismos tres values", () => {
     const evidencia = schemas.Evidencia;
-    expect(evidencia.required).toEqual(["resultado", "contentType", "url", "expiraEnSegundos"]);
+    expect(evidencia.required).toEqual(["resultado", "resultadoNombre", "contentType", "url", "expiraEnSegundos"]);
     expect(((evidencia.properties as Nodo).resultado as Nodo).enum).toEqual([
       "entregado",
       "devolucion_a_origen_por_rechazo",

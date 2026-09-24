@@ -151,7 +151,9 @@ describe("155/R42 — el contrato del canal por API key tras el retiro", () => {
       openApiSpec.paths["/api/ordenes/api-key/carga"].post.responses["200"],
     );
     expect(ejemplo).not.toContain('"estatus":"en_ruta_bodega_central"');
-    expect(ejemplo).toContain(`"estatus":"${VALUE_NACIMIENTO_API}"`);
+    // 455 (R27): la fila de la carga publica `estado` (antes `estatus`), con su nombre al lado.
+    expect(ejemplo).not.toContain(`"estatus":`);
+    expect(ejemplo).toContain(`"estado":"${VALUE_NACIMIENTO_API}","estadoNombre":"Por recolectar en tienda"`);
     expect(ejemplo).toContain(`"estado":"${VALUE_NACIMIENTO_API}"`);
   });
 });
@@ -252,7 +254,8 @@ describe("268/R15/R16 → 454 — `incidente` sigue publicado en los 4 enums; `a
     for (const lista of enumsTs) {
       expect(lista).not.toContain("ayuda_tienda");
       expect(lista).toContain("incidente");
-      expect(lista.slice(-2)).toEqual(["devuelta_a_tienda", "incidente"]);
+      // 455 (R29): el enum es `ORDER_STATUS_SEED` entero; `incidente` va detras de `por_recolectar_en_tienda`.
+      expect(lista.slice(-3)).toEqual(["por_recolectar_en_tienda", "incidente", "recolectando"]);
     }
   });
 
@@ -260,7 +263,7 @@ describe("268/R15/R16 → 454 — `incidente` sigue publicado en los 4 enums; `a
     const enumsYaml = enumsDelYaml(yaml);
     expect(enumsYaml).toHaveLength(4);
     for (let i = 0; i < enumsYaml.length; i++) {
-      expect(enumsYaml[i].slice(-2)).toEqual(["devuelta_a_tienda", "incidente"]);
+      expect(enumsYaml[i].slice(-3)).toEqual(["por_recolectar_en_tienda", "incidente", "recolectando"]);
       expect(enumsYaml[i]).toEqual(enumsTs[i]);
     }
     // Y ninguna linea del .yaml publica ya `ayuda_tienda` como value de un enum.

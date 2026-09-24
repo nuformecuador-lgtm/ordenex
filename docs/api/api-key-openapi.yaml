@@ -83,7 +83,8 @@ paths:
                       - fila: 1
                         numRemision: "REM-0001"
                         resultado: creada
-                        estatus: por_recolectar_en_tienda
+                        estado: por_recolectar_en_tienda
+                        estadoNombre: "Por recolectar en tienda"
                         numGuia: 100234
                     errores:
                       - fila: 2
@@ -97,6 +98,7 @@ paths:
                         numRemision: "REM-0001"
                         numGuia: 100234
                         estado: por_recolectar_en_tienda
+                        estadoNombre: "Por recolectar en tienda"
                         costoEnvio: "3.39"
                         fulfillment: "0.00"
                 filaSinTarifa:
@@ -111,7 +113,8 @@ paths:
                       - fila: 1
                         numRemision: "REM-0001"
                         resultado: creada
-                        estatus: por_recolectar_en_tienda
+                        estado: por_recolectar_en_tienda
+                        estadoNombre: "Por recolectar en tienda"
                         numGuia: 100234
                     errores:
                       - fila: 2
@@ -125,6 +128,7 @@ paths:
                         numRemision: "REM-0001"
                         numGuia: 100234
                         estado: por_recolectar_en_tienda
+                        estadoNombre: "Por recolectar en tienda"
                         costoEnvio: "3.39"
                         fulfillment: "0.00"
         "401":
@@ -173,25 +177,30 @@ paths:
         - name: estado
           in: query
           required: false
-          description: Filtra por estado exacto del catálogo.
+          description: "Filtra por estado exacto del catálogo (uno de los 20 códigos vigentes). Un código anterior al cambio de nombres de estados (ver CHANGELOG) responde `422` con un mensaje que nombra el código que lo sustituye."
           schema:
             type: string
             enum:
-              - entregada
-              - devuelta
+              - entregado
+              - novedad
               - devolviendo_a_tienda
-              - reprogramada
-              - por_recolectar_en_tienda
+              - reprogramado
               - en_ruta_bodega_central
               - en_bodega_central
               - en_preparacion
-              - por_recoger
+              - mensajero_recogiendo_en_bodega
               - en_ruta_bodega_satelite
               - en_reparto
-              - rechazada
+              - devolucion_a_origen_por_rechazo
               - en_bodega_satelite
               - devuelta_a_tienda
+              - novedad_interna
+              - por_devolver_a_bodega_central
+              - devolviendo_a_bodega_central
+              - por_devolver_a_tienda
+              - por_recolectar_en_tienda
               - incidente
+              - recolectando
         - name: desde
           in: query
           required: false
@@ -239,6 +248,7 @@ paths:
                       - numGuia: 100234
                         numRemision: "REM-0001"
                         estado: en_ruta_bodega_central
+                        estadoNombre: "En ruta a bodega central"
                         destinatario: Juan Pérez
                         telefonoDest: "88887777"
                         producto: Camiseta talla M
@@ -282,7 +292,9 @@ paths:
                   value:
                     numGuia: 100234
                     estadoAnterior: en_ruta_bodega_central
+                    estadoAnteriorNombre: "En ruta a bodega central"
                     estado: devolviendo_a_tienda
+                    estadoNombre: "Devolviendo a tienda"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -321,7 +333,8 @@ paths:
                   value:
                     numGuia: 100234
                     numRemision: "REM-0001"
-                    estado: entregada
+                    estado: entregado
+                    estadoNombre: "Entregado"
                     destinatario: Juan Pérez
                     telefonoDest: "88887777"
                     producto: Camiseta talla M
@@ -329,7 +342,8 @@ paths:
                     montoCobrar: 25.9
                     createdAt: "2026-07-22T14:03:11.000Z"
                     evidencias:
-                      - resultado: entregada
+                      - resultado: entregado
+                        resultadoNombre: "Entregado"
                         contentType: image/jpeg
                         url: "https://<proyecto>.supabase.co/storage/v1/object/sign/gestion-evidencias/..."
                         expiraEnSegundos: 300
@@ -360,12 +374,14 @@ paths:
                     numGuia: 100234
                     numRemision: "REM-0001"
                     estado: en_bodega_central
+                    estadoNombre: "En bodega central"
                 sinGuia:
                   summary: Orden recién cargada, todavía sin guía
                   value:
                     numGuia: null
                     numRemision: "REM-0002"
                     estado: en_preparacion
+                    estadoNombre: "En preparación"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -649,7 +665,7 @@ paths:
               $ref: "#/components/schemas/HabilitacionRequest"
             examples:
               dosFilas:
-                summary: "Dos filas: una en ayuda con mensajero y una devuelta"
+                summary: "Dos filas: una en ayuda con mensajero y una en novedad"
                 value:
                   ordenes:
                     - num_guia: 100234
@@ -676,16 +692,19 @@ paths:
                       - numGuia: 100234
                         resultado: habilitada
                         estado: en_reparto
+                        estadoNombre: "En reparto"
                         ayudaCerrada: true
                         error: null
                       - numGuia: 100235
                         resultado: habilitada_sin_cambio_de_estado
-                        estado: devuelta
+                        estado: novedad
+                        estadoNombre: "Novedad"
                         ayudaCerrada: false
                         error: null
                       - numGuia: 999999
                         resultado: error
                         estado: null
+                        estadoNombre: null
                         ayudaCerrada: false
                         error:
                           codigo: no_encontrada
@@ -707,7 +726,7 @@ paths:
 # orden alfabético determinista: son los 12 values que este webhook puede emitir de verdad, un
 # SUBCONJUNTO del catálogo de `OrdenListItem.estado`. El miedo de la 256 —«sería un 5.º catálogo
 # de estados y pondría roja `openapi-contrato-en-reparto.test.ts`»— era infundado: esa guardia
-# cuenta enums con el predicado `esEnumDeEstado`, que exige `entregada` **Y** el estado interno de
+# cuenta enums con el predicado `esEnumDeEstado`, que exige `entregado` **Y** el estado interno de
 # recogida; este enum no lleva el segundo, así que no entra en el recuento y los bloques siguen
 # siendo CUATRO. Lo verifica `tests/unit/api/openapi-webhook-contrato.test.ts`, no la fe.
 # El bloque `data` gana además la clave OPCIONAL `evidenciasUrl` (R24) y `motivo` amplía su enum
@@ -754,11 +773,12 @@ components:
           # presentes». Pasan a ser CINCO: `mensajero` se suma al bloque presente-con-`null`, por
           # la misma razón que `motivo` y no por la de `evidenciasUrl` (ver su description).
           # `evidenciasUrl` sigue siendo la ÚNICA opcional.
-          description: "Las cinco claves `numGuia`, `numRemision`, `estado`, `motivo` y `mensajero` están SIEMPRE presentes, sea cual sea el estado: el consumidor no ramifica por estado para saber si existen (`motivo` y `mensajero` viajan como `null` cuando no aplica, nunca omitidos). A ellas se suma UNA clave OPCIONAL, `evidenciasUrl`, que SÍ se omite salvo en los eventos con `estado: \"incidente\"`."
+          description: "Las seis claves `numGuia`, `numRemision`, `estado`, `estadoNombre`, `motivo` y `mensajero` están SIEMPRE presentes, sea cual sea el estado: el consumidor no ramifica por estado para saber si existen (`motivo` y `mensajero` viajan como `null` cuando no aplica, nunca omitidos). A ellas se suma UNA clave OPCIONAL, `evidenciasUrl`, que SÍ se omite salvo en los eventos con `estado: \"incidente\"`."
           required:
             - numGuia
             - numRemision
             - estado
+            - estadoNombre
             - motivo
             - mensajero
           properties:
@@ -773,23 +793,26 @@ components:
             estado:
               type: string
               # feature 268/R29: DERIVADO de `EVENTOS_PUBLICOS`, nunca copiado a mano.
-              # Contiene `entregada` pero NO el estado interno de recogida, asi que
+              # Contiene `entregado` pero NO el estado interno de recogida, asi que
               # `esEnumDeEstado` de `openapi-contrato-en-reparto.test.ts` NO lo cuenta:
               # los bloques de catalogo siguen siendo CUATRO.
               enum:
+                - devolucion_a_origen_por_rechazo
                 - devolviendo_a_tienda
-                - devuelta
                 - devuelta_a_tienda
                 - en_bodega_central
                 - en_preparacion
                 - en_reparto
                 - en_ruta_bodega_central
-                - entregada
+                - entregado
                 - incidente
+                - novedad
                 - por_recolectar_en_tienda
-                - rechazada
-                - reprogramada
-              description: "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de ruteo satélite que ese catálogo documenta (`por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. `en_preparacion` SÍ viaja, y solo como evento de NACIMIENTO: es el estado inicial de las órdenes creadas con `fulfillment` (el paquete ya está en bodega), llega una única vez por orden y con `numGuia: null`, porque en esa rama la guía se emite más tarde. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error."
+                - reprogramado
+              description: "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de ruteo satélite que ese catálogo documenta (`mensajero_recogiendo_en_bodega`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. `en_preparacion` SÍ viaja, y solo como evento de NACIMIENTO: es el estado inicial de las órdenes creadas con `fulfillment` (el paquete ya está en bodega), llega una única vez por orden y con `numGuia: null`, porque en esa rama la guía se emite más tarde. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error."
+            estadoNombre:
+              type: string
+              description: "Nombre visible de `estado`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
             motivo:
               type:
                 - string
@@ -806,7 +829,7 @@ components:
                 Causa TIPIFICADA del cambio de estado, con el value crudo del enum y sin traducir. El
                 campo transporta DOS enums distintos y cuál aplica lo decide `estado`:
 
-                - **`estado: "devuelta"`** → causa de la devolución: `not_found` (destinatario no
+                - **`estado: "novedad"`** → causa de la devolución: `not_found` (destinatario no
                   encontrado), `wrong_number` (teléfono equivocado), `wrong_address` (dirección
                   equivocada). Estos tres NO aparecen nunca con otro estado.
                 - **`estado: "incidente"`** → causa del incidente: `danado`, `perdido`, `robado`. Estos
@@ -819,8 +842,8 @@ components:
                 renombrar cualquiera de los dos rompería a los integradores que ya lo consumen.
                 Decisión consciente y firmada (73/F1.4-g y 158/Q-B): no se «armoniza» en el futuro.
 
-                Es `null` en todo evento cuyo `estado` NO sea `devuelta` ni `incidente`, y es `null`
-                **también** en una `devuelta` (o un `incidente`) sin causa registrada — órdenes cerradas
+                Es `null` en todo evento cuyo `estado` NO sea `novedad` ni `incidente`, y es `null`
+                **también** en una `novedad` (o un `incidente`) sin causa registrada — órdenes cerradas
                 antes de que la causa se pidiera; ese histórico no se rellenó. El contrato no distingue
                 «no hubo causa» de «no se registró»:
                 en los dos casos viaja `null`, el campo NUNCA se omite y la entrega es normal.
@@ -864,7 +887,7 @@ components:
                 misma regla que rige a `motivo`—: si la orden se reasigna entre dos entregas del
                 mismo `eventoId`, la segunda lleva el mensajero de entonces. Y varios flujos
                 LIMPIAN la asignación (generación de guía, quitar mensajero, devolución o
-                recuperación a bodega, liberación de una reprogramada, el barrido del cierre
+                recuperación a bodega, liberación de una orden en `reprogramado`, el barrido del cierre
                 diario), de modo que una orden que alguien llevó puede quedar con `mensajero:
                 null` más tarde. Para «quién gestionó cada intento» hace falta el historial de
                 gestiones, que este evento NO transporta.
@@ -903,7 +926,7 @@ components:
                 `Authorization: Bearer ordx_...`, igual que cualquier otra llamada al canal, y el
                 detalle te devolverá las URLs firmadas frescas de las fotos, con su TTL corto. La
                 credencial la ponés vos; el cuerpo del webhook nunca la transporta.
-      # feature 268/R30 — el ejemplo de la 256 (`devuelta`/`not_found`) NO se pierde: es el
+      # feature 268/R30 — el ejemplo de la 256 (`novedad`/`not_found`) NO se pierde: es el
       # primero de la lista, y se le suma el caso de `incidente`, que es el unico que muestra la
       # clave opcional `evidenciasUrl` y la causa en español.
       examples:
@@ -913,7 +936,8 @@ components:
           data:
             numGuia: 100234
             numRemision: "REM-0001"
-            estado: devuelta
+            estado: novedad
+            estadoNombre: "Novedad"
             motivo: not_found
             # ⏳ 2026-09-09 (feature 404/R2): el ejemplo del caso SIN mensajero asignado.
             mensajero: null
@@ -924,6 +948,7 @@ components:
             numGuia: 100235
             numRemision: "REM-0002"
             estado: incidente
+            estadoNombre: "Incidente"
             motivo: robado
             # ⏳ 2026-09-09 (feature 404/R2/R24): el ejemplo del caso CON mensajero asignado, y en
             # su posicion real dentro del cuerpo (tras `motivo`, antes de `evidenciasUrl`).
@@ -977,7 +1002,7 @@ components:
           description: "Instante del hecho (ISO 8601, UTC)."
         data:
           type: object
-          description: "`numGuia`, `numRemision`, `motivo` y `mensajero` están SIEMPRE presentes (`null` cuando no aplica, nunca omitidos). El resto de claves se OMITE cuando el evento no las lleva: `gestionId` y `resultado` en los tres eventos de gestión, `resultadoAnterior` solo en `orden.gestion_corregida`, `pendienteConfirmacion` en `orden.gestion_registrada` y `orden.gestion_corregida`, y `via` solo en `orden.ayuda_resuelta`."
+          description: "`numGuia`, `numRemision`, `motivo` y `mensajero` están SIEMPRE presentes (`null` cuando no aplica, nunca omitidos). El resto de claves se OMITE cuando el evento no las lleva: `gestionId` y `resultado` (con `resultadoNombre`) en los tres eventos de gestión, `resultadoAnterior` (con `resultadoAnteriorNombre`) solo en `orden.gestion_corregida`, `pendienteConfirmacion` en `orden.gestion_registrada` y `orden.gestion_corregida`, y `via` solo en `orden.ayuda_resuelta`."
           required:
             - numGuia
             - numRemision
@@ -998,21 +1023,27 @@ components:
             resultado:
               type: string
               enum:
-                - devuelta
-                - entregada
+                - devolucion_a_origen_por_rechazo
+                - entregado
                 - incidente
-                - rechazada
-                - reprogramada
+                - novedad
+                - reprogramado
               description: "Resultado de la gestión, con el MISMO value crudo que publica `OrdenGestion.resultado`. En `orden.gestion_corregida`, el resultado NUEVO."
+            resultadoNombre:
+              type: string
+              description: "Nombre visible de `resultado`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
             resultadoAnterior:
               type: string
               enum:
-                - devuelta
-                - entregada
+                - devolucion_a_origen_por_rechazo
+                - entregado
                 - incidente
-                - rechazada
-                - reprogramada
+                - novedad
+                - reprogramado
               description: "Solo en `orden.gestion_corregida`: el resultado que tenía antes de la corrección."
+            resultadoAnteriorNombre:
+              type: string
+              description: "Nombre visible de `resultadoAnterior`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
             motivo:
               type:
                 - string
@@ -1060,7 +1091,8 @@ components:
             numGuia: 100234
             numRemision: "REM-0001"
             gestionId: "018f2c31-0000-4000-8000-000000000201"
-            resultado: devuelta
+            resultado: novedad
+            resultadoNombre: "Novedad"
             motivo: not_found
             mensajero:
               id: "018f2c31-0000-4000-8000-0000000000aa"
@@ -1115,6 +1147,7 @@ components:
         - numGuia
         - numRemision
         - estado
+        - estadoNombre
         - destinatario
         - telefonoDest
         - producto
@@ -1139,21 +1172,29 @@ components:
         estado:
           type: string
           enum:
-            - entregada
-            - devuelta
+            - entregado
+            - novedad
             - devolviendo_a_tienda
-            - reprogramada
-            - por_recolectar_en_tienda
+            - reprogramado
             - en_ruta_bodega_central
             - en_bodega_central
             - en_preparacion
-            - por_recoger
+            - mensajero_recogiendo_en_bodega
             - en_ruta_bodega_satelite
             - en_reparto
-            - rechazada
+            - devolucion_a_origen_por_rechazo
             - en_bodega_satelite
             - devuelta_a_tienda
+            - novedad_interna
+            - por_devolver_a_bodega_central
+            - devolviendo_a_bodega_central
+            - por_devolver_a_tienda
+            - por_recolectar_en_tienda
             - incidente
+            - recolectando
+        estadoNombre:
+          type: string
+          description: "Nombre visible de `estado`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
         destinatario:
           type: string
         telefonoDest:
@@ -1195,7 +1236,7 @@ components:
 
             ⚠️ **Es QUIÉN LA LLEVA en el momento de la lectura, no quién la gestionó.** Varios
             flujos limpian la asignación (generación de guía, quitar mensajero, devolución o
-            recuperación a bodega, liberación de una reprogramada, el barrido del cierre diario),
+            recuperación a bodega, liberación de una orden en `reprogramado`, el barrido del cierre diario),
             así que una orden que alguien llevó puede devolver `null` más tarde. Para «quién
             gestionó cada intento» hace falta el historial de gestiones, que este recurso NO
             expone.
@@ -1247,7 +1288,7 @@ components:
             `null` significa **«esta orden todavía no ha entrado en ningún cierre aprobado»**.
 
             Puede moverse UNA vez más en un caso concreto: si la orden vuelve a entrar en un
-            segundo cierre aprobado (una orden devuelta sigue viva y puede recorrerse otra vez),
+            segundo cierre aprobado (una orden en `novedad` sigue viva y puede recorrerse otra vez),
             publicamos la fila del cierre MÁS RECIENTE.
     # ⏳ 2026-09-10 (feature 415/R1/R4/R38) — LA ZONA DE LA ORDEN. MISMA FORMA que `Mensajero` y
     # MISMA REGLA de agrupación, a propósito: son las dos entidades con nombre del mismo payload.
@@ -1331,6 +1372,7 @@ components:
       description: "Evidencia de entrega, rechazo o incidente, con URL firmada de corta duración. Las de incidente llegan con `resultado: \"incidente\"` y son las que enlaza el campo `evidenciasUrl` del webhook."
       required:
         - resultado
+        - resultadoNombre
         - contentType
         - url
         - expiraEnSegundos
@@ -1338,9 +1380,12 @@ components:
         resultado:
           type: string
           enum:
-            - entregada
-            - rechazada
+            - entregado
+            - devolucion_a_origen_por_rechazo
             - incidente
+        resultadoNombre:
+          type: string
+          description: "Nombre visible de `resultado`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
         contentType:
           type:
             - string
@@ -1385,7 +1430,9 @@ components:
       required:
         - createdAt
         - resultado
+        - resultadoNombre
         - estadoResultante
+        - estadoResultanteNombre
         - motivo
         - mensajero
         - pendienteConfirmacion
@@ -1398,16 +1445,19 @@ components:
         resultado:
           type: string
           # feature 405/R5: DERIVADO de `ESTATUS_POR_RESULTADO`, nunca copiado a mano. Contiene
-          # `entregada` pero NO el estado interno de recogida, asi que `esEnumDeEstado` de
+          # `entregado` pero NO el estado interno de recogida, asi que `esEnumDeEstado` de
           # `openapi-contrato-en-reparto.test.ts` NO lo cuenta: los bloques de catalogo siguen
           # siendo CUATRO.
           enum:
-            - devuelta
-            - entregada
+            - devolucion_a_origen_por_rechazo
+            - entregado
             - incidente
-            - rechazada
-            - reprogramada
+            - novedad
+            - reprogramado
           description: "Desenlace de la gestión, con el value CRUDO del catálogo interno y sin traducir. La lista de arriba es EXACTA y COMPLETA. Ojo: `resultado` NO es el estado en que quedó la orden — para eso está `estadoResultante`, y los dos NO siempre coinciden."
+        resultadoNombre:
+          type: string
+          description: "Nombre visible de `resultado`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
         estadoResultante:
           type:
             - string
@@ -1415,19 +1465,23 @@ components:
           description: |-
             El `value` del estado al que ESTA gestión llevó la orden: el destino de la primera
             transición que originó. Es un value del mismo catálogo que publica
-            `OrdenListItem.estado`; **se publica sin lista cerrada a propósito**, porque el
-            catálogo documentado en `estado` está incompleto y aquí pueden aparecer values que
-            aquella lista todavía no enumera. Tratá un value desconocido como texto, no como
-            error.
+            `OrdenListItem.estado`; **se publica sin lista cerrada a propósito**: en gestiones
+            antiguas puede traer un estado RETIRADO del catálogo (ver abajo). Tratá un value
+            desconocido como texto, no como error.
 
             ⚠️ **No lo deduzcas del `resultado`**: una gestión se REGISTRA sin mover la orden; el
             estado se aplica cuando se APRUEBA el cierre del mensajero. Mientras tanto la gestión
             está `pendienteConfirmacion: true` y este campo es `null`. En gestiones anteriores al
-            2026-09-23, una `devuelta` puede mostrar `devolucion_por_confirmar`.
+            2026-09-23, una `novedad` puede mostrar `devolucion_por_confirmar` (estado retirado).
 
             Es `null` en gestiones ANTIGUAS, anteriores a que existiera la línea de tiempo de
             estados: no hay ninguna transición registrada que las respalde. No es un fallo del
             canal, y la clave NUNCA se omite.
+        estadoResultanteNombre:
+          type:
+            - string
+            - "null"
+          description: "Nombre visible de `estadoResultante`: la MISMA cadena que muestra la aplicación. `null` cuando `estadoResultante` es `null`."
         motivo:
           type:
             - string
@@ -1448,7 +1502,7 @@ components:
             MISMOS valores que ya recibís en `data.motivo` del webhook `orden.estado_actualizado`.
             El campo transporta DOS enums distintos y cuál aplica lo decide `resultado`:
 
-            - **`resultado: "devuelta"`** → causa de la devolución: `not_found` (destinatario no
+            - **`resultado: "novedad"`** → causa de la devolución: `not_found` (destinatario no
               encontrado), `wrong_number` (teléfono equivocado), `wrong_address` (dirección
               equivocada).
             - **`resultado: "incidente"`** → causa del incidente: `danado`, `perdido`, `robado`.
@@ -1460,7 +1514,7 @@ components:
             renombrar cualquiera de los dos rompería a los integradores que ya lo consumen.
             Decisión consciente y firmada (73/F1.4-g y 158/Q-B): no se «armoniza» en el futuro.
 
-            Es `null` **también** en una `devuelta` (o un `incidente`) sin causa registrada —
+            Es `null` **también** en una `novedad` (o un `incidente`) sin causa registrada —
             gestiones anteriores a que la causa se pidiera; ese histórico no se rellenó—. El
             contrato no distingue «no hubo causa» de «no se registró»: en los dos casos viaja
             `null` y el campo NUNCA se omite.
@@ -1518,13 +1572,14 @@ components:
                 ⚠️ **`gestiones.length` no es nuestro contador interno de reintento.** Ese cuenta
                 cierres aprobados distintos con visita real, así que varias gestiones del mismo
                 cierre valen 1. Este array es la lista cruda, sin agrupar.
-      # feature 405/R20: ejemplo con DOS gestiones —una `reprogramada` con `motivo: null` y una
-      # `devuelta` con causa—, para que el consumidor vea la convencion de ausencia y la forma del
+      # feature 405/R20: ejemplo con DOS gestiones —una `reprogramado` con `motivo: null` y una
+      # `novedad` con causa—, para que el consumidor vea la convencion de ausencia y la forma del
       # mensajero sin tener que deducirlas.
       examples:
         - numGuia: 100234
           numRemision: "REM-0001"
           estado: devolviendo_a_tienda
+          estadoNombre: "Devolviendo a tienda"
           destinatario: Jimena Porras
           telefonoDest: "88887777"
           producto: Audífonos inalámbricos
@@ -1535,15 +1590,19 @@ components:
           evidencias: []
           gestiones:
             - createdAt: "2026-09-02T15:41:07.000Z"
-              resultado: reprogramada
-              estadoResultante: reprogramada
+              resultado: reprogramado
+              resultadoNombre: "Reprogramado"
+              estadoResultante: reprogramado
+              estadoResultanteNombre: "Reprogramado"
               motivo: null
               mensajero:
                 id: "018f2c31-0000-4000-8000-0000000000aa"
                 nombre: Carlos Jiménez Mora
             - createdAt: "2026-09-04T18:02:55.000Z"
-              resultado: devuelta
-              estadoResultante: devolucion_por_confirmar
+              resultado: novedad
+              resultadoNombre: "Novedad"
+              estadoResultante: novedad
+              estadoResultanteNombre: "Novedad"
               motivo: wrong_address
               mensajero:
                 id: "018f2c31-0000-4000-8000-0000000000bb"
@@ -1623,9 +1682,13 @@ components:
           enum:
             - creada
             - duplicada
-        estatus:
+        # FICHA 455 (R27): aqui estaba `estatus`; ahora `estado` + `estadoNombre`.
+        estado:
           type: string
-          description: Estado (en creada/duplicada); nunca ids internos.
+          description: "Estado de la orden, con un código del catálogo de `OrdenListItem.estado` (en creada/duplicada; en `duplicada`, el de la orden que ya ocupa esa remisión). Hasta el cambio de la ficha 455 se llamaba `estatus`."
+        estadoNombre:
+          type: string
+          description: "Nombre visible de `estado`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
         numGuia:
           type: integer
           description: "Número de guía asignado (solo en `creada`)."
@@ -1665,6 +1728,7 @@ components:
         - numRemision
         - numGuia
         - estado
+        - estadoNombre
         - costoEnvio
         - fulfillment
       properties:
@@ -1682,21 +1746,29 @@ components:
         estado:
           type: string
           enum:
-            - entregada
-            - devuelta
+            - entregado
+            - novedad
             - devolviendo_a_tienda
-            - reprogramada
-            - por_recolectar_en_tienda
+            - reprogramado
             - en_ruta_bodega_central
             - en_bodega_central
             - en_preparacion
-            - por_recoger
+            - mensajero_recogiendo_en_bodega
             - en_ruta_bodega_satelite
             - en_reparto
-            - rechazada
+            - devolucion_a_origen_por_rechazo
             - en_bodega_satelite
             - devuelta_a_tienda
+            - novedad_interna
+            - por_devolver_a_bodega_central
+            - devolviendo_a_bodega_central
+            - por_devolver_a_tienda
+            - por_recolectar_en_tienda
             - incidente
+            - recolectando
+        estadoNombre:
+          type: string
+          description: "Nombre visible de `estado`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
         costoEnvio:
           type: string
           description: "Costo total del envío (flete + IVA de la tarifa vigente del par (tienda, zona), MÁS el fulfillment si lo hay), string escala 2. Toda orden creada lo trae con un importe real: una fila sin tarifa no llega a crearse. Distinto de `monto_cobrar`/COD."
@@ -1748,37 +1820,51 @@ components:
       required:
         - numGuia
         - estadoAnterior
+        - estadoAnteriorNombre
         - estado
+        - estadoNombre
       properties:
         numGuia:
           type: integer
         estadoAnterior:
           type: string
           enum:
-            - entregada
-            - devuelta
+            - entregado
+            - novedad
             - devolviendo_a_tienda
-            - reprogramada
-            - por_recolectar_en_tienda
+            - reprogramado
             - en_ruta_bodega_central
             - en_bodega_central
             - en_preparacion
-            - por_recoger
+            - mensajero_recogiendo_en_bodega
             - en_ruta_bodega_satelite
             - en_reparto
-            - rechazada
+            - devolucion_a_origen_por_rechazo
             - en_bodega_satelite
             - devuelta_a_tienda
+            - novedad_interna
+            - por_devolver_a_bodega_central
+            - devolviendo_a_bodega_central
+            - por_devolver_a_tienda
+            - por_recolectar_en_tienda
             - incidente
+            - recolectando
+        estadoAnteriorNombre:
+          type: string
+          description: "Nombre visible de `estadoAnterior`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
         estado:
           type: string
           const: devolviendo_a_tienda
+        estadoNombre:
+          type: string
+          description: "Nombre visible de `estado`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
     EliminacionResponse:
       type: object
       required:
         - numGuia
         - numRemision
         - estado
+        - estadoNombre
       properties:
         numGuia:
           type:
@@ -1798,7 +1884,10 @@ components:
             - en_bodega_central
             - en_ruta_bodega_central
             - en_ruta_bodega_satelite
-            - por_recoger
+            - mensajero_recogiendo_en_bodega
+        estadoNombre:
+          type: string
+          description: "Nombre visible de `estado`: la MISMA cadena que muestra la aplicación (p. ej. `Novedad`)."
     PdfGenerateResponse:
       type: object
       description: "URL firmada de corta duración con el PDF de etiqueta (de una orden o de un lote). La URL se firma en cada llamada: nunca es una URL persistida."
@@ -2202,6 +2291,7 @@ components:
         - numGuia
         - resultado
         - estado
+        - estadoNombre
         - ayudaCerrada
         - error
       properties:
@@ -2213,12 +2303,17 @@ components:
             - habilitada
             - habilitada_sin_cambio_de_estado
             - error
-          description: "`habilitada`: la orden tenía la ayuda abierta y la ayuda quedó CERRADA; la orden sigue `en_reparto` con su mensajero y vuelve a ser gestionable (desde el 2026-09-23 no hay cambio de estado: mirá `ayudaCerrada`). `habilitada_sin_cambio_de_estado`: se registró y el estado NO cambió (SIEMPRE el caso de una `devuelta`). `error`: la fila no se procesó."
+          description: "`habilitada`: la orden tenía la ayuda abierta y la ayuda quedó CERRADA; la orden sigue `en_reparto` con su mensajero y vuelve a ser gestionable (desde el 2026-09-23 no hay cambio de estado: mirá `ayudaCerrada`). `habilitada_sin_cambio_de_estado`: se registró y el estado NO cambió (SIEMPRE el caso de una `novedad`). `error`: la fila no se procesó."
         estado:
           type:
             - string
             - "null"
           description: "Estado en el que la orden quedó; `null` cuando la fila falló."
+        estadoNombre:
+          type:
+            - string
+            - "null"
+          description: "Nombre visible de `estado`: la MISMA cadena que muestra la aplicación. `null` cuando `estado` es `null`."
         # FICHA 454 (R24/R36) — la clave NUEVA.
         ayudaCerrada:
           type: boolean
@@ -2238,7 +2333,7 @@ components:
                 - duplicada_en_lote
                 - no_encontrada
                 - estado_no_habilitable
-              description: "`fila_invalida`: `num_guia`/`nota` no cumplen. `duplicada_en_lote`: la guía ya apareció antes en el mismo lote. `no_encontrada`: no hay orden viva con esa guía para esta key (no distingue «no existe» de «es de otro dueño»). `estado_no_habilitable`: la orden no tiene una ayuda abierta ni está `devuelta` —incluye `reprogramada` y la segunda habilitación de una orden cuya ayuda ya se cerró—."
+              description: "`fila_invalida`: `num_guia`/`nota` no cumplen. `duplicada_en_lote`: la guía ya apareció antes en el mismo lote. `no_encontrada`: no hay orden viva con esa guía para esta key (no distingue «no existe» de «es de otro dueño»). `estado_no_habilitable`: la orden no tiene una ayuda abierta ni está en `novedad` —incluye `reprogramado` y la segunda habilitación de una orden cuya ayuda ya se cerró—."
             mensaje:
               type: string
   responses:

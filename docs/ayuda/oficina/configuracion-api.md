@@ -3,7 +3,7 @@ titulo: Configuración · API keys
 modulo: configuracion
 pantalla: /configuracion/api
 roles: [maestro, admin]
-actualizado: 2026-09-15
+actualizado: 2026-09-24
 fuentes:
   - app/(app)/configuracion/api/page.tsx
   - app/(app)/configuracion/api/_components/
@@ -36,6 +36,12 @@ Avisá antes, salvo que estés cortando a propósito.
 Si un integrador reporta que «la API no responde» o que «recibe algo raro», lo primero es confirmar
 **qué llave está usando y si está activa**. La causa más común es una llave desactivada o cambiada sin
 avisar.
+
+Si reporta un **error 422 al filtrar por estado**, o que sus estados «ya no coinciden», probablemente
+sigue usando los códigos de estado de antes del cambio de nombres: cada estado se llama ahora igual en
+la aplicación y en la API, y la respuesta le dice qué código usar. El aviso completo, con la tabla de
+códigos, está en el changelog del canal (`docs/api/CHANGELOG.md`). Cada respuesta trae además el
+nombre visible del estado al lado de su código.
 
 ## Lo que esta pantalla NO hace
 
