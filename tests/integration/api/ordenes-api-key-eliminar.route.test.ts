@@ -114,7 +114,7 @@ describe("DELETE /api/ordenes/api-key/orden/[id] — borrado (R1/R3/R4/R8)", () 
   it("R1: 200 con `{ numGuia, numRemision, estado }`", async () => {
     const eliminacion = fakeEliminacion({
       status: "ok",
-      data: { numGuia: 100234, numRemision: "REM-0001", estado: "en_bodega_central" },
+      data: { numGuia: 100234, numRemision: "REM-0001", estado: "en_bodega_central", estadoNombre: "En bodega central" },
     });
     const res = await handleEliminarOrdenApi(
       req(SECRETO),
@@ -126,7 +126,7 @@ describe("DELETE /api/ordenes/api-key/orden/[id] — borrado (R1/R3/R4/R8)", () 
     expect(await res.json()).toEqual({
       numGuia: 100234,
       numRemision: "REM-0001",
-      estado: "en_bodega_central",
+      estado: "en_bodega_central", estadoNombre: "En bodega central",
     });
   });
 
@@ -134,7 +134,7 @@ describe("DELETE /api/ordenes/api-key/orden/[id] — borrado (R1/R3/R4/R8)", () 
     const resolucion = fakeResolucion(RESUELTA);
     const eliminacion = fakeEliminacion({
       status: "ok",
-      data: { numGuia: null, numRemision: "REM-0002", estado: "en_preparacion" },
+      data: { numGuia: null, numRemision: "REM-0002", estado: "en_preparacion", estadoNombre: "En preparación" },
     });
     await handleEliminarOrdenApi(
       req(SECRETO, "REM-0002"),

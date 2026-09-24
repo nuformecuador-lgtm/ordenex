@@ -233,6 +233,7 @@ describe("R17/R19 — entrega y complete", () => {
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
     ]);
@@ -240,6 +241,7 @@ describe("R17/R19 — entrega y complete", () => {
       numGuia: 12345,
       numRemision: NUM_REMISION,
       estado: "en_reparto",
+      estadoNombre: "En reparto", // 455 (R25): pegado detras de `estado`
       motivo: null,
       mensajero: null, // 404/R2: la orden base no tiene asignado; la clave viaja igual
     });
@@ -450,6 +452,7 @@ describe("256/R6-R7 — la forma: UNA sola, el campo siempre presente", () => {
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
     ]);
@@ -713,6 +716,7 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
       "evidenciasUrl",
@@ -737,6 +741,7 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
     ]);
@@ -946,7 +951,7 @@ describe("406/R4-R6 — `data.evidenciasUrl` lleva el identificador PUBLICO, nun
 // en vez de emitir un enlace que el endpoint rechazaria o de tumbar la entrega entera.
 describe("406/R7-R8 — sin identificador resoluble, la clave se OMITE y el job completa", () => {
   /** Las CINCO claves siempre presentes: lo que tiene que seguir viajando cuando falta el enlace. */
-  const CINCO = ["numGuia", "numRemision", "estado", "motivo", "mensajero"];
+  const CINCO = ["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero"];
 
   it("406/R7a: remision de 129 caracteres -> clave AUSENTE, cuerpo normal y job completado", async () => {
     const larga = "R".repeat(129);

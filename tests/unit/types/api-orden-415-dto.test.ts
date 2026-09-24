@@ -32,7 +32,7 @@ const COSTO: ApiOrdenCostoDTO = {
 const ITEM_BASE = {
   numGuia: 10234,
   numRemision: "REM-1",
-  estado: "en_reparto",
+  estado: "en_reparto", estadoNombre: "En reparto",
   destinatario: "Ana Solis",
   telefonoDest: "0991234567",
   producto: "Caja",

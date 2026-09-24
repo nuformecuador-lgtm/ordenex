@@ -118,6 +118,7 @@ describe("454/T1.5 — WebhookEventoOrdenService", () => {
         numRemision: "REM-1",
         gestionId: "g-1",
         resultado: "novedad",
+        resultadoNombre: "Novedad", // 455 (R25)
         motivo: "wrong_address",
         mensajero: MENSAJERO,
         pendienteConfirmacion: true,
@@ -129,6 +130,7 @@ describe("454/T1.5 — WebhookEventoOrdenService", () => {
       "numRemision",
       "gestionId",
       "resultado",
+      "resultadoNombre",
       "motivo",
       "mensajero",
       "pendienteConfirmacion",
@@ -158,7 +160,7 @@ describe("454/T1.5 — WebhookEventoOrdenService", () => {
     await m.service.ejecutar(job());
     const c = cuerpoDe(m.entregar);
     expect(c.evento).toBe("orden.gestion_corregida");
-    expect(c.data).toMatchObject({ resultado: "devolucion_a_origen_por_rechazo", resultadoAnterior: "entregado", pendienteConfirmacion: true });
+    expect(c.data).toMatchObject({ resultado: "devolucion_a_origen_por_rechazo", resultadoNombre: "Devolución a origen por rechazo", resultadoAnterior: "entregado", resultadoAnteriorNombre: "Entregado", pendienteConfirmacion: true });
   });
 
   it("gestion anulada: sin `pendienteConfirmacion` ni `resultadoAnterior`", async () => {

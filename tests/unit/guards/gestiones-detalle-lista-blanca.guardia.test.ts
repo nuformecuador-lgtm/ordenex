@@ -63,13 +63,16 @@ const SENSIBLES = {
  * `pendienteConfirmacion` — la gestion de calle registrada cuyo cierre aun no se aprobo (su estado
  * todavia no se aplico). Es un booleano derivado, sin PII. Antes: cinco claves.
  */
+// FICHA 455 (R24): cada codigo gana su `…Nombre` al lado (`resultadoNombre`, `estadoResultanteNombre`).
 const CLAVES_PUBLICAS = [
   "createdAt",
   "estadoResultante",
+  "estadoResultanteNombre",
   "mensajero",
   "motivo",
   "pendienteConfirmacion",
   "resultado",
+  "resultadoNombre",
 ];
 const CLAVES_MENSAJERO = ["id", "nombre"];
 
@@ -216,7 +219,14 @@ describe("405/R3 — cada gestion lleva EXACTAMENTE las seis claves publicas (45
     // FICHA 454 (R32): la sexta, `pendienteConfirmacion`, entra por la puerta del spec.
     type Extra = Exclude<
       keyof ApiOrdenGestionDTO,
-      "createdAt" | "resultado" | "estadoResultante" | "motivo" | "mensajero" | "pendienteConfirmacion"
+      | "createdAt"
+      | "resultado"
+      | "resultadoNombre" // FICHA 455 (R24)
+      | "estadoResultante"
+      | "estadoResultanteNombre" // FICHA 455 (R24)
+      | "motivo"
+      | "mensajero"
+      | "pendienteConfirmacion"
     >;
     const sinExtras: Extra extends never ? true : never = true;
     expect(sinExtras).toBe(true);

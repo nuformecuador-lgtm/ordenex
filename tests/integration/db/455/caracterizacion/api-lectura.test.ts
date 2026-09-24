@@ -7,6 +7,7 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
+import { CODIGO_VIGENTE_DE_ANTERIOR } from "@/lib/types/order-status";
 import { C, R, claveDe, type ClaveEstado } from "../../../../fixtures/codigos-455";
 import { HAY_BASE_DE_DATOS } from "../../_postgres-real";
 import { conEscenario, prepararMundo, type Mundo } from "../../454/_escenario";
@@ -68,21 +69,30 @@ describeSiHayBase("455/C12 — API por API key: listado, detalle y carga (Postgr
       };
       const pedir = async (query: string) => {
         const res = await handleListadoApi(new Request(`http://localhost/api/ordenes/api-key?${query}`), deps);
-        const cuerpo = (await res.json()) as { items?: { numRemision: string; estado: string }[] };
+        const cuerpo = (await res.json()) as { items?: { numRemision: string; estado: string ; estadoNombre?: string }[]; details?: { fieldErrors?: Record<string, string[]> } };
         return { status: res.status, cuerpo };
       };
       const porEstado: Record<string, unknown> = {};
       let clavesItem: string[] = [];
+      // ⏳ 2026-09-24 (T1.6): el nombre que acompana a cada codigo en el item (R24), por clave.
+      const nombrePorClave: Record<string, string | undefined> = {};
       for (const clave of RENOMBRADOS) {
         const { status, cuerpo } = await pedir(`estado=${C[clave]}&limit=100`);
         const items = cuerpo.items ?? [];
         if (clave === "entregado" && items[0]) clavesItem = Object.keys(items[0]);
+        nombrePorClave[clave] = items[0]?.estadoNombre;
         porEstado[clave] = {
           status,
           items: items.map((i) => `${remision.get(i.numRemision) ?? "ajena"}:${claveDe(i.estado)}`),
         };
       }
       const inventado = await pedir("estado=estado_que_no_existe_455");
+      // ⏳ 2026-09-24 (T1.6, R26): cada codigo ANTERIOR responde 422 y su mensaje nombra el vigente.
+      const anteriores: Record<string, { status: number; mensaje: string }> = {};
+      for (const [anterior, vigente] of Object.entries(CODIGO_VIGENTE_DE_ANTERIOR)) {
+        const { status, cuerpo } = await pedir(`estado=${anterior}`);
+        anteriores[claveDe(vigente)] = { status, mensaje: (cuerpo.details?.fieldErrors?.estado ?? []).join(" | ") };
+      }
 
       // Detalle: una gestion R.novedad aprobada y una R.entregado pendiente (454).
       const conNovedad = await e.sembrarOrden({ estatus: C.enReparto as never, montoCobrar: 1000 });
@@ -128,7 +138,10 @@ describeSiHayBase("455/C12 — API por API key: listado, detalle y carga (Postgr
         carga.status === "ok"
           ? carga.summary.filas.map((f) => ({
               resultado: f.resultado,
-              estatus: claveDe((f as { estatus?: string }).estatus),
+              // ⏳ 2026-09-24 (T1.6, R27): la fila publica su estado en `estado` (antes `estatus`). Se
+              // lee el campo que HOY lo lleva; el invariante de abajo (el estado de la orden que ocupa
+              // la remision) no se toca. Nombre de la clave: bloque [INTERMEDIO].
+              estatus: claveDe((f as { estado?: string }).estado),
               claves: Object.keys(f).sort(),
             }))
           : [{ resultado: carga.status, estatus: "∅", claves: [] as string[] }];
@@ -142,6 +155,10 @@ describeSiHayBase("455/C12 — API por API key: listado, detalle y carga (Postgr
         clavesItem,
         clavesGestion,
         filas,
+        nombrePorClave,
+        anteriores,
+        nombresGestion: (detalleCrudo?.gestiones ?? []).map((g) => [g.resultadoNombre, g.estadoResultanteNombre]),
+        nombreFila: carga.status === "ok" ? carga.summary.filas.map((f) => f.estadoNombre) : [],
       };
     });
   }
@@ -180,27 +197,52 @@ describeSiHayBase("455/C12 — API por API key: listado, detalle y carga (Postgr
     });
   });
 
-  describe("[INTERMEDIO] lo que la 455 cambia por diseño (R24, R27)", () => {
-    // Fase 0 (2026-09-24): las formas de HOY, sin `…Nombre` y con `estatus` en la carga. La Fase 1
-    // (T1.6) reescribe este bloque con fecha.
-    it("el item del listado no lleva estadoNombre", () => {
-      expect(r.clavesItem).toContain("estado");
-      expect(r.clavesItem).not.toContain("estadoNombre");
+  describe("[INTERMEDIO] lo que la 455 cambia por diseño (R24, R26, R27)", () => {
+    // ⏳ 2026-09-24 (T1.6, Fase 1): REESCRITO. En la Fase 0 este bloque fijaba las formas de antes
+    // (sin `…Nombre`, `estatus` en la carga, 422 generico). Ahora fija las del contrato de la 455, con
+    // el nombre esperado escrito A MANO (no contra `nombreDeEstado`: memoria «Asercion contra su
+    // propia fuente»).
+    it("R24: el item del listado lleva `estadoNombre` justo detras de `estado`, con el nombre visible", () => {
+      expect(r.clavesItem.slice(r.clavesItem.indexOf("estado"), r.clavesItem.indexOf("estado") + 2)).toEqual([
+        "estado",
+        "estadoNombre",
+      ]);
+      expect(r.nombrePorClave).toEqual({
+        entregado: "Entregado",
+        novedad: "Novedad",
+        reprogramado: "Reprogramado",
+        recogiendo: "Mensajero recogiendo en la bodega",
+        rechazo: "Devolución a origen por rechazo",
+        novedadInterna: "Novedad interna",
+        porDevolverCentral: "Por devolver a bodega central",
+      });
     });
 
-    it("gestiones[] no lleva resultadoNombre ni estadoResultanteNombre", () => {
+    it("R24: gestiones[] lleva `resultadoNombre` y `estadoResultanteNombre` al lado de cada codigo", () => {
       expect(r.clavesGestion).toEqual([
         "createdAt",
         "resultado",
+        "resultadoNombre",
         "estadoResultante",
+        "estadoResultanteNombre",
         "motivo",
         "mensajero",
         "pendienteConfirmacion",
       ]);
+      expect(r.nombresGestion).toEqual([["Novedad", "Novedad"]]);
     });
 
-    it("la fila de la carga lleva `estatus` (no `estado`)", () => {
-      expect(r.filas[0]?.claves).toEqual(["estatus", "fila", "numRemision", "resultado"]);
+    it("R26: filtrar por un codigo ANTERIOR responde 422 y el mensaje nombra el vigente", () => {
+      expect(Object.values(r.anteriores).map((x) => x.status)).toEqual([422, 422, 422, 422, 422, 422, 422]);
+      for (const [clave, { mensaje }] of Object.entries(r.anteriores)) {
+        expect(mensaje, clave).toContain(`ahora se llama '${C[clave as ClaveEstado]}'`);
+      }
+      expect(r.anteriores.recogiendo.mensaje).toContain("«Mensajero recogiendo en la bodega»");
+    });
+
+    it("R27: la fila de la carga lleva `estado` + `estadoNombre` (y ya no `estatus`)", () => {
+      expect(r.filas[0]?.claves).toEqual(["estado", "estadoNombre", "fila", "numRemision", "resultado"]);
+      expect(r.nombreFila).toEqual(["Entregado"]);
     });
   });
 });

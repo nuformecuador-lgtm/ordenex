@@ -20,11 +20,11 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
     creadas: 1,
     duplicadas: 0,
     conError: 0,
-    filas: [{ fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 1042 }],
+    filas: [{ fila: 1, numRemision: "REM-1", resultado: "creada", estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda", numGuia: 1042 }],
     // 2026-08-31: `filas` solo lleva lo que entro; lo que falla va en esta lista hermana.
     errores: [],
     ordenes: [
-      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda", costoEnvio: "3.92", fulfillment: "0.00" },
+      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda", costoEnvio: "3.92", fulfillment: "0.00" },
     ],
     cargaId: "22222222-2222-4222-8222-222222222222", // feature 141/R39
     ...overrides,
@@ -148,7 +148,7 @@ describe("carga API: happy path (R10)", () => {
     );
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.ordenes[0]).toMatchObject({ numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda" });
+    expect(json.ordenes[0]).toMatchObject({ numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda" });
     expect(json.filas[0].numGuia).toBe(1042);
     // El service recibe el actor del usuario dedicado de la key.
     // Feature 141: el 3.er argumento son las opciones del lote (`name` ausente aquí).
@@ -176,7 +176,7 @@ describe("carga API: happy path (R10)", () => {
       creadas: 0,
       duplicadas: 1,
       conError: 1,
-      filas: [{ fila: 1, numRemision: "REM-D", resultado: "duplicada", estatus: "entregado" }],
+      filas: [{ fila: 1, numRemision: "REM-D", resultado: "duplicada", estado: "entregado", estadoNombre: "Entregado" }],
       errores: [
         { fila: 2, numRemision: "REM-E", resultado: "error", errores: { provincia: ["no encontrada"] } },
       ],
@@ -215,7 +215,7 @@ describe("carga API: happy path (R10)", () => {
               fila: 1,
               numRemision: "REM-1",
               resultado: "creada",
-              estatus: "por_recolectar_en_tienda",
+              estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda",
               numGuia: 1042,
               montoAjustado: { original: 11898.81, aplicado: 11899 },
             },
@@ -441,8 +441,8 @@ describe("carga API: contrato de la respuesta por modo (R47/R48/R53/R54)", () =>
     const summary = okSummary({
       creadas: 2,
       ordenes: [
-        { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", costoEnvio: "3.92", fulfillment: "0.00" },
-        { id: "ord-2", numRemision: "REM-2", numGuia: 1043, estado: "en_ruta_bodega_central", costoEnvio: "3.92", fulfillment: "0.00" },
+        { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", estadoNombre: "En ruta a bodega central", costoEnvio: "3.92", fulfillment: "0.00" },
+        { id: "ord-2", numRemision: "REM-2", numGuia: 1043, estado: "en_ruta_bodega_central", estadoNombre: "En ruta a bodega central", costoEnvio: "3.92", fulfillment: "0.00" },
       ],
     });
     const service = fakeService({
@@ -608,7 +608,7 @@ describe("carga API: manifiesto del lote (155/R24/R25/R26)", () => {
     expect(res.status).toBe(200);
     // R25: el estado, la guia y el resto del summary llegan igual.
     expect(json.creadas).toBe(1);
-    expect(json.ordenes[0]).toMatchObject({ numGuia: 1042, estado: "por_recolectar_en_tienda" });
+    expect(json.ordenes[0]).toMatchObject({ numGuia: 1042, estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda" });
     // El fallo es VISIBLE, no se oculta con null.
     expect(json.manifiesto).toEqual({ error: expect.any(String) });
     expect(json.manifiesto.error).not.toContain("boom"); // sin mensajes crudos

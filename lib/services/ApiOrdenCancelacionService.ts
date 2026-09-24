@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
   ApiOrdenCancelacionResult,
@@ -41,7 +42,9 @@ export class ApiOrdenCancelacionService implements IApiOrdenCancelacionService {
           data: {
             numGuia,
             estadoAnterior: result.estadoAnterior,
+            estadoAnteriorNombre: nombreDeEstado(result.estadoAnterior), // FICHA 455 (R24)
             estado: ESTADO_DESTINO_CANCELACION,
+            estadoNombre: nombreDeEstado(ESTADO_DESTINO_CANCELACION), // FICHA 455 (R24)
           },
         };
       case "not_found":

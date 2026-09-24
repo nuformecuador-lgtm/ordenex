@@ -104,6 +104,7 @@ describe("266/R3-R4 — el owner sale del actor y una guia ajena es opaca", () =
       numGuia: 999999,
       resultado: "error",
       estado: null,
+      estadoNombre: null,
       ayudaCerrada: false,
       error: { codigo: "no_encontrada", mensaje: expect.any(String) },
     });
@@ -125,6 +126,7 @@ describe("266/R3-R4 — el owner sale del actor y una guia ajena es opaca", () =
       numGuia: 100234,
       resultado: "error",
       estado: null,
+      estadoNombre: null,
       ayudaCerrada: false,
       error: { codigo: "no_encontrada", mensaje: expect.any(String) },
     });
@@ -258,7 +260,7 @@ describe("266/R12-R16 → 454/R24 — rama A: ayuda ABIERTA con mensajero: se ci
     expect(res.resultados[0]).toEqual({
       numGuia: 100234,
       resultado: "habilitada",
-      estado: "en_reparto",
+      estado: "en_reparto", estadoNombre: "En reparto",
       ayudaCerrada: true,
       error: null,
     });
@@ -295,7 +297,7 @@ describe("266/R12-R22 — rama B: el paquete ya esta en bodega, solo se deja log
     expect(res.resultados[0]).toEqual({
       numGuia: 100234,
       resultado: "habilitada_sin_cambio_de_estado",
-      estado: "novedad",
+      estado: "novedad", estadoNombre: "Novedad",
       ayudaCerrada: false,
       error: null,
     });
@@ -319,6 +321,7 @@ describe("266/R13-R14 — la guarda de estado del llamador rechaza lo que no es 
     expect(res.resultados[0]).toMatchObject({
       resultado: "error",
       estado: null,
+      estadoNombre: null,
       error: { codigo: "estado_no_habilitable" },
     });
     expect(registrarAyudaResuelta).not.toHaveBeenCalled();

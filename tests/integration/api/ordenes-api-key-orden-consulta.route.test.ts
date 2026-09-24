@@ -36,7 +36,7 @@ function detalleDe(fila: Fila, overrides: Partial<ApiOrdenDetalleDTO> = {}): Api
   return {
     numGuia: fila.numGuia,
     numRemision: fila.numRemision,
-    estado: "entregado",
+    estado: "entregado", estadoNombre: "Entregado",
     destinatario: "Ana",
     telefonoDest: "0999999999",
     producto: "Caja",
@@ -55,7 +55,7 @@ function detalleDe(fila: Fila, overrides: Partial<ApiOrdenDetalleDTO> = {}): Api
     gestiones: [],
     evidencias: [
       {
-        resultado: "entregado",
+        resultado: "entregado", resultadoNombre: "Entregado",
         contentType: "image/jpeg",
         url: "https://proyecto.supabase.co/storage/v1/object/sign/abc",
         expiraEnSegundos: 300,
@@ -155,7 +155,7 @@ describe("GET /api/ordenes/api-key/orden/{id} — resolucion (R6/R11/R12/R14/R15
     const json = await res.json();
     expect(json.numGuia).toBe(100234);
     expect(json.numRemision).toBe("REM-A");
-    expect(json.evidencias[0]).toMatchObject({ resultado: "entregado", expiraEnSegundos: 300 });
+    expect(json.evidencias[0]).toMatchObject({ resultado: "entregado", resultadoNombre: "Entregado", expiraEnSegundos: 300 });
     expect(detallePorOrdenId).toHaveBeenCalledWith(ACTOR, "orden-A");
   });
 
@@ -396,6 +396,7 @@ describe("GET /api/ordenes/api-key/orden/{id} — `mensajero` de punta a punta (
       "destinatario",
       "direccion",
       "estado",
+      "estadoNombre",
       "evidencias",
       "gestiones",
       "mensajero",
@@ -496,8 +497,9 @@ describe("GET /api/ordenes/api-key/orden/{id} — `gestiones` de punta a punta (
     expect(json.gestiones).toEqual([
       {
         createdAt: "2026-09-04T18:02:55.000Z",
-        resultado: "novedad",
+        resultado: "novedad", resultadoNombre: "Novedad",
         estadoResultante: "devolucion_por_confirmar",
+        estadoResultanteNombre: "Devolución por confirmar (estado retirado)",
         motivo: "wrong_address",
         mensajero: {
           id: "018f2c31-0000-4000-8000-0000000000bb",

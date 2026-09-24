@@ -56,7 +56,7 @@ describe("ApiOrdenEliminacionService — la orden propia y eliminable (R1)", () 
 
     expect(res).toEqual({
       status: "ok",
-      data: { numGuia: 100234, numRemision: "REM-0001", estado: "en_bodega_central" },
+      data: { numGuia: 100234, numRemision: "REM-0001", estado: "en_bodega_central", estadoNombre: "En bodega central" },
     });
   });
 
@@ -74,7 +74,7 @@ describe("ApiOrdenEliminacionService — la orden propia y eliminable (R1)", () 
 
     expect(res).toEqual({
       status: "ok",
-      data: { numGuia: null, numRemision: "REM-0002", estado: "en_preparacion" },
+      data: { numGuia: null, numRemision: "REM-0002", estado: "en_preparacion", estadoNombre: "En preparación" },
     });
   });
 });

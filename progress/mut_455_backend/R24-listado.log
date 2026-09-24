@@ -1,0 +1,63 @@
+# MUTACION R24-listado
+archivo: lib/services/ApiOrdenLecturaService.ts
+linea: 75
+- "estadoNombre: nombreDeEstado(row.estatusValue),"
++ "estadoNombre: row.estatusValue,"
+tests: tests/integration/db/455/caracterizacion/api-lectura.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 8 passed (9)
+FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R26, R27) > R24: el item del listado lleva `estadoNombre` justo detras de `estado`, con el nombre visible
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/db/455/caracterizacion/api-lectura.test.ts (9 tests | 1 failed) 754ms
+       × R24: el item del listado lleva `estadoNombre` justo detras de `estado`, con el nombre visible 6ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  06:00:22
+   Duration  3.63s (transform 1.02s, setup 55ms, import 2.61s, tests 754ms, environment 0ms)
+
+(node:30296) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R26, R27) > R24: el item del listado lleva `estadoNombre` justo detras de `estado`, con el nombre visible
+AssertionError: expected { entregado: 'entregado', …(6) } to deeply equal { entregado: 'Entregado', …(6) }
+
+- Expected
++ Received
+
+  {
+-   "entregado": "Entregado",
+-   "novedad": "Novedad",
+-   "novedadInterna": "Novedad interna",
+-   "porDevolverCentral": "Por devolver a bodega central",
+-   "rechazo": "Devolución a origen por rechazo",
+-   "recogiendo": "Mensajero recogiendo en la bodega",
+-   "reprogramado": "Reprogramado",
++   "entregado": "entregado",
++   "novedad": "novedad",
++   "novedadInterna": "novedad_interna",
++   "porDevolverCentral": "por_devolver_a_bodega_central",
++   "rechazo": "devolucion_a_origen_por_rechazo",
++   "recogiendo": "mensajero_recogiendo_en_bodega",
++   "reprogramado": "reprogramado",
+  }
+
+ ❯ tests/integration/db/455/caracterizacion/api-lectura.test.ts:210:32
+    208|         "estadoNombre",
+    209|       ]);
+    210|       expect(r.nombrePorClave).toEqual({
+       |                                ^
+    211|         entregado: "Entregado",
+    212|         novedad: "Novedad",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

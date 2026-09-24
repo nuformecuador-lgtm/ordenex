@@ -1,0 +1,81 @@
+# MUTACION R25-webhook-evento
+archivo: lib/services/WebhookEventoOrdenService.ts
+linea: 151
+- "resultadoNombre: nombreDeEstado(data.resultado)"
++ "resultadoNombre: data.resultado"
+tests: tests/unit/services/WebhookEventoOrdenService.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  2 failed | 9 passed (11)
+FAIL  tests/unit/services/WebhookEventoOrdenService.test.ts > 454/T1.5 — WebhookEventoOrdenService > gestion registrada: cuerpo con evento, eventoId estable, ocurridoAt del hecho y data en orden fijo
+FAIL  tests/unit/services/WebhookEventoOrdenService.test.ts > 454/T1.5 — WebhookEventoOrdenService > gestion corregida: resultado nuevo y anterior, pendiente de confirmacion
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/services/WebhookEventoOrdenService.test.ts (11 tests | 2 failed) 21ms
+     × gestion registrada: cuerpo con evento, eventoId estable, ocurridoAt del hecho y data en orden fijo 9ms
+     × gestion corregida: resultado nuevo y anterior, pendiente de confirmacion 2ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 9 passed (11)
+   Start at  06:00:46
+   Duration  956ms (transform 236ms, setup 57ms, import 669ms, tests 21ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/services/WebhookEventoOrdenService.test.ts > 454/T1.5 — WebhookEventoOrdenService > gestion registrada: cuerpo con evento, eventoId estable, ocurridoAt del hecho y data en orden fijo
+AssertionError: expected { …(4) } to deeply equal { …(4) }
+
+- Expected
++ Received
+
+@@ -8,11 +8,11 @@
+      "motivo": "wrong_address",
+      "numGuia": 12345,
+      "numRemision": "REM-1",
+      "pendienteConfirmacion": true,
+      "resultado": "novedad",
+-     "resultadoNombre": "Novedad",
++     "resultadoNombre": "novedad",
+    },
+    "evento": "orden.gestion_registrada",
+    "eventoId": "webhook_evento:ev-1",
+    "ocurridoAt": "2026-09-23T18:00:00.000Z",
+  }
+
+ ❯ tests/unit/services/WebhookEventoOrdenService.test.ts:112:15
+    110|     await m.service.ejecutar(job());
+    111|     const c = cuerpoDe(m.entregar);
+    112|     expect(c).toEqual({
+       |               ^
+    113|       evento: "orden.gestion_registrada",
+    114|       eventoId: "webhook_evento:ev-1",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/unit/services/WebhookEventoOrdenService.test.ts > 454/T1.5 — WebhookEventoOrdenService > gestion corregida: resultado nuevo y anterior, pendiente de confirmacion
+AssertionError: expected { numGuia: 12345, …(9) } to match object { …(5) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "pendienteConfirmacion": true,
+    "resultado": "devolucion_a_origen_por_rechazo",
+    "resultadoAnterior": "entregado",
+    "resultadoAnteriorNombre": "Entregado",
+-   "resultadoNombre": "Devolución a origen por rechazo",
++   "resultadoNombre": "devolucion_a_origen_por_rechazo",
+  }
+
+ ❯ tests/unit/services/WebhookEventoOrdenService.test.ts:163:20
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

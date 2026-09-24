@@ -133,6 +133,8 @@ export interface ApiOrdenListItemDTO {
   numGuia: number | null;
   numRemision: string;
   estado: string; // orden.estatus.value
+  /** FICHA 455 (R24): el nombre visible de `estado` (`nombreDeEstado`), la MISMA cadena que ve la app. */
+  estadoNombre: string;
   destinatario: string;
   telefonoDest: string;
   producto: string;
@@ -213,6 +215,8 @@ export interface ApiOrdenListadoDTO {
  */
 export interface ApiOrdenEvidenciaDTO {
   resultado: "entregado" | "devolucion_a_origen_por_rechazo" | "incidente";
+  /** FICHA 455 (R24): el nombre visible de `resultado`. */
+  resultadoNombre: string;
   contentType: string | null;
   url: string; // URL firmada (5 min); NUNCA el storage_path crudo ni el bucket (R16)
   expiraEnSegundos: number;
@@ -245,7 +249,11 @@ export interface ApiOrdenEvidenciaDTO {
 export interface ApiOrdenGestionDTO {
   createdAt: Date; // R4: instante del registro, misma serializacion que el `createdAt` de la orden
   resultado: GestionResultado; // R5: value CRUDO de `gestion_resultado`, sin traducir
+  /** FICHA 455 (R24): el nombre visible de `resultado` (el de su estado homonimo). */
+  resultadoNombre: string;
   estadoResultante: string | null; // R6/R7: destino de la PRIMERA transicion; `null` si no hubo
+  /** FICHA 455 (R24): el nombre visible de `estadoResultante`; `null` cuando `estadoResultante` lo es. */
+  estadoResultanteNombre: string | null;
   /**
    * FICHA 454 (R32, contrato nuevo): `true` mientras la gestion esta PENDIENTE de confirmar (el
    * estado se aplica al aprobar el cierre; hasta entonces `estadoResultante` es `null`).
@@ -277,7 +285,11 @@ export interface ApiOrdenDetalleDTO extends ApiOrdenListItemDTO {
 export interface ApiOrdenCancelacionDTO {
   numGuia: number;
   estadoAnterior: string;
+  /** FICHA 455 (R24). */
+  estadoAnteriorNombre: string;
   estado: string; // "devolviendo_a_tienda"
+  /** FICHA 455 (R24). */
+  estadoNombre: string;
 }
 
 /**
@@ -297,4 +309,6 @@ export interface ApiOrdenEliminacionDTO {
   numGuia: number | null;
   numRemision: string;
   estado: string; // el estatus.value que tenia al borrarse; siempre uno de ESTADOS_ELIMINABLES
+  /** FICHA 455 (R24). */
+  estadoNombre: string;
 }

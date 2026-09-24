@@ -236,6 +236,16 @@ export function codigoVigente(value: string): string {
   return tiene(CODIGO_VIGENTE_DE_ANTERIOR, value) ? CODIGO_VIGENTE_DE_ANTERIOR[value] : value;
 }
 
+/**
+ * R26 — el mensaje del `422` cuando un integrador filtra por un codigo ANTERIOR: nombra el codigo
+ * vigente que lo sustituye y donde esta el aviso. Sin fecha escrita aqui: la fija el despliegue y
+ * vive en `docs/api/CHANGELOG.md`.
+ */
+export function mensajeCodigoAnterior(anterior: CodigoAnterior): string {
+  const vigente = CODIGO_VIGENTE_DE_ANTERIOR[anterior];
+  return `'${anterior}' ya no existe: ahora se llama '${vigente}' («${NOMBRE_ESTADO[vigente]}»). Ver docs/api/CHANGELOG.md.`;
+}
+
 // Feature 63/A1 (R1-R4): resultado tipado y discriminado de la Server Action
 // `listarOrderStatus()`. Espeja el patron de resultados de dominio del repo
 // (union con `status`): el borde no filtra internals ni PII, solo el catalogo

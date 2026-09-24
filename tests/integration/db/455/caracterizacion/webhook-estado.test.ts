@@ -118,6 +118,8 @@ describeSiHayBase("455/C11 — webhook de estado (Postgres real)", () => {
           eventoIdEsElDelJob: b.eventoId === j.dedupeKey,
           estado: claveDe(b.data.estado as string),
           claves: Object.keys(b.data),
+          // ⏳ 2026-09-24 (T1.7): el nombre que acompana al codigo (solo lo lee el bloque [INTERMEDIO]).
+          estadoNombre: b.data.estadoNombre,
         });
       }
 
@@ -179,13 +181,19 @@ describeSiHayBase("455/C11 — webhook de estado (Postgres real)", () => {
   });
 
   describe("[INTERMEDIO] lo que la 455 cambia por diseño (R25)", () => {
-    // Fase 0 (2026-09-24): el `data` de HOY, sin `estadoNombre`. La Fase 1 (T1.7) lo reescribe con fecha.
-    it("las claves del data entregado, hoy", () => {
+    // ⏳ 2026-09-24 (T1.7, Fase 1): REESCRITO. En la Fase 0 fijaba el `data` sin `estadoNombre`. Ahora
+    // el nombre visible va INMEDIATAMENTE despues de `estado` (el cuerpo firmado cambia a proposito) y
+    // se compara contra el literal esperado, no contra la funcion que lo genera.
+    it("las claves del data entregado: `estadoNombre` pegado detras de `estado`", () => {
       expect(r.entregas.map((x) => x.claves)).toEqual([
-        ["numGuia", "numRemision", "estado", "motivo", "mensajero"],
-        ["numGuia", "numRemision", "estado", "motivo", "mensajero"],
-        ["numGuia", "numRemision", "estado", "motivo", "mensajero"],
+        ["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero"],
+        ["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero"],
+        ["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero"],
       ]);
+    });
+
+    it("R25: el nombre es el visible de cada destino", () => {
+      expect(r.entregas.map((x) => x.estadoNombre)).toEqual(["Novedad", "Entregado", "Devolución a origen por rechazo"]);
     });
   });
 });

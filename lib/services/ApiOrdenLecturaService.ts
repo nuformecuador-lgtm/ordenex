@@ -15,6 +15,8 @@ import type {
   ApiOrdenListadoDTO,
 } from "@/lib/types/api-orden";
 import { gestionConfig } from "@/lib/config/gestion";
+import { nombreDeResultado } from "@/lib/types/gestion-resultado";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
 // ⏳ 2026-09-10 (feature 415, T4): la resolucion de la tarifa VIGENTE entra por la MISMA cascada
 // y el MISMO metodo batch que ya usan el cierre de dia y la cotizacion (R19/R24). No se escribe
@@ -70,6 +72,7 @@ function toListItemDTO(
     numGuia: row.numGuia,
     numRemision: row.numRemision,
     estado: row.estatusValue,
+    estadoNombre: nombreDeEstado(row.estatusValue), // FICHA 455 (R24): al lado de su codigo
     destinatario: row.destinatario,
     telefonoDest: row.telefonoDest,
     producto: row.producto,
@@ -220,6 +223,7 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
 
     const evidencias = row.evidencias.map((e) => ({
       resultado: e.resultado,
+      resultadoNombre: nombreDeResultado(e.resultado), // FICHA 455 (R24)
       contentType: e.contentType,
       url: urlByPath[e.storagePath], // R16: solo URL firmada, NUNCA el storage_path crudo/bucket
       expiraEnSegundos: ttl,
@@ -233,7 +237,9 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
     const gestiones = row.gestiones.map((g) => ({
       createdAt: g.createdAt,
       resultado: g.resultado,
+      resultadoNombre: nombreDeResultado(g.resultado), // FICHA 455 (R24)
       estadoResultante: g.estadoResultante,
+      estadoResultanteNombre: g.estadoResultante === null ? null : nombreDeEstado(g.estadoResultante),
       motivo: g.motivo,
       // Las DOS claves del mensajero, tambien copiadas y no reenviadas por referencia: si la fila
       // del repositorio trajera una tercera, no cruzaria. Y si `ApiMensajeroDTO` ganara un campo

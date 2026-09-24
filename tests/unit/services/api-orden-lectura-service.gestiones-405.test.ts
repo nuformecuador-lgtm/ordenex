@@ -139,6 +139,7 @@ describe("405/R2 — una orden sin gestiones vigentes devuelve `gestiones` vacio
       "destinatario",
       "direccion",
       "estado",
+      "estadoNombre",
       "evidencias",
       "gestiones",
       "mensajero",
