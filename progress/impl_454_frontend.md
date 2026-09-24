@@ -109,4 +109,12 @@ los tests de `/novedades` (`estatusValue: "en_reparto"`).
 
 ## Gate
 
-Ver `progress/gate_454_frontend.log` (sin `tail`, con `INIT_EXIT=` dentro).
+`bash ./init.sh > progress/gate_454_frontend.log 2>&1; echo "INIT_EXIT=$?" >> …` (sin `tail`):
+
+1. `gate_454_frontend_1.log` — `INIT_EXIT=1`, 1 rojo MIO: `integration/db/gestion-tienda-ayuda-migration`
+   (R1/R45 afirmaba que las dos aristas `gestion_tienda_ayuda` salian de `ayuda_tienda`; ahora
+   salen de `en_reparto`, #71/#72). Actualizado con nota fechada en `f031ca1e`.
+2. **`gate_454_frontend.log` (definitiva)** — typecheck y lint en verde; `Test Files 2125 passed
+   (2125)` · `Tests 30394 passed | 26 skipped (30420)`; los 26 skipped son
+   `tests/components/Analitica{Page,Shell}` (igual que el backend), **0 skipped en
+   `integration/db`**; `== init OK ==`; **`INIT_EXIT=0`**.
