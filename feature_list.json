@@ -5437,11 +5437,11 @@
       "title": "un solo nombre por estado en toda la app",
       "description": "Cada estado de orden se llama igual en pantallas, rastreo, WhatsApp, API, webhooks, descargas y analitica.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "alta",
       "depends_on": 454,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-23. Se construye sobre dev y sale a prod JUNTO CON SF-001, y solo cuando el humano lo ordene. Recorrido en navegador de todos los roles (maestro, admin, adminTienda, adminSatelite, mensajero) y del rastreo publico. || Cambian nombre Y codigo (el humano acepta romper integraciones): por_recoger->Mensajero recogiendo en la bodega, entregada->Entregado, reprogramada->Reprogramado, devuelta->Novedad, rechazada->Devolucion a origen por rechazo, sin_gestionar->Novedad interna, por_devolver->Por devolver a bodega central. devuelta_a_tienda sigue Devuelta a tienda. || Mueren los nombres paralelos (hitos del rastreo, chips del mensajero, Asignada del chat, buckets de monitoreo, textos de novedades, donuts con value crudo). Incluye datos guardados con codigos (vistas de filtro, webhooks), manual de integradores, OpenAPI, Postman y SF-001. Inventario en el chat del 2026-09-23.",
+      "status_note": "HECHA 2026-09-24, en dev por PR #820 (merge d59ed59d). NO desplegada: sale con SF-001 cuando el humano lo ordene. Revision APROBADA tras un rechazo por textos; recorrido por rol + repaso de 15 pantallas; gate de dev tras merge verde (2164 archivos). || ANTES DE DESPLEGAR: enviar a integradores docs/api/CHANGELOG.md (ruptura: 1 webhook y 4 keys activas medidas); desplegar fuera de horario de reparto (ventana de build con enum ya renombrado); la 454 y la 455 van en la misma release. Detalle en progress/review_455.md.",
       "branch": "feature/455-un-nombre-por-estado"
     },
     {
@@ -5449,11 +5449,12 @@
       "title": "boton de informacion que explica cada estado",
       "description": "Junto a cada estado mostrado aparece un icono con tooltip que explica que significa.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "depends_on": 455,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-23. Se construye sobre dev y sale a prod JUNTO CON SF-001, y solo cuando el humano lo ordene. Recorrido en navegador de todos los roles (maestro, admin, adminTienda, adminSatelite, mensajero) y del rastreo publico. || Va ultima: los textos se escriben una vez sobre nombres y estados definitivos, y el humano los aprueba antes de implementar. Hoy no existe ninguna explicacion por estado; primitivo components/ui/tooltip.tsx."
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-23. Se construye sobre dev y sale a prod JUNTO CON SF-001, y solo cuando el humano lo ordene. Recorrido en navegador de todos los roles (maestro, admin, adminTienda, adminSatelite, mensajero) y del rastreo publico. || Va ultima: los textos se escriben una vez sobre nombres y estados definitivos, y el humano los aprueba antes de implementar. Hoy no existe ninguna explicacion por estado; primitivo components/ui/tooltip.tsx.",
+      "branch": "feature/456-tooltip-estados"
     }
   ]
 }
