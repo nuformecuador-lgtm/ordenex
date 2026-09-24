@@ -1,0 +1,82 @@
+MUTACION F13-rastreo-retirado-historico
+archivo: lib/services/RastreoPublicoService.ts
+cambio (numstat): 1	1	lib/services/RastreoPublicoService.ts
+-       nombre: nombrePublicoDeEstado(transicion.estatusValue),
++       nombre: nombreDeResultado(transicion.estatusValue as never) ?? transicion.estatusValue,
+tests: ['tests/components/RastreoDialog.pendiente.test.tsx', 'tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts (10 tests | 2 failed) 45ms
+     × 454/R40 · 455/R34: las filas HISTÓRICAS de los retirados tampoco publican su value crudo 23ms
+     × una fila HUERFANA (el caso real de la feature 155) tampoco publica su value crudo 2ms
+ ❯ tests/components/RastreoDialog.pendiente.test.tsx (6 tests | 1 failed) 2313ms
+     × una fila histórica de un estado RETIRADO se pinta con el nombre de su equivalente, fundida 349ms
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 13 passed (16)
+   Start at  08:10:59
+   Duration  4.57s (transform 218ms, setup 190ms, import 897ms, tests 2.36s, environment 1.11s)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/components/RastreoDialog.pendiente.test.tsx > 455/R31 · R34 · T2.8 — el destinatario ve los mismos nombres que la app interna > una fila histórica de un estado RETIRADO se pinta con el nombre de su equivalente, fundida
+AssertionError: expected [ …(4) ] to deeply equal [ …(3) ]
+
+- Expected
++ Received
+
+  [
+    "En bodega central2026-01-01 · 15:00",
+    "En reparto2026-01-02 · 15:00",
+-   "Novedad2026-01-03 · 15:00",
++   "ayuda_tienda2026-01-02 · 17:00",
++   "devolucion_por_confirmar2026-01-03 · 15:00",
+  ]
+
+ ❯ tests/components/RastreoDialog.pendiente.test.tsx:222:7
+    220|         .getAllByRole("listitem")
+    221|         .map((fila) => fila.textContent),
+    222|     ).toEqual([
+       |       ^
+    223|       "En bodega central2026-01-01 · 15:00",
+    224|       "En reparto2026-01-02 · 15:00",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts > R15 — un historial que atraviesa los 20 estatus no publica ningún value interno > 454/R40 · 455/R34: las filas HISTÓRICAS de los retirados tampoco publican su value crudo
+AssertionError: expected '{"numGuia":555001,"nombreVigente":"ay…' not to contain 'devolucion_por_confirmar'
+
+Expected: "devolucion_por_confirmar"
+Received: "{"numGuia":555001,"nombreVigente":"ayuda_tienda","actualizadoEn":"2026-02-02T09:00-06:00","linea":[{"nombre":"Entregado","fecha":"2026-01-01T09:00-06:00"},{"nombre":"Novedad","fecha":"2026-01-02T09:00-06:00"},{"nombre":"Devolviendo a tienda","fecha":"2026-01-03T09:00-06:00"},{"nombre":"Reprogramado","fecha":"2026-01-04T09:00-06:00"},{"nombre":"En ruta a bodega central","fecha":"2026-01-05T09:00-06:00"},{"nombre":"En bodega central","fecha":"2026-01-06T09:00-06:00"},{"nombre":"En preparación","fecha":"2026-01-07T09:00-06:00"},{"nombre":"Mensajero recogiendo en la bodega","fecha":"2026-01-08T09:00-06:00"},{"nombre":"En ruta a bodega satélite","fecha":"2026-01-09T09:00-06:00"},{"nombre":"En reparto","fecha":"2026-01-10T09:00-06:00"},{"nombre":"Devolución a origen por rechazo","fecha":"2026-01-11T09:00-06:00"},{"nombre":"En bodega satélite","fecha":"2026-01-12T09:00-06:00"},{"nombre":"Devuelta a tienda","fecha":"2026-01-13T09:00-06:00"},{"nombre":"Novedad interna","fecha":"2026-01-14T09:00-06:00"},{"nombre":"Por devolver a bodega central","fecha":"2026-01-15T09:00-06:00"},{"nombre":"Devolviendo a bodega central","fecha":"2026-01-16T09:00-06:00"},{"nombre":"Por devolver a tienda","fecha":"2026-01-17T09:00-06:00"},{"nombre":"Por recolectar en tienda","fecha":"2026-01-18T09:00-06:00"},{"nombre":"Incidente","fecha":"2026-01-19T09:00-06:00"},{"nombre":"Recolectando","fecha":"2026-01-20T09:00-06:00"},{"nombre":"devolucion_por_confirmar","fecha":"2026-02-01T09:00-06:00"},{"nombre":"ayuda_tienda","fecha":"2026-02-02T09:00-06:00"}]}"
+
+ ❯ tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts:138:59
+    136|     const envio = await proyectar([...TRANSICIONES, ...historicas]);
+    137|     const cadenas = JSON.stringify(envio);
+    138|     for (const retirado of RETIRADOS) expect(cadenas).not.toContain(re…
+       |                                                           ^
+    139|     for (const entrada of envio.linea) expect(NOMBRES_PUBLICABLES.has(…
+    140|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts > R15 — un historial que atraviesa los 20 estatus no publica ningún value interno > una fila HUERFANA (el caso real de la feature 155) tampoco publica su value crudo
+AssertionError: expected '{"numGuia":555001,"nombreVigente":"En…' not to contain 'un_estatus_retirado_del_catalogo'
+
+Expected: "un_estatus_retirado_del_catalogo"
+Received: "{"numGuia":555001,"nombreVigente":"Entregado","actualizadoEn":"2026-01-02T09:00-06:00","linea":[{"nombre":"un_estatus_retirado_del_catalogo","fecha":"2026-01-01T09:00-06:00"},{"nombre":"Entregado","fecha":"2026-01-02T09:00-06:00"}]}"
+
+ ❯ tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts:175:39
+    173|     ]);
+    174|
+    175|     expect(JSON.stringify(envio)).not.toContain(huerfano);
+       |                                       ^
+    176|     expect(envio.linea.map((e) => e.nombre)).toEqual(["Estado no recon…
+    177|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+RESTAURADO_LIMPIO=True

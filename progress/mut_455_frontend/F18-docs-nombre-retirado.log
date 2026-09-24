@@ -1,0 +1,68 @@
+MUTACION F18-docs-nombre-retirado
+archivo: docs/ayuda/tienda/novedades.md
+cambio (numstat): 1	1	docs/ayuda/tienda/novedades.md
+- - En **Novedad**: la **causa de devolución**.
++ - En **En devolución**: la **causa de devolución**.
+tests: ['tests/unit/guards/nombres-estado-retirados.guardia.test.ts']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts (6 tests | 2 failed) 44ms
+     × ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2 5ms
+     × ningun documento del contexto de ningun rol cita un nombre retirado (salvo los pendientes de la Fase 2) 14ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  08:11:23
+   Duration  2.46s (transform 139ms, setup 55ms, import 2.15s, tests 44ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/guards/nombres-estado-retirados.guardia.test.ts > 455/R41 · R9 · R37 (G2) — el arbol > ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2
+AssertionError: un nombre de estado RETIRADO (requirements 455 §0.3) volvio como texto visible. Usa el nombre de `NOMBRE_ESTADO` (`nombreDeEstado`) o, si es un grupo/accion, un texto propio (R6).: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "docs/ayuda/tienda/novedades.md:52 En devolución",
++ ]
+
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts:200:7
+    198|       "un nombre de estado RETIRADO (requirements 455 §0.3) volvio com…
+    199|         "de `NOMBRE_ESTADO` (`nombreDeEstado`) o, si es un grupo/accio…
+    200|     ).toEqual([]);
+       |       ^
+    201|   });
+    202|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/unit/guards/nombres-estado-retirados.guardia.test.ts > 455/R38 (G2) — el contexto del asistente, rol por rol > ningun documento del contexto de ningun rol cita un nombre retirado (salvo los pendientes de la Fase 2)
+AssertionError: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "maestro: docs/ayuda/tienda/novedades.md:39 En devolución",
++   "admin: docs/ayuda/tienda/novedades.md:39 En devolución",
++   "adminTienda: docs/ayuda/tienda/novedades.md:39 En devolución",
++ ]
+
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts:225:25
+    223|       }
+    224|     }
+    225|     expect(infractores).toEqual([]);
+       |                         ^
+    226|   });
+    227| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+RESTAURADO_LIMPIO=True

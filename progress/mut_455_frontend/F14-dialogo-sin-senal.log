@@ -1,0 +1,80 @@
+MUTACION F14-dialogo-sin-senal
+archivo: app/_landing/RastreoDialog.tsx
+cambio (numstat): 1	1	app/_landing/RastreoDialog.tsx
+-   return entrada.pendiente === true ? textoPendienteConfirmacion(entrada.nombre) : entrada.nombre;
++   return entrada.nombre;
+tests: ['tests/components/RastreoDialog.pendiente.test.tsx']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/components/RastreoDialog.pendiente.test.tsx (6 tests | 3 failed) 2282ms
+     × con gestión pendiente: la última entrada y la cabecera dicen «… · pendiente de confirmación» 503ms
+     × rechazo pendiente: dice «Devolución a origen por rechazo · pendiente de confirmación» 360ms
+     × no expone nada del mensajero ni del motivo: solo el nombre y la fecha 368ms
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 3 passed (6)
+   Start at  08:11:05
+   Duration  4.56s (transform 174ms, setup 158ms, import 810ms, tests 2.28s, environment 1.10s)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/components/RastreoDialog.pendiente.test.tsx > 454/R31 · 455/R33 — el rastreo público muestra la gestión pendiente de confirmar > con gestión pendiente: la última entrada y la cabecera dicen «… · pendiente de confirmación»
+AssertionError: expected [ …(3) ] to deeply equal [ …(3) ]
+
+- Expected
++ Received
+
+  [
+    "En preparación2026-09-21 · 18:05",
+    "En reparto2026-09-23 · 07:40",
+-   "Entregado · pendiente de confirmación2026-09-23 · 15:00",
++   "Entregado2026-09-23 · 15:00",
+  ]
+
+ ❯ tests/components/RastreoDialog.pendiente.test.tsx:153:7
+    151|         .getAllByRole("listitem")
+    152|         .map((fila) => fila.textContent),
+    153|     ).toEqual([
+       |       ^
+    154|       "En preparación2026-09-21 · 18:05",
+    155|       "En reparto2026-09-23 · 07:40",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/components/RastreoDialog.pendiente.test.tsx > 454/R31 · 455/R33 — el rastreo público muestra la gestión pendiente de confirmar > rechazo pendiente: dice «Devolución a origen por rechazo · pendiente de confirmación»
+AssertionError: expected 'Devolución a origen por rechazo2026-0…' to be 'Devolución a origen por rechazo · pen…' // Object.is equality
+
+Expected: "Devolución a origen por rechazo · pendiente de confirmación2026-09-23 · 15:00"
+Received: "Devolución a origen por rechazo2026-09-23 · 15:00"
+
+ ❯ tests/components/RastreoDialog.pendiente.test.tsx:165:72
+    163|     const modal = await consultarCon(RECHAZO_PENDIENTE);
+    164|
+    165|     expect(within(modal).getAllByRole("listitem").at(-1)?.textContent)…
+       |                                                                        ^
+    166|       "Devolución a origen por rechazo · pendiente de confirmación2026…
+    167|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/components/RastreoDialog.pendiente.test.tsx > 454/R31 · 455/R33 — el rastreo público muestra la gestión pendiente de confirmar > no expone nada del mensajero ni del motivo: solo el nombre y la fecha
+AssertionError: expected 'Entregado2026-09-23 · 15:00' to be 'Entregado · pendiente de confirmación…' // Object.is equality
+
+Expected: "Entregado · pendiente de confirmación2026-09-23 · 15:00"
+Received: "Entregado2026-09-23 · 15:00"
+
+ ❯ tests/components/RastreoDialog.pendiente.test.tsx:185:32
+    183|     const modal = await consultarCon(CON_PENDIENTE);
+    184|     const ultima = within(modal).getAllByRole("listitem").at(-1) as HT…
+    185|     expect(ultima.textContent).toBe("Entregado · pendiente de confirma…
+       |                                ^
+    186|   });
+    187| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+RESTAURADO_LIMPIO=True

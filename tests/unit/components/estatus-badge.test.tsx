@@ -9,8 +9,9 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 
-import { EstatusBadge } from "@/app/(app)/ordenes/_components/EstatusBadge";
+import { EstatusBadge, ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
 afterEach(() => {
   cleanup();
@@ -54,6 +55,12 @@ describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona", () => 
 
   it("«En ruta a bodega satélite» no interpola la zona (la prop de la feature 30 ya no existe)", () => {
     expect(textoDelChip("en_ruta_bodega_satelite")).toBe("En ruta a bodega satélite");
+  });
+
+  it("R42: `ORDER_STATUS_LABELS` es la fuente única reexportada, no un segundo mapa", () => {
+    // Sus consumidores (tests, descargas, satélite) lo leen por nombre: si volviera a ser un mapa
+    // propio podría divergir en una sola clave sin que el chip —que lee `nombreDeEstado`— lo note.
+    expect(ORDER_STATUS_LABELS).toBe(NOMBRE_ESTADO);
   });
 
   it("«bodega» siempre entera: ningún nombre abrevia (R9)", () => {

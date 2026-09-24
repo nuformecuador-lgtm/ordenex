@@ -1,0 +1,588 @@
+MUTACION F4-pos-sin-marca
+archivo: app/(app)/mis-asignaciones/_components/pos-card/pos-estado.ts
+cambio (numstat): 1	1	app/(app)/mis-asignaciones/_components/pos-card/pos-estado.ts
+-   if (esActiva) return "activa";
++   if (esActiva) return null;
+tests: ['tests/components/PosOrderCard.estado-455.test.tsx']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/components/PosOrderCard.estado-455.test.tsx (23 tests | 5 failed) 384ms
+     × R8: ACTIVA — el chip sigue diciendo el estado y la marca «Gestionando ahora» va aparte 20ms
+     × R8: ACTIVA — el chip sigue diciendo el estado y la marca «Gestionando ahora» va aparte 13ms
+     × R8: ACTIVA — el chip sigue diciendo el estado y la marca «Gestionando ahora» va aparte 3ms
+     × orden de las marcas: la de la interfaz primero, luego la nota; activa gana a detalle 3ms
+     × la cabecera de la card grande pinta chip y marcas en el mismo bloque 11ms
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 18 passed (23)
+   Start at  08:09:53
+   Duration  2.82s (transform 246ms, setup 159ms, import 946ms, tests 384ms, environment 1.10s)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/components/PosOrderCard.estado-455.test.tsx > 455/R7 · R8 — card grande: el chip es el estado de la orden > R8: ACTIVA — el chip sigue diciendo el estado y la marca «Gestionando ahora» va aparte
+TestingLibraryElementError: Unable to find an element with the text: Gestionando ahora. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <article
+      aria-label="Gestionar orden REM-1 · Ana"
+      class="overflow-hidden rounded-3xl bg-card shadow-sm ring-2 transition-all ring-border cursor-pointer hover:ring-brand/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      tabindex="0"
+    >
+      <div
+        class="flex items-center justify-between border-b-4 border-foreground px-4 py-3"
+      >
+        <div
+          class="flex items-center gap-2"
+        >
+          <span
+            aria-hidden="true"
+            class="flex size-9 items-center justify-center rounded-lg bg-navy text-base font-black text-white"
+          >
+            1
+          </span>
+          <div
+            class="leading-none"
+          >
+            <p
+              class="font-mono text-sm font-bold tracking-wide text-foreground"
+            >
+              REM-1
+            </p>
+            <p
+              class="mt-0.5 text-xs font-semibold text-muted-foreground"
+            >
+              <span
+                class="sr-only"
+              >
+                Parada 
+              </span>
+              1
+               de 
+              1
+               
+              ·
+               
+              1.2 kg
+            </p>
+          </div>
+        </div>
+        <div
+          class="flex flex-col items-end gap-1"
+        >
+          <span
+            class="rounded-lg bg-warning px-3 py-1.5 text-xs font-black uppercase tracking-wide text-navy"
+          >
+            En reparto
+          </span>
+        </div>
+      </div>
+      <div
+        class="space-y-3 p-4"
+      >
+        <div
+          class="flex items-center gap-2"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-package size-4 shrink-0 text-brand"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"
+            />
+            <path
+              d="M12 22V12"
+            />
+            <polyline
+              points="3.29 7 12 12 20.71 7"
+            />
+            <path
+              d="m7.5 4.27 9 5.15"
+            />
+          </svg>
+          <div
+            class="min-w-0"
+          >
+            <h3
+              class="truncate text-base font-black text-foreground"
+            >
+              Ana
+            </h3>
+            <p
+              class="truncate font-mono text-xs uppercase text-muted-foreground"
+            >
+              Caja
+            </p>
+            <p
+              class="mt-0.5 text-xs font-semibold text-muted-foreground"
+            >
+              <span
+                class="tabular-nums"
+              >
+                Intentos: 0
+              </span>
+            </p>
+          </div>
+        </div>
+        <div
+          class="flex w-full items-stretch gap-3 rounded-2xl bg-navy p-3 text-left text-white"
+        >
+          <button
+            aria-label="Ver en el mapa la ruta hasta 200m sur de la iglesia"
+            class="flex flex-col items-center justify-center rounded-xl bg-brand px-4 py-2 text-white transition-transform active:scale-[0.99]"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-navigation size-6"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <polygon
+                points="3 11 22 2 13 21 11 13 3 11"
+              />
+            </svg>
+            <span
+              class="mt-1 text-[10px] font-bold uppercase tracking-wide"
+            >
+              Ir
+            </span>
+          </button>
+          <div
+            class="min-w-0 flex-1 py-0.5"
+          >
+            <div
+              class="flex items-center gap-2"
+            >
+              <span
+                class="truncate font-mono text-lg font-bold tabular-nums text-white"
+              >
+                Escazú
+              </span>
+              <span
+                class="shrink-0 rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] font-bold"
+              >
+                San Rafael
+              </span>
+            </div>
+            <p
+              class="mt-1 flex items-start gap-1 text-sm font-semibold leading-tight text-white/90"
+            >
+              <button
+ ...
+ ❯ Object.getElementError ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/components/PosOrderCard.estado-455.test.tsx:94:19
+     92|     render(<Card orden={makeOrden()} total={1} esActiva onGestionar={(…
+     93|     expect(screen.getByText("En reparto")).toBeInTheDocument();
+     94|     expect(screen.getByText("Gestionando ahora")).toBeInTheDocument();
+       |                   ^
+     95|     expect(screen.queryByText("En gestión")).toBeNull();
+     96|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/components/PosOrderCard.estado-455.test.tsx > 455/R7 · R8 — card mosaico: el chip es el estado de la orden > R8: ACTIVA — el chip sigue diciendo el estado y la marca «Gestionando ahora» va aparte
+TestingLibraryElementError: Unable to find an element with the text: Gestionando ahora. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <article
+      aria-label="Gestionar orden REM-1 · Ana"
+      class="flex flex-col gap-2.5 rounded-xl border bg-card p-3 shadow-sm transition-all border-border cursor-pointer hover:border-brand/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      tabindex="0"
+    >
+      <header
+        class="flex items-start justify-between gap-2"
+      >
+        <div
+          class="flex min-w-0 items-center gap-1.5"
+        >
+          <span
+            aria-hidden="true"
+            class="flex size-6 shrink-0 items-center justify-center rounded-md bg-navy text-[11px] font-black text-white"
+          >
+            1
+          </span>
+          <div
+            class="min-w-0 leading-none"
+          >
+            <p
+              class="truncate font-mono text-xs font-bold tracking-wide text-foreground"
+            >
+              REM-1
+            </p>
+            <p
+              class="mt-0.5 text-[11px] font-semibold text-muted-foreground"
+            >
+              <span
+                class="sr-only"
+              >
+                Parada 
+              </span>
+              1
+               de 
+              1
+               
+              ·
+               
+              1.2 kg
+            </p>
+          </div>
+        </div>
+        <div
+          class="flex shrink-0 flex-col items-end gap-1"
+        >
+          <span
+            class="rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide bg-warning text-navy"
+          >
+            En reparto
+          </span>
+        </div>
+      </header>
+      <div
+        class="min-w-0"
+      >
+        <p
+          class="truncate text-sm font-bold text-foreground"
+        >
+          Ana
+        </p>
+        <p
+          class="flex items-center gap-1 truncate font-mono text-[11px] text-muted-foreground"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-package size-3 shrink-0 text-brand"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"
+            />
+            <path
+              d="M12 22V12"
+            />
+            <polyline
+              points="3.29 7 12 12 20.71 7"
+            />
+            <path
+              d="m7.5 4.27 9 5.15"
+            />
+          </svg>
+          Caja
+        </p>
+        <p
+          class="mt-0.5 text-[11px] font-semibold text-muted-foreground"
+        >
+          <span
+            class="tabular-nums"
+          >
+            Intentos: 0
+          </span>
+        </p>
+      </div>
+      <button
+        aria-label="Ver en el mapa la ruta hasta 200m sur de la iglesia"
+        class="flex w-full items-center gap-2 rounded-lg bg-navy px-2 py-1.5 text-left text-white transition-colors hover:bg-navy-deep"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-map-pin size-3.5 shrink-0 text-brand"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"
+          />
+          <circle
+            cx="12"
+            cy="10"
+            r="3"
+          />
+        </svg>
+        <div
+          class="min-w-0 flex-1"
+        >
+          <span
+            class="block truncate text-xs font-semibold"
+          >
+            Escazú
+            <span
+              class="text-white/60"
+            >
+               · 
+              San Rafael
+            </span>
+          </span>
+          <span
+            class="block truncate text-[0.6875rem] text-white/70"
+          >
+            200m sur de la iglesia
+          </span>
+        </div>
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-navigation size-3.5 shrink-0"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <polygon
+            points="3 11 22 2 13 21 11 ...
+ ❯ Object.getElementError ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/components/PosOrderCard.estado-455.test.tsx:94:19
+     92|     render(<Card orden={makeOrden()} total={1} esActiva onGestionar={(…
+     93|     expect(screen.getByText("En reparto")).toBeInTheDocument();
+     94|     expect(screen.getByText("Gestionando ahora")).toBeInTheDocument();
+       |                   ^
+     95|     expect(screen.queryByText("En gestión")).toBeNull();
+     96|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/components/PosOrderCard.estado-455.test.tsx > 455/R7 · R8 — card detalle: el chip es el estado de la orden > R8: ACTIVA — el chip sigue diciendo el estado y la marca «Gestionando ahora» va aparte
+TestingLibraryElementError: Unable to find an element with the text: Gestionando ahora. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <article
+      aria-label="Gestionar orden REM-1 · Ana"
+      class="flex flex-col gap-2 rounded-xl border bg-card p-2.5 shadow-sm transition-all border-border cursor-pointer hover:border-brand/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      tabindex="0"
+    >
+      <div
+        class="flex items-center gap-3"
+      >
+        <button
+          aria-label="Ver en el mapa la ubicación de Ana"
+          class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand text-white transition-transform hover:scale-105 active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-navigation size-5"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <polygon
+              points="3 11 22 2 13 21 11 13 3 11"
+            />
+          </svg>
+        </button>
+        <div
+          class="min-w-0 flex-1"
+        >
+          <div
+            class="flex flex-wrap items-center gap-2"
+          >
+            <span
+              class="flex size-5 shrink-0 items-center justify-center rounded-md bg-navy text-[10px] font-black text-white"
+            >
+              <span
+                class="sr-only"
+              >
+                Parada 1 de 1
+              </span>
+              <span
+                aria-hidden="true"
+              >
+                1
+              </span>
+            </span>
+            <span
+              class="font-mono text-[11px] font-bold text-foreground"
+            >
+              REM-1
+            </span>
+            <span
+              class="rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide bg-warning text-navy"
+            >
+              En reparto
+            </span>
+          </div>
+          <p
+            class="truncate text-sm font-bold text-foreground"
+          >
+            Ana
+          </p>
+          <p
+            class="flex items-center gap-1 truncate text-[11px] text-muted-foreground"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-map-pin size-3 shrink-0"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"
+              />
+              <circle
+                cx="12"
+                cy="10"
+                r="3"
+              />
+            </svg>
+            Escazú · San Rafael — 200m sur de la iglesia
+          </p>
+          <p
+            class="text-[11px] font-semibold text-muted-foreground"
+          >
+            <span
+              class="tabular-nums"
+            >
+              Intentos: 0
+            </span>
+          </p>
+        </div>
+        <div
+          class="flex shrink-0 flex-col items-end"
+        >
+          <span
+            class="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground"
+          >
+            Cobrar
+          </span>
+          <span
+            class="font-mono text-sm font-bold tabular-nums text-foreground"
+          >
+            ₡25.000
+          </span>
+        </div>
+      </div>
+    </article>
+  </div>
+</body>
+ ❯ Object.getElementError ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/components/PosOrderCard.estado-455.test.tsx:94:19
+     92|     render(<Card orden={makeOrden()} total={1} esActiva onGestionar={(…
+     93|     expect(screen.getByText("En reparto")).toBeInTheDocument();
+     94|     expect(screen.getByText("Gestionando ahora")).toBeInTheDocument();
+       |                   ^
+     95|     expect(screen.queryByText("En gestión")).toBeNull();
+     96|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/components/PosOrderCard.estado-455.test.tsx > 455/R12 · R8 — presentación indexada por código y marcas que no son nombres de estado > orden de las marcas: la de la interfaz primero, luego la nota; activa gana a detalle
+AssertionError: expected [ 'Nota' ] to deeply equal [ 'Gestionando ahora', 'Nota' ]
+
+- Expected
++ Received
+
+  [
+-   "Gestionando ahora",
+    "Nota",
+  ]
+
+ ❯ tests/components/PosOrderCard.estado-455.test.tsx:138:69
+    136|
+    137|   it("orden de las marcas: la de la interfaz primero, luego la nota; a…
+    138|     expect(marcasDeTarjeta(true, true, "Nota").map((m) => m.texto)).to…
+       |                                                                     ^
+    139|     expect(marcasDeTarjeta(false, true, undefined).map((m) => m.texto)…
+    140|     expect(marcasDeTarjeta(false, false, undefined)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/components/PosOrderCard.estado-455.test.tsx > 455/R12 · R8 — presentación indexada por código y marcas que no son nombres de estado > la cabecera de la card grande pinta chip y marcas en el mismo bloque
+TestingLibraryElementError: Unable to find an element with the text: Gestionando ahora. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<div
+  class="flex flex-col items-end gap-1"
+>
+  <span
+    class="rounded-lg bg-warning px-3 py-1.5 text-xs font-black uppercase tracking-wide text-navy"
+  >
+    En reparto
+  </span>
+  <span
+    class="rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide bg-warning-soft text-warning-strong"
+  >
+    Esperando tu respuesta
+  </span>
+</div>
+ ❯ Object.getElementError ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/components/PosOrderCard.estado-455.test.tsx:147:27
+    145|     const chip = screen.getByText("En reparto");
+    146|     const bloque = chip.parentElement as HTMLElement;
+    147|     expect(within(bloque).getByText("Gestionando ahora")).toBeInTheDoc…
+       |                           ^
+    148|     expect(within(bloque).getByText("Esperando tu respuesta")).toBeInT…
+    149|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+RESTAURADO_LIMPIO=True
