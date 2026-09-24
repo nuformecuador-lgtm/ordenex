@@ -16,8 +16,10 @@ aislarlo y documentarlo, sin bloquear el resto.
 ### Avance de la noche (se actualiza al cerrar cada ficha)
 
 - **454 HECHA, en dev** (PR #819, merge f4b3ebed). Contraste en prod: dinero 0 diferencias en 8 controles (165 cierres). Recorrido por rol en navegador OK. Revisión APROBADA. Gate completo verde. Deuda anotada para la release en su status_note.
-- **455 en curso** (Fase 0).
-- 456 pendiente (spec listo).
+- **455 HECHA, en dev** (PR #820). Revisión APROBADA; gate de dev tras merge verde contra la base real.
+- **456 HECHA, en dev** (PR #821). Revisión APROBADA; gate verde.
+- **Nada desplegado.** Pendientes para la release junto a SF-001: visto bueno del texto de la nota de ayuda (456); aviso a integradores con docs/api/CHANGELOG.md (455: 1 webhook y 4 keys activas); desplegar fuera de horario de reparto; re-correr backfill M3 de la 454 y re-medir la población legada.
+- Base local  migrada a dev (454+455). Clon  sigue existiendo (QA_PASSWORD Recorrido455Qa!).
 - Local: se borraron 3 notificaciones creadas por el recorrido (rompían tests de downs de otras fichas); QA_PASSWORD local rotada a Recorrido454!qa; una API key local rotada.
 
 ---

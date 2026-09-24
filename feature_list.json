@@ -5449,11 +5449,11 @@
       "title": "boton de informacion que explica cada estado",
       "description": "Junto a cada estado mostrado aparece un icono con tooltip que explica que significa.",
       "zone": "frontend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "media",
       "depends_on": 455,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-23. Se construye sobre dev y sale a prod JUNTO CON SF-001, y solo cuando el humano lo ordene. Recorrido en navegador de todos los roles (maestro, admin, adminTienda, adminSatelite, mensajero) y del rastreo publico. || Va ultima: los textos se escriben una vez sobre nombres y estados definitivos, y el humano los aprueba antes de implementar. Hoy no existe ninguna explicacion por estado; primitivo components/ui/tooltip.tsx.",
+      "status_note": "HECHA 2026-09-24, en dev por PR #821. NO desplegada: sale con SF-001, 454 y 455 cuando el humano lo ordene. Revision APROBADA (3 menores cerrados); recorrido por rol con mensajero movil; gate completo verde (2177 archivos). || ANTES DE DESPLEGAR: visto bueno del humano al texto de la nota de ayuda (seccion pendiente en specs/456-tooltip-estados/textos-aprobados.md).",
       "branch": "feature/456-tooltip-estados"
     }
   ]
