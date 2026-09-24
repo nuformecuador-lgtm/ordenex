@@ -593,7 +593,9 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
       const escrituraDelegado = new RegExp(`\\.\\w+\\.(${ESCRITURAS.join("|")})\\s*\\(`);
       expect(codigo, `${ruta} escribe por un delegado de Prisma`).not.toMatch(escrituraDelegado);
       // Toda sentencia cruda de escritura es, exactamente, la que fija la transaccion READ ONLY.
-      const crudas = codigo.match(/\$executeRaw(?:Unsafe)?\s*\(?`?[^;]*/g) ?? [];
+      // El acento grave va como `\x60` y no literal: el quitacomentarios no reconoce regex
+      // y un acento grave suelto abriria una plantilla que se come los comentarios que siguen.
+      const crudas = codigo.match(/\$executeRaw(?:Unsafe)?\s*\(?\x60?[^;]*/g) ?? [];
       for (const cruda of crudas) {
         expect(cruda, `${ruta} ejecuta SQL de escritura`).toContain("SET TRANSACTION READ ONLY");
       }
