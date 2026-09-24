@@ -31,8 +31,8 @@
 --   · Gestion de CALLE (lo que en la 454 lleva evento `gestion_registrada`): en produccion no hay
 --     eventos, asi que se usa el PROXY «no es sintetica»: ninguna fila de historial enlazada de las
 --     cuatro familias sinteticas (`escalado_devuelta_sla`, `rechazo_tope_intentos`,
---     `reprogramacion_tienda`, `rechazo_tienda`) y un `motivo` distinto del literal del tope
---     (`MOTIVO_RECHAZO_TOPE_INTENTOS`). La guardia `sinteticas-sin-evento-registro` fija que esos
+--     `reprogramacion_tienda`, `rechazo_tienda`) y un `motivo` distinto de los DOS literales del tope
+--     (el anterior a la 455 y el vigente, `MOTIVO_RECHAZO_TOPE_INTENTOS`). La guardia `sinteticas-sin-evento-registro` fija que esos
 --     son TODOS los productores sinteticos. El proxy se valida contra los eventos reales en local
 --     (bloque P0 de `contraste-454.ts`, que en produccion no se puede correr).
 --   · Aplicacion al aprobar (`CierresAdminRepository.resolverCierre`, bloque APLICACION DE
@@ -60,7 +60,12 @@ params AS (
          3   AS umbral,
          24  AS horas_not_found,
          5   AS dias_wrong,
-         'rechazada al aprobar el cierre: sin gestionar y sin intentos de entrega disponibles'::text AS motivo_tope
+         -- Motivo de las gestiones sinteticas del tope. FICHA 455: el texto cambio; las filas escritas
+         -- antes conservan el VIEJO y las nuevas llevan el NUEVO (`CierresAdminRepository.
+         -- MOTIVO_RECHAZO_TOPE_INTENTOS`), asi que se reconocen LOS DOS. `contraste-454.ts` comprueba
+         -- al arrancar que el nuevo de aqui es identico a la constante.
+         'rechazada al aprobar el cierre: sin gestionar y sin intentos de entrega disponibles'::text AS motivo_tope_viejo,
+         'Devolución a origen por rechazo al aprobar el cierre: estaba en Novedad interna y sin intentos de entrega disponibles'::text AS motivo_tope_nuevo
 ),
 
 -- ─── FUENTES (una lectura por tabla) ──────────────────────────────────────────────────────────────
@@ -135,7 +140,8 @@ hist_ult AS (
 -- `calle` = el proxy del evento `gestion_registrada`; `visita_primera` = la sonda de visita real.
 g AS (
   SELECT sg.*,
-         (s.gid IS NULL AND sg.motivo IS DISTINCT FROM p.motivo_tope) AS calle,
+         (s.gid IS NULL AND sg.motivo IS DISTINCT FROM p.motivo_tope_viejo
+                        AND sg.motivo IS DISTINCT FROM p.motivo_tope_nuevo) AS calle,
          v.primera AS visita_primera,
          hu.destino AS destino_real
     FROM src_gestion sg
@@ -624,7 +630,8 @@ SELECT 'K4b cobro por tope (sinteticas)', count(*), count(*) FILTER (WHERE (nuev
        format('sinteticas de tope que crearia la logica nueva=%s, creadas=%s, ingreso ya cobrado por las creadas=%s',
               count(*) FILTER (WHERE nuevo = 'tope'), count(*) FILTER (WHERE real = 'tope'),
               coalesce((SELECT sum(gi.ingreso_bodega_rechazo) FROM g gi
-                         WHERE gi.motivo = (SELECT motivo_tope FROM params)
+                         WHERE gi.motivo IN (SELECT motivo_tope_viejo FROM params
+                                             UNION ALL SELECT motivo_tope_nuevo FROM params)
                            AND EXISTS (SELECT 1 FROM k3 x WHERE x.orden_id = gi.orden_id AND x.real = 'tope')), 0))
   FROM k3
 UNION ALL

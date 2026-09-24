@@ -91,11 +91,84 @@ describeSiHayBase("455/F9 — rastreo: tramo retirado y gestion pendiente del mi
       const conPendiente = await consultar(o.numGuia);
       const estado = await e.estadoDe(o.ordenId);
 
+      // Revision m9 (2026-09-24). Las dos filas —gestion y fila retirada— se escribian en la misma
+      // transaccion con relojes distintos: nunca el mismo instante exacto (medido: 12–39 ms). Los
+      // instantes de abajo se alinean a un minuto para controlar el formateo a precision de minuto.
+      const minuto = Math.floor((ahora - 2 * HORA) / 60_000) * 60_000;
+
+      // m9 (a) — OTRA fila del MISMO minuto (y a 2 s de la gestion), de un estado vigente: se ve.
+      // Solo se oculta la fila del estado retirado `devolucion_por_confirmar`.
+      const b = await e.sembrarOrden({ estatus: "en_reparto" });
+      await e.tx.ordenHistorialEstado.create({
+        data: {
+          ordenId: b.ordenId,
+          estatusDestinoId: e.id("en_reparto"),
+          origenTipo: "asignacion_satelite",
+          createdAt: new Date(ahora - 3 * HORA),
+        },
+      });
+      const gestionB = await e.gestionarOk(b.ordenId, "novedad");
+      const instanteB = new Date(minuto + 10_000);
+      await e.tx.gestionOrden.update({ where: { id: gestionB }, data: { createdAt: instanteB } });
+      await e.tx.ordenHistorialEstado.create({
+        data: {
+          ordenId: b.ordenId,
+          estatusOrigenId: e.id("en_reparto"),
+          estatusDestinoId: e.id("devolucion_por_confirmar"),
+          origenTipo: "gestion",
+          gestionOrdenId: gestionB,
+          createdAt: new Date(instanteB.getTime() + 25),
+        },
+      });
+      await e.tx.ordenHistorialEstado.create({
+        data: {
+          ordenId: b.ordenId,
+          estatusOrigenId: e.id("devolucion_por_confirmar"),
+          estatusDestinoId: e.id("en_bodega_satelite"),
+          origenTipo: "ajuste_estado",
+          createdAt: new Date(instanteB.getTime() + 2_000),
+        },
+      });
+      const otroEstadoMismoMinuto = await consultar(b.numGuia);
+
+      // m9 (b) — el par a caballo de un cambio de minuto (gestion a hh:mm:59.985, fila retirada a
+      // hh:(mm+1):00.020): sigue siendo la MISMA gestion y la fila retirada no se publica.
+      const c = await e.sembrarOrden({ estatus: "en_reparto" });
+      await e.tx.ordenHistorialEstado.create({
+        data: {
+          ordenId: c.ordenId,
+          estatusDestinoId: e.id("en_reparto"),
+          origenTipo: "asignacion_satelite",
+          createdAt: new Date(ahora - 3 * HORA),
+        },
+      });
+      const gestionC = await e.gestionarOk(c.ordenId, "novedad");
+      const instanteC = new Date(minuto + 60_000 - 15);
+      await e.tx.gestionOrden.update({ where: { id: gestionC }, data: { createdAt: instanteC } });
+      await e.tx.ordenHistorialEstado.create({
+        data: {
+          ordenId: c.ordenId,
+          estatusOrigenId: e.id("en_reparto"),
+          estatusDestinoId: e.id("devolucion_por_confirmar"),
+          origenTipo: "gestion",
+          gestionOrdenId: gestionC,
+          createdAt: new Date(minuto + 60_000 + 20),
+        },
+      });
+      const aCaballoDeMinuto = await consultar(c.numGuia);
+
       // Control: sin gestion pendiente (se anula), la fila retirada se vuelve a publicar (R34).
       const deshacer = await e.s.cierreDia.deshacerGestion(gestionId, e.actorMensajero);
       const sinPendiente = await consultar(o.numGuia);
 
-      return { conPendiente, sinPendiente, estado, deshacer: deshacer.status };
+      return {
+        conPendiente,
+        sinPendiente,
+        estado,
+        deshacer: deshacer.status,
+        otroEstadoMismoMinuto,
+        aCaballoDeMinuto,
+      };
     });
   }
 
@@ -130,6 +203,24 @@ describeSiHayBase("455/F9 — rastreo: tramo retirado y gestion pendiente del mi
   it("F9: ninguna entrada se repite (nombre, fecha y marca): la pagina no puede duplicar claves", () => {
     const claves = r.conPendiente.linea.map(clave);
     expect(new Set(claves).size).toBe(claves.length);
+  });
+
+  it("m9: una fila de OTRO estado del mismo minuto que la pendiente se ve; solo se oculta la retirada", () => {
+    expect(r.otroEstadoMismoMinuto.linea.map((l) => [l.nombre, l.pendiente === true])).toEqual([
+      ["En reparto", false],
+      ["En bodega satélite", false],
+      ["Novedad", true],
+    ]);
+    // Precondicion del caso: de verdad es el MISMO minuto formateado que la pendiente.
+    const [, otra, pendiente] = r.otroEstadoMismoMinuto.linea;
+    expect(otra?.fecha).toBe(pendiente?.fecha);
+  });
+
+  it("m9: el par gestion/fila retirada a caballo de un cambio de minuto sigue fundido en la pendiente", () => {
+    expect(r.aCaballoDeMinuto.linea.map((l) => [l.nombre, l.pendiente === true])).toEqual([
+      ["En reparto", false],
+      ["Novedad", true],
+    ]);
   });
 
   it("control (R34): sin gestion pendiente, la fila retirada se publica como «Novedad»", () => {

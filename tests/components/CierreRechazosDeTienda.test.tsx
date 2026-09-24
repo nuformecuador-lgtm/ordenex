@@ -342,6 +342,13 @@ describe("ficha 425 — cada fila trae lo necesario para separar el paquete (R15
     ]);
   });
 
+  it("455/m8: la lista se nombra en masculino, como el título, sin el participio del estado retirado", () => {
+    pintar();
+    expect(
+      within(seccion()).getByRole("list", { name: "Lista de paquetes rechazados por la tienda" }),
+    ).toBeInTheDocument();
+  });
+
   it("guía, remisión, destinatario, producto, tienda, FECHA del rechazo y motivo", () => {
     pintar();
     const texto = fila("Beto Mora").textContent ?? "";

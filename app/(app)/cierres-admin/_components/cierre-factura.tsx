@@ -1872,8 +1872,12 @@ function FilaGestion({
 // --- FICHA 425: rótulos de la sección de rechazos de tienda (i18n-ready) ---
 /** R16 — el rótulo que aprobó el humano el 2026-09-14 (`design.md §5.4`, Q3), literal. */
 const RECHAZOS_TITULO = "Rechazados por la tienda";
-/** Nombre accesible de la lista, para que su recuento no dependa de una clase. */
-const RECHAZOS_LISTA_LABEL = "Lista de órdenes rechazadas por la tienda";
+/**
+ * Nombre accesible de la lista, para que su recuento no dependa de una clase. FICHA 455 (m8): en
+ * masculino, como el título aprobado (se habla del paquete), para que no se lea como el estado
+ * retirado «Rechazada»; es el rechazo de la TIENDA (425), no un estado.
+ */
+const RECHAZOS_LISTA_LABEL = "Lista de paquetes rechazados por la tienda";
 /**
  * Los DOS CONTEOS de la forma aprobada, cada uno con lo que HACE: las gestiones del mensajero
  * «paga» —entran en su liquidación— y los rechazos de la tienda «revisar» —se separan y no se

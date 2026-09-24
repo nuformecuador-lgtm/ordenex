@@ -33,6 +33,23 @@ const TELEFONO_CENTINELA = "";
 const POR_CONFIRMAR_RETIRADO: keyof typeof ESTADO_RETIRADO = "devolucion_por_confirmar";
 
 /**
+ * FICHA 455 (revision m9, 2026-09-24) — cuanto pueden separarse, como mucho, el `created_at` de la
+ * gestion y el de la fila `devolucion_por_confirmar` que la era anterior escribia al registrarla.
+ *
+ * Por que una ventana sobre el INSTANTE real y no otro vinculo:
+ *  - el vinculo exacto seria `gestion_orden_id`, pero leerlo aqui cruzaria la frontera de la 229
+ *    (R25: el repositorio publico no puede nombrarlo; `rastreo-frontera.guardia` lo prohibe);
+ *  - el instante EXACTO no coincide: las dos filas se escribian en la misma transaccion pero con
+ *    relojes distintos (medido en la base local: 5 de 5 pares separados 12–39 ms, ninguno igual);
+ *  - la fecha FORMATEADA (precision de minuto), lo que se comparaba antes, separa el par cuando cae a
+ *    caballo de un cambio de minuto.
+ * Junto con la condicion de estado, la ventana solo puede ocultar una fila `devolucion_por_confirmar`
+ * escrita con la gestion pendiente; una fila de otro estado del mismo minuto se ve siempre. Cinco
+ * segundos cubren con holgura una transaccion lenta.
+ */
+const VENTANA_MISMA_GESTION_MS = 5_000;
+
+/**
  * `true` si el texto de la fila es un resultado de gestion. Se lee de las claves de
  * `ESTATUS_POR_RESULTADO` (exhaustivo sobre el enum, sin importar Prisma en runtime: R33).
  */
@@ -138,7 +155,10 @@ export class RastreoPublicoService implements IRastreoPublicoService {
             pendiente: true,
           }
         : null;
-    const linea = this.proyectarLinea(transiciones, entradaPendiente?.fecha ?? null);
+    const linea = this.proyectarLinea(
+      transiciones,
+      entradaPendiente !== null && pendiente !== null ? pendiente.createdAt : null,
+    );
     if (entradaPendiente !== null) linea.push(entradaPendiente);
 
     // Sin transiciones no hay nada OCURRIDO que contar (G10) y `nombreVigente` no podria
@@ -169,7 +189,7 @@ export class RastreoPublicoService implements IRastreoPublicoService {
    */
   private proyectarLinea(
     transiciones: readonly TransicionRastreoFila[],
-    fechaPendiente: string | null,
+    instantePendiente: Date | null,
   ): EntradaLineaPublica[] {
     const ascendente = [...transiciones].sort(
       (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
@@ -183,10 +203,13 @@ export class RastreoPublicoService implements IRastreoPublicoService {
       // pendiente—, fuera de orden (la migracion 454 devolvio la orden a `en_reparto` DESPUES) y con
       // la misma clave en la pagina. Mientras esa gestion siga pendiente, la fila vieja no se
       // publica: la entrada pendiente la sustituye, y la racha de «En reparto» se vuelve a fundir.
+      // Solo ESA fila: la del estado retirado Y escrita junto con la gestion (ventana sobre el
+      // instante real, ver `VENTANA_MISMA_GESTION_MS`). Cualquier otra fila del mismo minuto se ve.
       if (
-        fechaPendiente !== null &&
+        instantePendiente !== null &&
         transicion.estatusValue === POR_CONFIRMAR_RETIRADO &&
-        fecha === fechaPendiente
+        Math.abs(transicion.createdAt.getTime() - instantePendiente.getTime()) <=
+          VENTANA_MISMA_GESTION_MS
       ) {
         continue;
       }

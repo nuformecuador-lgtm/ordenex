@@ -147,6 +147,19 @@ describe("RecuperarABodegaModal", () => {
     expect(successMock).not.toHaveBeenCalled();
   });
 
+  it("455/m8: la descripción nombra el estado de las órdenes por su nombre vigente, «Novedad»", () => {
+    renderModal([
+      makeOrden({ id: "o1", numRemision: "REM-CENTRAL-1" }),
+      makeOrden({ id: "o2", numRemision: "REM-CENTRAL-2" }),
+    ]);
+
+    expect(
+      within(screen.getByRole("dialog")).getByText(
+        "Se recuperarán a la bodega central 2 orden(es) en Novedad para un nuevo intento.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("lista las órdenes seleccionadas por su Nº Remisión", () => {
     renderModal([
       makeOrden({ id: "o1", numRemision: "REM-CENTRAL-1" }),
