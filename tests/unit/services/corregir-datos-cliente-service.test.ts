@@ -55,6 +55,7 @@ function orden(overrides: Partial<OrdenParaCorreccionRow> = {}): OrdenParaCorrec
     esCentral: false,
     esZonaEspecial: false,
     yaEnUnCierre: false,
+    ayudaAbierta: false, // FICHA 454 (R64): la ayuda abierta se deriva; aqui, ninguna
     ...overrides,
   };
 }
@@ -204,7 +205,11 @@ describe("312/C2 — R9: adminTienda", () => {
   });
 
   it("sobre orden propia en el grupo AYUDA: ok (P2 de la 312, 2026-08-28)", async () => {
-    const { service } = escenario({ ordenFila: orden({ estatusValue: ESTATUS_POR_GRUPO.ayuda }) });
+    // ⏳ 2026-09-23 (FICHA 454, R64): la ayuda deja de ser el estado `ayuda_tienda`: la orden esta
+    // `en_reparto` y lo que la pone en el grupo es la ayuda ABIERTA que deriva el repositorio.
+    const { service } = escenario({
+      ordenFila: orden({ estatusValue: "en_reparto", ayudaAbierta: true }),
+    });
     const r = await service.corregir(entrada(), ADMIN_TIENDA);
     expect(r).toEqual({ status: "ok", cambios: ["destinatario"] });
   });

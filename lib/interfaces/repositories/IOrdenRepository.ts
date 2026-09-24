@@ -148,6 +148,11 @@ export interface OrdenParaCorreccionRow {
   esZonaEspecial: boolean;
   /** 327/R16: la orden ya tiene al menos una fila congelada en un cierre. */
   yaEnUnCierre: boolean;
+  /**
+   * FICHA 454 (R64): la orden tiene ayuda a la tienda ABIERTA (derivacion de `ayuda-abierta.ts`). Es
+   * lo que abre al `adminTienda` la correccion en el grupo de ayuda, que ya no es un estado.
+   */
+  ayudaAbierta: boolean;
 }
 
 /**

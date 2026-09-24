@@ -137,6 +137,14 @@ export function estadoAdmiteCorreccion(estatusValue: string | null | undefined):
 export function rolAdmiteCorreccion(
   rol: RolValue,
   estatusValue: string | null | undefined,
+  /**
+   * FICHA 454 (2026-09-23, R64) — la orden tiene ayuda a la tienda ABIERTA (la derivacion de
+   * `lib/repositories/ayuda-abierta.ts`, resuelta por el servidor). La ayuda dejo de ser el estado
+   * `ayuda_tienda`: sin este dato, el grupo de ayuda de `/novedades` ya no se deduce del estado
+   * (`en_reparto`) y el `adminTienda` perderia la correccion que P2 de la 312 le concedio. Requerido
+   * a proposito: un `false` por defecto seria esa perdida, en silencio.
+   */
+  ayudaAbierta: boolean,
 ): boolean {
   if (estatusValue === null || estatusValue === undefined) return false; // fallo cerrado (R24)
   switch (rol) {
@@ -144,7 +152,9 @@ export function rolAdmiteCorreccion(
     case "admin":
       return estadoAdmiteCorreccion(estatusValue);
     case "adminTienda":
-      return grupoDeEstatus(estatusValue) !== null;
+      // Los DOS grupos de `/novedades`: la devolucion por su estado y la ayuda por la derivacion,
+      // que exige `en_reparto` (nunca se abre sobre otro estado).
+      return grupoDeEstatus(estatusValue) !== null || ayudaAbierta;
     default:
       return false; // R10: mensajero, adminSatelite, apiKey
   }

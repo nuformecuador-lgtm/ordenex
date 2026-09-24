@@ -120,6 +120,8 @@ afterEach(() => {
   cleanup();
 });
 
+// ⏳ 2026-09-23 (FICHA 454, T2.5): las filas del grupo AYUDA llevan `estatusValue: "en_reparto"` —la ayuda dejo
+// de ser el estado `ayuda_tienda`— y su grupo lo pone la lista que las trajo (`grupoDeFila`).
 describe("NovedadesTabs — las tres superficies (236/R1/R13)", () => {
   it("R1/R13: hay TRES pestañas, con sus rótulos en español y sin jerga", () => {
     renderTabs();
@@ -180,7 +182,7 @@ describe("NovedadesTabs — las tres superficies (236/R1/R13)", () => {
     cleanup();
     renderTabs({
       ayuda: {
-        items: [novedad({ id: "a1", estatusValue: "ayuda_tienda" })],
+        items: [novedad({ id: "a1", estatusValue: "en_reparto" })],
         total: 1,
         page: 1,
         pageSize: 10,
@@ -198,7 +200,7 @@ describe("NovedadesTabs — las tres superficies (236/R1/R13)", () => {
     const user = userEvent.setup();
     renderTabs({
       ayuda: {
-        items: [novedad({ id: "a1", estatusValue: "ayuda_tienda" })],
+        items: [novedad({ id: "a1", estatusValue: "en_reparto" })],
         total: 1,
         page: 1,
         pageSize: 10,
@@ -302,7 +304,7 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
     renderTabs({
       ayuda: {
         items: [
-          novedad({ id: "a1", estatusValue: "ayuda_tienda", destinatario: "Ana Cliente" }),
+          novedad({ id: "a1", estatusValue: "en_reparto", destinatario: "Ana Cliente" }),
           novedad({ id: "o9", estatusValue: "devuelta", destinatario: "Beto Cliente" }),
         ],
         total: 2,
@@ -361,7 +363,7 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
     renderTabs({
       ayuda: {
         items: [
-          novedad({ id: "a1", estatusValue: "ayuda_tienda", destinatario: "Ana Cliente" }),
+          novedad({ id: "a1", estatusValue: "en_reparto", destinatario: "Ana Cliente" }),
           novedad({ id: "o9", estatusValue: "devuelta", destinatario: "Beto Cliente" }),
         ],
         total: 2,

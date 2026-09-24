@@ -234,11 +234,12 @@ describe("R13 — validacion O(1) sin round-trips de DB adicionales", () => {
     const emitir = vi.fn(async () => {});
     const primero = buildTx();
     // 2026-08-19 (feature 239): el par era `en_reparto -> devuelta`, que dejo de ser legal (la
-    // arista #14 se retiro). Se usa su SUSTITUTA, `en_reparto -> devolucion_por_confirmar`: lo
-    // que este caso mide es la cache del catalogo, no el par concreto.
+    // arista #14 se retiro), y se uso su sustituta `en_reparto -> devolucion_por_confirmar`.
+    // 2026-09-23 (ficha 454): esa sustituta sale con su estado y el par original vuelve a ser legal
+    // (#70, el anclaje al aprobar). Lo que este caso mide es la cache del catalogo, no el par.
     await appendCambioEstado(
       primero.tx as never,
-      [entrada("en_reparto", "devolucion_por_confirmar")],
+      [entrada("en_reparto", "devuelta", "anclaje_devolucion")],
       emitir,
     );
     const segundo = buildTx();
@@ -417,9 +418,9 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
       (fila) =>
         fila.value !== "por_recolectar_en_tienda" &&
         fila.value !== "incidente" &&
-        fila.value !== "recolectando" && // feature 157 (ampliacion): otro value posterior
-        fila.value !== "devolucion_por_confirmar" && // feature 239 (2026-08-19): idem
-        fila.value !== "ayuda_tienda", // feature 235 (2026-08-19): idem
+        fila.value !== "recolectando", // feature 157 (ampliacion): otro value posterior
+      // 2026-09-23 (ficha 454): aqui se excluian tambien `devolucion_por_confirmar` (239) y
+      // `ayuda_tienda` (235). Salieron del catalogo TS, asi que este fixture ya no los fabrica.
     );
     // 17 y no 18: la foto de la DB pre-154 tenia 18 values, pero la feature 155 retiro uno de
     // ellos del catalogo TS (y de la DB, con su migracion), asi que este fixture ya no lo
@@ -440,11 +441,9 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
         a.origen !== "incidente" &&
         a.destino !== "incidente" &&
         a.origen !== "recolectando" && // feature 157 (ampliacion)
-        a.destino !== "recolectando" &&
-        a.origen !== "devolucion_por_confirmar" && // feature 239 (2026-08-19)
-        a.destino !== "devolucion_por_confirmar" &&
-        a.origen !== "ayuda_tienda" && // feature 235 (2026-08-19)
-        a.destino !== "ayuda_tienda",
+        a.destino !== "recolectando",
+      // 2026-09-23 (ficha 454): aqui se excluian las aristas de `devolucion_por_confirmar` y de
+      // `ayuda_tienda`; salieron del inventario con sus estados.
     );
     // Feature 158: las aristas que TOCAN los values de la 154 pasan de 2 a 13. El PR 1 anadio
     // #53 (`incidente -> en_reparto`, el deshacer del mensajero) y el PR 2 las DIEZ del camino
@@ -459,7 +458,9 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     // rescate, #64 el corte de la noche), asi que sube de 18 a 21.
     // Feature 237 (2026-08-20): y las DOS que SALEN de `ayuda_tienda` hacia los desenlaces de la
     // tienda (#65 `-> reprogramada`, #66 `-> rechazada`), asi que sube de 21 a 23.
-    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 23; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158) + #45b/#46b (157) + #59/#60/#61 (239) + #62/#63/#64 (235) + #65/#66 (237)
+    // Ficha 454 (2026-09-23): las OCHO de la 239/235/237 (#59-#66) salen del inventario con sus
+    // estados, asi que el descuento vuelve de 23 a 15.
+    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 15; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158) + #45b/#46b (157)
     expect(previas).toHaveLength(
       RECUENTO_INVENTARIO.aristasFlujo - ARISTAS_QUE_TOCAN_LOS_VALUES_154,
     );

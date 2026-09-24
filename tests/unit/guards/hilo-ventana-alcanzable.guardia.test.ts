@@ -52,7 +52,7 @@ import { describe, it, expect } from "vitest";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 // Feature 236 (T2.7): la pantalla de la tienda ya no declara sus estatus en el fuente del
 // repositorio — los toma de este mapa, y el bloque 0 ATA el predicado a él.
-import { ESTATUS_POR_GRUPO, GRUPOS_NOVEDAD } from "@/lib/types/novedad-grupo";
+import { GRUPOS_NOVEDAD, PREDICADO_POR_GRUPO } from "@/lib/types/novedad-grupo";
 import {
   ROLES_CON_HILO,
   VENTANA_ESCRITURA,
@@ -190,8 +190,10 @@ export function estatusDeNovedades(): string[] {
   //
   // ⏳ FICHA 454: SIN los grupos que se listan por DERIVACION (la ayuda abierta): su valor en el
   // mapa ya no es lo que el predicado usa. `ayudaPorDerivacionEnNovedadWhere` ata esa rama.
+  // (2026-09-23, T2.5: `ESTATUS_POR_GRUPO` ya solo tiene los grupos por estatus; el estado de cada
+  // grupo se lee de `PREDICADO_POR_GRUPO`, que es de donde `ESTATUS_POR_GRUPO` lo deriva.)
   return GRUPOS_NOVEDAD.filter((grupo) => !GRUPOS_POR_DERIVACION.includes(grupo)).map(
-    (grupo) => ESTATUS_POR_GRUPO[grupo],
+    (grupo) => PREDICADO_POR_GRUPO[grupo].estatus,
   );
 }
 
@@ -232,7 +234,13 @@ export function literalesDeEstatusEnNovedadWhere(
     /private\s+novedadWhere\s*\(/,
     "la declaración de `novedadWhere`",
   );
-  const catalogo = new Set<string>(ORDER_STATUS_SEED as readonly string[]);
+  // FICHA 454 (2026-09-23): + los dos values RETIRADOS del catalogo: escribir a mano un estado que
+  // ya no existe es la misma infraccion (y la contraprueba (d) lo planta).
+  const catalogo = new Set<string>([
+    ...(ORDER_STATUS_SEED as readonly string[]),
+    "ayuda_tienda",
+    "devolucion_por_confirmar",
+  ]);
   const encontrados = new Set<string>();
 
   // (a) literales de texto escritos dentro del cuerpo.
@@ -509,7 +517,9 @@ describe("0 — el detector de esta guardia no está roto", () => {
     // `estatusDeNovedades` recorre `GRUPOS_NOVEDAD`. Si un grupo estuviera en el mapa y no en la
     // lista, su estatus desaparecería del cruce de abajo sin que nada lo dijera: la tienda tendría
     // ventana de escritura sobre un estado cuya pestaña esta guardia habría dejado de ver.
-    expect([...GRUPOS_NOVEDAD].sort()).toEqual(Object.keys(ESTATUS_POR_GRUPO).sort());
+    // ⏳ 2026-09-23 (FICHA 454): el mapa de todos los grupos es `PREDICADO_POR_GRUPO`
+    // (`ESTATUS_POR_GRUPO` solo conserva los que son una igualdad de estado).
+    expect([...GRUPOS_NOVEDAD].sort()).toEqual(Object.keys(PREDICADO_POR_GRUPO).sort());
   });
 });
 

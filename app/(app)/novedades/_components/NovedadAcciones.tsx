@@ -6,7 +6,7 @@ import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { EnviarPlantillaWhatsappButton } from "@/components/shared/EnviarPlantillaWhatsappButton";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { grupoDeEstatus } from "@/lib/types/novedad-grupo";
+import { grupoDeFila, type GrupoNovedad } from "@/lib/types/novedad-grupo";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
 import type { ModoGestionDesdeAyuda } from "./GestionarDesdeAyudaModal";
@@ -88,6 +88,12 @@ import {
 
 export interface NovedadAccionesProps {
   novedad: NovedadDTO;
+  /**
+   * FICHA 454 (T2.5) — el grupo bajo el que el SERVIDOR listó esta fila (la pestaña que la pidió).
+   * La ayuda dejó de ser estado: una orden con ayuda abierta está en `en_reparto`, y el estado ya
+   * no dice por sí solo a qué grupo pertenece. Requerido: sin él no se ofrece nada (R21).
+   */
+  grupoListado: GrupoNovedad;
   /** Abre el modal de reprogramación para esta orden (feature 100/T3.1). */
   onReprogramar: (novedad: NovedadDTO) => void;
   /** Abre el modal de «Habilitar» (nota obligatoria) que dispara el rescate de la 235. */
@@ -242,10 +248,11 @@ const ICONO_POR_ACCION: Record<
 export function NovedadAcciones(props: NovedadAccionesProps) {
   const { novedad } = props;
 
-  // R21 — FALLO CERRADO. El grupo sale del estado por `grupoDeEstatus`, que se deriva del MISMO
-  // mapa que el predicado del servidor. `null` (un estado que no pertenece a ningún grupo) deja la
-  // fila con lo que no resuelve nada: el contacto y nada más.
-  const grupo = grupoDeEstatus(novedad.estatusValue);
+  // R21 — FALLO CERRADO. El grupo es el de la lista que el servidor devolvió, confirmado contra el
+  // estado que ese grupo exige (`grupoDeFila`, derivado del MISMO mapa que el predicado del
+  // servidor). `null` (un estado que no casa con su grupo) deja la fila con lo que no resuelve
+  // nada: el contacto y nada más. FICHA 454: antes salía solo del estado (`grupoDeEstatus`).
+  const grupo = grupoDeFila(novedad.estatusValue, props.grupoListado);
   const acciones: readonly AccionNovedad[] = grupo
     ? ACCIONES_POR_GRUPO[grupo]
     : ACCIONES_SIN_GRUPO;

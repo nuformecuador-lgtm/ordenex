@@ -55,16 +55,10 @@ const CATALOGO_CONGELADO = [
   "por_recolectar_en_tienda",
   "incidente",
   "recolectando",
-  // 2026-08-19 (feature 239/T1.8): 20 -> 21 values. El pre-estado de la devolucion entra como
-  // APENDICE y NO gana bucket explicito (cae en `otros`, ver `buckets-estatus.test.ts`). Esta
-  // foto se actualiza a mano A PROPOSITO: es lo unico que delata un value nuevo, porque el mapa
-  // tiene default y lo absorberia en silencio.
-  "devolucion_por_confirmar",
-  // 2026-08-19 (feature 235/T1.6): 21 -> 22 values. El estatus de la SOLICITUD DE AYUDA entra como
-  // APENDICE y tampoco gana bucket explicito (cae en `otros`, ver `buckets-estatus.test.ts`). Se
-  // actualiza a mano A PROPOSITO, por la misma razon que la linea de arriba: el mapa tiene default
-  // y absorberia el value nuevo en silencio.
-  "ayuda_tienda",
+  // 2026-08-19 (features 239/T1.8 y 235/T1.6): 20 -> 22 values con `devolucion_por_confirmar` y
+  // `ayuda_tienda` como apendice, sin bucket explicito.
+  // ⏳ 2026-09-23 (FICHA 454, R37): 22 -> 20. Los dos salen del catalogo. Esta foto se actualiza a
+  // mano A PROPOSITO: es lo unico que delata un value que entra o sale.
 ] as const;
 
 // Archivos que legitimamente nombran a la vez un bucket y un estatus de la clasificacion.
@@ -123,9 +117,9 @@ describe("R46 — el catalogo esta congelado: ganar, perder o renombrar un value
   // `order-status.ts`, escrito cuando la 155 dejo el catalogo en 19). El catalogo REAL
   // tiene 20: la 157 sumo `recolectando` despues de aquel retiro. Se congela el numero
   // REAL, medido contra el seed, no el del texto.
-  it("el catalogo tiene 22 values (los 19 tras el retiro de la 155 + `recolectando` de la 157 + `devolucion_por_confirmar` de la 239)", () => {
-    expect(ORDER_STATUS_SEED).toHaveLength(22); // 2026-08-19 (235): 21 -> 22, +ayuda_tienda
-    expect(CATALOGO_CONGELADO).toHaveLength(22); // 2026-08-19 (235): 21 -> 22, +ayuda_tienda
+  it("el catalogo tiene 20 values (los 19 tras el retiro de la 155 + `recolectando` de la 157; la 239 y la 235 sumaron dos que la 454 retiro)", () => {
+    expect(ORDER_STATUS_SEED).toHaveLength(20); // 2026-08-19 (235): 21 -> 22; 2026-09-23 (454): 22 -> 20
+    expect(CATALOGO_CONGELADO).toHaveLength(20); // 2026-08-19 (235): 21 -> 22; 2026-09-23 (454): 22 -> 20
   });
 
   it("las claves del mapa siguen existiendo en el catalogo (un rename las dejaria huerfanas)", () => {

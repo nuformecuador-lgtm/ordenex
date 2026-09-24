@@ -1710,7 +1710,7 @@ export const openApiSpec = {
               {
                 createdAt: "2026-09-04T18:02:55.000Z",
                 resultado: "devuelta",
-                estadoResultante: "devolucion_por_confirmar",
+                estadoResultante: "devuelta",
                 motivo: "wrong_address",
                 mensajero: {
                   id: "018f2c31-0000-4000-8000-0000000000bb",

@@ -28,7 +28,7 @@ import {
 } from "@/app/(app)/mis-asignaciones/_components/useTransicionVista";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { NovedadDTO } from "@/lib/types/novedad";
-import { grupoDeEstatus, type GrupoNovedad } from "@/lib/types/novedad-grupo";
+import { grupoDeFila, type GrupoNovedad } from "@/lib/types/novedad-grupo";
 
 import { habilitarNovedad } from "@/lib/actions/habilitar-novedad";
 // FICHA 312 (F2) — la correccion de los datos del cliente. La ventana la COMPARTE con el
@@ -316,8 +316,10 @@ function causaLabel(causa: NovedadDTO["causa"]): string {
  * Para la devolucion no cambia nada: su señal sigue siendo la causa, que es lo unico que distingue
  * una devolucion de otra en la lista (R7/R11 de la 87).
  */
-function badgeNovedad(novedad: NovedadDTO): string {
-  const grupo = grupoDeEstatus(novedad.estatusValue);
+function badgeNovedad(novedad: NovedadDTO, grupoListado: GrupoNovedad): string {
+  // FICHA 454 (T2.5): el grupo de la fila es el de la lista que la trajo, confirmado contra su
+  // estado (`grupoDeFila`); la ayuda ya no se deduce del estado, que es `en_reparto`.
+  const grupo = grupoDeFila(novedad.estatusValue, grupoListado);
   const chipFijo = grupo ? TEXTOS_POR_GRUPO[grupo].chipFijo : null;
   return chipFijo ?? causaLabel(novedad.causa);
 }
@@ -752,7 +754,7 @@ export function NovedadesModule({
               // El badge lo decide el GRUPO DE LA FILA (ver `badgeNovedad`). No hay estado de
               // reparto que anunciar: lo que la tienda necesita saber de un vistazo es por qué
               // esa orden está en su pantalla.
-              estado={badgeNovedad(novedad)}
+              estado={badgeNovedad(novedad, grupo)}
               // FICHA 296 — A QUIÉN PREGUNTARLE. Hasta hoy la tienda veía una orden pidiendo
               // ayuda y la card no nombraba a nadie. El dato es campo PROPIO de `NovedadDTO`
               // (no de `MiAsignacionDTO`, que es el contrato del portal del mensajero), así que
@@ -778,6 +780,7 @@ export function NovedadesModule({
               acciones={
                 <NovedadAcciones
                   novedad={novedad}
+                  grupoListado={grupo}
                   onReprogramar={setOrdenAReprogramar}
                   onHabilitar={setOrdenAHabilitar}
                   onRechazar={setOrdenARechazar}

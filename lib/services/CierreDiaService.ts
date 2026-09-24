@@ -136,11 +136,11 @@ const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
   // puede estar cuando alguien intenta deshacerla (reintento a bodega o escalado del cron, mas
   // `devuelta` por defensa ante filas anteriores a la 47/239).
   //
-  // FICHA 454 (T1.11): esta tabla solo la usa ya la rama LEGADA. Se CONSERVA el pre-estado de la
-  // 239 como literal: una devolucion legada todavia sin anclar estaria ahi (M3 las lleva todas a
-  // `en_reparto` con su registro, asi que en la practica ya no hay ninguna).
+  // FICHA 454 (T1.11): esta tabla solo la usa ya la rama LEGADA. FICHA 454 (T1.23, design §11 U4,
+  // 2026-09-23): sale el pre-estado de la 239. Su estado se retira del catalogo y M3 lleva toda
+  // orden que estuviera en el a `en_reparto` con su gestion registrada (rama NUEVA del deshacer),
+  // asi que ninguna gestion legada puede estar ya ahi.
   devuelta: [
-    "devolucion_por_confirmar",
     "en_bodega_central",
     "en_bodega_satelite",
     "rechazada",

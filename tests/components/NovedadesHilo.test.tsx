@@ -74,7 +74,7 @@ function novedad(over: Partial<NovedadDTO> = {}): NovedadDTO {
     id: "o-ayuda",
     numGuia: 12345,
     numRemision: "REM-001",
-    estatusValue: "ayuda_tienda",
+    estatusValue: "en_reparto",
     intentosContacto: 1,
     mensajeroNombre: "Marta Mensajera",
     destinatario: DESTINATARIO,
@@ -156,6 +156,8 @@ afterEach(() => {
 // =================================================================================================
 // T6.1 / R27 — la puerta existe, y sólo existe cuando se pide
 // =================================================================================================
+// ⏳ 2026-09-23 (FICHA 454, T2.5): las filas del grupo AYUDA llevan `estatusValue: "en_reparto"` —la ayuda dejo
+// de ser el estado `ayuda_tienda`— y su grupo lo pone la lista que las trajo (`grupoDeFila`).
 describe("236/R27 — la fila de ayuda ofrece la conversación y la abre", () => {
   it("con el modal CERRADO, el hilo no está en el árbol", () => {
     renderAyuda();

@@ -1,7 +1,7 @@
 import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
-import type { OrderStatusValue } from "@/lib/types/order-status";
+import type { OrderStatusRetirado, OrderStatusValue } from "@/lib/types/order-status";
 import type {
   CierrePasadoDTO,
   CierreRechazoDeTienda,
@@ -42,8 +42,11 @@ export interface CierreSinGestionRow {
   producto: string;
   tiendaNombre: string;
   zonaNombre: string;
-  /** `en_reparto` | `ayuda_tienda`; `null` SOLO si no consta (R4/R32/R33). */
-  estatusOrigen: OrderStatusValue | null;
+  /**
+   * `en_reparto`; `null` SOLO si no consta (R4/R32/R33). FICHA 454 (R40): o un value RETIRADO
+   * (`ayuda_tienda`) en las barridas historicas, que se siguen leyendo igual.
+   */
+  estatusOrigen: OrderStatusValue | OrderStatusRetirado | null;
 }
 
 export interface CierreGestionPendienteRow {

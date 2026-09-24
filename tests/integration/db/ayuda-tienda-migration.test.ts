@@ -348,9 +348,11 @@ describe("Feature 235 · el codigo y la base dicen lo mismo (sin drift)", () => 
     }
   });
 
-  it("`ORDER_STATUS_SEED` incluye el estatus, y como APENDICE (no reordena)", () => {
-    expect(ORDER_STATUS_SEED as readonly string[]).toContain(ESTATUS);
-    expect(ORDER_STATUS_SEED[ORDER_STATUS_SEED.length - 1]).toBe(ESTATUS);
+  // ⏳ 2026-09-23 (FICHA 454, R37): este caso afirmaba que el SEED incluia el estatus como ultimo
+  // apendice. La 454 lo RETIRA (la ayuda pasa a ser un evento `orden_evento`).
+  it("454: el estatus ya NO esta en `ORDER_STATUS_SEED`, y su baja no reordena a nadie", () => {
+    expect(ORDER_STATUS_SEED as readonly string[]).not.toContain(ESTATUS);
+    expect(ORDER_STATUS_SEED[ORDER_STATUS_SEED.length - 1]).toBe("recolectando");
   });
 
   it("el schema de Prisma YA NO declara la columna `ayuda`", () => {
@@ -377,17 +379,14 @@ describe("Feature 235 · el codigo y la base dicen lo mismo (sin drift)", () => 
   // script de datos. Pero la medicion CADUCA, asi que lo que se afirma aqui es la propiedad
   // ESTRUCTURAL, que no caduca: una orden que acabe en el estatus de ayuda —por el despliegue o
   // por el uso normal— (i) LA VE su tienda y (ii) TIENE salida.
-  it("235/R43: una orden en el estatus de ayuda ni queda invisible ni queda sin salida", () => {
-    // (i) visible: es una de las dos ramas del predicado de `/novedades` (se fija por texto en
-    // `orden-repository.novedades.test.ts`; aqui se afirma que el value existe para poder serlo).
-    expect(ORDER_STATUS_SEED as readonly string[]).toContain(ESTATUS);
-    // (ii) con salida, y todas con productor. Sin ninguna seria un pozo y R43 caeria.
-    // ⏳ 2026-08-20 (feature 237): eran DOS (`en_reparto`, `sin_gestionar`) y ahora son CUATRO. Las
-    // dos altas son los desenlaces que la tienda puede registrar desde la pestaña de ayuda, y
-    // llegan con su productor (`crearGestionDesdeAyuda`). Lo que R43 exige —que la orden no quede
-    // atrapada— se cumple con mas holgura, no con menos.
-    const salidas = TRANSICIONES.ayuda_tienda.map((d) => d.to).sort();
-    expect(salidas).toEqual(["en_reparto", "rechazada", "reprogramada", "sin_gestionar"]);
+  // ⏳ 2026-09-23 (FICHA 454, R37/R38): este caso afirmaba que una orden en el estatus de ayuda
+  // era visible y tenia salida (cuatro aristas). La 454 retira el estatus: M3 lleva toda orden que
+  // estuviera en el a `en_reparto` con su ayuda ABIERTA como evento, y desde `en_reparto` la orden
+  // tiene sus salidas de siempre. Lo que R43 exigia —que nadie quede atrapado— lo afirma ahora
+  // `454/retiro-estados-migration.test.ts` (a); aqui queda que el grafo ya no lo declara.
+  it("235/R43 -> 454: el estatus de ayuda ya no esta en el grafo; `en_reparto` conserva sus salidas", () => {
+    expect(Object.keys(TRANSICIONES)).not.toContain(ESTATUS);
+    expect(TRANSICIONES.en_reparto.length).toBeGreaterThan(0);
   });
 
   it("ninguna de las dos esta en `ORIGEN_TIPOS_CON_GESTION`", () => {

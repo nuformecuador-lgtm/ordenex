@@ -208,9 +208,9 @@ describe("153/R13 — eventos publicos de webhook", () => {
     // lista completa se lea de un vistazo.
     // ⏳ FICHA 454 (R34): de las dos altas de la 268 queda `incidente`; `ayuda_tienda` sale.
     expect(EVENTOS_PUBLICOS.has("incidente"), "no entro en la politica: incidente").toBe(true);
-    expect(EVENTOS_PUBLICOS.has("ayuda_tienda")).toBe(false);
+    expect((EVENTOS_PUBLICOS as ReadonlySet<string>).has("ayuda_tienda")).toBe(false);
     // 268/R4: `devolucion_por_confirmar` SIGUE FUERA (239/P2, firmada). No entra «por simetria».
-    expect(EVENTOS_PUBLICOS.has("devolucion_por_confirmar")).toBe(false);
+    expect((EVENTOS_PUBLICOS as ReadonlySet<string>).has("devolucion_por_confirmar")).toBe(false);
   });
 
   it("155/R43: el estado de nacimiento de la rama (b) ES evento publico", () => {

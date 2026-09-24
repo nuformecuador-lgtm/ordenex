@@ -13,8 +13,13 @@ import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 // la puerta: sin un caso propio, el dia que alguien la anada «por simetria» no rompera nada.
 
 describe("Feature 266 · T2.1 — ESTADOS_HABILITABLES_API (D1)", () => {
-  it("D1: el conjunto es EXACTAMENTE `ayuda_tienda` y `devuelta`, por igualdad", () => {
-    expect(ESTADOS_HABILITABLES_API).toEqual(["ayuda_tienda", "devuelta"]);
+  // ⏳ 2026-09-23 (FICHA 454, R24): el conjunto era `["ayuda_tienda", "devuelta"]`. La ayuda deja
+  // de ser estado: una orden con ayuda ABIERTA es habilitable por la derivacion
+  // (`ApiHabilitacionService`, `orden.ayudaAbierta`), no por su estado, que es `en_reparto` — y
+  // `en_reparto` a secas sigue sin serlo (caso R13/R31 de abajo).
+  it("D1 -> 454: por ESTADO solo es habilitable `devuelta`; la ayuda se habilita por la derivacion", () => {
+    expect(ESTADOS_HABILITABLES_API).toEqual(["devuelta"]);
+    expect(esEstadoHabilitableApi("ayuda_tienda")).toBe(false);
   });
 
   it("R13-b: `reprogramada` NO es habilitable, aunque el integrador la llame novedad", () => {

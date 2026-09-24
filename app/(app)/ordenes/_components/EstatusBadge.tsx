@@ -35,15 +35,22 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29: espera en la tienda a que el mensajero la recolecte
   recolectando: "Recolectando", // feature 157 (ampliacion): ya tiene mensajero y va en camino a la tienda
   incidente: "Incidente", // feature 154/R30: resultado terminal de la gestión
-  // Feature 239/R26 (P1 firmada 2026-08-19): la devolución la gestionó el mensajero y la bodega
-  // todavía no la confirmó al aprobar el cierre. La etiqueta nombra QUIÉN FALTA, no promete un
-  // desenlace: «por confirmar», no «pendiente» (que se leería como lo contrario).
-  devolucion_por_confirmar: "Devolución por confirmar",
-  // Feature 235/R37 (P1 firmada 2026-08-19): la etiqueta dice A QUIÉN SE LE PIDIÓ, que es lo que
-  // no se puede deducir de «Ayuda solicitada» a secas cuando maestro/admin la ven en `/ordenes`
-  // junto a otros veintiún estados. Se descartó la forma corta por ambigua; la longitud (28) está
-  // dentro de lo que ya existe («Devolviendo a bodega central», 28).
-  ayuda_tienda: "Ayuda solicitada a la tienda",
+  // FICHA 454 (2026-09-23, R37): salen `devolucion_por_confirmar` (239) y la ayuda a la tienda
+  // (235) con su retiro del catálogo. Sus filas HISTÓRICAS se siguen leyendo igual (R40) por
+  // `ORDER_STATUS_LABELS_RETIRADOS`, abajo.
+};
+
+/**
+ * FICHA 454 (R40) — etiquetas de los estados RETIRADOS del catálogo que el historial todavía
+ * referencia (línea de tiempo, cierres barridos). Mismo texto que tenían mientras fueron estados
+ * vigentes: una fila pasada se lee como se leía. NO es un estado ofrecible (no está en
+ * `ORDER_STATUS_SEED`, así que ningún filtro lo lista) ni un tipo (`OrderStatusValue` no lo
+ * incluye). Es el ÚNICO sitio de la UI donde se escriben esos dos `value`: la guardia
+ * `sin-estados-retirados.guardia.test.ts` solo los admite dentro de un mapa `*_RETIRADOS`.
+ */
+export const ORDER_STATUS_LABELS_RETIRADOS: Readonly<Record<string, string>> = {
+  devolucion_por_confirmar: "Devolución por confirmar", // 239/R26
+  ayuda_tienda: "Ayuda solicitada a la tienda", // 235/R37
 };
 
 /**
@@ -86,16 +93,8 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   // es trabajo en curso, la misma familia visual que el resto de tramos en movimiento.
   recolectando: "info",
   incidente: "danger",
-  // Feature 239/R26: MISMA variante que `devuelta` (`warning`). Es la misma cosa vista antes de
-  // la confirmación: un estado de alerta con acción pendiente, no un error ni un tránsito. Sin
-  // refuerzo de acento en `ORDER_STATUS_CLASS`, igual que `devuelta`.
-  devolucion_por_confirmar: "warning",
-  // Feature 235/R37: `warning` es la variante que este repo da a los estados de ESPERA CON ACCIÓN
-  // PENDIENTE (`por_devolver`, `sin_gestionar`, `devuelta`, `devolucion_por_confirmar`), que es
-  // exactamente lo que es: el paquete sigue en la calle y alguien tiene que hacer algo. Ni error
-  // (`danger`) ni tránsito (`info`). Sin refuerzo de acento en `ORDER_STATUS_CLASS`, igual que
-  // `devuelta`.
-  ayuda_tienda: "warning",
+  // FICHA 454 (R37): fuera las variantes de los dos estados retirados; sus filas históricas usan
+  // `warning`, la que tenían (ver `EstatusBadge`).
 };
 
 /**
@@ -138,14 +137,21 @@ export function EstatusBadge({
   zonaNombre?: string;
 }) {
   const known = isKnownStatus(value);
+  // FICHA 454 (R40): un estado RETIRADO (fila histórica) se lee con su etiqueta de siempre y la
+  // variante `warning` que tenían los dos; no cae al texto crudo.
+  const retirado = known ? undefined : ORDER_STATUS_LABELS_RETIRADOS[value];
   const label =
     value === "en_ruta_bodega_satelite" && zonaNombre
       ? `En ruta a bodega ${zonaNombre}`
       : known
         ? ORDER_STATUS_LABELS[value]
-        : value;
+        : (retirado ?? value);
   // Estatus desconocido -> variante neutra (no rompe la UI ante datos inesperados).
-  const variant = known ? ORDER_STATUS_VARIANT[value] : "secondary";
+  const variant = known
+    ? ORDER_STATUS_VARIANT[value]
+    : retirado !== undefined
+      ? "warning"
+      : "secondary";
   const extra = known ? ORDER_STATUS_CLASS[value] : undefined;
 
   return (

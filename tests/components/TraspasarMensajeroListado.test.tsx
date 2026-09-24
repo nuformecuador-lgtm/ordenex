@@ -202,15 +202,22 @@ describe("427/R34 — `/ordenes` ofrece el traspaso EXACTAMENTE en los dos estad
     expect(await screen.findByRole("button", { name: ACCION })).toBeInTheDocument();
   });
 
-  it("se ofrece en `ayuda_tienda` — el paquete sigue con él, en la calle", async () => {
-    const user = userEvent.setup();
+  // ⏳ 2026-09-23 (FICHA 454, R37/R28): este caso decia «se ofrece en `ayuda_tienda` — el paquete
+  // sigue con él, en la calle». La ayuda deja de ser estado: una orden con ayuda abierta ESTÁ en
+  // `en_reparto` y el caso de arriba ya la cubre (R28: sigue siendo traspasable). Una fila con el
+  // estado retirado —imposible tras la migración— cae al `default`: NO se ofrece (fallo cerrado).
+  it("454: una fila con el estado retirado `ayuda_tienda` NO ofrece el traspaso", async () => {
     renderOrdenes([
       makeOrden({ id: "o2", estatusId: "est-ayuda_tienda", estatusValue: "ayuda_tienda" }),
     ]);
 
-    await seleccionarFila(user, "REM-o2");
-
-    expect(await screen.findByRole("button", { name: ACCION })).toBeInTheDocument();
+    // Sin ninguna acción que ofrecer, la fila ni siquiera es seleccionable: la fila está, su
+    // casilla no.
+    expect(await screen.findByText("REM-o2")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: "Seleccionar orden REM-o2" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
   });
 
   it("NO se ofrece en `por_recoger`: el paquete está en la bodega y ya tiene su propia acción", async () => {

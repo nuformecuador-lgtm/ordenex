@@ -1020,16 +1020,11 @@ describe("Feature 67 · deshacerGestion — guardia de estado de la orden (R5, F
     { resultado: "devuelta" as const, estatusValue: "en_bodega_central", nota: "47: reintento a central" },
     { resultado: "devuelta" as const, estatusValue: "en_bodega_satelite", nota: "47: reintento a satelite" },
     { resultado: "devuelta" as const, estatusValue: "rechazada", nota: "47: escalado al umbral" },
-    // Feature 239 (T1.5, R24) — EL CASO DE LA FEATURE, y es una REGRESION EVITADA, no una
-    // asercion nueva de adorno: desde la 239 la gestion `devuelta` deja la orden en el
-    // PRE-ESTADO, asi que ese es el sitio donde el mensajero la encuentra el mismo dia. Sin
-    // `devolucion_por_confirmar` en `ESTADOS_ESPERADOS.devuelta`, esta guardia no casaria NUNCA
-    // y el mensajero perderia la capacidad de deshacer su propia devolucion del dia.
-    {
-      resultado: "devuelta" as const,
-      estatusValue: "devolucion_por_confirmar",
-      nota: "239: el mensajero deshace su devolucion del dia desde el pre-estado",
-    },
+    // ⏳ 2026-09-23 (FICHA 454, T1.23): aqui vivia el caso de la 239 «el mensajero deshace su
+    // devolucion del dia desde el PRE-ESTADO». El pre-estado sale del catalogo: una gestion
+    // `devuelta` nueva deja la orden `en_reparto` y la deshace la rama NUEVA (sin transicion,
+    // `deshacer-ramas-sql-real`), y M3 llevo toda orden que estuviera en el pre-estado a esa rama.
+    // La tabla de la rama LEGADA pierde el value (design §11 U4); el caso pasa a CASOS_CONFLICT.
   ];
 
   for (const c of CASOS_OK) {
@@ -1054,6 +1049,11 @@ describe("Feature 67 · deshacerGestion — guardia de estado de la orden (R5, F
     { resultado: "rechazada" as const, estatusValue: "devolviendo_a_tienda", nota: "48: ya se devolvio a la tienda" },
     { resultado: "devuelta" as const, estatusValue: "en_reparto", nota: "la bodega la reasigno y ruteo" },
     { resultado: "entregada" as const, estatusValue: "en_preparacion", nota: "ajuste administrativo" },
+    {
+      resultado: "devuelta" as const,
+      estatusValue: "devolucion_por_confirmar",
+      nota: "454: el pre-estado de la 239 ya no existe; la rama legada no lo espera",
+    },
   ];
 
   for (const c of CASOS_CONFLICT) {
@@ -2308,7 +2308,9 @@ describe("264/B9 — verCierrePasado emite `ordenesSinGestion` y `sinGestionRegi
     producto: "Caja",
     tiendaNombre: "Tienda W",
     zonaNombre: "Cartago",
-    estatusOrigen: "ayuda_tienda" as const,
+    // FICHA 454 (2026-09-23): era `"ayuda_tienda"`. El corte ya barre desde un solo origen
+    // (`en_reparto`, con o sin ayuda abierta); el value retirado no es un `OrderStatusValue`.
+    estatusOrigen: "en_reparto" as const,
   };
 
   function repoCon(sinGestion: (typeof BARRIDA)[], sinGestionRegistrado = true) {

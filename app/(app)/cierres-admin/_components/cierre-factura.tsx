@@ -37,7 +37,11 @@ import type {
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
-import type { OrderStatusValue } from "@/lib/types/order-status";
+import {
+  esOrderStatusRetirado,
+  type OrderStatusRetirado,
+  type OrderStatusValue,
+} from "@/lib/types/order-status";
 // FICHA 425 — la fecha del rechazo se pinta en el CALENDARIO DE COSTA RICA. `rechazadoAt` es un
 // instante UTC, y cortarlo con `slice(0, 10)` daría el día siguiente para todo rechazo hecho
 // después de las 18:00. Aquí la fecha ES el dato: explica por qué un paquete lleva semanas (D3).
@@ -1420,11 +1424,27 @@ const SIN_GESTION_LISTA_LABEL = "Lista de órdenes sin gestionar";
  * Las etiquetas son las CORTAS del `design.md §4` y no las de `ORDER_STATUS_LABELS`
  * («Ayuda solicitada a la tienda», 28 caracteres): esto va incrustado en la línea del producto,
  * no en un chip de una tabla de estados.
+ *
+ * FICHA 454 (2026-09-23): el corte ya barre desde UN solo origen (`en_reparto`, con o sin ayuda
+ * abierta; la ayuda dejó de ser estado). El origen de ayuda sobrevive SOLO para las filas
+ * históricas de cierres barridos antes de la ficha (R40), en `SIN_GESTION_ORIGEN_LABEL_RETIRADOS`.
+ * Una barrida nueva con ayuda abierta se lee «En reparto» (Pregunta abierta 4 del spec).
  */
 const SIN_GESTION_ORIGEN_LABEL: Partial<Record<OrderStatusValue, string>> = {
   en_reparto: "En reparto",
+};
+
+/** FICHA 454 (R40): la lectura de siempre para el origen retirado de las barridas históricas. */
+const SIN_GESTION_ORIGEN_LABEL_RETIRADOS: Readonly<Partial<Record<OrderStatusRetirado, string>>> = {
   ayuda_tienda: "Ayuda de la tienda",
 };
+
+/** El rótulo del origen: vigente o retirado; `undefined` si no hay (se OMITE, R32). */
+function rotuloOrigen(origen: OrderStatusValue | OrderStatusRetirado): string | undefined {
+  return esOrderStatusRetirado(origen)
+    ? SIN_GESTION_ORIGEN_LABEL_RETIRADOS[origen]
+    : SIN_GESTION_ORIGEN_LABEL[origen];
+}
 
 /** Tono de la píldora de conteo de cada pestaña, por resultado. */
 const TAB_TONO: Record<CierreResultado, "success" | "warning" | "neutral"> = {
@@ -2108,9 +2128,7 @@ function SeccionRechazosDeTienda({
  * producto y **desaparece** cuando no consta (R32): no se pinta un guion en su lugar.
  */
 function FilaSinGestion({ o }: Readonly<{ o: CierreOrdenSinGestion }>) {
-  const origen = o.estatusOrigen
-    ? SIN_GESTION_ORIGEN_LABEL[o.estatusOrigen]
-    : undefined;
+  const origen = o.estatusOrigen ? rotuloOrigen(o.estatusOrigen) : undefined;
   return (
     // `break-inside-avoid` (feature 223): mismo criterio que `FilaGestion` — la fila se repite N
     // veces y es la que decide dónde caen los cortes. Partida, deja la guía en una página y el

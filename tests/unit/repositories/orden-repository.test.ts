@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
+import type { OrderStatusValue } from "@/lib/types/order-status";
 import {
   assertTransicionValida,
   TRANSICIONES,
@@ -797,12 +798,14 @@ describe("239/R25 — el pre-estado no se ofrece para asignacion, ruteo, recolec
   });
 
   it("R25(b): el grafo no ofrece salida del pre-estado hacia asignacion/ruteo/recoleccion", () => {
-    // Las DOS unicas salidas son el anclaje (al aprobar el cierre) y el deshacer del mensajero.
-    // Cualquier intento de asignar, rutear o recolectar desde aqui muere en el choke point.
-    const salidas = TRANSICIONES.devolucion_por_confirmar.map((d) => d.to);
-    expect([...salidas].sort()).toEqual(["devuelta", "en_reparto"]);
+    // ⏳ 2026-09-23 (FICHA 454, R37): el pre-estado sale del catalogo y con el sus DOS salidas
+    // (antes `["devuelta", "en_reparto"]`). Ahora no tiene NINGUNA: lo que R25(b) protegia —que
+    // nada lo lleve a asignacion, ruteo ni recoleccion— se cumple con mas fuerza.
+    expect(Object.keys(TRANSICIONES)).not.toContain(PRE_ESTADO);
     for (const destino of ["por_recoger", "en_ruta_bodega_satelite", "recolectando"] as const) {
-      expect(() => assertTransicionValida(PRE_ESTADO, destino)).toThrow(TransicionIlegalError);
+      expect(() =>
+        assertTransicionValida(PRE_ESTADO as unknown as OrderStatusValue, destino),
+      ).toThrow(TransicionIlegalError);
     }
   });
 });
@@ -899,25 +902,22 @@ describe("235/R14/R17 — la orden en ayuda no es parada de ruta ni se ofrece pa
     // Lo que R17 protege NO se toca, y por eso se afirma aqui al lado: que la orden en ayuda no
     // se pueda ASIGNAR, RUTEAR ni RECOLECTAR. Eso lo sostienen el `where` del caso de arriba y
     // el grafo del caso de abajo, no la lista de estados de una pantalla. VER no es OPERAR.
-    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain(AYUDA);
+    //
+    // ⏳ 2026-09-23 (FICHA 454, R37): `ayuda_tienda` sale del catalogo y de esta lista. La orden con
+    // ayuda abierta esta `en_reparto`, que la satelite SI lista: la intencion de la 357 se cumple
+    // por esa fila.
+    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).not.toContain(AYUDA);
+    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain("en_reparto");
   });
 
   it("R17(b): el GRAFO no ofrece salida de `ayuda_tienda` hacia asignacion, ruteo ni recoleccion", () => {
     // La via que sobrevive a un refactor del WHERE: aunque alguien la colara en un listado, la
     // accion moriria en el choke point.
     //
-    // ⏳ 2026-08-20 (feature 237): las salidas pasan de DOS a CUATRO. A los dos caminos de vuelta
-    // (el rescate y el corte) se suman los DOS DESENLACES que la tienda puede registrar desde su
-    // pestaña de ayuda (#65 `reprogramada`, #66 `rechazada`), con su productor. Lo que R17(b)
-    // vigila NO cambia: ninguna de las cuatro lleva a asignacion, ruteo ni recoleccion — el
-    // paquete sigue en la moto, no en un estante.
-    const salidas = TRANSICIONES.ayuda_tienda.map((d) => d.to);
-    expect([...salidas].sort()).toEqual([
-      "en_reparto",
-      "rechazada",
-      "reprogramada",
-      "sin_gestionar",
-    ]);
+    // ⏳ 2026-09-23 (FICHA 454, R37): `ayuda_tienda` sale del catalogo y del grafo (antes tenia
+    // cuatro salidas: rescate, corte y las dos gestiones de la tienda). Ya no tiene NINGUNA, y lo
+    // que R17(b) vigila —que nada la lleve a asignacion, ruteo ni recoleccion— se cumple igual.
+    expect(Object.keys(TRANSICIONES)).not.toContain(AYUDA);
     for (const destino of [
       "por_recoger", // asignacion a mensajero
       "en_ruta_bodega_satelite", // ruteo a satelite
@@ -925,7 +925,9 @@ describe("235/R14/R17 — la orden en ayuda no es parada de ruta ni se ofrece pa
       "en_bodega_central", // recuperacion manual
       "en_bodega_satelite",
     ] as const) {
-      expect(() => assertTransicionValida(AYUDA, destino)).toThrow(TransicionIlegalError);
+      expect(() =>
+        assertTransicionValida(AYUDA as unknown as OrderStatusValue, destino),
+      ).toThrow(TransicionIlegalError);
     }
   });
 });

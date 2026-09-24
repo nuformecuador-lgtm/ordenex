@@ -32,7 +32,7 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
   it("R27/P2: `devolucion_por_confirmar` NO es evento publico", () => {
     // 268/R4: se CONSERVA intacto. La 268 amplia el vocabulario, pero el pre-estado NO entra «por
     // simetria»: la decision 239/P2 sigue firmada y en pie.
-    expect(EVENTOS_PUBLICOS.has(PRE_ESTADO)).toBe(false);
+    expect((EVENTOS_PUBLICOS as ReadonlySet<string>).has(PRE_ESTADO)).toBe(false);
     expect(esEventoPublico(PRE_ESTADO)).toBe(false);
   });
 
@@ -118,7 +118,7 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
     // ⏳ 2026-09-23 (FICHA 454, R34): la mitad `ayuda_tienda` de este caso se invierte OTRA vez, con
     // otro motivo que el de la 235: no es que no se quiera avisar, es que el estado deja de existir
     // y la ayuda viaja como evento propio (`orden.ayuda_solicitada`/`orden.ayuda_cerrada`, R33).
-    expect(EVENTOS_PUBLICOS.has("ayuda_tienda")).toBe(false);
+    expect((EVENTOS_PUBLICOS as ReadonlySet<string>).has("ayuda_tienda")).toBe(false);
     expect(esEventoPublico("ayuda_tienda")).toBe(false);
     expect(EVENTOS_PUBLICOS.has("incidente")).toBe(true);
     expect(esEventoPublico("incidente")).toBe(true);

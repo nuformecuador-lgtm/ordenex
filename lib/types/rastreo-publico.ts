@@ -93,6 +93,15 @@ export const HITO_POR_ESTATUS = {
   por_devolver_a_tienda: "devolucion_en_curso",
   devolviendo_a_tienda: "devolucion_en_curso",
   devuelta_a_tienda: "devuelto",
+} as const satisfies Record<OrderStatusValue, HitoPublico>;
+
+/**
+ * FICHA 454 (2026-09-23, design §11 «Rastreo»; R40) — los hitos de los dos estados RETIRADOS del
+ * catalogo. Ya no los tiene ninguna orden viva (M3 las lleva a `en_reparto`), pero el historial es
+ * append-only y sus filas se siguen proyectando: se leen EXACTAMENTE como se leian (las dos
+ * decisiones firmadas de abajo se conservan). `hitoDeEstatus` lo consulta antes del hito neutral.
+ */
+export const HITO_POR_ESTATUS_RETIRADO: Readonly<Record<string, HitoPublico>> = {
   // Feature 239/R28: el destinatario ve EXACTAMENTE el mismo hito que ve hoy una `devuelta`.
   // Para el cliente final no ha cambiado nada —el paquete no se le entregó— y quien falta por
   // confirmar es la bodega, que es asunto interno. Un hito propio le contaría un trámite
@@ -105,7 +114,7 @@ export const HITO_POR_ESTATUS = {
   // destinatario no ve ningun tramite nuestro, ni al pedir ayuda ni al rescatar. Precedente exacto:
   // `sin_gestionar -> en_reparto`, riesgo aceptado y firmado en la 229 (G8).
   ayuda_tienda: "en_reparto",
-} as const satisfies Record<OrderStatusValue, HitoPublico>;
+};
 
 /**
  * R17 — hito NEUTRAL para values huerfanos (fuera del catalogo vigente). El historial es
@@ -122,7 +131,7 @@ export const HITO_POR_DEFECTO: HitoPublico = "en_proceso";
  */
 export function hitoDeEstatus(value: string): HitoPublico {
   const explicito: Partial<Record<string, HitoPublico>> = HITO_POR_ESTATUS;
-  return explicito[value] ?? HITO_POR_DEFECTO;
+  return explicito[value] ?? HITO_POR_ESTATUS_RETIRADO[value] ?? HITO_POR_DEFECTO;
 }
 
 /* -------------------------------------------------------------------------- */

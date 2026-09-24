@@ -224,15 +224,13 @@ describe("Feature 239 · el codigo y la base dicen lo mismo (sin drift)", () => 
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain(FAMILIA);
   });
 
-  it("`ORDER_STATUS_SEED` incluye el pre-estado, y como APENDICE (no reordena)", () => {
-    expect(ORDER_STATUS_SEED as readonly string[]).toContain(PRE_ESTADO);
-    // 2026-08-19 (feature 235): el pre-estado deja de ser el ULTIMO porque `ayuda_tienda` se
-    // apendio DESPUES. Lo que este caso afirma sigue siendo lo mismo —que la 239 no reordeno a
-    // nadie— y se dice de la forma que sobrevive a la siguiente feature aditiva: su posicion es la
-    // penultima, e inmediatamente despues del value que ya estaba antes de ella.
-    const i = (ORDER_STATUS_SEED as readonly string[]).indexOf(PRE_ESTADO);
-    expect(i).toBe(ORDER_STATUS_SEED.length - 2);
-    expect(ORDER_STATUS_SEED[i - 1]).toBe("recolectando"); // el ultimo antes de la 239 (157)
+  // ⏳ 2026-09-23 (FICHA 454, R37): este caso afirmaba que el SEED incluia el pre-estado como
+  // apendice. La 454 lo RETIRA del SEED (su migracion M3 lo borra del catalogo solo si nadie lo
+  // referencia). Lo que la 239 protegia —que su alta no reordenara a nadie— sigue siendo cierto de
+  // la baja: sale sin mover a ningun otro value (`recolectando` vuelve a ser el ultimo).
+  it("454: el pre-estado ya NO esta en `ORDER_STATUS_SEED`, y su baja no reordena a nadie", () => {
+    expect(ORDER_STATUS_SEED as readonly string[]).not.toContain(PRE_ESTADO);
+    expect(ORDER_STATUS_SEED[ORDER_STATUS_SEED.length - 1]).toBe("recolectando");
   });
 
   // R16 — EL CASO QUE PROTEGE EL DINERO. Si la familia del anclaje entrara en la lista de visita

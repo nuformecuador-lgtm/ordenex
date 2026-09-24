@@ -139,11 +139,25 @@ function valuesInternosFiltrados(valor: unknown): string[] {
 
 /* -------------------------------------------------------------------------- */
 
-describe("R15 — un historial que atraviesa los 22 estatus no publica ningún value interno", () => {
-  it("CONTROL DE NO-VACUIDAD: el escenario recorre de verdad los 22 values del catalogo", () => {
-    expect(ORDER_STATUS_SEED).toHaveLength(22); // 2026-08-19 (235): +ayuda_tienda
-    expect(TRANSICIONES).toHaveLength(22); // 2026-08-19 (235)
-    expect(new Set(TRANSICIONES.map((t) => t.estatusValue)).size).toBe(22); // 2026-08-19 (235)
+describe("R15 — un historial que atraviesa los 20 estatus no publica ningún value interno", () => {
+  it("CONTROL DE NO-VACUIDAD: el escenario recorre de verdad los 20 values del catalogo", () => {
+    // 2026-08-19 (235): 22; 2026-09-23 (ficha 454): 20, salen `devolucion_por_confirmar` y
+    // `ayuda_tienda`. Sus filas historicas las cubre el caso «454/R40» de abajo.
+    expect(ORDER_STATUS_SEED).toHaveLength(20);
+    expect(TRANSICIONES).toHaveLength(20);
+    expect(new Set(TRANSICIONES.map((t) => t.estatusValue)).size).toBe(20);
+  });
+
+  it("454/R40: las filas HISTÓRICAS de los dos estados retirados tampoco publican su value crudo", async () => {
+    const RETIRADOS = ["devolucion_por_confirmar", "ayuda_tienda"];
+    const historicas: TransicionRastreoFila[] = RETIRADOS.map((estatusValue, i) => ({
+      createdAt: new Date(Date.UTC(2026, 1, 1 + i, 15, 0, 0)),
+      estatusValue,
+    }));
+    const envio = await proyectar([...TRANSICIONES, ...historicas]);
+    const cadenas = JSON.stringify(envio);
+    for (const retirado of RETIRADOS) expect(cadenas).not.toContain(retirado);
+    for (const entrada of envio.linea) expect(HITOS_PUBLICOS).toContain(entrada.hito);
   });
 
   it("DEMOSTRACION de la homonimia: el `includes` ciego daria rojo contra un resultado CORRECTO", () => {

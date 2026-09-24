@@ -6,6 +6,7 @@ import {
   HITOS_PUBLICOS,
   HITO_POR_DEFECTO,
   HITO_POR_ESTATUS,
+  HITO_POR_ESTATUS_RETIRADO,
   hitoDeEstatus,
   type HitoPublico,
 } from "@/lib/types/rastreo-publico";
@@ -44,20 +45,32 @@ const TABLA_FIRMADA: Record<OrderStatusValue, HitoPublico> = {
   por_devolver_a_tienda: "devolucion_en_curso",
   devolviendo_a_tienda: "devolucion_en_curso",
   devuelta_a_tienda: "devuelto",
-  // Feature 239/R28 (2026-08-19): el pre-estado comparte hito con `devuelta`. Para el
-  // destinatario no cambia nada —el paquete no se le entrego—; lo que falta (la confirmacion en
-  // bodega) es un tramite interno que el rastreo publico no cuenta.
-  devolucion_por_confirmar: "no_entregado",
-  // Feature 235/R38 (P3 firmada 2026-08-19): EL MISMO hito que `en_reparto`. Para el destinatario
-  // no cambia nada -el paquete sigue con el mensajero- y quien resuelve la incidencia es asunto
-  // interno. Como el rastreo COLAPSA rachas del mismo hito, el viaje
-  // `en_reparto -> ayuda_tienda -> en_reparto` se ve como UNA sola entrada «En reparto».
-  ayuda_tienda: "en_reparto",
+  // ⏳ 2026-09-23 (FICHA 454, R37/R40): aqui estaban `devolucion_por_confirmar: "no_entregado"`
+  // (239/R28) y `ayuda_tienda: "en_reparto"` (235/R38). Salen del catalogo; sus decisiones firmadas
+  // se conservan para las filas HISTORICAS en `HITO_POR_ESTATUS_RETIRADO` y las afirma el caso
+  // «454/R40» de abajo, transcritas a mano igual que esta tabla.
+};
+
+/** 454/R40 — la lectura firmada de los dos estados retirados, transcrita a mano. */
+const TABLA_FIRMADA_RETIRADOS: Record<string, string> = {
+  devolucion_por_confirmar: "no_entregado", // 239/R28
+  ayuda_tienda: "en_reparto", // 235/R38
 };
 
 describe("R16 — el mapeo de hitos cubre el catalogo vigente entero", () => {
   // 2026-08-19 (feature 239): 20 -> 21 values. El añadido es `devolucion_por_confirmar`.
-  it("los 21 values del catalogo tienen hito publico asignado y coinciden con la tabla firmada (incluidos recolectando→registrado, incidente→no_entregado y sin_gestionar→en_reparto)", () => {
+  // 2026-09-23 (ficha 454): 22 -> 20 (salen `devolucion_por_confirmar` y `ayuda_tienda`).
+  it("454/R40: las filas historicas de los dos estados retirados se leen con su hito firmado de siempre", () => {
+    expect(Object.keys(HITO_POR_ESTATUS_RETIRADO).sort()).toEqual(
+      Object.keys(TABLA_FIRMADA_RETIRADOS).sort(),
+    );
+    for (const [value, hito] of Object.entries(TABLA_FIRMADA_RETIRADOS)) {
+      expect(hitoDeEstatus(value), value).toBe(hito);
+      expect(value in HITO_POR_ESTATUS, `${value} no debe seguir en el mapa vigente`).toBe(false);
+    }
+  });
+
+  it("los 20 values del catalogo tienen hito publico asignado y coinciden con la tabla firmada (incluidos recolectando→registrado, incidente→no_entregado y sin_gestionar→en_reparto)", () => {
     const sinHito = ORDER_STATUS_SEED.filter((value) => !(value in HITO_POR_ESTATUS));
     expect(sinHito).toEqual([]);
 

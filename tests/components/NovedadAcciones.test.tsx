@@ -19,6 +19,7 @@ import userEvent from "@testing-library/user-event";
 
 import { NovedadAcciones } from "@/app/(app)/novedades/_components/NovedadAcciones";
 import type { NovedadDTO } from "@/lib/types/novedad";
+import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
 
 vi.mock("@/lib/actions/orden-ayuda", () => ({
   solicitarAyudaOrden: vi.fn(),
@@ -83,8 +84,16 @@ const handlers = {
   onCorregirDatos: vi.fn(),
 };
 
-function renderAcciones(over: Partial<NovedadDTO> = {}) {
-  return render(<NovedadAcciones novedad={novedad(over)} {...handlers} />);
+/**
+ * FICHA 454 (T2.5, 2026-09-23): la fila lleva el grupo bajo el que el SERVIDOR la listo (la ayuda
+ * dejo de ser el estado `ayuda_tienda`: una fila de ayuda esta `en_reparto`). Por defecto, el grupo
+ * de su estado: `devuelta` -> devolucion; cualquier otro -> ayuda. Los casos de fallo cerrado lo
+ * pasan explicito.
+ */
+function renderAcciones(over: Partial<NovedadDTO> = {}, grupoListado?: GrupoNovedad) {
+  const fila = novedad(over);
+  const grupo = grupoListado ?? (fila.estatusValue === "devuelta" ? "devolucion" : "ayuda");
+  return render(<NovedadAcciones novedad={fila} grupoListado={grupo} {...handlers} />);
 }
 
 /** Los nombres accesibles de TODOS los controles de la fila, en el orden en que se pintan. */
@@ -114,7 +123,7 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
   // actualiza A MANO, una entrada más; jamás se deriva de `ACCIONES_POR_GRUPO`, que es su propia
   // fuente y lo dejaría verde con cualquier contenido.
   it("R22/237/312: la fila de AYUDA ofrece exactamente ocho controles, y son los suyos", () => {
-    renderAcciones({ estatusValue: "ayuda_tienda" });
+    renderAcciones({ estatusValue: "en_reparto" });
 
     expect(censoDeBotones()).toEqual([
       "Llamar a Ana Cliente",
@@ -173,7 +182,7 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
     expect(censoDeBotones()).toHaveLength(5);
 
     cleanup();
-    renderAcciones({ estatusValue: "ayuda_tienda" });
+    renderAcciones({ estatusValue: "en_reparto" });
     expect(
       screen.getByRole("button", { name: "Habilitar la orden de Ana Cliente" }),
       "R34: sobre una orden en ayuda el paquete SIGUE EN LA MOTO, así que devolverla a la ruta es " +
@@ -182,11 +191,13 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
   });
 
   it("R21: un estatus que no es de ningún grupo se queda SÓLO con el contacto", () => {
-    // `grupoDeEstatus` devuelve `null` y no se ofrece ninguna acción que RESUELVA la orden. No
+    // `grupoDeFila` devuelve `null` y no se ofrece ninguna acción que RESUELVA la orden. No
     // puede ocurrir con los predicados del servidor —sólo lista esos dos estados— y por eso mismo
     // hay que escribirlo: el día que un tercer camino traiga una fila por otra vía, la pantalla no
     // se inventará botones para ella.
-    renderAcciones({ estatusValue: "en_reparto" });
+    // ⏳ 2026-09-23 (FICHA 454): antes era `en_reparto` a secas; ahora `en_reparto` ES el estado de
+    // una fila de ayuda, así que el caso usa un estado que no casa con la lista que lo trajo.
+    renderAcciones({ estatusValue: "sin_gestionar" }, "ayuda");
 
     expect(censoDeBotones()).toEqual([
       "Llamar a Ana Cliente",
@@ -198,9 +209,13 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
     // Si `censoDeBotones` estuviera roto —devolviendo siempre lo mismo, o siempre vacío— los tres
     // casos de arriba podrían pasar a la vez sin medir nada. Esto lo caza.
     const censos: string[][] = [];
-    for (const estatus of ["ayuda_tienda", "devuelta", "en_reparto"]) {
+    for (const [estatus, grupo] of [
+      ["en_reparto", "ayuda"],
+      ["devuelta", "devolucion"],
+      ["sin_gestionar", "ayuda"],
+    ] as const) {
       cleanup();
-      renderAcciones({ estatusValue: estatus });
+      renderAcciones({ estatusValue: estatus }, grupo);
       censos.push(censoDeBotones());
     }
     expect(new Set(censos.map((c) => c.join("|"))).size).toBe(3);
@@ -211,7 +226,7 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
 describe("NovedadAcciones — cada control llama a SU handler (236/R27)", () => {
   it("«Conversación» abre el hilo de ESTA orden, y no toca ninguna otra acción", async () => {
     const user = userEvent.setup();
-    renderAcciones({ id: "o-ayuda", estatusValue: "ayuda_tienda" });
+    renderAcciones({ id: "o-ayuda", estatusValue: "en_reparto" });
 
     await user.click(
       screen.getByRole("button", {
@@ -236,7 +251,7 @@ describe("NovedadAcciones — cada control llama a SU handler (236/R27)", () => 
   // se quedaría llamando a otro handler y el censo de arriba seguiría verde.
   it("312/R23: «Corregir datos» llama a SU handler desde el grupo de AYUDA", async () => {
     const user = userEvent.setup();
-    renderAcciones({ id: "o-ayuda", estatusValue: "ayuda_tienda" });
+    renderAcciones({ id: "o-ayuda", estatusValue: "en_reparto" });
 
     await user.click(
       screen.getByRole("button", {
@@ -270,7 +285,7 @@ describe("NovedadAcciones — cada control llama a SU handler (236/R27)", () => 
 
   it("«Habilitar» desde la fila de ayuda llama a su handler con la orden", async () => {
     const user = userEvent.setup();
-    renderAcciones({ id: "o-ayuda", estatusValue: "ayuda_tienda" });
+    renderAcciones({ id: "o-ayuda", estatusValue: "en_reparto" });
 
     await user.click(
       screen.getByRole("button", { name: "Habilitar la orden de Ana Cliente" }),
@@ -282,7 +297,7 @@ describe("NovedadAcciones — cada control llama a SU handler (236/R27)", () => 
   });
 
   it("cada botón de icono es SOLO icono, con su nombre accesible en el propio control", () => {
-    renderAcciones({ estatusValue: "ayuda_tienda" });
+    renderAcciones({ estatusValue: "en_reparto" });
 
     // El tooltip NO es el nombre del botón: aparece al pasar el puntero o al enfocar, y quien
     // navega con lector de pantalla —o desde una pantalla táctil, donde no hay hover— necesita el
@@ -314,7 +329,7 @@ describe("NovedadAcciones — cada control llama a SU handler (236/R27)", () => 
 describe("NovedadAcciones — 237: la ayuda resuelve por su propia puerta", () => {
   it("«Reprogramar» de la fila de AYUDA abre la ventana en modo reprogramar", async () => {
     const user = userEvent.setup();
-    renderAcciones({ id: "o-ayuda", estatusValue: "ayuda_tienda" });
+    renderAcciones({ id: "o-ayuda", estatusValue: "en_reparto" });
 
     await user.click(
       screen.getByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),
@@ -331,7 +346,7 @@ describe("NovedadAcciones — 237: la ayuda resuelve por su propia puerta", () =
 
   it("«Rechazar» de la fila de AYUDA abre la ventana en modo rechazar", async () => {
     const user = userEvent.setup();
-    renderAcciones({ id: "o-ayuda", estatusValue: "ayuda_tienda" });
+    renderAcciones({ id: "o-ayuda", estatusValue: "en_reparto" });
 
     await user.click(
       screen.getByRole("button", { name: "Rechazar la orden de Ana Cliente" }),
@@ -351,7 +366,7 @@ describe("NovedadAcciones — 237: la ayuda resuelve por su propia puerta", () =
     // Si `RESULTADO_POR_MODO` o los dos handlers se cablearan al mismo valor, los dos casos de
     // arriba podrían pasar por separado y la tienda estaría rechazando cuando pulsa reprogramar.
     const user = userEvent.setup();
-    renderAcciones({ estatusValue: "ayuda_tienda" });
+    renderAcciones({ estatusValue: "en_reparto" });
 
     await user.click(
       screen.getByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),

@@ -752,8 +752,9 @@ export function OrdenesListado({
       // propia acción desde la 149), o moverlo afirmaría una custodia que nadie verificó
       // (`devolviendo_a_tienda`), o sacaría la orden del cierre abierto de su mensajero
       // (`sin_gestionar`).
+      // FICHA 454 (2026-09-23): el `case` de la ayuda a la tienda se va con su estado (R37); una
+      // orden con ayuda abierta ESTÁ en `en_reparto` y sigue siendo traspasable (R28).
       case "en_reparto":
-      case "ayuda_tienda":
         return [accionTraspasarMensajero, accionCambiarDia];
       // FICHA 371 — la orden ya no está en circulación: espera a la fecha de su reprogramación, y
       // esa fecha es lo ÚNICO que decide cuándo vuelve a la bodega. Si está equivocada, hasta hoy

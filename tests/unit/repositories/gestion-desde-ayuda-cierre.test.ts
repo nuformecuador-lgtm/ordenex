@@ -221,7 +221,9 @@ function buildStore(filas: FilaGestion[]) {
       // devolviera `count: 0` por la mera ausencia de la guarda daria un rojo FALSO: parecería
       // que el test caza la mutacion cuando lo que caza es su propia suposicion.
       updateMany: vi.fn(async (args: { where: Record<string, unknown>; data: { estatusId: string } }) => {
-        const actual = ordenes.get(args.where.id as string) ?? idEstado("ayuda_tienda");
+        // FICHA 454 (2026-09-23): el defecto era `idEstado("ayuda_tienda")`; el value salio del
+        // catalogo (ya no es `OrderStatusValue`) y una orden con ayuda abierta esta `en_reparto`.
+        const actual = ordenes.get(args.where.id as string) ?? idEstado("en_reparto");
         if ("estatusId" in args.where && args.where.estatusId !== actual) return { count: 0 };
         ordenes.set(args.where.id as string, args.data.estatusId);
         return { count: 1 };

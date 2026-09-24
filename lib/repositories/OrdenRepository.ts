@@ -2750,6 +2750,8 @@ export class OrdenRepository implements IOrdenRepository {
       // especial. Una orden sin distrito (el unico FK nullable) entra como `false`.
       esZonaEspecial: row.distrito?.zonaEspecial === true,
       yaEnUnCierre: row.cierreDetalles.length > 0,
+      // FICHA 454 (R64): la ayuda deja de ser estado; se deriva (punto unico, `ayuda-abierta.ts`).
+      ayudaAbierta: (await conAyudaAbiertaDe(this.prisma, [row.id])).has(row.id),
     };
   }
 
