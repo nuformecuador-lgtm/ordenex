@@ -47,7 +47,6 @@ import { useSeguimientoUbicacion } from "./useSeguimientoUbicacion";
 import { SincronizarRutaButton } from "./SincronizarRutaButton";
 import { TrayectoVivoButton } from "./TrayectoVivoButton";
 import { CarruselCards } from "@/components/shared/CarruselCards";
-import { NOTA_AYUDA_SOLICITADA } from "@/components/shared/nota-pendiente-confirmacion";
 
 import { VistaCardsToggle, type VistaCards } from "./VistaCardsToggle";
 import { CLASE_FASE, useTransicionVista } from "./useTransicionVista";
@@ -591,7 +590,8 @@ export function RepartoModule({
         bloqueado={bloqueado}
         /* FICHA 455 (R7/R8): el chip dice el estado de la orden («En reparto», que es lo cierto: la
            ayuda de la 454 es un evento, no un estado) y la ayuda va como NOTA junto al chip. */
-        nota={NOTA_AYUDA_SOLICITADA}
+        /* FICHA 456 (T3.6, R12): la nota de ayuda con su botón de información. */
+        notaAyuda
         /* Feature 235 (R15) — LA CARD NO LLEVA MARCAS DE RUTA. R15 prohíbe pintar estas órdenes
            como parada y contarlas entre las pendientes de optimizar; el servicio ya las deja fuera
            de `paradasSinOptimizar` y del mapa, pero la card seguía luciendo el nº de parada («·»,

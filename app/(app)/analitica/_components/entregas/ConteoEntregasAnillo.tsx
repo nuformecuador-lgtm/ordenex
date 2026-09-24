@@ -37,6 +37,7 @@ import { serializarFiltroEntregas } from "@/app/(app)/_components/entregas-filtr
 import { useFiltroEntregas } from "@/app/(app)/_components/filtro-entregas";
 import { formatearValor } from "@/components/private/analytics/formato";
 import { GraficaReparto } from "@/components/private/analytics/GraficaReparto";
+import { LeyendaEstadosConInfo, TITULO_LEYENDA_ESTADOS } from "@/components/shared/EstadoInfo";
 import {
   BUCKET_OTROS,
   DESENLACES,
@@ -169,6 +170,15 @@ export function ConteoEntregasAnillo() {
         cargando={isLoading}
         error={mensaje}
       />
+      {/* FICHA 456 (T3.12, design §5.1 fila 17; R14/R37): la leyenda de `GraficaReparto` es
+          `aria-hidden`; la explicación de cada desenlace (que ES un estado) va en una leyenda
+          PROPIA debajo, en el orden de la barra. «Otros» es un grupo, no un estado: sin botón. */}
+      {hayDato ? (
+        <LeyendaEstadosConInfo
+          codigos={SEGMENTOS.filter((clave) => clave !== BUCKET_OTROS)}
+          titulo={TITULO_LEYENDA_ESTADOS}
+        />
+      ) : null}
     </div>
   );
 }

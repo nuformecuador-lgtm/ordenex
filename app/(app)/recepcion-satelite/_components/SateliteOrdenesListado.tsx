@@ -484,6 +484,10 @@ export function SateliteOrdenesListado({
   const estadoUnico =
     estadosSeleccionados.size === 1 ? [...estadosSeleccionados][0] : null;
   const haySeleccion = seleccionadas.length > 0;
+  // El texto del contador de selección (`role="status"`): una FRASE que nombra el estado común.
+  const textoSeleccion = `${seleccionadas.length} seleccionada(s) en esta página${
+    estadoUnico === null ? " · estados mezclados" : ` · ${etiquetaEstado(estadoUnico)}`
+  }`;
 
   /**
    * R48 — `true` si hay al menos una orden de ese estado ENTRE LAS SELECCIONADAS.
@@ -582,11 +586,7 @@ export function SateliteOrdenesListado({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p role="status" className="text-sm text-muted-foreground">
           {haySeleccion
-            ? `${seleccionadas.length} seleccionada(s) en esta página${
-                estadoUnico === null
-                  ? " · estados mezclados"
-                  : ` · ${etiquetaEstado(estadoUnico)}`
-              }`
+            ? textoSeleccion
             : /* R42: los DOS números son totales del servidor. El de la izquierda responde
                  a los filtros vigentes; el de la derecha es el conjunto del actor. Ninguno
                  sale de las filas de la página, que es lo que R42 prohíbe. */

@@ -1,10 +1,8 @@
 import type { GestionResultado } from "@prisma/client";
 
-import { NOTA_AYUDA_SOLICITADA } from "@/components/shared/nota-pendiente-confirmacion";
+import { NotaAyudaConInfo, SenalPendienteConInfo } from "@/components/shared/EstadoInfo";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-
-import { notaGestionPendiente } from "./estatus-label";
 
 // FICHA 454 (T2.2, R29) — LA NOTA que acompaña al chip de estado de una orden `en_reparto` cuando
 // su gestión ya se registró y el cierre del día no se aprobó («Entregada · pendiente de
@@ -38,16 +36,17 @@ export function NotaGestionPendiente({
   ayudaAbierta = false,
   className,
 }: NotaGestionPendienteProps) {
-  const texto =
-    resultadoPendiente !== null
-      ? notaGestionPendiente(resultadoPendiente)
-      : ayudaAbierta
-        ? NOTA_AYUDA_SOLICITADA
-        : null;
-  if (texto === null) return null;
-  return (
-    <Badge variant="outline" className={cn("font-normal", className)}>
+  // FICHA 456 (T3.2, R11/R12): la nota va con su botón de información, como hermano del `Badge`
+  // (que conserva su texto y su variante). La señal de pendiente explica con el texto de «En
+  // reparto»; la ayuda, con el de la nota de ayuda.
+  const chip = (texto: string) => (
+    <Badge variant="outline" className="font-normal">
       {texto}
     </Badge>
   );
+  if (resultadoPendiente !== null) {
+    return <SenalPendienteConInfo resultado={resultadoPendiente} chip={chip} className={cn(className)} />;
+  }
+  if (ayudaAbierta) return <NotaAyudaConInfo chip={chip} className={cn(className)} />;
+  return null;
 }

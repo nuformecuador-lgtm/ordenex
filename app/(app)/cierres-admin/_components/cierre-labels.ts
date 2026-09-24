@@ -43,6 +43,14 @@ export const RESULTADO_LABEL: Readonly<Record<CierreResultado, string>> = {
   incidente: nombreDeResultado("incidente"), // feature 158/R18
 };
 
+/**
+ * FICHA 456 (design §5.2): el título de una sección o pestaña que CUENTA gestiones de un resultado
+ * («Entregado (3)»). Es un rótulo de recuento: no lleva botón de información (cada fila sí).
+ */
+export function tituloResultadoConCifra(resultado: CierreResultado, cuantas: number): string {
+  return `${RESULTADO_LABEL[resultado]} (${cuantas})`;
+}
+
 /** Alias de `RESULTADO_LABEL` (feature 230; R45: la celda es SIEMPRE esta etiqueta, nunca el enum). */
 export const RESULTADO_FILA_LABEL: Readonly<Record<CierreResultado, string>> = RESULTADO_LABEL;
 

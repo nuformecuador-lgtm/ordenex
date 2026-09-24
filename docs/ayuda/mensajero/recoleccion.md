@@ -36,8 +36,8 @@ La lista es del día: mañana arranca vacía.
 
 ## Cosas que te pueden pasar
 
-**«Código inválido».** El número que escaneaste o escribiste no corresponde a ninguna orden por
-recolectar. Revisá el número; si el código está estropeado, escribilo a mano.
+**«Código inválido».** El número que escaneaste o escribiste no corresponde a ningún paquete que
+tengas que recolectar. Revisá el número; si el código está estropeado, escribilo a mano.
 
 **«No se pudo abrir la cámara».** El navegador no te dio permiso o la cámara está ocupada por otra
 app. Cerrá la otra app, o usá el campo de número de guía, que hace exactamente lo mismo.

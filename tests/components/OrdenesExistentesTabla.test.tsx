@@ -34,7 +34,11 @@ describe("OrdenesExistentesTabla — solo lectura (R5, R6)", () => {
   it("no ofrece ninguna accion de recarga sobre las existentes", () => {
     render(<OrdenesExistentesTabla existentes={EXISTENTES} />);
 
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    // ⏳ 2026-09-24 (FICHA 456, T3.2/R9): el chip de estado lleva su botón de información («Qué
+    // significa «…»»), que solo abre la explicación. Se descuenta; ninguna OTRA acción se ofrece.
+    const esInfo = (b: HTMLElement) => (b.getAttribute("aria-label") ?? "").startsWith("Qué significa «");
+    expect(screen.queryAllByRole("button").filter((b) => !esInfo(b))).toHaveLength(0);
+    expect(screen.queryAllByRole("button").filter(esInfo).length).toBeGreaterThan(0);
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 });

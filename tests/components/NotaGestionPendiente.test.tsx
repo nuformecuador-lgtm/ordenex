@@ -67,3 +67,25 @@ describe("454/R29 — el chip de la nota", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+// FICHA 456 (T3.2, design §5.1 filas 3 y 18; R11, R12, R23) — la señal de pendiente y la nota de
+// ayuda, junto al chip de `/ordenes` y del detalle, llevan su botón de información.
+describe("456 — la nota lleva su botón de información", () => {
+  it("señal de pendiente → «Qué significa «pendiente de confirmación»»", () => {
+    render(<NotaGestionPendiente resultadoPendiente="novedad" />);
+    expect(screen.getByText("Novedad · pendiente de confirmación")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Qué significa «pendiente de confirmación»" })).toBeTruthy();
+  });
+
+  it("ayuda abierta → «Qué significa «Ayuda solicitada a la tienda»»", () => {
+    render(<NotaGestionPendiente resultadoPendiente={null} ayudaAbierta />);
+    expect(screen.getByText("Ayuda solicitada a la tienda")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Qué significa «Ayuda solicitada a la tienda»" })).toBeTruthy();
+  });
+
+  it("sin nada que pintar, ni nota ni botón", () => {
+    const { container } = render(<NotaGestionPendiente resultadoPendiente={null} />);
+    expect(container.textContent).toBe("");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+});

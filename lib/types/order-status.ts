@@ -1,3 +1,5 @@
+import { devolucionSlaConfig, type DevolucionSlaConfig } from "@/lib/config/devolucion-sla";
+
 // Fuente unica de verdad de los estatus de orden (R2), patron ROLES_SEED.
 // El seed idempotente (seedOrderStatus) itera esta lista con upsert por `value`.
 // Feature 15/R5: suma "en_preparacion" (8vo valor), nuevo default GLOBAL de
@@ -244,6 +246,113 @@ export function codigoVigente(value: string): string {
 export function mensajeCodigoAnterior(anterior: CodigoAnterior): string {
   const vigente = CODIGO_VIGENTE_DE_ANTERIOR[anterior];
   return `'${anterior}' ya no existe: ahora se llama '${vigente}' («${NOMBRE_ESTADO[vigente]}»). Ver docs/api/CHANGELOG.md.`;
+}
+
+// =================================================================================================
+// FICHA 456 (2026-09-24, design §1.1 DA/DB; R1-R8) — LA EXPLICACION DE CADA ESTADO, junto a su nombre.
+//
+// El boton de informacion (`components/shared/EstadoInfo.tsx`) muestra, al lado de cada nombre de
+// estado, el texto que dice que significa. Vive AQUI, pegado a `NOMBRE_ESTADO`, por la misma razon
+// que el nombre: una sola fuente para todas las superficies y todos los roles (R7), y la guardia G3
+// de la 455 prohibe cualquier `Record` codigo->texto fuera de este archivo.
+//
+// Los textos son LITERALES de la tabla aprobada por el humano
+// (`specs/456-tooltip-estados/textos-aprobados.md`), salvo «Novedad», cuyos dos plazos se LEEN de
+// `lib/config/devolucion-sla.ts` (R4/R5): un numero repetido a mano es el fallo de la 407/409. El tope
+// de intentos (`lib/config/reintentos.ts`) NO se importa: es configurable por entorno y el texto no
+// da el numero (R6). Los ancla `tests/unit/types/descripcion-estado.test.ts` contra el `.md` leido
+// del disco.
+// =================================================================================================
+
+/**
+ * R4/R5/R6 — la unica explicacion CONSTRUIDA. Exige plazos >= 2: con 1, «a las 1 horas» / «a los 1
+ * dias» es falso en castellano y necesitaria un texto nuevo aprobado por el humano. Con < 2 lanza al
+ * cargar el modulo (nadie ve un texto mal escrito).
+ */
+export function descripcionNovedad(plazos: DevolucionSlaConfig): string {
+  const { HORAS_REINTENTO: horas, DIAS_RECHAZO_AUTOMATICO: dias } = plazos;
+  if (!Number.isInteger(horas) || horas < 2) {
+    throw new Error(`descripcionNovedad: HORAS_REINTENTO=${horas} no cabe en el texto aprobado (exige un entero >= 2)`);
+  }
+  if (!Number.isInteger(dias) || dias < 2) {
+    throw new Error(`descripcionNovedad: DIAS_RECHAZO_AUTOMATICO=${dias} no cabe en el texto aprobado (exige un entero >= 2)`);
+  }
+  return (
+    "El mensajero no pudo entregar el paquete (cliente no localizado, número o dirección errados). " +
+    "La tienda debe decidir si se vuelve a intentar o se devuelve. " +
+    `Si no responde: con cliente no localizado, a las ${horas} horas vuelve a salir a reparto; ` +
+    `con número o dirección errados, a los ${dias} días se devuelve a la tienda. ` +
+    "Si ya agotó sus intentos, se devuelve antes."
+  );
+}
+
+/** R1-R3 — la explicacion de cada uno de los 20 estados vigentes. Literal salvo `novedad`. */
+export const DESCRIPCION_ESTADO = {
+  por_recolectar_en_tienda:
+    "El paquete está en la tienda y todavía no hay un mensajero asignado para recogerlo.",
+  recolectando: "Ya hay un mensajero asignado y va camino a la tienda a recoger el paquete.",
+  en_ruta_bodega_central:
+    "El mensajero recogió el paquete en la tienda y lo lleva a la bodega central.",
+  en_preparacion:
+    "El paquete ya está en nuestra bodega y se está preparando su guía para despacharlo.",
+  en_bodega_central:
+    "El paquete está en la bodega central, listo para asignarse a un mensajero o enviarse a una bodega satélite.",
+  en_ruta_bodega_satelite:
+    "El paquete viaja desde la bodega central hacia la bodega satélite de su zona.",
+  en_bodega_satelite:
+    "El paquete llegó a la bodega satélite de su zona y espera ser asignado a un mensajero.",
+  mensajero_recogiendo_en_bodega:
+    "El paquete ya tiene mensajero asignado, que debe recogerlo en la bodega para salir a reparto.",
+  en_reparto:
+    "El mensajero tiene el paquete y lo lleva al destinatario. Si ya lo gestionó, verás el resultado como «pendiente de confirmación» hasta que se apruebe su cierre del día.",
+  entregado:
+    "El paquete fue entregado al destinatario y la bodega lo confirmó al aprobar el cierre del mensajero.",
+  reprogramado:
+    "No se pudo entregar y se acordó una nueva fecha. El paquete vuelve a su bodega para asignarse de nuevo.",
+  novedad: descripcionNovedad(devolucionSlaConfig),
+  novedad_interna:
+    "El mensajero terminó el día sin gestionar el paquete. Al aprobarse su cierre, el paquete vuelve a su bodega para asignarse de nuevo.",
+  devolucion_a_origen_por_rechazo:
+    "El destinatario rechazó el paquete. Al aprobarse el cierre, empieza su regreso a la tienda.",
+  incidente: "El paquete se dañó, se perdió o fue robado. Quedó reportado para su revisión.",
+  por_devolver_a_bodega_central:
+    "El paquete devuelto está en la bodega satélite, esperando ser enviado a la bodega central.",
+  devolviendo_a_bodega_central:
+    "El paquete devuelto viaja de la bodega satélite a la bodega central.",
+  por_devolver_a_tienda:
+    "El paquete devuelto está en la bodega central, esperando ser enviado a la tienda.",
+  devolviendo_a_tienda:
+    "El paquete va camino de regreso a la tienda. También pasa aquí cuando la tienda cancela el envío.",
+  devuelta_a_tienda: "La tienda recibió de vuelta su paquete. Fin del recorrido.",
+} as const satisfies Record<OrderStatusValue, string>;
+
+/**
+ * R8 — la explicacion de la nota de ayuda («Ayuda solicitada a la tienda», `NOTA_AYUDA_SOLICITADA`).
+ * ⚠️ PENDIENTE DE VISTO BUENO DEL HUMANO (`textos-aprobados.md`, seccion propia, 2026-09-23). Si el
+ * humano lo cambia, se cambia esa seccion y `descripcion-estado.test.ts` obliga a actualizar esto.
+ */
+export const DESCRIPCION_NOTA_AYUDA =
+  "El mensajero pidió ayuda a la tienda con esta entrega. El paquete sigue en reparto hasta que se registre su gestión.";
+
+/**
+ * R15 — la explicacion de un codigo, o `null` si no es un estado vigente (retirado, desconocido o
+ * vacio): quien la llame no pinta boton, porque no hay texto aprobado para ellos.
+ */
+export function descripcionDeEstado(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return tiene(DESCRIPCION_ESTADO, value) ? DESCRIPCION_ESTADO[value] : null;
+}
+
+/**
+ * design DF — la inversa de `NOMBRE_ESTADO`: el rastreo publico recibe NOMBRES (455/R31, la frontera
+ * publica no publica codigos) y el cliente los traduce a codigo para buscar su explicacion. `null`
+ * si el nombre no es el de un estado vigente («Estado no reconocido» incluido).
+ */
+export function codigoDeNombre(nombre: string): OrderStatusValue | null {
+  for (const codigo of ORDER_STATUS_SEED) {
+    if (NOMBRE_ESTADO[codigo] === nombre) return codigo;
+  }
+  return null;
 }
 
 // Feature 63/A1 (R1-R4): resultado tipado y discriminado de la Server Action

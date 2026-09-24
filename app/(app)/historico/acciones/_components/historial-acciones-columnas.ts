@@ -1,4 +1,7 @@
+import { createElement, type ReactNode } from "react";
+
 import type { Column } from "@/components/shared/DataTable";
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
 import { money } from "@/lib/config/moneda";
 import {
@@ -59,6 +62,18 @@ const ACCIONES_CON_RESULTADO_EN_VALOR: ReadonlySet<string> = new Set(["cierre_di
 export function valorLegible(accion: string, valor: string | null): string | null {
   if (valor === null) return null;
   return ACCIONES_CON_RESULTADO_EN_VALOR.has(accion) ? nombreDeEstado(valor) : valor;
+}
+
+/**
+ * FICHA 456 (T3.13, R10): la CELDA del valor. Si la accion guarda el codigo de un resultado, se pinta
+ * con `EstadoConInfo` (su nombre visible, el mismo de `valorLegible`, y su boton de informacion); si
+ * no, el texto de siempre. La descarga sigue leyendo `valorLegible` (R17: sin columnas nuevas).
+ */
+function celdaValor(accion: string, valor: string | null): ReactNode {
+  if (valor !== null && ACCIONES_CON_RESULTADO_EN_VALOR.has(accion)) {
+    return createElement(EstadoConInfo, { codigo: valor });
+  }
+  return valorLegible(accion, valor) ?? SIN_DATO;
 }
 
 /**
@@ -166,12 +181,12 @@ export const columnasHistorialAcciones: Column<HistorialAccionDTO>[] = [
     id: "anterior",
     value: "Valor anterior",
     minWidth: "10rem",
-    render: (fila) => valorLegible(fila.accion, fila.valorAnterior) ?? SIN_DATO,
+    render: (fila) => celdaValor(fila.accion, fila.valorAnterior),
   },
   {
     id: "nuevo",
     value: "Valor nuevo",
     minWidth: "10rem",
-    render: (fila) => valorLegible(fila.accion, fila.valorNuevo) ?? SIN_DATO,
+    render: (fila) => celdaValor(fila.accion, fila.valorNuevo),
   },
 ];

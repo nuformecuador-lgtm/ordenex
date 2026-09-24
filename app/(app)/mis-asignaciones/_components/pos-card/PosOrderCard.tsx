@@ -25,7 +25,7 @@ import { AsignacionDetalle } from "../AsignacionDetalle";
 import { PosAmountRow } from "./PosAmountRow";
 import { PosCardHeader } from "./PosCardHeader";
 import { PosNavBlock } from "./PosNavBlock";
-import { marcasDeTarjeta, textoChipEstado } from "./pos-estado";
+import { marcasDeTarjeta } from "./pos-estado";
 import { textoMensajero } from "./pos-mensajero";
 import { seccionesVisibles, type PosSecciones } from "./pos-secciones";
 
@@ -64,6 +64,12 @@ export interface PosOrderCardProps {
    * SUSTITUÍA («Por recoger», «En ayuda», «Recolectada»…).
    */
   nota?: string;
+  /**
+   * FICHA 456 (T3.6, R12): la orden tiene una ayuda a la tienda ABIERTA (454). La card pinta la nota
+   * «Ayuda solicitada a la tienda» junto al chip, con su botón de información. Va aparte de `nota`
+   * porque su texto y su explicación son fijos (`NotaAyudaConInfo`); las tres vistas la respetan.
+   */
+  notaAyuda?: boolean;
   /**
    * `false` para superficies sin ruta optimizada ("Por recoger"): oculta el nº de parada
    * de la cabecera y la marca "Pendiente de optimizar". Default `true`.
@@ -117,6 +123,7 @@ export function PosOrderCard({
   bloqueado = false,
   onGestionar,
   nota,
+  notaAyuda = false,
   mostrarRuta = true,
   secciones,
   acciones,
@@ -166,7 +173,6 @@ export function PosOrderCard({
   // La card responde a puntero/teclado solo si hay selección disponible y no está bloqueada.
   const seleccionable = Boolean(onGestionar) && !bloqueado;
   // FICHA 455 (R7/R8): el chip es el estado de la orden; activa/detalle/nota van en marcas aparte.
-  const estado = textoChipEstado(orden);
   const marcas = marcasDeTarjeta(esActiva, esDetalle, nota);
 
   return (
@@ -190,8 +196,8 @@ export function PosOrderCard({
       <PosCardHeader
         orden={orden}
         total={total}
-        estado={estado}
         marcas={marcas}
+        notaAyuda={notaAyuda}
         mostrarParada={mostrarRuta}
       />
 

@@ -11,6 +11,7 @@ import {
   Warehouse,
 } from "lucide-react";
 
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -1434,9 +1435,9 @@ const SIN_GESTION_LISTA_LABEL = `Lista de órdenes que pasaron a ${NOVEDAD_INTER
 // de la tienda», un nombre que el estado nunca tuvo): un origen vigente se lee con su nombre y el
 // retirado de la 454 como «Ayuda solicitada a la tienda (estado retirado)» (R11), igual que en la
 // línea de tiempo. `null`/ausente sigue OMITIENDO la pieza (R32).
-function rotuloOrigen(origen: OrderStatusValue | OrderStatusRetirado): string | undefined {
-  return origen ? nombreDeEstado(origen) : undefined;
-}
+//
+// FICHA 456 (T3.4): el rótulo ya no se calcula aquí: `EstadoConInfo` lo calcula con la misma
+// `nombreDeEstado` y le pone su botón de información (R9); un retirado sale sin botón (R15).
 
 /** Tono de la píldora de conteo de cada pestaña, por resultado. */
 const TAB_TONO: Record<CierreResultado, "success" | "warning" | "neutral"> = {
@@ -1528,6 +1529,9 @@ function TabResultado({
   active: boolean;
   onSelect: () => void;
 }>) {
+  // FICHA 456 (design §5.2): la pestaña con cifra es un control (`role="tab"`) y un rótulo de
+  // recuento: su nombre no lleva botón (cada fila del panel que abre, sí).
+  const nombrePestana = RESULTADO_LABEL[resultado];
   const tonos = {
     success: "bg-success/15 text-success-strong",
     warning: "bg-warning/15 text-warning-strong",
@@ -1550,7 +1554,7 @@ function TabResultado({
           : "border-transparent text-muted-foreground hover:text-foreground",
       )}
     >
-      {RESULTADO_LABEL[resultado]}
+      {nombrePestana}
       <span
         className={cn(
           "rounded-full px-1.5 py-0.5 text-[0.6875rem]",
@@ -2124,7 +2128,7 @@ function SeccionRechazosDeTienda({
  * producto y **desaparece** cuando no consta (R32): no se pinta un guion en su lugar.
  */
 function FilaSinGestion({ o }: Readonly<{ o: CierreOrdenSinGestion }>) {
-  const origen = o.estatusOrigen ? rotuloOrigen(o.estatusOrigen) : undefined;
+  const origen: OrderStatusValue | OrderStatusRetirado | null = o.estatusOrigen ?? null;
   return (
     // `break-inside-avoid` (feature 223): mismo criterio que `FilaGestion` — la fila se repite N
     // veces y es la que decide dónde caen los cortes. Partida, deja la guía en una página y el
@@ -2149,9 +2153,14 @@ function FilaSinGestion({ o }: Readonly<{ o: CierreOrdenSinGestion }>) {
         <span className="truncate text-[13px] text-foreground">
           {o.destinatario}
         </span>
-        <span className="truncate text-[11px] text-muted-foreground">
-          {o.numRemision} · {o.producto}
-          {origen ? ` · ${origen}` : null}
+        {/* FICHA 456 (T3.4, R9/R15): el estado de origen con su botón de información (un origen
+            retirado sale con su nombre histórico y sin botón). */}
+        <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
+          <span className="truncate">
+            {o.numRemision} · {o.producto}
+            {origen ? " · " : null}
+          </span>
+          {origen ? <EstadoConInfo codigo={origen} className="shrink-0" /> : null}
         </span>
       </span>
       <span className="min-w-0 truncate text-[13px] text-muted-foreground">

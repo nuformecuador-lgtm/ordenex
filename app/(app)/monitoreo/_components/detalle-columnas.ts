@@ -51,9 +51,11 @@
 // que empiece por `sumar`, ni la lectura del papel del actor. El alcance llega YA RESUELTO
 // desde el servidor y aqui solo se consume su respuesta.
 
-import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import { createElement } from "react";
+
 import { ordenesColumns } from "@/app/(app)/ordenes/_components/ordenes-columns";
 import type { Column } from "@/components/shared/DataTable";
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import type { AlcanceTableroDia, OrdenDetalleDia } from "@/lib/types/tablero-dia";
 
 /** Id de la UNICA columna propia del detalle (R22). La declara este modulo y nadie mas. */
@@ -110,7 +112,11 @@ function columnaResultadoDelDia(): Column<OrdenDetalleDia> {
   return {
     id: COLUMNA_RESULTADO_ID,
     value: COLUMNA_RESULTADO_LABEL,
-    render: (orden) => estatusLabel(orden.resultadoDelDia),
+    // FICHA 456 (T3.10, R10): el resultado nombra un estado y lleva su botón de información. El
+    // nombre lo calcula `EstadoConInfo` con la misma `nombreDeEstado`; sigue siendo TEXTO (sin chip).
+    // `null` (sin gestión hoy) sigue siendo «—», sin botón.
+    render: (orden) =>
+      orden.resultadoDelDia ? createElement(EstadoConInfo, { codigo: orden.resultadoDelDia }) : "—",
   };
 }
 

@@ -441,3 +441,18 @@ describe("NovedadesTabs — la superficie inicial (409/R7)", () => {
     ).toBeInTheDocument();
   });
 });
+
+// FICHA 456 (T3.15, design §5.2; R16) — las pestañas de `/novedades` («Novedad», «Ayuda solicitada»)
+// son rótulos de recuento y controles: no llevan botón de información (cada tarjeta de dentro, sí).
+describe("456 — las pestañas de novedades no llevan botón de información", () => {
+  it("0 botones «Qué significa» en la barra de pestañas", () => {
+    renderTabs();
+    const pestanas = screen.getAllByRole("tab");
+    expect(pestanas.length).toBeGreaterThan(0);
+    for (const t of pestanas) {
+      expect(within(t).queryAllByRole("button", { name: /^Qué significa «/ })).toHaveLength(0);
+    }
+    const lista = screen.getByRole("tablist");
+    expect(within(lista).queryAllByRole("button", { name: /^Qué significa «/ })).toHaveLength(0);
+  });
+});

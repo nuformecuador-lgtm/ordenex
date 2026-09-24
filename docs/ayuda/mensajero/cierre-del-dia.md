@@ -46,7 +46,7 @@ Ahí mismo podés **descargar el detalle** si lo necesitás para cuadrar por tu 
 
 ## Devolver una orden a gestión
 
-Si al revisar el detalle ves que una orden entró mal —la marcaste entregada por error, por ejemplo—
+Si al revisar el detalle ves que una orden entró mal —la marcaste como Entregado por error, por ejemplo—
 tenés **Devolver la orden a gestión**. La orden sale de ese cierre y vuelve a tu lista de trabajo para
 que la gestionés bien.
 
