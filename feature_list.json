@@ -5455,6 +5455,28 @@
       "depends_on": 455,
       "status_note": "HECHA 2026-09-24, en dev por PR #821. NO desplegada: sale con SF-001, 454 y 455 cuando el humano lo ordene. Revision APROBADA (3 menores cerrados); recorrido por rol con mensajero movil; gate completo verde (2177 archivos). || ANTES DE DESPLEGAR: visto bueno del humano al texto de la nota de ayuda (seccion pendiente en specs/456-tooltip-estados/textos-aprobados.md).",
       "branch": "feature/456-tooltip-estados"
+    },
+    {
+      "id": 457,
+      "title": "la tienda le paga a Ordenex",
+      "description": "Registrar un pago recibido de una tienda con saldo en contra: sube su saldo, entra a la caja y queda asociado a la tienda y a su motivo.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-24. Caso real: Nuform con saldo -6.170.666,55 en prod quiere pagar a Ordenex. || DECIDIDO: entra a la caja como dinero de TERCEROS (no ganancia: los fletes ya se contaron al aprobar cada cierre), con la condicion del humano de que quede ASOCIADO: debe ser muy facil ver que fue un pago de esa tienda y por que motivo. Espejo de registrarPagoTienda (documento, idempotencia, bloqueo, tope = lo que debe, anulacion con motivo). Reabre a conciencia la D3 de la 381 (test que prohibe abono_tienda_registrado). || Su UI final sale del rediseño de la 458; la forma de pantalla se acuerda en la maqueta."
+    },
+    {
+      "id": 458,
+      "title": "rediseño de la wallet: cada movimiento dice que, quien, por que y como quedo",
+      "description": "Un solo registro de movimientos con catalogo predefinido y estado de cuenta claro por tienda, mensajero y bodega.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "alta",
+      "depends_on": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-09-24, alcance AMPLIADO a toda la wallet («esa falencia la tenemos en gran parte de la wallet»). Pasa por maqueta antes del spec; la arma el leader y se revisa con el humano. Se partira en fichas tras acordar la maqueta. || Inventario de hoy y problemas en el chat del 2026-09-24: modal que mezcla dos libros, dos formas de cobrar a tienda, anulacion desigual, sin comprobantes ni asociacion a orden/mensajero, filtro de cierre por ID a mano, origen gestion_orden crudo, categorias fantasma en filtros."
     }
   ]
 }
