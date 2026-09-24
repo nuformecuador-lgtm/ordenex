@@ -1,0 +1,35 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-abcae9f1af1b22f27
+
+ ❯ tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts (5 tests | 1 failed) 11ms
+     × ninguna segunda fuente de nombres ni humanizacion fuera de lo pendiente de la Fase 2 5ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  11:17:02
+   Duration  2.19s (transform 120ms, setup 53ms, import 1.92s, tests 11ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts > 455/R42 · R3 · R12 (G3) — el arbol > ninguna segunda fuente de nombres ni humanizacion fuera de lo pendiente de la Fase 2
+AssertionError: otro modulo declara nombres de estado o humaniza un codigo. El nombre sale de `nombreDeEstado` (`lib/types/order-status.ts`); los colores y variantes, de un mapa indexado por CODIGO.: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "app/(app)/ordenes/_components/EstatusBadge.tsx:119 mapa codigo->texto",
++ ]
+
+ ❯ tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts:189:7
+    187|       "otro modulo declara nombres de estado o humaniza un codigo. El …
+    188|         "(`lib/types/order-status.ts`); los colores y variantes, de un…
+    189|     ).toEqual([]);
+       |       ^
+    190|   });
+    191|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

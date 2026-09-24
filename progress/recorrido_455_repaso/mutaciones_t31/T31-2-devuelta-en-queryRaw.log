@@ -1,0 +1,77 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-abcae9f1af1b22f27
+
+ ❯ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts (5 tests | 5 skipped) 467ms
+ ❯ tests/unit/guards/censo-order-status-rename.test.ts (14 tests | 1 failed) 664ms
+     × ningun archivo de app/ lib/ components/ hooks/ scripts/ tests/ e2e/ ni de los docs de integradores usa un codigo anterior 6ms
+
+ Test Files  2 failed | 4 passed (6)
+      Tests  1 failed | 25 passed | 5 skipped (31)
+   Start at  11:16:50
+   Duration  8.58s (transform 3.80s, setup 225ms, import 17.08s, tests 3.75s, environment 1ms)
+
+(node:24444) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real)
+AnaliticaRollupError: rollup analitica 2001-06-15: fallo en la etapa gestiones
+ ❯ AnaliticaRollupService.enEtapa lib/services/AnaliticaRollupService.ts:324:13
+    322|         throw error;
+    323|       }
+    324|       throw new AnaliticaRollupError(fecha, etapa, error);
+       |             ^
+    325|     }
+    326|   }
+ ❯ AnaliticaRollupService.componerFilas lib/services/AnaliticaRollupService.ts:191:21
+ ❯ AnaliticaRollupService.agregarFecha lib/services/AnaliticaRollupService.ts:133:19
+ ❯ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts:170:7
+ ❯ prisma.$transaction.timeout tests/integration/db/_postgres-real.ts:228:28
+ ❯ Proxy._transactionWithCallback ../../../node_modules/.pnpm/@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:810:17
+ ❯ enTransaccionRevertida tests/integration/db/_postgres-real.ts:226:5
+ ❯ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts:239:9
+
+Caused by: PrismaClientKnownRequestError: 
+Invalid `prisma.$queryRaw()` invocation:
+
+
+Raw query failed. Code: `22P02`. Message: `la sintaxis de entrada no es válida para el enum gestion_resultado: «devuelta»`
+ ❯ zr.handleRequestError ../../../node_modules/.pnpm/@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9/node_modules/@prisma/client/runtime/client.js:65:8286
+ ❯ zr.handleAndLogRequestError ../../../node_modules/.pnpm/@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9/node_modules/@prisma/client/runtime/client.js:65:7581
+ ❯ zr.request ../../../node_modules/.pnpm/@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9/node_modules/@prisma/client/runtime/client.js:65:7288
+ ❯ a ../../../node_modules/.pnpm/@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9/node_modules/@prisma/client/runtime/client.js:75:6862
+ ❯ AnaliticaRollupRepository.contarGestionesVigentes lib/repositories/AnaliticaRollupRepository.ts:213:19
+ ❯ AnaliticaRollupService.enEtapa lib/services/AnaliticaRollupService.ts:315:14
+ ❯ AnaliticaRollupService.componerFilas lib/services/AnaliticaRollupService.ts:191:21
+ ❯ AnaliticaRollupService.agregarFecha lib/services/AnaliticaRollupService.ts:133:19
+ ❯ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts:170:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'P2010', meta: { driverAdapterError: { stack: 'DriverAdapterError: la sintaxis de entrada no es válida para el enum gestion_resultado: «devuelta»\n    at PgTransaction.onError (file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/@prisma+adapter-pg@7.8.0/node_modules/@prisma/adapter-pg/dist/index.mjs:642:11)\n    at PgTransaction.performIO (file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/@prisma+adapter-pg@7.8.0/node_modules/@prisma/adapter-pg/dist/index.mjs:637:12)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at PgTransaction.queryRaw (file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/@prisma+adapter-pg@7.8.0/node_modules/@prisma/adapter-pg/dist/index.mjs:568:30)\n    at e.interpretNode (R:\job\singularis\projects\ordenex\node_modules\.pnpm\@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9\node_modules\@prisma\client\runtime\client.js:11:44621)\n    at e.run (R:\job\singularis\projects\ordenex\node_modules\.pnpm\@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9\node_modules\@prisma\client\runtime\client.js:11:43335)\n    at execute (R:\job\singularis\projects\ordenex\node_modules\.pnpm\@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9\node_modules\@prisma\client\runtime\client.js:57:815)\n    at jt.request (R:\job\singularis\projects\ordenex\node_modules\.pnpm\@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9\node_modules\@prisma\client\runtime\client.js:58:2401)\n    at Object.singleLoader (R:\job\singularis\projects\ordenex\node_modules\.pnpm\@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9\node_modules\@prisma\client\runtime\client.js:65:6569)', message: 'la sintaxis de entrada no es válida para el enum gestion_resultado: «devuelta»', name: 'DriverAdapterError', cause: { originalCode: '22P02', originalMessage: 'la sintaxis de entrada no es válida para el enum gestion_resultado: «devuelta»', kind: 'InvalidInputValue', message: 'la sintaxis de entrada no es válida para el enum gestion_resultado: «devuelta»' }, constructor: 'Function<DriverAdapterError>', toString: 'Function<toString>' } }, clientVersion: '7.8.0', batchRequestIdx: undefined }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/guards/censo-order-status-rename.test.ts > 455/R40 (G1) — el arbol no tiene codigos anteriores fuera de su excepcion > ningun archivo de app/ lib/ components/ hooks/ scripts/ tests/ e2e/ ni de los docs de integradores usa un codigo anterior
+AssertionError: un codigo ANTERIOR de la 455 volvio como codigo. Usa el vigente (`lib/types/order-status.ts`); si es para LEER un dato guardado antes de la ficha, traducelo con `codigoVigente`.: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "lib/repositories/AnaliticaRollupRepository.ts:214 devuelta",
++ ]
+
+ ❯ tests/unit/guards/censo-order-status-rename.test.ts:491:7
+    489|       "un codigo ANTERIOR de la 455 volvio como codigo. Usa el vigente…
+    490|         "si es para LEER un dato guardado antes de la ficha, traducelo…
+    491|     ).toEqual([]);
+       |       ^
+    492|   });
+    493|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

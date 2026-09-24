@@ -1,0 +1,85 @@
+  volcado publico_rastreo_990012 589 chars
+login admin.qa@ordenex.test dentro -> http://localhost:3455/dashboard
+  volcado admin_ordenes 6648 chars
+  volcado admin_monitoreo 1758 chars
+  volcado admin_cierres_admin 899 chars
+  sin 'Ver / decidir' ["Colapsar menú","Inicio","Analítica","Monitoreo","Órdenes","Ranking","Wallet","Cierres del día","Incidentes","Histórico","Ayuda","Toggle Sidebar","Ayuda de esta pantalla","Tema: Claro. Cambiar a Oscuro.","Notificaciones, 4 por hacer","Salir","Bodega","Mensajero","Filtros","Pendientes(0)","Resueltos","Descargar Cierres de bodega pendientes","Elegir el detalle y las columnas de la descarga","Primera página","Página anterior","Ir a la página 1","Página siguiente","Última página","Primera página","Página anterior","Ir a la página 1","Página siguiente","Última página","Filtros","Pendientes\n(1)","Resueltos\n(7)","Descargar Cierres pendientes de decisión","Elegir el detalle y las columnas de la descarga","Ver / decidir","Ver detalles del cierre de Marco Mensajero","Primera página","Página anterior","Ir a la página 1","Página siguiente","Última página","Ver el cierre resuelto de Rita Recorrido","Ver detalles del cierre de Rita Recorrido","Ver el cierre resuelto de Marco Mensajero","Ver detalles del cierre de Marco Mensajero","Ver el cierre resuelto de Marco Mensajero","Ver detalles del cierre de Marco Mensajero","Ver el cierre resuelto de Marco Mensajero","Ver detalles del cierre de Marco Mensajero","Ver el cierre resuelto de Marco Mensajero","Ver detalles del cierre de Marco Mensajero","Ver el cierre resuelto de Marco Mensajero","Ver detalles del cierre de Marco Mensajero","Ver el cierre resuelto de Marco Mensajero","Ver detalles del cierre de Marco Mensajero","Primera página"]
+  volcado admin_analitica 8310 chars
+  volcado admin_ranking 1466 chars
+  historial QA-R-0012 FALLO locator.click: Timeout 15000ms exceeded.
+  historial 111117 FALLO locator.click: Timeout 15000ms exceeded.
+  historial 111111 FALLO locator.click: Timeout 15000ms exceeded.
+login admin.qa@ordenex.test dentro -> http://localhost:3455/dashboard
+  historial QA-R-0012 FALLO locator.click: Timeout 15000ms exceeded.
+  historial 111117 FALLO locator.click: Timeout 15000ms exceeded.
+  historial 111111 FALLO locator.click: Timeout 15000ms exceeded.
+  volcado admin_cierres_admin 899 chars
+PASO admin FALLO locator.click: Timeout 30000ms exceeded.
+login admin.qa@ordenex.test dentro -> http://localhost:3455/dashboard
+  (aviso SINPE cerrado)
+  volcado admin_ordenes 6344 chars
+  volcado admin_monitoreo 1454 chars
+  volcado admin_cierres_admin 593 chars
+  volcado admin_cierres_admin_decidir 3305 chars
+  volcado admin_analitica 8004 chars
+  volcado admin_ranking 1160 chars
+  volcado admin_historial_QA-R-0012 1524 chars
+  volcado admin_historial_111117 832 chars
+  volcado admin_historial_111111 352 chars
+login mensajero.qa@ordenex.test dentro -> http://localhost:3455/dashboard
+  volcado mensajero_cierre_dia 1157 chars
+  volcado mensajero_recoleccion 390 chars
+  volcado mensajero_reparto 795 chars
+  volcado mensajero_chat_lista 293 chars
+  volcado mensajero_ayuda 306 chars
+login mensajero.qa@ordenex.test dentro -> http://localhost:3455/dashboard
+  volcado mensajero_cierre_dia 1157 chars
+  volcado mensajero_recoleccion 390 chars
+  volcado mensajero_reparto 795 chars
+  volcado mensajero_chat_conversacion 293 chars
+  botones del chat ["AMAlejandra MenaQA-R-001797865841En repartoColón · Mora","MAMagaly Aguilar111112Mensajero recogiendo en la bodegaMercedes · Montes de Oca","YYendri111138Mensajero recogiendo en la bodegaCurridabat · Curridabat","JRJose Ruiz111111Mensajero recogiendo en la bodegaDesamparados · Desamparados","Volver a la lista","Llamar por WhatsApp a Alejandra Mena","Ver detalle","Adjuntar","Enviar mensaje","Cerrar"]
+  volcado mensajero_chat_lista 403 chars
+  volcado mensajero_ayuda 306 chars
+  paginas de ayuda mensajero ["/ayuda/mensajero/cierre-del-dia","/ayuda/mensajero/ranking","/ayuda/mensajero/por-recoger","/ayuda/mensajero/recoleccion","/ayuda/mensajero/reparto","/ayuda/publico/entrar-y-recuperar-contrasena","/ayuda/publico/postulacion","/ayuda/publico/rastreo-de-paquete"]
+  volcado mensajero_ayuda_mensajero_cierre_del_dia 2518 chars
+  volcado mensajero_ayuda_mensajero_ranking 1516 chars
+  volcado mensajero_ayuda_mensajero_por_recoger 2928 chars
+  volcado mensajero_ayuda_mensajero_recoleccion 1638 chars
+  volcado mensajero_ayuda_mensajero_reparto 4108 chars
+  volcado mensajero_ayuda_publico_entrar_y_recuperar_contrasena 1979 chars
+  volcado mensajero_ayuda_publico_postulacion 1687 chars
+  volcado mensajero_ayuda_publico_rastreo_de_paquete 1423 chars
+login tienda.qa@ordenex.test dentro -> http://localhost:3455/dashboard
+  volcado tienda_novedades 499 chars
+  volcado tienda_novedades_tab_1 499 chars
+  pestaña 1 Ayuda solicitada
+  sin boton Rechazar
+  volcado tienda_novedades_tab_2 1996 chars
+  pestaña 2 Novedad
+  volcado tienda_novedades_tab_3 531 chars
+  pestaña 3 Devolución a origen por plazo vencido
+  volcado tienda_ayuda 554 chars
+  paginas de ayuda tienda ["/ayuda/tienda/mi-wallet","/ayuda/tienda/novedades","/ayuda/tienda/ordenes","/ayuda/compartido/analitica","/ayuda/publico/entrar-y-recuperar-contrasena","/ayuda/publico/postulacion","/ayuda/publico/rastreo-de-paquete"]
+  volcado tienda_ayuda_tienda_mi_wallet 2448 chars
+  volcado tienda_ayuda_tienda_novedades 2573 chars
+  volcado tienda_ayuda_tienda_ordenes 2458 chars
+  volcado tienda_ayuda_compartido_analitica 2380 chars
+  volcado tienda_ayuda_publico_entrar_y_recuperar_contrasena 2126 chars
+  volcado tienda_ayuda_publico_postulacion 1834 chars
+  volcado tienda_ayuda_publico_rastreo_de_paquete 1569 chars
+login satelite.qa@ordenex.test dentro -> http://localhost:3455/dashboard
+  (aviso SINPE cerrado)
+  volcado satelite_cierres_admin 528 chars
+  volcado satelite_cierre_ver 2917 chars
+  volcado satelite_ayuda 631 chars
+  paginas de ayuda satelite ["/ayuda/satelite/en-bodega","/ayuda/satelite/mi-bodega","/ayuda/satelite/por-recibir","/ayuda/oficina/cierres","/ayuda/oficina/incidentes","/ayuda/oficina/monitoreo","/ayuda/compartido/analitica","/ayuda/publico/entrar-y-recuperar-contrasena","/ayuda/publico/postulacion","/ayuda/publico/rastreo-de-paquete"]
+  volcado satelite_ayuda_satelite_en_bodega 3064 chars
+  volcado satelite_ayuda_satelite_mi_bodega 3365 chars
+  volcado satelite_ayuda_satelite_por_recibir 1792 chars
+  volcado satelite_ayuda_oficina_cierres 2679 chars
+  volcado satelite_ayuda_oficina_incidentes 1958 chars
+  volcado satelite_ayuda_oficina_monitoreo 2116 chars
+  volcado satelite_ayuda_compartido_analitica 2430 chars
+  volcado satelite_ayuda_publico_entrar_y_recuperar_contrasena 2176 chars
+  volcado satelite_ayuda_publico_postulacion 1884 chars
+  volcado satelite_ayuda_publico_rastreo_de_paquete 1619 chars

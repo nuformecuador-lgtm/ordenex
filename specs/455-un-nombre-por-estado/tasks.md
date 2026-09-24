@@ -183,12 +183,18 @@ Sin «SLA» en textos (memoria). Todas `[P]` entre sí salvo T2.1.
 
 ## FASE 3 — Verificación (leader + frontend_dev). Dep: T2.11
 
-- [ ] **T3.1 — Mutaciones de cierre.** Sobre el árbol final, secuencial y **nunca en paralelo con el gate**
+- [x] **T3.1 — Mutaciones de cierre.** (2026-09-24: hecha sobre `8ab6baae`, cinco rojos con nombre del test y
+  `git status` vacío después; `progress/recorrido_455_repaso.md` § T3.1 y `progress/recorrido_455_repaso/mutaciones_t31/`.)
+  Sobre el árbol final, secuencial y **nunca en paralelo con el gate**
   (memoria «Gate y mutaciones no en paralelo»): (1) reintroducir `"Entregada"` en un chip → G2 rojo; (2) un
   `'devuelta'` en un `$queryRaw` → G1 rojo y C03-C07 rojos; (3) un `Record` código→texto en un componente → G3
   rojo; (4) quitar `estadoNombre` del webhook → T1.7 rojo; (5) cambiar un nombre en `NOMBRE_ESTADO` → G4 rojo.
   **Hecho:** cinco rojos con nombre del test, y `git diff --stat` vacío después.
-- [ ] **T3.2 — Recorrido en navegador por rol** (Playwright MCP; memoria «Ver la app encuentra lo que la suite
+- [x] **T3.2 — Recorrido en navegador por rol** (2026-09-24: recorrido completo en `progress/recorrido_455.md`, con
+  11 hallazgos F1–F11 corregidos en `progress/impl_455_fix.md` y en `8ab6baae`; repaso de esas pantallas en
+  `progress/recorrido_455_repaso.md`: 15 de 15 OK, 0 códigos crudos, 0 `console.error`. Quedan dos observaciones
+  para que decida el leader, O6 «Todavía en proceso» en la dona de cohortes y O7 prosa de `/ayuda` en minúscula.)
+  (Playwright MCP; memoria «Ver la app encuentra lo que la suite
   no»; un solo dev server, memoria «Dos dev servers se pisan»). Base local con una orden en **cada uno de los 20
   estados**, una con gestión pendiente de cada resultado (454), una con ayuda abierta, y una fila histórica de
   cada retirado. En cada pantalla: capturar el texto visible y buscar **cada** nombre de §0.3 y **cada** código

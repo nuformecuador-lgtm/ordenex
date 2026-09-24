@@ -1,0 +1,243 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-abcae9f1af1b22f27
+
+ ❯ tests/unit/services/webhook-estado-service.test.ts (75 tests | 6 failed) 55ms
+     × con suscripcion activa hace POST a la URL del owner con el cuerpo del evento 13ms
+     × 256/R7 (+404): `data` tiene EXACTAMENTE las cinco claves, en orden, tambien en un evento de devolucion 1ms
+     × 268/R24 (1): en `incidente` viaja el enlace EXACTO; en `entregada` la clave NO existe 1ms
+     × 268/R19: el cuerpo de un evento NO-incidente conserva EXACTAMENTE sus claves de siempre 1ms
+     × 406/R7a: remision de 129 caracteres -> clave AUSENTE, cuerpo normal y job completado 1ms
+     × 406/R8: remision con un sustituto UTF-16 desemparejado -> clave AUSENTE y el job NO falla 1ms
+ ❯ tests/integration/db/455/caracterizacion/webhook-estado.test.ts (5 tests | 2 failed) 662ms
+       × las claves del data entregado: `estadoNombre` pegado detras de `estado` 6ms
+       × R25: el nombre es el visible de cada destino 1ms
+
+ Test Files  2 failed (2)
+      Tests  8 failed | 72 passed (80)
+   Start at  11:17:10
+   Duration  3.23s (transform 1.13s, setup 103ms, import 2.94s, tests 717ms, environment 0ms)
+
+(node:5092) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/services/webhook-estado-service.test.ts > R17/R19 — entrega y complete > con suscripcion activa hace POST a la URL del owner con el cuerpo del evento
+AssertionError: expected [ 'numGuia', 'numRemision', …(3) ] to deeply equal [ 'numGuia', 'numRemision', …(4) ]
+
+- Expected
++ Received
+
+  [
+    "numGuia",
+    "numRemision",
+    "estado",
+-   "estadoNombre",
+    "motivo",
+    "mensajero",
+  ]
+
+ ❯ tests/unit/services/webhook-estado-service.test.ts:232:36
+    230|     // protege es que las cuatro claves de la 256 sigan estando, con s…
+    231|     // posicion. La posicion es load-bearing porque la firma se calcul…
+    232|     expect(Object.keys(body.data)).toEqual([
+       |                                    ^
+    233|       "numGuia",
+    234|       "numRemision",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  tests/unit/services/webhook-estado-service.test.ts > 256/R6-R7 — la forma: UNA sola, el campo siempre presente > 256/R7 (+404): `data` tiene EXACTAMENTE las cinco claves, en orden, tambien en un evento de devolucion
+AssertionError: expected [ 'numGuia', 'numRemision', …(3) ] to deeply equal [ 'numGuia', 'numRemision', …(4) ]
+
+- Expected
++ Received
+
+  [
+    "numGuia",
+    "numRemision",
+    "estado",
+-   "estadoNombre",
+    "motivo",
+    "mensajero",
+  ]
+
+ ❯ tests/unit/services/webhook-estado-service.test.ts:451:36
+    449|     await service.ejecutar(jobDevuelta());
+    450|     const body = JSON.parse(cuerpoDe(entregar));
+    451|     expect(Object.keys(body.data)).toEqual([
+       |                                    ^
+    452|       "numGuia",
+    453|       "numRemision",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  tests/unit/services/webhook-estado-service.test.ts > 268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin credencial > 268/R24 (1): en `incidente` viaja el enlace EXACTO; en `entregada` la clave NO existe
+AssertionError: expected [ 'numGuia', 'numRemision', …(4) ] to deeply equal [ 'numGuia', 'numRemision', …(5) ]
+
+- Expected
++ Received
+
+  [
+    "numGuia",
+    "numRemision",
+    "estado",
+-   "estadoNombre",
+    "motivo",
+    "mensajero",
+    "evidenciasUrl",
+  ]
+
+ ❯ tests/unit/services/webhook-estado-service.test.ts:715:45
+    713|     // ⏳ 2026-09-09 (404/R9/R10): pasa de 5 a 6 claves. `mensajero` en…
+    714|     // que sigue cerrando el objeto y sigue siendo la UNICA clave opci…
+    715|     expect(Object.keys(bodyIncidente.data)).toEqual([
+       |                                             ^
+    716|       "numGuia",
+    717|       "numRemision",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tests/unit/services/webhook-estado-service.test.ts > 268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin credencial > 268/R19: el cuerpo de un evento NO-incidente conserva EXACTAMENTE sus claves de siempre
+AssertionError: expected [ 'numGuia', 'numRemision', …(3) ] to deeply equal [ 'numGuia', 'numRemision', …(4) ]
+
+- Expected
++ Received
+
+  [
+    "numGuia",
+    "numRemision",
+    "estado",
+-   "estadoNombre",
+    "motivo",
+    "mensajero",
+  ]
+
+ ❯ tests/unit/services/webhook-estado-service.test.ts:740:36
+    738|     expect(Object.keys(body)).toEqual(["evento", "eventoId", "ocurrido…
+    739|     // ⏳ 2026-09-09 (404/R9/R10): cuatro -> cinco, con `mensajero` al …
+    740|     expect(Object.keys(body.data)).toEqual([
+       |                                    ^
+    741|       "numGuia",
+    742|       "numRemision",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  tests/unit/services/webhook-estado-service.test.ts > 406/R7-R8 — sin identificador resoluble, la clave se OMITE y el job completa > 406/R7a: remision de 129 caracteres -> clave AUSENTE, cuerpo normal y job completado
+AssertionError: expected [ 'numGuia', 'numRemision', …(3) ] to deeply equal [ 'numGuia', 'numRemision', …(4) ]
+
+- Expected
++ Received
+
+  [
+    "numGuia",
+    "numRemision",
+    "estado",
+-   "estadoNombre",
+    "motivo",
+    "mensajero",
+  ]
+
+ ❯ tests/unit/services/webhook-estado-service.test.ts:966:31
+    964|     const { data } = JSON.parse(cuerpo);
+    965|     expect("evidenciasUrl" in data).toBe(false);
+    966|     expect(Object.keys(data)).toEqual(CINCO);
+       |                               ^
+    967|     expect(cuerpo).not.toContain("evidenciasUrl");
+    968|     // El resto del cuerpo va como siempre: la remision larga SI viaja…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  tests/unit/services/webhook-estado-service.test.ts > 406/R7-R8 — sin identificador resoluble, la clave se OMITE y el job completa > 406/R8: remision con un sustituto UTF-16 desemparejado -> clave AUSENTE y el job NO falla
+AssertionError: expected [ 'numGuia', 'numRemision', …(3) ] to deeply equal [ 'numGuia', 'numRemision', …(4) ]
+
+- Expected
++ Received
+
+  [
+    "numGuia",
+    "numRemision",
+    "estado",
+-   "estadoNombre",
+    "motivo",
+    "mensajero",
+  ]
+
+ ❯ tests/unit/services/webhook-estado-service.test.ts:1010:31
+    1008|     const { data } = JSON.parse(cuerpoDe(entregar));
+    1009|     expect("evidenciasUrl" in data).toBe(false);
+    1010|     expect(Object.keys(data)).toEqual(CINCO);
+       |                               ^
+    1011|   });
+    1012| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R25) > las claves del data entregado: `estadoNombre` pegado detras de `estado`
+AssertionError: expected [ …(3) ] to deeply equal [ …(3) ]
+
+- Expected
++ Received
+
+  [
+    [
+      "numGuia",
+      "numRemision",
+      "estado",
+-     "estadoNombre",
+      "motivo",
+      "mensajero",
+    ],
+    [
+      "numGuia",
+      "numRemision",
+      "estado",
+-     "estadoNombre",
+      "motivo",
+      "mensajero",
+    ],
+    [
+      "numGuia",
+      "numRemision",
+      "estado",
+-     "estadoNombre",
+      "motivo",
+      "mensajero",
+    ],
+  ]
+
+ ❯ tests/integration/db/455/caracterizacion/webhook-estado.test.ts:188:47
+    186|     // se compara contra el literal esperado, no contra la funcion que…
+    187|     it("las claves del data entregado: `estadoNombre` pegado detras de…
+    188|       expect(r.entregas.map((x) => x.claves)).toEqual([
+       |                                               ^
+    189|         ["numGuia", "numRemision", "estado", "estadoNombre", "motivo",…
+    190|         ["numGuia", "numRemision", "estado", "estadoNombre", "motivo",…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R25) > R25: el nombre es el visible de cada destino
+AssertionError: expected [ undefined, undefined, undefined ] to deeply equal [ 'Novedad', 'Entregado', …(1) ]
+
+- Expected
++ Received
+
+  [
+-   "Novedad",
+-   "Entregado",
+-   "Devolución a origen por rechazo",
++   undefined,
++   undefined,
++   undefined,
+  ]
+
+ ❯ tests/integration/db/455/caracterizacion/webhook-estado.test.ts:196:53
+    194|
+    195|     it("R25: el nombre es el visible de cada destino", () => {
+    196|       expect(r.entregas.map((x) => x.estadoNombre)).toEqual(["Novedad"…
+       |                                                     ^
+    197|     });
+    198|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
