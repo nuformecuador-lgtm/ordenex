@@ -175,18 +175,18 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
     //     FICHA 449: con ₡696 de bodega congelados, una de las dos tarifas de produccion.
     const liquidada = await crearOrden(tx, tiendaA, TEXTO_COMPARTIDO);
     await congelar(tx, cierreAprobado, liquidada, tarifaId, "10000.00", { fulfillment: FF_696 });
-    await crearGestion(tx, liquidada, mensajero, "entregada", "10000.00", cierreAprobado);
+    await crearGestion(tx, liquidada, mensajero, "entregado", "10000.00", cierreAprobado);
 
     // (2) PENDIENTE: entrega de 7.000 SIN cierre. Su recaudo es un hecho; su reparto, no.
     const pendiente = await crearOrden(tx, tiendaA, TEXTO_COMPARTIDO);
-    await crearGestion(tx, pendiente, mensajero, "entregada", "7000.00", null);
+    await crearGestion(tx, pendiente, mensajero, "entregado", "7000.00", null);
 
     // (3) RECHAZADA liquidada: no recauda, y su retorno va FUERA del reparto (R19).
     //     FICHA 449: SI cobra bodega. El contrato publico lo dice con todas las letras —
     //     «preparar y despachar el paquete ya costo, lo reciba el destinatario o no».
     const rechazada = await crearOrden(tx, tiendaA, TEXTO_COMPARTIDO);
     await congelar(tx, cierreAprobado, rechazada, tarifaId, "0.00", { fulfillment: FF_696 });
-    await crearGestion(tx, rechazada, mensajero, "rechazada", null, cierreAprobado);
+    await crearGestion(tx, rechazada, mensajero, "devolucion_a_origen_por_rechazo", null, cierreAprobado);
 
     // (4) LA MISMA ORDEN EN DOS CIERRES (R18): dos gestiones, dos snapshots, dos derivaciones
     //     que se SUMAN, y UNA sola orden en los cardinales.
@@ -197,36 +197,36 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
     const dosCierres = await crearOrden(tx, tiendaA, TEXTO_COMPARTIDO);
     await congelar(tx, cierreAprobado, dosCierres, tarifaId, "10000.00", { fulfillment: FF_696 });
     await congelar(tx, cierreAprobado2, dosCierres, tarifaId, "4000.00", { fulfillment: FF_696 });
-    await crearGestion(tx, dosCierres, mensajero, "entregada", "10000.00", cierreAprobado);
-    await crearGestion(tx, dosCierres, mensajero, "entregada", "4000.00", cierreAprobado2);
+    await crearGestion(tx, dosCierres, mensajero, "entregado", "10000.00", cierreAprobado);
+    await crearGestion(tx, dosCierres, mensajero, "entregado", "4000.00", cierreAprobado2);
 
     // (5) ANULADA con recaudo: ⟨Q3⟩ — se EXCLUYE. Es la que el humano midio en produccion
     //     (2 gestiones, ₡33.564, ninguna dentro de un cierre ni de un snapshot).
     const anulada = await crearOrden(tx, tiendaA, TEXTO_COMPARTIDO);
-    await crearGestion(tx, anulada, mensajero, "entregada", "33564.00", null, { anulada: true });
+    await crearGestion(tx, anulada, mensajero, "entregado", "33564.00", null, { anulada: true });
 
     // (6) MULTIPRODUCTO: su importe ENTERO cuenta en `base c` y en `dr melaxin` (R12).
     //     FICHA 449: con ₡800, la OTRA tarifa de produccion. Su bodega tambien cuenta ENTERA en
     //     los dos productos: no se reparte, se repite.
     const acompanada = await crearOrden(tx, tiendaA, TEXTO_ACOMPANADO);
     await congelar(tx, cierreAprobado, acompanada, tarifaId, "4000.00", { fulfillment: FF_800 });
-    await crearGestion(tx, acompanada, mensajero, "entregada", "4000.00", cierreAprobado);
+    await crearGestion(tx, acompanada, mensajero, "entregado", "4000.00", cierreAprobado);
 
     // (7) CIERRE SOLICITADO (⟨Q2⟩): snapshot congelado, dinero SIN salir -> PENDIENTE.
     //     FICHA 449: su snapshot SI trae bodega congelada, y AUN ASI no cuenta. Un cierre
     //     solicitado se ha llegado a BORRAR en este repo, y con el su snapshot.
     const solicitada = await crearOrden(tx, tiendaA, "1 * Producto Solicitado");
     await congelar(tx, cierreSolicitado, solicitada, tarifaId, "5000.00", { fulfillment: FF_696 });
-    await crearGestion(tx, solicitada, mensajero, "entregada", "5000.00", cierreSolicitado);
+    await crearGestion(tx, solicitada, mensajero, "entregado", "5000.00", cierreSolicitado);
 
     // (8) SIN TARIFA CONGELADA (R23): cierre aprobado, `tarifa_id` NULL -> no deriva nada.
     const sinTarifa = await crearOrden(tx, tiendaA, "1 * Producto Sin Tarifa");
     await congelar(tx, cierreAprobado, sinTarifa, null, "6000.00");
-    await crearGestion(tx, sinTarifa, mensajero, "entregada", "6000.00", cierreAprobado);
+    await crearGestion(tx, sinTarifa, mensajero, "entregado", "6000.00", cierreAprobado);
 
     // (9) BORRADA (R74): no cuenta en ningun bucket, aunque tenga dinero.
     const borrada = await crearOrden(tx, tiendaA, "1 * Producto Borrado");
-    await crearGestion(tx, borrada, mensajero, "entregada", "99999.00", null);
+    await crearGestion(tx, borrada, mensajero, "entregado", "99999.00", null);
     await tx.orden.update({ where: { id: borrada }, data: { deletedAt: new Date() } });
 
     // (10) LA OTRA TIENDA, con el MISMO producto y dinero propio: lo que el aislamiento protege.
@@ -237,7 +237,7 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
       tiendaId: tiendaB,
       fulfillment: FF_AJENO,
     });
-    await crearGestion(tx, deB, mensajero, "entregada", "10000.00", cierreAprobado);
+    await crearGestion(tx, deB, mensajero, "entregado", "10000.00", cierreAprobado);
 
     const repo = new DineroProductosRepository(tx as unknown as PrismaClient);
     const servicioDetalle = new DetalleDineroProductoService(repo);
@@ -321,8 +321,8 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
    */
   async function cifrasEnSql(tx: Tx, tiendaId: string, soloEntregas: boolean): Promise<CifrasSql> {
     const filtroResultado = soloEntregas
-      ? Prisma.sql`AND g."resultado" = 'entregada'`
-      : Prisma.sql`AND g."resultado" IN ('entregada', 'rechazada')`;
+      ? Prisma.sql`AND g."resultado" = 'entregado'`
+      : Prisma.sql`AND g."resultado" IN ('entregado', 'devolucion_a_origen_por_rechazo')`;
     const filas = await tx.$queryRaw<{ recaudado: string; ordenex: string; tienda: string }[]>`
       WITH calc AS (
         SELECT COALESCE(g."monto_recibido", 0) AS recaudado,
@@ -578,7 +578,7 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
     });
     // Y aparece UNA sola vez, con dos resultados (R35).
     expect(detalle.ordenes.filter((o) => o.guia === m.guiaDosCierres)).toHaveLength(1);
-    expect(porGuia.get(m.guiaDosCierres)?.resultados).toEqual(["entregada", "entregada"]);
+    expect(porGuia.get(m.guiaDosCierres)?.resultados).toEqual(["entregado", "entregado"]);
 
     // 6 (R39). NINGUNA fila del detalle aporta cero en las CUATRO cifras.
     for (const o of detalle.ordenes) {
@@ -902,7 +902,7 @@ describeSiHayBase("347 / B3.3 — DineroProductosRepository contra Postgres real
     tx: Tx,
     ordenId: string,
     mensajeroId: string,
-    resultado: "entregada" | "rechazada",
+    resultado: "entregado" | "devolucion_a_origen_por_rechazo",
     montoRecibido: string | null,
     cierreId: string | null,
     opts: { anulada?: boolean } = {},

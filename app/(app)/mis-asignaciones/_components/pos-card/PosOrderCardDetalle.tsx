@@ -11,7 +11,7 @@ import {
 
 import { UbicacionTrigger } from "../UbicacionTrigger";
 import { formatMonto } from "./pos-format";
-import { estadoBadgeClass, estadoPorDefecto, textoParada } from "./pos-estado";
+import { claseChipEstado, marcasDeTarjeta, textoChipEstado, textoParada } from "./pos-estado";
 import { textoMensajero } from "./pos-mensajero";
 import { posSeleccionHandlers } from "./pos-seleccion";
 import { seccionesVisibles } from "./pos-secciones";
@@ -34,13 +34,15 @@ export function PosOrderCardDetalle({
   esDetalle = false,
   bloqueado = false,
   onGestionar,
-  estado: estadoProp,
+  nota,
   mostrarRuta = true,
   secciones,
   acciones,
   mensajero,
 }: PosOrderCardProps) {
-  const estado = estadoProp ?? estadoPorDefecto(esActiva, esDetalle);
+  // FICHA 455 (R7/R8): el chip es el estado de la orden; activa/detalle/nota van en marcas aparte.
+  const estado = textoChipEstado(orden);
+  const marcas = marcasDeTarjeta(esActiva, esDetalle, nota);
   // Feature 196: las mismas compuertas que las otras dos vistas, con el mismo default.
   // `detalle` no tiene nada que apagar AQUÍ: esta vista es una fila y nunca llevó el
   // desplegable "Ver detalle completo" (lo dice el encabezado del componente).
@@ -109,10 +111,15 @@ export function PosOrderCardDetalle({
             {orden.numRemision}
           </span>
           <span
-            className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${estadoBadgeClass(estado)}`}
+            className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${claseChipEstado(orden.estatusValue)}`}
           >
             {estado}
           </span>
+          {marcas.map((m) => (
+            <span key={m.texto} className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${m.clase}`}>
+              {m.texto}
+            </span>
+          ))}
           {/* Marcas de EXCEPCIÓN (R28 / feature 115/R18 / feature 246/R22), solo si aplican. */}
           {mostrarRuta && orden.secuenciaRuta === null ? (
             <Badge variant="outline">Pendiente de optimizar</Badge>

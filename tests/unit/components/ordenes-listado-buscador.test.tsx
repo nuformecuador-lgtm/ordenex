@@ -33,7 +33,7 @@ import { OrdenesListado } from "@/app/(app)/ordenes/_components/OrdenesListado";
 
 const CATALOGO_ESTADOS = [
   { id: "est-pendiente", value: "pendiente" },
-  { id: "est-entregada", value: "entregada" },
+  { id: "est-entregada", value: "entregado" },
 ];
 
 const CATALOGO: CatalogoFiltrosOrdenesDTO = {
@@ -51,7 +51,7 @@ function makeOrden(id: string): OrdenListItemDTO {
     numGuia: 1001,
     numRemision: `REM-${id}`,
     estatusId: "est-entregada",
-    estatusValue: "entregada",
+    estatusValue: "entregado",
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "t1",

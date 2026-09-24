@@ -216,12 +216,12 @@ describe("427/R4 y R5 — solo `en_reparto`; el resto rechaza el lote entero", (
   });
 
   it.each([
-    ["por_recoger"],
+    ["mensajero_recogiendo_en_bodega"],
     ["devolviendo_a_tienda"],
-    ["sin_gestionar"],
-    ["entregada"],
+    ["novedad_interna"],
+    ["entregado"],
     ["en_bodega_central"],
-    ["reprogramada"],
+    ["reprogramado"],
   ])("⭑ `%s` -> conflict NOMBRANDO el estado, y SIN escritura", async (estatusValue) => {
     const { repo, espias } = buildRepo({
       findByIdsForTransicion: vi.fn(async () => [orden({ estatusValue })]),
@@ -241,7 +241,7 @@ describe("427/R4 y R5 — solo `en_reparto`; el resto rechaza el lote entero", (
     const { repo, espias } = buildRepo({
       findByIdsForTransicion: vi.fn(async () => [
         orden(),
-        orden({ id: ORDEN_B, estatusValue: "entregada" }),
+        orden({ id: ORDEN_B, estatusValue: "entregado" }),
       ]),
     });
 
@@ -455,7 +455,7 @@ describe("427/R24 — la carrera: el lote revierte entero, con un motivo POR ORD
         return llamada === 1
           ? [orden(), orden({ id: ORDEN_B })]
           : [
-              orden({ estatusValue: "entregada" }),
+              orden({ estatusValue: "entregado" }),
               orden({ id: ORDEN_B, mensajeroAsignadoId: "u-tercero" }),
             ];
       }),
@@ -472,7 +472,7 @@ describe("427/R24 — la carrera: el lote revierte entero, con un motivo POR ORD
     expect(r.status).toBe("conflict");
     if (r.status !== "conflict") throw new Error("unreachable");
     expect(r.detalle).toEqual([
-      { ordenId: ORDEN_A, motivo: "estado no traspasable: entregada" },
+      { ordenId: ORDEN_A, motivo: "estado no traspasable: entregado" },
       { ordenId: ORDEN_B, motivo: MSG_ORDEN_DE_OTRO_MENSAJERO },
     ]);
   });
@@ -635,7 +635,7 @@ describe("427/R38-R41 — los DOS avisos, fuera de la transaccion y sin cambiar 
     const recibido = vi.fn(async (_ctx: TraspasoOrdenesContexto) => {});
     const cedido = vi.fn(async (_ctx: TraspasoOrdenesContexto) => {});
     const { repo } = buildRepo({
-      findByIdsForTransicion: vi.fn(async () => [orden({ estatusValue: "entregada" })]),
+      findByIdsForTransicion: vi.fn(async () => [orden({ estatusValue: "entregado" })]),
     });
 
     await new TraspasoMensajeroService(repo, recibido, cedido).traspasar(entrada(), MAESTRO);

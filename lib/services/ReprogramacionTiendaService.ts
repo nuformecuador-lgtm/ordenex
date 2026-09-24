@@ -13,8 +13,8 @@ import type {
 
 // Estado de ORIGEN elegible (la orden REPOSA en `devuelta`, feature 99) y destino de la
 // reprogramacion. Valores de catalogo ya sembrados (`order_status`); esta feature NO agrega estados.
-const ESTADO_ORIGEN = "devuelta";
-const ESTADO_DESTINO = "reprogramada";
+const ESTADO_ORIGEN = "novedad";
+const ESTADO_DESTINO = "reprogramado";
 
 // Metodos de repo que consume el service (inyeccion por constructor). Se declaran como Pick para
 // dobles de test sin DB/HTTP (patron DevolucionOrigenService).

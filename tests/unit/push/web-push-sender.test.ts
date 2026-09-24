@@ -74,17 +74,17 @@ describe("410 — la tabla de desenlaces, uno por uno", () => {
     expect((await new WebPushSender(CONFIG).enviar(SUSCRIPCION, "{}")).status).toBe("transitorio");
   });
 
-  it("⭑ 400 -> rechazada: el problema es NUESTRO y la suscripcion NO se borra", async () => {
+  it("⭑ 400 -> devolucion_a_origen_por_rechazo: el problema es NUESTRO y la suscripcion NO se borra", async () => {
     sendNotification.mockRejectedValue(errorHttp(400));
     const r = await new WebPushSender(CONFIG).enviar(SUSCRIPCION, "{}");
     // Ni `caducada` (borraria la suscripcion de la persona por un bug nuestro) ni `transitorio`
     // (reintentar un payload mal formado gasta la cola tres veces para nada).
-    expect(r.status).toBe("rechazada");
+    expect(r.status).toBe("devolucion_a_origen_por_rechazo");
   });
 
-  it("⭑ 403 (claves VAPID que no casan) -> rechazada, no caducada", async () => {
+  it("⭑ 403 (claves VAPID que no casan) -> devolucion_a_origen_por_rechazo, no caducada", async () => {
     sendNotification.mockRejectedValue(errorHttp(403));
-    expect((await new WebPushSender(CONFIG).enviar(SUSCRIPCION, "{}")).status).toBe("rechazada");
+    expect((await new WebPushSender(CONFIG).enviar(SUSCRIPCION, "{}")).status).toBe("devolucion_a_origen_por_rechazo");
   });
 });
 

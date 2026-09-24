@@ -63,7 +63,7 @@ describe("R4 · `etiquetasDeEstatus` se delega siempre y su Map llega intacto", 
   it("dos llamadas van las dos al repositorio interno y el `Map` conserva sus entradas", async () => {
     let llamadas = 0;
     const etiquetas = new Map<string, EtiquetaEstatus>([
-      ["e-1", { value: "entregada", label: "entregada" }],
+      ["e-1", { value: "entregado", label: "entregado" }],
     ]);
     const interno = {
       async agregarCubos() {
@@ -83,7 +83,7 @@ describe("R4 · `etiquetasDeEstatus` se delega siempre y su Map llega intacto", 
     // con ids crudos en vez de con el `value` del estatus.
     expect(llamadas).toBe(2);
     expect(primera).toBeInstanceOf(Map);
-    expect(segunda.get("e-1")).toEqual({ value: "entregada", label: "entregada" });
+    expect(segunda.get("e-1")).toEqual({ value: "entregado", label: "entregado" });
     expect(segunda.size).toBe(1);
   });
 });

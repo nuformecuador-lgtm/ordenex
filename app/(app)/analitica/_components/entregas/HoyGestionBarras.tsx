@@ -50,7 +50,9 @@ import { ETIQUETA_NOTA, NOTA_NO_SIGUE_LA_FECHA, vacioDeHoy } from "./hoy-gestion
 const TITULO_BASE = "Cargadas hoy";
 
 /** Las DOS barras, en orden: primero lo que falta por hacer. */
-const ETIQUETA_SIN_GESTION = "Sin gestionar";
+// FICHA 455 (2026-09-24, R6): cuenta las órdenes SIN GESTIÓN EN EL DÍA (no el estado
+// `novedad_interna`, que antes se llamaba «Sin gestionar»): es un grupo y lleva texto propio.
+const ETIQUETA_SIN_GESTION = "Sin gestión en el día";
 const ETIQUETA_CON_GESTION = "Gestionadas";
 
 /** La unidad del formateador: son ordenes contadas, no dinero ni porcentaje. */

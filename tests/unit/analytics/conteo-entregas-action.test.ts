@@ -7,7 +7,7 @@ import type { ConteoEntregasDTO } from "@/lib/types/conteo-entregas";
 const AHORA = new Date("2026-08-17T12:00:00.000Z");
 
 const DATOS: ConteoEntregasDTO = {
-  porDesenlace: { entregada: 20, devuelta: 5, rechazada: 3, reprogramada: 7, incidente: 1, otros: 64 },
+  porDesenlace: { entregado: 20, novedad: 5, devolucion_a_origen_por_rechazo: 3, reprogramado: 7, incidente: 1, otros: 64 },
   total: 100,
   lastSync: "2026-08-17T12:00:00.000Z",
 };

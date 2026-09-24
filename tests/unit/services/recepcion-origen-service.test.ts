@@ -179,12 +179,12 @@ describe("RecepcionOrigenService.recibirEnOrigen", () => {
   it("estado_invalido si sigue en rechazada (aún no salió hacia la tienda)", async () => {
     const repo = fakeRepo({
       findByNumGuiaForTransicion: vi.fn(async () =>
-        transicionRow({ estatusValue: "rechazada" }),
+        transicionRow({ estatusValue: "devolucion_a_origen_por_rechazo" }),
       ),
     });
     const res = await newService(repo).recibirEnOrigen(NUM_GUIA, TIENDA);
 
-    expect(res).toEqual({ status: "estado_invalido", estado: "rechazada" });
+    expect(res).toEqual({ status: "estado_invalido", estado: "devolucion_a_origen_por_rechazo" });
     expect(repo.recibirEnOrigen).not.toHaveBeenCalled();
   });
 

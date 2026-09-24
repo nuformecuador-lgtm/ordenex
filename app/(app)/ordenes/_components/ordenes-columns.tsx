@@ -110,10 +110,9 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     // la pintan por el mismo sitio. Un DTO sin los campos (lector que no los anota) no pinta nota.
     render: (row) => (
       <span className="inline-flex flex-wrap items-center gap-1">
-        <EstatusBadge
-          value={row.relaciones?.estatus?.value ?? row.estatusValue ?? SIN_DATO}
-          zonaNombre={row.relaciones?.zona?.nombre ?? row.zonaNombre}
-        />
+        {/* FICHA 455 (R2): el chip es el nombre exacto, sin la zona interpolada (columna propia);
+            sin estado, `nombreDeEstado("")` pinta «—». */}
+        <EstatusBadge value={row.relaciones?.estatus?.value ?? row.estatusValue ?? ""} />
         <NotaGestionPendiente
           resultadoPendiente={row.gestionPendiente?.resultado ?? null}
           ayudaAbierta={row.ayudaAbierta === true}
@@ -236,7 +235,7 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
 ];
 
 /**
- * Columna "Reprogramada para" (ficha 367): la fecha PARA LA QUE quedó reprogramada
+ * Columna "Reprogramado para" (ficha 367): la fecha PARA LA QUE quedó reprogramada
  * la orden, no cuándo se desbloquea. Antes se llamaba "Liberada el" y solo se
  * montaba filtrando por el único estado `reprogramada` —donde esa fecha coincide
  * con el día en que el cron de liberación (feature 46) la libera—, pero fuera de
@@ -250,12 +249,12 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
  */
 const liberadaColumn: Column<OrdenListItemDTO> = {
   id: "liberada",
-  value: "Reprogramada para",
+  value: "Reprogramado para",
   render: (row) => row.fechaReprogramacion ?? SIN_DATO,
 };
 
 /**
- * Variante de columnas que añade "Reprogramada para" al final. Deriva de
+ * Variante de columnas que añade "Reprogramado para" al final. Deriva de
  * `ordenesColumns` para no duplicar el resto.
  *
  * FICHA 367: `/ordenes` la monta SIEMPRE, no solo filtrando por `reprogramada` —el

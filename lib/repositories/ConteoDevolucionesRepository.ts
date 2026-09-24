@@ -50,7 +50,7 @@ interface FilaCausa {
  * El resultado que define el universo. Se escribe una vez y se compara contra el enum del
  * esquema en el test, no contra una cadena suelta repetida por el archivo.
  */
-const RESULTADO_DEVUELTA = "devuelta";
+const RESULTADO_DEVUELTA = "novedad";
 
 /** Lista de ids como parametros, nunca interpolada: cada uno entra como `$n`. */
 function comoParametros(ids: readonly string[]): Prisma.Sql {

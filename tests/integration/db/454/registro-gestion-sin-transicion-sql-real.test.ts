@@ -32,7 +32,7 @@ describeSiHayBase("454/T1.4 — registrar una gestion sin transicion (Postgres r
       const jobsAntes = await e.tx.job.count({
         where: { tipo: "optimizacion_ruta", payload: { path: ["mensajeroId"], equals: e.mensajeroId } },
       });
-      const rE = await e.gestionar(entregada.ordenId, "entregada", {
+      const rE = await e.gestionar(entregada.ordenId, "entregado", {
         monto: 8000,
         pagos: [
           { metodo: "efectivo", monto: 5000 },
@@ -44,7 +44,7 @@ describeSiHayBase("454/T1.4 — registrar una gestion sin transicion (Postgres r
       const jobsDespues = await e.tx.job.count({
         where: { tipo: "optimizacion_ruta", payload: { path: ["mensajeroId"], equals: e.mensajeroId } },
       });
-      const rD = await e.gestionar(devuelta.ordenId, "devuelta", { causaDevolucion: "wrong_address" });
+      const rD = await e.gestionar(devuelta.ordenId, "novedad", { causaDevolucion: "wrong_address" });
 
       const gestion = async (ordenId: string) =>
         e.tx.gestionOrden.findFirstOrThrow({
@@ -98,7 +98,7 @@ describeSiHayBase("454/T1.4 — registrar una gestion sin transicion (Postgres r
         gD,
         evE: await eventos(entregada.ordenId),
         evD: await eventos(devuelta.ordenId),
-        ids: { entregada: entregada.ordenId, devuelta: devuelta.ordenId },
+        ids: { entregado: entregada.ordenId, novedad: devuelta.ordenId },
         mensajeroId: e.mensajeroId,
       };
     });
@@ -115,7 +115,7 @@ describeSiHayBase("454/T1.4 — registrar una gestion sin transicion (Postgres r
   it("anti-vacuidad: las dos gestiones se registran y el puntero estaba puesto", () => {
     expect(r.rE).toBe("ok");
     expect(r.rD).toBe("ok");
-    expect(r.punteroAntes).toBe(r.ids.entregada);
+    expect(r.punteroAntes).toBe(r.ids.entregado);
   });
 
   it("R1: las dos ordenes siguen `en_reparto` y no hay ni una fila de historial", () => {
@@ -126,7 +126,7 @@ describeSiHayBase("454/T1.4 — registrar una gestion sin transicion (Postgres r
   it("R1: la gestion guarda sus datos — resultado, cobro, desglose, evidencia; sin cierre ni anulacion", () => {
     expect(r.gE).toEqual({
       id: expect.any(String),
-      resultado: "entregada",
+      resultado: "entregado",
       motivo: null,
       causaDevolucion: null,
       montoRecibido: "8000.00",
@@ -137,7 +137,7 @@ describeSiHayBase("454/T1.4 — registrar una gestion sin transicion (Postgres r
       _count: { evidencias: 1 },
     });
     expect(r.gD).toEqual(
-      expect.objectContaining({ resultado: "devuelta", motivo: "No aparece", causaDevolucion: "wrong_address", cierreId: null }),
+      expect.objectContaining({ resultado: "novedad", motivo: "No aparece", causaDevolucion: "wrong_address", cierreId: null }),
     );
   });
 
@@ -146,7 +146,7 @@ describeSiHayBase("454/T1.4 — registrar una gestion sin transicion (Postgres r
       {
         tipo: "gestion_registrada",
         gestionOrdenId: r.gE.id,
-        resultado: "entregada",
+        resultado: "entregado",
         motivo: null,
         familiaAplicacion: "gestion",
         mensajeroId: r.mensajeroId,
@@ -156,7 +156,7 @@ describeSiHayBase("454/T1.4 — registrar una gestion sin transicion (Postgres r
       },
     ]);
     expect(r.evD).toEqual([
-      expect.objectContaining({ tipo: "gestion_registrada", gestionOrdenId: r.gD.id, resultado: "devuelta", motivo: "wrong_address", familiaAplicacion: "gestion" }),
+      expect.objectContaining({ tipo: "gestion_registrada", gestionOrdenId: r.gD.id, resultado: "novedad", motivo: "wrong_address", familiaAplicacion: "gestion" }),
     ]);
   });
 

@@ -88,7 +88,6 @@ import {
 // FICHA 355: el control de ESTADO se declara una sola vez y lo montan las dos superficies
 // (aquí y la bodega satélite). Ver la cabecera de ese módulo.
 import {
-  EXCLUDE_ESTADO_DEFAULT,
   estadosOfrecidos,
   filtroEstado,
 } from "./filtro-estado-def";
@@ -154,7 +153,8 @@ async function mensajerosFetcher() {
 // FICHA 355: el valor por defecto vive ahora en `filtro-estado-def.ts`, junto al resto de
 // la declaración del control, para que una superficie que lo monte sin pasar `exclude`
 // obtenga exactamente lo mismo que maestro/admin.
-const DEFAULT_EXCLUDE = [...EXCLUDE_ESTADO_DEFAULT];
+// FICHA 455 (2026-09-24, R18): el default ya no excluye nada (el catálogo vigente es el filtro).
+const DEFAULT_EXCLUDE: string[] = [];
 
 /*
  * ── FICHA 355 (2026-09-02): AQUÍ VIVÍAN `VALUES_VIGENTES` Y EL DESPLEGABLE DE ESTADO ─────────
@@ -185,7 +185,7 @@ const DEFAULT_EXCLUDE = [...EXCLUDE_ESTADO_DEFAULT];
 // memorización de cualquier hijo que llegue a compararlas.
 const SIN_FECHAS_DIA_REPARTO: FechasDiaReparto = { hoy: "", manana: "" };
 
-const ESTADO_DEVUELTA = "devuelta";
+const ESTADO_DEVUELTA = "novedad";
 const MOTIVO_DEVUELTA_NO_CENTRAL =
   "Orden de zona satélite: la recupera el admin de la bodega satélite de su zona.";
 
@@ -732,7 +732,7 @@ export function OrdenesListado({
         ];
       case "en_preparacion":
         return [{ key: "guia", label: "Generar guía", onRun: abrirGenerarGuia }];
-      case "por_recoger":
+      case "mensajero_recogiendo_en_bodega":
         // Feature 149/R34: caso (a) — la orden sigue en la bodega, sin recoger.
         return [
           { key: "etiquetas", label: "Imprimir etiquetas", onRun: abrirEtiquetas },
@@ -782,7 +782,7 @@ export function OrdenesListado({
       // NO se le ofrece "Cambiar día de reparto": son dos columnas distintas —aquélla mueve el día
       // en que el mensajero sale a repartir, ésta la fecha a la que la orden está retenida— y
       // mezclarlas dejaría al coordinador corrigiendo la que no es.
-      case "reprogramada":
+      case "reprogramado":
         return [accionCorregirFechaReprogramacion];
       case "en_bodega_central":
         return [
@@ -831,7 +831,7 @@ export function OrdenesListado({
             onRun: abrirEnviarTienda,
           },
         ];
-      case "devuelta":
+      case "novedad":
         // Feature 100/T4.2 (R12): recuperar a bodega las devueltas de la zona central.
         return [
           { key: "recuperar", label: "Recuperar a bodega", onRun: abrirRecuperar },
@@ -1129,7 +1129,7 @@ export function OrdenesListado({
       ? estadosDisponibles.find((s) => s.id === estadosMarcados[0])?.value
       : undefined;
 
-  // FICHA 367: el conjunto de columnas SIEMPRE incluye "Reprogramada para" (antes solo
+  // FICHA 367: el conjunto de columnas SIEMPRE incluye "Reprogramado para" (antes solo
   // se montaba filtrando por el único estado `reprogramada`; sin filtro, con varios
   // estados marcados, o en cuanto el cron de liberación sacaba la orden de ese estado,
   // la fecha desaparecía del listado para siempre). No se añade la columna a

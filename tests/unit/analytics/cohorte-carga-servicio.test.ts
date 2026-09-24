@@ -65,10 +65,10 @@ function cacheConMemoria() {
 
 /** Dos dias, con la cohorte mas reciente PRIMERO, como los emite el repositorio. */
 const FILAS: CohorteCuboCrudo[] = [
-  { fecha: "2026-08-16", desenlace: "entregada", n: 2, segundosAcum: 6 * 3600 },
+  { fecha: "2026-08-16", desenlace: "entregado", n: 2, segundosAcum: 6 * 3600 },
   { fecha: "2026-08-16", desenlace: "viva", n: 3, segundosAcum: null },
   { fecha: "2026-08-15", desenlace: "devuelta_a_tienda", n: 1, segundosAcum: 4 * 3600 },
-  { fecha: "2026-08-15", desenlace: "entregada", n: 4, segundosAcum: 8 * 3600 },
+  { fecha: "2026-08-15", desenlace: "entregado", n: 4, segundosAcum: 8 * 3600 },
 ];
 
 function servicioCon(filas: CohorteCuboCrudo[], reloj: () => Date = () => AHORA) {
@@ -118,7 +118,7 @@ describe("R15 · el DTO lleva numerador Y denominador, no solo el promedio", () 
     const cubo = dto.porDia[0].cubos[0];
 
     expect(cubo).toEqual({
-      desenlace: "entregada",
+      desenlace: "entregado",
       n: 2,
       segundosAcum: 6 * 3600,
       promedioSegundos: 3 * 3600,
@@ -183,7 +183,7 @@ describe("R11/R30 · los totales se derivan de las MISMAS filas", () => {
 
     expect(dto.totalPorDesenlace).toEqual([
       { desenlace: "devuelta_a_tienda", n: 1, segundosAcum: 4 * 3600, promedioSegundos: 4 * 3600 },
-      { desenlace: "entregada", n: 6, segundosAcum: 14 * 3600, promedioSegundos: (14 / 6) * 3600 },
+      { desenlace: "entregado", n: 6, segundosAcum: 14 * 3600, promedioSegundos: (14 / 6) * 3600 },
       { desenlace: "viva", n: 3, segundosAcum: null, promedioSegundos: null },
     ]);
     // Y suma el mismo universo que los dias: si saliera de otra consulta, podrian discrepar.
@@ -195,15 +195,15 @@ describe("R11/R30 · los totales se derivan de las MISMAS filas", () => {
   // rellena. Que el servicio no los fabrique se comprueba, no se supone.
   it("los cubos con `n = 0` no viajan, y tampoco se inventan los que faltan", async () => {
     const { service } = servicioCon([
-      { fecha: "2026-08-16", desenlace: "entregada", n: 3, segundosAcum: 3600 },
+      { fecha: "2026-08-16", desenlace: "entregado", n: 3, segundosAcum: 3600 },
       { fecha: "2026-08-16", desenlace: "incidente", n: 0, segundosAcum: null },
     ]);
 
     const dto = await service.consultar(consultaDe());
 
-    expect(dto.porDia[0].cubos.map((c) => c.desenlace)).toEqual(["entregada"]);
+    expect(dto.porDia[0].cubos.map((c) => c.desenlace)).toEqual(["entregado"]);
     expect(dto.porDia[0].cargadas).toBe(3);
-    expect(dto.totalPorDesenlace.map((c) => c.desenlace)).toEqual(["entregada"]);
+    expect(dto.totalPorDesenlace.map((c) => c.desenlace)).toEqual(["entregado"]);
   });
 });
 

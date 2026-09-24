@@ -23,11 +23,11 @@ const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   en_reparto: "os-reparto",
-  entregada: "os-entregada",
-  devuelta: "os-devuelta",
+  entregado: "os-entregada",
+  novedad: "os-devuelta",
   // Feature 239 (2026-08-19): gestionar `devuelta` resuelve el PRE-ESTADO, no `devuelta`.
   devolucion_por_confirmar: "os-devolucion-por-confirmar",
-  rechazada: "os-rechazada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
   en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
 };
@@ -117,7 +117,7 @@ function gestionEmitida(repo: IGestionOrdenRepository): GestionOrdenData {
 function devolucion(overrides: Partial<GestionarInput> = {}): GestionarInput {
   return {
     ordenId: "o1",
-    resultado: "devuelta",
+    resultado: "novedad",
     causaDevolucion: "wrong_address",
     motivo: "la direccion no existe",
     // Feature 75: la evidencia es obligatoria tambien en devuelta; el service la sube antes de la tx.
@@ -134,7 +134,7 @@ describe("Feature 73 · el service persiste la causa en su campo propio (R11)", 
       const r = await newService(repo).gestionar(devolucion({ causaDevolucion: causa }), MENSAJERO);
       expect(r.status).toBe("ok");
       const gestion = gestionEmitida(repo);
-      expect(gestion.resultado).toBe("devuelta");
+      expect(gestion.resultado).toBe("novedad");
       expect(gestion.causaDevolucion).toBe(causa);
     },
   );
@@ -183,7 +183,7 @@ describe("Feature 73 · el `motivo` NO se decora con la causa (R12)", () => {
     await newService(repo).gestionar(devolucion(), MENSAJERO);
     const gestion = gestionEmitida(repo);
     expect(gestion).toMatchObject({
-      resultado: "devuelta",
+      resultado: "novedad",
       causaDevolucion: "wrong_address",
       motivo: "la direccion no existe",
     });
@@ -196,7 +196,7 @@ describe("Feature 73 · las otras ramas no emiten causa (R10/R19)", () => {
     await newService(repo).gestionar(
       {
         ordenId: "o1",
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: 100,
         metodoPago: "efectivo",
         pagos: [{ metodo: "efectivo", monto: 100 }], // feature 212: desglose normalizado (R12)
@@ -212,7 +212,7 @@ describe("Feature 73 · las otras ramas no emiten causa (R10/R19)", () => {
     const r = await newService(repo).gestionar(
       {
         ordenId: "o1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         motivo: "el cliente lo rechazo",
         evidencias: [{ contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) }],
       },

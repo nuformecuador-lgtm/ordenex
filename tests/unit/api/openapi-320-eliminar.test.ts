@@ -140,8 +140,8 @@ describe("FICHA 320 — el DELETE esta publicado en el objeto TS", () => {
 
   it("el schema EliminacionResponse publica las TRES claves, con `numGuia` nullable", () => {
     const schema = spec.components.schemas.EliminacionResponse;
-    expect(Object.keys(schema.properties)).toEqual(["numGuia", "numRemision", "estado"]);
-    expect([...schema.required]).toEqual(["numGuia", "numRemision", "estado"]);
+    expect(Object.keys(schema.properties)).toEqual(["numGuia", "numRemision", "estado", "estadoNombre"]);
+    expect([...schema.required]).toEqual(["numGuia", "numRemision", "estado", "estadoNombre"]);
     // `null` admitido: la orden sin guia es EL caso que motiva la ficha.
     expect(schema.properties.numGuia.type).toEqual(["integer", "null"]);
     expect(schema.properties.numRemision.type).toBe("string");
@@ -181,12 +181,12 @@ describe("FICHA 320 — el .yaml publicado dice lo MISMO", () => {
     const requeridas = subBloque(schema, "required", 6)
       .filter((l) => /^\s*-\s+/.test(l))
       .map((l) => l.replace(/^\s*-\s+/, "").trim());
-    expect(requeridas).toEqual(["numGuia", "numRemision", "estado"]);
+    expect(requeridas).toEqual(["numGuia", "numRemision", "estado", "estadoNombre"]);
 
     const propiedades = subBloque(schema, "properties", 6)
       .filter((l) => indent(l) === 8)
       .map((l) => l.trim().replace(/:$/, ""));
-    expect(propiedades).toEqual(["numGuia", "numRemision", "estado"]);
+    expect(propiedades).toEqual(["numGuia", "numRemision", "estado", "estadoNombre"]);
 
     // El enum cerrado de estados, con los cuatro y en el mismo orden que el TS.
     const valores = schema

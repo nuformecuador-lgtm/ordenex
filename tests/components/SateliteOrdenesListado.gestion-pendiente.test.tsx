@@ -68,14 +68,14 @@ function makeOrden(
 
 const PENDIENTE = makeOrden({
   id: "pend",
-  gestionPendiente: { resultado: "devuelta", registradaAt: "2026-09-23T21:00:00.000Z" },
+  gestionPendiente: { resultado: "novedad", registradaAt: "2026-09-23T21:00:00.000Z" },
   ayudaAbierta: false,
 });
 const CON_AYUDA = makeOrden({ id: "ayuda", gestionPendiente: null, ayudaAbierta: true });
 const EN_MANO = makeOrden({ id: "mano", gestionPendiente: null, ayudaAbierta: false });
 const POR_RECOGER = makeOrden({
   id: "recoger",
-  estatusValue: "por_recoger",
+  estatusValue: "mensajero_recogiendo_en_bodega",
   gestionPendiente: null,
   ayudaAbierta: false,
 });
@@ -114,7 +114,7 @@ beforeEach(() => {
     status: "ok",
     estatus: [
       { id: "st-en_reparto", value: "en_reparto" },
-      { id: "st-por_recoger", value: "por_recoger" },
+      { id: "st-mensajero_recogiendo_en_bodega", value: "mensajero_recogiendo_en_bodega" },
     ],
   });
 });
@@ -122,11 +122,11 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("454/R29 — la bodega satélite pinta la nota junto al chip de estado", () => {
-  it("gestión pendiente: «En reparto» + «Devuelta · pendiente de confirmación»", () => {
+  it("gestión pendiente: «En reparto» + «Novedad · pendiente de confirmación»", () => {
     renderListado([PENDIENTE, EN_MANO]);
     const fila = filaDe("REM-pend");
     expect(within(fila).getByText("En reparto")).toBeInTheDocument();
-    expect(within(fila).getByText("Devuelta · pendiente de confirmación")).toBeInTheDocument();
+    expect(within(fila).getByText("Novedad · pendiente de confirmación")).toBeInTheDocument();
   });
 
   it("ayuda abierta: «En reparto» + «Ayuda solicitada a la tienda»", () => {
@@ -146,7 +146,7 @@ describe("454/R29 — la bodega satélite pinta la nota junto al chip de estado"
 });
 
 describe("454/R54-R55 — la fila con gestión pendiente no ofrece cambio de día ni traspaso", () => {
-  it("R55 — marcada la pendiente, no sale «Cambiar día de reparto»; con `por_recoger` sí (control)", async () => {
+  it("R55 — marcada la pendiente, no sale «Cambiar día de reparto»; con `mensajero_recogiendo_en_bodega` sí (control)", async () => {
     const user = userEvent.setup();
     const { onCambiarDiaReparto } = renderListado([PENDIENTE, POR_RECOGER]);
 

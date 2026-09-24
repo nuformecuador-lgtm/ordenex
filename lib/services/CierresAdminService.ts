@@ -153,15 +153,15 @@ const MSG_CATALOGO_ANCLAJE =
 
 // Feature 109 (T3.1, R16): estados del catalogo que consume la LIBERACION de `sin_gestionar` al
 // aprobar (destinos de bodega por zona de la orden).
-const ESTADO_SIN_GESTIONAR = "sin_gestionar";
+const ESTADO_SIN_GESTIONAR = "novedad_interna";
 const ESTADO_EN_BODEGA = "en_bodega_central";
 const ESTADO_EN_BODEGA_SATELITE = "en_bodega_satelite";
 
 // Feature 139 (T1.2, R5): estados del catalogo que consume el DISPARO de la devolucion de
 // RECHAZADAS al aprobar. Origen `rechazada`; destinos por zona de la orden: bodega satelite ->
 // `por_devolver`, bodega central -> `por_devolver_a_tienda` (misma regla `resolverDestinoCierre`).
-const ESTADO_RECHAZADA = "rechazada";
-const ESTADO_POR_DEVOLVER = "por_devolver";
+const ESTADO_RECHAZADA = "devolucion_a_origen_por_rechazo";
+const ESTADO_POR_DEVOLVER = "por_devolver_a_bodega_central";
 const ESTADO_POR_DEVOLVER_A_TIENDA = "por_devolver_a_tienda";
 
 // FICHA 454 (T1.7): AQUI VIVIAN los dos estados del ANCLAJE de la 239. La aplicacion al aprobar se
@@ -753,10 +753,10 @@ export class CierresAdminService implements ICierresAdminService {
     // R6: agrupa por resultado (4 claves siempre presentes) con el mapper reuso 37.
     // Feature 158/R18: 5 claves — el `incidente` es un grupo PROPIO del detalle del admin.
     const grupos: CierreGrupos = {
-      entregada: [],
-      reprogramada: [],
-      devuelta: [],
-      rechazada: [],
+      entregado: [],
+      reprogramado: [],
+      novedad: [],
+      devolucion_a_origen_por_rechazo: [],
       incidente: [],
     };
     for (const g of found.gestiones) {
@@ -968,9 +968,9 @@ export class CierresAdminService implements ICierresAdminService {
       // FICHA 454 (T1.7, design §7.2): los ids de la APLICACION DE GESTIONES — el origen
       // `en_reparto` y el destino de cada resultado, del mapa UNICO `ESTATUS_POR_RESULTADO`.
       this.ordenRepo.findEstatusIdByValue(ESTADO_EN_REPARTO_APLICACION),
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.entregada),
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.reprogramada),
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.devuelta),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.entregado),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.reprogramado),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.novedad),
       this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.incidente),
     ]);
     // 💰 FEATURE 276 (T9, R7/R21): la config gana el destino `rechazada` y el UMBRAL. El umbral se
@@ -1039,10 +1039,10 @@ export class CierresAdminService implements ICierresAdminService {
       aplicacionGestiones: {
         enRepartoId,
         destinoPorResultado: {
-          entregada: entregadaId,
-          reprogramada: reprogramadaId,
-          rechazada: rechazadaId,
-          devuelta: devueltaId,
+          entregado: entregadaId,
+          reprogramado: reprogramadaId,
+          devolucion_a_origen_por_rechazo: rechazadaId,
+          novedad: devueltaId,
           incidente: incidenteId,
         },
       },
@@ -1381,7 +1381,7 @@ export class CierresAdminService implements ICierresAdminService {
 
     // Solo una ENTREGA reparte dinero; los otros cuatro resultados no cobran nada (R8/R25), así
     // que no hay desglose que corregir y aceptar uno inventaría un cobro.
-    if (gestion.resultado !== "entregada") {
+    if (gestion.resultado !== "entregado") {
       return {
         status: "validation_error",
         fieldErrors: { lineas: [MSG_PAGOS_SOLO_ENTREGA] },
@@ -1469,7 +1469,7 @@ export class CierresAdminService implements ICierresAdminService {
       return { status: "conflict" }; // guardia 3 (R3)
     }
 
-    if (gestion.resultado !== "entregada") {
+    if (gestion.resultado !== "entregado") {
       // guardia 4 (R4)
       return {
         status: "validation_error",
@@ -1488,8 +1488,8 @@ export class CierresAdminService implements ICierresAdminService {
     // sale de `ESTATUS_POR_RESULTADO`, el punto UNICO de la regla «que estado le toca a este
     // resultado» (239/R3), y no de un literal escrito aqui.
     const [estatusEntregadaId, estatusRechazadaId] = await Promise.all([
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.entregada),
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.rechazada),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.entregado),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.devolucion_a_origen_por_rechazo),
     ]);
     // FALLO CERRADO: sin los dos ids no se puede escribir la transicion, y un catalogo incompleto
     // no es «sigue adelante sin mover la orden» — eso dejaria la gestion rechazada con la orden

@@ -142,10 +142,10 @@ describeSiHayBase("425/B6 — los totales del cierre no se mueven cuando entra u
     tx: TxDeTest,
     mensajeroId: string,
     origenTipo: OrdenHistorialOrigenTipo,
-    resultado: "entregada" | "rechazada",
+    resultado: "entregado" | "devolucion_a_origen_por_rechazo",
   ): Promise<string> {
     const clave = `${SUFIJO}${(n += 1)}`;
-    const entregada = resultado === "entregada";
+    const entregada = resultado === "entregado";
     const orden = await tx.orden.create({
       data: {
         numGuia: GUIA_BASE + n,
@@ -287,10 +287,10 @@ describeSiHayBase("425/B6 — los totales del cierre no se mueven cuando entra u
     return enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const mensajeroId = await sembrarMensajeroConTarifa(tx);
-      await sembrarGestion(tx, mensajeroId, "gestion", "entregada");
-      await sembrarGestion(tx, mensajeroId, "gestion", "rechazada");
+      await sembrarGestion(tx, mensajeroId, "gestion", "entregado");
+      await sembrarGestion(tx, mensajeroId, "gestion", "devolucion_a_origen_por_rechazo");
       const rechazoId = conRechazoDeTienda
-        ? await sembrarGestion(tx, mensajeroId, "rechazo_tienda", "rechazada")
+        ? await sembrarGestion(tx, mensajeroId, "rechazo_tienda", "devolucion_a_origen_por_rechazo")
         : null;
       const r = await montar(tx).mensajero.solicitarCierre({ usuarioId: mensajeroId, rol: "mensajero" });
       if (r.status !== "ok" || r.via !== "creado") {
@@ -307,7 +307,7 @@ describeSiHayBase("425/B6 — los totales del cierre no se mueven cuando entra u
       const mensajeroId = await sembrarMensajeroConTarifa(tx);
       const ids: string[] = [];
       for (let i = 0; i < 3; i += 1) {
-        ids.push(await sembrarGestion(tx, mensajeroId, "rechazo_tienda", "rechazada"));
+        ids.push(await sembrarGestion(tx, mensajeroId, "rechazo_tienda", "devolucion_a_origen_por_rechazo"));
       }
       const ctx = montar(tx);
       // SONDA, no requisito: el mensajero NO puede pedir el mismo un cierre que solo trae rechazos
@@ -339,12 +339,12 @@ describeSiHayBase("425/B6 — los totales del cierre no se mueven cuando entra u
     if (usuario === null) throw new Error("hace falta al menos UN usuario en la base.");
     fksUsuario = usuario;
     const catalogo = await prisma.orderStatus.findMany({
-      where: { value: { in: ["entregada", "rechazada"] } },
+      where: { value: { in: ["entregado", "devolucion_a_origen_por_rechazo"] } },
       select: { id: true, value: true },
     });
     estatus = new Map(catalogo.map((c) => [c.value, c.id]));
-    idDe("entregada");
-    idDe("rechazada");
+    idDe("entregado");
+    idDe("devolucion_a_origen_por_rechazo");
 
     conRechazo = await medir(true);
     sinRechazo = await medir(false);

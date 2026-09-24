@@ -53,9 +53,9 @@ const cicloMock = vi.mocked(consultarCicloVida);
  * lectura cuenta otra cosa.
  */
 const PERIODO_DEL_DISENO = [
-  { status: "entregada", conteo: 424 },
-  { status: "rechazada", conteo: 60 },
-  { status: "devuelta", conteo: 41 },
+  { status: "entregado", conteo: 424 },
+  { status: "devolucion_a_origen_por_rechazo", conteo: 60 },
+  { status: "novedad", conteo: 41 },
   { status: "en_reparto", conteo: 265 },
 ];
 
@@ -163,7 +163,7 @@ describe("El vocabulario de la fila de KPIs", () => {
   it("las dos frases conviven en la misma fila", async () => {
     renderFila();
 
-    expect(await screen.findByText(/525 órdenes con desenlace terminaron entregadas/)).toBeInTheDocument();
+    expect(await screen.findByText(/525 órdenes con desenlace terminaron en Entregado/)).toBeInTheDocument();
     expect(screen.getByText(`Ciclo de vida promedio (${CERRADAS_DEL_CICLO} órdenes cerradas)`)).toBeInTheDocument();
   });
 });

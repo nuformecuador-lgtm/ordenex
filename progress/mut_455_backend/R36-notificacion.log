@@ -1,0 +1,44 @@
+# MUTACION R36-notificacion
+archivo: lib/notificaciones/emitir.ts
+linea: 63
+- "`${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo}: el destinatario rechazó una orden.`"
++ "\"Una orden fue rechazada por el destinatario.\""
+tests: tests/unit/repositories/notificacion-orden-rechazada.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 13 passed (14)
+FAIL  tests/unit/repositories/notificacion-orden-rechazada.test.ts > R18 → 454/R35 — registrar un rechazo crea cuatro avisos con su alcance > las cuatro son de tipo alert, referencian la orden y llevan la guia como anexo
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/repositories/notificacion-orden-rechazada.test.ts (14 tests | 1 failed) 20ms
+     × las cuatro son de tipo alert, referencian la orden y llevan la guia como anexo 6ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  06:22:51
+   Duration  710ms (transform 184ms, setup 54ms, import 434ms, tests 20ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/repositories/notificacion-orden-rechazada.test.ts > R18 → 454/R35 — registrar un rechazo crea cuatro avisos con su alcance > las cuatro son de tipo alert, referencian la orden y llevan la guia como anexo
+AssertionError: expected 'Una orden fue rechazada por el destin…' to be 'Devolución a origen por rechazo: el d…' // Object.is equality
+
+Expected: "Devolución a origen por rechazo: el destinatario rechazó una orden."
+Received: "Una orden fue rechazada por el destinatario."
+
+ ❯ tests/unit/repositories/notificacion-orden-rechazada.test.ts:135:32
+    133|       expect(fila.anexo).toBe("4242");
+    134|       // FICHA 455 (R36): el texto CONTIENE el nombre visible exacto d…
+    135|       expect(fila.descripcion).toBe("Devolución a origen por rechazo: …
+       |                                ^
+    136|       expect(fila.descripcion).toContain("Devolución a origen por rech…
+    137|       // §4.6: nunca direccion, telefono ni monto.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

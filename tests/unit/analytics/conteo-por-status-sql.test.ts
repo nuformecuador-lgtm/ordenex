@@ -217,7 +217,7 @@ describe("La consulta que se ejecuta", () => {
 
   it("devuelve un bucket por fila, con el conteo como número", async () => {
     const { prisma } = prismaFalso([
-      { status: "entregada", n: 20 },
+      { status: "entregado", n: 20 },
       { status: "en_reparto", n: 8 },
     ]);
 
@@ -226,7 +226,7 @@ describe("La consulta que se ejecuta", () => {
     );
 
     expect(filas).toEqual([
-      { status: "entregada", conteo: 20 },
+      { status: "entregado", conteo: 20 },
       { status: "en_reparto", conteo: 8 },
     ]);
   });
@@ -234,7 +234,7 @@ describe("La consulta que se ejecuta", () => {
   // Los status sin órdenes no vienen: `GROUP BY` no emite filas vacías. Es lo pedido, y por eso
   // el repositorio no filtra nada — este caso fija que tampoco INVENTE buckets en cero.
   it("no añade buckets que la base no devolvió", async () => {
-    const { prisma } = prismaFalso([{ status: "entregada", n: 3 }]);
+    const { prisma } = prismaFalso([{ status: "entregado", n: 3 }]);
 
     const filas = await new ConteoPorStatusRepository(prisma as never).contarPorStatus(
       consultaDe({}),

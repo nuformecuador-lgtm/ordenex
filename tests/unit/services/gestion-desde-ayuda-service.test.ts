@@ -50,8 +50,8 @@ function fakeStorage(overrides: Partial<IFileStorage> = {}): IFileStorage {
 
 const CATALOGO: Record<string, string> = {
   ayuda_tienda: "os-ayuda",
-  reprogramada: "os-reprogramada",
-  rechazada: "os-rechazada",
+  reprogramado: "os-reprogramada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
   devolucion_por_confirmar: "os-devolucion-por-confirmar",
 };
 
@@ -96,14 +96,14 @@ function foto(n: number) {
 
 const RECHAZO: GestionDesdeAyudaInput = {
   ordenId: "o1",
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   motivo: "el cliente no la quiere",
   evidencias: [foto(0), foto(1)],
 };
 
 const REPROGRAMACION: GestionDesdeAyudaInput = {
   ordenId: "o1",
-  resultado: "reprogramada",
+  resultado: "reprogramado",
   fechaReprogramacion: "2027-01-05",
   motivo: "el cliente pidio otro dia",
   evidencias: [foto(0)],
@@ -119,7 +119,7 @@ describe("gestionar — el camino feliz (R2/R3/R4/R26)", () => {
 
     const r = await service.gestionar(RECHAZO, TIENDA);
 
-    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "rechazada" });
+    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo" });
     const arg = (gestionRepo.crearGestionDesdeAyuda as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as Record<string, unknown>;
     expect(arg).toMatchObject({
@@ -145,7 +145,7 @@ describe("gestionar — el camino feliz (R2/R3/R4/R26)", () => {
 
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalled();
     // El mapa unico sigue diciendo lo que la aprobacion aplicara.
-    expect(ESTATUS_POR_RESULTADO.reprogramada).toBe("reprogramada");
+    expect(ESTATUS_POR_RESULTADO.reprogramado).toBe("reprogramado");
   });
 
   it("la fecha de reprogramacion viaja al repo; en un rechazo va NULA", async () => {
@@ -178,7 +178,7 @@ describe("gestionar — el camino feliz (R2/R3/R4/R26)", () => {
     expect(arg.gestion.evidencias.map((e) => e.indice)).toEqual([0, 1]);
     // Prefijo propio: distingue estas fotos de las de una gestion del mensajero sobre la MISMA
     // orden, y dice de que camino vinieron.
-    expect(arg.gestion.evidencias[0].storagePath).toMatch(/^o1\/ayuda-rechazada-\d+-0\./);
+    expect(arg.gestion.evidencias[0].storagePath).toMatch(/^o1\/ayuda-devolucion_a_origen_por_rechazo-\d+-0\./);
   });
 
   it("R18: el servicio NO arma ubicacion — la tienda gestiona desde un escritorio", async () => {
@@ -254,7 +254,7 @@ describe("gestionar — la puerta (R19/R20/R21/R22)", () => {
     // operacion se rechaza. Aqui se simula un estatus que NO esta en la ventana del adminTienda y
     // que tampoco es el de ayuda: el resultado es un rechazo, no un paso adelante.
     const { service, gestionRepo } = montar({
-      orden: ordenParaHilo({ estatusValue: "por_recoger", ayudaAbierta: false }),
+      orden: ordenParaHilo({ estatusValue: "mensajero_recogiendo_en_bodega", ayudaAbierta: false }),
     });
     const r = await service.gestionar(RECHAZO, TIENDA);
     expect(r.status).not.toBe("ok");
@@ -270,7 +270,7 @@ describe("gestionar — el estado de la orden y su mensajero (R23/R8)", () => {
   // ⏳ 2026-09-23 (FICHA 454): «fuera de ayuda» deja de ser «estatus distinto de `ayuda_tienda`» y
   // pasa a ser «sin ayuda ABIERTA». `en_reparto` sin ayuda abierta (rescatada, o con una gestion ya
   // pendiente) es el caso nuevo que importa; los otros estatus, sin ayuda abierta por construccion.
-  it.each(["en_reparto", "devuelta", "entregada", "sin_gestionar"])(
+  it.each(["en_reparto", "novedad", "entregado", "novedad_interna"])(
     "R23: una orden en `%s` SIN ayuda abierta ⇒ `conflict`, sin tocar el repo de gestion ni subir nada",
     async (estatusValue) => {
       const { service, gestionRepo, storage } = montar({
@@ -316,7 +316,7 @@ describe("gestionar — el catalogo ya no interviene al registrar (454)", () => 
   it("con el catalogo VACIO la gestion se registra igual: no hay estatus que resolver", async () => {
     const { service, gestionRepo } = montar({ catalogo: {} });
     const r = await service.gestionar(RECHAZO, TIENDA);
-    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "rechazada" });
+    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo" });
     expect(gestionRepo.crearGestionDesdeAyuda).toHaveBeenCalledTimes(1);
   });
 });

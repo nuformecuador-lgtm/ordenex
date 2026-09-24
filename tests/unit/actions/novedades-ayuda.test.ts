@@ -81,7 +81,7 @@ describe("236/R2 — el grupo es una constante del modulo servidor", () => {
       { grupo: "devolucion" },
       { grupo: "ayuda" },
       { group: "devolucion" },
-      { estatus: "devuelta" },
+      { estatus: "novedad" },
     ]) {
       const service = buildService();
       await listarAyudaTiendaAction(

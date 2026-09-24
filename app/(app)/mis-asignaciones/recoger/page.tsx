@@ -42,7 +42,9 @@ export default async function RecogerPage() {
 
   return (
     <AppPage
-      title="Por recoger"
+      // FICHA 455 (2026-09-24, R6; design §2.1): el título es la ACCIÓN, no un estado («Por
+      // recoger» era el nombre viejo de un estado). La ruta no cambia (R51).
+      title="Recoger en bodega"
       description="Órdenes asignadas pendientes de recoger"
     >
       <RecogerModule porRecoger={result.porRecoger} bloqueo={bloqueo} />

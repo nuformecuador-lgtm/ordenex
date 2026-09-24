@@ -9,7 +9,7 @@ import type {
 // y destino (en transito a la bodega central). El primer tramo del retorno satelite: la devolucion
 // pasa OBLIGATORIAMENTE por la central antes de volver a la tienda.
 //   por_devolver --(adminSatelite de la zona)--> devolviendo_a_bodega_central
-const ESTADO_ORIGEN = "por_devolver";
+const ESTADO_ORIGEN = "por_devolver_a_bodega_central";
 const ESTADO_DESTINO = "devolviendo_a_bodega_central";
 
 // Solo el adminSatelite de la zona de la orden envia a central (R14). `por_devolver` es, por

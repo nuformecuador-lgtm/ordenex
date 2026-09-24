@@ -123,7 +123,7 @@ describe("resolverFlete — la tabla de verdad completa", () => {
 describe("derivarIngresoOrden — el pacto es la BASE, el IVA se calcula sobre el", () => {
   it("entregada en distrito especial: flete = pacto, IVA = 13% del pacto", () => {
     const d = derivarIngresoOrden(
-      { ...ORDEN, resultado: "entregada", esCentral: false, esZonaEspecial: true },
+      { ...ORDEN, resultado: "entregado", esCentral: false, esZonaEspecial: true },
       CON_PACTO,
     );
     expect(d.ingreso_flete?.toFixed(2)).toBe("2500.00");
@@ -132,11 +132,11 @@ describe("derivarIngresoOrden — el pacto es la BASE, el IVA se calcula sobre e
 
   it("y la comision COD no se entera: lo especial es el FLETE, no la factura", () => {
     const normal = derivarIngresoOrden(
-      { ...ORDEN, resultado: "entregada", esCentral: false, esZonaEspecial: false },
+      { ...ORDEN, resultado: "entregado", esCentral: false, esZonaEspecial: false },
       CON_PACTO,
     );
     const especial = derivarIngresoOrden(
-      { ...ORDEN, resultado: "entregada", esCentral: false, esZonaEspecial: true },
+      { ...ORDEN, resultado: "entregado", esCentral: false, esZonaEspecial: true },
       CON_PACTO,
     );
     expect(especial.ingreso_comision_cod?.toFixed(2)).toBe(
@@ -150,7 +150,7 @@ describe("derivarIngresoOrden — el pacto es la BASE, el IVA se calcula sobre e
 
   it("rechazada en distrito especial: usa el pacto de DEVOLUCION, no el de entrega", () => {
     const d = derivarIngresoOrden(
-      { ...ORDEN, resultado: "rechazada", esCentral: false, esZonaEspecial: true },
+      { ...ORDEN, resultado: "devolucion_a_origen_por_rechazo", esCentral: false, esZonaEspecial: true },
       CON_PACTO,
     );
     expect(d.ingreso_flete_devolucion?.toFixed(2)).toBe("1200.00");
@@ -164,7 +164,7 @@ describe("derivarIngresoOrden — el pacto es la BASE, el IVA se calcula sobre e
     // pacto especial sigue existiendo y sigue eligiendose bien; lo que ya no ocurre es que una
     // devuelta llegue a usarlo, porque no deriva ningun concepto.
     const d = derivarIngresoOrden(
-      { ...ORDEN, resultado: "devuelta", esCentral: false, esZonaEspecial: true },
+      { ...ORDEN, resultado: "novedad", esCentral: false, esZonaEspecial: true },
       CON_PACTO,
     );
     expect(d).toEqual({});
@@ -176,11 +176,11 @@ describe("derivarIngresoOrden — el pacto es la BASE, el IVA se calcula sobre e
 
   it("distrito especial SIN pacto: el importe es el de siempre (no bloquea, no cobra 0)", () => {
     const sin = derivarIngresoOrden(
-      { ...ORDEN, resultado: "entregada", esCentral: false, esZonaEspecial: true },
+      { ...ORDEN, resultado: "entregado", esCentral: false, esZonaEspecial: true },
       SIN_PACTO,
     );
     const normal = derivarIngresoOrden(
-      { ...ORDEN, resultado: "entregada", esCentral: false, esZonaEspecial: false },
+      { ...ORDEN, resultado: "entregado", esCentral: false, esZonaEspecial: false },
       SIN_PACTO,
     );
     expect(sin).toEqual(normal);
@@ -189,7 +189,7 @@ describe("derivarIngresoOrden — el pacto es la BASE, el IVA se calcula sobre e
 
   it("sin tarifa vigente el gap R9 se preserva: ningun concepto, sin lanzar", () => {
     const d = derivarIngresoOrden(
-      { ...ORDEN, resultado: "entregada", esCentral: false, esZonaEspecial: true },
+      { ...ORDEN, resultado: "entregado", esCentral: false, esZonaEspecial: true },
       null,
     );
     expect(d).toEqual({});
@@ -200,7 +200,7 @@ describe("derivarIngresoOrden — el pacto es la BASE, el IVA se calcula sobre e
     // `WalletTiendaFeedService` recorre sus claves. Un `origen` colado ahi dentro entraria en
     // una suma de dinero como si fuera un importe.
     const d = derivarIngresoOrden(
-      { ...ORDEN, resultado: "entregada", esCentral: false, esZonaEspecial: true },
+      { ...ORDEN, resultado: "entregado", esCentral: false, esZonaEspecial: true },
       CON_PACTO,
     );
     for (const v of Object.values(d)) expect(v).toBeInstanceOf(Prisma.Decimal);

@@ -584,7 +584,7 @@ function rechazosDeTiendaDelCierreWhere(mensajeroId: string): Prisma.GestionOrde
     mensajeroId,
     cierreId: null,
     anuladaAt: null,
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     historialEstados: { some: { origenTipo: "rechazo_tienda" } },
     vinculoRechazoTienda: { is: null },
   };

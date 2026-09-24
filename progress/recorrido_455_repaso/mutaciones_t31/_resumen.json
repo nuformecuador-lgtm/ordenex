@@ -1,0 +1,80 @@
+{
+ "filas": [
+  {
+   "id": "T31-1-chip-Entregada",
+   "aplicado": true,
+   "restaurado": true,
+   "base": "0 Test Files  1 passed (1) Tests  9 passed (9)",
+   "mutado": "1 Test Files  1 failed (1) Tests  1 failed | 8 passed (9)",
+   "rojo": true,
+   "fallidos": [
+    "ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2",
+    "tests/unit/guards/nombres-estado-retirados.guardia.test.ts > 455/R41 · R9 · R37 (G2) — el arbol > ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2"
+   ]
+  },
+  {
+   "id": "T31-2-devuelta-en-queryRaw",
+   "aplicado": true,
+   "restaurado": true,
+   "base": "0 Test Files  6 passed (6) Tests  31 passed (31)",
+   "mutado": "1 Test Files  2 failed | 4 passed (6) Tests  1 failed | 25 passed | 5 skipped (31)",
+   "rojo": true,
+   "fallidos": [
+    "ningun archivo de app/ lib/ components/ hooks/ scripts/ tests/ e2e/ ni de los docs de integradores usa un codigo anterior",
+    "tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real)",
+    "tests/unit/guards/censo-order-status-rename.test.ts > 455/R40 (G1) — el arbol no tiene codigos anteriores fuera de su excepcion > ningun archivo de app/ lib/ components/ hooks/ scripts/ tests/ e2e/ ni de los docs de integradores usa un codigo anterior"
+   ]
+  },
+  {
+   "id": "T31-3-Record-en-componente",
+   "aplicado": true,
+   "restaurado": true,
+   "base": "0 Test Files  1 passed (1) Tests  5 passed (5)",
+   "mutado": "1 Test Files  1 failed (1) Tests  1 failed | 4 passed (5)",
+   "rojo": true,
+   "fallidos": [
+    "ninguna segunda fuente de nombres ni humanizacion fuera de lo pendiente de la Fase 2",
+    "tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts > 455/R42 · R3 · R12 (G3) — el arbol > ninguna segunda fuente de nombres ni humanizacion fuera de lo pendiente de la Fase 2"
+   ]
+  },
+  {
+   "id": "T31-4-sin-estadoNombre-webhook",
+   "aplicado": true,
+   "restaurado": true,
+   "base": "0 Test Files  2 passed (2) Tests  80 passed (80)",
+   "mutado": "1 Test Files  2 failed (2) Tests  8 failed | 72 passed (80)",
+   "rojo": true,
+   "fallidos": [
+    "con suscripcion activa hace POST a la URL del owner con el cuerpo del evento",
+    "256/R7 (+404): `data` tiene EXACTAMENTE las cinco claves, en orden, tambien en un evento de devolucion",
+    "268/R24 (1): en `incidente` viaja el enlace EXACTO; en `entregada` la clave NO existe",
+    "268/R19: el cuerpo de un evento NO-incidente conserva EXACTAMENTE sus claves de siempre",
+    "406/R7a: remision de 129 caracteres -> clave AUSENTE, cuerpo normal y job completado",
+    "406/R8: remision con un sustituto UTF-16 desemparejado -> clave AUSENTE y el job NO falla",
+    "las claves del data entregado: `estadoNombre` pegado detras de `estado`",
+    "R25: el nombre es el visible de cada destino",
+    "tests/unit/services/webhook-estado-service.test.ts > R17/R19 — entrega y complete > con suscripcion activa hace POST a la URL del owner con el cuerpo del evento",
+    "tests/unit/services/webhook-estado-service.test.ts > 256/R6-R7 — la forma: UNA sola, el campo siempre presente > 256/R7 (+404): `data` tiene EXACTAMENTE las cinco claves, en orden, tambien en un evento de devolucion",
+    "tests/unit/services/webhook-estado-service.test.ts > 268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin credencial > 268/R24 (1): en `incidente` viaja el enlace EXACTO; en `entregada` la clave NO existe",
+    "tests/unit/services/webhook-estado-service.test.ts > 268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin credencial > 268/R19: el cuerpo de un evento NO-incidente conserva EXACTAMENTE sus claves de siempre"
+   ]
+  },
+  {
+   "id": "T31-5-NOMBRE_ESTADO",
+   "aplicado": true,
+   "restaurado": true,
+   "base": "0 Test Files  1 passed (1) Tests  4 passed (4)",
+   "mutado": "1 Test Files  1 failed (1) Tests  3 failed | 1 passed (4)",
+   "rojo": true,
+   "fallidos": [
+    "20 codigos, un nombre cada uno, igual a la tabla aprobada (§0.1)",
+    "los 20 nombres son los de `specs/456-tooltip-estados/textos-aprobados.md` (leidos del disco)",
+    "MUTACION (R44): un nombre cambiado, uno repetido o uno de menos ponen rojo el comparador",
+    "tests/unit/types/nombre-estado-catalogo.test.ts > 455/R1 · R43 (G4) — el catalogo de nombres es el aprobado > 20 codigos, un nombre cada uno, igual a la tabla aprobada (§0.1)",
+    "tests/unit/types/nombre-estado-catalogo.test.ts > 455/R1 · R43 (G4) — el catalogo de nombres es el aprobado > los 20 nombres son los de `specs/456-tooltip-estados/textos-aprobados.md` (leidos del disco)",
+    "tests/unit/types/nombre-estado-catalogo.test.ts > 455/R1 · R43 (G4) — el catalogo de nombres es el aprobado > MUTACION (R44): un nombre cambiado, uno repetido o uno de menos ponen rojo el comparador"
+   ]
+  }
+ ],
+ "git_status_codigo": ""
+}

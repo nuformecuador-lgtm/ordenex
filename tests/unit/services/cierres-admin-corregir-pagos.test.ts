@@ -34,7 +34,7 @@ function editable(
     gestionId: GESTION,
     cierreId: "c-1",
     cierreEstado: "solicitado",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "10000.00",
     pagos: [{ metodo: "efectivo", monto: "10000.00" }],
     ...overrides,
@@ -191,7 +191,7 @@ describe("CierresAdminService.actualizarPagosGestion — qué se puede corregir"
   it("un resultado que no es `entregada` no tiene desglose que corregir", async () => {
     const repo = fakeRepo({
       findGestionEditableEnCierre: vi.fn(async () =>
-        editable({ resultado: "devuelta", montoRecibido: null, pagos: [] }),
+        editable({ resultado: "novedad", montoRecibido: null, pagos: [] }),
       ),
     });
     const r = await newService(repo).actualizarPagosGestion(

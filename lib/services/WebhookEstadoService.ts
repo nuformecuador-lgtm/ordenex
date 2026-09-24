@@ -30,6 +30,7 @@ import { idOrdenApiSchema } from "@/lib/api/api-orden-identificador";
 // FICHA 403 — el circuito: un predicado puro + la config del umbral + el aviso best-effort.
 import { estaPausada } from "@/lib/utils/webhook-suscripcion-pausa";
 import { pausaConfigDe } from "@/lib/config/webhook";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import {
   notificadorNoOp,
   type WebhookSuscripcionPausadaNotificador,
@@ -43,7 +44,7 @@ export const EVENTO_ESTADO = "orden.estado_actualizado";
  * decidir que publica en `data`. El repositorio no los conoce: el reader siempre responde «cual es
  * la causa vigente» y es AQUI donde se decide que sale al cable (criterio heredado de la 256).
  */
-const ESTADO_DEVUELTA = "devuelta";
+const ESTADO_DEVUELTA = "novedad";
 const ESTADO_INCIDENTE = "incidente";
 
 /**
@@ -81,6 +82,8 @@ interface DataEvento {
   numGuia: number | null;
   numRemision: string;
   estado: string | null;
+  /** FICHA 455 (R25): nombre visible de `estado`, INMEDIATAMENTE despues de el en el cuerpo firmado. */
+  estadoNombre: string | null;
   motivo: CausaDevolucion | CausaIncidente | null;
   mensajero: ApiMensajeroDTO | null;
   evidenciasUrl?: string;
@@ -271,6 +274,9 @@ export class WebhookEstadoService {
       numGuia: datos.numGuia,
       numRemision: datos.numRemision,
       estado: datos.estado,
+      // FICHA 455 (R25): el nombre va PEGADO a su codigo, en esta posicion y no en otra: la firma se
+      // calcula sobre el string serializado (99/R18). Sale de la fuente unica, no de un mapa propio.
+      estadoNombre: datos.estado === null ? null : nombreDeEstado(datos.estado),
       // Feature 256 (R1-R7) + feature 268 (R20/R21). ⚠️ DOS `motivo` DISTINTOS QUE COMPARTEN
       // NOMBRE, y esta es la UNICA linea donde el nombre publico se pega al dato: `data.motivo`
       // transporta la causa TIPIFICADA (enum cerrado de 3 valores: `gestion_orden.causa_devolucion`

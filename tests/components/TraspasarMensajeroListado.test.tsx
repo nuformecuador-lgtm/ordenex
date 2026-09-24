@@ -99,7 +99,7 @@ const FECHAS = { hoy: "2026-09-14", manana: "2026-09-15" };
 const CATALOGO = [
   { id: "est-en_reparto", value: "en_reparto" },
   { id: "est-ayuda_tienda", value: "ayuda_tienda" },
-  { id: "est-por_recoger", value: "por_recoger" },
+  { id: "est-mensajero_recogiendo_en_bodega", value: "mensajero_recogiendo_en_bodega" },
   { id: "est-devolviendo_a_tienda", value: "devolviendo_a_tienda" },
   { id: "est-en_bodega_central", value: "en_bodega_central" },
 ];
@@ -220,10 +220,10 @@ describe("427/R34 — `/ordenes` ofrece el traspaso EXACTAMENTE en los dos estad
     expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
   });
 
-  it("NO se ofrece en `por_recoger`: el paquete está en la bodega y ya tiene su propia acción", async () => {
+  it("NO se ofrece en `mensajero_recogiendo_en_bodega`: el paquete está en la bodega y ya tiene su propia acción", async () => {
     const user = userEvent.setup();
     renderOrdenes([
-      makeOrden({ id: "o3", estatusId: "est-por_recoger", estatusValue: "por_recoger" }),
+      makeOrden({ id: "o3", estatusId: "est-mensajero_recogiendo_en_bodega", estatusValue: "mensajero_recogiendo_en_bodega" }),
     ]);
 
     await seleccionarFila(user, "REM-o3");
@@ -283,8 +283,8 @@ describe("427/R34 — `/ordenes` ofrece el traspaso EXACTAMENTE en los dos estad
       makeOrden({ id: "o6" }), // en_reparto -> sí
       makeOrden({
         id: "o7",
-        estatusId: "est-por_recoger",
-        estatusValue: "por_recoger",
+        estatusId: "est-mensajero_recogiendo_en_bodega",
+        estatusValue: "mensajero_recogiendo_en_bodega",
       }), // -> no
     ]);
 

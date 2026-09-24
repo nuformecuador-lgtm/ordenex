@@ -75,7 +75,7 @@ const ENTREGA: CierreDetalleGestion = {
   distritoNombre: "Carmen",
   producto: "Caja mediana",
   tiendaNombre: "Tienda X",
-  resultado: "entregada",
+  resultado: "entregado",
   montoRecibido: "8000.00",
   metodoPago: null,
   pagos: [],
@@ -93,10 +93,10 @@ const ENTREGA: CierreDetalleGestion = {
 
 function grupos(): CierreGrupos {
   return {
-    entregada: [ENTREGA],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: [ENTREGA],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 }
@@ -188,7 +188,7 @@ function pintar(
 
 /** La sección nueva, localizada por su NOMBRE ACCESIBLE (nunca por una clase). */
 function seccion(): HTMLElement {
-  return screen.getByRole("region", { name: "Órdenes sin gestionar" });
+  return screen.getByRole("region", { name: "Pasaron a Novedad interna" });
 }
 
 /**
@@ -312,7 +312,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
   it("R15: registrado y sin ninguna orden ⇒ la sección NO está en el DOM", () => {
     pintar([], true);
     expect(
-      screen.queryByRole("region", { name: "Órdenes sin gestionar" }),
+      screen.queryByRole("region", { name: "Pasaron a Novedad interna" }),
       "con la marca en `true` y cero órdenes, la lectura correcta es «no hubo ninguna» y eso se " +
         "dice callando: la sección no se pinta",
     ).toBeNull();
@@ -323,7 +323,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
     const s = seccion();
     expect(
       within(s).getByText(
-        "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.",
+        "Este cierre es anterior al registro de las órdenes que pasan a Novedad interna: no se conserva la lista.",
       ),
     ).toBeInTheDocument();
   });
@@ -353,7 +353,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
 
     pintar([], true);
     const sinSeccion = screen.queryByRole("region", {
-      name: "Órdenes sin gestionar",
+      name: "Pasaron a Novedad interna",
     });
 
     expect(
@@ -368,7 +368,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
     const s = seccion();
     expect(
       within(s).getByText(
-        "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.",
+        "Este cierre es anterior al registro de las órdenes que pasan a Novedad interna: no se conserva la lista.",
       ),
     ).toBeInTheDocument();
     expect(within(s).queryAllByRole("listitem")).toHaveLength(0);
@@ -399,8 +399,10 @@ describe("feature 264 — la sección es de consulta y no rellena lo que no sabe
       .closest('[role="listitem"]');
 
     expect((desdeReparto as HTMLElement).textContent).toContain("En reparto");
+    // ⏳ 2026-09-24 (FICHA 455, R11): el origen retirado se lee con su nombre histórico MARCADO,
+    // el mismo de la línea de tiempo (antes, «Ayuda de la tienda», un nombre que nunca tuvo).
     expect((desdeAyuda as HTMLElement).textContent).toContain(
-      "Ayuda de la tienda",
+      "Ayuda solicitada a la tienda (estado retirado)",
     );
   });
 
@@ -536,11 +538,11 @@ describe("feature 264 — el dinero del comprobante no se mueve por la sección 
     // «Entregadas 1» y las otras cuatro en cero. Concatenar las órdenes sin gestionar a
     // `grupos.entregada` —la otra mitad de M4— movería la primera.
     expect(pestanas.map((t) => t.textContent)).toEqual([
-      "Entregadas1",
-      "Reprogramadas0",
-      "Devueltas0",
-      "Rechazadas0",
-      "Incidentes0",
+      "Entregado1",
+      "Reprogramado0",
+      "Novedad0",
+      "Devolución a origen por rechazo0",
+      "Incidente0",
     ]);
   });
 });

@@ -349,7 +349,7 @@ describe("R13/R15/R16 — las cinco medidas de gestion y la causa de devolucion"
     expect(fila.devoluciones).toBe(1);
   });
 
-  it("materializa `incidentes` (cuarto termino del denominador) y no inventa `sin_gestionar`", async () => {
+  it("materializa `incidentes` (cuarto termino del denominador) y no inventa `novedad_interna`", async () => {
     const { repo, service } = construir({
       gestiones: [gestion({ incidentes: 1, rechazos: 2, reprogramaciones: 3 })],
       totales: { incidentes: 1, rechazos: 2, reprogramaciones: 3 },
@@ -946,7 +946,7 @@ describe("R7/R48 — toda consulta esta acotada por la ventana o por el universo
     expect(FUENTE_REPO).toMatch(
       /import \{ ESTADOS_TERMINALES \} from "@\/lib\/types\/order-status-transiciones"/,
     );
-    for (const inventado of ["'entregada'", "'devuelta_a_tienda'"]) {
+    for (const inventado of ["'entregado'", "'devuelta_a_tienda'"]) {
       expect(FUENTE_REPO.includes(`s."value" = ${inventado}`)).toBe(false);
     }
   });

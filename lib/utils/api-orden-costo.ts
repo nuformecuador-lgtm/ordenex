@@ -70,7 +70,7 @@ function conceptos(
   // R15: `resultado: "entregada"` FIJO. Los dos campos publicados responden «cuanto cuesta este
   // paquete SI SE ENTREGA»; el escenario del rechazo (flete de devolucion + su IVA) es otro y lo
   // sirve la cotizacion.
-  const derivado = derivarIngresoOrden({ resultado: "entregada", ...entradas }, tarifa);
+  const derivado = derivarIngresoOrden({ resultado: "entregado", ...entradas }, tarifa);
   return {
     flete: serializar(derivado.ingreso_flete),
     iva: serializar(derivado.ingreso_iva_flete),

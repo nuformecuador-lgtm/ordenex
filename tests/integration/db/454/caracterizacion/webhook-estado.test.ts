@@ -23,7 +23,7 @@ describeSiHayBase("454/C26 — webhook de estado de una entrega (Postgres real)"
         data: { ownerUsuarioId: e.tiendaId, url: "https://example.test/hook-454", secret: "cifrado-de-prueba", activa: true },
       });
       const o = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 4000 });
-      const entregadaId = e.id("entregada");
+      const entregadaId = e.id("entregado");
       const jobs = async () =>
         (
           await e.tx.job.findMany({
@@ -32,7 +32,7 @@ describeSiHayBase("454/C26 — webhook de estado de una entrega (Postgres real)"
           })
         ).map((j) => j.payload as Record<string, unknown>);
 
-      await e.gestionarOk(o.ordenId, "entregada", { monto: 4000 });
+      await e.gestionarOk(o.ordenId, "entregado", { monto: 4000 });
       const trasGestionar = (await jobs()).filter((p) => p.estatusDestinoId === entregadaId);
       const cierreId = await e.solicitarCierreOk();
       const aprobacion = await e.aprobar(cierreId);

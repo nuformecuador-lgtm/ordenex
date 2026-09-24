@@ -173,7 +173,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
   // ⭑ EL CASO DEL REPORTE, literal: entrega en GAM. Antes salían DOS marcas.
   it("una ENTREGA en GAM cobra en «Valor flete GAM» y en NINGUNA fila de rechazo", () => {
     render(
-      <DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: true, ...ENTREGADA }), "entregada")} />,
+      <DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: true, ...ENTREGADA }), "entregado")} />,
     );
 
     // El conjunto exacto de filas con importe, no «contiene»: la mitad del defecto era una marca
@@ -185,7 +185,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
   it("una ENTREGA fuera de GAM cobra en «Valor flete», y tampoco en ninguna de rechazo", () => {
     render(
       <DesgloseIngresoOrdenex
-        g={gestion(ingreso({ esCentral: false, ...ENTREGADA, flete: "1000.00" }), "entregada")}
+        g={gestion(ingreso({ esCentral: false, ...ENTREGADA, flete: "1000.00" }), "entregado")}
       />,
     );
     expect(FILAS_FLETE.filter(cobra)).toEqual([VALOR_FLETE_LABEL]);
@@ -195,7 +195,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
   // El espejo: un rechazo cobra el retorno y NADA de la entrega.
   it("un RECHAZO en GAM cobra en «Flete por rechazo GAM» y en NINGUNA fila de entrega", () => {
     render(
-      <DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: true, ...RECHAZADA }), "rechazada")} />,
+      <DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: true, ...RECHAZADA }), "devolucion_a_origen_por_rechazo")} />,
     );
     expect(FILAS_FLETE.filter(cobra)).toEqual([FLETE_RECHAZO_GAM_LABEL]);
     expect(cobro(FLETE_RECHAZO_GAM_LABEL)).toBe(money("400.00"));
@@ -206,7 +206,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
       <DesgloseIngresoOrdenex
         g={gestion(
           ingreso({ esCentral: false, ...RECHAZADA, fleteDevolucion: "500.00" }),
-          "rechazada",
+          "devolucion_a_origen_por_rechazo",
         )}
       />,
     );
@@ -218,7 +218,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
   // cobro, ninguna fila lleva importe. Y desde la 338 eso ya no hay que deducirlo de la ausencia
   // de una marca: cada fila lo DICE, con un cero.
   it("una REPROGRAMADA (cobra 0,00) no carga importe en NINGUNA fila", () => {
-    render(<DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: true }), "reprogramada")} />);
+    render(<DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: true }), "reprogramado")} />);
     expect(FILAS_FLETE.filter(cobra)).toEqual([]);
     expect(FILAS_FLETE.map(cobro)).toEqual(FILAS_FLETE.map(() => CERO));
   });
@@ -226,7 +226,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
   // Desde la ficha 301 una `devuelta` tampoco emite ningún concepto. Mismo trato, y se afirma
   // aparte porque son dos decisiones de negocio distintas que dan el mismo resultado visual.
   it("una DEVUELTA (301: ya no cobra retorno) tampoco carga importe en NINGUNA fila", () => {
-    render(<DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: false }), "devuelta")} />);
+    render(<DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: false }), "novedad")} />);
     expect(FILAS_FLETE.filter(cobra)).toEqual([]);
   });
 
@@ -245,7 +245,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
             total: "2604.00",
             tarifa: tarifa({ tarifaEspecial: "2500.00", tarifaEspecialDevuelta: "1200.00" }),
           }),
-          "entregada",
+          "entregado",
         )}
       />,
     );
@@ -265,7 +265,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
             fleteDevolucionOrigen: "especial",
             tarifa: tarifa({ tarifaEspecial: "2500.00", tarifaEspecialDevuelta: "1200.00" }),
           }),
-          "reprogramada",
+          "reprogramado",
         )}
       />,
     );
@@ -289,7 +289,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
             fleteConIva: "0.00",
             tarifa: tarifa({ valorFleteGam: "0.00" }),
           }),
-          "entregada",
+          "entregado",
         )}
       />,
     );
@@ -301,7 +301,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
 
   it("el panel ya NO imprime el UUID crudo de la tarifa, y conserva la nota que sí se lee", () => {
     render(
-      <DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: true, ...ENTREGADA }), "entregada")} />,
+      <DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: true, ...ENTREGADA }), "entregado")} />,
     );
     // A una persona un identificador interno no le dice nada; era ruido junto a la única frase
     // del panel que sí explica qué está viendo.

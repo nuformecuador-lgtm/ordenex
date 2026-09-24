@@ -36,7 +36,7 @@ describe("R17 — el pago al MENSAJERO no cobra por un incidente", () => {
   it("pagoPorResultado('incidente') = 0.00 aunque la tarifa pague 5000 por entrega", () => {
     expect(pagoPorResultado("incidente", TARIFA_MENSAJERO)).toBe("0.00");
     // Control de discriminacion: con la MISMA tarifa, `entregada` SI paga.
-    expect(pagoPorResultado("entregada", TARIFA_MENSAJERO)).toBe("5000.00");
+    expect(pagoPorResultado("entregado", TARIFA_MENSAJERO)).toBe("5000.00");
   });
 
   it("sin tarifa tampoco lanza (mismo gap seguro que el resto de resultados)", () => {
@@ -48,7 +48,7 @@ describe("R17 — el ingreso de BODEGA por rechazo no se cobra por un incidente"
   it("ingresoBodegaPorResultado('incidente') = 0.00 aunque el cobro por rechazo sea 2500", () => {
     expect(ingresoBodegaPorResultado("incidente", TARIFA_MENSAJERO)).toBe("0.00");
     // Control de discriminacion: con la MISMA tarifa, `rechazada` SI genera ingreso.
-    expect(ingresoBodegaPorResultado("rechazada", TARIFA_MENSAJERO)).toBe("2500.00");
+    expect(ingresoBodegaPorResultado("devolucion_a_origen_por_rechazo", TARIFA_MENSAJERO)).toBe("2500.00");
   });
 
   it("sin tarifa tampoco lanza", () => {
@@ -80,7 +80,7 @@ describe("R17 — el ingreso de ORDENEX no factura nada por un incidente", () =>
 
   it("control de discriminacion: con la MISMA tarifa y orden, `entregada` SI factura", () => {
     const derivado = derivarIngresoOrden(
-      { resultado: "entregada", esCentral: true, esZonaEspecial: false, montoCobrar: "50000.00", cobraComision: true },
+      { resultado: "entregado", esCentral: true, esZonaEspecial: false, montoCobrar: "50000.00", cobraComision: true },
       TARIFA_TIENDA,
     );
     expect(Object.keys(derivado).length).toBeGreaterThan(0);

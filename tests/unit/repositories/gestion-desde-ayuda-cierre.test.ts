@@ -33,7 +33,7 @@ interface FilaGestion {
   id: string;
   ordenId: string;
   mensajeroId: string;
-  resultado: "entregada" | "reprogramada" | "rechazada" | "devuelta" | "incidente";
+  resultado: "entregado" | "reprogramado" | "devolucion_a_origen_por_rechazo" | "novedad" | "incidente";
   cierreId: string | null;
   anuladaAt: Date | null;
   pagoMensajero: Prisma.Decimal | null;
@@ -51,7 +51,7 @@ function gestion(over: Partial<FilaGestion> = {}): FilaGestion {
     id: `g${seq}`,
     ordenId: `o${seq}`,
     mensajeroId: "mensajero-1",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     cierreId: null,
     anuladaAt: null,
     pagoMensajero: null,
@@ -344,7 +344,7 @@ describe("💰 R29 — la gestion de la tienda entra en el cierre del mensajero,
       // (que la gestion caiga en el cierre del mensajero), no el predicado del dia: basta con un
       // dia valido para que la orden sembrada, que no tiene reserva, pase la guarda.
       diaEnCurso: new Date("2026-08-21T00:00:00.000Z"),
-      gestion: { resultado: "rechazada", motivo: "el cliente no la quiere", evidencias: [] },
+      gestion: { resultado: "devolucion_a_origen_por_rechazo", motivo: "el cliente no la quiere", evidencias: [] },
     });
     expect(gestionId).not.toBeNull();
 
@@ -389,7 +389,7 @@ describe("💰 R29 — la gestion de la tienda entra en el cierre del mensajero,
       mensajeroId: "mensajero-1",
       actorUsuarioId: "tienda-1",
       diaEnCurso: new Date("2026-08-21T00:00:00.000Z"), // feature 261 (B17)
-      gestion: { resultado: "rechazada", motivo: "el cliente no la quiere", evidencias: [] },
+      gestion: { resultado: "devolucion_a_origen_por_rechazo", motivo: "el cliente no la quiere", evidencias: [] },
     });
 
     expect(gestionId).toBeNull();
@@ -578,7 +578,7 @@ describe("💰 R30 — los movimientos son IDENTICOS venga la gestion del mensaj
     };
   }
 
-  it.each(["rechazada", "reprogramada"] as const)(
+  it.each(["devolucion_a_origen_por_rechazo", "reprogramado"] as const)(
     "`%s`: mismo pago, mismo ingreso y mismos totales para las dos procedencias",
     (resultado) => {
       const delMensajero = [fila("g-mensajero", resultado)];
@@ -603,7 +603,7 @@ describe("💰 R30 — los movimientos son IDENTICOS venga la gestion del mensaj
     // SI le cuesta, pero por otra via y otra tarifa: el flete de devolucion mas IVA 13 %. La tarifa
     // se resuelve por zona + vehiculo DEL MENSAJERO, coherente con «cuenta como del mensajero», y
     // el resultado es el mismo string.
-    const deLaTienda = [fila("g-tienda", "rechazada")];
+    const deLaTienda = [fila("g-tienda", "devolucion_a_origen_por_rechazo")];
     const { ingresoByGestionId, total } = derivarIngresoBodega(deLaTienda, TARIFA);
     expect(ingresoByGestionId["g-tienda"]).toBe("1000.00");
     expect(total).toBe("1000.00");
@@ -612,7 +612,7 @@ describe("💰 R30 — los movimientos son IDENTICOS venga la gestion del mensaj
   });
 
   it("`reprogramada` de la tienda es money-neutral: 0.00 en pago y 0.00 en ingreso", () => {
-    const deLaTienda = [fila("g-tienda", "reprogramada")];
+    const deLaTienda = [fila("g-tienda", "reprogramado")];
     expect(derivarPagos(deLaTienda, TARIFA)).toEqual({
       pagoByGestionId: { "g-tienda": "0.00" },
       total: "0.00",
@@ -626,7 +626,7 @@ describe("💰 R30 — los movimientos son IDENTICOS venga la gestion del mensaj
   });
 
   it("los importes viajan como STRING de escala 2 — ni un `number` en el camino", () => {
-    const { total } = derivarIngresoBodega([fila("g-tienda", "rechazada")], TARIFA);
+    const { total } = derivarIngresoBodega([fila("g-tienda", "devolucion_a_origen_por_rechazo")], TARIFA);
     expect(typeof total).toBe("string");
     expect(total).toMatch(/^\d+\.\d{2}$/);
   });
@@ -644,7 +644,7 @@ describe("💰 R30 — los movimientos son IDENTICOS venga la gestion del mensaj
       mensajeroId: "mensajero-1",
       actorUsuarioId: "tienda-1",
       diaEnCurso: new Date("2026-08-21T00:00:00.000Z"), // feature 261 (B17)
-      gestion: { resultado: "rechazada", motivo: "el cliente no la quiere", evidencias: [] },
+      gestion: { resultado: "devolucion_a_origen_por_rechazo", motivo: "el cliente no la quiere", evidencias: [] },
     });
     expect(gestionId).not.toBeNull();
 

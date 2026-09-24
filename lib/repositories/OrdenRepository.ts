@@ -489,7 +489,7 @@ function apiOrdenDetalleSelect(ownerId: string) {
       OR: [
         {
           // R15 + 268/R27: entrega/rechazo y ademas el incidente del MENSAJERO. INTACTO.
-          resultado: { in: ["entregada", "rechazada", "incidente"] },
+          resultado: { in: ["entregado", "devolucion_a_origen_por_rechazo", "incidente"] },
           evidenciaStoragePath: { not: null }, // R15: con evidencia adjunta
         },
         // 405/R11: las gestiones VIGENTES, sea cual sea su resultado y lleven foto o no. Es el
@@ -719,7 +719,7 @@ export function causaTipificadaDeGestion(gestion: {
   causaDevolucion: GestionCausaDevolucion | null;
   causaIncidente: GestionCausaIncidente | null;
 }): GestionCausaDevolucion | GestionCausaIncidente | null {
-  if (gestion.resultado === "devuelta") return gestion.causaDevolucion;
+  if (gestion.resultado === "novedad") return gestion.causaDevolucion;
   if (gestion.resultado === "incidente") return gestion.causaIncidente;
   return null;
 }
@@ -763,12 +763,12 @@ function toApiOrdenDetalleRow(row: ApiOrdenDetalleSelectRow): ApiOrdenDetalleRow
     // 405: el predicado ORIGINAL de la 106/268, palabra por palabra, sobre el superconjunto.
     .filter(
       (g) =>
-        ["entregada", "rechazada", "incidente"].includes(g.resultado) &&
+        ["entregado", "devolucion_a_origen_por_rechazo", "incidente"].includes(g.resultado) &&
         g.evidenciaStoragePath !== null,
     )
     .map((g) => ({
       // `resultado` esta acotado por el filtro de arriba a estos tres valores.
-      resultado: g.resultado as "entregada" | "rechazada" | "incidente",
+      resultado: g.resultado as "entregado" | "devolucion_a_origen_por_rechazo" | "incidente",
       // El filtro exige `evidencia_storage_path` no nulo; el `!` es seguro.
       storagePath: g.evidenciaStoragePath!,
       contentType: g.evidenciaContentType,
@@ -1040,7 +1040,7 @@ const TARIFA_SELECT = {
 
 // `gestion_orden.resultado` de una reprogramacion (espejo de
 // `LiberacionReprogramadaRepository`, el cron que consume la misma fecha).
-const RESULTADO_REPROGRAMADA = "reprogramada";
+const RESULTADO_REPROGRAMADA = "reprogramado";
 
 // Origen UNICO de las dos decisiones de despacho del maestro —asignar mensajero y rutear a
 // una bodega satelite—, y por tanto el estado del filtro REASIGNABLES.
@@ -1049,14 +1049,14 @@ const ESTATUS_EN_BODEGA_CENTRAL = "en_bodega_central";
 // Feature 87 (T2/R6): `gestion_orden.resultado` de una DEVOLUCION. Mismo valor del enum
 // `GestionResultado` que ya usa el historial; la vigencia se filtra por `anuladaAt: null`
 // (mismo criterio que `contarPorDestinoVigentes`, feature 67).
-const RESULTADO_DEVUELTA = "devuelta";
+const RESULTADO_DEVUELTA = "novedad";
 
 // ⚰️ FEATURE 236 (T2.1) — y aqui, `ESTATUS_DEVUELTA = "devuelta"`, la primera rama de aquel `OR`.
 // Mismo destino y mismo motivo que su hermana de arriba: hoy es `ESTATUS_POR_GRUPO.devolucion`.
 
 // Feature 102 (T7): `order_status.value` de una orden rechazada. La superficie de rechazos por
 // SLA de la tienda se ancla a este estado real (mientras la orden REPOSE en `rechazada`, R15).
-const ESTATUS_RECHAZADA = "rechazada";
+const ESTATUS_RECHAZADA = "devolucion_a_origen_por_rechazo";
 
 // FICHA 454 (T1.16): aqui vivia `ORIGEN_TIPO_SOLICITUD_AYUDA` (236/D7). La fecha de la solicitud
 // sale ahora del evento `ayuda_solicitada` (`fechasSolicitudAyuda`, `ayuda-abierta.ts`).

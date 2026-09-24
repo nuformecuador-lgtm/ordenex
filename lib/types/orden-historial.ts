@@ -257,9 +257,9 @@ export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)
  * El `satisfies` rompe el build si un valor deja de existir en el enum `GestionResultado`.
  */
 export const RESULTADOS_QUE_CUENTAN_COMO_INTENTO = [
-  "rechazada",
-  "devuelta",
-  "reprogramada",
+  "devolucion_a_origen_por_rechazo",
+  "novedad",
+  "reprogramado",
 ] as const satisfies readonly GestionResultado[];
 
 export type ResultadoIntentoEntrega = (typeof RESULTADOS_QUE_CUENTAN_COMO_INTENTO)[number];

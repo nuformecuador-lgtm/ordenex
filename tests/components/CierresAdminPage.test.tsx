@@ -375,10 +375,10 @@ describe("CierresAdminPage — Feature 172 [P3]/R6: quién recibe la oferta de p
   };
 
   const GRUPOS_VACIOS: CierreGrupos = {
-    entregada: [],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: [],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 

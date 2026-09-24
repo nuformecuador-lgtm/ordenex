@@ -81,9 +81,9 @@ function vinculo(ordenId: string, numGuia: number) {
 }
 
 const GESTIONES = [
-  { ordenId: "o-e1", resultado: "entregada", montoRecibido: new Prisma.Decimal("10000.00") },
-  { ordenId: "o-d1", resultado: "devuelta", montoRecibido: null },
-  { ordenId: "o-r1", resultado: "rechazada", montoRecibido: null },
+  { ordenId: "o-e1", resultado: "entregado", montoRecibido: new Prisma.Decimal("10000.00") },
+  { ordenId: "o-d1", resultado: "novedad", montoRecibido: null },
+  { ordenId: "o-r1", resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null },
 ];
 const DETALLES = GESTIONES.map((g) => detalle(g.ordenId));
 
@@ -251,14 +251,14 @@ async function aprobarCon(
     motivoRechazo: null,
     // Feature 109: la config de liberacion de las ordenes `sin_gestionar` del mensajero.
     liberacionSinGestionar: {
-      sinGestionarEstatusId: idEstado("sin_gestionar"),
+      sinGestionarEstatusId: idEstado("novedad_interna"),
       enBodegaEstatusId: idEstado("en_bodega_central"),
       enBodegaSateliteEstatusId: idEstado("en_bodega_satelite"),
       centralZonaId: "z-264",
       // FEATURE 276 (T9): la config gana el destino del rechazo por tope y el UMBRAL inyectado.
       // Con el corpus de esta suite ninguna orden llega al umbral, asi que la rama nueva es un
       // no-op y estos casos siguen midiendo lo que median (la liberacion a bodega, R25).
-      rechazadaEstatusId: idEstado("rechazada"),
+      rechazadaEstatusId: idEstado("devolucion_a_origen_por_rechazo"),
       umbralIntentos: 3,
     },
     confirmacionFisica: [],
@@ -346,19 +346,19 @@ describe("264/B8 — aprobar un cierre CON ordenes sin gestionar mueve el mismo 
     expect(tx.cierreSinGestion.createMany).not.toHaveBeenCalled();
   });
 
-  it("R22/109: la liberacion de las `sin_gestionar` sigue siendo la de siempre", async () => {
+  it("R22/109: la liberacion de las `novedad_interna` sigue siendo la de siempre", async () => {
     const { tx } = await aprobarCon([vinculo("o-b1", 11)]);
 
     // Se localiza por su GUARDA, no por su posicion: la rama `aprobado` tiene mas de un
     // `updateMany` sobre `orden` y un indice fijo se rompe en cuanto se añade otro bloque.
     const upd = tx.orden.updateMany.mock.calls
       .map(([a]) => a as { where: { estatusId?: string; id: { in: string[] } }; data: unknown })
-      .find((a) => a.where.estatusId === idEstado("sin_gestionar"));
-    expect(upd, "la liberacion de las `sin_gestionar` no ocurrio").toBeDefined();
+      .find((a) => a.where.estatusId === idEstado("novedad_interna"));
+    expect(upd, "la liberacion de las `novedad_interna` no ocurrio").toBeDefined();
     // Guardada por el estatus de origen, y money-neutral: SOLO toca columnas de `orden`.
     expect(upd?.where).toEqual({
       id: { in: ["o-barrida-1", "o-barrida-2"] },
-      estatusId: idEstado("sin_gestionar"),
+      estatusId: idEstado("novedad_interna"),
       deletedAt: null,
     });
     expect(upd?.data).toEqual({
@@ -419,7 +419,7 @@ describe("276/R24 — la rama nueva es MONEY-NEUTRAL sobre el cierre que se apru
     // (Option A de la 99). Con el id de ESTE cierre, los importes cambiarian DESPUES de que el
     // snapshot se congelara al solicitar — que es exactamente lo que R24 prohibe.
     expect(creada.data.cierreId).toBeNull();
-    expect(creada.data.resultado).toBe("rechazada");
+    expect(creada.data.resultado).toBe("devolucion_a_origen_por_rechazo");
     expect(creada.data.mensajeroId).toBe(MENSAJERO_ID);
   });
 
@@ -428,19 +428,19 @@ describe("276/R24 — la rama nueva es MONEY-NEUTRAL sobre el cierre que se apru
 
     const upd = tx.orden.updateMany.mock.calls
       .map(([a]) => a as { where: { estatusId?: string; id: { in: string[] } }; data: unknown })
-      .filter((a) => a.where.estatusId === idEstado("sin_gestionar"))
-      .find((a) => (a.data as { estatusId?: string }).estatusId === idEstado("rechazada"));
+      .filter((a) => a.where.estatusId === idEstado("novedad_interna"))
+      .find((a) => (a.data as { estatusId?: string }).estatusId === idEstado("devolucion_a_origen_por_rechazo"));
     expect(upd, "el rechazo por tope no ocurrio").toBeDefined();
     expect(upd?.where).toEqual({
       id: { in: ["o-barrida-1"] },
-      estatusId: idEstado("sin_gestionar"),
+      estatusId: idEstado("novedad_interna"),
       deletedAt: null,
     });
     // ⭑ UNA SOLA CLAVE, literal. Diferencia DELIBERADA con la liberacion de al lado, que si limpia
     // mensajero/`asignado_at`/`fecha_reparto` y enciende `prioridad`. Conservar el mensajero es lo
     // que hace que el bloque de la 139 recoja la orden y la lleve a `por_devolver*`; limpiarlo la
     // dejaria en `rechazada` sin nadie que la moviera.
-    expect(upd?.data).toEqual({ estatusId: idEstado("rechazada") });
+    expect(upd?.data).toEqual({ estatusId: idEstado("devolucion_a_origen_por_rechazo") });
   });
 
   it("la orden que NO llego al umbral sigue yendo a bodega en la MISMA corrida (R25)", async () => {

@@ -1,0 +1,143 @@
+Detalle del cierre
+
+Marco Mensajero · Bodega central · GAM
+
+De quién es el dinero
+Total general
+₡6.500
+Lo que Ordenex facturó
+-₡21.890,24
+Gana la tienda
+Lo recaudado menos todo lo que Ordenex le factura, incluido el flete por rechazo. No es lo que se le paga hoy.
+Ordenex le factura más de lo que se recaudó en este cierre: a la tienda no le queda nada y pasa a deber la diferencia.
+-₡15.390,24
+Lo que Ordenex le factura a la tienda
+Cobrado sobre lo recaudado
+Flete + IVA y comisión + IVA de lo que sí se entregó: sale del dinero que el mensajero recaudó.
+₡19.630,24
+Flete por rechazo + IVA
+Se le factura a la tienda, pero no sale de lo recaudado: un rechazo no cobra contra entrega.
+Todavía no se le ha cargado al saldo de la tienda: ese cargo se hace al aprobar el cierre.
++₡2.260
+Lo que Ordenex facturó
+₡21.890,24
+Total general
+₡6.500
+Cobrado sobre lo recaudado
+-₡19.630,24
+Pago a tienda
+Es lo que se le paga de este dinero hoy. No es lo que gana en total: el flete por rechazo se le cobra aparte.
+-₡13.130,24
+Lo que le queda a Ordenex
+Lo que Ordenex facturó
+₡21.890,24
+Pago al mensajero
+-₡11.900
+Ingreso de bodega por rechazos
+-₡2.000
+Neto de Ordenex
+Lo que Ordenex facturó menos el pago al mensajero y menos el ingreso de bodega por rechazos.
+₡7.990,24
+Cierre del día
+Solicitado
+Bodega central · GAM · Mensajero Marco Mensajero
+Solicitud #FE596160
+Solicitado 2026-09-24 · Resuelto 2026-09-24
+Pago a tienda
+-₡13.130,24
+Total general menos flete + IVA y comisión + IVA. No descuenta el flete por rechazo: un rechazo no recauda contra entrega, así que ese dinero nunca entró en el total general.
+Ingreso de bodega por rechazos
+₡2.000
+Automático (por plazo vencido)
+₡0
+·
+Manual (mensajero)
+₡2.000
+TOTAL GENERAL
+₡6.500
+TOTAL ORDENEX
+₡21.890,24
+PAGO AL MENSAJERO
+₡11.900
+GESTIONES
+16
+TOTALES DEL CIERRE
+Efectivo
+₡6.500
+SINPE
+₡0
+Transferencia
+₡0
+Total general
+₡6.500
+INGRESO DE ORDENEX
+Flete + IVA
+₡15.820
+Comisión + IVA
+₡3.810,24
+Flete por rechazo + IVA
+₡2.260
+Total Ordenex
+₡21.890,24
+LIQUIDACIÓN
+Ingreso bruto
+Todo lo que facturó Ordenex en el cierre (flete + IVA + comisión + IVA), sin descontar nada.
+₡21.890,24
+Pago al mensajero
+₡11.900
+Ingreso de bodega por rechazos
+₡2.000
+Entregado
+7
+Reprogramado
+3
+Novedad
+3
+Devolución a origen por rechazo
+2
+Incidente
+1
+Guía
+Destinatario
+Cobrado
+Total Ordenex
+—
+Roger Francisco Maradiaga paiz
+111136 · 1 * TURKESTERONE.
+₡17.700
+₡0
+990014
+Esteban Ramirez
+QA-R-0014 · Mochila escolar
+₡9.800
+₡0
+—
+Anabelle Vargas Castro
+111117 · 1 * Lima Eléctrica Profesional para Pies. 1 * Gel de Abejas.
+₡14.618
+₡0
+ÓRDENES SIN GESTIONAR
+3
+
+El corte del día las cerró sin gestión. No tienen dinero asociado.
+
+Guía
+Destinatario
+Tienda
+—
+Anabelle Vargas Castro
+111117 · 1 * Lima Eléctrica Profesional para Pies. 1 * Gel de Abejas. · En reparto
+Tania
+—
+Laura Ramírez Barquero
+63241 · 1 * Crema Dental Blanqueadora. · En reparto
+Tania
+—
+Juan Pérez
+REM-0001 · Camiseta talla M · En reparto
+Tania
+Total recaudado ₡6.500 · 7 entregas
+Motivo de rechazo: Faltan comprobantes de la entrega (recorrido 454)
+Rechazar
+Aprobar
+Cerrar

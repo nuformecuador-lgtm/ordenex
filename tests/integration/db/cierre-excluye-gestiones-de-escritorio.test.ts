@@ -140,7 +140,7 @@ describeSiHayBase("💰 337 — el cierre NO recoge las gestiones de escritorio 
     tx: Tx,
     mensajeroId: string,
     origenTipo: OrdenHistorialOrigenTipo,
-    resultado: "entregada" | "rechazada" | "reprogramada",
+    resultado: "entregado" | "devolucion_a_origen_por_rechazo" | "reprogramado",
   ): Promise<string> {
     const clave = `${SUFIJO}${(n += 1)}`;
     const orden = await tx.orden.create({
@@ -177,10 +177,10 @@ describeSiHayBase("💰 337 — el cierre NO recoge las gestiones de escritorio 
   /** Las CUATRO del escenario: dos que son suyas y las dos de escritorio que no. */
   async function sembrarEscenario(tx: Tx, mensajeroId: string) {
     return {
-      calle: await sembrarGestion(tx, mensajeroId, CALLE, "entregada"),
-      ayuda: await sembrarGestion(tx, mensajeroId, AYUDA, "rechazada"),
-      rechazoTienda: await sembrarGestion(tx, mensajeroId, RECHAZO_ESCRITORIO, "rechazada"),
-      reproTienda: await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada"),
+      calle: await sembrarGestion(tx, mensajeroId, CALLE, "entregado"),
+      ayuda: await sembrarGestion(tx, mensajeroId, AYUDA, "devolucion_a_origen_por_rechazo"),
+      rechazoTienda: await sembrarGestion(tx, mensajeroId, RECHAZO_ESCRITORIO, "devolucion_a_origen_por_rechazo"),
+      reproTienda: await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramado"),
     };
   }
 
@@ -287,8 +287,8 @@ describeSiHayBase("💰 337 — el cierre NO recoge las gestiones de escritorio 
       // rechazo y una reprogramacion y afirmaba `null`; la 425/R5 REVOCA a proposito esa mitad para el
       // RECHAZO —era lo que dejaba su orden sin salida— y su caso vive justo debajo. Para la
       // REPROGRAMACION (D2) sigue siendo el contrato, y por eso las aserciones no cambian ni una coma.
-      const reproUno = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada");
-      const reproDos = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada");
+      const reproUno = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramado");
+      const reproDos = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramado");
 
       const cierreId = await repoDe(tx).crearCierre({
         ...INPUT_CIERRE_VACIO,
@@ -360,8 +360,8 @@ describeSiHayBase("💰 337 — el cierre NO recoge las gestiones de escritorio 
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const mensajeroId = await crearMensajero(tx);
-      const rechazo = await sembrarGestion(tx, mensajeroId, RECHAZO_ESCRITORIO, "rechazada");
-      const repro = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada");
+      const rechazo = await sembrarGestion(tx, mensajeroId, RECHAZO_ESCRITORIO, "devolucion_a_origen_por_rechazo");
+      const repro = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramado");
 
       const cierreId = await repoDe(tx).crearCierre({
         ...INPUT_CIERRE_VACIO,
@@ -401,8 +401,8 @@ describeSiHayBase("💰 337 — el cierre NO recoge las gestiones de escritorio 
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const mensajeroId = await crearMensajero(tx);
-      const uno = await sembrarGestion(tx, mensajeroId, CALLE, "entregada");
-      const dos = await sembrarGestion(tx, mensajeroId, CALLE, "entregada");
+      const uno = await sembrarGestion(tx, mensajeroId, CALLE, "entregado");
+      const dos = await sembrarGestion(tx, mensajeroId, CALLE, "entregado");
 
       const vistas = (await repoDe(tx).findGestionesPendientes(mensajeroId)).map(
         (f) => f.gestionId,

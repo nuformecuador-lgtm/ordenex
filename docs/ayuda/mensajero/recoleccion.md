@@ -3,7 +3,7 @@ titulo: Recolección
 modulo: recoleccion
 pantalla: /recoleccion
 roles: [mensajero]
-actualizado: 2026-09-15
+actualizado: 2026-09-24
 fuentes:
   - app/(app)/recoleccion/_components/RecoleccionModule.tsx
   - app/(app)/recoleccion/_components/RecolectadasHoyLista.tsx
@@ -15,19 +15,19 @@ fuentes:
 Acá recogés paquetes **en la tienda**: los que la tienda ya tiene listos y hay que llevarse para
 meterlos al sistema.
 
-Es distinto de **Por recoger**. Allá están los paquetes que ya te asignaron a vos; acá estás
+Es distinto de **Recoger en bodega**. Allá están los paquetes que ya te asignaron a vos; acá estás
 recolectando en la tienda lo que todavía no ha entrado al circuito.
 
 ## Cómo se recolecta
 
-Igual que en Por recoger, dos formas y las dos valen:
+Igual que en Recoger en bodega, dos formas y las dos valen:
 
 - **Escanear** el código con la cámara.
 - **Escribir el número de guía**.
 
 Elegís el paquete, confirmás la recolección y queda registrado a tu nombre.
 
-## Recolectadas hoy
+## Recogidos en tienda hoy
 
 Debajo tenés la lista de **lo que llevás recolectado hoy**, para que puedas comprobar de un vistazo
 que no se te quedó nada y que no contaste dos veces lo mismo.
@@ -48,4 +48,4 @@ tu cuenta no tiene ese rol — avisá a la oficina.
 ## Lo que esta pantalla NO hace
 
 - **No se entrega nada acá.** Lo recolectado sigue su camino y las entregas se trabajan en **Reparto**.
-- **No es la lista de tus asignaciones.** Eso es **Por recoger**.
+- **No es la lista de tus asignaciones.** Eso es **Recoger en bodega**.

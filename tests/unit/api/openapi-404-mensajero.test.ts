@@ -73,7 +73,7 @@ describe("404/R24 — los schemas publicados declaran `mensajero` con la forma `
 describe("404/R9+R24 — `required` y la unica clave opcional", () => {
   it("`mensajero` esta en `required` de `data`, y `evidenciasUrl` sigue siendo la UNICA fuera", () => {
     const required = dataWebhook.required as string[];
-    expect(required).toEqual(["numGuia", "numRemision", "estado", "motivo", "mensajero"]);
+    expect(required).toEqual(["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero"]);
     const noRequeridas = Object.keys(dataWebhook.properties as Nodo).filter(
       (k) => !required.includes(k),
     );
@@ -90,6 +90,7 @@ describe("404/R9+R24 — `required` y la unica clave opcional", () => {
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "destinatario",
       "telefonoDest",
       "producto",
@@ -114,6 +115,7 @@ describe("404/R9+R24 — `required` y la unica clave opcional", () => {
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
       "evidenciasUrl",
@@ -142,6 +144,7 @@ describe("404/R2+R24 — los dos ejemplos publicados llevan la clave", () => {
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
       "evidenciasUrl",
@@ -303,6 +306,6 @@ describe("404/R24 — el espejo `docs/api/api-key-openapi.yaml` refleja el cambi
   it("el `.yaml` dice tambien lo de R7 y lo de Q1", () => {
     expect(yamlTexto).toContain("no quién la gestionó");
     expect(yamlTexto).toContain("UUID en TEXTO, no un entero");
-    expect(yamlTexto).toContain("Las cinco claves");
+    expect(yamlTexto).toContain("Las seis claves"); // 455 (R25): `estadoNombre` se suma a las cinco
   });
 });

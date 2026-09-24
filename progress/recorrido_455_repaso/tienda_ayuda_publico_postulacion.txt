@@ -1,0 +1,49 @@
+Ayuda
+
+Cómo funciona cada pantalla, explicado para tu trabajo.
+
+24/09/2026
+Claro
+Tema claro activado.
+Salir
+Buscar en la ayuda
+
+TIENDAS
+Mi wallet
+Novedades
+Órdenes
+COMPARTIDO
+Analítica
+SIN INICIAR SESIÓN
+Entrar y recuperar la contraseña
+Postularse para trabajar
+Rastrear un paquete
+Postularse para trabajar
+
+La página pública donde alguien se ofrece para trabajar como mensajero, o para aportar un vehículo o una bodega. No hace falta tener cuenta: se entra, se llena y se envía.
+
+Qué se pide
+
+Los datos personales, el correo y una contraseña —que será la de la cuenta si la postulación se acepta—, la cédula con foto del anverso y del reverso, y el tipo de vehículo cuando aplica: moto, carro o camión.
+
+Qué pasa después
+
+La postulación no crea una cuenta activa. Llega a la pantalla de Inicio de la oficina, al panel de postulaciones, y espera a que alguien la revise. Hasta entonces no se puede entrar al sistema.
+
+Errores que van a ver
+
+«Este correo ya está registrado». Ya hay una cuenta con ese correo. Si es suya y no recuerda la contraseña, la vía es recuperar la contraseña, no postularse otra vez.
+
+«Este número de documento ya está registrado». Igual, pero con la cédula. Suele significar que ya se postuló antes — conviene revisar el panel de postulaciones antes de pedirle que lo repita.
+
+Para quien revisa
+
+Las fotos de la cédula son el motivo por el que esta pantalla existe con este formulario: sin anverso y reverso legibles no se puede validar a quién se está dando acceso. Si llegan borrosas, es razonable pedirlas de nuevo antes de aprobar.
+
+Lo que esta página NO hace
+No da acceso. Enviar la postulación no habilita nada; hay que aprobarla.
+No avisa sola. Quien se postula queda esperando; si nadie revisa el panel de Inicio, la postulación se queda ahí.
+
+Actualizado el 15/09/2026
+
+Siguiente: Rastrear un paquete

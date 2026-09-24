@@ -29,7 +29,7 @@ describeSiHayBase("454/C05 — el plazo de la devolucion se ancla en la aprobaci
   function correr() {
     return conEscenario(mundo, async (e) => {
       const o = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 5000 });
-      const g = await e.gestionarOk(o.ordenId, "devuelta", { causaDevolucion: "wrong_address" });
+      const g = await e.gestionarOk(o.ordenId, "novedad", { causaDevolucion: "wrong_address" });
       const estadoTrasGestionar = await e.estadoDe(o.ordenId);
       const ahora = await e.tx.gestionOrden.findUniqueOrThrow({ where: { id: g }, select: { createdAt: true } });
       const t0 = new Date(ahora.createdAt.getTime() - 20 * 60 * MIN);
@@ -57,7 +57,7 @@ describeSiHayBase("454/C05 — el plazo de la devolucion se ancla en la aprobaci
       await cron.ejecutar(new Date(t1.getTime() + VENTANA_MS + MIN));
       const estadoAlVencer = await e.estadoDe(o.ordenId);
       const sinteticas = await e.tx.gestionOrden.findMany({
-        where: { ordenId: o.ordenId, cierreId: null, resultado: "rechazada" },
+        where: { ordenId: o.ordenId, cierreId: null, resultado: "devolucion_a_origen_por_rechazo" },
         select: { id: true, mensajeroId: true },
       });
       const siguiente = await e.solicitarCierre();
@@ -96,15 +96,15 @@ describeSiHayBase("454/C05 — el plazo de la devolucion se ancla en la aprobaci
   it("precondicion: la aprobacion ocurre ~20 h despues de la gestion y deja la orden en `devuelta`", () => {
     expect(r.aprobacion).toBe("ok");
     expect(r.t1.getTime() - r.t0.getTime()).toBeGreaterThanOrEqual(20 * 60 * MIN - 5 * MIN);
-    expect(r.estadoTrasAprobar).toBe("devuelta");
+    expect(r.estadoTrasAprobar).toBe("novedad");
   });
 
   it("el cron a t1 + ventana − 1 min NO escala", () => {
-    expect(r.estadoAntesDeVencer).toBe("devuelta");
+    expect(r.estadoAntesDeVencer).toBe("novedad");
   });
 
   it("el cron a t1 + ventana + 1 min escala a `rechazada` con UNA gestion sintetica del mensajero", () => {
-    expect(r.estadoAlVencer).toBe("rechazada");
+    expect(r.estadoAlVencer).toBe("devolucion_a_origen_por_rechazo");
     expect(r.sinteticas).toHaveLength(1);
     expect(r.sinteticas[0].mensajeroId).toBe(r.mensajeroId);
   });

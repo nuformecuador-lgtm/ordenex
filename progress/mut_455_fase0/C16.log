@@ -1,0 +1,30 @@
+=== MUTACION C16 — 2026-09-24T04:52:27-05:00
+archivo: lib/repositories/CierresAdminRepository.ts
+perl: s/          valorNuevo: RESULTADO_RECHAZADA,/          valorNuevo: "",/
+--- diff aplicado:
+diff --git a/lib/repositories/CierresAdminRepository.ts b/lib/repositories/CierresAdminRepository.ts
+index e525dba2..44a301b4 100644
+--- a/lib/repositories/CierresAdminRepository.ts
++++ b/lib/repositories/CierresAdminRepository.ts
+@@ -1786 +1786 @@ export class CierresAdminRepository implements ICierresAdminRepository {
+-          valorNuevo: RESULTADO_RECHAZADA,
++          valorNuevo: "",
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts
+ × tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts > 455/C16 — snapshot de la correccion de resultado (Postgres real) > invariantes > la correccion escribe UNA fila de bitacora entregado -> rechazo 8ms
+   → expected [ { anterior: 'entregado', …(1) } ] to deeply equal [ { anterior: 'entregado', …(1) } ]
+ × tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts > 455/C16 — snapshot de la correccion de resultado (Postgres real) > invariantes > la pantalla del historico de acciones la lee con los mismos valores 1ms
+   → expected [ { anterior: 'entregado', …(1) } ] to deeply equal [ { anterior: 'entregado', …(1) } ]
+ × tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts > 455/C16 — snapshot de la correccion de resultado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R23) > la columna pinta hoy el codigo crudo 1ms
+   → expected [ Array(1) ] to deeply equal [ { anterior: 'entregada', …(1) } ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts > 455/C16 — snapshot de la correccion de resultado (Postgres real) > invariantes > la correccion escribe UNA fila de bitacora entregado -> rechazo
+AssertionError: expected [ { anterior: 'entregado', …(1) } ] to deeply equal [ { anterior: 'entregado', …(1) } ]
+ FAIL  tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts > 455/C16 — snapshot de la correccion de resultado (Postgres real) > invariantes > la pantalla del historico de acciones la lee con los mismos valores
+AssertionError: expected [ { anterior: 'entregado', …(1) } ] to deeply equal [ { anterior: 'entregado', …(1) } ]
+ FAIL  tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts > 455/C16 — snapshot de la correccion de resultado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R23) > la columna pinta hoy el codigo crudo
+AssertionError: expected [ Array(1) ] to deeply equal [ { anterior: 'entregada', …(1) } ]
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

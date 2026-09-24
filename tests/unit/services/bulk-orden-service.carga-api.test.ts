@@ -336,7 +336,9 @@ describe("cargarViaApi — dueño y estado inicial (R8, D4)", () => {
     expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
     expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_ruta_bodega_central");
     if (r.status === "ok") {
-      expect(r.summary.filas[0].estatus).toBe("por_recolectar_en_tienda");
+      expect(r.summary.filas[0].estado).toBe("por_recolectar_en_tienda"); // 455 (R27): `estado`, ya no `estatus`
+      expect(r.summary.filas[0].estadoNombre).toBe("Por recolectar en tienda");
+      expect(r.summary.filas[0]).not.toHaveProperty("estatus");
       expect(r.summary.filas[0].numGuia).toBe(1000); // R20: guia asignada, reportada
       // R24: la rama (b) SI emite manifiesto, y la orden creada esta en su seleccion.
       expect(r.manifiestoOrdenIds).toEqual(["ord-REM-1"]);
@@ -371,7 +373,7 @@ describe("cargarViaApi — dueño y estado inicial (R8, D4)", () => {
       expect(r.summary.ordenes[0]).toMatchObject({
         numRemision: "REM-1",
         numGuia: null,
-        estado: "en_preparacion",
+        estado: "en_preparacion", estadoNombre: "En preparación",
       });
       // El monto de bodega se SUMA al costo del envio (3.50 + 12% = 3.92, + 2.00) y viaja
       // desglosado al lado, para que ese total no haya que adivinarlo.
@@ -406,14 +408,14 @@ describe("cargarViaApi — resultado con num_guia (R10)", () => {
     if (r.status === "ok") {
       expect(r.summary.creadas).toBe(2);
       // Filas creadas extendidas con numGuia.
-      expect(r.summary.filas[0]).toMatchObject({ resultado: "creada", numGuia: 1000, estatus: "por_recolectar_en_tienda" });
+      expect(r.summary.filas[0]).toMatchObject({ resultado: "creada", numGuia: 1000, estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda" });
       expect(r.summary.filas[1]).toMatchObject({ resultado: "creada", numGuia: 1001 });
       // Bloque plano `ordenes` (R10): id + numGuia + estado + costoEnvio (feature 98/R5) +
       // fulfillment (2026-08-25) por creada. No-central con TARIFA por defecto -> 3.50 + 12%
       // = "3.92", y sin monto de bodega el desglose es el cero explicito.
       expect(r.summary.ordenes).toEqual([
-        { id: "ord-REM-1", numRemision: "REM-1", numGuia: 1000, estado: "por_recolectar_en_tienda", costoEnvio: "3.92", fulfillment: "0.00" },
-        { id: "ord-REM-2", numRemision: "REM-2", numGuia: 1001, estado: "por_recolectar_en_tienda", costoEnvio: "3.92", fulfillment: "0.00" },
+        { id: "ord-REM-1", numRemision: "REM-1", numGuia: 1000, estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda", costoEnvio: "3.92", fulfillment: "0.00" },
+        { id: "ord-REM-2", numRemision: "REM-2", numGuia: 1001, estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda", costoEnvio: "3.92", fulfillment: "0.00" },
       ]);
     }
   });
@@ -505,7 +507,7 @@ describe("cargarViaApi — monto redondeado al colon (feature 299)", () => {
 describe("cargarViaApi — dedup y exito parcial (R7/R11/R12)", () => {
   it("R11: remision existente en DB -> duplicada, sin consumir guia", async () => {
     const repo = buildRepo({
-      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-1", "entregada"]])),
+      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-1", "entregado"]])),
     });
     const r = await buildService(repo).cargarViaApi([row()], APIKEY);
     if (r.status === "ok") {
@@ -601,7 +603,7 @@ describe("cargarViaApi — costoEnvio flete + IVA (feature 98)", () => {
 
   it("R4/R6: filas duplicada y error NO llevan costoEnvio y conservan su shape", async () => {
     const repo = buildRepo({
-      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-DUP", "entregada"]])),
+      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-DUP", "entregado"]])),
     });
     const r = await buildService(repo, buildTarifaRepo(TARIFA)).cargarViaApi(
       [
@@ -618,7 +620,7 @@ describe("cargarViaApi — costoEnvio flete + IVA (feature 98)", () => {
       expect(dup).not.toHaveProperty("costoEnvio");
       expect(err).not.toHaveProperty("costoEnvio");
       // Shape intacto: la duplicada expone `estatus`, la error expone `errores`.
-      expect(dup).toMatchObject({ resultado: "duplicada", estatus: "entregada" });
+      expect(dup).toMatchObject({ resultado: "duplicada", estado: "entregado", estadoNombre: "Entregado" });
       expect(err.errores).toHaveProperty("provincia");
       // Y `ordenes` (una por creada) sí lleva costoEnvio, solo para la creada.
       expect(r.summary.ordenes).toHaveLength(1);
@@ -687,7 +689,7 @@ describe("cargarViaApi — no-regresión del contrato 88 (feature 98/R10)", () =
         id: "ord-REM-1",
         numRemision: "REM-1",
         numGuia: 1000,
-        estado: "por_recolectar_en_tienda",
+        estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda",
         costoEnvio: "3.92",
         fulfillment: "0.00",
       });
@@ -901,12 +903,12 @@ describe("cargarViaApi — lote MIXTO por fulfillment (una zona con monto, otra 
     if (r.status !== "ok") return;
     const porRemision = new Map(r.summary.ordenes.map((o) => [o.numRemision, o]));
     expect(porRemision.get("REM-Z1")).toMatchObject({
-      estado: "por_recolectar_en_tienda",
+      estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda",
       numGuia: 1000,
       fulfillment: "0.00",
     });
     expect(porRemision.get("REM-Z2")).toMatchObject({
-      estado: "en_preparacion",
+      estado: "en_preparacion", estadoNombre: "En preparación",
       numGuia: null,
       // 10.00 + 12% = 11.20, mas el monto de bodega.
       costoEnvio: "13.20",
@@ -1012,7 +1014,7 @@ describe("cargarViaApi — lote MIXTO: unas resuelven y otras no (274/R27/R28/R3
   it("summary: `total` = filas recibidas y creadas + duplicadas + conError = total (la degradada no se cuenta dos veces)", async () => {
     const repo = buildRepo({
       ...DOS_ZONAS,
-      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-DUP", "entregada"]])),
+      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-DUP", "entregado"]])),
     });
     const tarifaRepo = buildTarifaRepoPorZona({ z1: TARIFA });
     const rows = [

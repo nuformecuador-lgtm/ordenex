@@ -20,7 +20,7 @@ import type {
   IngresoOrdenexDTO,
 } from "@/lib/interfaces/services/ICierreDiaService";
 
-// Feature 158 (T2.3 — R18/R17/R34/R19) — el grupo "Incidentes" en el detalle COMPARTIDO por
+// Feature 158 (T2.3 — R18/R17/R34/R19) — el grupo "Incidente" en el detalle COMPARTIDO por
 // los módulos de admin (`CierresAdminModule` de la 38 y los de bodega de la 40). Lo que
 // protege:
 //   - el grupo existe, está etiquetado en español y va AL FINAL del orden fijo (R18);
@@ -107,7 +107,7 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 function unIncidente(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion {
@@ -135,16 +135,17 @@ afterEach(() => {
 
 describe("R18 — `incidente` es un grupo propio del detalle de admin", () => {
   it("está etiquetado en español y va AL FINAL del orden fijo de secciones", () => {
-    expect(RESULTADO_LABEL.incidente).toBe("Incidentes");
-    expect(RESULTADO_VACIO.incidente).toBe("No hay incidentes.");
+    expect(RESULTADO_LABEL.incidente).toBe("Incidente");
+    // ⏳ 2026-09-24 (FICHA 455, R5): el vacío nombra el resultado exacto.
+    expect(RESULTADO_VACIO.incidente).toBe("No hay gestiones con resultado «Incidente».");
     expect(ORDEN_RESULTADOS).toContain("incidente");
     expect(ORDEN_RESULTADOS[ORDEN_RESULTADOS.length - 1]).toBe("incidente");
     // Los cuatro previos conservan su orden exacto (no regresión, R35).
     expect(ORDEN_RESULTADOS.slice(0, 4)).toEqual([
-      "entregada",
-      "reprogramada",
-      "devuelta",
-      "rechazada",
+      "entregado",
+      "reprogramado",
+      "novedad",
+      "devolucion_a_origen_por_rechazo",
     ]);
   });
 
@@ -156,15 +157,15 @@ describe("R18 — `incidente` es un grupo propio del detalle de admin", () => {
       />,
     );
 
-    const region = screen.getByRole("region", { name: "Incidentes" });
-    expect(within(region).getByRole("heading", { name: /Incidentes/ })).toHaveTextContent("(1)");
+    const region = screen.getByRole("region", { name: "Incidente" });
+    expect(within(region).getByRole("heading", { name: /Incidente/ })).toHaveTextContent("(1)");
     expect(within(region).getByText("REM-INC")).toBeInTheDocument();
     expect(within(region).getByText("Paquete robado en la parada")).toBeInTheDocument();
   });
 
   it("el grupo vacío NO se pinta", () => {
     renderConToast(<DetalleSecciones grupos={emptyGrupos()} onVerEvidencia={() => {}} />);
-    expect(screen.queryByRole("region", { name: "Incidentes" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Incidente" })).toBeNull();
   });
 
   it("la evidencia se abre con la URL FIRMADA que llega del servidor", async () => {
@@ -179,7 +180,7 @@ describe("R18 — `incidente` es un grupo propio del detalle de admin", () => {
       />,
     );
 
-    const region = screen.getByRole("region", { name: "Incidentes" });
+    const region = screen.getByRole("region", { name: "Incidente" });
     await user.click(within(region).getByRole("button", { name: "Ver evidencia" }));
 
     expect(abierta).toBe("https://signed.example/inc.jpg?token=abc");
@@ -195,7 +196,7 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
       />,
     );
 
-    const cabeceras = cabecerasDe("Incidentes");
+    const cabeceras = cabecerasDe("Incidente");
     for (const ausente of [
       "Origen", // 102/R9: un incidente no es un rechazo escalado
       "Pago mensajero", // R17: no se paga
@@ -216,10 +217,10 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
       <DetalleSecciones
         grupos={{
           ...emptyGrupos(),
-          rechazada: [
+          devolucion_a_origen_por_rechazo: [
             makeGestion({
               gestionId: "gr",
-              resultado: "rechazada",
+              resultado: "devolucion_a_origen_por_rechazo",
               ingresoOrdenex: ingreso(),
               ingresoBodegaRechazo: "5.00",
             }),
@@ -229,7 +230,7 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
       />,
     );
 
-    const cabeceras = cabecerasDe("Rechazadas");
+    const cabeceras = cabecerasDe("Devolución a origen por rechazo");
     for (const presente of [
       "Origen",
       "Pago mensajero",
@@ -244,7 +245,7 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
 
   it("las columnas del incidente son un conjunto EXPLÍCITO, no la rama por defecto", () => {
     const delIncidente = columnasPara("incidente", () => {}).map((c) => c.id);
-    const delRechazo = columnasPara("rechazada", () => {}).map((c) => c.id);
+    const delRechazo = columnasPara("devolucion_a_origen_por_rechazo", () => {}).map((c) => c.id);
     expect(delIncidente).not.toEqual(delRechazo);
     expect(delIncidente).toEqual([
       "numGuia",
@@ -295,7 +296,7 @@ describe("El dato viaja en el DTO y AHORA SÍ se pinta (T2.3 cerrada el 2026-07-
     expect(typeof g.indemnizacion).toBe("string");
     // `null` cuando no aplica (cierre aún sin aprobar) o cuando el resultado no es incidente.
     expect(unIncidente().indemnizacion).toBeNull();
-    expect(makeGestion({ gestionId: "ge", resultado: "entregada" }).causaIncidente).toBeNull();
+    expect(makeGestion({ gestionId: "ge", resultado: "entregado" }).causaIncidente).toBeNull();
   });
 
   // Este caso nació afirmando lo contrario («las columnas aún NO se pintan»), a propósito, para
@@ -322,7 +323,7 @@ describe("R34/R9 — la CAUSA se pinta traducida, nunca el slug del enum", () =>
       />,
     );
 
-    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    const tabla = screen.getByRole("table", { name: "Incidente" });
     expect(within(tabla).getByText(etiqueta)).toBeInTheDocument();
     // El value crudo del enum no aparece por ninguna parte (se comprueba con `danado`, el
     // único que difiere textualmente de su etiqueta acentuada).
@@ -339,7 +340,7 @@ describe("R34/R9 — la CAUSA se pinta traducida, nunca el slug del enum", () =>
         onVerEvidencia={() => {}}
       />,
     );
-    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    const tabla = screen.getByRole("table", { name: "Incidente" });
     expect(within(tabla).getByText(CAUSA_INCIDENTE_LABEL.robado)).toBeInTheDocument();
   });
 });
@@ -356,7 +357,7 @@ describe("R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero",
       />,
     );
 
-    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    const tabla = screen.getByRole("table", { name: "Incidente" });
     // FICHA 359: el caso sigue midiendo lo mismo, por otra vía. El monto no cabe
     // exacto en un `double`; que los once dígitos enteros lleguen intactos Y con
     // su cola sólo pasa si el camino es dígito a dígito.
@@ -371,7 +372,7 @@ describe("R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero",
       />,
     );
 
-    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    const tabla = screen.getByRole("table", { name: "Incidente" });
     // Un "—" pelado se leería como «esta orden no se indemniza», que es lo contrario de lo
     // que pasa: el monto todavía no se capturó (R19: lo pone el admin AL APROBAR).
     const celda = within(tabla).getByLabelText(INDEMNIZACION_PENDIENTE_NOTA);
@@ -381,7 +382,7 @@ describe("R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero",
   });
 
   it("la columna del monto NO aparece en los otros cuatro resultados", () => {
-    for (const resultado of ["entregada", "reprogramada", "devuelta", "rechazada"] as const) {
+    for (const resultado of ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo"] as const) {
       const ids = columnasPara(resultado, () => {}).map((c) => c.id);
       expect(ids, `${resultado} no debería tener la columna`).not.toContain("indemnizacion");
       expect(ids, `${resultado} no debería tener la columna`).not.toContain("causaIncidente");

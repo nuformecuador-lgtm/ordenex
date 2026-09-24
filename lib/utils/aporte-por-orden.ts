@@ -166,14 +166,14 @@ export interface CriterioDeAporte {
 export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte> = {
   // Solo una ENTREGA factura flete, y sin tarifa congelada no hay monto que facturar.
   ingreso_flete: {
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     exigeCobraComision: false,
     exigeTarifa: true,
     exigeMontoCobrar: false,
     exigeMontoRecibido: false,
   },
   ingreso_iva_flete: {
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     exigeCobraComision: false,
     exigeTarifa: true,
     exigeMontoCobrar: false,
@@ -183,14 +183,14 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
   // negocio. Volver a meterla sin tocar `derivarIngresoOrden` pone rojo el test de equivalencia,
   // que es exactamente para lo que existe.
   ingreso_flete_devolucion: {
-    resultados: ["rechazada"],
+    resultados: ["devolucion_a_origen_por_rechazo"],
     exigeCobraComision: false,
     exigeTarifa: true,
     exigeMontoCobrar: false,
     exigeMontoRecibido: false,
   },
   ingreso_iva_flete_devolucion: {
-    resultados: ["rechazada"],
+    resultados: ["devolucion_a_origen_por_rechazo"],
     exigeCobraComision: false,
     exigeTarifa: true,
     exigeMontoCobrar: false,
@@ -199,14 +199,14 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
   // La comision COD y su IVA solo existen si la orden COBRA comision (R8/R26 de la 42). El
   // `exigeMontoCobrar` es la supresion de ceros, no parte de la formula.
   ingreso_comision_cod: {
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     exigeCobraComision: true,
     exigeTarifa: true,
     exigeMontoCobrar: true,
     exigeMontoRecibido: false,
   },
   ingreso_iva_comision_cod: {
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     exigeCobraComision: true,
     exigeTarifa: true,
     exigeMontoCobrar: true,
@@ -222,7 +222,7 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
  * cuando alguno de ellos lo es.
  */
 export const CRITERIO_COD_RECAUDADO: CriterioDeAporte = {
-  resultados: ["entregada", "reprogramada", "devuelta", "rechazada", "incidente"],
+  resultados: ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo", "incidente"],
   exigeCobraComision: false,
   exigeTarifa: false,
   exigeMontoCobrar: false,

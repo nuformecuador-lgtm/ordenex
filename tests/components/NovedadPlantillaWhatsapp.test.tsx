@@ -53,7 +53,7 @@ function novedad(over: Partial<NovedadDTO> = {}): NovedadDTO {
     id: "o1",
     numGuia: 12345,
     numRemision: "REM-001",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     intentosContacto: 0,
     mensajeroNombre: "Marta Mensajera",
     destinatario: DESTINATARIO,

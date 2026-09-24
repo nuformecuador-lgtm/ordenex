@@ -502,7 +502,7 @@ describe("R31 — un campo nuevo del contrato interno NO aparece en la respuesta
     expect(Object.keys(dto.cobertura).sort()).toEqual(["fechasNoComparables", "penumbra"]);
   });
 
-  it("`nota` (R35 de la 126) no se publica: `sin_gestionar` no esta en la lista blanca de P1", () => {
+  it("`nota` (R35 de la 126) no se publica: `novedad_interna` no esta en la lista blanca de P1", () => {
     const serie = {
       ...serieBase(),
       nota: "sin_gestionar_es_del_dia_universo_b2",

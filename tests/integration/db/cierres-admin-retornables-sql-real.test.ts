@@ -40,7 +40,7 @@ const GUIA_BASE = 900_000_000 + (Date.now() % 50_000_000);
 
 interface Semilla {
   clave: string;
-  resultado: "devuelta" | "rechazada" | "reprogramada" | "entregada" | "incidente";
+  resultado: "novedad" | "devolucion_a_origen_por_rechazo" | "reprogramado" | "entregado" | "incidente";
   /** `false` = la orden nace sin numero de guia (R13: no se omite, viaja `null`). */
   conGuia?: boolean;
   anulada?: boolean;
@@ -51,15 +51,15 @@ interface Semilla {
 // Un cierre con las tres clases que vuelven, las dos que no, una anulada, una de OTRO cierre
 // central y una del cierre del SATELITE. Cada fila es el testigo de una condicion del WHERE.
 const SEMILLAS: Semilla[] = [
-  { clave: "dev", resultado: "devuelta" },
-  { clave: "rec", resultado: "rechazada" },
-  { clave: "rep", resultado: "reprogramada" },
-  { clave: "sin-guia", resultado: "devuelta", conGuia: false },
-  { clave: "entregada", resultado: "entregada" },
+  { clave: "dev", resultado: "novedad" },
+  { clave: "rec", resultado: "devolucion_a_origen_por_rechazo" },
+  { clave: "rep", resultado: "reprogramado" },
+  { clave: "sin-guia", resultado: "novedad", conGuia: false },
+  { clave: "entregado", resultado: "entregado" },
   { clave: "incidente", resultado: "incidente" },
-  { clave: "anulada", resultado: "devuelta", anulada: true },
-  { clave: "otro-cierre", resultado: "devuelta", cierre: "otro" },
-  { clave: "del-satelite", resultado: "devuelta", cierre: "satelite" },
+  { clave: "anulada", resultado: "novedad", anulada: true },
+  { clave: "otro-cierre", resultado: "novedad", cierre: "otro" },
+  { clave: "del-satelite", resultado: "novedad", cierre: "satelite" },
 ];
 
 describeSiHayBase("238/T1.3 — findGestionesRetornablesDelCierre contra Postgres real", () => {
@@ -209,7 +209,7 @@ describeSiHayBase("238/T1.3 — findGestionesRetornablesDelCierre contra Postgre
 
     expect(fila).not.toBeNull();
     expect(fila?.numGuia).toBeNull();
-    expect(fila?.resultado).toBe("devuelta");
+    expect(fila?.resultado).toBe("novedad");
   });
 
   it("la guia y el resultado que viajan son los de la BASE, no los que el test supone", async () => {
@@ -224,7 +224,7 @@ describeSiHayBase("238/T1.3 — findGestionesRetornablesDelCierre contra Postgre
           const f = porGestion.get(ctx.gestionPorClave.get(c) as string);
           return `${c}:${f?.numGuia}:${f?.resultado}`;
         }),
-        sembradas: ["dev:devuelta", "rec:rechazada", "rep:reprogramada"].map((par, i) => {
+        sembradas: ["dev:novedad", "rec:devolucion_a_origen_por_rechazo", "rep:reprogramado"].map((par, i) => {
           const [clave, resultado] = par.split(":");
           void i;
           return `${clave}:${ctx.guiaPorClave.get(clave)}:${resultado}`;

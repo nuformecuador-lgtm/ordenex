@@ -31,12 +31,12 @@ const OTRO: Actor = { usuarioId: "m2", rol: "mensajero" };
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
-  por_recoger: "os-espera",
+  mensajero_recogiendo_en_bodega: "os-espera",
   en_reparto: "os-reparto",
-  entregada: "os-entregada",
-  reprogramada: "os-reprogramada",
-  devuelta: "os-devuelta",
-  rechazada: "os-rechazada",
+  entregado: "os-entregada",
+  reprogramado: "os-reprogramada",
+  novedad: "os-devuelta",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
   // Feature 239 (2026-08-19): gestionar `devuelta` ya NO resuelve el estatus `devuelta`, sino el
   // PRE-ESTADO. El fake tiene que conocerlo o la rama cae en "catalogo incompleto".
   devolucion_por_confirmar: "os-devolucion-por-confirmar",
@@ -64,7 +64,7 @@ function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRo
     id: "o1",
     numGuia: 1,
     numRemision: "R-1",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     destinatario: "Ana",
     telefonoDest: "099",
     direccion: "calle",
@@ -204,7 +204,7 @@ describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24
   it("R11/R14: ambos grupos salen con `intentosEntrega` numerico, el `0` INCLUIDO", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
         asignacionRow({ id: "c", estatusValue: "en_reparto" }),
       ]),
@@ -226,7 +226,7 @@ describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24
   it("R12: UNA sola llamada al derivador con la union de los ids de los DOS grupos", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
       ]),
     });
@@ -250,7 +250,7 @@ describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24
     // R15: el alcance lo impuso la consulta del repo, acotada al actor.
     // Feature 167 (R34) + 235 (R18): y a EXACTAMENTE los TRES estados del flujo de Entregas.
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_reparto",
     ]);
   });
@@ -273,10 +273,10 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     expect(r.status).toBe("forbidden");
   });
 
-  it("R10/R13: separa por recoger (por_recoger) de por gestionar (en_reparto) + ordenEnGestionId", async () => {
+  it("R10/R13: separa por recoger (mensajero_recogiendo_en_bodega) de por gestionar (en_reparto) + ordenEnGestionId", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
       ]),
       getOrdenEnGestion: vi.fn(async () => "b"),
@@ -291,7 +291,7 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     // R13: la consulta se hizo con el mensajero del actor.
     // Feature 235 (T3.1, R18): el corte pasa a TRES estados. `recolectando` SIGUE fuera (167/R34).
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_reparto",
     ]);
   });
@@ -299,7 +299,7 @@ describe("listarMisAsignaciones (R9-R13)", () => {
   it("Feature 61: KPIs = pendientes (en_reparto), entregadas (conteo) y porCobrar (suma COD de en_reparto; null=0)", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger", montoCobrar: 999 }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega", montoCobrar: 999 }),
         asignacionRow({ id: "b", estatusValue: "en_reparto", montoCobrar: 100 }),
         asignacionRow({ id: "c", estatusValue: "en_reparto", montoCobrar: 250 }),
         asignacionRow({ id: "d", estatusValue: "en_reparto", montoCobrar: null }),
@@ -360,7 +360,7 @@ describe("listarMisAsignaciones (R9-R13)", () => {
   it("F97: el DTO propaga latitud/longitud (number|null) en porRecoger y porGestionar", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "r", estatusValue: "por_recoger", latitud: 9.9, longitud: -84.1 }),
+        asignacionRow({ id: "r", estatusValue: "mensajero_recogiendo_en_bodega", latitud: 9.9, longitud: -84.1 }),
         asignacionRow({ id: "g", estatusValue: "en_reparto", latitud: null, longitud: null }),
       ]),
     });
@@ -384,7 +384,7 @@ describe("listarMisAsignaciones (R9-R13)", () => {
   it("el DTO no emite el campo de nota privada", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "r", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "r", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "g", estatusValue: "en_reparto" }),
       ]),
     });
@@ -421,7 +421,7 @@ describe("235 · el tercer grupo y los KPI del dia (T3.1/T3.6, R16/R18/R19/R20/R
   it("R18: las de ayuda salen en `conAyuda` y NO en `porGestionar`", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
         // ⏳ 2026-09-23 (FICHA 454, R22): la de ayuda sigue `en_reparto`; la separa la DERIVACION.
         asignacionRow({ id: "c", estatusValue: "en_reparto" }),
@@ -554,7 +554,7 @@ describe("235 · el tercer grupo y los KPI del dia (T3.1/T3.6, R16/R18/R19/R20/R
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ estatusValue: "ayuda_tienda" })]),
     });
-    const input = { ordenId: "o1", resultado: "entregada", pagos: [] } as unknown as GestionarInput;
+    const input = { ordenId: "o1", resultado: "entregado", pagos: [] } as unknown as GestionarInput;
     const r = await newService(repo).gestionar(input, MENSAJERO);
 
     expect(r.status).toBe("conflict");
@@ -568,11 +568,11 @@ describe("recogerAsignaciones (R14-R17)", () => {
     expect(r.status).toBe("forbidden");
   });
 
-  it("R15/R16: recoge el lote (por_recoger -> en_reparto) de sus ordenes", async () => {
+  it("R15/R16: recoge el lote (mensajero_recogiendo_en_bodega -> en_reparto) de sus ordenes", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
-        gestionRow({ id: "o1", estatusValue: "por_recoger" }),
-        gestionRow({ id: "o2", estatusValue: "por_recoger" }),
+        gestionRow({ id: "o1", estatusValue: "mensajero_recogiendo_en_bodega" }),
+        gestionRow({ id: "o2", estatusValue: "mensajero_recogiendo_en_bodega" }),
       ]),
     });
     // FEATURE 261 (B4/B5, R6): el reloj se INYECTA. 22:30 CR del 21 = 04:30Z del 22, a
@@ -600,7 +600,7 @@ describe("recogerAsignaciones (R14-R17)", () => {
   it("R17: orden de OTRO mensajero -> forbidden, sin recoger", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
-        gestionRow({ id: "o1", estatusValue: "por_recoger", mensajeroAsignadoId: "m2" }),
+        gestionRow({ id: "o1", estatusValue: "mensajero_recogiendo_en_bodega", mensajeroAsignadoId: "m2" }),
       ]),
     });
     const r = await newService(repo).recogerAsignaciones({ ordenIds: ["o1"] }, MENSAJERO);
@@ -608,7 +608,7 @@ describe("recogerAsignaciones (R14-R17)", () => {
     expect(repo.recogerLote).not.toHaveBeenCalled();
   });
 
-  it("R17: origen invalido (no por_recoger) -> conflict, sin recoger", async () => {
+  it("R17: origen invalido (no mensajero_recogiendo_en_bodega) -> conflict, sin recoger", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
         gestionRow({ id: "o1", estatusValue: "en_reparto" }),
@@ -621,10 +621,10 @@ describe("recogerAsignaciones (R14-R17)", () => {
 
   // Feature 46/R4: una orden reprogramada NO es origen valido de "recoger"; el bloqueo de
   // envio es inherente a la maquina de estados (se verifica explicitamente, sin codigo nuevo).
-  it("feature 46/R4: recoger una orden reprogramada -> conflict por origen, sin efectos", async () => {
+  it("feature 46/R4: recoger una orden reprogramado -> conflict por origen, sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
-        gestionRow({ id: "o1", estatusValue: "reprogramada", mensajeroAsignadoId: "m1" }),
+        gestionRow({ id: "o1", estatusValue: "reprogramado", mensajeroAsignadoId: "m1" }),
       ]),
     });
     const r = await newService(repo).recogerAsignaciones({ ordenIds: ["o1"] }, MENSAJERO);
@@ -670,20 +670,20 @@ describe("escogerParaGestion (R19-R21)", () => {
 describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R12: rol != mensajero -> forbidden", async () => {
     const r = await newService().gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MAESTRO,
     );
     expect(r.status).toBe("forbidden");
   });
 
-  it("R18: origen no en_reparto (aun por_recoger) -> conflict, sin persistir", async () => {
+  it("R18: origen no en_reparto (aun mensajero_recogiendo_en_bodega) -> conflict, sin persistir", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
-        gestionRow({ estatusValue: "por_recoger" }),
+        gestionRow({ estatusValue: "mensajero_recogiendo_en_bodega" }),
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -695,7 +695,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ mensajeroAsignadoId: "m2" })]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("forbidden");
@@ -705,7 +705,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R21: otra orden activa distinta -> conflict, sin persistir", async () => {
     const repo = fakeRepo({ getOrdenEnGestion: vi.fn(async () => "o-otra") });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -714,14 +714,14 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
 
   // Feature 46/R4: gestionar exige origen en_reparto; una orden reprogramada se rechaza
   // por origen (bloqueo de "envio" inherente a la maquina de estados).
-  it("feature 46/R4: gestionar una orden reprogramada -> conflict por origen, sin persistir", async () => {
+  it("feature 46/R4: gestionar una orden reprogramado -> conflict por origen, sin persistir", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
-        gestionRow({ id: "o1", estatusValue: "reprogramada", mensajeroAsignadoId: "m1" }),
+        gestionRow({ id: "o1", estatusValue: "reprogramado", mensajeroAsignadoId: "m1" }),
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -736,7 +736,7 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
   // cada caso de abajo AFIRMA sigue siendo lo mismo.
   const entrega = (monto: number): GestionarInput => ({
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: monto,
     metodoPago: "efectivo",
     pagos: [{ metodo: "efectivo", monto }],
@@ -809,16 +809,16 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.estado).toBe("entregada");
+    expect(r.estado).toBe("entregado");
     // Feature 119 (R13): el resultado devuelve la lista de URLs firmadas (una por foto).
     expect(r.evidenciaUrls?.[0]).toMatch(/^https:\/\/signed\//);
     expect(storage.upload).toHaveBeenCalledTimes(1);
     const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(gArg.gestion.resultado).toBe("entregada");
+    expect(gArg.gestion.resultado).toBe("entregado");
     expect(gArg.gestion.montoRecibido).toBe(100);
     expect(gArg.gestion.metodoPago).toBe("efectivo");
     // Feature 119 (R1): la portada (indice 0) viaja como primera evidencia de la lista.
-    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/entregada-");
+    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/entregado-");
     expect(gArg.gestion.evidencias[0].indice).toBe(0);
     // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO; registrar ya no transiciona.
     expect(gArg).not.toHaveProperty("nuevoEstatusId");
@@ -850,13 +850,13 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     const repo = fakeRepo();
     const storage = fakeStorage();
     const r = await newService(repo, storage).gestionar(
-      { ordenId: "o1", resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
+      { ordenId: "o1", resultado: "reprogramado", fechaReprogramacion: "2027-01-01", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
     expect(storage.upload).not.toHaveBeenCalled();
     const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(gArg.gestion.resultado).toBe("reprogramada");
+    expect(gArg.gestion.resultado).toBe("reprogramado");
     // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO; registrar ya no transiciona.
     expect(gArg).not.toHaveProperty("nuevoEstatusId");
   });
@@ -865,15 +865,15 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     const repo = fakeRepo();
     const storage = fakeStorage();
     const r = await newService(repo, storage).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "no estaba", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "no estaba", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
     // Pedido: la devolución ahora sube y persiste la evidencia (como rechazo/entrega).
     expect(storage.upload).toHaveBeenCalledTimes(1);
     const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(gArg.gestion.resultado).toBe("devuelta");
-    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/devuelta-");
+    expect(gArg.gestion.resultado).toBe("novedad");
+    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/novedad-");
     expect(gArg.gestion.evidencias[0].contentType).toBe("image/jpeg");
     // 2026-08-19 (feature 239/R2): el destino ya NO es `devuelta`. La aprobacion del cierre es
     // la que lleva la orden ahi; hasta entonces la tienda no la ve y su reloj no corre.
@@ -890,7 +890,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     });
     await expect(
       newService(repo, storage).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+        { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
         MENSAJERO,
       ),
     ).rejects.toThrow("db caida");
@@ -901,16 +901,16 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     const repo = fakeRepo();
     const storage = fakeStorage();
     const r = await newService(repo, storage).gestionar(
-      { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo", motivo: "cliente rechazo", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.estado).toBe("rechazada");
+    expect(r.estado).toBe("devolucion_a_origen_por_rechazo");
     expect(storage.upload).toHaveBeenCalledTimes(1);
     const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(gArg.gestion.resultado).toBe("rechazada");
-    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/rechazada-");
+    expect(gArg.gestion.resultado).toBe("devolucion_a_origen_por_rechazo");
+    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/devolucion_a_origen_por_rechazo-");
     // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO; registrar ya no transiciona.
     expect(gArg).not.toHaveProperty("nuevoEstatusId");
   });
@@ -924,7 +924,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     });
     await expect(
       newService(repo, storage).gestionar(
-        { ordenId: "o1", resultado: "rechazada", motivo: "x", evidencias: [evidencia()] },
+        { ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo", motivo: "x", evidencias: [evidencia()] },
         MENSAJERO,
       ),
     ).rejects.toThrow("db caida");
@@ -943,7 +943,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
 describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (feature 99 R1/R29 · 239 R2)", () => {
   const devolucion: GestionarInput = {
     ordenId: "o1",
-    resultado: "devuelta",
+    resultado: "novedad",
     causaDevolucion: "not_found",
     motivo: "ausente",
     evidencias: [evidencia()],
@@ -1001,7 +1001,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
       // `gestionar` solo resuelve el estatus del RESULTADO (`devuelta`), nunca los de bodega.
       expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_bodega_central");
       expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_bodega_satelite");
-      expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("rechazada");
+      expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devolucion_a_origen_por_rechazo");
     }
   });
 
@@ -1091,7 +1091,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
   it("R4: reprogramada tampoco pasa seguimiento (rama intacta)", async () => {
     const repo = fakeRepo();
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
+      { ordenId: "o1", resultado: "reprogramado", fechaReprogramacion: "2027-01-01", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
@@ -1103,7 +1103,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
     await newService(repo).gestionar(
       {
         ordenId: "o1",
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: 100,
         metodoPago: "efectivo",
         pagos: [{ metodo: "efectivo", monto: 100 }], // feature 212: desglose normalizado (R12)
@@ -1117,7 +1117,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
   it("rechazada DIRECTA NO pasa seguimiento (una sola transicion)", async () => {
     const repo = fakeRepo();
     await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo", motivo: "cliente rechazo", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(repoCall(repo)).not.toHaveProperty("seguimiento");
@@ -1136,7 +1136,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
         findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: "z-satelite" })]),
       });
       const r = await newService(repo).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencias: [evidencia()] },
+        { ordenId: "o1", resultado: "novedad", causaDevolucion: causa, motivo: "ausente", evidencias: [evidencia()] },
         MENSAJERO,
       );
       expect(r.status).toBe("ok");
@@ -1203,7 +1203,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
 
   const entrega = (): GestionarInput => ({
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: 100,
     metodoPago: "efectivo",
     pagos: [{ metodo: "efectivo", monto: 100 }], // feature 212: desglose normalizado (R12)
@@ -1280,7 +1280,7 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
   const RECOLECTANDO = "recolectando";
 
   // ⏳ 2026-09-23 (FICHA 454): el censo vuelve a DOS — `ayuda_tienda` deja de ser estado.
-  it("R34: pide EXACTAMENTE `[\"por_recoger\", \"en_reparto\"]`, ni un estado mas", async () => {
+  it("R34: pide EXACTAMENTE `[\"mensajero_recogiendo_en_bodega\", \"en_reparto\"]`, ni un estado mas", async () => {
     const repo = fakeRepo();
 
     await newService(repo).listarMisAsignaciones(MENSAJERO);
@@ -1294,7 +1294,7 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
     // desde el servidor. Lo que la 167 aislo se conserva intacto y se dice abajo como negativo:
     // `recolectando` SIGUE FUERA.
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith(MENSAJERO.usuarioId, [
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_reparto",
     ]);
     const estados = (repo.findMisAsignaciones as ReturnType<typeof vi.fn>).mock
@@ -1328,7 +1328,7 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
         asignacionRow({ id: "o-rec", estatusValue: RECOLECTANDO }),
-        asignacionRow({ id: "o-recoger", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "o-recoger", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "o-reparto", estatusValue: "en_reparto" }),
       ]),
     });
@@ -1392,7 +1392,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
 
   it("R22/R26: la reservada para MAÑANA llega con `esParaManana: true`", async () => {
     const repo = conFilas([
-      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "manana", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 },
     ]);
     const r = await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
     expect(cardsPorId(r).get("manana")?.esParaManana).toBe(true);
@@ -1400,8 +1400,8 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
 
   it("R26: la de HOY y la SIN FECHA llegan con `esParaManana: false`", async () => {
     const repo = conFilas([
-      { id: "hoy", estatusValue: "por_recoger", fechaReparto: DIA_20 },
-      { id: "sin", estatusValue: "por_recoger", fechaReparto: null },
+      { id: "hoy", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_20 },
+      { id: "sin", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: null },
       { id: "ayer", estatusValue: "en_reparto", fechaReparto: DIA_19 },
     ]);
     const cards = cardsPorId(await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H));
@@ -1415,7 +1415,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
     // BYTE A BYTE las mismas; lo unico que cambia es el reloj. Con una marca booleana esto no
     // podria pasar: seguiria diciendo «para mañana» hasta que alguien la apagara.
     const filas: Partial<MiAsignacionRow>[] = [
-      { id: "reservada", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "reservada", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 },
     ];
 
     const hoy = cardsPorId(
@@ -1434,7 +1434,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
 
   it("R23: la reservada NO se oculta — aparece en su grupo de siempre", async () => {
     const repo = conFilas([
-      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "manana", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 },
       { id: "en-reparto-manana", estatusValue: "en_reparto", fechaReparto: DIA_21 },
       // ⏳ 2026-09-23 (FICHA 454): con ayuda ABIERTA sigue `en_reparto` (la separa la derivacion).
       { id: "ayuda-manana", estatusValue: "en_reparto", fechaReparto: DIA_21 },
@@ -1458,12 +1458,12 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
     // es que la card llega COMPLETA —con todo lo que la UI necesita para recogerla y gestionarla—
     // y que el unico campo nuevo es el informativo.
     const repo = conFilas([
-      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21, montoCobrar: 100 },
+      { id: "manana", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21, montoCobrar: 100 },
     ]);
     const card = cardsPorId(
       await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H),
     ).get("manana");
-    expect(card?.estatusValue).toBe("por_recoger"); // sigue recogible
+    expect(card?.estatusValue).toBe("mensajero_recogiendo_en_bodega"); // sigue recogible
     expect(card?.montoCobrar).toBe(100);
     expect(card?.numGuia).toBe(1);
     expect(card?.esParaManana).toBe(true);
@@ -1473,7 +1473,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
     // Si la fecha viajara al navegador, alguien acabaria comparandola con `new Date()` alli, y la
     // etiqueta pasaria a depender del reloj del dispositivo. Se manda el booleano YA resuelto.
     const repo = conFilas([
-      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "manana", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 },
     ]);
     const card = cardsPorId(
       await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H),
@@ -1485,7 +1485,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
     // `2026-08-21T05:59:00Z` = 23:59 CR del 20. En UTC ya es dia 21: si el servicio comparara
     // contra el dia UTC, la reservada para el 21 dejaria de etiquetarse una hora antes de tiempo.
     const repo = conFilas([
-      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "manana", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 },
     ]);
     const cards = cardsPorId(
       await newService(repo).listarMisAsignaciones(
@@ -1499,7 +1499,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
   it("R35: la proyeccion del repositorio trae el dia SIN una consulta nueva", async () => {
     // T3.7: el dato viaja en la lectura que ya existe. Si hiciera falta una consulta aparte, seria
     // un N+1 sobre la pantalla mas caliente del portal.
-    const repo = conFilas([{ id: "o1", estatusValue: "por_recoger", fechaReparto: DIA_21 }]);
+    const repo = conFilas([{ id: "o1", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 }]);
     await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
     expect(repo.findMisAsignaciones).toHaveBeenCalledTimes(1);
   });
@@ -1525,7 +1525,7 @@ describe("296 — `MiAsignacionDTO` no gana ningun campo de mensajero", () => {
   it("las cards que emite el portal no traen NINGUNA clave de mensajero", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
       ]),
     });

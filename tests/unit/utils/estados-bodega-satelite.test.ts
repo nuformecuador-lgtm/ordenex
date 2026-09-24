@@ -49,18 +49,18 @@ describe("FICHA 357 · ESTADOS_BODEGA_SATELITE es el cierre del grafo, no una li
     // literal y completo.
     expect([...ESTADOS_BODEGA_SATELITE]).toEqual([
       "en_bodega_satelite",
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_reparto",
       // ⏳ 2026-09-23 (FICHA 454, R37): aqui iba `ayuda_tienda`, y abajo `devolucion_por_confirmar`.
       // Salen del catalogo; la orden con ayuda abierta o gestion pendiente esta en `en_reparto`.
-      "entregada",
-      "reprogramada",
-      "rechazada",
-      "sin_gestionar",
+      "entregado",
+      "reprogramado",
+      "devolucion_a_origen_por_rechazo",
+      "novedad_interna",
       "incidente",
-      "por_devolver",
+      "por_devolver_a_bodega_central",
       "devolviendo_a_bodega_central",
-      "devuelta",
+      "novedad",
       "por_devolver_a_tienda",
       "devolviendo_a_tienda",
       "devuelta_a_tienda",
@@ -71,10 +71,10 @@ describe("FICHA 357 · ESTADOS_BODEGA_SATELITE es el cierre del grafo, no una li
       (ESTADOS_BODEGA_SATELITE as readonly string[]).indexOf(value);
     const losCincoDeSiempre = [
       "en_bodega_satelite",
-      "por_recoger",
-      "por_devolver",
+      "mensajero_recogiendo_en_bodega",
+      "por_devolver_a_bodega_central",
       "devolviendo_a_bodega_central",
-      "devuelta",
+      "novedad",
     ];
     const posiciones = losCincoDeSiempre.map(posicion);
     expect(posiciones).toEqual([...posiciones].sort((a, b) => a - b));
@@ -116,7 +116,7 @@ describe("FICHA 357 · las tres exclusiones que se revierten, y lo que NO se toc
   it("(cara A) los desenlaces que la bodega perdia de vista SI estan en el listado", () => {
     // Las 17 ordenes invisibles de produccion estaban repartidas en estos tres estados: 15
     // `entregada`, 1 `rechazada` (la guia 66840050 del reporte) y 1 `reprogramada`.
-    for (const desenlace of ["entregada", "rechazada", "reprogramada"]) {
+    for (const desenlace of ["entregado", "devolucion_a_origen_por_rechazo", "reprogramado"]) {
       expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain(desenlace);
     }
   });
@@ -163,16 +163,16 @@ describe("FICHA 357 · el filtro INTERSECA, nunca amplia", () => {
   });
 
   it("el resultado sale en el orden canonico aunque la seleccion llegue al reves", () => {
-    expect(estadosDelListado(["devuelta", "en_bodega_satelite"])).toEqual([
+    expect(estadosDelListado(["novedad", "en_bodega_satelite"])).toEqual([
       "en_bodega_satelite",
-      "devuelta",
+      "novedad",
     ]);
   });
 
   it("una seleccion mixta se queda solo con lo que el contrato admite", () => {
-    expect(estadosDelListado(["entregada", "en_bodega_central", "rechazada"])).toEqual([
-      "entregada",
-      "rechazada",
+    expect(estadosDelListado(["entregado", "en_bodega_central", "devolucion_a_origen_por_rechazo"])).toEqual([
+      "entregado",
+      "devolucion_a_origen_por_rechazo",
     ]);
   });
 });

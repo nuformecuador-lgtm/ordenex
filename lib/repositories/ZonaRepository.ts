@@ -193,7 +193,7 @@ function whereBaseElegible(distritoIds: string[], zonaResueltaId: string): Prism
     gestiones: {
       none: {
         anuladaAt: null,
-        resultado: { in: ["entregada", "rechazada", "incidente"] },
+        resultado: { in: ["entregado", "devolucion_a_origen_por_rechazo", "incidente"] },
       },
     },
   };

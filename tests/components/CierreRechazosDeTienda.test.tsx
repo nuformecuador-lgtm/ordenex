@@ -124,7 +124,7 @@ function entrega(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
     distritoNombre: "Carmen",
     producto: "Caja mediana",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "5000.00",
     metodoPago: null,
     pagos: [],
@@ -145,7 +145,7 @@ function entrega(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
 /** DOS entregas: 5.000 + 3.000 = 8.000, que es el total general de la cabecera. */
 function dosEntregas(): CierreGrupos {
   return {
-    entregada: [
+    entregado: [
       entrega(),
       entrega({
         gestionId: "g2",
@@ -156,15 +156,15 @@ function dosEntregas(): CierreGrupos {
         montoRecibido: "3000.00",
       }),
     ],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 }
 
 function ningunaGestion(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 function rechazo(over: Partial<CierreRechazoDeTienda> = {}): CierreRechazoDeTienda {
@@ -289,7 +289,7 @@ describe("ficha 425 — la sección existe, va aparte y tiene la forma aprobada 
     expect(s.contains(pestanas)).toBe(false);
     expect(within(s).queryAllByRole("tab")).toHaveLength(0);
     // Tampoco se mete en la sección de la 264: con su lista vacía, esa ni existe.
-    expect(screen.queryByRole("region", { name: "Órdenes sin gestionar" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Pasaron a Novedad interna" })).toBeNull();
   });
 
   it("los DOS conteos van etiquetados con lo que hace cada uno: gestiones «paga», rechazos «revisar»", () => {
@@ -321,7 +321,7 @@ describe("ficha 425 — la sección existe, va aparte y tiene la forma aprobada 
     ).toBeInTheDocument();
     expect(
       within(s).getByText(
-        "Al aprobar el cierre, las 3 pasan solas a «Por devolver a tienda» (las de zona satélite, a «Por devolver»).",
+        "Al aprobar el cierre, las 3 pasan solas a «Por devolver a tienda» (las de zona satélite, a «Por devolver a bodega central»).",
       ),
     ).toBeInTheDocument();
   });
@@ -340,6 +340,13 @@ describe("ficha 425 — cada fila trae lo necesario para separar el paquete (R15
       "NA-981",
       "NA-1103",
     ]);
+  });
+
+  it("455/m8: la lista se nombra en masculino, como el título, sin el participio del estado retirado", () => {
+    pintar();
+    expect(
+      within(seccion()).getByRole("list", { name: "Lista de paquetes rechazados por la tienda" }),
+    ).toBeInTheDocument();
   });
 
   it("guía, remisión, destinatario, producto, tienda, FECHA del rechazo y motivo", () => {
@@ -445,11 +452,11 @@ describe("ficha 425 — la sección no es dinero ni se toca (R16, R10)", () => {
     expect(kpi("Pago al mensajero")).toBe("₡1.200");
 
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Entregadas2",
-      "Reprogramadas0",
-      "Devueltas0",
-      "Rechazadas0",
-      "Incidentes0",
+      "Entregado2",
+      "Reprogramado0",
+      "Novedad0",
+      "Devolución a origen por rechazo0",
+      "Incidente0",
     ]);
 
     expect(
@@ -468,7 +475,7 @@ describe("ficha 425 — singular y plural, sin «orden(es)»", () => {
     expect(within(s).getByText("Separar 1 orden para devolución, sin escanearla.")).toBeInTheDocument();
     expect(
       within(s).getByText(
-        "Al aprobar el cierre, la orden pasa sola a «Por devolver a tienda» (si es de zona satélite, a «Por devolver»).",
+        "Al aprobar el cierre, la orden pasa sola a «Por devolver a tienda» (si es de zona satélite, a «Por devolver a bodega central»).",
       ),
     ).toBeInTheDocument();
     expect(within(conteo("Rechazados por la tienda")).getByText("1")).toBeInTheDocument();
@@ -485,7 +492,7 @@ describe("ficha 425 — singular y plural, sin «orden(es)»", () => {
 
     expect(texto).toContain("Separar 3 órdenes para devolución, sin escanearlas.");
     expect(texto).toContain(
-      "Al aprobar el cierre, las 3 pasan solas a «Por devolver a tienda» (las de zona satélite, a «Por devolver»).",
+      "Al aprobar el cierre, las 3 pasan solas a «Por devolver a tienda» (las de zona satélite, a «Por devolver a bodega central»).",
     );
     for (const colado of ["3 orden ", "(es)", "pasa sola", "escanearla."]) {
       expect(texto, `con tres órdenes se coló «${colado}»`).not.toContain(colado);

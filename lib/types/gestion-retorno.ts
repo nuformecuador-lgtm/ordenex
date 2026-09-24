@@ -24,17 +24,17 @@ import type { GestionResultado } from "@prisma/client";
  * «arreglar» poniendolo a `true`: eso bloquearia el cierre exigiendo escanear un paquete que no
  * existe, y dejaria cierres imposibles de aprobar.
  *
- * POR QUE UN `Record` TOTAL Y NO UNA LISTA. Una lista (`["devuelta","rechazada","reprogramada"]`)
+ * POR QUE UN `Record` TOTAL Y NO UNA LISTA. Una lista (`["novedad","devolucion_a_origen_por_rechazo","reprogramado"]`)
  * expresa lo que entra y CALLA lo que queda fuera; ese silencio es exactamente lo que hace que la
  * exclusion de los incidentes «parezca un olvido» (R34) y lo que deja pasar un resultado nuevo.
  * El `Record` obliga a nombrar los cinco y a poner el `false` con su comentario; la lista se
  * DERIVA de el.
  */
 export const RETORNA_A_BODEGA = {
-  entregada: false, // se quedo con el cliente
-  reprogramada: true, // vuelve a bodega y espera su fecha (liberacion_reprogramada, 46)
-  devuelta: true,
-  rechazada: true,
+  entregado: false, // se quedo con el cliente
+  reprogramado: true, // vuelve a bodega y espera su fecha (liberacion_reprogramada, 46)
+  novedad: true,
+  devolucion_a_origen_por_rechazo: true,
   incidente: false, // perdido / robado / danado: no vuelve, se indemniza (158)
 } as const satisfies Record<GestionResultado, boolean>;
 

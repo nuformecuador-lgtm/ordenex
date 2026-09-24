@@ -242,14 +242,14 @@ describe("Feature 240 · el codigo y la base dicen lo mismo (R6/R7/R19/R44)", ()
     const conEstaVia = Object.entries(TRANSICIONES).flatMap(([origen, destinos]) =>
       destinos.filter((d) => d.via === FAMILIA).map((d) => `${origen} -> ${d.to}`),
     );
-    expect(conEstaVia).toEqual(["devuelta -> rechazada"]);
+    expect(conEstaVia).toEqual(["novedad -> devolucion_a_origen_por_rechazo"]);
   });
 
   it("R26: comparte par con el cron pero NO su familia — es el tercer duplicado del inventario", () => {
     // Las dos llegan a `rechazada` desde `devuelta` y cobran lo mismo (D1). Lo unico que las
     // distingue es la familia, y de ella cuelgan la pestaña «Rechazadas por plazo vencido» (102) y
     // `esRechazoSla`. Fusionarlas haria que esa pestaña afirmara un plazo que aqui no vencio.
-    const aRechazada = TRANSICIONES.devuelta.filter((d) => d.to === "rechazada");
+    const aRechazada = TRANSICIONES.novedad.filter((d) => d.to === "devolucion_a_origen_por_rechazo");
     expect(aRechazada.map((d) => d.via).sort()).toEqual([FAMILIA_CRON, FAMILIA].sort());
   });
 });

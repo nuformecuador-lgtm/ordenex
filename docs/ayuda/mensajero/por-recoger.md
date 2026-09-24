@@ -1,9 +1,9 @@
 ---
-titulo: Por recoger
+titulo: Recoger en bodega
 modulo: mis-asignaciones
 pantalla: /mis-asignaciones/recoger
 roles: [mensajero]
-actualizado: 2026-09-15
+actualizado: 2026-09-24
 fuentes:
   - app/(app)/mis-asignaciones/_components/RecogerModule.tsx
   - app/(app)/mis-asignaciones/_components/recoger-grupos.ts
@@ -14,9 +14,10 @@ fuentes:
   - lib/services/MisAsignacionesService.ts
 ---
 
-# Por recoger
+# Recoger en bodega
 
-Acá están los paquetes que **te asignaron pero todavía no tenés encima**. Cuando recogés uno, se pasa
+Acá están los paquetes que **te asignaron pero todavía no tenés encima**: su estado es **Mensajero
+recogiendo en la bodega**. Cuando recogés uno, se pasa
 solo a **Reparto**, que es donde vas a trabajarlo.
 
 ## Recoger un paquete
@@ -34,7 +35,7 @@ Usá la que te sirva. Si la cámara no abre o el código está estropeado, escri
 
 ## Las dos pestañas
 
-**Órdenes por recoger** — las que podés recoger hoy.
+**Órdenes para recoger** — las que podés recoger hoy.
 
 **Órdenes para otro día** — las que te asignaron pero están reservadas para una fecha posterior.
 
@@ -46,7 +47,7 @@ fecha y hay que respetarla.
 
 ## Buscar
 
-El buscador filtra entre tus paquetes por recoger. Escribí el número de guía y te lo deja a la vista.
+El buscador filtra entre tus paquetes para recoger. Escribí el número de guía y te lo deja a la vista.
 
 ## Escribirle al cliente
 

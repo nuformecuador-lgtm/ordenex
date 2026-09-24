@@ -63,7 +63,7 @@ function gestionDbRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "g1",
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: new Prisma.Decimal("10.00"),
     metodoPago: "efectivo",
     motivo: null,
@@ -220,7 +220,7 @@ describe("CierresBodegaAdminRepository.findCierreBodegaConDetalle (R11/R19)", ()
     ]);
     prisma.gestionOrden.findMany
       .mockResolvedValueOnce([gestionDbRow({ id: "g1" })])
-      .mockResolvedValueOnce([gestionDbRow({ id: "g2", ordenId: "o2", resultado: "devuelta", montoRecibido: null, metodoPago: null, evidenciaStoragePath: null })]);
+      .mockResolvedValueOnce([gestionDbRow({ id: "g2", ordenId: "o2", resultado: "novedad", montoRecibido: null, metodoPago: null, evidenciaStoragePath: null })]);
     prisma.cierreDetail.findMany
       .mockResolvedValueOnce([detalleDbRow({ ordenId: "o1" })])
       .mockResolvedValueOnce([detalleDbRow({ ordenId: "o2" })]);

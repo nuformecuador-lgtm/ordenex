@@ -29,12 +29,12 @@ describeSiHayBase("454/C20 — aviso de orden rechazada (Postgres real)", () => 
           select: { destinatarioRol: true, tiendaId: true, zonaId: true },
         });
 
-      await e.gestionarOk(calle.ordenId, "rechazada");
+      await e.gestionarOk(calle.ordenId, "devolucion_a_origen_por_rechazo");
       const trasMensajero = await avisos(calle.ordenId);
 
       const pedida = await e.pedirAyuda(ayuda.ordenId);
       if (pedida.status !== "ok") throw new Error(`pedirAyuda: ${JSON.stringify(pedida)}`);
-      const desdeAyuda = await e.gestionarDesdeAyuda(ayuda.ordenId, "rechazada");
+      const desdeAyuda = await e.gestionarDesdeAyuda(ayuda.ordenId, "devolucion_a_origen_por_rechazo");
       const trasTienda = await avisos(ayuda.ordenId);
 
       const cierreId = await e.solicitarCierreOk();

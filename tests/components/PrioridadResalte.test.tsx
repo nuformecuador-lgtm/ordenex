@@ -91,8 +91,8 @@ describe("PrioridadResalte (feature 101)", () => {
 // (R26); solo la orden ya liberada (con `prioridad = true`) entra en el resalte EXISTENTE
 // (101/R8). Además, `sin_gestionar` está ausente de los listados de reasignación por
 // construcción del server (R15), así que nunca llega a una superficie que resalte.
-describe("PrioridadResalte — feature 109 (R26): `sin_gestionar` congelada", () => {
-  it("una `sin_gestionar` congelada (sin flag `prioridad`) NO resalta ni lleva badge; solo la orden ya liberada a bodega (prioridad=true) entra en el resalte", () => {
+describe("PrioridadResalte — feature 109 (R26): `novedad_interna` congelada", () => {
+  it("una `novedad_interna` congelada (sin flag `prioridad`) NO resalta ni lleva badge; solo la orden ya liberada a bodega (prioridad=true) entra en el resalte", () => {
     const congelada: Fila = { id: "sg", nombre: "Sin gestionar" };
     const liberada: Fila = { id: "lb", nombre: "En bodega", prioridad: true };
 

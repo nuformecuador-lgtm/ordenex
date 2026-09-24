@@ -1,3 +1,4 @@
+import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 import { MSG_CARGA_SIN_TARIFA, MSG_FILA_SIN_TARIFA } from "@/lib/services/mensajes-tarifa";
 import { EVENTOS_PUBLICOS } from "@/lib/types/webhook-eventos";
 import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
@@ -39,25 +40,12 @@ import { EVENTO_PUBLICO_POR_TIPO } from "@/lib/types/orden-evento";
 // deuda se declara en `progress/impl_155_backend.md` en vez de arreglarse de contrabando.
 // `tests/unit/api/openapi-contrato-en-reparto.test.ts` verifica que todo value de aqui exista
 // en `ORDER_STATUS_SEED` y que el `.yaml` sea espejo EXACTO de este literal.
-const ORDER_STATUS_ENUM = [
-  "entregada",
-  "devuelta",
-  "devolviendo_a_tienda",
-  "reprogramada",
-  "por_recolectar_en_tienda", // feature 155/R42: estado de nacimiento del canal por API key
-  "en_ruta_bodega_central",
-  "en_bodega_central",
-  "en_preparacion",
-  "por_recoger",
-  "en_ruta_bodega_satelite",
-  "en_reparto",
-  "rechazada",
-  "en_bodega_satelite",
-  "devuelta_a_tienda",
-  // ⏳ 2026-09-23 (FICHA 454, R36/R37): aqui estaba `"ayuda_tienda"` (268/R15). La ayuda deja de ser
-  // un estado de la orden: la ida y la vuelta se publican como eventos de orden propios.
-  "incidente", // feature 268/R15: desenlace terminal de la gestion, ya emitido como evento publico
-];
+//
+// ⏳ 2026-09-24 (FICHA 455, R29): la DEUDA de arriba SE CIERRA. El contrato enumera EXACTAMENTE los 20
+// codigos vigentes, DERIVADOS del catalogo y en su orden (`ORDER_STATUS_SEED`): ya no hay una lista
+// escrita a mano que se quede atras. Aqui decia una lista de 15 (sin `novedad_interna` ni los tres del
+// flujo de devolucion ni `recolectando`).
+const ORDER_STATUS_ENUM: string[] = [...ORDER_STATUS_SEED];
 
 // ⚠️ 2026-08-22 (feature 268) — la DEUDA de arriba SIGUE ABIERTA a proposito: `sin_gestionar` y los
 // tres values del flujo de devolucion de la 139 continuan alcanzables y sin documentar. La 268
@@ -82,7 +70,7 @@ const WEBHOOK_ESTADO_ENUM = [...EVENTOS_PUBLICOS].sort();
 // el mapa de origen no mueva el contrato publicado.
 //
 // NO cuenta como «enum de estado» para `openapi-contrato-en-reparto.test.ts`: contiene
-// `entregada` pero NO `por_recoger`, asi que los bloques de catalogo siguen siendo CUATRO.
+// `entregado` pero NO `mensajero_recogiendo_en_bodega`, asi que los bloques de catalogo siguen siendo CUATRO.
 const GESTION_RESULTADO_ENUM = Object.keys(ESTATUS_POR_RESULTADO).sort();
 
 // FICHA 454 (R33/R36) — los eventos de ORDEN que NO son un cambio de estado (webhook
@@ -105,6 +93,20 @@ const MOTIVO_CAUSA_ENUM: (string | null)[] = [
   ...CAUSA_INCIDENTE_SEED,
   null,
 ];
+
+/**
+ * FICHA 455 (R24, R25, R29) — el schema de un campo `XNombre`: el nombre visible del codigo que va en
+ * `X`, la MISMA cadena que la aplicacion ensena (fuente unica `NOMBRE_ESTADO`). Un solo constructor
+ * para que las once apariciones digan lo mismo; el `.yaml` espejo las escribe enteras.
+ */
+function schemaNombre(campo: string, nullable = false) {
+  return {
+    type: nullable ? ["string", "null"] : "string",
+    description: nullable
+      ? `Nombre visible de \`${campo}\`: la MISMA cadena que muestra la aplicación. \`null\` cuando \`${campo}\` es \`null\`.`
+      : `Nombre visible de \`${campo}\`: la MISMA cadena que muestra la aplicación (p. ej. \`Novedad\`).`,
+  };
+}
 
 // Tope duro de filas por lote de carga (cargaMasivaConfig.MAX_CHUNK_ROWS, default 5000).
 const MAX_CARGA_ROWS = 5000;
@@ -201,7 +203,7 @@ export const openApiSpec = {
                       duplicadas: 0,
                       conError: 1,
                       filas: [
-                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda", numGuia: 100234 },
                       ],
                       errores: [
                         { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { telefono: ["requerido"] } },
@@ -211,7 +213,7 @@ export const openApiSpec = {
                           id: "6f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
                           numRemision: "REM-0001",
                           numGuia: 100234,
-                          estado: "por_recolectar_en_tienda",
+                          estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda",
                           costoEnvio: "3.39",
                           fulfillment: "0.00",
                         },
@@ -227,7 +229,7 @@ export const openApiSpec = {
                       duplicadas: 0,
                       conError: 1,
                       filas: [
-                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda", numGuia: 100234 },
                       ],
                       errores: [
                         { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { tarifa: [MSG_FILA_SIN_TARIFA] } },
@@ -237,7 +239,7 @@ export const openApiSpec = {
                           id: "6f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
                           numRemision: "REM-0001",
                           numGuia: 100234,
-                          estado: "por_recolectar_en_tienda",
+                          estado: "por_recolectar_en_tienda", estadoNombre: "Por recolectar en tienda",
                           costoEnvio: "3.39",
                           fulfillment: "0.00",
                         },
@@ -296,7 +298,8 @@ export const openApiSpec = {
             name: "estado",
             in: "query",
             required: false,
-            description: "Filtra por estado exacto del catálogo.",
+            description:
+              "Filtra por estado exacto del catálogo (uno de los 20 códigos vigentes). Un código anterior al cambio de nombres de estados (ver CHANGELOG) responde `422` con un mensaje que nombra el código que lo sustituye.",
             schema: { type: "string", enum: ORDER_STATUS_ENUM },
           },
           {
@@ -346,7 +349,7 @@ export const openApiSpec = {
                         {
                           numGuia: 100234,
                           numRemision: "REM-0001",
-                          estado: "en_ruta_bodega_central",
+                          estado: "en_ruta_bodega_central", estadoNombre: "En ruta a bodega central",
                           destinatario: "Juan Pérez",
                           telefonoDest: "88887777",
                           producto: "Camiseta talla M",
@@ -393,8 +396,8 @@ export const openApiSpec = {
                     summary: "Cancelación desde en_ruta_bodega_central",
                     value: {
                       numGuia: 100234,
-                      estadoAnterior: "en_ruta_bodega_central",
-                      estado: "devolviendo_a_tienda",
+                      estadoAnterior: "en_ruta_bodega_central", estadoAnteriorNombre: "En ruta a bodega central",
+                      estado: "devolviendo_a_tienda", estadoNombre: "Devolviendo a tienda",
                     },
                   },
                 },
@@ -438,7 +441,7 @@ export const openApiSpec = {
                     value: {
                       numGuia: 100234,
                       numRemision: "REM-0001",
-                      estado: "entregada",
+                      estado: "entregado", estadoNombre: "Entregado",
                       destinatario: "Juan Pérez",
                       telefonoDest: "88887777",
                       producto: "Camiseta talla M",
@@ -447,7 +450,7 @@ export const openApiSpec = {
                       createdAt: "2026-07-22T14:03:11.000Z",
                       evidencias: [
                         {
-                          resultado: "entregada",
+                          resultado: "entregado", resultadoNombre: "Entregado",
                           contentType: "image/jpeg",
                           url: "https://<proyecto>.supabase.co/storage/v1/object/sign/gestion-evidencias/...",
                           expiraEnSegundos: 300,
@@ -485,12 +488,12 @@ export const openApiSpec = {
                     value: {
                       numGuia: 100234,
                       numRemision: "REM-0001",
-                      estado: "en_bodega_central",
+                      estado: "en_bodega_central", estadoNombre: "En bodega central",
                     },
                   },
                   sinGuia: {
                     summary: "Orden recién cargada, todavía sin guía",
-                    value: { numGuia: null, numRemision: "REM-0002", estado: "en_preparacion" },
+                    value: { numGuia: null, numRemision: "REM-0002", estado: "en_preparacion", estadoNombre: "En preparación" },
                   },
                 },
               },
@@ -823,7 +826,7 @@ export const openApiSpec = {
               schema: { $ref: "#/components/schemas/HabilitacionRequest" },
               examples: {
                 dosFilas: {
-                  summary: "Dos filas: una en ayuda con mensajero y una devuelta",
+                  summary: "Dos filas: una en ayuda con mensajero y una en novedad",
                   value: {
                     ordenes: [
                       { num_guia: 100234, nota: "el cliente pidió reintento mañana" },
@@ -855,14 +858,14 @@ export const openApiSpec = {
                         {
                           numGuia: 100234,
                           resultado: "habilitada",
-                          estado: "en_reparto",
+                          estado: "en_reparto", estadoNombre: "En reparto",
                           ayudaCerrada: true,
                           error: null,
                         },
                         {
                           numGuia: 100235,
                           resultado: "habilitada_sin_cambio_de_estado",
-                          estado: "devuelta",
+                          estado: "novedad", estadoNombre: "Novedad",
                           ayudaCerrada: false,
                           error: null,
                         },
@@ -870,6 +873,7 @@ export const openApiSpec = {
                           numGuia: 999999,
                           resultado: "error",
                           estado: null,
+                          estadoNombre: null,
                           ayudaCerrada: false,
                           error: {
                             codigo: "no_encontrada",
@@ -982,8 +986,8 @@ export const openApiSpec = {
             // por la misma razón que `motivo` y no por la de `evidenciasUrl` (ver su description).
             // `evidenciasUrl` sigue siendo la ÚNICA opcional.
             description:
-              "Las cinco claves `numGuia`, `numRemision`, `estado`, `motivo` y `mensajero` están SIEMPRE presentes, sea cual sea el estado: el consumidor no ramifica por estado para saber si existen (`motivo` y `mensajero` viajan como `null` cuando no aplica, nunca omitidos). A ellas se suma UNA clave OPCIONAL, `evidenciasUrl`, que SÍ se omite salvo en los eventos con `estado: \"incidente\"`.",
-            required: ["numGuia", "numRemision", "estado", "motivo", "mensajero"],
+              "Las seis claves `numGuia`, `numRemision`, `estado`, `estadoNombre`, `motivo` y `mensajero` están SIEMPRE presentes, sea cual sea el estado: el consumidor no ramifica por estado para saber si existen (`motivo` y `mensajero` viajan como `null` cuando no aplica, nunca omitidos). A ellas se suma UNA clave OPCIONAL, `evidenciasUrl`, que SÍ se omite salvo en los eventos con `estado: \"incidente\"`.",
+            required: ["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero"],
             properties: {
               numGuia: {
                 type: ["integer", "null"],
@@ -998,8 +1002,10 @@ export const openApiSpec = {
                 // feature 268/R29: DERIVADO de `EVENTOS_PUBLICOS`, nunca copiado a mano.
                 enum: WEBHOOK_ESTADO_ENUM,
                 description:
-                  "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de ruteo satélite que ese catálogo documenta (`por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. `en_preparacion` SÍ viaja, y solo como evento de NACIMIENTO: es el estado inicial de las órdenes creadas con `fulfillment` (el paquete ya está en bodega), llega una única vez por orden y con `numGuia: null`, porque en esa rama la guía se emite más tarde. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
+                  "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de ruteo satélite que ese catálogo documenta (`mensajero_recogiendo_en_bodega`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. `en_preparacion` SÍ viaja, y solo como evento de NACIMIENTO: es el estado inicial de las órdenes creadas con `fulfillment` (el paquete ya está en bodega), llega una única vez por orden y con `numGuia: null`, porque en esa rama la guía se emite más tarde. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
               },
+              // FICHA 455 (R25): el nombre visible, INMEDIATAMENTE detras de `estado` en el cuerpo firmado.
+              estadoNombre: schemaNombre("estado"),
               motivo: {
                 type: ["string", "null"],
                 enum: [
@@ -1015,7 +1021,7 @@ export const openApiSpec = {
                   "Causa TIPIFICADA del cambio de estado, con el value crudo del enum y sin traducir. El",
                   "campo transporta DOS enums distintos y cuál aplica lo decide `estado`:",
                   "",
-                  "- **`estado: \"devuelta\"`** → causa de la devolución: `not_found` (destinatario no",
+                  "- **`estado: \"novedad\"`** → causa de la devolución: `not_found` (destinatario no",
                   "  encontrado), `wrong_number` (teléfono equivocado), `wrong_address` (dirección",
                   "  equivocada). Estos tres NO aparecen nunca con otro estado.",
                   "- **`estado: \"incidente\"`** → causa del incidente: `danado`, `perdido`, `robado`. Estos",
@@ -1028,8 +1034,8 @@ export const openApiSpec = {
                   "renombrar cualquiera de los dos rompería a los integradores que ya lo consumen.",
                   "Decisión consciente y firmada (73/F1.4-g y 158/Q-B): no se «armoniza» en el futuro.",
                   "",
-                  "Es `null` en todo evento cuyo `estado` NO sea `devuelta` ni `incidente`, y es `null`",
-                  "**también** en una `devuelta` (o un `incidente`) sin causa registrada — órdenes cerradas",
+                  "Es `null` en todo evento cuyo `estado` NO sea `novedad` ni `incidente`, y es `null`",
+                  "**también** en una `novedad` (o un `incidente`) sin causa registrada — órdenes cerradas",
                   "antes de que la causa se pidiera; ese histórico no se rellenó. El contrato no distingue",
                   "«no hubo causa» de «no se registró»:",
                   "en los dos casos viaja `null`, el campo NUNCA se omite y la entrega es normal.",
@@ -1076,7 +1082,7 @@ export const openApiSpec = {
                   "misma regla que rige a `motivo`—: si la orden se reasigna entre dos entregas del",
                   "mismo `eventoId`, la segunda lleva el mensajero de entonces. Y varios flujos",
                   "LIMPIAN la asignación (generación de guía, quitar mensajero, devolución o",
-                  "recuperación a bodega, liberación de una reprogramada, el barrido del cierre",
+                  "recuperación a bodega, liberación de una orden en `reprogramado`, el barrido del cierre",
                   "diario), de modo que una orden que alguien llevó puede quedar con `mensajero:",
                   "null` más tarde. Para «quién gestionó cada intento» hace falta el historial de",
                   "gestiones, que este evento NO transporta.",
@@ -1131,7 +1137,7 @@ export const openApiSpec = {
             data: {
               numGuia: 100234,
               numRemision: "REM-0001",
-              estado: "devuelta",
+              estado: "novedad", estadoNombre: "Novedad",
               motivo: "not_found",
               // ⏳ 2026-09-09 (feature 404/R2): el ejemplo del caso SIN mensajero asignado.
               mensajero: null,
@@ -1145,7 +1151,7 @@ export const openApiSpec = {
             data: {
               numGuia: 100235,
               numRemision: "REM-0002",
-              estado: "incidente",
+              estado: "incidente", estadoNombre: "Incidente",
               motivo: "robado",
               // ⏳ 2026-09-09 (feature 404/R2/R24): el ejemplo del caso CON mensajero asignado, y
               // en su posicion real dentro del cuerpo (tras `motivo`, antes de `evidenciasUrl`).
@@ -1204,7 +1210,7 @@ export const openApiSpec = {
           data: {
             type: "object",
             description:
-              "`numGuia`, `numRemision`, `motivo` y `mensajero` están SIEMPRE presentes (`null` cuando no aplica, nunca omitidos). El resto de claves se OMITE cuando el evento no las lleva: `gestionId` y `resultado` en los tres eventos de gestión, `resultadoAnterior` solo en `orden.gestion_corregida`, `pendienteConfirmacion` en `orden.gestion_registrada` y `orden.gestion_corregida`, y `via` solo en `orden.ayuda_resuelta`.",
+              "`numGuia`, `numRemision`, `motivo` y `mensajero` están SIEMPRE presentes (`null` cuando no aplica, nunca omitidos). El resto de claves se OMITE cuando el evento no las lleva: `gestionId` y `resultado` (con `resultadoNombre`) en los tres eventos de gestión, `resultadoAnterior` (con `resultadoAnteriorNombre`) solo en `orden.gestion_corregida`, `pendienteConfirmacion` en `orden.gestion_registrada` y `orden.gestion_corregida`, y `via` solo en `orden.ayuda_resuelta`.",
             required: ["numGuia", "numRemision", "motivo", "mensajero"],
             properties: {
               numGuia: {
@@ -1225,11 +1231,13 @@ export const openApiSpec = {
                 description:
                   "Resultado de la gestión, con el MISMO value crudo que publica `OrdenGestion.resultado`. En `orden.gestion_corregida`, el resultado NUEVO.",
               },
+              resultadoNombre: schemaNombre("resultado"), // FICHA 455 (R25)
               resultadoAnterior: {
                 type: "string",
                 enum: GESTION_RESULTADO_ENUM,
                 description: "Solo en `orden.gestion_corregida`: el resultado que tenía antes de la corrección.",
               },
+              resultadoAnteriorNombre: schemaNombre("resultadoAnterior"), // FICHA 455 (R25)
               motivo: {
                 type: ["string", "null"],
                 enum: MOTIVO_CAUSA_ENUM,
@@ -1269,7 +1277,7 @@ export const openApiSpec = {
               numGuia: 100234,
               numRemision: "REM-0001",
               gestionId: "018f2c31-0000-4000-8000-000000000201",
-              resultado: "devuelta",
+              resultado: "novedad", resultadoNombre: "Novedad",
               motivo: "not_found",
               mensajero: { id: "018f2c31-0000-4000-8000-0000000000aa", nombre: "Carlos Jiménez Mora" },
               pendienteConfirmacion: true,
@@ -1319,6 +1327,7 @@ export const openApiSpec = {
           "numGuia",
           "numRemision",
           "estado",
+          "estadoNombre", // FICHA 455 (R24)
           "destinatario",
           "telefonoDest",
           "producto",
@@ -1337,6 +1346,7 @@ export const openApiSpec = {
           numGuia: { type: ["integer", "null"], description: "Número de guía (null si aún no asignado)." },
           numRemision: { type: "string" },
           estado: { type: "string", enum: ORDER_STATUS_ENUM },
+          estadoNombre: schemaNombre("estado"), // FICHA 455 (R24)
           destinatario: { type: "string" },
           telefonoDest: { type: "string" },
           producto: { type: "string" },
@@ -1367,7 +1377,7 @@ export const openApiSpec = {
               "",
               "⚠️ **Es QUIÉN LA LLEVA en el momento de la lectura, no quién la gestionó.** Varios",
               "flujos limpian la asignación (generación de guía, quitar mensajero, devolución o",
-              "recuperación a bodega, liberación de una reprogramada, el barrido del cierre diario),",
+              "recuperación a bodega, liberación de una orden en `reprogramado`, el barrido del cierre diario),",
               "así que una orden que alguien llevó puede devolver `null` más tarde. Para «quién",
               "gestionó cada intento» hace falta el historial de gestiones, que este recurso NO",
               "expone.",
@@ -1418,7 +1428,7 @@ export const openApiSpec = {
               "`null` significa **«esta orden todavía no ha entrado en ningún cierre aprobado»**.",
               "",
               "Puede moverse UNA vez más en un caso concreto: si la orden vuelve a entrar en un",
-              "segundo cierre aprobado (una orden devuelta sigue viva y puede recorrerse otra vez),",
+              "segundo cierre aprobado (una orden en `novedad` sigue viva y puede recorrerse otra vez),",
               "publicamos la fila del cierre MÁS RECIENTE.",
             ].join("\n"),
           },
@@ -1501,9 +1511,10 @@ export const openApiSpec = {
         // admin) se exponen con la MISMA forma, y por eso `resultado` gana un tercer value.
         description:
           "Evidencia de entrega, rechazo o incidente, con URL firmada de corta duración. Las de incidente llegan con `resultado: \"incidente\"` y son las que enlaza el campo `evidenciasUrl` del webhook.",
-        required: ["resultado", "contentType", "url", "expiraEnSegundos"],
+        required: ["resultado", "resultadoNombre", "contentType", "url", "expiraEnSegundos"],
         properties: {
-          resultado: { type: "string", enum: ["entregada", "rechazada", "incidente"] },
+          resultado: { type: "string", enum: ["entregado", "devolucion_a_origen_por_rechazo", "incidente"] },
+          resultadoNombre: schemaNombre("resultado"), // FICHA 455 (R24)
           contentType: { type: ["string", "null"], description: "MIME del archivo (p. ej. image/jpeg)." },
           url: { type: "string", format: "uri", description: "URL firmada (vence a los 5 min)." },
           expiraEnSegundos: { type: "integer", description: "TTL de la URL firmada en segundos (300)." },
@@ -1556,7 +1567,17 @@ export const openApiSpec = {
         description:
           "Un desenlace registrado sobre la orden: quién lo registró, cuándo y en qué dejó la orden. El array completo permite medir cuántas veces se visitó la orden y cuánto pasó entre una vez y la siguiente.",
         // FICHA 454 (R32): `pendienteConfirmacion` entra AL FINAL (aditivo).
-        required: ["createdAt", "resultado", "estadoResultante", "motivo", "mensajero", "pendienteConfirmacion"],
+        // FICHA 455 (R24): cada codigo con su `…Nombre` al lado.
+        required: [
+          "createdAt",
+          "resultado",
+          "resultadoNombre",
+          "estadoResultante",
+          "estadoResultanteNombre",
+          "motivo",
+          "mensajero",
+          "pendienteConfirmacion",
+        ],
         additionalProperties: false,
         properties: {
           createdAt: {
@@ -1571,26 +1592,27 @@ export const openApiSpec = {
             description:
               "Desenlace de la gestión, con el value CRUDO del catálogo interno y sin traducir. La lista de arriba es EXACTA y COMPLETA. Ojo: `resultado` NO es el estado en que quedó la orden — para eso está `estadoResultante`, y los dos NO siempre coinciden.",
           },
+          resultadoNombre: schemaNombre("resultado"), // FICHA 455 (R24)
           estadoResultante: {
             type: ["string", "null"],
             description: [
               "El `value` del estado al que ESTA gestión llevó la orden: el destino de la primera",
               "transición que originó. Es un value del mismo catálogo que publica",
-              "`OrdenListItem.estado`; **se publica sin lista cerrada a propósito**, porque el",
-              "catálogo documentado en `estado` está incompleto y aquí pueden aparecer values que",
-              "aquella lista todavía no enumera. Tratá un value desconocido como texto, no como",
-              "error.",
+              "`OrdenListItem.estado`; **se publica sin lista cerrada a propósito**: en gestiones",
+              "antiguas puede traer un estado RETIRADO del catálogo (ver abajo). Tratá un value",
+              "desconocido como texto, no como error.",
               "",
               "⚠️ **No lo deduzcas del `resultado`**: una gestión se REGISTRA sin mover la orden; el",
               "estado se aplica cuando se APRUEBA el cierre del mensajero. Mientras tanto la gestión",
               "está `pendienteConfirmacion: true` y este campo es `null`. En gestiones anteriores al",
-              "2026-09-23, una `devuelta` puede mostrar `devolucion_por_confirmar`.",
+              "2026-09-23, una `novedad` puede mostrar `devolucion_por_confirmar` (estado retirado).",
               "",
               "Es `null` en gestiones ANTIGUAS, anteriores a que existiera la línea de tiempo de",
               "estados: no hay ninguna transición registrada que las respalde. No es un fallo del",
               "canal, y la clave NUNCA se omite.",
             ].join("\n"),
           },
+          estadoResultanteNombre: schemaNombre("estadoResultante", true), // FICHA 455 (R24)
           motivo: {
             type: ["string", "null"],
             enum: MOTIVO_CAUSA_ENUM,
@@ -1599,7 +1621,7 @@ export const openApiSpec = {
               "MISMOS valores que ya recibís en `data.motivo` del webhook `orden.estado_actualizado`.",
               "El campo transporta DOS enums distintos y cuál aplica lo decide `resultado`:",
               "",
-              "- **`resultado: \"devuelta\"`** → causa de la devolución: `not_found` (destinatario no",
+              "- **`resultado: \"novedad\"`** → causa de la devolución: `not_found` (destinatario no",
               "  encontrado), `wrong_number` (teléfono equivocado), `wrong_address` (dirección",
               "  equivocada).",
               "- **`resultado: \"incidente\"`** → causa del incidente: `danado`, `perdido`, `robado`.",
@@ -1611,7 +1633,7 @@ export const openApiSpec = {
               "renombrar cualquiera de los dos rompería a los integradores que ya lo consumen.",
               "Decisión consciente y firmada (73/F1.4-g y 158/Q-B): no se «armoniza» en el futuro.",
               "",
-              "Es `null` **también** en una `devuelta` (o un `incidente`) sin causa registrada —",
+              "Es `null` **también** en una `novedad` (o un `incidente`) sin causa registrada —",
               "gestiones anteriores a que la causa se pidiera; ese histórico no se rellenó—. El",
               "contrato no distingue «no hubo causa» de «no se registró»: en los dos casos viaja",
               "`null` y el campo NUNCA se omite.",
@@ -1687,7 +1709,7 @@ export const openApiSpec = {
           {
             numGuia: 100234,
             numRemision: "REM-0001",
-            estado: "devolviendo_a_tienda",
+            estado: "devolviendo_a_tienda", estadoNombre: "Devolviendo a tienda",
             destinatario: "Jimena Porras",
             telefonoDest: "88887777",
             producto: "Audífonos inalámbricos",
@@ -1699,8 +1721,8 @@ export const openApiSpec = {
             gestiones: [
               {
                 createdAt: "2026-09-02T15:41:07.000Z",
-                resultado: "reprogramada",
-                estadoResultante: "reprogramada",
+                resultado: "reprogramado", resultadoNombre: "Reprogramado",
+                estadoResultante: "reprogramado", estadoResultanteNombre: "Reprogramado",
                 motivo: null,
                 mensajero: {
                   id: "018f2c31-0000-4000-8000-0000000000aa",
@@ -1709,8 +1731,8 @@ export const openApiSpec = {
               },
               {
                 createdAt: "2026-09-04T18:02:55.000Z",
-                resultado: "devuelta",
-                estadoResultante: "devuelta",
+                resultado: "novedad", resultadoNombre: "Novedad",
+                estadoResultante: "novedad", estadoResultanteNombre: "Novedad",
                 motivo: "wrong_address",
                 mensajero: {
                   id: "018f2c31-0000-4000-8000-0000000000bb",
@@ -1786,7 +1808,13 @@ export const openApiSpec = {
           fila: { type: "integer", description: "Índice 1-based dentro de `ordenes`." },
           numRemision: { type: "string" },
           resultado: { type: "string", enum: ["creada", "duplicada"] },
-          estatus: { type: "string", description: "Estado (en creada/duplicada); nunca ids internos." },
+          // FICHA 455 (R27): aqui estaba `estatus`. «Un concepto, un nombre»: el resto del canal ya lo
+          // llamaba `estado`, y ahora viaja con su nombre visible al lado.
+          estado: {
+            type: "string",
+            description: "Estado de la orden, con un código del catálogo de `OrdenListItem.estado` (en creada/duplicada; en `duplicada`, el de la orden que ya ocupa esa remisión). Hasta el cambio de la ficha 455 se llamaba `estatus`.",
+          },
+          estadoNombre: schemaNombre("estado"), // FICHA 455 (R24, R27)
           numGuia: { type: "integer", description: "Número de guía asignado (solo en `creada`)." },
         },
       },
@@ -1817,7 +1845,7 @@ export const openApiSpec = {
       CargaOrden: {
         type: "object",
         description: "Una orden efectivamente creada (bloque plano listo para consumir).",
-        required: ["id", "numRemision", "numGuia", "estado", "costoEnvio", "fulfillment"],
+        required: ["id", "numRemision", "numGuia", "estado", "estadoNombre", "costoEnvio", "fulfillment"],
         properties: {
           id: { type: "string", format: "uuid", description: "Id interno de la orden creada." },
           numRemision: { type: "string" },
@@ -1827,6 +1855,7 @@ export const openApiSpec = {
               "Número de guía asignado en el acto. Es `null` —y solo entonces— cuando la orden nació en `en_preparacion` por fulfillment: la guía se emite más tarde y nunca se fabrica un número.",
           },
           estado: { type: "string", enum: ORDER_STATUS_ENUM },
+          estadoNombre: schemaNombre("estado"), // FICHA 455 (R24)
           costoEnvio: {
             type: "string",
             description:
@@ -1873,11 +1902,13 @@ export const openApiSpec = {
       },
       CancelacionResponse: {
         type: "object",
-        required: ["numGuia", "estadoAnterior", "estado"],
+        required: ["numGuia", "estadoAnterior", "estadoAnteriorNombre", "estado", "estadoNombre"],
         properties: {
           numGuia: { type: "integer" },
           estadoAnterior: { type: "string", enum: ORDER_STATUS_ENUM },
+          estadoAnteriorNombre: schemaNombre("estadoAnterior"), // FICHA 455 (R24)
           estado: { type: "string", const: "devolviendo_a_tienda" },
+          estadoNombre: schemaNombre("estado"), // FICHA 455 (R24)
         },
       },
       // FICHA 320 — respuesta del `DELETE`. Devuelve la IDENTIDAD de lo retirado y el estado que
@@ -1886,7 +1917,7 @@ export const openApiSpec = {
       // habilita ninguna decision del cliente (misma razon por la que se retiro `generado`).
       EliminacionResponse: {
         type: "object",
-        required: ["numGuia", "numRemision", "estado"],
+        required: ["numGuia", "numRemision", "estado", "estadoNombre"],
         properties: {
           numGuia: {
             type: ["integer", "null"],
@@ -1906,9 +1937,10 @@ export const openApiSpec = {
               "en_bodega_central",
               "en_ruta_bodega_central",
               "en_ruta_bodega_satelite",
-              "por_recoger",
+              "mensajero_recogiendo_en_bodega",
             ],
           },
+          estadoNombre: schemaNombre("estado"), // FICHA 455 (R24)
         },
       },
       PdfGenerateResponse: {
@@ -2288,7 +2320,7 @@ export const openApiSpec = {
       },
       HabilitacionRowResult: {
         type: "object",
-        required: ["numGuia", "resultado", "estado", "ayudaCerrada", "error"],
+        required: ["numGuia", "resultado", "estado", "estadoNombre", "ayudaCerrada", "error"],
         properties: {
           numGuia: {
             description: "La guía tal como se envió (si la fila era inválida, puede no ser entero).",
@@ -2297,12 +2329,13 @@ export const openApiSpec = {
             type: "string",
             enum: ["habilitada", "habilitada_sin_cambio_de_estado", "error"],
             description:
-              "`habilitada`: la orden tenía la ayuda abierta y la ayuda quedó CERRADA; la orden sigue `en_reparto` con su mensajero y vuelve a ser gestionable (desde el 2026-09-23 no hay cambio de estado: mirá `ayudaCerrada`). `habilitada_sin_cambio_de_estado`: se registró y el estado NO cambió (SIEMPRE el caso de una `devuelta`). `error`: la fila no se procesó.",
+              "`habilitada`: la orden tenía la ayuda abierta y la ayuda quedó CERRADA; la orden sigue `en_reparto` con su mensajero y vuelve a ser gestionable (desde el 2026-09-23 no hay cambio de estado: mirá `ayudaCerrada`). `habilitada_sin_cambio_de_estado`: se registró y el estado NO cambió (SIEMPRE el caso de una `novedad`). `error`: la fila no se procesó.",
           },
           estado: {
             type: ["string", "null"],
             description: "Estado en el que la orden quedó; `null` cuando la fila falló.",
           },
+          estadoNombre: schemaNombre("estado", true), // FICHA 455 (R24)
           // FICHA 454 (R24/R36) — la clave NUEVA.
           ayudaCerrada: {
             type: "boolean",
@@ -2322,7 +2355,7 @@ export const openApiSpec = {
                   "estado_no_habilitable",
                 ],
                 description:
-                  "`fila_invalida`: `num_guia`/`nota` no cumplen. `duplicada_en_lote`: la guía ya apareció antes en el mismo lote. `no_encontrada`: no hay orden viva con esa guía para esta key (no distingue «no existe» de «es de otro dueño»). `estado_no_habilitable`: la orden no tiene una ayuda abierta ni está `devuelta` —incluye `reprogramada` y la segunda habilitación de una orden cuya ayuda ya se cerró—.",
+                  "`fila_invalida`: `num_guia`/`nota` no cumplen. `duplicada_en_lote`: la guía ya apareció antes en el mismo lote. `no_encontrada`: no hay orden viva con esa guía para esta key (no distingue «no existe» de «es de otro dueño»). `estado_no_habilitable`: la orden no tiene una ayuda abierta ni está en `novedad` —incluye `reprogramado` y la segunda habilitación de una orden cuya ayuda ya se cerró—.",
               },
               mensaje: { type: "string" },
             },

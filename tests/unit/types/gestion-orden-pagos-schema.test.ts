@@ -21,7 +21,7 @@ function entrega(extra: Record<string, unknown>) {
   return {
     ordenId: "o1",
     ubicacion: UBICACION,
-    resultado: "entregada",
+    resultado: "entregado",
     evidencias: [foto()],
     ...extra,
   };
@@ -53,7 +53,7 @@ describe("R11: el desglose valido entra (regla 5 del superRefine · la suma cuad
       }),
     );
     expect(r.success).toBe(true);
-    if (r.success && r.data.resultado === "entregada") {
+    if (r.success && r.data.resultado === "entregado") {
       expect(r.data.pagos).toHaveLength(2);
       expect(r.data.metodoPago).toBeUndefined();
     }
@@ -151,7 +151,7 @@ describe("R14 (regla 4): entrega SIN cobro", () => {
     const input = entrega({ montoRecibido: 0, pagos: [] });
     const r = gestionarSchema.safeParse(input);
     expect(r.success).toBe(true);
-    if (r.success && r.data.resultado === "entregada") {
+    if (r.success && r.data.resultado === "entregado") {
       expect(normalizarPagos(r.data)).toEqual([]);
     }
   });
@@ -159,7 +159,7 @@ describe("R14 (regla 4): entrega SIN cobro", () => {
   it("montoRecibido 0 con el escalar `efectivo` que hoy fuerza el panel -> valido y CERO lineas", () => {
     const r = gestionarSchema.safeParse(entrega({ montoRecibido: 0, metodoPago: "efectivo" }));
     expect(r.success).toBe(true);
-    if (r.success && r.data.resultado === "entregada") {
+    if (r.success && r.data.resultado === "entregado") {
       // El panel manda `efectivo` porque su control lo exige; con el modelo nuevo eso NO es
       // una linea de efectivo/0: son CERO lineas (R14).
       expect(normalizarPagos(r.data)).toEqual([]);
@@ -173,7 +173,7 @@ describe("R12: la forma ESCALAR historica sigue validando (compatibilidad en pro
       entrega({ montoRecibido: 12500, metodoPago: "transferencia" }),
     );
     expect(r.success).toBe(true);
-    if (r.success && r.data.resultado === "entregada") {
+    if (r.success && r.data.resultado === "entregado") {
       expect(r.data.metodoPago).toBe("transferencia");
       expect(normalizarPagos(r.data)).toEqual([{ metodo: "transferencia", monto: 12500 }]);
     }
@@ -187,9 +187,9 @@ describe("R12: la forma ESCALAR historica sigue validando (compatibilidad en pro
 
 describe("R16: ninguna otra rama admite recaudo ni desglose", () => {
   const OTRAS = [
-    { resultado: "reprogramada", fechaReprogramacion: "2099-01-01", motivo: "x" },
-    { resultado: "devuelta", causaDevolucion: "wrong_address", motivo: "x", evidencias: [foto()] },
-    { resultado: "rechazada", motivo: "x", evidencias: [foto()] },
+    { resultado: "reprogramado", fechaReprogramacion: "2099-01-01", motivo: "x" },
+    { resultado: "novedad", causaDevolucion: "wrong_address", motivo: "x", evidencias: [foto()] },
+    { resultado: "devolucion_a_origen_por_rechazo", motivo: "x", evidencias: [foto()] },
     { resultado: "incidente", causaIncidente: "robado", motivo: "x", evidencias: [foto()] },
   ] as const;
 

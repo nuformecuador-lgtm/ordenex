@@ -1,0 +1,65 @@
+# MUTACION R26-mensaje
+archivo: app/api/ordenes/api-key/route.ts
+linea: 69
+- "? mensajeCodigoAnterior(iss.input)"
++ "? undefined"
+tests: tests/integration/api/ordenes-api-key-listado-codigo-anterior.route.test.ts tests/integration/db/455/caracterizacion/api-lectura.test.ts
+exit vitest: 1
+Test Files  2 failed (2)
+Tests  2 failed | 10 passed (12)
+FAIL  tests/integration/api/ordenes-api-key-listado-codigo-anterior.route.test.ts > 455/R26 — GET /api/ordenes/api-key con un codigo anterior > cada uno de los 7 codigos anteriores responde 422, nombra su vigente y no consulta nada
+FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R26, R27) > R26: filtrar por un codigo ANTERIOR responde 422 y el mensaje nombra el vigente
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/api/ordenes-api-key-listado-codigo-anterior.route.test.ts (3 tests | 1 failed) 20ms
+     × cada uno de los 7 codigos anteriores responde 422, nombra su vigente y no consulta nada 16ms
+ ❯ tests/integration/db/455/caracterizacion/api-lectura.test.ts (9 tests | 1 failed) 635ms
+       × R26: filtrar por un codigo ANTERIOR responde 422 y el mensaje nombra el vigente 7ms
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 10 passed (12)
+   Start at  06:00:32
+   Duration  3.62s (transform 1.53s, setup 109ms, import 4.05s, tests 655ms, environment 0ms)
+
+(node:13908) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/api/ordenes-api-key-listado-codigo-anterior.route.test.ts > 455/R26 — GET /api/ordenes/api-key con un codigo anterior > cada uno de los 7 codigos anteriores responde 422, nombra su vigente y no consulta nada
+AssertionError: expected 'Invalid option: expected one of "entr…' to be '\'entregada\' ya no existe: ahora se …' // Object.is equality
+
+Expected: "'entregada' ya no existe: ahora se llama 'entregado' («Entregado»). Ver docs/api/CHANGELOG.md."
+Received: "Invalid option: expected one of "entregado"|"novedad"|"devolviendo_a_tienda"|"reprogramado"|"en_ruta_bodega_central"|"en_bodega_central"|"en_preparacion"|"mensajero_recogiendo_en_bodega"|"en_ruta_bodega_satelite"|"en_reparto"|"devolucion_a_origen_por_rechazo"|"en_bodega_satelite"|"devuelta_a_tienda"|"novedad_interna"|"por_devolver_a_bodega_central"|"devolviendo_a_bodega_central"|"por_devolver_a_tienda"|"por_recolectar_en_tienda"|"incidente"|"recolectando""
+
+ ❯ tests/integration/api/ordenes-api-key-listado-codigo-anterior.route.test.ts:47:23
+     45|       expect(r.cuerpo.code).toBe("VALIDATION_ERROR");
+     46|       const [mensaje] = r.cuerpo.details?.fieldErrors?.estado ?? [];
+     47|       expect(mensaje).toBe(
+       |                       ^
+     48|         `'${anterior}' ya no existe: ahora se llama '${vigente}' («${
+     49|           {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R26, R27) > R26: filtrar por un codigo ANTERIOR responde 422 y el mensaje nombra el vigente
+AssertionError: entregado: expected 'Invalid option: expected one of "entr…' to contain 'ahora se llama \'entregado\''
+
+Expected: "ahora se llama 'entregado'"
+Received: "Invalid option: expected one of "entregado"|"novedad"|"devolviendo_a_tienda"|"reprogramado"|"en_ruta_bodega_central"|"en_bodega_central"|"en_preparacion"|"mensajero_recogiendo_en_bodega"|"en_ruta_bodega_satelite"|"en_reparto"|"devolucion_a_origen_por_rechazo"|"en_bodega_satelite"|"devuelta_a_tienda"|"novedad_interna"|"por_devolver_a_bodega_central"|"devolviendo_a_bodega_central"|"por_devolver_a_tienda"|"por_recolectar_en_tienda"|"incidente"|"recolectando""
+
+ ❯ tests/integration/db/455/caracterizacion/api-lectura.test.ts:238:32
+    236|       expect(Object.values(r.anteriores).map((x) => x.status)).toEqual…
+    237|       for (const [clave, { mensaje }] of Object.entries(r.anteriores))…
+    238|         expect(mensaje, clave).toContain(`ahora se llama '${C[clave as…
+       |                                ^
+    239|       }
+    240|       expect(r.anteriores.recogiendo.mensaje).toContain("«Mensajero re…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

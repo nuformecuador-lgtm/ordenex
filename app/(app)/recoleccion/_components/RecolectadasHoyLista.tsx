@@ -35,7 +35,7 @@ import type { RecolectadaHoyDTO } from "@/lib/types/recoleccion-tienda";
 // Sigue montado con el mensajero BLOQUEADO por un cierre pendiente: es historial de lo ya
 // hecho, no una acción (R23).
 
-const TITULO = "Recolectadas hoy";
+const TITULO = "Recogidos en tienda hoy";
 
 /** R30: el vacío se DICE, no se omite — omitir la lista parecería que el trabajo se perdió. */
 const VACIO =
@@ -88,7 +88,8 @@ export function RecolectadasHoyLista({
 }: Readonly<RecolectadasHoyListaProps>) {
   /**
    * Una card «recolectada hoy». La MISMA de «Por recoger» y «Por recolectar»: sin `onGestionar`
-   * (solo-visualización) y sin ruta (no son paradas). El `estado` dice en qué punto está.
+   * (solo-visualización) y sin ruta (no son paradas). FICHA 455 (R7): el chip dice el estado
+   * ACTUAL de la orden; que se recolectó hoy lo dice el pie («Recolectada a las…»).
    */
   function renderCard(orden: RecolectadaHoyDTO, vistaCard: VistaCards) {
     const CardVista =
@@ -97,11 +98,10 @@ export function RecolectadasHoyLista({
       <CardVista
         orden={orden}
         total={recolectadasHoy.length}
-        estado="Recolectada"
         mostrarRuta={false}
         acciones={
           <p className="text-[11px] font-semibold text-muted-foreground">
-            Recolectada a las{" "}
+            Recogido a las{" "}
             <time
               dateTime={
                 Number.isNaN(orden.recolectadaAt.getTime())
@@ -126,8 +126,8 @@ export function RecolectadasHoyLista({
           <div className="flex flex-wrap items-center gap-3">
             <p role="status" className="text-sm text-muted-foreground">
               {recolectadasHoy.length === 1
-                ? "1 orden recolectada hoy."
-                : `${recolectadasHoy.length} órdenes recolectadas hoy.`}
+                ? "1 paquete recogido en tienda hoy."
+                : `${recolectadasHoy.length} paquetes recogidos en tienda hoy.`}
             </p>
             {/* Conmutador PROPIO de esta sección, sobre el MISMO estado que el de arriba: el
                 control queda al alcance de la lista que gobierna, pero la preferencia sigue
@@ -146,7 +146,7 @@ export function RecolectadasHoyLista({
               <CarruselCards
                 items={[...recolectadasHoy]}
                 getKey={(orden) => orden.id}
-                ariaLabel="Órdenes recolectadas hoy"
+                ariaLabel="Paquetes recogidos en tienda hoy"
                 singular="Orden"
                 plural="Órdenes"
                 renderItem={(orden) => renderCard(orden, "mosaico")}

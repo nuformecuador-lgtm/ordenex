@@ -72,7 +72,7 @@ function orden(over: Partial<OrdenAporteDTO> = {}): OrdenAporteDTO {
     guia: "48127",
     destinatario: "María Fernández",
     tiendaNombre: "Tienda Central",
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     aporte: "1700.00",
     ...over,
   };
@@ -290,8 +290,8 @@ describe("Ficha 344 — /mi-wallet: qué dice el detalle (R9–R14)", () => {
 
     expect(dentro.getByText("María Fernández")).toBeInTheDocument();
     // R13: la etiqueta legible, nunca el valor del enum.
-    expect(dentro.getByText("Entregada")).toBeInTheDocument();
-    expect(dentro.queryByText("entregada")).toBeNull();
+    expect(dentro.getByText("Entregado")).toBeInTheDocument();
+    expect(dentro.queryByText("entregado")).toBeNull();
     expect(dentro.getByText("₡1.700")).toBeInTheDocument();
   });
 
@@ -505,7 +505,7 @@ describe("Ficha 344 — /mi-wallet: el detalle en un teléfono (R50/R52)", () =>
       await dentro.findByRole("link", { name: "Ver en órdenes la guía 48127" }),
     ).toBeInTheDocument();
     expect(dentro.getByText("María Fernández")).toBeInTheDocument();
-    expect(dentro.getByText("Entregada")).toBeInTheDocument();
+    expect(dentro.getByText("Entregado")).toBeInTheDocument();
     expect(dentro.getByText("₡1.700")).toBeInTheDocument();
     // R14 también en el teléfono: la tienda no aparece ni apilada.
     expect(dentro.queryByText("Tienda Central")).toBeNull();

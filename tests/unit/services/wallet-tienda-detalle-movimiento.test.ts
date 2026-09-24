@@ -66,7 +66,7 @@ function fila(over: Partial<OrdenAporteRow> = {}): OrdenAporteRow {
         tarifaEspecialDevuelta: null,
       },
     },
-    gestiones: [{ resultado: "entregada", montoRecibido: "14900.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "14900.00" }],
     ...over,
   };
 }
@@ -190,7 +190,7 @@ describe("ficha 344 — el detalle de un movimiento de la tienda (R15/R40/R41/R4
     const r = await m.service.verDetalleDeMiMovimiento(PAGINA, TIENDA_A);
     if (r.status !== "ok") throw new Error("esperado ok");
     // `flete` (tienda) resuelve a `ingreso_flete` (caja): mismo criterio, mismo importe.
-    expect(m.listarOrdenesQueAportan.mock.calls[0][0].criterio.resultados).toEqual(["entregada"]);
+    expect(m.listarOrdenesQueAportan.mock.calls[0][0].criterio.resultados).toEqual(["entregado"]);
     expect(r.data.ordenes[0].aporte).toBe("1000.00");
     expect(r.data.monto).toBe("9000.00");
     expect(r.data.total).toBe(3);
@@ -203,8 +203,8 @@ describe("ficha 344 — el detalle de un movimiento de la tienda (R15/R40/R41/R4
       filas: [
         fila({
           gestiones: [
-            { resultado: "entregada", montoRecibido: "10000.00" },
-            { resultado: "devuelta", montoRecibido: null },
+            { resultado: "entregado", montoRecibido: "10000.00" },
+            { resultado: "novedad", montoRecibido: null },
           ],
         }),
       ],
@@ -212,7 +212,7 @@ describe("ficha 344 — el detalle de un movimiento de la tienda (R15/R40/R41/R4
     const r = await m.service.verDetalleDeMiMovimiento(PAGINA, TIENDA_A);
     if (r.status !== "ok") throw new Error("esperado ok");
     expect(r.data.ordenes[0].aporte).toBe("10000.00");
-    expect(r.data.ordenes[0].resultados).toEqual(["entregada", "devuelta"]);
+    expect(r.data.ordenes[0].resultados).toEqual(["entregado", "novedad"]);
   });
 
   it("R48: los conceptos del libro de tienda que no nacen de un cierre lo declaran", async () => {

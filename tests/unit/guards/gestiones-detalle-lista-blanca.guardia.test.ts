@@ -63,13 +63,16 @@ const SENSIBLES = {
  * `pendienteConfirmacion` — la gestion de calle registrada cuyo cierre aun no se aprobo (su estado
  * todavia no se aplico). Es un booleano derivado, sin PII. Antes: cinco claves.
  */
+// FICHA 455 (R24): cada codigo gana su `…Nombre` al lado (`resultadoNombre`, `estadoResultanteNombre`).
 const CLAVES_PUBLICAS = [
   "createdAt",
   "estadoResultante",
+  "estadoResultanteNombre",
   "mensajero",
   "motivo",
   "pendienteConfirmacion",
   "resultado",
+  "resultadoNombre",
 ];
 const CLAVES_MENSAJERO = ["id", "nombre"];
 
@@ -111,8 +114,8 @@ const MENSAJERO_POBLADO: MensajeroPoblado = {
 const GESTION_POBLADA: FilaGestionPoblada = {
   // Lo que SI se publica
   createdAt: new Date("2026-09-02T15:41:07.000Z"),
-  resultado: "devuelta",
-  estadoResultante: "devuelta",
+  resultado: "novedad",
+  estadoResultante: "novedad",
   motivo: "wrong_address",
   mensajero: MENSAJERO_POBLADO,
   pendienteConfirmacion: false,
@@ -192,7 +195,7 @@ describe("405/R3 — cada gestion lleva EXACTAMENTE las seis claves publicas (45
       findDetalleByOrdenIdForOwner: vi.fn().mockResolvedValue({
         ...FILA_DETALLE,
         gestiones: [
-          { ...GESTION_POBLADA, resultado: "entregada", motivo: null, estadoResultante: null },
+          { ...GESTION_POBLADA, resultado: "entregado", motivo: null, estadoResultante: null },
         ],
       }),
       findEstatusIdByValue: vi.fn(),
@@ -216,7 +219,14 @@ describe("405/R3 — cada gestion lleva EXACTAMENTE las seis claves publicas (45
     // FICHA 454 (R32): la sexta, `pendienteConfirmacion`, entra por la puerta del spec.
     type Extra = Exclude<
       keyof ApiOrdenGestionDTO,
-      "createdAt" | "resultado" | "estadoResultante" | "motivo" | "mensajero" | "pendienteConfirmacion"
+      | "createdAt"
+      | "resultado"
+      | "resultadoNombre" // FICHA 455 (R24)
+      | "estadoResultante"
+      | "estadoResultanteNombre" // FICHA 455 (R24)
+      | "motivo"
+      | "mensajero"
+      | "pendienteConfirmacion"
     >;
     const sinExtras: Extra extends never ? true : never = true;
     expect(sinExtras).toBe(true);
@@ -305,7 +315,7 @@ describe("405/R12 — ningun valor sensible de la gestion cruza al DTO publico",
     expect(serializado).toContain("Carlos Jimenez Mora");
     expect(serializado).toContain("wrong_address");
     // FICHA 454: el fixture publica `estadoResultante: devuelta` (el pre-estado se retira).
-    expect(serializado).toContain('"estadoResultante":"devuelta"');
+    expect(serializado).toContain('"estadoResultante":"novedad"');
     expect(serializado.length).toBeGreaterThan(100);
   });
 

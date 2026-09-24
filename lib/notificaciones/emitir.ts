@@ -35,6 +35,7 @@ import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 // el dia que el humano mueva el plazo el cron escalaria a los 6 dias y el aviso seguiria
 // prometiendo 5 — y la tienda organiza su trabajo con ese numero.
 import { devolucionSlaConfig } from "@/lib/config/devolucion-sla";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
 /**
  * Cliente transaccional que el emisor del rechazo necesita: las dos tablas de la feature +
@@ -57,7 +58,9 @@ export type NotificacionEmisor = (
 // Textos (design §4.6). NUNCA direccion, telefono ni monto.
 // ---------------------------------------------------------------------------
 
-export const TEXTO_ORDEN_RECHAZADA = "Una orden fue rechazada por el destinatario.";
+// FICHA 455 (R36): el texto CONTIENE el nombre visible exacto del estado (antes: «Una orden fue rechazada
+// por el destinatario.»). Las notificaciones ya emitidas no se reescriben.
+export const TEXTO_ORDEN_RECHAZADA = `${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo}: el destinatario rechazó una orden.`;
 export const TEXTO_POSTULACION_PENDIENTE =
   "Una postulación de mensajero está pendiente de aprobación.";
 export const TEXTO_CIERRE_POR_APROBAR = "Un mensajero envió su cierre del día para aprobación.";

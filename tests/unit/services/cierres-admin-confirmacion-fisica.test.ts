@@ -36,7 +36,7 @@ const GUIA: Record<string, number> = {
 /** Una gestion del conjunto esperado, tal como la devuelve el repo. */
 function ret(
   gestionId: string,
-  resultado: GestionRetornableDelCierre["resultado"] = "devuelta",
+  resultado: GestionRetornableDelCierre["resultado"] = "novedad",
   numGuia: number | null = GUIA[gestionId] ?? 9999,
 ): GestionRetornableDelCierre {
   return { gestionId, numGuia, resultado };
@@ -116,9 +116,9 @@ describe("238/R7/R8 — un cierre CON retornables no se aprueba sin confirmarlos
   it("confirmacion VACIA con tres paquetes que vuelven: rechaza y NO toca el repo", async () => {
     const repo = fakeRepo({
       findGestionesRetornablesDelCierre: vi.fn(async () => [
-        ret(G_DEV, "devuelta"),
-        ret(G_REC, "rechazada"),
-        ret(G_REP, "reprogramada"),
+        ret(G_DEV, "novedad"),
+        ret(G_REC, "devolucion_a_origen_por_rechazo"),
+        ret(G_REP, "reprogramado"),
       ]),
     });
 
@@ -147,7 +147,7 @@ describe("238/R7/R8 — un cierre CON retornables no se aprueba sin confirmarlos
 
   it("R9: con DOS paquetes y UNO confirmado, el error va en el que FALTA", async () => {
     const repo = fakeRepo({
-      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV), ret(G_REC, "rechazada")]),
+      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV), ret(G_REC, "devolucion_a_origen_por_rechazo")]),
     });
 
     const r = await newService(repo).aprobarCierre("c1", MAESTRO, [], [ok(G_DEV)]);
@@ -182,7 +182,7 @@ describe("238/R10 — sobra una entrada, o viene dos veces", () => {
 
   it("la MISMA gestion confirmada dos veces: error de duplicada", async () => {
     const repo = fakeRepo({
-      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV), ret(G_REC, "rechazada")]),
+      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV), ret(G_REC, "devolucion_a_origen_por_rechazo")]),
     });
 
     // Sin esta guarda, dos entradas cubririan una sola gestion y el conteo cuadraria con un
@@ -254,7 +254,7 @@ describe("238/R11 — un INCIDENTE enviado tiene su propio mensaje", () => {
 describe("238/R12/R13 — la guia leida", () => {
   it("R12: una guia que NO es la de ese paquete rechaza la aprobacion", async () => {
     const repo = fakeRepo({
-      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV, "devuelta", 9001)]),
+      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV, "novedad", 9001)]),
     });
 
     // Bodega escaneo un paquete que no es este: el conteo cuadraria igual, y por eso hace falta
@@ -272,7 +272,7 @@ describe("238/R12/R13 — la guia leida", () => {
 
   it("R13: una gestion que vuelve SIN numero de guia bloquea con su mensaje propio", async () => {
     const repo = fakeRepo({
-      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV, "devuelta", null)]),
+      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV, "novedad", null)]),
     });
 
     const r = await newService(repo).aprobarCierre(
@@ -296,9 +296,9 @@ describe("238/R7/R17 — el camino feliz", () => {
   it("confirmadas TODAS y con su guia correcta: aprueba y pasa SOLO los ids al repo", async () => {
     const repo = fakeRepo({
       findGestionesRetornablesDelCierre: vi.fn(async () => [
-        ret(G_DEV, "devuelta"),
-        ret(G_REC, "rechazada"),
-        ret(G_REP, "reprogramada"),
+        ret(G_DEV, "novedad"),
+        ret(G_REC, "devolucion_a_origen_por_rechazo"),
+        ret(G_REP, "reprogramado"),
       ]),
     });
 
@@ -369,7 +369,7 @@ describe("238/T2.4 — las claves de error de las DOS coberturas no se pisan", (
   // sus mismos cierres. Es EL caso, no un borde.
   it("un cierre con incidentes Y retornables produce claves DISJUNTAS", async () => {
     const repo = fakeRepo({
-      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV), ret(G_REC, "rechazada")]),
+      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV), ret(G_REC, "devolucion_a_origen_por_rechazo")]),
       findGestionesIncidenteDelCierre: vi.fn(async () => [
         { gestionId: G_INC, ordenMontoCobrar: null },
       ]),
@@ -388,7 +388,7 @@ describe("238/T2.4 — las claves de error de las DOS coberturas no se pisan", (
 
   it("las dos guardias nombran gestiones de conjuntos DISJUNTOS por construccion", async () => {
     const repo = fakeRepo({
-      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV), ret(G_REC, "rechazada")]),
+      findGestionesRetornablesDelCierre: vi.fn(async () => [ret(G_DEV), ret(G_REC, "devolucion_a_origen_por_rechazo")]),
       findGestionesIncidenteDelCierre: vi.fn(async () => [
         { gestionId: G_INC, ordenMontoCobrar: null },
       ]),

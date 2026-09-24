@@ -1172,7 +1172,7 @@ export interface ApiOrdenListResult {
 // este mismo tipo. No hay campo que diga de cual viene: es deliberado (el integrador pregunta por
 // las fotos del incidente, no por quien las subio) y anadirlo seria exponer estructura interna.
 export interface ApiOrdenEvidenciaRow {
-  resultado: "entregada" | "rechazada" | "incidente";
+  resultado: "entregado" | "devolucion_a_origen_por_rechazo" | "incidente";
   storagePath: string;
   contentType: string | null;
 }

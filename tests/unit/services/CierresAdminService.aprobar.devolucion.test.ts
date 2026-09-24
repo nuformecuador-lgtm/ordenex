@@ -17,19 +17,19 @@ const MAESTRO: Actor = { usuarioId: "adm-maestro", rol: "maestro" };
 // Ids del catalogo que `aprobarCierre` resuelve (109 + 139). El default trae todos -> la config
 // de devolucion se puede construir.
 const ESTATUS_IDS: Record<string, string | null> = {
-  sin_gestionar: "s-sin-gestionar",
+  novedad_interna: "s-sin-gestionar",
   en_bodega_central: "s-en-bodega",
   en_bodega_satelite: "s-en-bodega-sat",
-  rechazada: "s-rechazada",
-  por_devolver: "s-por-devolver",
+  devolucion_a_origen_por_rechazo: "s-rechazada",
+  por_devolver_a_bodega_central: "s-por-devolver",
   por_devolver_a_tienda: "s-por-devolver-a-tienda",
   // Feature 239 -> FICHA 454: `devuelta` sigue siendo obligatorio al aprobar (fallo cerrado).
-  devuelta: "s-devuelta",
+  novedad: "s-devuelta",
   // FICHA 454 (T1.7): los de la APLICACION DE GESTIONES (origen + destino de cada resultado).
   // Sin cualquiera de ellos la aprobacion NO ocurre (fallo cerrado, heredado de la 239/R9).
   en_reparto: "s-en-reparto",
-  entregada: "s-entregada",
-  reprogramada: "s-reprogramada",
+  entregado: "s-entregada",
+  reprogramado: "s-reprogramada",
   incidente: "s-incidente",
 };
 
@@ -97,7 +97,7 @@ function newService(estatusIds: Record<string, string | null> = ESTATUS_IDS) {
 }
 
 describe("CierresAdminService.aprobarCierre — config de devolucion de `rechazada` (feature 139/R5/R10)", () => {
-  it("R5: resuelve rechazada/por_devolver/por_devolver_a_tienda + zona central y los pasa al aprobar", async () => {
+  it("R5: resuelve rechazada/por_devolver_a_bodega_central/por_devolver_a_tienda + zona central y los pasa al aprobar", async () => {
     const { service, repo, ordenRepo } = newService();
 
     await service.aprobarCierre("c1", MAESTRO);
@@ -109,13 +109,13 @@ describe("CierresAdminService.aprobarCierre — config de devolucion de `rechaza
       porDevolverATiendaId: "s-por-devolver-a-tienda",
       centralZonaId: "z-central",
     });
-    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("rechazada");
-    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("por_devolver");
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("devolucion_a_origen_por_rechazo");
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("por_devolver_a_bodega_central");
     expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("por_devolver_a_tienda");
   });
 
-  it("R5 defensivo: catalogo sin `por_devolver` (seed pendiente) -> devolucionRechazadas undefined", async () => {
-    const { service, repo } = newService({ ...ESTATUS_IDS, por_devolver: null });
+  it("R5 defensivo: catalogo sin `por_devolver_a_bodega_central` (seed pendiente) -> devolucionRechazadas undefined", async () => {
+    const { service, repo } = newService({ ...ESTATUS_IDS, por_devolver_a_bodega_central: null });
 
     await service.aprobarCierre("c1", MAESTRO);
 

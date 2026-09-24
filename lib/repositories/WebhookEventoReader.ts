@@ -34,7 +34,7 @@ export class WebhookEventoReader implements IWebhookEventoReader {
     if (e === null) return null;
 
     const causa =
-      e.resultado === "devuelta"
+      e.resultado === "novedad"
         ? (e.gestion?.causaDevolucion ?? null)
         : e.resultado === "incidente"
           ? (e.gestion?.causaIncidente ?? null)

@@ -164,7 +164,7 @@
             {
               "key": "estado",
               "value": "en_reparto",
-              "description": "Uno del enum publicado. Desactivado: actívalo para acotar.",
+              "description": "Uno de los 20 códigos del enum publicado (un código anterior al cambio de nombres responde 422 con el vigente). Desactivado: actívalo para acotar.",
               "disabled": true
             },
             {
@@ -351,7 +351,7 @@
           "host": ["{{baseUrl}}"],
           "path": ["api", "ordenes", "api-key", "habilitar"]
         },
-        "description": "Reactiva órdenes detenidas por una novedad. `nota` es OBLIGATORIA (1..200 caracteres). El lote acepta entre 1 y 100 filas y una fila mala no aborta el resto.\n\nSolo dos estados son habilitables: `ayuda_tienda` y `devuelta`. Una `devuelta` se habilita pero **no cambia de estado** (responde `habilitada_sin_cambio_de_estado`), y `reprogramada` NO es habilitable.\n\nSustituye las guías del ejemplo por dos tuyas que estén en esos estados.",
+        "description": "Reactiva órdenes detenidas por una novedad. `nota` es OBLIGATORIA (1..200 caracteres). El lote acepta entre 1 y 100 filas y una fila mala no aborta el resto.\n\nSolo son habilitables una orden con la ayuda a la tienda abierta (sigue `en_reparto`; responde `habilitada` con `ayudaCerrada: true`) y una orden en `novedad`. Una `novedad` se habilita pero **no cambia de estado** (responde `habilitada_sin_cambio_de_estado`), y `reprogramado` NO es habilitable. Cada fila trae `estado` y su nombre visible `estadoNombre`.\n\nSustituye las guías del ejemplo por dos tuyas que estén en esos estados.",
         "body": {
           "mode": "raw",
           "raw": "{\n  \"ordenes\": [\n    { \"num_guia\": 100234, \"nota\": \"el cliente pidió reintento mañana\" },\n    { \"num_guia\": 100235, \"nota\": \"dirección corregida por el call center\" }\n  ]\n}"
@@ -393,7 +393,7 @@
               "pm.test('200', () => pm.response.to.have.status(200));",
               "const b = pm.response.json();",
               "pm.test('devuelve la orden borrada y su estado', () => {",
-              "  pm.expect(b).to.have.all.keys('numGuia', 'numRemision', 'estado');",
+              "  pm.expect(b).to.have.all.keys('numGuia', 'numRemision', 'estado', 'estadoNombre');",
               "});"
             ]
           }

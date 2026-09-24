@@ -91,7 +91,7 @@ export type CampoUbicacion = (typeof CAMPOS_UBICACION)[number];
  */
 export const ESTADOS_SIN_CORRECCION = [
   ...ESTADOS_TERMINALES, // entregada, devuelta_a_tienda, incidente
-  "rechazada",
+  "devolucion_a_origen_por_rechazo",
 ] as const satisfies readonly OrderStatusValue[];
 
 const SET_SIN_CORRECCION: ReadonlySet<string> = new Set<string>(ESTADOS_SIN_CORRECCION);

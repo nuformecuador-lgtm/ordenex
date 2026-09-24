@@ -499,9 +499,10 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
+    // ⏳ 2026-09-24 (FICHA 455, R3): el estado se nombra con su nombre visible, no con el código.
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith(
-        'La guía 1001 ya no está por recolectar (está en "en_bodega_central").',
+        "La guía 1001 ya no está por recolectar (está en «En bodega central»).",
       ),
     );
     expect(refreshMock).not.toHaveBeenCalled();
@@ -779,7 +780,7 @@ describe("RecoleccionModule — bloqueado por cierres sin resolver (R9/R23 -> 27
 // a que la bodega central ya haya recibido el paquete (R26, probado en el service).
 // ---------------------------------------------------------------------------------------
 describe("RecoleccionModule — «Recolectadas hoy» (R24/R28/R30/R31)", () => {
-  const lista = () => screen.getByRole("region", { name: "Recolectadas hoy" });
+  const lista = () => screen.getByRole("region", { name: "Recogidos en tienda hoy" });
 
   it("R24/R28: pinta la MISMA card de la orden, con la hora de la recolección", () => {
     renderModule({

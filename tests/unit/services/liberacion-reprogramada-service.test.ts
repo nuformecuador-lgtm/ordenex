@@ -18,7 +18,7 @@ const SATELITE = "z-limon";
 const HOY = new Date("2026-07-15T00:00:00.000Z");
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
-  reprogramada: "os-reprogramada",
+  reprogramado: "os-reprogramada",
   en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
 };
@@ -187,7 +187,7 @@ describe("ejecutarLiberacion — resiliencia por orden (R14)", () => {
 });
 
 describe("ejecutarLiberacion — idempotencia (R17/T8)", () => {
-  it("segunda corrida: la orden ya salio de reprogramada -> findOrdenesLiberables vacio -> liberadas=0", async () => {
+  it("segunda corrida: la orden ya salio de reprogramado -> findOrdenesLiberables vacio -> liberadas=0", async () => {
     // 1a corrida: hay una candidata y se libera.
     const primeraCandidata = [liberableRow({ id: "o1" })];
     const findMany = vi

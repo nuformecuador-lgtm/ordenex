@@ -713,7 +713,7 @@ describe("377/T4 — el corte por estado y el conteo de retenidas", () => {
     zonaId: { not: "zA" },
     deletedAt: null,
     cierreDetalles: { none: {} },
-    gestiones: { none: { anuladaAt: null, resultado: { in: ["entregada", "rechazada", "incidente"] } } },
+    gestiones: { none: { anuladaAt: null, resultado: { in: ["entregado", "devolucion_a_origen_por_rechazo", "incidente"] } } },
   };
 
   it("⭑ R2/R9: las dos consultas comparten el `where` base y solo difieren en el estado", async () => {

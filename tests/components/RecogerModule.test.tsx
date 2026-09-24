@@ -72,7 +72,7 @@ function makeAsignacion(
   return {
     numGuia: 1001,
     numRemision: "REM-001",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1, casa 2",
@@ -106,7 +106,7 @@ function renderModule(props?: Partial<Parameters<typeof RecogerModule>[0]>) {
 
 /** La región del listado (el `<section aria-label>` de la pantalla). */
 function listado() {
-  return screen.getByRole("region", { name: "Por recoger" });
+  return screen.getByRole("region", { name: "Recoger en bodega" }); // FICHA 455 (R6): la acción, no un estado
 }
 
 /** El acceso a la recogida por guía/escaneo, plegado o no. */
@@ -175,7 +175,7 @@ afterEach(() => {
 });
 
 describe("RecogerModule — listado de solo-visualización", () => {
-  it("monta la región 'Por recoger' y NINGUNA superficie de reparto", () => {
+  it("monta la región «Recoger en bodega» y NINGUNA superficie de reparto", () => {
     renderModule({ porRecoger: [makeAsignacion({ id: "r1" })] });
 
     expect(listado()).toBeInTheDocument();
@@ -197,7 +197,7 @@ describe("RecogerModule — listado de solo-visualización", () => {
   // «2 Órdenes nuevas asignadas», con la N pegada a un plural fijo; con una sola orden se leía «1
   // Órdenes nuevas asignadas». El defecto ya existía, pero contar sólo el grupo de hoy (R15) lo
   // vuelve frecuente y se decidió no dejarlo a la vista.
-  it("Feature 63: muestra el banner con el contador de órdenes nuevas asignadas", () => {
+  it("Feature 63: muestra el banner con el contador de órdenes nuevas para recoger", () => {
     renderModule({
       porRecoger: [
         makeAsignacion({ id: "r1", numRemision: "REM-R1" }),
@@ -206,7 +206,7 @@ describe("RecogerModule — listado de solo-visualización", () => {
     });
 
     expect(
-      within(listado()).getByText("2 órdenes nuevas asignadas"),
+      within(listado()).getByText("2 órdenes nuevas para recoger"),
     ).toBeInTheDocument();
   });
 
@@ -395,7 +395,7 @@ describe("RecogerModule — las dos vías de recogida (feature 96)", () => {
     // FEATURE 277 (R10): el vacío es ahora el de la pestaña de entrada, que nombra su grupo. La
     // pantalla sigue explicando el vacío; lo que cambió es que hay dos grupos que explicar.
     expect(
-      screen.getByText("No hay órdenes por recoger hoy."),
+      screen.getByText("No hay órdenes para recoger hoy."),
     ).toBeInTheDocument();
   });
 
@@ -611,11 +611,11 @@ describe("RecogerModule — buscador de guías (feature 114)", () => {
 
     expect(
       within(listado()).getByText(
-        "Ninguna guía por recoger coincide con la búsqueda.",
+        "Ninguna guía para recoger coincide con la búsqueda.",
       ),
     ).toBeInTheDocument();
     // DISTINGUIBLE del vacío sin búsqueda (277/R10: el de la pestaña de hoy).
-    expect(screen.queryByText("No hay órdenes por recoger hoy.")).toBeNull();
+    expect(screen.queryByText("No hay órdenes para recoger hoy.")).toBeNull();
   });
 
   it("el banner de contador cuenta el grupo COMPLETO, no lo que el buscador deja ver", async () => {
@@ -632,13 +632,13 @@ describe("RecogerModule — buscador de guías (feature 114)", () => {
     // Sigue diciendo 2: lo pendiente de recoger no cambia porque se filtre la vista. (277/R16: el
     // banner cuenta el grupo COMPLETO de hoy; el literal concuerda desde la Q1 de la 277.)
     expect(
-      within(listado()).getByText("2 órdenes nuevas asignadas"),
+      within(listado()).getByText("2 órdenes nuevas para recoger"),
     ).toBeInTheDocument();
   });
 });
 
 describe("RecogerModule — conmutador mosaico/detalle y carrusel (pedido humano)", () => {
-  it("arranca en MOSAICO, con las cards dentro del carrusel de 'Órdenes por recoger'", () => {
+  it("arranca en MOSAICO, con las cards dentro del carrusel de 'Órdenes para recoger'", () => {
     renderModule({
       porRecoger: [
         makeAsignacion({ id: "r1", numRemision: "REM-R1" }),
@@ -647,7 +647,7 @@ describe("RecogerModule — conmutador mosaico/detalle y carrusel (pedido humano
     });
 
     const carrusel = screen.getByRole("region", {
-      name: "Órdenes por recoger",
+      name: "Órdenes para recoger",
     });
     expect(within(carrusel).getByText(/REM-R1/)).toBeInTheDocument();
     expect(within(carrusel).getByText(/REM-R2/)).toBeInTheDocument();
@@ -668,7 +668,7 @@ describe("RecogerModule — conmutador mosaico/detalle y carrusel (pedido humano
     });
 
     const carrusel = screen.getByRole("region", {
-      name: "Órdenes por recoger",
+      name: "Órdenes para recoger",
     });
     expect(
       within(carrusel).getByRole("button", { name: /anterior/i }),
@@ -694,7 +694,7 @@ describe("RecogerModule — conmutador mosaico/detalle y carrusel (pedido humano
     // El cambio va animado en dos tramos, así que la vista nueva se espera.
     await vi.waitFor(() =>
       expect(
-        screen.queryByRole("region", { name: "Órdenes por recoger" }),
+        screen.queryByRole("region", { name: "Órdenes para recoger" }),
       ).toBeNull(),
     );
     // Las MISMAS órdenes siguen ahí: el conmutador es presentación, no filtro.
@@ -707,11 +707,11 @@ describe("RecogerModule — conmutador mosaico/detalle y carrusel (pedido humano
     renderModule({ porRecoger: [] });
 
     expect(
-      screen.queryByRole("region", { name: "Órdenes por recoger" }),
+      screen.queryByRole("region", { name: "Órdenes para recoger" }),
     ).toBeNull();
     // 277/R10: el vacío de la pestaña de entrada.
     expect(
-      screen.getByText("No hay órdenes por recoger hoy."),
+      screen.getByText("No hay órdenes para recoger hoy."),
     ).toBeInTheDocument();
   });
 });
@@ -973,7 +973,7 @@ describe("RecogerModule — la guía reservada no se recoge (feature 261/R13)", 
     // Y con EL DÍA que la orden trae consigo: una regla, dos sitios, un texto.
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalledWith(AVISO_22));
     expect(errorMock).not.toHaveBeenCalledWith(
-      "La orden ya no está por recoger. Actualiza y vuelve a intentar.",
+      "La orden ya no está en «Mensajero recogiendo en la bodega». Actualiza y vuelve a intentar.",
     );
   });
 
@@ -998,7 +998,7 @@ describe("RecogerModule — la guía reservada no se recoge (feature 261/R13)", 
 
     await vi.waitFor(() =>
       expect(errorMock).toHaveBeenCalledWith(
-        "La orden ya no está por recoger. Actualiza y vuelve a intentar.",
+        "La orden ya no está en «Mensajero recogiendo en la bodega». Actualiza y vuelve a intentar.",
       ),
     );
   });
@@ -1237,7 +1237,7 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
     expect(pestanaHoy()).toHaveAttribute("aria-selected", "true");
     expect(pestanaOtroDia()).toHaveAttribute("aria-selected", "false");
     expect(
-      within(panelActivo()).getByText("No hay órdenes por recoger hoy."),
+      within(panelActivo()).getByText("No hay órdenes para recoger hoy."),
     ).toBeInTheDocument();
   });
 
@@ -1322,10 +1322,10 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
     });
 
     expect(
-      within(panelActivo()).getByText("1 orden nueva asignada"),
+      within(panelActivo()).getByText("1 orden nueva para recoger"),
     ).toBeInTheDocument();
     // La mitad negativa, sin la cual un contador que contara todo pasaría igual.
-    expect(screen.queryByText("2 órdenes nuevas asignadas")).toBeNull();
+    expect(screen.queryByText("2 órdenes nuevas para recoger")).toBeNull();
     expect(screen.queryByText(/2 Órdenes nuevas asignadas/)).toBeNull();
   });
 
@@ -1337,7 +1337,7 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByText(/orden(es)? nueva(s)? asignada(s)?/)).toBeNull();
     expect(
-      within(panelActivo()).getByText("No hay órdenes por recoger hoy."),
+      within(panelActivo()).getByText("No hay órdenes para recoger hoy."),
     ).toBeInTheDocument();
   });
 
@@ -1351,7 +1351,7 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
     });
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "1 orden nueva asignada",
+      "1 orden nueva para recoger",
     );
 
     await user.click(pestanaOtroDia());
@@ -1364,7 +1364,7 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
     const { unmount } = renderModule({ porRecoger: [] });
 
     expect(
-      within(panelActivo()).getByText("No hay órdenes por recoger hoy."),
+      within(panelActivo()).getByText("No hay órdenes para recoger hoy."),
     ).toBeInTheDocument();
     await user.click(pestanaOtroDia());
     expect(
@@ -1381,10 +1381,10 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
 
     expect(
       within(panelActivo()).getByText(
-        "Ninguna guía por recoger coincide con la búsqueda.",
+        "Ninguna guía para recoger coincide con la búsqueda.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText("No hay órdenes por recoger hoy.")).toBeNull();
+    expect(screen.queryByText("No hay órdenes para recoger hoy.")).toBeNull();
   });
 
   it("R11: la pestaña vacía nombra la otra y cuántas hay allí", () => {
@@ -1427,7 +1427,7 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
     const panel = panelActivo();
     expect(
       within(panel).getByText(
-        "Ninguna guía por recoger coincide con la búsqueda.",
+        "Ninguna guía para recoger coincide con la búsqueda.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -1481,7 +1481,7 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
 
     expect(pestanaHoy()).toHaveAttribute("aria-selected", "true");
     expect(
-      within(panelActivo()).getByText("No hay órdenes por recoger hoy."),
+      within(panelActivo()).getByText("No hay órdenes para recoger hoy."),
     ).toBeInTheDocument();
   });
 
@@ -1548,7 +1548,7 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
       screen.getByRole("tab", { name: "Para otro día (1)" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
-      "2 órdenes nuevas asignadas",
+      "2 órdenes nuevas para recoger",
     );
   });
 
@@ -1712,10 +1712,10 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
     // Los tres nombres accesibles de la pantalla son DISTINTOS a propósito: si coincidieran, el de
     // uno chocaría con el de otro.
     expect(
-      screen.getByRole("tablist", { name: "Grupos de órdenes por recoger" }),
+      screen.getByRole("tablist", { name: "Grupos de órdenes para recoger" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Buscar guías por recoger" }),
+      screen.getByRole("region", { name: "Buscar guías para recoger" }),
     ).toBeInTheDocument();
     expect(listado()).toBeInTheDocument();
 
@@ -1727,7 +1727,7 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
     );
     // Y el listado del grupo de hoy conserva su nombre de siempre.
     expect(
-      screen.getByRole("region", { name: "Órdenes por recoger" }),
+      screen.getByRole("region", { name: "Órdenes para recoger" }),
     ).toBeInTheDocument();
 
     await user.click(pestanaOtroDia());
@@ -1742,7 +1742,7 @@ describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
       screen.getByRole("region", { name: "Órdenes para otro día" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("region", { name: "Órdenes por recoger" }),
+      screen.queryByRole("region", { name: "Órdenes para recoger" }),
     ).toBeNull();
   });
 });

@@ -21,23 +21,37 @@
 // ve, sale con codigo 1.
 //
 // GUARDA DE HOST (patron de `rollup-analitica-manual.ts`): aborta si `DATABASE_URL` no apunta a
-// `localhost:5432/ordenex`. Produccion se contrasta por el MCP de Supabase, no con este script.
+// `localhost:5432/ordenex` (o un clon local `ordenex_<sufijo>`, FICHA 455). Produccion se contrasta por
+// el MCP de Supabase, no con este script.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { MOTIVO_RECHAZO_TOPE_INTENTOS } from "@/lib/repositories/CierresAdminRepository";
 
 const HOST_LOCAL = new Set(["localhost", "127.0.0.1", "::1"]);
+/** La base local compartida o un clon suyo por feature (`ordenex_455`); nunca otra. */
+const BASE_LOCAL = /^ordenex(_[a-z0-9_]+)?$/;
 
 function esBaseLocal(url: string | undefined): boolean {
   if (!url) return false;
   try {
     const u = new URL(url);
     const host = u.hostname.replace(/^\[|\]$/g, "");
-    return HOST_LOCAL.has(host) && (u.port || "5432") === "5432" && u.pathname.replace(/^\//, "") === "ordenex";
+    return HOST_LOCAL.has(host) && (u.port || "5432") === "5432" && BASE_LOCAL.test(u.pathname.replace(/^\//, ""));
   } catch {
     return false;
   }
 }
+
+/**
+ * Motivo de las gestiones SINTETICAS del tope de intentos. FICHA 455 cambio el texto: las filas
+ * escritas antes conservan el VIEJO y las nuevas llevan el NUEVO (la constante que escribe
+ * `CierresAdminRepository`), asi que el contraste reconoce LOS DOS. Si solo viera el viejo, tras el
+ * despliegue dejaria de reconocer en silencio las sinteticas nuevas y las contaria como de calle.
+ */
+const TOPE_VIEJO = "rechazada al aprobar el cierre: sin gestionar y sin intentos de entrega disponibles";
+const TOPE_NUEVO = MOTIVO_RECHAZO_TOPE_INTENTOS;
+const MOTIVOS_TOPE = [TOPE_VIEJO, TOPE_NUEVO] as const;
 
 type Fila = Record<string, unknown>;
 
@@ -59,6 +73,14 @@ const SQL_PATH = path.join(process.cwd(), "scripts", "contraste-454.sql");
 
 function cargarSql(desde: string | null): string {
   let sql = readFileSync(SQL_PATH, "utf8").replace(/\r\n/g, "\n");
+  // FICHA 455 — el SQL se pega tal cual en produccion y no puede importar la constante: se comprueba
+  // aqui que sus dos motivos del tope son EXACTAMENTE los de este script (el nuevo, el que escribe el
+  // repositorio). Si alguien cambia el texto en un lado y no en el otro, el contraste no arranca.
+  for (const [columna, motivo] of [["motivo_tope_viejo", TOPE_VIEJO], ["motivo_tope_nuevo", TOPE_NUEVO]] as const) {
+    if (!sql.includes(`${literal(motivo, "text")} AS ${columna}`)) {
+      throw new Error(`el SQL no declara ${columna} con el texto vigente del repositorio: ${motivo}`);
+    }
+  }
   if (desde !== null) {
     if (!/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/.test(desde)) throw new Error(`--desde invalido: ${desde}`);
     const antes = sql;
@@ -81,7 +103,7 @@ WITH sint AS (
 )
 SELECT 'P0 proxy calle vs evento (local)' AS k, count(*) AS total_evaluado,
        count(*) FILTER (WHERE s.gid IS NOT NULL
-                          OR g.motivo = 'rechazada al aprobar el cierre: sin gestionar y sin intentos de entrega disponibles') AS diferencias,
+                          OR g.motivo IN (${MOTIVOS_TOPE.map((m) => literal(m, "text")).join(", ")})) AS diferencias,
        array_to_string((array_agg(g.id ORDER BY g.id) FILTER (WHERE s.gid IS NOT NULL))[1:10], ' ; ') AS muestra_ids,
        'gestiones con evento gestion_registrada clasificadas como sinteticas por el proxy' AS nota
   FROM ev JOIN gestion_orden g ON g.id = ev.gid LEFT JOIN sint s ON s.gid = g.id`;
@@ -149,7 +171,14 @@ function filasSql(tabla: string, filas: Record<string, Valor>[]): string {
 }
 
 const Z = "zz454-";
-const TOPE = "rechazada al aprobar el cierre: sin gestionar y sin intentos de entrega disponibles";
+/** Marca de la fixture sintetica del tope: `inyectar` la sustituye por cada motivo de `MOTIVOS_TOPE`. */
+const TOPE = "@MOTIVO_TOPE";
+/**
+ * FICHA 455 — lo que K4b atribuye a las sinteticas del tope se busca por el MOTIVO (su nota «ingreso ya
+ * cobrado por las creadas»). La fixture lleva un ingreso propio y la autocomprobacion exige que la nota
+ * suba exactamente eso con cada motivo: si el SQL dejara de reconocer uno, la nota no se moveria.
+ */
+const INGRESO_TOPE = 777;
 const cierre = (id: string, mensajero: string, estado: string, creado: string, resuelto: string | null,
   extra: Partial<Record<"total_efectivo" | "total_pago_mensajero" | "total_ingreso_bodega_rechazos", number>> = {}) => ({
   id: Z + id, mensajero_id: Z + mensajero, estado, created_at: creado, resuelto_at: resuelto,
@@ -189,47 +218,47 @@ const FIXTURES: Record<string, Record<string, Valor>[]> = {
   ],
   gestion: [
     // K1: la gestion dice `entregada` pero su transicion real llevo la orden a `rechazada`.
-    gestion("g1", "o1", "m", "entregada", "c1", "2030-01-01 12:00:00"),
+    gestion("g1", "o1", "m", "entregado", "c1", "2030-01-01 12:00:00"),
     // K2: `devuelta` de calle con solo la fila de anclaje (lo que escribe el modelo nuevo): la via vieja
     // no la cuenta y la nueva si.
-    gestion("g2", "o2", "m", "devuelta", "c1", "2030-01-01 13:00:00"),
+    gestion("g2", "o2", "m", "novedad", "c1", "2030-01-01 13:00:00"),
     // K3/K4b: la sintetica del tope (su fila de historial la hace «tope» real con 0 intentos).
-    gestion("g3s", "o3", "m", "rechazada", null, "2030-01-02 10:00:01", { motivo: TOPE }),
+    gestion("g3s", "o3", "m", "devolucion_a_origen_por_rechazo", null, "2030-01-02 10:00:01", { motivo: TOPE, ingreso_bodega_rechazo: INGRESO_TOPE }),
     // K5a: gestion de calle sin cierre ANTES del corte de c3 que barrio su orden.
-    gestion("g5", "o5", "m2", "reprogramada", null, "2030-01-04 15:00:00"),
+    gestion("g5", "o5", "m2", "reprogramado", null, "2030-01-04 15:00:00"),
     // K5b: g6 en c4 (aprobado antes del corte) pero NO era la mas reciente al aprobar (g6b, anulada
     // despues): ni pendiente ni aplicada.
-    gestion("g6", "o6", "m2", "entregada", "c4", "2030-01-04 16:00:00"),
-    gestion("g6b", "o6", "m2", "entregada", null, "2030-01-04 17:30:00", { anulada_at: "2030-01-04 20:00:00" }),
+    gestion("g6", "o6", "m2", "entregado", "c4", "2030-01-04 16:00:00"),
+    gestion("g6b", "o6", "m2", "entregado", null, "2030-01-04 17:30:00", { anulada_at: "2030-01-04 20:00:00" }),
     // K6: `rechazada` de calle en c5 (solicitado) cuando la 139 la devolvio.
-    gestion("g7", "o7", "m5", "rechazada", "c5", "2030-01-05 08:00:00"),
+    gestion("g7", "o7", "m5", "devolucion_a_origen_por_rechazo", "c5", "2030-01-05 08:00:00"),
     // K7a: `reprogramada` de calle vencida hoy, cierre sin aprobar, y aun asi se libero.
-    gestion("g8", "o8", "m5", "reprogramada", "c5", "2030-01-05 08:30:00", { fecha_reprogramacion: "2030-01-07" }),
+    gestion("g8", "o8", "m5", "reprogramado", "c5", "2030-01-05 08:30:00", { fecha_reprogramacion: "2030-01-07" }),
     // K7b/K4c: `devuelta` not_found aprobada a las 10:00 y escalada a las 12:00 (ventana de 24 h viva).
-    gestion("g9", "o9", "m4", "devuelta", "c6", "2030-01-07 20:00:00", { causa: "not_found" }),
-    gestion("g9s", "o9", "m4", "rechazada", null, "2030-01-08 12:00:00"),
+    gestion("g9", "o9", "m4", "novedad", "c6", "2030-01-07 20:00:00", { causa: "not_found" }),
+    gestion("g9s", "o9", "m4", "devolucion_a_origen_por_rechazo", null, "2030-01-08 12:00:00"),
     // K8a..K8e
-    gestion("g10", "o10", "m3", "entregada", "c7", "2030-01-09 07:00:00"),
-    gestion("g11", "o11", "m3", "entregada", "c8", "2030-01-09 07:00:00", { monto_recibido: 5000 }),
-    gestion("g12", "o12", "m3", "entregada", "c9", "2030-01-09 07:00:00", { monto_recibido: 3000 }),
-    gestion("g13", "o13", "m3", "entregada", "c10", "2030-01-09 07:00:00", { pago_mensajero: 1700 }),
+    gestion("g10", "o10", "m3", "entregado", "c7", "2030-01-09 07:00:00"),
+    gestion("g11", "o11", "m3", "entregado", "c8", "2030-01-09 07:00:00", { monto_recibido: 5000 }),
+    gestion("g12", "o12", "m3", "entregado", "c9", "2030-01-09 07:00:00", { monto_recibido: 3000 }),
+    gestion("g13", "o13", "m3", "entregado", "c10", "2030-01-09 07:00:00", { pago_mensajero: 1700 }),
     gestion("g14", "o14", "m3", "incidente", "c11", "2030-01-09 07:00:00", { indemnizacion: 800 }),
   ],
   hist: [
-    hist("h1", "o1", "en_reparto", "rechazada", "gestion", "g1", "2030-01-01 12:00:00"),
-    hist("h2", "o2", "en_reparto", "devuelta", "anclaje_devolucion", "g2", "2030-01-02 10:00:01"),
-    hist("h3a", "o3", "en_reparto", "sin_gestionar", "corte_sin_gestionar", null, "2030-01-01 23:59:00"),
-    hist("h3b", "o3", "sin_gestionar", "rechazada", "rechazo_tope_intentos", "g3s", "2030-01-02 10:00:01"),
-    hist("h5", "o5", "en_reparto", "sin_gestionar", "corte_sin_gestionar", null, "2030-01-05 00:00:00"),
-    hist("h7", "o7", "rechazada", "por_devolver_a_tienda", "devolucion_rechazada", null, "2030-01-06 10:00:00"),
-    hist("h8", "o8", "reprogramada", "en_bodega_central", "liberacion_reprogramada", null, "2030-01-07 06:00:00"),
+    hist("h1", "o1", "en_reparto", "devolucion_a_origen_por_rechazo", "gestion", "g1", "2030-01-01 12:00:00"),
+    hist("h2", "o2", "en_reparto", "novedad", "anclaje_devolucion", "g2", "2030-01-02 10:00:01"),
+    hist("h3a", "o3", "en_reparto", "novedad_interna", "corte_sin_gestionar", null, "2030-01-01 23:59:00"),
+    hist("h3b", "o3", "novedad_interna", "devolucion_a_origen_por_rechazo", "rechazo_tope_intentos", "g3s", "2030-01-02 10:00:01"),
+    hist("h5", "o5", "en_reparto", "novedad_interna", "corte_sin_gestionar", null, "2030-01-05 00:00:00"),
+    hist("h7", "o7", "devolucion_a_origen_por_rechazo", "por_devolver_a_tienda", "devolucion_rechazada", null, "2030-01-06 10:00:00"),
+    hist("h8", "o8", "reprogramado", "en_bodega_central", "liberacion_reprogramada", null, "2030-01-07 06:00:00"),
     hist("h9a", "o9", "en_reparto", "devolucion_por_confirmar", "gestion", "g9", "2030-01-07 20:00:00"),
-    hist("h9b", "o9", "devolucion_por_confirmar", "devuelta", "anclaje_devolucion", "g9", "2030-01-08 10:00:01"),
-    hist("h9c", "o9", "devuelta", "rechazada", "escalado_devuelta_sla", "g9s", "2030-01-08 12:00:00"),
-    hist("h10", "o10", "en_reparto", "entregada", "gestion", "g10", "2030-01-09 07:00:00"),
-    hist("h11", "o11", "en_reparto", "entregada", "gestion", "g11", "2030-01-09 07:00:00"),
-    hist("h12", "o12", "en_reparto", "entregada", "gestion", "g12", "2030-01-09 07:00:00"),
-    hist("h13", "o13", "en_reparto", "entregada", "gestion", "g13", "2030-01-09 07:00:00"),
+    hist("h9b", "o9", "devolucion_por_confirmar", "novedad", "anclaje_devolucion", "g9", "2030-01-08 10:00:01"),
+    hist("h9c", "o9", "novedad", "devolucion_a_origen_por_rechazo", "escalado_devuelta_sla", "g9s", "2030-01-08 12:00:00"),
+    hist("h10", "o10", "en_reparto", "entregado", "gestion", "g10", "2030-01-09 07:00:00"),
+    hist("h11", "o11", "en_reparto", "entregado", "gestion", "g11", "2030-01-09 07:00:00"),
+    hist("h12", "o12", "en_reparto", "entregado", "gestion", "g12", "2030-01-09 07:00:00"),
+    hist("h13", "o13", "en_reparto", "entregado", "gestion", "g13", "2030-01-09 07:00:00"),
     hist("h14", "o14", "en_reparto", "incidente", "incidente", "g14", "2030-01-09 07:00:00"),
   ],
   csg: [
@@ -283,12 +312,14 @@ const ID_ESPERADO: Record<string, string> = {
   K8e: Z + "c11",
 };
 
-function inyectar(sql: string): string {
+/** `motivoTope`: el texto que lleva la fixture sintetica del tope (se corre con cada uno de `MOTIVOS_TOPE`). */
+function inyectar(sql: string, motivoTope: string): string {
   let out = sql;
   for (const [tabla, filas] of Object.entries(FIXTURES)) {
     const marcador = `/*FIX:${tabla}*/`;
     if (!out.includes(marcador)) throw new Error(`marcador ${marcador} ausente en el SQL`);
-    out = out.replace(marcador, `${marcador}\n${filasSql(tabla, filas)}`);
+    const conMotivo = filas.map((f) => (f.motivo === TOPE ? { ...f, motivo: motivoTope } : f));
+    out = out.replace(marcador, `${marcador}\n${filasSql(tabla, conMotivo)}`);
   }
   return out;
 }
@@ -315,7 +346,7 @@ async function soloLectura(sqls: string[]): Promise<Fila[][]> {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (!esBaseLocal(process.env.DATABASE_URL)) {
-    console.error("ABORTA: DATABASE_URL no apunta a localhost:5432/ordenex. Produccion se contrasta por el MCP de Supabase.");
+    console.error("ABORTA: DATABASE_URL no apunta a localhost:5432/ordenex (ni a un clon ordenex_<sufijo>). Produccion se contrasta por el MCP de Supabase.");
     process.exit(2);
   }
   const desdeArg = args.find((a) => a.startsWith("--desde="))?.slice("--desde=".length) ?? null;
@@ -333,11 +364,15 @@ async function main(): Promise<void> {
   // que la muestra de cada bloque sea exactamente la fila sembrada y se pueda comprobar POR ID (no solo por
   // conteo: un +1 de otra fila no vale). Los datos reales siguen entrando en las subconsultas (conteos de
   // intentos, «mas reciente», etc.), asi que tambien se mide que no contaminan. `--desde=` lo cambia.
+  //
+  // FICHA 455: la pasada se repite con la sintetica del tope llevando el motivo VIEJO y luego el NUEVO;
+  // las dos tienen que salir enteras (si el SQL dejara de reconocer uno, la sintetica contaria como
+  // gestion de calle y algun bloque perderia su diferencia sembrada o ganaria otra).
   const base = cargarSql(desdeArg ?? "2030-01-01");
-  const [sin, con] = await soloLectura([base, inyectar(base)]);
+  const [sin, ...conPorMotivo] = await soloLectura([base, ...MOTIVOS_TOPE.map((m) => inyectar(base, m))]);
   const porK = new Map(sin.map((f) => [String(f.k), f]));
   let fallos = 0;
-  const tabla = con.map((f) => {
+  const tabla = conPorMotivo.flatMap((con, i) => con.map((f) => {
     const k = String(f.k);
     const antes = porK.get(k);
     const esT33 = k.startsWith("T3.3");
@@ -346,16 +381,23 @@ async function main(): Promise<void> {
     const esperado = esT33 ? 5 : 1; // T3.3: g3s, g5, g7, g8, g9s
     const idEsperado = ID_ESPERADO[k.split(" ")[0]] ?? null;
     const muestra = String(f.muestra_ids ?? "");
-    const ok = dCon - dAntes === esperado && (idEsperado === null || muestra.includes(idEsperado));
+    const ingresoTope = (fila: Fila | undefined): number =>
+      Number(/ingreso ya cobrado por las creadas=([\d.]+)/.exec(String(fila?.nota ?? ""))?.[1] ?? NaN);
+    const tope = !k.startsWith("K4b") || ingresoTope(f) - ingresoTope(antes) === INGRESO_TOPE;
+    const ok = dCon - dAntes === esperado && (idEsperado === null || muestra.includes(idEsperado)) && tope;
     if (!ok) fallos += 1;
-    return { k, sin_fixture: dAntes, con_fixture: dCon, esperado_delta: esperado, id_sembrado: idEsperado, detecta: ok ? "SI" : "NO", muestra: muestra.slice(0, 90) };
-  });
+    return { motivo_tope: i === 0 ? "viejo" : "nuevo", k, sin_fixture: dAntes, con_fixture: dCon, esperado_delta: esperado, id_sembrado: idEsperado, detecta: ok ? "SI" : "NO", muestra: muestra.slice(0, 90) };
+  }));
   console.table(tabla);
+  for (const motivo of ["viejo", "nuevo"]) {
+    const filas = tabla.filter((t) => t.motivo_tope === motivo);
+    console.log(`motivo del tope ${motivo}: ${filas.filter((t) => t.detecta === "SI").length}/${filas.length} bloques detectan su diferencia`);
+  }
   if (fallos > 0) {
     console.error(`AUTOCOMPROBACION ROJA: ${fallos} bloque(s) no ven su diferencia sembrada`);
     process.exit(1);
   }
-  console.log("AUTOCOMPROBACION VERDE: cada bloque detecta su diferencia sembrada");
+  console.log("AUTOCOMPROBACION VERDE: cada bloque detecta su diferencia sembrada, con los dos motivos del tope");
 }
 
 main().catch((e) => {

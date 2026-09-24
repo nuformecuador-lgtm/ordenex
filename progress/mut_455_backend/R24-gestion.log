@@ -1,0 +1,54 @@
+# MUTACION R24-gestion
+archivo: lib/services/ApiOrdenLecturaService.ts
+linea: 240
+- "resultadoNombre: nombreDeResultado(g.resultado),"
++ "resultadoNombre: g.resultado,"
+tests: tests/integration/db/455/caracterizacion/api-lectura.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 8 passed (9)
+FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R26, R27) > R24: gestiones[] lleva `resultadoNombre` y `estadoResultanteNombre` al lado de cada codigo
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/db/455/caracterizacion/api-lectura.test.ts (9 tests | 1 failed) 630ms
+       × R24: gestiones[] lleva `resultadoNombre` y `estadoResultanteNombre` al lado de cada codigo 6ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  06:00:27
+   Duration  3.51s (transform 1.03s, setup 54ms, import 2.62s, tests 630ms, environment 0ms)
+
+(node:12132) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R26, R27) > R24: gestiones[] lleva `resultadoNombre` y `estadoResultanteNombre` al lado de cada codigo
+AssertionError: expected [ [ 'novedad', 'Novedad' ] ] to deeply equal [ [ 'Novedad', 'Novedad' ] ]
+
+- Expected
++ Received
+
+  [
+    [
+-     "Novedad",
++     "novedad",
+      "Novedad",
+    ],
+  ]
+
+ ❯ tests/integration/db/455/caracterizacion/api-lectura.test.ts:232:32
+    230|         "pendienteConfirmacion",
+    231|       ]);
+    232|       expect(r.nombresGestion).toEqual([["Novedad", "Novedad"]]);
+       |                                ^
+    233|     });
+    234|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

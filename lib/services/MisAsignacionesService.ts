@@ -98,7 +98,7 @@ function estaReservadaParaOtroDia(fechaReparto: Date | null, diaEnCurso: Date): 
 }
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
-const ORIGEN_RECOGER: EstadoRepartoMensajero = "por_recoger";
+const ORIGEN_RECOGER: EstadoRepartoMensajero = "mensajero_recogiendo_en_bodega";
 const ESTADO_EN_REPARTO: EstadoRepartoMensajero = "en_reparto";
 // FICHA 454 (T1.12/T1.15): aqui vivia `ESTADO_AYUDA = "ayuda_tienda"` (235/R18). La ayuda deja de
 // ser estado; el grupo «con ayuda» se corta por la derivacion `ayuda-abierta.ts` (ver el bucle).
@@ -630,7 +630,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // persiste. Comparacion en Decimal (no float) para evitar falsos negativos
     // por representacion binaria de los montos. `montoCobrar` null = orden SIN
     // cobro: cuadra con un recaudo de 0 (mismo trato que montoCobrar 0).
-    if (input.resultado === "entregada") {
+    if (input.resultado === "entregado") {
       const cuadra = new Prisma.Decimal(input.montoRecibido).equals(
         new Prisma.Decimal(orden.montoCobrar ?? 0),
       );
@@ -678,9 +678,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     let uploaded: string[] = [];
     let evidencias: EvidenciaSubida[] = [];
     if (
-      input.resultado === "entregada" ||
-      input.resultado === "rechazada" ||
-      input.resultado === "devuelta" || // feature 75: evidencia obligatoria tambien en Devolver
+      input.resultado === "entregado" ||
+      input.resultado === "devolucion_a_origen_por_rechazo" ||
+      input.resultado === "novedad" || // feature 75: evidencia obligatoria tambien en Devolver
       // Feature 158 (R10, Q-B): el INCIDENTE sube sus 1..N fotos por el MISMO camino
       // compensado, en las TRES causas (tambien `perdido` y `robado`). El borde ya exigio
       // `min(1)`, asi que aqui nunca llega una lista vacia.
@@ -870,10 +870,10 @@ function buildGestionData(
     ubicacionAusencia: input.ubicacionAusencia ?? null,
   };
   switch (input.resultado) {
-    case "entregada":
+    case "entregado":
       return {
         ...geo,
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: input.montoRecibido,
         // Feature 212 (R19): la columna DEPRECADA se deriva del DESGLOSE, no del escalar que
         // mando el cliente: con una sola linea vale esa (y una entrega legacy escribe
@@ -883,28 +883,28 @@ function buildGestionData(
         pagos: input.pagos,
         evidencias,
       };
-    case "reprogramada":
+    case "reprogramado":
       return {
         ...geo,
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         fechaReprogramacion: input.fechaReprogramacion,
         motivo: input.motivo,
       };
-    case "devuelta":
+    case "novedad":
       // Feature 73/R11/R12: la causa va en su COLUMNA propia, APARTE del texto libre; el
       // `motivo` se persiste EXACTAMENTE como lo escribio el mensajero, sin decoracion.
       // Feature 75/119: la devolucion persiste sus 1..N fotos de evidencia (obligatorias).
       return {
         ...geo,
-        resultado: "devuelta",
+        resultado: "novedad",
         causaDevolucion: input.causaDevolucion,
         motivo: input.motivo,
         evidencias,
       };
-    case "rechazada":
+    case "devolucion_a_origen_por_rechazo":
       return {
         ...geo,
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         motivo: input.motivo,
         evidencias,
       };

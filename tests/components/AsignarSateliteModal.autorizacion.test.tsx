@@ -186,7 +186,7 @@ describe("AsignarSateliteModal — 407/R16: el modal ofrece autorizar en las DOS
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "partial",
-      resultados: [{ ordenId: ID_ASIGNABLE, estado: "por_recoger" }],
+      resultados: [{ ordenId: ID_ASIGNABLE, estado: "mensajero_recogiendo_en_bodega" }],
       bloqueadas: [{ ordenId: ID_IRRESOLUBLE, motivo: "direccion_no_geocodificable" }],
     });
     renderModal([
@@ -246,7 +246,7 @@ describe("AsignarSateliteModal — 407/R16: el modal ofrece autorizar en las DOS
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: ID_ASIGNABLE, estado: "por_recoger" }],
+      resultados: [{ ordenId: ID_ASIGNABLE, estado: "mensajero_recogiendo_en_bodega" }],
     });
     renderModal([makeOrden({ id: ID_ASIGNABLE, numRemision: "NA-900" })]);
 
@@ -344,7 +344,7 @@ describe("AsignarSateliteModal — 407/R18: la segunda petición va acotada a la
       })
       .mockResolvedValueOnce({
         status: "ok",
-        resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "por_recoger" }],
+        resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "mensajero_recogiendo_en_bodega" }],
         sinUbicacionAutorizada: 1,
       });
     renderModal([makeOrden({ id: ID_IRRESOLUBLE, numRemision: "NA-138" })]);
@@ -367,7 +367,7 @@ describe("AsignarSateliteModal — 407/R18: la segunda petición va acotada a la
     asignarDesdeSateliteMock
       .mockResolvedValueOnce({
         status: "partial",
-        resultados: [{ ordenId: ID_ASIGNABLE, estado: "por_recoger" }],
+        resultados: [{ ordenId: ID_ASIGNABLE, estado: "mensajero_recogiendo_en_bodega" }],
         bloqueadas: [
           { ordenId: ID_IRRESOLUBLE, motivo: "direccion_no_geocodificable" },
           { ordenId: ID_EN_CURSO, motivo: "geocodificacion_en_curso" },
@@ -375,7 +375,7 @@ describe("AsignarSateliteModal — 407/R18: la segunda petición va acotada a la
       })
       .mockResolvedValueOnce({
         status: "ok",
-        resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "por_recoger" }],
+        resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "mensajero_recogiendo_en_bodega" }],
         sinUbicacionAutorizada: 1,
       });
     renderModal([
@@ -410,7 +410,7 @@ describe("AsignarSateliteModal — 407/R18: la segunda petición va acotada a la
       })
       .mockResolvedValueOnce({
         status: "ok",
-        resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "por_recoger" }],
+        resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "mensajero_recogiendo_en_bodega" }],
         sinUbicacionAutorizada: 1,
       });
     renderModal([
@@ -458,7 +458,7 @@ describe("AsignarSateliteModal — 407/R18: la segunda petición va acotada a la
     await user.click(boton);
 
     expect(asignarDesdeSateliteMock).toHaveBeenCalledTimes(2);
-    resolver({ status: "ok", resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "por_recoger" }] });
+    resolver({ status: "ok", resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "mensajero_recogiendo_en_bodega" }] });
   });
 
   it("R9: al reabrir el modal la autorización NO sobrevive — el panel desaparece", async () => {
@@ -492,12 +492,12 @@ describe("AsignarSateliteModal — 407/R20: el manifiesto lleva TODO lo asignado
     asignarDesdeSateliteMock
       .mockResolvedValueOnce({
         status: "partial",
-        resultados: [{ ordenId: ID_ASIGNABLE, estado: "por_recoger" }],
+        resultados: [{ ordenId: ID_ASIGNABLE, estado: "mensajero_recogiendo_en_bodega" }],
         bloqueadas: [{ ordenId: ID_IRRESOLUBLE, motivo: "direccion_no_geocodificable" }],
       })
       .mockResolvedValueOnce({
         status: "ok",
-        resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "por_recoger" }],
+        resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "mensajero_recogiendo_en_bodega" }],
         sinUbicacionAutorizada: 1,
       });
     renderModal([
@@ -523,7 +523,7 @@ describe("AsignarSateliteModal — 407/R20: el manifiesto lleva TODO lo asignado
     asignarDesdeSateliteMock
       .mockResolvedValueOnce({
         status: "partial",
-        resultados: [{ ordenId: ID_ASIGNABLE, estado: "por_recoger" }],
+        resultados: [{ ordenId: ID_ASIGNABLE, estado: "mensajero_recogiendo_en_bodega" }],
         bloqueadas: [
           { ordenId: ID_IRRESOLUBLE, motivo: "direccion_no_geocodificable" },
           { ordenId: ID_EN_CURSO, motivo: "geocodificacion_en_curso" },
@@ -531,7 +531,7 @@ describe("AsignarSateliteModal — 407/R20: el manifiesto lleva TODO lo asignado
       })
       .mockResolvedValueOnce({
         status: "ok",
-        resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "por_recoger" }],
+        resultados: [{ ordenId: ID_IRRESOLUBLE, estado: "mensajero_recogiendo_en_bodega" }],
         sinUbicacionAutorizada: 1,
       });
     renderModal([
@@ -569,8 +569,8 @@ describe("AsignarSateliteModal — 407/R10-R12: el aviso de la autorización no 
       .mockResolvedValueOnce({
         status: "ok",
         resultados: [
-          { ordenId: ID_IRRESOLUBLE, estado: "por_recoger" },
-          { ordenId: ID_EN_CURSO, estado: "por_recoger" },
+          { ordenId: ID_IRRESOLUBLE, estado: "mensajero_recogiendo_en_bodega" },
+          { ordenId: ID_EN_CURSO, estado: "mensajero_recogiendo_en_bodega" },
         ],
         sinUbicacionAutorizada: 2,
       });
@@ -598,8 +598,8 @@ describe("AsignarSateliteModal — 407/R10-R12: el aviso de la autorización no 
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: ID_ASIGNABLE, estado: "por_recoger" },
-        { ordenId: ID_IRRESOLUBLE, estado: "por_recoger" },
+        { ordenId: ID_ASIGNABLE, estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: ID_IRRESOLUBLE, estado: "mensajero_recogiendo_en_bodega" },
       ],
       sinUbicacion: 1,
       sinUbicacionAutorizada: 1,
@@ -622,7 +622,7 @@ describe("AsignarSateliteModal — 407/R10-R12: el aviso de la autorización no 
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: ID_ASIGNABLE, estado: "por_recoger" }],
+      resultados: [{ ordenId: ID_ASIGNABLE, estado: "mensajero_recogiendo_en_bodega" }],
     });
     renderModal([makeOrden({ id: ID_ASIGNABLE, numRemision: "NA-900" })]);
 

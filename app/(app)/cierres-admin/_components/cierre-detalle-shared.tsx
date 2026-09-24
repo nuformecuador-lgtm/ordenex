@@ -33,6 +33,7 @@ import type { OrigenFlete } from "@/lib/utils/ingreso-ordenex";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import {
   RESULTADO_LABEL,
+  RESULTADO_VACIO,
   ESTADO_LABEL,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
@@ -129,6 +130,7 @@ import {
 // `cierre-labels.ts`, que es donde vive y de donde la leen por igual la pantalla y el archivo.
 export {
   RESULTADO_LABEL,
+  RESULTADO_VACIO,
   ESTADO_LABEL,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
@@ -183,13 +185,8 @@ export {
   GESTION_TIENDA_BADGE_NOTA,
 };
 
-export const RESULTADO_VACIO: Record<CierreResultado, string> = {
-  entregada: "No hay entregas.",
-  reprogramada: "No hay reprogramaciones.",
-  devuelta: "No hay devoluciones.",
-  rechazada: "No hay rechazos.",
-  incidente: "No hay incidentes.", // feature 158/R18
-};
+// FICHA 455 (2026-09-24, R5): `RESULTADO_VACIO` vive ahora en `cierre-labels` (nombre exacto del
+// resultado) y se reexporta desde aquí para sus consumidores.
 
 // Feature 41 (R20): variante de badge por estado para diferenciar VISUALMENTE el
 // `vencido` (generado por el corte diario: dinero sin conciliar mas alla del plazo)
@@ -511,10 +508,10 @@ export const PAGO_SIN_TARIFA_NOTA = `El pago al mensajero de esta entrega se res
  * del mensajero (37) y que el paso de resultados del panel.
  */
 export const ORDEN_RESULTADOS: CierreResultado[] = [
-  "entregada",
-  "reprogramada",
-  "devuelta",
-  "rechazada",
+  "entregado",
+  "reprogramado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
   "incidente",
 ];
 
@@ -1413,7 +1410,7 @@ export function columnasPara(
       COLUMNA_INDEMNIZACION,
     ];
   }
-  if (resultado === "entregada") {
+  if (resultado === "entregado") {
     return [
       ...COLUMNAS_COMUNES,
       COLUMNA_MONTO_COBRAR,
@@ -1435,7 +1432,7 @@ export function columnasPara(
       COLUMNA_PAGO_MENSAJERO,
     ];
   }
-  if (resultado === "reprogramada") {
+  if (resultado === "reprogramado") {
     // Una reprogramación no aporta a ningún concepto (la fórmula devuelve vacío): no se
     // pintan columnas de ingreso que serían "—" en todas las filas.
     return [
@@ -1458,7 +1455,7 @@ export function columnasPara(
       COLUMNA_PAGO_MENSAJERO,
     ];
   }
-  if (resultado === "devuelta") {
+  if (resultado === "novedad") {
     return [
       ...COLUMNAS_COMUNES,
       COLUMNA_MONTO_COBRAR,
@@ -1565,22 +1562,22 @@ const DESCARGA_POR_RESULTADO: Record<
     fila: (g: CierreDetalleGestion) => DescargaFila;
   }
 > = {
-  entregada: {
+  entregado: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS,
     fila: filaDescargaGestionEntregada,
     ambitoColumnas: AMBITO_DESCARGA_GESTIONES_ENTREGADAS,
   },
-  reprogramada: {
+  reprogramado: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_REPROGRAMADAS,
     fila: filaDescargaGestionReprogramada,
     ambitoColumnas: AMBITO_DESCARGA_GESTIONES_REPROGRAMADAS,
   },
-  devuelta: {
+  novedad: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
     fila: filaDescargaGestionDevuelta,
     ambitoColumnas: AMBITO_DESCARGA_GESTIONES_DEVUELTAS,
   },
-  rechazada: {
+  devolucion_a_origen_por_rechazo: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS,
     fila: filaDescargaGestionRechazada,
     ambitoColumnas: AMBITO_DESCARGA_GESTIONES_RECHAZADAS,

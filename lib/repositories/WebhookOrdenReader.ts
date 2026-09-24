@@ -14,7 +14,7 @@ import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre
 // Feature 256 (R8): `gestion_orden.resultado` de una DEVOLUCION. Mismo molde que
 // `RESULTADO_DEVUELTA` de `OrdenRepository.ts:318` y `DevolucionSlaRepository.ts:14`; la
 // vigencia se filtra aparte, por `anuladaAt: null` (criterio de la feature 67).
-const RESULTADO_DEVUELTA: GestionResultado = "devuelta";
+const RESULTADO_DEVUELTA: GestionResultado = "novedad";
 
 // ⏳ 2026-08-22 (feature 268, R20): `gestion_orden.resultado` de un INCIDENTE del MENSAJERO
 // (arista #44, familia `gestion`). Misma vigencia (`anuladaAt: null`) y mismo criterio de

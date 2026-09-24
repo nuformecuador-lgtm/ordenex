@@ -64,7 +64,7 @@ export const ORIGENES_INCIDENTE_ADMIN = [
   "en_bodega_satelite",
   "en_ruta_bodega_central",
   "en_ruta_bodega_satelite",
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
 ] as const;
 
 const SET_ORIGENES: ReadonlySet<string> = new Set(ORIGENES_INCIDENTE_ADMIN);

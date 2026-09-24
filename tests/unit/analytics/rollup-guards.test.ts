@@ -449,7 +449,7 @@ describe("R26 — ninguna coordenada escrita a mano en el escritor", () => {
     expect(literalesDeCoordenada(`GROUP BY 1, 2, 3, 4`)).toEqual([]);
     // Un literal que NO es coordenada (el `value` de un resultado de gestion) es legal: sale del
     // catalogo de enums, no de las cuatro claves foraneas.
-    expect(literalesDeCoordenada(`g."resultado" = 'devuelta'`)).toEqual([]);
+    expect(literalesDeCoordenada(`g."resultado" = 'novedad'`)).toEqual([]);
   });
 
   it("ningun modulo del escritor contiene un literal de coordenada", () => {

@@ -1,0 +1,1131 @@
+MUTACION F11-dona-humaniza
+archivo: app/(app)/analitica/_components/entregas/ConteoPorStatusDona.tsx
+cambio (numstat): 1	1	app/(app)/analitica/_components/entregas/ConteoPorStatusDona.tsx
+-             categoria: nombreDeEstado(fila.status),
++             categoria: fila.status.replaceAll("_", " "),
+tests: ['tests/components/ConteoPorStatusDona.test.tsx', 'tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts (5 tests | 1 failed) 12ms
+     × ninguna segunda fuente de nombres ni humanizacion fuera de lo pendiente de la Fase 2 6ms
+ ❯ tests/components/ConteoPorStatusDona.test.tsx (12 tests | 6 failed) 6270ms
+     × pinta un segmento por status, con su conteo 1021ms
+     × no inventa segmentos para los status que no llegaron 1014ms
+     × no pinta la nota de la fuente del estado 1016ms
+     × ni la hora de la última actualización 1019ms
+     × nombres exactos, incluidos los que el código no deja adivinar 1010ms
+     × un value que el catálogo no conoce se lee «Estado no reconocido», nunca el código 1020ms
+
+ Test Files  2 failed (2)
+      Tests  7 failed | 10 passed (17)
+   Start at  08:10:43
+   Duration  10.79s (transform 1.03s, setup 201ms, import 5.05s, tests 6.28s, environment 1.22s)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/components/ConteoPorStatusDona.test.tsx > Dona por estado — los segmentos > pinta un segmento por status, con su conteo
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 20/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 30"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 30
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_5_"
+            >
+              entregado
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (66,7%)
+            </span>
+          </li>
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_7_"
+            >
+              en reparto
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 40%; animation-delay: 40ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              8 (26,7%)
+            </span>
+          </li>
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_9_"
+            >
+              novedad
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 10%; animation-delay: 80ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              2 (6,7%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 30"
+          >
+            <li>
+              Detalle de las ordenes, entregado: 20 (66,7%)
+            </li>
+            <li>
+              Detalle de las ordenes, en reparto: 8 (26,7%)
+            </li>
+            <li>
+              Detalle de las ordenes, novedad: 2 (6,7%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 30"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 30
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_5_"
+            >
+              entregado
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (66,7%)
+            </span>
+          </li>
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_7_"
+            >
+              en reparto
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 40%; animation-delay: 40ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              8 (26,7%)
+            </span>
+          </li>
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_9_"
+            >
+              novedad
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 10%; animation-delay: 80ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              2 (6,7%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 30"
+          >
+            <li>
+              Detalle de las ordenes, entregado: 20 (66,7%)
+            </li>
+            <li>
+              Detalle de las ordenes, en reparto: 8 (26,7%)
+            </li>
+            <li>
+              Detalle de las ordenes, novedad: 2 (6,7%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoPorStatusDona.test.tsx:73:25
+     71|     renderDona();
+     72|
+     73|     expect(await screen.findByText(/Entregado: 20/)).toBeInTheDocument…
+       |                         ^
+     74|     expect(screen.getByText(/En reparto: 8/)).toBeInTheDocument();
+     75|     expect(screen.getByText(/Novedad: 2/)).toBeInTheDocument();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/components/ConteoPorStatusDona.test.tsx > Dona por estado — los segmentos > no inventa segmentos para los status que no llegaron
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 20/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 20"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 20
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_b_"
+            >
+              entregado
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (100%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 20"
+          >
+            <li>
+              Detalle de las ordenes, entregado: 20 (100%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 20"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 20
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_b_"
+            >
+              entregado
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (100%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 20"
+          >
+            <li>
+              Detalle de las ordenes, entregado: 20 (100%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoPorStatusDona.test.tsx:84:18
+     82|     renderDona();
+     83|
+     84|     await screen.findByText(/Entregado: 20/);
+       |                  ^
+     85|     expect(screen.queryByText(/En reparto/)).toBeNull();
+     86|     expect(screen.queryByText(/Novedad/)).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/components/ConteoPorStatusDona.test.tsx > Dona por estado — sin rótulos bajo la gráfica > no pinta la nota de la fuente del estado
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 20/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 20"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 20
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_d_"
+            >
+              entregado
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (100%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 20"
+          >
+            <li>
+              Detalle de las ordenes, entregado: 20 (100%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 20"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 20
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_d_"
+            >
+              entregado
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (100%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 20"
+          >
+            <li>
+              Detalle de las ordenes, entregado: 20 (100%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoPorStatusDona.test.tsx:111:18
+    109|     renderDona();
+    110|
+    111|     await screen.findByText(/Entregado: 20/);
+       |                  ^
+    112|     expect(screen.queryByText(/última gestión/i)).toBeNull();
+    113|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/components/ConteoPorStatusDona.test.tsx > Dona por estado — sin rótulos bajo la gráfica > ni la hora de la última actualización
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 20/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 20"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 20
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_f_"
+            >
+              entregado
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (100%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 20"
+          >
+            <li>
+              Detalle de las ordenes, entregado: 20 (100%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 20"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 20
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_f_"
+            >
+              entregado
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (100%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 20"
+          >
+            <li>
+              Detalle de las ordenes, entregado: 20 (100%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoPorStatusDona.test.tsx:119:18
+    117|     renderDona();
+    118|
+    119|     await screen.findByText(/Entregado: 20/);
+       |                  ^
+    120|     expect(screen.queryByText(/Actualizado/)).toBeNull();
+    121|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/components/ConteoPorStatusDona.test.tsx > 455 — la leyenda nombra cada status con su nombre visible exacto > nombres exactos, incluidos los que el código no deja adivinar
+TestingLibraryElementError: Unable to find an element with the text: /Mensajero recogiendo en la bodega: 3/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 6"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 6
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_h_"
+            >
+              mensajero recogiendo en bodega
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              3 (50%)
+            </span>
+          </li>
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_j_"
+            >
+              devolucion a origen por rechazo
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 66.66666666666666%; animation-delay: 40ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              2 (33,3%)
+            </span>
+          </li>
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_l_"
+            >
+              devuelta a tienda
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 33.33333333333333%; animation-delay: 80ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              1 (16,7%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 6"
+          >
+            <li>
+              Detalle de las ordenes, mensajero recogiendo en bodega: 3 (50%)
+            </li>
+            <li>
+              Detalle de las ordenes, devolucion a origen por rechazo: 2 (33,3%)
+            </li>
+            <li>
+              Detalle de las ordenes, devuelta a tienda: 1 (16,7%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 6"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 6
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_h_"
+            >
+              mensajero recogiendo en bodega
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              3 (50%)
+            </span>
+          </li>
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_j_"
+            >
+              devolucion a origen por rechazo
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 66.66666666666666%; animation-delay: 40ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              2 (33,3%)
+            </span>
+          </li>
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_l_"
+            >
+              devuelta a tienda
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 33.33333333333333%; animation-delay: 80ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              1 (16,7%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 6"
+          >
+            <li>
+              Detalle de las ordenes, mensajero recogiendo en bodega: 3 (50%)
+            </li>
+            <li>
+              Detalle de las ordenes, devolucion a origen por rechazo: 2 (33,3%)
+            </li>
+            <li>
+              Detalle de las ordenes, devuelta a tienda: 1 (16,7%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoPorStatusDona.test.tsx:163:25
+    161|     renderDona();
+    162|
+    163|     expect(await screen.findByText(/Mensajero recogiendo en la bodega:…
+       |                         ^
+    164|     expect(screen.getByText(/Devolución a origen por rechazo: 2/)).toB…
+    165|     expect(screen.getByText(/Devuelta a tienda: 1/)).toBeInTheDocument…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/components/ConteoPorStatusDona.test.tsx > 455 — la leyenda nombra cada status con su nombre visible exacto > un value que el catálogo no conoce se lee «Estado no reconocido», nunca el código
+TestingLibraryElementError: Unable to find an element with the text: /Estado no reconocido: 4/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 4"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 4
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_n_"
+            >
+              estatus inventado manana
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              4 (100%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 4"
+          >
+            <li>
+              Detalle de las ordenes, estatus inventado manana: 4 (100%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle de las ordenes · 4"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle de las ordenes · 4
+        </h3>
+        <ul
+          aria-hidden="true"
+          class="flex w-full flex-col gap-2"
+        >
+          <li
+            class="grid items-center gap-3 text-sm"
+            style="grid-template-columns: minmax(88px, 136px) minmax(0, 1fr) auto;"
+          >
+            <span
+              class="min-w-0 cursor-default truncate text-left text-muted-foreground"
+              data-base-ui-tooltip-trigger=""
+              data-slot="tooltip-trigger"
+              id="base-ui-_r_n_"
+            >
+              estatus inventado manana
+            </span>
+            <span
+              class="flex"
+              style="height: 14px;"
+            >
+              <span
+                class="grafica-barra-crece rounded-xs bg-chart-1"
+                style="width: 100%; animation-delay: 0ms;"
+              />
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              4 (100%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle de las ordenes · 4"
+          >
+            <li>
+              Detalle de las ordenes, estatus inventado manana: 4 (100%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoPorStatusDona.test.tsx:175:25
+    173|     renderDona();
+    174|
+    175|     expect(await screen.findByText(/Estado no reconocido: 4/)).toBeInT…
+       |                         ^
+    176|     expect(screen.queryByText(/estatus_inventado_manana|Estatus invent…
+    177|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts > 455/R42 · R3 · R12 (G3) — el arbol > ninguna segunda fuente de nombres ni humanizacion fuera de lo pendiente de la Fase 2
+AssertionError: otro modulo declara nombres de estado o humaniza un codigo. El nombre sale de `nombreDeEstado` (`lib/types/order-status.ts`); los colores y variantes, de un mapa indexado por CODIGO.: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "app/(app)/analitica/_components/entregas/ConteoPorStatusDona.tsx:129 humaniza un codigo",
++ ]
+
+ ❯ tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts:189:7
+    187|       "otro modulo declara nombres de estado o humaniza un codigo. El …
+    188|         "(`lib/types/order-status.ts`); los colores y variantes, de un…
+    189|     ).toEqual([]);
+       |       ^
+    190|   });
+    191|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+RESTAURADO_LIMPIO=True

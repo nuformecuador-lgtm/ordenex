@@ -100,7 +100,7 @@ type Args = Record<string, never> & Record<string, unknown>;
 function ordenBase(over: Partial<OrdenRow> & Pick<OrdenRow, "id" | "numGuia" | "zonaId">): OrdenRow {
   return {
     numRemision: `R-${over.id}`,
-    estatusId: idEstado("rechazada"),
+    estatusId: idEstado("devolucion_a_origen_por_rechazo"),
     deletedAt: null,
     tiendaId: TIENDA,
     mensajeroAsignadoId: MENSAJERO, // el rechazo NO limpia el mensajero (R8/R12)
@@ -450,23 +450,23 @@ beforeEach(async () => {
 });
 
 describe("Feature 139 T4.1 — la aprobacion del cierre rutea cada rechazada por la ZONA de la orden (R5)", () => {
-  it("satelite -> por_devolver y central -> por_devolver_a_tienda, en la MISMA aprobacion", async () => {
+  it("satelite -> por_devolver_a_bodega_central y central -> por_devolver_a_tienda, en la MISMA aprobacion", async () => {
     const db = makeDb();
     const s = makeServices(db);
 
-    expect(estadoDe(db, "o-sat")).toBe("rechazada");
-    expect(estadoDe(db, "o-cen")).toBe("rechazada");
+    expect(estadoDe(db, "o-sat")).toBe("devolucion_a_origen_por_rechazo");
+    expect(estadoDe(db, "o-cen")).toBe("devolucion_a_origen_por_rechazo");
 
     expect((await s.cierres.aprobarCierre("c1", ADMIN_CENTRAL)).status).toBe("ok");
 
-    expect(estadoDe(db, "o-sat")).toBe("por_devolver");
+    expect(estadoDe(db, "o-sat")).toBe("por_devolver_a_bodega_central");
     expect(estadoDe(db, "o-cen")).toBe("por_devolver_a_tienda");
     // R11: ambos saltos quedan clasificados como `devolucion_rechazada` con el admin que aprobo.
     expect(timeline(db, "o-sat")).toEqual([
-      ["rechazada", "por_devolver", "devolucion_rechazada", ADMIN_CENTRAL.usuarioId],
+      ["devolucion_a_origen_por_rechazo", "por_devolver_a_bodega_central", "devolucion_rechazada", ADMIN_CENTRAL.usuarioId],
     ]);
     expect(timeline(db, "o-cen")).toEqual([
-      ["rechazada", "por_devolver_a_tienda", "devolucion_rechazada", ADMIN_CENTRAL.usuarioId],
+      ["devolucion_a_origen_por_rechazo", "por_devolver_a_tienda", "devolucion_rechazada", ADMIN_CENTRAL.usuarioId],
     ]);
   });
 });
@@ -481,9 +481,9 @@ describe("Feature 139 T4.1 — rama SATELITE: recorrido completo hasta devuelta_
     expect(estadoDe(db, "o-sat")).toBe("devuelta_a_tienda");
     expect(timeline(db, "o-sat")).toEqual([
       // R5/R11: la aprobacion del cierre saca la orden de `rechazada` (unico disparador, R9).
-      ["rechazada", "por_devolver", "devolucion_rechazada", ADMIN_CENTRAL.usuarioId],
+      ["devolucion_a_origen_por_rechazo", "por_devolver_a_bodega_central", "devolucion_rechazada", ADMIN_CENTRAL.usuarioId],
       // R13/R23: envio por lote del adminSatelite de la zona.
-      ["por_devolver", "devolviendo_a_bodega_central", "ajuste_estado", ADMIN_SATELITE.usuarioId],
+      ["por_devolver_a_bodega_central", "devolviendo_a_bodega_central", "ajuste_estado", ADMIN_SATELITE.usuarioId],
       // R17: recepcion central STATE-AWARE (reuso 138), que rutea a `por_devolver_a_tienda`.
       [
         "devolviendo_a_bodega_central",
@@ -505,7 +505,7 @@ describe("Feature 139 T4.1 — rama SATELITE: recorrido completo hasta devuelta_
     await recorrerRamaSatelite(db, s);
 
     const saltos = timeline(db, "o-sat");
-    expect(saltos[0][0]).toBe("rechazada"); // arranca donde reposaba la orden
+    expect(saltos[0][0]).toBe("devolucion_a_origen_por_rechazo"); // arranca donde reposaba la orden
     for (let i = 1; i < saltos.length; i += 1) {
       expect(saltos[i][0]).toBe(saltos[i - 1][1]);
     }
@@ -537,13 +537,13 @@ describe("Feature 139 T4.1 — rama CENTRAL: recorrido completo hasta devuelta_a
 
     expect(estadoDe(db, "o-cen")).toBe("devuelta_a_tienda");
     expect(timeline(db, "o-cen")).toEqual([
-      ["rechazada", "por_devolver_a_tienda", "devolucion_rechazada", ADMIN_CENTRAL.usuarioId],
+      ["devolucion_a_origen_por_rechazo", "por_devolver_a_tienda", "devolucion_rechazada", ADMIN_CENTRAL.usuarioId],
       ["por_devolver_a_tienda", "devolviendo_a_tienda", "ajuste_estado", ADMIN_CENTRAL.usuarioId],
       ["devolviendo_a_tienda", "devuelta_a_tienda", "ajuste_estado", ADMIN_TIENDA.usuarioId],
     ]);
     // Los dos estados del tramo satelite no aparecen NUNCA en su linea de tiempo.
     const visitados = timeline(db, "o-cen").flatMap((s2) => [s2[0], s2[1]]);
-    expect(visitados).not.toContain("por_devolver");
+    expect(visitados).not.toContain("por_devolver_a_bodega_central");
     expect(visitados).not.toContain("devolviendo_a_bodega_central");
   });
 });
@@ -579,7 +579,7 @@ describe("Feature 139 T4.1 — ambas ramas convergen y el recorrido no se puede 
       status: "forbidden",
     });
     // Ningun rechazo dejo rastro: la orden sigue donde la dejo la aprobacion.
-    expect(estadoDe(db, "o-sat")).toBe("por_devolver");
+    expect(estadoDe(db, "o-sat")).toBe("por_devolver_a_bodega_central");
     expect(timeline(db, "o-sat")).toHaveLength(1);
   });
 
@@ -610,8 +610,8 @@ describe("Feature 139 T4.1 — el recorrido completo es legal para la guardia ce
 
     const pares = timeline(db, "o-sat").map(([origen, destino]) => `${origen}->${destino}`);
     expect(pares).toEqual([
-      "rechazada->por_devolver",
-      "por_devolver->devolviendo_a_bodega_central",
+      "devolucion_a_origen_por_rechazo->por_devolver_a_bodega_central",
+      "por_devolver_a_bodega_central->devolviendo_a_bodega_central",
       "devolviendo_a_bodega_central->por_devolver_a_tienda",
       "por_devolver_a_tienda->devolviendo_a_tienda",
       "devolviendo_a_tienda->devuelta_a_tienda",

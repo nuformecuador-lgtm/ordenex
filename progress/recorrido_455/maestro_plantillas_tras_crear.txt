@@ -1,0 +1,31 @@
+Plantillas
+
+Plantillas de mensaje con campos variables
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Sincronizar con WhatsApp
+Nueva plantilla
+Descargar
+Nombre	Plant. Tienda	Estado	Cuerpo	Acciones
+
+recorrido_455_estatus
+Tienda
+	
+	Activo	Hola {{cliente}}, tu envio {{guia}} esta: {{estatus}}.	
+Editar
+Desactivar
+Eliminar
+1-1 de 1
+«
+‹
+1
+›
+»
+10
+25
+50

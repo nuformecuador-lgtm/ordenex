@@ -26,7 +26,7 @@ export const ELIMINABLES_ESPERADOS = [
   "en_bodega_central",
   "en_ruta_bodega_central",
   "en_ruta_bodega_satelite",
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
 ] as const;
 
 /**
@@ -44,14 +44,14 @@ export const NO_ELIMINABLES_ESPERADOS = [
   "en_reparto", // «eso esta en gestion»: va con el mensajero RUMBO AL CLIENTE. Se mantiene.
   "en_bodega_satelite", // ya ATERRIZO en la satelite, el ultimo eslabon antes del cliente
   // Y todo lo demas: terminales, resultados de gestion y el flujo de devoluciones.
-  "entregada",
-  "devuelta",
+  "entregado",
+  "novedad",
   "devolviendo_a_tienda",
-  "reprogramada",
-  "rechazada",
+  "reprogramado",
+  "devolucion_a_origen_por_rechazo",
   "devuelta_a_tienda",
-  "sin_gestionar",
-  "por_devolver",
+  "novedad_interna",
+  "por_devolver_a_bodega_central",
   "devolviendo_a_bodega_central",
   "por_devolver_a_tienda",
   "incidente",

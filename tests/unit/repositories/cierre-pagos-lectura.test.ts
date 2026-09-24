@@ -41,7 +41,7 @@ function filaEnVivo(overrides: Record<string, unknown> = {}) {
   return {
     id: "g1",
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: new Prisma.Decimal("8000.00"),
     metodoPago: null, // R19: dos líneas -> la columna deprecada queda NULL
     pagos: lineasMixtas(),
@@ -72,7 +72,7 @@ function filaAdmin(overrides: Record<string, unknown> = {}) {
   return {
     id: "g1",
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: new Prisma.Decimal("8000.00"),
     metodoPago: null,
     pagos: lineasMixtas(),
@@ -216,7 +216,7 @@ describe("R21 — camino 1 (vivo): `CierreDiaRepository.findGestionesPendientes`
 
   it("una gestión SIN líneas llega con `[]`, nunca con `undefined`", () => {
     const row = toPendienteRow(
-      filaEnVivo({ resultado: "reprogramada", montoRecibido: null, pagos: [] }) as never,
+      filaEnVivo({ resultado: "reprogramado", montoRecibido: null, pagos: [] }) as never,
       false, // feature 237 (D6/R41): el flag lo resuelve el repo en lote; aqui no se ejercita
     );
     expect(row.pagos).toEqual([]);

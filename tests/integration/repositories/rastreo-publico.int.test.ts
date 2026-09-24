@@ -89,7 +89,7 @@ const HISTORIAL: FilaHistorial[] = [
   historial("orden-viva", "2026-08-12T16:00:00.000Z", "en_reparto"),
   historial("orden-viva", "2026-08-10T14:00:00.000Z", "en_preparacion"),
   historial("orden-borrada", "2026-08-10T14:00:00.000Z", "en_preparacion"),
-  historial("orden-viva", "2026-08-13T17:00:00.000Z", "entregada"),
+  historial("orden-viva", "2026-08-13T17:00:00.000Z", "entregado"),
   historial("orden-viva", "2026-08-11T15:00:00.000Z", "en_bodega_central"),
 ];
 
@@ -162,7 +162,7 @@ describe("R21 — la linea de tiempo sale en UNA consulta y ordenada asc", () =>
       "en_preparacion",
       "en_bodega_central",
       "en_reparto",
-      "entregada",
+      "entregado",
     ]);
     const instantes = transiciones.map((t) => t.createdAt.getTime());
     expect([...instantes].sort((a, b) => a - b)).toEqual(instantes);
@@ -184,11 +184,12 @@ describe("R21 — la linea de tiempo sale en UNA consulta y ordenada asc", () =>
     expect(findMany).toHaveBeenCalledTimes(1);
     expect(queryRaw).toHaveBeenCalledTimes(1);
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
-    expect(resultado.envio.linea.map((e) => e.hito)).toEqual([
-      "registrado",
-      "en_bodega",
-      "en_reparto",
-      "entregado",
+    // FICHA 455 (2026-09-24, T1.9; R31): la linea publica NOMBRES de estado, no hitos.
+    expect(resultado.envio.linea.map((e) => e.nombre)).toEqual([
+      "En preparación",
+      "En bodega central",
+      "En reparto",
+      "Entregado",
     ]);
   });
 });

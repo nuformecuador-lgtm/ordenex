@@ -40,7 +40,7 @@ function editable(overrides: Partial<GestionEditableDelCierre> = {}): GestionEdi
     gestionId: GESTION,
     cierreId: "c-1",
     cierreEstado: "solicitado",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "10000.00",
     pagos: [{ metodo: "efectivo", monto: "10000.00" }],
     ...overrides,
@@ -247,7 +247,7 @@ describe("398/R3 — solo un cierre ABIERTO se corrige", () => {
 // ---------------------------------------------------------------------------------------------
 
 describe("398/R4 — solo una `entregada` se corrige a rechazo", () => {
-  it.each(["rechazada", "reprogramada", "devuelta", "incidente"] as const)(
+  it.each(["devolucion_a_origen_por_rechazo", "reprogramado", "novedad", "incidente"] as const)(
     "una gestion `%s` es `validation_error` y el repositorio NO se toca",
     async (resultado) => {
       const repo = fakeRepo({
@@ -308,8 +308,8 @@ describe("398/R5 — el motivo es obligatorio y no puede quedar vacio al recorta
 
 describe("398 — si el catalogo de estados no resuelve, NO se escribe nada", () => {
   it.each([
-    ["falta `entregada`", (v: string) => (v === "entregada" ? null : "os-r")],
-    ["falta `rechazada`", (v: string) => (v === "rechazada" ? null : "os-e")],
+    ["falta `entregada`", (v: string) => (v === "entregado" ? null : "os-r")],
+    ["falta `rechazada`", (v: string) => (v === "devolucion_a_origen_por_rechazo" ? null : "os-e")],
   ])("%s -> `conflict` sin tocar el repositorio", async (_nombre, resolver) => {
     // FALLO CERRADO: «no se pudo resolver» se trata como «no», y no como «sigue adelante sin
     // mover la orden». Escribir la gestion sin transicionar la orden dejaria una gestion
@@ -330,7 +330,7 @@ describe("398 — si el catalogo de estados no resuelve, NO se escribe nada", ()
       MAESTRO,
     );
     const pedidos = vi.mocked(ordenRepo.findEstatusIdByValue).mock.calls.map((c) => c[0]);
-    expect([...pedidos].sort()).toEqual(["entregada", "rechazada"]);
+    expect([...pedidos].sort()).toEqual(["devolucion_a_origen_por_rechazo", "entregado"]);
   });
 });
 

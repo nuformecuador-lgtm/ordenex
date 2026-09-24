@@ -36,7 +36,7 @@ function devuelta(extra: Record<string, unknown> = {}) {
   return {
     ordenId: "o1",
     ubicacion: UBICACION_193,
-    resultado: "devuelta",
+    resultado: "novedad",
     causaDevolucion: "not_found",
     motivo: MOTIVO,
     evidencias: [evidenciaValida()],
@@ -57,7 +57,7 @@ describe("Feature 73 · rama `devuelta` — causa obligatoria (R1/R6)", () => {
     (causa) => {
       const r = gestionarSchema.safeParse(devuelta({ causaDevolucion: causa }));
       expect(r.success).toBe(true);
-      if (r.success && r.data.resultado === "devuelta") {
+      if (r.success && r.data.resultado === "novedad") {
         expect(r.data.causaDevolucion).toBe(causa);
         expect(r.data.motivo).toBe(MOTIVO);
       }
@@ -108,7 +108,7 @@ describe("Feature 73 · el motivo SIGUE obligatorio y no lo sustituye la causa (
   });
 
   it("R8: sin causa Y sin motivo -> AMBOS errores por campo en la MISMA respuesta", () => {
-    const r = gestionarSchema.safeParse({ ordenId: "o1", resultado: "devuelta" });
+    const r = gestionarSchema.safeParse({ ordenId: "o1", resultado: "novedad" });
     expect(r.success).toBe(false);
     if (!r.success) {
       const fieldErrors = fieldErrorsDe(r.error);
@@ -121,7 +121,7 @@ describe("Feature 73 · el motivo SIGUE obligatorio y no lo sustituye la causa (
     const crudo = "  no vive aqui  ";
     const r = gestionarSchema.safeParse(devuelta({ motivo: crudo }));
     expect(r.success).toBe(true);
-    if (r.success && r.data.resultado === "devuelta") {
+    if (r.success && r.data.resultado === "novedad") {
       // `motivoSchema` ya hacia trim (feature 36): lo unico que se afirma es que la causa NO
       // se concatena, prefija ni embebe en el texto libre.
       expect(r.data.motivo).toBe(crudo.trim());
@@ -160,7 +160,7 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: 1000,
       metodoPago: "efectivo",
       evidencias: [evidenciaValida()],
@@ -174,7 +174,7 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       motivo: "cliente rechazo",
       evidencias: [evidenciaValida()],
       causaDevolucion: "wrong_address",
@@ -187,7 +187,7 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "reprogramada",
+      resultado: "reprogramado",
       fechaReprogramacion: fechaFuturaISO(),
       motivo: "reagendar",
       causaDevolucion: "wrong_number",
@@ -200,7 +200,7 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
     const entregada = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: 1000,
       metodoPago: "efectivo",
       evidencias: [evidenciaValida()],
@@ -208,14 +208,14 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
     const rechazada = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       motivo: "cliente rechazo",
       evidencias: [evidenciaValida()],
     });
     const reprogramada = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "reprogramada",
+      resultado: "reprogramado",
       fechaReprogramacion: fechaFuturaISO(),
       motivo: "reagendar",
     });

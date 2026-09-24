@@ -1,140 +1,23 @@
 import { z } from "zod";
 
-import type { GestionResultado } from "@prisma/client";
-
-import type { OrderStatusValue } from "@/lib/types/order-status";
-
 // Feature 229 (design §3) — CONTRATO COMPARTIDO del rastreo publico del envio.
 //
-// Modulo de TIPOS + tablas puras. NO importa `repositories/`, `services/`, `@/lib/db` ni
-// `next/headers`: el Client Component del modal importa de aqui las etiquetas de los hitos,
-// y cualquiera de esos imports lo convertiria en codigo de servidor (mismo criterio que
-// `lib/types/tablero-dia.ts:1-8`).
+// Modulo de TIPOS puros. NO importa `repositories/`, `services/`, `@/lib/db` ni `next/headers`:
+// el Client Component del modal importa de aqui sus tipos, y cualquiera de esos imports lo
+// convertiria en codigo de servidor (mismo criterio que `lib/types/tablero-dia.ts:1-8`).
 
 /* -------------------------------------------------------------------------- */
-/* 1. El vocabulario publico (requirements §D2, decision G5)                    */
+/* 1-2. El vocabulario publico: los NOMBRES de estado (FICHA 455, design §4)    */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Los NUEVE hitos firmados en el gate (G5) mas `en_proceso`, que NO es uno de los nueve:
- * es la red de seguridad para filas del historial que referencian un estatus fuera del
- * catalogo vigente (R17, caso real de la feature 155). Se declara aqui, junto a los otros,
- * porque es un valor que el modal tiene que saber pintar.
- */
-export const HITOS_PUBLICOS = [
-  "registrado",
-  "en_bodega",
-  "en_transito",
-  "en_reparto",
-  "entregado",
-  "reprogramado",
-  "no_entregado",
-  "devolucion_en_curso",
-  "devuelto",
-  "en_proceso",
-] as const;
-
-export type HitoPublico = (typeof HITOS_PUBLICOS)[number];
-
-/**
- * R15 — el texto que ve el destinatario. Es lo UNICO que se pinta: ningun
- * `order_status.value` interno cruza la frontera. Copiado literal de la tabla de nueve
- * hitos de `requirements.md` §D2, mas el texto neutral del hito por defecto.
- */
-export const ETIQUETA_POR_HITO: Record<HitoPublico, string> = {
-  registrado: "Envío registrado",
-  en_bodega: "En nuestras instalaciones",
-  en_transito: "En tránsito",
-  en_reparto: "En reparto",
-  entregado: "Entregado",
-  reprogramado: "Entrega reprogramada",
-  no_entregado: "No fue posible entregarlo",
-  devolucion_en_curso: "En devolución a la tienda",
-  devuelto: "Devuelto a la tienda",
-  en_proceso: "En proceso",
-};
-
-/* -------------------------------------------------------------------------- */
-/* 2. El mapeo estatus interno -> hito publico (R16/R17)                        */
-/* -------------------------------------------------------------------------- */
-
-/**
- * R16 — TRANSCRIPCION LITERAL de la tabla firmada de `requirements.md` §D2 (los 20 values
- * de `ORDER_STATUS_SEED`). Esa tabla es la fuente; esto es su copia.
- *
- * El `satisfies Record<OrderStatusValue, HitoPublico>` es TOTAL a proposito (patron de
- * `ORDER_STATUS_LABELS`, `EstatusBadge.tsx:13`, no el parcial de `tablero-dia.ts`): añadir
- * un value al catalogo debe ROMPER EL BUILD aqui, no caer en silencio en el hito neutral.
- *
- * Tres asignaciones son decisiones firmadas y NO se "arreglan" en implementacion:
- *  - `recolectando` -> `registrado` (G6): el mensajero va en camino a la tienda, pero el
- *    paquete todavia no esta con nosotros; decir "en transito" adelantaria un hecho.
- *  - `incidente` -> `no_entregado` (G7): colapsado, sin hito propio; un hito "incidencia"
- *    insinuaria daño o perdida antes de que la tienda hable con el cliente.
- *  - `sin_gestionar` -> `en_reparto` (G8, RIESGO ACEPTADO, design §5.ter): el cliente ve
- *    "En reparto" y no se entera de que su envio se quedo sin gestionar. Es deliberado.
- */
-export const HITO_POR_ESTATUS = {
-  en_preparacion: "registrado",
-  por_recolectar_en_tienda: "registrado",
-  recolectando: "registrado", // G6
-  por_recoger: "en_bodega",
-  en_bodega_central: "en_bodega",
-  en_bodega_satelite: "en_bodega",
-  en_ruta_bodega_central: "en_transito",
-  en_ruta_bodega_satelite: "en_transito",
-  en_reparto: "en_reparto",
-  sin_gestionar: "en_reparto", // G8 — riesgo aceptado (design §5.ter)
-  entregada: "entregado",
-  reprogramada: "reprogramado",
-  devuelta: "no_entregado",
-  rechazada: "no_entregado",
-  incidente: "no_entregado", // G7
-  por_devolver: "devolucion_en_curso",
-  devolviendo_a_bodega_central: "devolucion_en_curso",
-  por_devolver_a_tienda: "devolucion_en_curso",
-  devolviendo_a_tienda: "devolucion_en_curso",
-  devuelta_a_tienda: "devuelto",
-} as const satisfies Record<OrderStatusValue, HitoPublico>;
-
-/**
- * FICHA 454 (2026-09-23, design §11 «Rastreo»; R40) — los hitos de los dos estados RETIRADOS del
- * catalogo. Ya no los tiene ninguna orden viva (M3 las lleva a `en_reparto`), pero el historial es
- * append-only y sus filas se siguen proyectando: se leen EXACTAMENTE como se leian (las dos
- * decisiones firmadas de abajo se conservan). `hitoDeEstatus` lo consulta antes del hito neutral.
- */
-export const HITO_POR_ESTATUS_RETIRADO: Readonly<Record<string, HitoPublico>> = {
-  // Feature 239/R28: el destinatario ve EXACTAMENTE el mismo hito que ve hoy una `devuelta`.
-  // Para el cliente final no ha cambiado nada —el paquete no se le entregó— y quien falta por
-  // confirmar es la bodega, que es asunto interno. Un hito propio le contaría un trámite
-  // nuestro; retrasar el hito hasta la aprobación le escondería un hecho que ya ocurrió.
-  devolucion_por_confirmar: "no_entregado",
-  // Feature 235/R38 (P3 firmada 2026-08-19): EL MISMO HITO QUE `en_reparto`. Para el destinatario
-  // no ha cambiado nada —el paquete sigue con el mensajero— y quien resuelve la incidencia es
-  // asunto interno. Ademas el rastreo COLAPSA LAS RACHAS del mismo hito, asi que el viaje entero
-  // `en_reparto -> ayuda_tienda -> en_reparto` se ve como UNA SOLA entrada «En reparto»: el
-  // destinatario no ve ningun tramite nuestro, ni al pedir ayuda ni al rescatar. Precedente exacto:
-  // `sin_gestionar -> en_reparto`, riesgo aceptado y firmado en la 229 (G8).
-  ayuda_tienda: "en_reparto",
-};
-
-/**
- * R17 — hito NEUTRAL para values huerfanos (fuera del catalogo vigente). El historial es
- * append-only: una fila antigua puede apuntar a un `order_status` retirado del seed
- * (feature 155, `lib/types/order-status.ts:45-53`). Ni se omite la fila, ni se revienta,
- * ni se publica el value crudo.
- */
-export const HITO_POR_DEFECTO: HitoPublico = "en_proceso";
-
-/**
- * R16/R17 — hito de un estatus. Acepta `string` A PROPOSITO (mismo criterio que
- * `bucketDeEstatus`, `lib/types/tablero-dia.ts:66`): el value llega crudo de
- * `order_status.value` y puede estar fuera del catalogo vigente.
- */
-export function hitoDeEstatus(value: string): HitoPublico {
-  const explicito: Partial<Record<string, HitoPublico>> = HITO_POR_ESTATUS;
-  return explicito[value] ?? HITO_POR_ESTATUS_RETIRADO[value] ?? HITO_POR_DEFECTO;
-}
+// FICHA 455 (2026-09-24, design DF/§4; R31-R34). Hasta la 455 el rastreo tenia su propio
+// vocabulario: nueve HITOS («Envío registrado», «En nuestras instalaciones», «En tránsito»…) y un
+// mapa estado -> hito (`HITO_POR_ESTATUS`, con sus retirados y un hito neutral «En proceso»). El
+// humano pidio transparencia total: el destinatario ve los MISMOS nombres que la app interna. Asi
+// que los hitos desaparecen y cada entrada de la linea es el NOMBRE VISIBLE de un estado, leido de
+// la fuente unica con `nombrePublicoDeEstado` (`lib/types/order-status.ts`): un estado retirado se
+// pliega a su vigente equivalente (R34) y un codigo desconocido se lee «Estado no reconocido»
+// (R10). Ningun codigo cruza la frontera (R32).
 
 /* -------------------------------------------------------------------------- */
 /* 3. Entrada del borde publico (design §3.1)                                   */
@@ -166,54 +49,35 @@ export type ConsultaRastreo = z.infer<typeof consultaRastreoSchema>;
 /* 4. Salida: lista blanca CERRADA de cuatro campos (R22, G11/G13)              */
 /* -------------------------------------------------------------------------- */
 
-export interface HitoPublicoEntrada {
-  /** Vocabulario publico, nunca el value interno (R15). */
-  readonly hito: HitoPublico;
+export interface EntradaLineaPublica {
+  /**
+   * El NOMBRE VISIBLE del estado de ese tramo (FICHA 455, R31), nunca su codigo (R32). En la entrada
+   * `pendiente`, el nombre del RESULTADO pendiente (`nombreDeResultado`), que la pagina pinta como
+   * «<Resultado> · pendiente de confirmación» (R33).
+   */
+  readonly nombre: string;
   /** Dia Y hora (G12) en la zona horaria del negocio, resuelta por configuracion (R19). */
   readonly fecha: string;
   /**
-   * FICHA 454 (design §12.3; R31) — SOLO en la ULTIMA entrada, y solo cuando la orden tiene una
-   * gestion pendiente de confirmar: el hito de su resultado todavia no esta confirmado. La pagina lo
-   * pinta como «<hito> — pendiente de confirmacion». AUSENTE (no `false`) en las entradas
-   * confirmadas, para que su forma siga siendo exactamente `{ hito, fecha }`.
+   * FICHA 454 (R31) / 455 (R33) — SOLO en la ULTIMA entrada, y solo cuando la orden tiene una
+   * gestion pendiente de confirmar. AUSENTE (no `false`) en las entradas confirmadas, para que su
+   * forma siga siendo exactamente `{ nombre, fecha }`.
    */
   readonly pendiente?: true;
-  /**
-   * FICHA 454 (R31, decision del humano 2026-09-24, prevalece sobre §12.3 del design) — SOLO en la
-   * entrada `pendiente`: el NOMBRE VISIBLE del resultado pendiente (`Entregada`, `Reprogramada`,
-   * `Devuelta`, `Rechazada`, `Incidente`), para que la pagina diga «<Resultado> · pendiente de
-   * confirmación» y no el hito («No entregado»). Es texto, no un codigo: sale de
-   * `NOMBRE_RESULTADO_PENDIENTE`. AUSENTE en las entradas confirmadas.
-   */
-  readonly nombreResultado?: string;
 }
-
-/**
- * FICHA 454 (R31) — el nombre visible de cada resultado de gestion, el MISMO que el chip de estado
- * de las pantallas internas (`ORDER_STATUS_LABELS` del estado al que la aprobacion lo aplica,
- * `ESTATUS_POR_RESULTADO`). Vive aqui y no se importa de alli porque `lib/` no puede importar de
- * `app/`: es una copia DECLARADA de cinco nombres, atada a su fuente por
- * `tests/unit/types/rastreo-publico.nombre-resultado.test.ts` (si uno cambia sin el otro, rojo).
- * La 455 (design DA) mueve la fuente unica de nombres a `lib/types/order-status.ts`; entonces esta
- * tabla pasa a derivarse de ella.
- */
-export const NOMBRE_RESULTADO_PENDIENTE = {
-  entregada: "Entregada",
-  reprogramada: "Reprogramada",
-  devuelta: "Devuelta",
-  rechazada: "Rechazada",
-  incidente: "Incidente",
-} as const satisfies Record<GestionResultado, string>;
 
 /**
  * R22 — CUATRO campos y ninguno mas. Cualquier campo no declarado es una fuga, no una
  * mejora: la lista blanca es el mecanismo (R23/G14), no la buena intencion.
+ *
+ * FICHA 455 (R31/R32): `hitoVigente` pasa a `nombreVigente` (el nombre del ultimo tramo) y la linea
+ * lleva nombres de estado en vez de hitos.
  */
 export interface RastreoPublicoDTO {
   readonly numGuia: number;
-  readonly hitoVigente: HitoPublico;
+  readonly nombreVigente: string;
   readonly actualizadoEn: string;
-  readonly linea: readonly HitoPublicoEntrada[];
+  readonly linea: readonly EntradaLineaPublica[];
 }
 
 /**

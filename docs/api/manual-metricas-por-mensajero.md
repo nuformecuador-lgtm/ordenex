@@ -55,7 +55,8 @@ ese momento, así que no necesitás consultar nada después.
 "data": {
   "numGuia": 100235,
   "numRemision": "REM-0002",
-  "estado": "entregada",
+  "estado": "entregado",
+  "estadoNombre": "Entregado",
   "motivo": null,
   "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" }
 }
@@ -87,8 +88,8 @@ Acumulá por `data.mensajero.id` y por `data.estado`.
 2. **`mensajero: null` significa «todavía nadie la lleva»**, no «no se sabe». La clave **viaja
    siempre**: ramificá por su valor, no por si la clave existe.
 3. **Es quién la LLEVA, no quién la entregó.** Hay flujos que limpian la asignación (generar guía,
-   quitar mensajero, devolución a bodega, liberar una reprogramada, el barrido del cierre diario).
-   En la práctica: una orden **entregada o devuelta conserva** su mensajero —así que esta métrica
+   quitar mensajero, devolución a bodega, liberar una orden en `reprogramado`, el barrido del cierre diario).
+   En la práctica: una orden en **`entregado` o en `novedad` conserva** su mensajero —así que esta métrica
    funciona—, pero una orden vieja barrida por el cierre puede aparecer con `null` aunque alguien
    la llevara.
 
@@ -116,15 +117,19 @@ donde `{id}` es el **número de guía** o el **número de remisión**.
 "gestiones": [
   {
     "createdAt": "2026-09-02T15:41:07.000Z",
-    "resultado": "reprogramada",
-    "estadoResultante": "reprogramada",
+    "resultado": "reprogramado",
+    "resultadoNombre": "Reprogramado",
+    "estadoResultante": "reprogramado",
+    "estadoResultanteNombre": "Reprogramado",
     "motivo": null,
     "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" }
   },
   {
     "createdAt": "2026-09-04T18:02:55.000Z",
-    "resultado": "devuelta",
+    "resultado": "novedad",
+    "resultadoNombre": "Novedad",
     "estadoResultante": "devolucion_por_confirmar",
+    "estadoResultanteNombre": "Devolución por confirmar (estado retirado)",
     "motivo": "wrong_address",
     "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000bb", "nombre": "Ana Solís Vargas" }
   }
@@ -134,8 +139,9 @@ donde `{id}` es el **número de guía** o el **número de remisión**.
 - **Tiempos**: restá los `createdAt` consecutivos, o el primero contra la fecha de creación de la
   orden. Vienen en UTC con formato ISO.
 - **Reintentos**: contá elementos —leyendo antes la advertencia de abajo.
-- La clave **viaja siempre**; una orden sin gestionar trae `"gestiones": []`, nunca `null`.
-- Las **cinco** claves de cada elemento están siempre presentes, con `null` donde no aplica.
+- La clave **viaja siempre**; una orden que todavía no tiene gestiones trae `"gestiones": []`, nunca `null`.
+- Las **ocho** claves de cada elemento están siempre presentes, con `null` donde no aplica (cada código
+  viaja con su nombre visible al lado: `resultadoNombre`, `estadoResultanteNombre`).
 - Llega **completo y sin paginar**. Sobre datos reales el máximo en una orden son 5 y el promedio
   1,4, así que el cuerpo crece unos cientos de bytes en el peor caso.
 
@@ -154,8 +160,9 @@ se ven **idénticas** a una visita de calle. Si tu métrica es «tiempo por mens
 cuenta: no todas las entradas son una visita física de esa persona.
 
 **3. `estadoResultante` no se deduce del `resultado`.** Es el estado en que **esa** gestión dejó la
-orden. El caso que más confunde: una gestión `devuelta` deja la orden en `devolucion_por_confirmar`,
-**no** en `devuelta` — es la aprobación posterior del cierre la que la mueve. Puede llegar `null` en
+orden. El caso que más confunde: una gestión registrada deja la orden `en_reparto` —pendiente de
+confirmar, con `estadoResultante: null`— y es la aprobación posterior del cierre la que la mueve (en
+gestiones anteriores al 2026-09-23 puede verse `devolucion_por_confirmar`, un estado retirado). Puede llegar `null` en
 gestiones antiguas, y se publica **sin lista cerrada de valores**: tratá un valor desconocido como
 texto, no como error.
 
@@ -169,13 +176,13 @@ gestiones, no tienen mensajero atribuido). Las fotos de esos incidentes sí sigu
 
 Lo que recibís es un valor de una lista cerrada:
 
-| En una devolución | En un incidente |
+| En una `novedad` | En un incidente |
 |---|---|
 | `not_found` | `danado` (sin eñe) |
 | `wrong_number` | `perdido` |
 | `wrong_address` | `robado` |
 
-En cualquier otro `resultado` —`entregada`, `reprogramada`, `rechazada`— es `null`. También es
+En cualquier otro `resultado` —`entregado`, `reprogramado`, `devolucion_a_origen_por_rechazo`— es `null`. También es
 `null` en devoluciones e incidentes **antiguos**, anteriores a que empezáramos a pedir la causa: ese
 histórico no se rellenó, y el contrato **no distingue** «no hubo causa» de «no se registró».
 
@@ -273,7 +280,7 @@ congeló al cerrar y ya no cambia: archivá ese.
 campos responden a la misma pregunta —«¿cuánto cuesta este paquete si se entrega?»— y difieren solo
 en qué tarifa los alimenta.
 
-Si la orden terminó **rechazada**, lo que se te factura es el **flete de devolución y su IVA**, que
+Si la orden terminó en **`devolucion_a_origen_por_rechazo`**, lo que se te factura es el **flete de devolución y su IVA**, que
 son conceptos distintos y que **no** son estos importes. Ese escenario lo sirve la cotización
 (`POST /api/ordenes/api-key/cotizacion`), en su bloque `devuelto`.
 

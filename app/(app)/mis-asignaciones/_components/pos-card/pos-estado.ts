@@ -1,63 +1,99 @@
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { nombreDeEstado } from "@/lib/types/order-status";
 
-// POS card · configuración de PRESENTACIÓN del badge de estado, compartida por las
-// vistas compactas (mosaico y detalle). Equivale al `statusConfig` de la referencia:
-// una etiqueta y sus clases de color, sin lógica de negocio. La `PosOrderCard` grande
-// no lo usa (su badge va sólido en la cabecera navy); vive aquí para que mosaico y
-// detalle pinten EXACTAMENTE el mismo lenguaje de color y no diverjan.
+// POS card · configuración de PRESENTACIÓN del chip de estado y de las marcas de la card,
+// compartida por las tres vistas (grande, mosaico y detalle) para que pinten EXACTAMENTE el
+// mismo lenguaje de texto y color.
+//
+// FICHA 455 (2026-09-24, design §2.1; R7, R8, R12). Hasta la 455 el chip era un RÓTULO que la
+// card derivaba de sus flags («En gestión», «En detalle», «En reparto») o que el consumidor le
+// pasaba fijo («Por recoger», «En ayuda», «Por recolectar», «Recolectada»), y el color se buscaba
+// POR ESE TEXTO. Ahora:
+//   - el chip dice SIEMPRE el nombre visible del estado de la orden (`nombreDeEstado`, R7), aunque
+//     la card esté activa o abierta en detalle (R8);
+//   - la condición de la INTERFAZ (activa / abierta en detalle) va en una MARCA aparte, con un
+//     texto que no es nombre de ningún estado («Gestionando ahora», «Abierta en detalle», R8/R6);
+//   - el consumidor puede añadir una NOTA propia (la ayuda de la 454, la causa de la novedad) que
+//     también va fuera del chip;
+//   - los colores se indexan por CÓDIGO de estado o por la CLAVE de la marca, nunca por el texto
+//     visible (R12).
 
 /**
- * Etiqueta de estado que `estadoPorDefecto` DERIVA de los flags del módulo. No es el censo
- * de todo lo que las cards saben pintar: el consumidor puede pasar su propio rótulo por la
- * prop `estado` —«En ayuda» lo hace (feature 235/R37)— y esos no entran aquí, porque esta
- * unión es lo que la función de abajo puede devolver y anunciarle un valor que nunca sale
- * de ella sería falso. Por eso `estadoBadgeClass` recibe `string` y no esta unión.
+ * Colores del chip por CÓDIGO de estado (R12). Chips SÓLIDOS (feature 208): `navy`/`warning` son
+ * tokens fijos del `@theme` (fijo-sobre-fijo: blanco sobre `bg-navy` 13.2:1, `text-navy` sobre
+ * `bg-warning` 8.1:1 en los dos temas). Parcial a propósito: lo que no figura cae al color por
+ * defecto, que es el que la card siempre dio al estado que más pinta (`en_reparto`).
  */
-export type PosEstado = "En gestión" | "En detalle" | "En reparto" | "Por recoger";
-
-/**
- * Clases del badge para cada estado (fondo + texto), sobre fondo de card.
- *
- * Feature 208 — estos `navy` se CONSERVAN a propósito: son chips SÓLIDOS, es decir
- * superficie fija con tinta fija encima ("Regla" de DESIGN.md). Medido: blanco sobre
- * `bg-navy` = 13.2:1 y `text-navy` sobre `bg-warning` = 8.1:1, idénticos en los dos
- * temas porque ninguno de los dos colores gira. Lo que sí se migró en esta card fue
- * el navy usado como LÍNEA o TINTA sobre la card (ver `PosCardHeader`, `PosAmountRow`).
- */
-const ESTADO_CLASSNAME: Record<string, string> = {
-  "En gestión": "bg-brand text-white",
-  "En detalle": "bg-navy text-white",
-  "En reparto": "bg-warning text-navy",
-  "Por recoger": "bg-secondary text-secondary-foreground",
-  // Feature 235 (R37) — chip de la card de «Con ayuda solicitada» (`RepartoModule`). Por qué
-  // `warning`: es la familia que este repo da a los estados de ESPERA CON ACCIÓN PENDIENTE, la
-  // misma que `EstatusBadge` asigna a `ayuda_tienda` y la del `text-warning-strong` del
-  // encabezado de esa sección; ni `danger` (no hay fallo) ni `info` (no es un aviso pasivo). Va
-  // SÓLIDO como sus cuatro vecinos —`warning` y `navy` son tokens fijos del `@theme`, o sea
-  // fijo-sobre-fijo y los 8.1:1 de arriba—, no en el tratamiento suave de `Badge variant="warning"`
-  // (`bg-warning-soft text-warning-strong`): misma familia, distinto tratamiento.
-  // Y por qué tiene entrada PROPIA aunque coincida con el fallback: el fallback significa «no sé
-  // qué es este rótulo», así que apoyar en él una decisión de color la vuelve indistinguible de un
-  // accidente y la movería EN SILENCIO el día que alguien retoque «En reparto».
-  "En ayuda": "bg-warning text-navy",
+const CLASE_CHIP_POR_CODIGO: Partial<Record<string, string>> = {
+  en_reparto: "bg-warning text-navy",
+  // Antes «Por recoger»: la orden todavía no sale; tratamiento neutro de siempre.
+  mensajero_recogiendo_en_bodega: "bg-secondary text-secondary-foreground",
 };
 
-/** Clases del badge para `estado`; cae a las de "En reparto" si es un texto libre. */
-export function estadoBadgeClass(estado: string): string {
-  return ESTADO_CLASSNAME[estado] ?? ESTADO_CLASSNAME["En reparto"];
+/** Color por defecto del chip (el de `en_reparto`). */
+const CLASE_CHIP_POR_DEFECTO = "bg-warning text-navy";
+
+/** Clases del chip de estado para un CÓDIGO de estado (R12). */
+export function claseChipEstado(estatusValue: string): string {
+  return CLASE_CHIP_POR_CODIGO[estatusValue] ?? CLASE_CHIP_POR_DEFECTO;
+}
+
+/** El texto del chip: el nombre visible del estado de la orden (R7, R8). */
+export function textoChipEstado(orden: Pick<MiAsignacionDTO, "estatusValue">): string {
+  return nombreDeEstado(orden.estatusValue);
+}
+
+/** Las condiciones de la INTERFAZ que la card anuncia fuera del chip (R8). */
+export type MarcaTarjeta = "activa" | "detalle";
+
+/**
+ * R8/R6 — el texto de cada marca. Ninguno es un nombre de estado vigente ni retirado (lo vigila la
+ * guardia G2 y el test de la card).
+ */
+export const TEXTO_MARCA_TARJETA: Record<MarcaTarjeta, string> = {
+  activa: "Gestionando ahora",
+  detalle: "Abierta en detalle",
+};
+
+/** Colores de cada marca, por su CLAVE (R12): los que tenían «En gestión» y «En detalle». */
+const CLASE_MARCA_TARJETA: Record<MarcaTarjeta, string> = {
+  activa: "bg-brand text-white",
+  detalle: "bg-navy text-white",
+};
+
+/** Color de la nota que pone el consumidor (ayuda, causa): la familia de espera con acción. */
+const CLASE_NOTA = "bg-warning-soft text-warning-strong";
+
+/**
+ * La marca de la card, derivada de los flags del módulo: activa (puntero 1-a-1 fijado) > abierta en
+ * el panel de detalle > ninguna.
+ */
+export function marcaPorDefecto(esActiva: boolean, esDetalle: boolean): MarcaTarjeta | null {
+  if (esActiva) return "activa";
+  if (esDetalle) return "detalle";
+  return null;
+}
+
+/** Una marca pintable: texto + clases. */
+export interface MarcaPintable {
+  readonly texto: string;
+  readonly clase: string;
 }
 
 /**
- * Etiqueta de estado por defecto de una card, derivada de los flags del módulo:
- * activa (puntero 1-a-1 fijado) > en el panel de detalle > en reparto.
+ * Las marcas que la card pinta junto al chip, en orden: la de la interfaz (si la hay) y la nota del
+ * consumidor (si la hay).
  */
-export function estadoPorDefecto(
+export function marcasDeTarjeta(
   esActiva: boolean,
   esDetalle: boolean,
-): PosEstado {
-  if (esActiva) return "En gestión";
-  if (esDetalle) return "En detalle";
-  return "En reparto";
+  nota: string | undefined,
+): MarcaPintable[] {
+  const marcas: MarcaPintable[] = [];
+  const marca = marcaPorDefecto(esActiva, esDetalle);
+  if (marca !== null) marcas.push({ texto: TEXTO_MARCA_TARJETA[marca], clase: CLASE_MARCA_TARJETA[marca] });
+  if (nota) marcas.push({ texto: nota, clase: CLASE_NOTA });
+  return marcas;
 }
 
 /** Texto corto de la parada en la ruta ("3" o "·" si aún no tiene posición). */

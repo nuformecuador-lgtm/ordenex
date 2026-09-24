@@ -21,7 +21,7 @@ describeSiHayBase("454/C18 — multi-dia: cada aprobacion toca solo lo suyo (Pos
     return conEscenario(mundo, async (e) => {
       const o1 = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 2000 });
       const a = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 3000 });
-      const g1 = await e.gestionarOk(o1.ordenId, "entregada", { monto: 2000 });
+      const g1 = await e.gestionarOk(o1.ordenId, "entregado", { monto: 2000 });
       await e.correrCorte(new Date());
       const c1 = await e.tx.cierreDia.findFirst({
         where: { mensajeroId: e.mensajeroId, estado: "vencido" },
@@ -31,7 +31,7 @@ describeSiHayBase("454/C18 — multi-dia: cada aprobacion toca solo lo suyo (Pos
       const resolicitud = await e.solicitarCierre();
 
       const o2 = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 4000 });
-      await e.gestionarOk(o2.ordenId, "entregada", { monto: 4000 });
+      await e.gestionarOk(o2.ordenId, "entregado", { monto: 4000 });
       const c2 = await e.solicitarCierreOk();
 
       const aprobC2 = await e.aprobar(c2);
@@ -63,8 +63,8 @@ describeSiHayBase("454/C18 — multi-dia: cada aprobacion toca solo lo suyo (Pos
     expect(r.aprobC2).toBe("ok");
   });
 
-  it("aprobar C2 no toca A (sigue `sin_gestionar` con su mensajero) ni g1 (sigue en C1, sin dinero)", () => {
-    expect(estatus(r.trasC2.a)).toBe("sin_gestionar");
+  it("aprobar C2 no toca A (sigue `novedad_interna` con su mensajero) ni g1 (sigue en C1, sin dinero)", () => {
+    expect(estatus(r.trasC2.a)).toBe("novedad_interna");
     expect(r.trasC2.a.mensajeroAsignadoId).toBe(r.mensajeroId);
     expect(r.trasC2.g1.cierreId).toBe(r.c1);
     expect(r.trasC2.c1Estado).toBe("solicitado");

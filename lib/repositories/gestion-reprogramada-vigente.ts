@@ -34,7 +34,7 @@ import type { PrismaClient } from "@prisma/client";
  * `resultado` de la gestion que fija una fecha de reprogramacion (feature 36). Se declara aqui
  * porque forma parte de la correlacion; los repositorios lo importan en vez de re-escribirlo.
  */
-export const RESULTADO_REPROGRAMADA = "reprogramada";
+export const RESULTADO_REPROGRAMADA = "reprogramado";
 
 /**
  * LA CORRELACION, como argumentos de Prisma listos para expandir con `...`.

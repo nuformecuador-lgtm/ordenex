@@ -3,7 +3,7 @@ titulo: Reparto
 modulo: mis-asignaciones
 pantalla: /mis-asignaciones/reparto
 roles: [mensajero]
-actualizado: 2026-09-15
+actualizado: 2026-09-24
 fuentes:
   - app/(app)/mis-asignaciones/_components/RepartoModule.tsx
   - app/(app)/mis-asignaciones/_components/chat/ChatFlotante.tsx
@@ -20,7 +20,7 @@ fuentes:
 Aquí están los paquetes que **ya llevás encima** y tenés que entregar hoy. Es tu pantalla de trabajo
 del día: desde acá ves la ruta, le escribís al cliente y registrás lo que pasó con cada entrega.
 
-Los paquetes que todavía no recogiste no están acá — esos viven en **Por recoger**.
+Los paquetes que todavía no recogiste no están acá — esos viven en **Recoger en bodega**.
 
 ## Qué vas a ver
 
@@ -57,8 +57,8 @@ también los paquetes que todavía no recogiste, en sus propios grupos:
 | Grupo | Qué hay ahí |
 | --- | --- |
 | **En reparto** | Lo que ya llevás encima |
-| **Para recoger hoy** | Asignadas, todavía en bodega, las podés recoger hoy |
-| **Para otro día** | Asignadas y reservadas para una fecha posterior |
+| **Para recoger hoy** | Asignados, todavía en bodega, los podés recoger hoy |
+| **Para otro día** | Asignados y reservados para una fecha posterior |
 
 Podés escribirle al cliente **desde que te la asignan**, sin esperar a recogerla. Conversar no es
 aceptar el paquete: la orden se queda donde está y la seguís recogiendo cuando te toque.
@@ -100,6 +100,6 @@ cálculo. Tocá **Sincronizar ruta** y se pone al día.
 
 ## Lo que esta pantalla NO hace
 
-- **No se recogen paquetes acá.** Eso es en **Por recoger**. Que un paquete por recoger te aparezca
+- **No se recogen paquetes acá.** Eso es en **Recoger en bodega**. Que un paquete para recoger te aparezca
   en el chat no cambia eso: ahí se conversa, no se recoge.
 - **No se ve la plata.** Tus pagos y tu cierre del día están en **Mi wallet** y en **Cierre del día**.

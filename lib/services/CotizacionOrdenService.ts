@@ -403,17 +403,17 @@ function calcularEscenarios(
 ): { entregado: MontosEntregado; devuelto: MontosDevuelto } {
   const input = { ...geo, montoCobrar, cobraComision: COBRA_COMISION };
 
-  const entregada = derivarIngresoOrden({ ...input, resultado: "entregada" }, tarifa);
+  const escenarioEntrega = derivarIngresoOrden({ ...input, resultado: "entregado" }, tarifa);
   // Ficha 301: `rechazada` es el resultado que factura el retorno (ver el bloque de arriba).
-  const devuelta = derivarIngresoOrden({ ...input, resultado: "rechazada" }, tarifa);
+  const escenarioDevolucion = derivarIngresoOrden({ ...input, resultado: "devolucion_a_origen_por_rechazo" }, tarifa);
 
-  const flete = entregada.ingreso_flete ?? cero();
-  const iva = entregada.ingreso_iva_flete ?? cero();
-  const comision = entregada.ingreso_comision_cod ?? cero();
-  const ivaComision = entregada.ingreso_iva_comision_cod ?? cero();
+  const flete = escenarioEntrega.ingreso_flete ?? cero();
+  const iva = escenarioEntrega.ingreso_iva_flete ?? cero();
+  const comision = escenarioEntrega.ingreso_comision_cod ?? cero();
+  const ivaComision = escenarioEntrega.ingreso_iva_comision_cod ?? cero();
 
-  const fleteDevolucion = devuelta.ingreso_flete_devolucion ?? cero();
-  const ivaDevolucion = devuelta.ingreso_iva_flete_devolucion ?? cero();
+  const fleteDevolucion = escenarioDevolucion.ingreso_flete_devolucion ?? cero();
+  const ivaDevolucion = escenarioDevolucion.ingreso_iva_flete_devolucion ?? cero();
 
   // FULFILLMENT (2026-08-25): NO sale de `derivarIngresoOrden` —sigue fuera de la formula de
   // liquidacion— sino de la tarifa directamente, y entra igual en los DOS escenarios. Cero si
@@ -441,7 +441,7 @@ function calcularEscenarios(
       iva: ivaDevolucion,
       // R28: el cero de la comision se AFIRMA aqui. `derivarIngresoOrden` no emite comision
       // para una devolucion (no hubo recaudo), y esa ausencia se publica como cero explicito.
-      comision: devuelta.ingreso_comision_cod ?? cero(),
+      comision: escenarioDevolucion.ingreso_comision_cod ?? cero(),
       fulfillment,
       // R31/D1: la DEUDA de la tienda = el negativo de (flete + IVA + fulfillment) de la
       // devolucion. El fulfillment suma a la deuda porque el servicio ya se presto.

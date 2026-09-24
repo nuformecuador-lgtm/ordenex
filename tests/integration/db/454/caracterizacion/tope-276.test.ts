@@ -94,7 +94,7 @@ describeSiHayBase("454/C04 — tope de intentos al aprobar (Postgres real)", () 
 
   it("precondicion: O tiene exactamente el umbral de intentos y O' uno menos, y el corte barrio las dos", () => {
     expect(r.intentosAntes).toEqual({ tope: UMBRAL, bajo: UMBRAL - 1 });
-    expect(r.trasCorte).toEqual({ tope: "sin_gestionar", bajo: "sin_gestionar" });
+    expect(r.trasCorte).toEqual({ tope: "novedad_interna", bajo: "novedad_interna" });
     expect(r.aprobacion.status).toBe("ok");
   });
 
@@ -110,7 +110,7 @@ describeSiHayBase("454/C04 — tope de intentos al aprobar (Postgres real)", () 
   it("O en el tope: UNA gestion sintetica `rechazada`, sin cierre, del mensajero, con el motivo fijo", () => {
     expect(r.sinteticas).toHaveLength(1);
     expect(r.sinteticas[0]).toMatchObject({
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       motivo: MOTIVO_RECHAZO_TOPE_INTENTOS,
       mensajeroId: r.mensajeroId,
     });

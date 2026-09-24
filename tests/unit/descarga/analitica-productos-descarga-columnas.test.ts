@@ -51,8 +51,8 @@ const FILA: FilaProductoDTO = {
   unidades: 19,
   ordenes: 16,
   porStatus: [
-    { status: "entregada", conteo: 8 },
-    { status: "rechazada", conteo: 6 },
+    { status: "entregado", conteo: 8 },
+    { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
     { status: EN_CURSO, conteo: 2 },
   ],
   ordenesAcompanadas: 0,
@@ -83,18 +83,20 @@ describe("FICHA 345 · columnas del archivo de productos (R48)", () => {
   });
 
   it("los ONCE encabezados salen en este orden y con la unidad dicha donde hace falta", () => {
+    // ⏳ 2026-09-24 (FICHA 455, R5/R6): las columnas de UN desenlace llevan su nombre exacto
+    // («Entregado», «Devolución a origen por rechazo») y la del grupo sin desenlace, su rótulo propio.
     expect(COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS.map((c) => c.encabezado)).toEqual([
       "Tienda",
       "Producto",
       "Unidades",
       "Órdenes",
-      "Entregadas",
-      "Rechazadas",
+      "Entregado",
+      "Devolución a origen por rechazo",
       // FICHA 346 — el MISMO rótulo que la pantalla: el archivo se abre al lado de la tabla y
       // dos nombres para la misma cifra se leen como dos cifras distintas.
       "Otros resultados",
       "Otros resultados (detalle)",
-      "En proceso",
+      "Sin desenlace todavía",
       // La unidad va en el encabezado porque la celda lleva PUNTOS, no la fracción.
       "Efectividad de entrega (%)",
       "Rechazo (%)",
@@ -155,8 +157,8 @@ describe("FICHA 345 · la proyección de una fila", () => {
       ...FILA,
       ordenes: 29,
       porStatus: [
-        { status: "entregada", conteo: 20 },
-        { status: "devuelta", conteo: 5 },
+        { status: "entregado", conteo: 20 },
+        { status: "novedad", conteo: 5 },
         { status: EN_CURSO, conteo: 4 },
       ],
     });
@@ -170,8 +172,8 @@ describe("FICHA 345 · la proyección de una fila", () => {
     const unTercio = filaDescargaAnaliticaProductos({
       ...FILA,
       porStatus: [
-        { status: "entregada", conteo: 1 },
-        { status: "rechazada", conteo: 2 },
+        { status: "entregado", conteo: 1 },
+        { status: "devolucion_a_origen_por_rechazo", conteo: 2 },
       ],
     });
     expect(unTercio.efectividad).toBe(33.3);
@@ -197,10 +199,10 @@ describe("FICHA 346 · la fila del archivo SUMA", () => {
     unidades: 29,
     ordenes: 24,
     porStatus: [
-      { status: "entregada", conteo: 3 },
-      { status: "rechazada", conteo: 2 },
-      { status: "devuelta", conteo: 4 },
-      { status: "reprogramada", conteo: 2 },
+      { status: "entregado", conteo: 3 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 2 },
+      { status: "novedad", conteo: 4 },
+      { status: "reprogramado", conteo: 2 },
       { status: EN_CURSO, conteo: 13 },
     ],
   };
@@ -302,11 +304,11 @@ describe("FICHA 347 · columnas del archivo con dinero concedido (R66/R68)", () 
       "Producto",
       "Unidades",
       "Órdenes",
-      "Entregadas",
-      "Rechazadas",
+      "Entregado",
+      "Devolución a origen por rechazo",
       "Otros resultados",
       "Otros resultados (detalle)",
-      "En proceso",
+      "Sin desenlace todavía",
       "Efectividad de entrega (%)",
       "Rechazo (%)",
       // R49 — LA MARCA VA EN EL ENCABEZADO porque el párrafo de la pantalla NO viaja con el
@@ -567,20 +569,20 @@ describe("FICHA 347 · la proyección con dinero", () => {
       {
         ...FILA_CON_DINERO,
         porStatus: [
-          { status: "entregada", conteo: 3 },
-          { status: "devuelta", conteo: 4 },
-          { status: "reprogramada", conteo: 2 },
+          { status: "entregado", conteo: 3 },
+          { status: "novedad", conteo: 4 },
+          { status: "reprogramado", conteo: 2 },
         ],
       },
       true,
     );
 
     expect(fila.otros_resultados).toBe(6);
-    expect(fila.otros_resultados_detalle).toBe("4 devueltas · 2 reprogramadas");
+    expect(fila.otros_resultados_detalle).toBe("Novedad: 4 · Reprogramado: 2");
     // Y NO hay una columna por desenlace: ni `devuelta`, ni `reprogramada`, ni `incidente`.
     const claves = COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO.map((c) => c.clave);
-    expect(claves).not.toContain("devuelta");
-    expect(claves).not.toContain("reprogramada");
+    expect(claves).not.toContain("novedad");
+    expect(claves).not.toContain("reprogramado");
     expect(claves).not.toContain("incidente");
   });
 });

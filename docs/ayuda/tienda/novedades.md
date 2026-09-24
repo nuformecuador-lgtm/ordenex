@@ -3,7 +3,7 @@ titulo: Novedades
 modulo: novedades
 pantalla: /novedades
 roles: [adminTienda]
-actualizado: 2026-09-15
+actualizado: 2026-09-24
 fuentes:
   - app/(app)/novedades/_components/NovedadesTabs.tsx
   - app/(app)/novedades/_components/NovedadesModule.tsx
@@ -24,9 +24,11 @@ Si no entrás nunca acá, esas órdenes se quedan quietas. Conviene revisarla to
 **Ayuda solicitada.** El mensajero no pudo entregar y pide que intervengas: el teléfono no contesta,
 la dirección no aparece, el cliente no estaba. Vos tenés el dato que falta.
 
-**En devolución.** Órdenes que van de vuelta hacia vos, con la causa por la que no se entregaron.
+**Novedad.** Órdenes en estado **Novedad**: el mensajero no pudo entregarlas, y aparecen con la causa.
+Vos decidís si se vuelve a intentar o se devuelven.
 
-**Rechazadas por plazo vencido.** Las que se pasaron del plazo sin resolverse. Es una lista de consulta:
+**Devolución a origen por plazo vencido.** Las que se pasaron del plazo sin resolverse y pasaron a
+**Devolución a origen por rechazo**. Es una lista de consulta:
 se mira para saber qué pasó, no se actúa desde ahí.
 
 ## Qué podés hacer
@@ -48,7 +50,7 @@ El buscador y los filtros funcionan dentro de la lista en la que estés: podés 
 
 Cada lista tiene además un filtro propio:
 
-- En **En devolución**: la **causa de devolución**.
+- En **Novedad**: la **causa de devolución**.
 - En **Ayuda solicitada**: **sin intentos de contacto** — las que el mensajero todavía no intentó
   contactar. Suelen ser las más fáciles de resolver.
 

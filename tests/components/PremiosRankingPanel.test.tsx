@@ -146,7 +146,7 @@ describe("R5 — `entregadas / asignadas` está SIEMPRE, también cuando vale ce
 
     const fila = await waitFor(() => filaDe("Kevin Rojas"));
     // El caso del 26/08: el podio lo decidió el orden alfabético y el premio se ofrece igual.
-    expect(within(fila).getByText("0 / 21 entregadas")).toBeInTheDocument();
+    expect(within(fila).getByText("0 / 21 entregados")).toBeInTheDocument();
     // Y NO se sustituye por el marcador de «sin dato» de esta pantalla.
     expect(within(fila).queryByText("—")).not.toBeInTheDocument();
     // El dato está en la MISMA fila que el premio y que el botón: no en otra pestaña ni en un
@@ -161,16 +161,16 @@ describe("R5 — `entregadas / asignadas` está SIEMPRE, también cuando vale ce
     montar();
 
     await waitFor(() => filaDe("Kevin Rojas"));
-    expect(within(filaDe("Kevin Rojas")).getByText("0 / 21 entregadas")).toBeInTheDocument();
-    expect(within(filaDe("Ana Mora")).getByText("14 / 20 entregadas")).toBeInTheDocument();
-    expect(within(filaDe("Luis Vargas")).getByText("11 / 19 entregadas")).toBeInTheDocument();
+    expect(within(filaDe("Kevin Rojas")).getByText("0 / 21 entregados")).toBeInTheDocument();
+    expect(within(filaDe("Ana Mora")).getByText("14 / 20 entregados")).toBeInTheDocument();
+    expect(within(filaDe("Luis Vargas")).getByText("11 / 19 entregados")).toBeInTheDocument();
   });
 
   it("una fila SIN premio también lo lleva: el par no depende de que haya premio", async () => {
     montar();
 
     const fila = await waitFor(() => filaDe("Ana Mora"));
-    expect(within(fila).getByText("14 / 20 entregadas")).toBeInTheDocument();
+    expect(within(fila).getByText("14 / 20 entregados")).toBeInTheDocument();
     expect(within(fila).getByText(/sin premio/i)).toBeInTheDocument();
   });
 });

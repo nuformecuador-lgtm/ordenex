@@ -81,7 +81,7 @@ const DATOS_BASE: DatosEntregaOrden = {
 
 /** Feature 256 — datos de una orden que transiciona a `devuelta` con su causa vigente. */
 function datosDevuelta(causaDevolucion: CausaDevolucion | null): DatosEntregaOrden {
-  return { ...DATOS_BASE, estado: "devuelta", causaDevolucion };
+  return { ...DATOS_BASE, estado: "novedad", causaDevolucion };
 }
 
 /** ⏳ 2026-08-22 (268) — datos de una orden que transiciona a `incidente` con su causa vigente. */
@@ -233,6 +233,7 @@ describe("R17/R19 — entrega y complete", () => {
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
     ]);
@@ -240,6 +241,7 @@ describe("R17/R19 — entrega y complete", () => {
       numGuia: 12345,
       numRemision: NUM_REMISION,
       estado: "en_reparto",
+      estadoNombre: "En reparto", // 455 (R25): pegado detras de `estado`
       motivo: null,
       mensajero: null, // 404/R2: la orden base no tiene asignado; la clave viaja igual
     });
@@ -450,6 +452,7 @@ describe("256/R6-R7 — la forma: UNA sola, el campo siempre presente", () => {
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
     ]);
@@ -463,7 +466,7 @@ describe("256/R6-R7 — la forma: UNA sola, el campo siempre presente", () => {
     const body = JSON.parse(cuerpoDe(entregar));
     expect(body.data.numGuia).toBe(12345);
     expect(body.data.numRemision).toBe(NUM_REMISION);
-    expect(body.data.estado).toBe("devuelta");
+    expect(body.data.estado).toBe("novedad");
     expect(body.orden).toBeUndefined(); // la clave retirada por la 112 no vuelve
     expect(body.evento).toBe("orden.estado_actualizado");
   });
@@ -656,7 +659,7 @@ describe("268/R20-R21 — `data.motivo` transporta tambien la causa del incident
     // R21 pide «la misma convencion de ausencia que fije la 256», y la 256 fijo PRESENTE-CON-NULL,
     // no la omision: su OpenAPI documenta forma UNICA para las cuatro claves.
     const { service, entregar } = buildService({
-      datos: { ...DATOS_BASE, estado: "entregada", causaIncidente: "perdido" },
+      datos: { ...DATOS_BASE, estado: "entregado", causaIncidente: "perdido" },
     });
     await service.ejecutar(job());
     const body = JSON.parse(cuerpoDe(entregar));
@@ -681,7 +684,7 @@ describe("268/R20-R21 — `data.motivo` transporta tambien la causa del incident
       causaDevolucion: "not_found",
       causaIncidente: "robado",
     };
-    const a = buildService({ datos: { ...datos, estado: "devuelta" } });
+    const a = buildService({ datos: { ...datos, estado: "novedad" } });
     await a.service.ejecutar(jobDevuelta());
     expect(JSON.parse(cuerpoDe(a.entregar)).data.motivo).toBe("not_found");
     expect(cuerpoDe(a.entregar)).not.toContain("robado");
@@ -713,12 +716,13 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
       "evidenciasUrl",
     ]);
 
-    const b = buildService({ datos: { ...DATOS_BASE, estado: "entregada" } });
+    const b = buildService({ datos: { ...DATOS_BASE, estado: "entregado" } });
     await b.service.ejecutar(job());
     const bodyEntregada = JSON.parse(cuerpoDe(b.entregar));
     // R24: no viaja. Se afirma por AUSENCIA DE CLAVE, no con `toBeUndefined()` a secas.
@@ -737,6 +741,7 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
     ]);
@@ -946,7 +951,7 @@ describe("406/R4-R6 — `data.evidenciasUrl` lleva el identificador PUBLICO, nun
 // en vez de emitir un enlace que el endpoint rechazaria o de tumbar la entrega entera.
 describe("406/R7-R8 — sin identificador resoluble, la clave se OMITE y el job completa", () => {
   /** Las CINCO claves siempre presentes: lo que tiene que seguir viajando cuando falta el enlace. */
-  const CINCO = ["numGuia", "numRemision", "estado", "motivo", "mensajero"];
+  const CINCO = ["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero"];
 
   it("406/R7a: remision de 129 caracteres -> clave AUSENTE, cuerpo normal y job completado", async () => {
     const larga = "R".repeat(129);

@@ -1,0 +1,74 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Ranking del día
+Histórico
+Wallet
+Configuración
+Cierres del día
+Incidentes
+Histórico
+Ayuda
+MQ
+Maestro QA
+Maestro
+Ranking
+
+Ranking diario de mensajeros por entregas exitosas y premios del podio
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Ranking de mensajeros
+
+Efectividad · entregadas / asignadas · hoy
+
+5 mensajeros
+RR
+Rita Recorrido
+5/14 entregas
+35.7%
+2º lugar
+QQ
+Quino QUEPOS
+1/2 entregas
+50.0%
+1º lugar
+—
+Sin ocupante
+—
+—
+3º lugar
+3
+Marco Mensajero
+1/0 entregas
+—
+4
+Mensajero test
+0/0 entregas
+—
+5
+Quique Quepos
+0/0 entregas
+—
+Ranking del día
+Ordenado por porcentaje de entregas exitosas del día. El conteo crudo (entregadas / asignadas) hace el porcentaje auditable.
+Descargar
+Posición	Mensajero	% del día	Entregadas / asignadas
+1	Quino QUEPOS	50.0%	1/2
+2	Rita Recorrido	35.7%	5/14
+—	Marco Mensajero	—	1/0
+—	Mensajero test	—	0/0
+—	Quique Quepos	—	0/0
+Premios del podio
+Tres posiciones del podio, cada una con un monto y una descripción opcionales.
+Posición	Mensajero	Monto del premio	Descripción	Acciones
+1	Quino QUEPOS			Guardar
+2	Rita Recorrido			Guardar
+3	Sin ocupante elegible hoy			Guardar

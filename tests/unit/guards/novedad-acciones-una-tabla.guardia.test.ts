@@ -162,7 +162,7 @@ const SANO = `
 
 const CON_LITERAL = `
   function NovedadAcciones({ novedad }) {
-    const esDevuelta = novedad.estatusValue === "devuelta";
+    const esDevuelta = novedad.estatusValue === "novedad";
     const esAyuda = novedad.estatusValue === "ayuda_tienda";
     return [...(esDevuelta ? ["reprogramar"] : []), ...(esAyuda ? ["conversacion"] : [])];
   }`;
@@ -192,7 +192,7 @@ describe("0 — el detector de esta guardia no está roto", () => {
     // Es literalmente el código que este archivo vino a impedir: las dos condiciones sueltas que
     // `NovedadAcciones` tenía hasta el 2026-08-19.
     expect(lecturasCrudasDeEstatus(CON_LITERAL)).toBe(2);
-    expect(literalesDeEstatus(CON_LITERAL)).toEqual(["ayuda_tienda", "devuelta"]);
+    expect(literalesDeEstatus(CON_LITERAL)).toEqual(["ayuda_tienda", "novedad"]);
   });
 
   it("AUTOCOMPROBACIÓN: el literal escondido tras un `const` tampoco se escapa", () => {

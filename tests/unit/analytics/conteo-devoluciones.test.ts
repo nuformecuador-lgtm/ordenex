@@ -91,7 +91,7 @@ describe("El universo: gestiones vigentes con resultado `devuelta`", () => {
 
     expect(sql).toContain('g."resultado"');
     expect(sql).toContain('"gestion_resultado"');
-    expect(paramsDe(consultaDe())).toContain("devuelta");
+    expect(paramsDe(consultaDe())).toContain("novedad");
   });
 
   // Una gestión anulada (feature 67) no es una devolución: es una devolución DESHECHA.

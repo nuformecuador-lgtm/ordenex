@@ -1,0 +1,29 @@
+=== MUTACION C05 — 2026-09-24T04:51:09-05:00
+archivo: lib/repositories/AnaliticaRollupRepository.ts
+perl: s/COUNT\(\*\) FILTER \(WHERE g."resultado" = 'devuelta'\)::int     AS devoluciones,/COUNT(*) FILTER (WHERE g."resultado" = 'rechazada')::int     AS devoluciones,/
+--- diff aplicado:
+diff --git a/lib/repositories/AnaliticaRollupRepository.ts b/lib/repositories/AnaliticaRollupRepository.ts
+index d66ae9fc..29575155 100644
+--- a/lib/repositories/AnaliticaRollupRepository.ts
++++ b/lib/repositories/AnaliticaRollupRepository.ts
+@@ -221 +221 @@ export class AnaliticaRollupRepository implements IAnaliticaRollupRepository {
+-             COUNT(*) FILTER (WHERE g."resultado" = 'devuelta')::int     AS devoluciones,
++             COUNT(*) FILTER (WHERE g."resultado" = 'rechazada')::int     AS devoluciones,
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts
+ × tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > las filas del rollup de D, cubo a cubo y medida a medida 9ms
+   → expected [ { …(2) }, { …(2) }, { …(2) }, …(6) ] to deeply equal [ { …(2) }, { …(2) }, { …(2) }, …(7) ]
+ × tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > el intradia de D reproduce el rollup 2ms
+   → expected [ { …(2) }, { …(2) }, { …(2) }, …(7) ] to deeply equal [ { …(2) }, { …(2) }, { …(2) }, …(6) ]
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > la cohorte de carga de D por desenlace 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > el ranking: una entrega vigente de mensajero1 en D 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R3) > la etiqueta de estatus del rollup operativo es el codigo 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > las filas del rollup de D, cubo a cubo y medida a medida
+AssertionError: expected [ { …(2) }, { …(2) }, { …(2) }, …(6) ] to deeply equal [ { …(2) }, { …(2) }, { …(2) }, …(7) ]
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > el intradia de D reproduce el rollup
+AssertionError: expected [ { …(2) }, { …(2) }, { …(2) }, …(7) ] to deeply equal [ { …(2) }, { …(2) }, { …(2) }, …(6) ]
+ Test Files  1 failed (1)
+      Tests  2 failed | 3 passed (5)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

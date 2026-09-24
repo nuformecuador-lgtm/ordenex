@@ -8,6 +8,7 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 // Feature 261 (F1, R13/R15): el motivo del rechazo por reserva sale de la fuente ÚNICA, la misma
 // frase que pinta la card y la misma que devuelve el servidor. Aquí no se redacta nada.
 import { avisoReservaParaOtroDia } from "@/lib/utils/dia-reparto-textos";
+import { nombreDeEstado } from "@/lib/types/order-status";
 
 // Feature 96 (DRY): lógica compartida por el escáner de cámara (`EscanerRecoger`) y el
 // input de número de guía (`InputRecoger`). Resuelve un `num_guia` contra las órdenes
@@ -48,7 +49,7 @@ export function useRecogerPorGuia(
       if (procesando) return false;
       const orden = porRecoger.find((o) => o.numGuia === numGuia);
       if (!orden) {
-        toast.error(`La guía ${numGuia} no está entre tus órdenes por recoger.`);
+        toast.error(`La guía ${numGuia} no está entre tus órdenes para recoger.`);
         return false;
       }
       // Feature 261 (F1, R13) — LA ORDEN ESTÁ RESERVADA PARA UN DÍA POSTERIOR: se rechaza AQUÍ,
@@ -81,7 +82,7 @@ export function useRecogerPorGuia(
             toast.error(
               result.detalle.some((d) => d.codigo === "reservada_para_otro_dia")
                 ? avisoReservaParaOtroDia(orden.fechaRepartoISO)
-                : "La orden ya no está por recoger. Actualiza y vuelve a intentar.",
+                : `La orden ya no está en «${nombreDeEstado("mensajero_recogiendo_en_bodega")}». Actualiza y vuelve a intentar.`,
             );
             break;
           case "forbidden":

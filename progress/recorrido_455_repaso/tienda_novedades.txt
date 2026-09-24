@@ -1,0 +1,25 @@
+Ordenex
+Analítica
+Órdenes
+Novedades
+Mi wallet
+Ayuda
+TT
+Tania Tienda
+Admin de tienda
+Novedades
+
+Las órdenes en las que tus mensajeros piden ayuda, tus órdenes en Novedad y las que pasaron a Devolución a origen por rechazo por vencerse el plazo
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+Salir
+Ayuda solicitada
+Novedad
+Devolución a origen por plazo vencido
+
+Ningún mensajero te pidió ayuda
+
+Cuando un mensajero necesite que resuelvas algo de una orden que lleva encima, aparecerá acá con su mensaje.

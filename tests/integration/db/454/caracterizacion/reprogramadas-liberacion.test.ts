@@ -29,8 +29,8 @@ describeSiHayBase("454/C19 — liberacion de reprogramadas (Postgres real)", () 
       const ahora = new Date();
       const h = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000 });
       const m = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000 });
-      await e.gestionarOk(h.ordenId, "reprogramada", { fechaReprogramacion: fechaRepartoComoTexto(diaCR(0)) });
-      await e.gestionarOk(m.ordenId, "reprogramada", { fechaReprogramacion: fechaRepartoComoTexto(diaCR(1)) });
+      await e.gestionarOk(h.ordenId, "reprogramado", { fechaReprogramacion: fechaRepartoComoTexto(diaCR(0)) });
+      await e.gestionarOk(m.ordenId, "reprogramado", { fechaReprogramacion: fechaRepartoComoTexto(diaCR(1)) });
       const cierreId = await e.solicitarCierreOk();
 
       const liberacion = new LiberacionReprogramadaService(
@@ -80,7 +80,7 @@ describeSiHayBase("454/C19 — liberacion de reprogramadas (Postgres real)", () 
   });
 
   it("el timbre NO libera la reprogramada para MAÑANA", () => {
-    expect(estatus(r.trasTimbre.m)).toBe("reprogramada");
+    expect(estatus(r.trasTimbre.m)).toBe("reprogramado");
   });
 
   it("el reloj de las 00:00 del dia siguiente la libera", () => {

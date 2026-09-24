@@ -47,6 +47,7 @@ import { useSeguimientoUbicacion } from "./useSeguimientoUbicacion";
 import { SincronizarRutaButton } from "./SincronizarRutaButton";
 import { TrayectoVivoButton } from "./TrayectoVivoButton";
 import { CarruselCards } from "@/components/shared/CarruselCards";
+import { NOTA_AYUDA_SOLICITADA } from "@/components/shared/nota-pendiente-confirmacion";
 
 import { VistaCardsToggle, type VistaCards } from "./VistaCardsToggle";
 import { CLASE_FASE, useTransicionVista } from "./useTransicionVista";
@@ -145,14 +146,9 @@ const AYUDA_SECCION_AYUDA =
 // Feature 235 (R35): rótulo de la acción que abre el hilo desde la card de ayuda. Dice de qué es
 // la pantalla que abre, no qué componente monta.
 const AYUDA_ACCION_HILO = "Conversación";
-// Feature 235 (T8.1) — CHIP DE ESTADO de la card de ayuda. Sigue la gramática de los otros cuatro
-// («En gestión», «En detalle», «En reparto», «Por recoger»: preposición + sustantivo) y comparte la
-// palabra «ayuda» con el encabezado de la sección y con el `EstatusBadge` de la tienda, así que no
-// es un tercer sinónimo. La forma CORTA se descartó en `/ordenes` por ambigua —allí maestro/admin
-// la ven suelta entre veintiún estados y no sabrían a quién se le pidió (R37)—, pero aquí la
-// desambiguación está pegada: el chip vive DENTRO de la sección «Con ayuda solicitada», cuyo texto
-// de ayuda ya dice que la tienda las está viendo en Novedades.
-const AYUDA_CARD_ESTADO = "En ayuda";
+// FICHA 455 (2026-09-24, R7/R8/R6; design §2.1): aquí vivía `AYUDA_CARD_ESTADO = «En ayuda»`, un
+// rótulo que SUSTITUÍA al chip de estado de la card de ayuda. La orden está `en_reparto` y el chip
+// lo dice; la ayuda de la 454 va como NOTA aparte (`NOTA_AYUDA_SOLICITADA`, texto de la 456).
 const SIN_PENDIENTES_TODAS_CON_AYUDA =
   "Todas tus órdenes en reparto tienen ayuda solicitada; están abajo.";
 
@@ -593,15 +589,9 @@ export function RepartoModule({
            acción de selección—, no por diseño: cuando la 237 le devuelva las gestiones desde ayuda,
            el bloqueo del mensajero (111/R14) tiene que valer sin que nadie lo redescubra. */
         bloqueado={bloqueado}
-        /* Feature 235 (T8.1) — SIN esta prop el chip decía «En reparto», que es exactamente lo que
-           esta ficha convirtió en falso: `estadoPorDefecto(false, false)` devuelve ese literal. Para
-           los otros tres valores el chip describe la situación de la orden; aquí afirmaba la
-           contraria. El COLOR lo DECLARA `ESTADO_CLASSNAME` con entrada propia (`bg-warning
-           text-navy`, con el porqué de `warning` escrito allí). Coincide con lo que daba el fallback
-           de texto libre, y aun así se declara: el fallback significa «no sé qué es este rótulo», así
-           que heredar de él una decisión de color la vuelve indistinguible de un accidente y la
-           movería en silencio si alguien retoca «En reparto». Lo fija `RepartoAyuda.test.tsx`. */
-        estado={AYUDA_CARD_ESTADO}
+        /* FICHA 455 (R7/R8): el chip dice el estado de la orden («En reparto», que es lo cierto: la
+           ayuda de la 454 es un evento, no un estado) y la ayuda va como NOTA junto al chip. */
+        nota={NOTA_AYUDA_SOLICITADA}
         /* Feature 235 (R15) — LA CARD NO LLEVA MARCAS DE RUTA. R15 prohíbe pintar estas órdenes
            como parada y contarlas entre las pendientes de optimizar; el servicio ya las deja fuera
            de `paradasSinOptimizar` y del mapa, pero la card seguía luciendo el nº de parada («·»,

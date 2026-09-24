@@ -1,0 +1,25 @@
+=== MUTACION C07 — 2026-09-24T04:51:31-05:00
+archivo: lib/repositories/ConteoDevolucionesRepository.ts
+perl: s/const RESULTADO_DEVUELTA = "devuelta";/const RESULTADO_DEVUELTA = "rechazada";/
+--- diff aplicado:
+diff --git a/lib/repositories/ConteoDevolucionesRepository.ts b/lib/repositories/ConteoDevolucionesRepository.ts
+index 6c345dd6..32031d3b 100644
+--- a/lib/repositories/ConteoDevolucionesRepository.ts
++++ b/lib/repositories/ConteoDevolucionesRepository.ts
+@@ -53 +53 @@ interface FilaCausa {
+-const RESULTADO_DEVUELTA = "devuelta";
++const RESULTADO_DEVUELTA = "rechazada";
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > el desglose por status de la cohorte 1ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > el plegado en desenlaces (con el cubo `otros`) 0ms
+ × tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > las devoluciones por causa 5ms
+   → expected [ 'sin_causa:1' ] to deeply equal [ 'not_found:1', 'sin_causa:1' ]
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > el ciclo de vida acumulado de las cerradas en D 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > las devoluciones por causa
+AssertionError: expected [ 'sin_causa:1' ] to deeply equal [ 'not_found:1', 'sin_causa:1' ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

@@ -1,0 +1,141 @@
+Detalle del cierre
+
+Rita Recorrido · Bodega central · GAM
+
+De quién es el dinero
+Total general
+₡32.500
+Lo que Ordenex facturó
+-₡12.585,39
+Gana la tienda
+Lo recaudado menos todo lo que Ordenex le factura, incluido el flete por rechazo. No es lo que se le paga hoy.
+₡19.914,61
+Lo que Ordenex le factura a la tienda
+Cobrado sobre lo recaudado
+Flete + IVA y comisión + IVA de lo que sí se entregó: sale del dinero que el mensajero recaudó.
+₡12.585,39
+Flete por rechazo + IVA
+Se le factura a la tienda, pero no sale de lo recaudado: un rechazo no cobra contra entrega.
++₡0
+Lo que Ordenex facturó
+₡12.585,39
+Total general
+₡32.500
+Cobrado sobre lo recaudado
+-₡12.585,39
+Pago a tienda
+Es lo que se le paga de este dinero hoy. No es lo que gana en total: el flete por rechazo se le cobra aparte.
+₡19.914,61
+Lo que le queda a Ordenex
+Lo que Ordenex facturó
+₡12.585,39
+Pago al mensajero
+-₡8.500
+Ingreso de bodega por rechazos
+-₡4.000
+Neto de Ordenex
+Lo que Ordenex facturó menos el pago al mensajero y menos el ingreso de bodega por rechazos.
+₡85,39
+Cierre del día
+Aprobado
+Bodega central · GAM · Mensajero Rita Recorrido
+Comprobante #F916027A
+Solicitado 2026-09-24 · Resuelto 2026-09-24
+Pago a tienda
+₡19.914,61
+Total general menos flete + IVA y comisión + IVA. No descuenta el flete por rechazo: un rechazo no recauda contra entrega, así que ese dinero nunca entró en el total general.
+Ingreso de bodega por rechazos
+₡4.000
+Automático (por plazo vencido)
+₡0
+·
+Manual (mensajero)
+₡4.000
+TOTAL GENERAL
+₡32.500
+TOTAL ORDENEX
+₡12.585,39
+PAGO AL MENSAJERO
+₡8.500
+GESTIONES
+14
+TOTALES DEL CIERRE
+Efectivo
+₡32.500
+SINPE
+₡0
+Transferencia
+₡0
+Total general
+₡32.500
+INGRESO DE ORDENEX
+Flete + IVA
+₡11.300
+Comisión + IVA
+₡1.285,39
+Flete por rechazo + IVA
+₡0
+Total Ordenex
+₡12.585,39
+LIQUIDACIÓN
+Ingreso bruto
+Todo lo que facturó Ordenex en el cierre (flete + IVA + comisión + IVA), sin descontar nada.
+₡12.585,39
+Pago al mensajero
+₡8.500
+Ingreso de bodega por rechazos
+₡4.000
+Entregado
+5
+Reprogramado
+2
+Novedad
+2
+Devolución a origen por rechazo
+4
+Incidente
+1
+Guía
+Destinatario
+Cobrado
+Total Ordenex
+71377932
+Cliente Recorrido 5
+R454-05 · Producto prueba 454 #5
+₡7.500
+₡2.556,63
+59144030
+Cliente Recorrido 4
+R454-04 · Producto prueba 454 #4
+₡7.000
+₡2.536,85
+92987981
+Cliente Recorrido 3
+R454-03 · Producto prueba 454 #3
+₡6.500
+₡2.517,08
+80975515
+Cliente Recorrido 2
+R454-02 · Producto prueba 454 #2
+₡6.000
+₡2.497,30
+40520764
+Cliente Recorrido 1
+R454-01 · Producto prueba 454 #1
+₡5.500
+₡2.477,53
+Total recaudado ₡32.500 · 5 entregas
+Pago al mensajero
+
+Pendiente de liquidar:
+Liquidado
+
+Este cierre ya está liquidado: no queda nada por pagar.
+
+Descargar
+Fecha del pago	Monto	Método	Referencia	Nota	Registró	Registrado el	Estado	Acciones
+
+
+Todavía no hay pagos registrados.
+
+Cerrar

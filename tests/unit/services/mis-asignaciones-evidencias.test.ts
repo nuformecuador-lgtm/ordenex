@@ -65,10 +65,10 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
 function fakeOrdenRepo(): Pick<IOrdenRepository, "findEstatusIdByValue" | "findBloqueoDetalle"> {
   const ids: Record<string, string> = {
     en_reparto: "os-reparto",
-    entregada: "os-entregada",
-    rechazada: "os-rechazada",
-    devuelta: "os-devuelta",
-    reprogramada: "os-reprogramada",
+    entregado: "os-entregada",
+    devolucion_a_origen_por_rechazo: "os-rechazada",
+    novedad: "os-devuelta",
+    reprogramado: "os-reprogramada",
   };
   return {
     findEstatusIdByValue: vi.fn(async (v: string) => ids[v] ?? null),
@@ -130,7 +130,7 @@ function foto(n: number) {
 function rechazoConFotos(k: number): GestionarInput {
   return {
     ordenId: "o1",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     motivo: "cliente rechazo",
     evidencias: Array.from({ length: k }, (_v, i) => foto(i)),
   };
@@ -148,8 +148,8 @@ describe("R9: subida secuencial de N fotos + persistencia en una transaccion", (
     const evidencias = gArg.gestion.evidencias as { storagePath: string; indice: number }[];
     expect(evidencias.map((e) => e.indice)).toEqual([0, 1, 2]);
     // Cada path lleva el sufijo -i de su posicion (unicidad entre fotos de la misma gestion).
-    expect(evidencias[0].storagePath).toMatch(/o1\/rechazada-\d+-0\./);
-    expect(evidencias[2].storagePath).toMatch(/o1\/rechazada-\d+-2\./);
+    expect(evidencias[0].storagePath).toMatch(/o1\/devolucion_a_origen_por_rechazo-\d+-0\./);
+    expect(evidencias[2].storagePath).toMatch(/o1\/devolucion_a_origen_por_rechazo-\d+-2\./);
   });
 });
 
@@ -231,7 +231,7 @@ describe("R13: exito -> N URLs firmadas (TTL de config), nunca el path crudo", (
   it("reprogramada (sin foto) -> evidenciaUrls undefined y no firma nada", async () => {
     const signed = fakeSignedUrls();
     const r = await newService(fakeRepo(), fakeStorage(), signed).gestionar(
-      { ordenId: "o1", resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
+      { ordenId: "o1", resultado: "reprogramado", fechaReprogramacion: "2027-01-01", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");

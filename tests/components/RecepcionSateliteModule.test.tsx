@@ -895,7 +895,7 @@ describe("RecepcionSateliteModule", () => {
 
   // ---------- Feature 139 (T3.3) — "Por devolver" por lote a bodega central ----------
 
-  it("R13/R21: 'Por devolver' es una TABLA seleccionable de las órdenes por_devolver + botón 'Enviar a central'", async () => {
+  it("R13/R21: 'Por devolver' es una TABLA seleccionable de las órdenes por_devolver_a_bodega_central + botón 'Enviar a central'", async () => {
     const user = userEvent.setup();
     renderModule({
       porDevolver: [
@@ -903,7 +903,7 @@ describe("RecepcionSateliteModule", () => {
           id: "d1",
           numRemision: "REM-PORDEV",
           destinatario: "Caro Díaz",
-          estatusValue: "por_devolver",
+          estatusValue: "por_devolver_a_bodega_central",
         }),
       ],
     });
@@ -931,7 +931,7 @@ describe("RecepcionSateliteModule", () => {
         makeOrden({
           id: "d1",
           numRemision: "REM-PORDEV",
-          estatusValue: "por_devolver",
+          estatusValue: "por_devolver_a_bodega_central",
         }),
       ],
     });
@@ -957,8 +957,8 @@ describe("RecepcionSateliteModule", () => {
     enviarACentralMock.mockResolvedValue({ status: "ok" });
     renderModule({
       porDevolver: [
-        makeOrden({ id: "d1", numRemision: "REM-A", estatusValue: "por_devolver" }),
-        makeOrden({ id: "d2", numRemision: "REM-B", estatusValue: "por_devolver" }),
+        makeOrden({ id: "d1", numRemision: "REM-A", estatusValue: "por_devolver_a_bodega_central" }),
+        makeOrden({ id: "d2", numRemision: "REM-B", estatusValue: "por_devolver_a_bodega_central" }),
       ],
     });
 
@@ -986,7 +986,7 @@ describe("RecepcionSateliteModule", () => {
     enviarACentralMock.mockResolvedValue({ status: "conflict", motivo: "estado" });
     renderModule({
       porDevolver: [
-        makeOrden({ id: "d1", numRemision: "REM-A", estatusValue: "por_devolver" }),
+        makeOrden({ id: "d1", numRemision: "REM-A", estatusValue: "por_devolver_a_bodega_central" }),
       ],
     });
 
@@ -1061,7 +1061,7 @@ describe("RecepcionSateliteModule", () => {
           id: "n1",
           numRemision: "REM-DEVUELTA",
           destinatario: "Caro Díaz",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
         }),
       ],
     });
@@ -1086,7 +1086,7 @@ describe("RecepcionSateliteModule", () => {
         makeOrden({
           id: "n1",
           numRemision: "REM-DEVUELTA",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
         }),
       ],
     });
@@ -1111,7 +1111,7 @@ describe("RecepcionSateliteModule", () => {
         makeOrden({
           id: "n1",
           numRemision: "REM-DEVUELTA",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
         }),
       ],
     });
@@ -1190,7 +1190,7 @@ describe("RecepcionSateliteModule", () => {
         makeOrden({
           id: "d1",
           numRemision: "REM-DEV",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
           prioridad: true,
         }),
       ],
@@ -1311,13 +1311,13 @@ describe("RecepcionSateliteModule — intentos de entrega (feature 160)", () => 
         makeOrden({
           id: "n1",
           numRemision: "REM-N1",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
           intentosEntrega: 4,
         }),
         makeOrden({
           id: "n2",
           numRemision: "REM-N0",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
           intentosEntrega: 0,
         }),
       ],

@@ -15,7 +15,8 @@ import {
 } from "@/lib/utils/dia-reparto-textos";
 
 import { coincideBusqueda } from "../mis-asignaciones-buscador";
-import { ESTADO_CHIP, estadoDe, iniciales, zonaCorta } from "./chat-format";
+import { TEXTO_MARCA_TARJETA } from "../pos-card/pos-estado";
+import { chipDeEstado, iniciales, zonaCorta } from "./chat-format";
 import {
   contadorContactos,
   SECCION_CON_EL_PAQUETE,
@@ -62,7 +63,7 @@ function OrdenFila({
   noLeidos: number;
   onSeleccionar: (id: string) => void;
 }) {
-  const chip = ESTADO_CHIP[estadoDe(orden.estatusValue)];
+  const chip = chipDeEstado(orden.estatusValue);
   return (
     <button
       type="button"
@@ -251,8 +252,10 @@ export function ChatOrdenesLista({
           <section aria-label="Orden en gestión">
             <div className="flex items-center gap-1.5 px-4 pb-1 pt-1">
               <MessageSquareDot className="size-3.5 text-primary" aria-hidden="true" />
+              {/* FICHA 455 (R8/R6): la condición de la interfaz, con el MISMO texto que la marca de
+                  la card («Gestionando ahora»); «En gestión» era un nombre de estado retirado. */}
               <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">
-                En gestión
+                {TEXTO_MARCA_TARJETA.activa}
               </span>
             </div>
             <div className="border-l-[3px] border-primary bg-primary/5">

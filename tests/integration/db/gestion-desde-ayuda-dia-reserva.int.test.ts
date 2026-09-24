@@ -46,7 +46,7 @@ const NOW = new Date("2026-08-22T04:30:00.000Z");
 
 const RECHAZO: GestionDesdeAyudaInput = {
   ordenId: "", // se rellena por caso
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   motivo: "el cliente no la quiere",
   evidencias: [
     { contentType: "image/jpeg", bytes: new Uint8Array([0]) },
@@ -95,11 +95,11 @@ describeSiHayBase("261/B18 — el `where` del `updateMany` de la tienda, contra 
       );
     }
     const estados = await prisma.orderStatus.findMany({
-      where: { value: { in: ["en_reparto", "rechazada"] } },
+      where: { value: { in: ["en_reparto", "devolucion_a_origen_por_rechazo"] } },
       select: { id: true, value: true },
     });
     const ayudaId = estados.find((e) => e.value === "en_reparto")?.id;
-    const rechazadaId = estados.find((e) => e.value === "rechazada")?.id;
+    const rechazadaId = estados.find((e) => e.value === "devolucion_a_origen_por_rechazo")?.id;
     if (!ayudaId || !rechazadaId) {
       throw new Error(
         "el catalogo `order_status` no tiene `en_reparto` y/o `rechazada`: sin ellos no hay " +

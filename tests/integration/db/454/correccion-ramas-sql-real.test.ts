@@ -33,15 +33,15 @@ describeSiHayBase("454/T1.14 — correccion #69: rama nueva y rama legada (Postg
 
       // NUEVA: entregada por el portal real.
       const n = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 10000, mensajeroId: central.mensajeroId });
-      const gN = await e.gestionarOk(n.ordenId, "entregada", { monto: 10000, actor: central.actor });
+      const gN = await e.gestionarOk(n.ordenId, "entregado", { monto: 10000, actor: central.actor });
       const cierreId = await e.solicitarCierreOk(central.actor);
 
       // LEGADA: una `entregada` de antes de la 454 (orden ya `entregada`, historial `gestion`, sin
       // evento) metida en el MISMO cierre abierto.
-      const l = await e.sembrarOrden({ estatus: "entregada", mensajeroId: central.mensajeroId });
+      const l = await e.sembrarOrden({ estatus: "entregado", mensajeroId: central.mensajeroId });
       const gL = (
         await e.tx.gestionOrden.create({
-          data: { ordenId: l.ordenId, mensajeroId: central.mensajeroId, resultado: "entregada", cierreId },
+          data: { ordenId: l.ordenId, mensajeroId: central.mensajeroId, resultado: "entregado", cierreId },
           select: { id: true },
         })
       ).id;
@@ -56,7 +56,7 @@ describeSiHayBase("454/T1.14 — correccion #69: rama nueva y rama legada (Postg
         data: {
           ordenId: l.ordenId,
           estatusOrigenId: e.id("en_reparto"),
-          estatusDestinoId: e.id("entregada"),
+          estatusDestinoId: e.id("entregado"),
           origenTipo: "gestion",
           actorUsuarioId: central.mensajeroId,
           gestionOrdenId: gL,
@@ -126,13 +126,13 @@ describeSiHayBase("454/T1.14 — correccion #69: rama nueva y rama legada (Postg
     expect(r.trasCorregir.historialN).toEqual([]);
   });
 
-  it("R18 (nueva): queda UN evento `gestion_corregida` entregada -> rechazada, del maestro, con motivo, y su webhook", () => {
+  it("R18 (nueva): queda UN evento `gestion_corregida` entregado -> devolucion_a_origen_por_rechazo, del maestro, con motivo, y su webhook", () => {
     expect(r.evN).toEqual([
       {
         id: expect.any(String),
         gestionOrdenId: r.gN,
-        resultado: "rechazada",
-        resultadoAnterior: "entregada",
+        resultado: "devolucion_a_origen_por_rechazo",
+        resultadoAnterior: "entregado",
         actorUsuarioId: r.maestroId,
         actorRol: "maestro",
         motivo: "El cliente no la recibio",
@@ -142,16 +142,16 @@ describeSiHayBase("454/T1.14 — correccion #69: rama nueva y rama legada (Postg
   });
 
   it("R20 (legada): transicion #69 inmediata con familia `correccion_resultado_gestion` y ningun evento", () => {
-    expect(r.trasCorregir.estadoL).toBe("rechazada");
+    expect(r.trasCorregir.estadoL).toBe("devolucion_a_origen_por_rechazo");
     expect(r.trasCorregir.historialL).toEqual([
-      "gestion:en_reparto->entregada:otro",
-      "correccion_resultado_gestion:entregada->rechazada:maestro",
+      "gestion:en_reparto->entregado:otro",
+      "correccion_resultado_gestion:entregado->devolucion_a_origen_por_rechazo:maestro",
     ]);
     expect(r.evL).toEqual([]);
   });
 
   it("R19: al aprobar, la nueva se aplica como `rechazada` (familia `gestion`, actor el mensajero) y se devuelve", () => {
-    expect(r.historialFinalN[0]).toEqual({ fila: "gestion:en_reparto->rechazada", actor: "mensajero", gestion: "gN" });
+    expect(r.historialFinalN[0]).toEqual({ fila: "gestion:en_reparto->devolucion_a_origen_por_rechazo", actor: "mensajero", gestion: "gN" });
     expect(r.estadoFinalN).toBe("por_devolver_a_tienda");
   });
 

@@ -21,7 +21,7 @@ describeSiHayBase("454/C08 — cuando se puede solicitar el cierre (Postgres rea
   async function jornada(extra: (e: Escenario) => Promise<void>): Promise<Resultado> {
     return conEscenario(mundo, async (e) => {
       const hecha = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 2000 });
-      await e.gestionarOk(hecha.ordenId, "entregada", { monto: 2000 });
+      await e.gestionarOk(hecha.ordenId, "entregado", { monto: 2000 });
       await extra(e);
       return (await e.solicitarCierre()) as Resultado;
     });

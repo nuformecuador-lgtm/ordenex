@@ -14,6 +14,8 @@ import type { ComponentProps } from "react";
 
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import type { Badge } from "@/components/ui/badge";
+import { nombreDeResultado } from "@/lib/types/gestion-resultado";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 import {
   estatusDelBucket,
   type BucketSinResultado,
@@ -21,11 +23,21 @@ import {
 } from "@/lib/types/tablero-dia";
 
 /**
- * Clave del contador de cada resultado del dia. Se DERIVA del enum `GestionResultado`
- * (`entregada` -> `entregadas`), asi que un sexto valor del enum deja de compilar aqui en
- * vez de quedarse sin etiqueta en silencio (R24/R27).
+ * FICHA 455 (2026-09-24, design §1.2): la clave del contador ya no se DERIVA por plantilla
+ * (`${GestionResultado}s`): con los codigos de la 455 daria `novedads`. Las COLUMNAS de
+ * `FilaTableroDia` no cambian (design §9-F), asi que la correspondencia se declara explicita.
+ * `Record` EXHAUSTIVO sobre el enum: un sexto resultado sigue sin compilar aqui (R24/R27).
  */
-export type ClaveResultado = `${GestionResultado}s`;
+export const CLAVE_CONTADOR_DE_RESULTADO = {
+  entregado: "entregadas",
+  reprogramado: "reprogramadas",
+  novedad: "devueltas",
+  devolucion_a_origen_por_rechazo: "rechazadas",
+  incidente: "incidentes",
+} as const satisfies Record<GestionResultado, keyof FilaTableroDia>;
+
+/** Clave del contador de cada resultado del dia. */
+export type ClaveResultado = (typeof CLAVE_CONTADOR_DE_RESULTADO)[GestionResultado];
 
 /**
  * Comprobacion tipada de que cada clave derivada del enum ES un contador de la fila: si el
@@ -35,13 +47,20 @@ type _ClavesSonContadores = ClaveResultado extends keyof FilaTableroDia ? true :
 const _clavesSonContadores: _ClavesSonContadores = true;
 void _clavesSonContadores;
 
-/** R24 — los cinco resultados del dia. `Record` EXHAUSTIVO: falta una y no compila. */
+/**
+ * R24 — los cinco resultados del dia. `Record` EXHAUSTIVO: falta una y no compila.
+ *
+ * FICHA 455 (2026-09-24, design §2.1; R4/R5): cada contador cuenta UN resultado, asi que se rotula
+ * con su nombre exacto (`nombreDeResultado`, el del estado homonimo): «Entregado», «Novedad»,
+ * «Devolución a origen por rechazo»… Antes eran plurales escritos a mano («Entregadas»,
+ * «Devueltas», «Rechazadas»). Las CLAVES son las columnas de `FilaTableroDia` y no cambian.
+ */
 export const ETIQUETA_RESULTADO = {
-  entregadas: "Entregadas",
-  reprogramadas: "Reprogramadas",
-  devueltas: "Devueltas",
-  rechazadas: "Rechazadas",
-  incidentes: "Incidentes",
+  entregadas: nombreDeResultado("entregado"),
+  reprogramadas: nombreDeResultado("reprogramado"),
+  devueltas: nombreDeResultado("novedad"),
+  rechazadas: nombreDeResultado("devolucion_a_origen_por_rechazo"),
+  incidentes: nombreDeResultado("incidente"),
 } as const satisfies Record<ClaveResultado, string>;
 
 /** Orden de pintado de los cinco resultados (el del enum, de mejor a peor desenlace). */
@@ -57,10 +76,15 @@ export const CLAVES_RESULTADO = [
  * F5.1 — etiquetas de los tres buckets de "sin resultado", derivadas del tipo
  * `BucketSinResultado` con un `Record` EXHAUSTIVO: un bucket nuevo no compila sin etiqueta.
  */
+//
+// FICHA 455 (2026-09-24, design §2.1; R5/R6): `sinRecoger` y `otros` son GRUPOS de estados, asi que
+// llevan un texto propio que no es nombre de ningun estado («Sin recoger» era un nombre retirado);
+// `enReparto` agrupa un solo estado y lleva su nombre exacto. La ayuda (`ayudaBucket`) sigue
+// listando los estados que cada grupo contiene.
 export const ETIQUETA_BUCKET = {
-  sinRecoger: "Sin recoger",
-  enReparto: "En reparto",
-  otros: "Otros",
+  sinRecoger: "Todavía no sale a reparto",
+  enReparto: NOMBRE_ESTADO.en_reparto,
+  otros: "Otros estados",
 } as const satisfies Record<BucketSinResultado, string>;
 
 /** Orden de pintado de los tres buckets: del que no arranco al cajon de sastre. */

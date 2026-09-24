@@ -1,0 +1,74 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Wallet
+Cierres del día
+Incidentes
+Histórico
+Ayuda
+AA
+Ana Admin
+Administrador
+Panel maestro
+
+Postulaciones pendientes: mensajeros, y vehículos o bodegas ofrecidos desde la web
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Postulaciones de mensajeros
+Prueba Comprime Pesadas
+Email
+e2e.2372910@ordenex.test
+Teléfono
+88882910
+Tipo de identificación
+cedula
+Nº de documento
+72372910
+Vehículo
+moto
+Placa
+E2E910
+Documentos
+Ver Cédula (anverso)
+Ver Cédula (reverso)
+Ver Matrícula (anverso)
+Ver Matrícula (reverso)
+Ver Foto de rostro
+Rechazar
+Aprobar
+1-1 de 1
+«
+‹
+1
+›
+»
+Vehículos y bodegas ofrecidos
+Pendientes
+Atendidas
+Vehículo
+Carlos Prueba VEHICULO
+Teléfono
+88884517
+Correo
+prueba.vehiculo.544517@ordenex.test
+Lo que nos contó
+
+Es un vehiculo de prueba del recorrido T10, con disponibilidad completa.
+
+Llegó
+20 ago 2026, 11:35 p. m.
+Marcar como atendida
+1-1 de 1
+«
+‹
+1
+›
+»

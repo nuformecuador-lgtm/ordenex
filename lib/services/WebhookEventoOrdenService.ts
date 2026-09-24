@@ -31,6 +31,7 @@ import { WebhookEntregaFallidaError } from "@/lib/services/WebhookEstadoService"
 import { dedupeKeyWebhookEvento } from "@/lib/services/jobs/webhook-evento-encolado";
 import type { ApiMensajeroDTO } from "@/lib/types/api-orden";
 import { EVENTO_PUBLICO_POR_TIPO } from "@/lib/types/orden-evento";
+import { nombreDeEstado } from "@/lib/types/order-status";
 
 // El mapa `tipo -> nombre publico` vive en `lib/types/orden-evento.ts` (lo lee tambien el contrato
 // OpenAPI). Se re-exporta aqui para los consumidores que ya lo importaban de este modulo.
@@ -44,7 +45,11 @@ interface DataEvento {
   numRemision: string;
   gestionId?: string;
   resultado?: string;
+  /** FICHA 455 (R25): nombre visible de `resultado`, justo detras de el. */
+  resultadoNombre?: string;
   resultadoAnterior?: string;
+  /** FICHA 455 (R25): nombre visible de `resultadoAnterior`, justo detras de el. */
+  resultadoAnteriorNombre?: string;
   motivo: string | null;
   mensajero: ApiMensajeroDTO | null;
   pendienteConfirmacion?: boolean;
@@ -141,8 +146,13 @@ export function armarData(d: DatosEntregaEvento): DataEvento {
     numGuia: data.numGuia,
     numRemision: data.numRemision,
     ...(data.gestionId !== undefined ? { gestionId: data.gestionId } : {}),
-    ...(data.resultado !== undefined ? { resultado: data.resultado } : {}),
-    ...(data.resultadoAnterior !== undefined ? { resultadoAnterior: data.resultadoAnterior } : {}),
+    // FICHA 455 (R25): cada codigo con su nombre PEGADO detras (la firma cubre el orden de claves).
+    ...(data.resultado !== undefined
+      ? { resultado: data.resultado, resultadoNombre: nombreDeEstado(data.resultado) }
+      : {}),
+    ...(data.resultadoAnterior !== undefined
+      ? { resultadoAnterior: data.resultadoAnterior, resultadoAnteriorNombre: nombreDeEstado(data.resultadoAnterior) }
+      : {}),
     motivo: data.motivo,
     mensajero: data.mensajero,
     ...(data.pendienteConfirmacion !== undefined ? { pendienteConfirmacion: data.pendienteConfirmacion } : {}),

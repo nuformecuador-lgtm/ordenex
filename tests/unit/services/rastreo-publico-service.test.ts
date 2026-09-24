@@ -15,6 +15,12 @@ import { RastreoPublicoService } from "@/lib/services/RastreoPublicoService";
 //
 // R33 — el service se construye con DOBLES: ni Prisma, ni `next/headers`, ni HTTP. Si algun
 // dia hiciera falta levantar algo para probarlo, la logica se habria escapado de la capa.
+//
+// ⏳ FICHA 455 (2026-09-24, T1.9; design §4; R31/R34): el rastreo ya no publica HITOS sino el NOMBRE
+// VISIBLE de cada estado (`linea[].nombre`, `nombreVigente`). Los casos conservan lo que medían
+// (orden, vigente = último, colapso de rachas, huérfano, lista blanca) con el vocabulario nuevo; el
+// colapso ahora funde el MISMO nombre, así que su escenario usa estados que comparten nombre
+// (repetidos o retirados plegados a su equivalente, R34).
 
 const CONFIG: RastreoPublicoConfig = {
   RATE_MAX: 8,
@@ -62,7 +68,7 @@ const LINEA_COMPLETA: readonly TransicionRastreoFila[] = [
   transicion("2026-08-10T14:00:00.000Z", "en_preparacion"),
   transicion("2026-08-11T15:00:00.000Z", "en_bodega_central"),
   transicion("2026-08-12T16:00:00.000Z", "en_reparto"),
-  transicion("2026-08-13T17:00:00.000Z", "entregada"),
+  transicion("2026-08-13T17:00:00.000Z", "entregado"),
 ];
 
 describe("R33 — el service se construye con dobles y resuelve sin Prisma ni next/headers", () => {
@@ -180,17 +186,17 @@ describe("R11 — normalizacion a digitos de AMBOS lados", () => {
   });
 });
 
-describe("R14/R20 — la linea son hitos YA OCURRIDOS y el vigente es el ultimo", () => {
+describe("R14/R20 — la linea son estados YA OCURRIDOS y el vigente es el ultimo", () => {
   it("devuelve la secuencia de hitos ocurridos con sus fechas y no añade ninguna entrada posterior a la ultima transicion", async () => {
     const { service } = build(ORDEN_VIVA, LINEA_COMPLETA);
     const resultado = await service.consultar(4321, "7766");
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
 
-    expect(resultado.envio.linea.map((entrada) => entrada.hito)).toEqual([
-      "registrado",
-      "en_bodega",
-      "en_reparto",
-      "entregado",
+    expect(resultado.envio.linea.map((entrada) => entrada.nombre)).toEqual([
+      "En preparación",
+      "En bodega central",
+      "En reparto",
+      "Entregado",
     ]);
     // Nada despues del ultimo hecho registrado: ni "en camino", ni pasos pendientes (G10).
     expect(resultado.envio.linea).toHaveLength(4);
@@ -203,8 +209,8 @@ describe("R14/R20 — la linea son hitos YA OCURRIDOS y el vigente es el ultimo"
       [...LINEA_COMPLETA],
       [
         transicion("2026-08-10T14:00:00.000Z", "en_preparacion"),
-        transicion("2026-08-11T14:00:00.000Z", "rechazada"),
-        transicion("2026-08-12T14:00:00.000Z", "por_devolver"),
+        transicion("2026-08-11T14:00:00.000Z", "devolucion_a_origen_por_rechazo"),
+        transicion("2026-08-12T14:00:00.000Z", "por_devolver_a_bodega_central"),
         transicion("2026-08-13T14:00:00.000Z", "devuelta_a_tienda"),
       ],
       [
@@ -217,7 +223,7 @@ describe("R14/R20 — la linea son hitos YA OCURRIDOS y el vigente es el ultimo"
       const resultado = await service.consultar(4321, "7766");
       if (resultado.estado !== "ok") throw new Error("se esperaba ok");
       const ultimo = resultado.envio.linea.at(-1);
-      expect(resultado.envio.hitoVigente).toBe(ultimo?.hito);
+      expect(resultado.envio.nombreVigente).toBe(ultimo?.nombre);
       expect(resultado.envio.actualizadoEn).toBe(ultimo?.fecha);
     }
   });
@@ -226,47 +232,62 @@ describe("R14/R20 — la linea son hitos YA OCURRIDOS y el vigente es el ultimo"
     const { service } = build(ORDEN_VIVA, [...LINEA_COMPLETA].reverse());
     const resultado = await service.consultar(4321, "7766");
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
-    expect(resultado.envio.linea.map((entrada) => entrada.hito)).toEqual([
-      "registrado",
-      "en_bodega",
-      "en_reparto",
-      "entregado",
+    expect(resultado.envio.linea.map((entrada) => entrada.nombre)).toEqual([
+      "En preparación",
+      "En bodega central",
+      "En reparto",
+      "Entregado",
     ]);
   });
 });
 
-describe("R18 — colapso de rachas del mismo hito (G9)", () => {
-  it("colapsa transiciones consecutivas del mismo hito conservando la fecha de la primera", async () => {
+describe("R18 — colapso de rachas del mismo nombre (G9; FICHA 455)", () => {
+  it("colapsa transiciones consecutivas del mismo nombre conservando la fecha de la primera", async () => {
     const { service } = build(ORDEN_VIVA, [
-      transicion("2026-08-10T14:00:00.000Z", "en_preparacion"), // registrado
-      transicion("2026-08-10T15:00:00.000Z", "por_recolectar_en_tienda"), // registrado
-      transicion("2026-08-10T16:00:00.000Z", "recolectando"), // registrado
-      transicion("2026-08-11T14:00:00.000Z", "en_bodega_central"), // en_bodega
-      transicion("2026-08-11T18:00:00.000Z", "en_bodega_satelite"), // en_bodega
-      transicion("2026-08-12T14:00:00.000Z", "entregada"), // entregado
+      transicion("2026-08-10T14:00:00.000Z", "pendiente"), // retirado -> En preparación (R34)
+      transicion("2026-08-10T15:00:00.000Z", "en_fulfillment"), // retirado -> En preparación (R34)
+      transicion("2026-08-10T16:00:00.000Z", "en_preparacion"), // En preparación
+      transicion("2026-08-11T14:00:00.000Z", "en_bodega_central"), // En bodega central
+      transicion("2026-08-11T18:00:00.000Z", "en_bodega_central"), // En bodega central (repetido)
+      transicion("2026-08-12T14:00:00.000Z", "entregado"), // Entregado
     ]);
     const resultado = await service.consultar(4321, "7766");
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
 
     expect(resultado.envio.linea).toEqual([
-      { hito: "registrado", fecha: "2026-08-10T08:00-06:00" }, // la PRIMERA de la racha
-      { hito: "en_bodega", fecha: "2026-08-11T08:00-06:00" },
-      { hito: "entregado", fecha: "2026-08-12T08:00-06:00" },
+      { nombre: "En preparación", fecha: "2026-08-10T08:00-06:00" }, // la PRIMERA de la racha
+      { nombre: "En bodega central", fecha: "2026-08-11T08:00-06:00" },
+      { nombre: "Entregado", fecha: "2026-08-12T08:00-06:00" },
     ]);
   });
 
-  it("una racha que vuelve al mismo hito mas tarde SI produce dos entradas (solo colapsa lo consecutivo)", async () => {
+  it("dos estados DISTINTOS que antes compartían hito ya no se funden (cada uno con su nombre)", async () => {
+    const { service } = build(ORDEN_VIVA, [
+      transicion("2026-08-10T14:00:00.000Z", "en_preparacion"),
+      transicion("2026-08-10T15:00:00.000Z", "por_recolectar_en_tienda"),
+      transicion("2026-08-10T16:00:00.000Z", "recolectando"),
+    ]);
+    const resultado = await service.consultar(4321, "7766");
+    if (resultado.estado !== "ok") throw new Error("se esperaba ok");
+    expect(resultado.envio.linea.map((e) => e.nombre)).toEqual([
+      "En preparación",
+      "Por recolectar en tienda",
+      "Recolectando",
+    ]);
+  });
+
+  it("una racha que vuelve al mismo nombre mas tarde SI produce dos entradas (solo colapsa lo consecutivo)", async () => {
     const { service } = build(ORDEN_VIVA, [
       transicion("2026-08-10T14:00:00.000Z", "en_reparto"),
-      transicion("2026-08-11T14:00:00.000Z", "reprogramada"),
+      transicion("2026-08-11T14:00:00.000Z", "reprogramado"),
       transicion("2026-08-12T14:00:00.000Z", "en_reparto"),
     ]);
     const resultado = await service.consultar(4321, "7766");
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
-    expect(resultado.envio.linea.map((entrada) => entrada.hito)).toEqual([
-      "en_reparto",
-      "reprogramado",
-      "en_reparto",
+    expect(resultado.envio.linea.map((entrada) => entrada.nombre)).toEqual([
+      "En reparto",
+      "Reprogramado",
+      "En reparto",
     ]);
   });
 
@@ -295,12 +316,12 @@ describe("R18 — colapso de rachas del mismo hito (G9)", () => {
       // UNA entrada, con la fecha de la PRIMERA de la racha: el destinatario no ve ningun tramite
       // nuestro, ni al pedir ayuda ni al rescatar.
       expect(resultado.envio.linea).toEqual([
-        { hito: "en_reparto", fecha: "2026-08-10T08:00-06:00" },
+        { nombre: "En reparto", fecha: "2026-08-10T08:00-06:00" },
       ]);
     })();
   });
 
-  it("235/R38: y el hito VIGENTE mientras la orden esta en ayuda sigue siendo «En reparto»", () => {
+  it("235/R38: y el estado VIGENTE publicado mientras la orden esta en ayuda sigue siendo «En reparto»", () => {
     return (async () => {
       const { service } = build(ORDEN_VIVA, [
         transicion("2026-08-10T14:00:00.000Z", "en_reparto"),
@@ -309,7 +330,8 @@ describe("R18 — colapso de rachas del mismo hito (G9)", () => {
       const resultado = await service.consultar(4321, "7766");
       if (resultado.estado !== "ok") throw new Error("se esperaba ok");
       // Sin este caso, el anterior no distinguiria «colapsa» de «la ultima no se pinta».
-      expect(resultado.envio.linea.map((e) => e.hito)).toEqual(["en_reparto"]);
+      expect(resultado.envio.linea.map((e) => e.nombre)).toEqual(["En reparto"]);
+      expect(resultado.envio.nombreVigente).toBe("En reparto");
     })();
   });
 });
@@ -318,7 +340,7 @@ describe("R19 — dia y hora en el calendario del negocio", () => {
   it("formatea dia y hora en el calendario del negocio para un instante UTC conocido", async () => {
     // 2026-08-15T02:30Z son las 20:30 del DIA ANTERIOR en Costa Rica (UTC-6): el dia
     // cambia, no solo la hora. Un formateo en UTC daria el 15 y mentiria al destinatario.
-    const { service } = build(ORDEN_VIVA, [transicion("2026-08-15T02:30:00.000Z", "entregada")]);
+    const { service } = build(ORDEN_VIVA, [transicion("2026-08-15T02:30:00.000Z", "entregado")]);
     const resultado = await service.consultar(4321, "7766");
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
     expect(resultado.envio.linea[0].fecha).toBe("2026-08-14T20:30-06:00");
@@ -327,7 +349,7 @@ describe("R19 — dia y hora en el calendario del negocio", () => {
   it("la zona sale de la CONFIGURACION: con otra zona, el mismo instante da otra hora", async () => {
     const { service } = build(
       ORDEN_VIVA,
-      [transicion("2026-08-15T02:30:00.000Z", "entregada")],
+      [transicion("2026-08-15T02:30:00.000Z", "entregado")],
       { ...CONFIG, ZONA_HORARIA: "UTC" },
     );
     const resultado = await service.consultar(4321, "7766");
@@ -357,35 +379,49 @@ describe("R21 — una sola lectura del historial", () => {
 });
 
 describe("R17 — una fila huerfana no rompe la proyeccion", () => {
-  it("un estatus fuera del catalogo aparece como hito neutral y su value crudo no viaja", async () => {
+  it("un estatus fuera del catalogo se lee «Estado no reconocido» y su value crudo no viaja (R10)", async () => {
     const { service } = build(ORDEN_VIVA, [
       transicion("2026-08-10T14:00:00.000Z", "en_preparacion"),
+      transicion("2026-08-11T14:00:00.000Z", "un_estatus_huerfano"),
+    ]);
+    const resultado = await service.consultar(4321, "7766");
+    if (resultado.estado !== "ok") throw new Error("se esperaba ok");
+    expect(resultado.envio.linea.map((entrada) => entrada.nombre)).toEqual([
+      "En preparación",
+      "Estado no reconocido",
+    ]);
+    expect(JSON.stringify(resultado)).not.toContain("un_estatus_huerfano");
+  });
+
+  it("FICHA 455 (R34): el retirado de la 155 se pliega a su equivalente y no viaja crudo", async () => {
+    const { service } = build(ORDEN_VIVA, [
+      transicion("2026-08-10T14:00:00.000Z", "en_bodega_central"),
       transicion("2026-08-11T14:00:00.000Z", "en_fulfillment"),
     ]);
     const resultado = await service.consultar(4321, "7766");
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
-    expect(resultado.envio.linea.map((entrada) => entrada.hito)).toEqual([
-      "registrado",
-      "en_proceso",
+    expect(resultado.envio.linea.map((entrada) => entrada.nombre)).toEqual([
+      "En bodega central",
+      "En preparación",
     ]);
     expect(JSON.stringify(resultado)).not.toContain("en_fulfillment");
   });
 });
 
 describe("R22 — el DTO es la lista blanca cerrada, construida campo a campo", () => {
-  it("devuelve exactamente numGuia, hitoVigente, actualizadoEn y linea, y ningun id interno", async () => {
+  it("devuelve exactamente numGuia, nombreVigente, actualizadoEn y linea, y ningun id interno", async () => {
     const { service } = build(ORDEN_VIVA, LINEA_COMPLETA);
     const resultado = await service.consultar(4321, "7766");
     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
 
     expect(Object.keys(resultado.envio).sort()).toEqual([
       "actualizadoEn",
-      "hitoVigente",
       "linea",
+      "nombreVigente",
       "numGuia",
     ]);
     for (const entrada of resultado.envio.linea) {
-      expect(Object.keys(entrada).sort()).toEqual(["fecha", "hito"]);
+      expect(Object.keys(entrada).sort()).toEqual(["fecha", "nombre"]);
     }
     const serializado = JSON.stringify(resultado);
     expect(serializado).not.toContain("orden-1"); // el id interno se queda en el service

@@ -16,10 +16,10 @@ import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 
 // Estatus destino de las transiciones del cron (valores de catalogo YA sembrados; esta feature
 // NO agrega estados). Origen SIEMPRE `devuelta` (guarda de idempotencia en el repo).
-const ESTATUS_DEVUELTA = "devuelta";
+const ESTATUS_DEVUELTA = "novedad";
 const ESTATUS_EN_BODEGA = "en_bodega_central"; // reintento -> bodega central
 const ESTATUS_EN_BODEGA_SATELITE = "en_bodega_satelite"; // reintento -> bodega satelite
-const ESTATUS_RECHAZADA = "rechazada"; // escalado (final)
+const ESTATUS_RECHAZADA = "devolucion_a_origen_por_rechazo"; // escalado (final)
 
 const HORA_MS = 60 * 60 * 1000;
 const DIA_MS = 24 * HORA_MS;

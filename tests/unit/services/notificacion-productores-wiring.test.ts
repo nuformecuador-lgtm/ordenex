@@ -141,7 +141,7 @@ const GESTION_PENDIENTE = {
   provinciaNombre: null,
   cantonNombre: null,
   distritoNombre: null,
-  resultado: "entregada" as const,
+  resultado: "entregado" as const,
   metodoPago: null,
   montoRecibido: null,
   evidenciaStoragePath: null,

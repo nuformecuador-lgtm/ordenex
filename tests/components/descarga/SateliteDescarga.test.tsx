@@ -144,7 +144,7 @@ const ORDENES: RecepcionSateliteDTO[] = [
   makeOrden({
     id: "o3",
     numRemision: "REM-003",
-    estatusValue: "por_devolver",
+    estatusValue: "por_devolver_a_bodega_central",
     cantonNombre: "Pococí",
     distritoNombre: "Guápiles",
     numGuia: null,
@@ -202,7 +202,7 @@ function renderModulo(ordenes: RecepcionSateliteDTO[] = ORDENES) {
     porRecibir: [],
     recibidas: ordenes.filter((o) => o.estatusValue === "en_bodega_satelite"),
     asignadas: [],
-    porDevolver: ordenes.filter((o) => o.estatusValue === "por_devolver"),
+    porDevolver: ordenes.filter((o) => o.estatusValue === "por_devolver_a_bodega_central"),
     enTransitoACentral: [],
     devueltas: [],
     zonaNombre: ZONA_ACTOR,

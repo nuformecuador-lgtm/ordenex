@@ -33,20 +33,20 @@ describeSiHayBase("454/T1.9 — intentos: la segunda via (evento de registro) (P
 
       // (1) `devuelta` de calle del mensajero.
       const dev = await e.sembrarOrden({ estatus: "en_reparto" });
-      await e.gestionarOk(dev.ordenId, "devuelta");
+      await e.gestionarOk(dev.ordenId, "novedad");
       // (2) la tienda reprograma desde una ayuda del mismo mensajero.
       const ayu = await e.sembrarOrden({ estatus: "en_reparto" });
       const ayuda = await e.pedirAyuda(ayu.ordenId);
-      const desdeAyuda = await e.gestionarDesdeAyuda(ayu.ordenId, "reprogramada");
+      const desdeAyuda = await e.gestionarDesdeAyuda(ayu.ordenId, "reprogramado");
       // (3) sintetica: escalado por plazo en un cierre APROBADO, sin evento.
-      const sin = await e.sembrarOrden({ estatus: "rechazada" });
-      await e.sembrarIntentoPasado(sin.ordenId, { resultado: "rechazada", origenTipo: "escalado_devuelta_sla" });
+      const sin = await e.sembrarOrden({ estatus: "devolucion_a_origen_por_rechazo" });
+      await e.sembrarIntentoPasado(sin.ordenId, { resultado: "devolucion_a_origen_por_rechazo", origenTipo: "escalado_devuelta_sla" });
       // (4) solo familia de aplicacion (`anclaje_devolucion`), sin evento, en un cierre APROBADO.
-      const anc = await e.sembrarOrden({ estatus: "devuelta" });
-      const g4 = await e.sembrarIntentoPasado(anc.ordenId, { resultado: "devuelta" });
+      const anc = await e.sembrarOrden({ estatus: "novedad" });
+      const g4 = await e.sembrarIntentoPasado(anc.ordenId, { resultado: "novedad" });
       await e.tx.ordenHistorialEstado.updateMany({
         where: { gestionOrdenId: g4.gestionId },
-        data: { origenTipo: "anclaje_devolucion", estatusDestinoId: e.id("devuelta") },
+        data: { origenTipo: "anclaje_devolucion", estatusDestinoId: e.id("novedad") },
       });
 
       const cierreId = await e.solicitarCierreOk();

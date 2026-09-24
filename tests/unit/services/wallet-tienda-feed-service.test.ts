@@ -136,7 +136,7 @@ function mapMovs(movs: { categoria: string; monto: string; tipo: string; tiendaI
 
 describe("WalletTiendaFeedService — entregada (R8/R9)", () => {
   it("emite credito COD + debitos flete/iva_flete/comision/iva_comision (cobraComision=true)", async () => {
-    const tx = buildTx([gestion("entregada")]);
+    const tx = buildTx([gestion("entregado")]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
     const movs = await svc.construirMovimientosPorTienda("c1", tx);
     const map = mapMovs(movs);
@@ -158,7 +158,7 @@ describe("WalletTiendaFeedService — entregada (R8/R9)", () => {
   });
 
   it("cobraComision=false -> NO emite comision ni su IVA (credito + flete/iva_flete)", async () => {
-    const tx = buildTx([gestion("entregada", { cobraComision: false })]);
+    const tx = buildTx([gestion("entregado", { cobraComision: false })]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
     const cats = (await svc.construirMovimientosPorTienda("c1", tx)).map((m) => m.categoria);
     expect(cats).toContain("cod_recaudado");
@@ -168,14 +168,14 @@ describe("WalletTiendaFeedService — entregada (R8/R9)", () => {
   });
 
   it("esCentral usa flete GAM", async () => {
-    const tx = buildTx([gestion("entregada", { esCentral: true, cobraComision: false })]);
+    const tx = buildTx([gestion("entregado", { esCentral: true, cobraComision: false })]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
     const map = mapMovs(await svc.construirMovimientosPorTienda("c1", tx));
     expect(map.flete).toBe("1500.00");
   });
 
-  it("R9: montoRecibido null en entregada -> credito COD 0.00 OMITIDO (R11)", async () => {
-    const tx = buildTx([gestion("entregada", { montoRecibido: null, cobraComision: false })]);
+  it("R9: montoRecibido null en entregado -> credito COD 0.00 OMITIDO (R11)", async () => {
+    const tx = buildTx([gestion("entregado", { montoRecibido: null, cobraComision: false })]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
     const cats = (await svc.construirMovimientosPorTienda("c1", tx)).map((m) => m.categoria);
     expect(cats).not.toContain("cod_recaudado"); // 0.00 omitido
@@ -188,8 +188,8 @@ describe("WalletTiendaFeedService — rechazada + interruptor Q3 (R10/R28; ficha
     // Ficha 301: eran DOS gestiones (devuelta + rechazada) y sumaban 800/104. Ahora la
     // devuelta no aporta, asi que los mismos dos movimientos salen de las rechazadas solas.
     const tx = buildTx([
-      gestion("rechazada", { montoRecibido: null }),
-      gestion("rechazada", { montoRecibido: null }),
+      gestion("devolucion_a_origen_por_rechazo", { montoRecibido: null }),
+      gestion("devolucion_a_origen_por_rechazo", { montoRecibido: null }),
     ]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
     const movs = await svc.construirMovimientosPorTienda("c1", tx);
@@ -204,15 +204,15 @@ describe("WalletTiendaFeedService — rechazada + interruptor Q3 (R10/R28; ficha
   it("ficha 301: flag=TRUE y una DEVUELTA -> el ledger de la tienda no recibe NADA", async () => {
     // El cobro que la ficha 301 elimina, visto donde le duele a la tienda: su libro. Antes de
     // esa fecha esta misma gestion escribia 400.00 + 52.00 de debito.
-    const tx = buildTx([gestion("devuelta", { montoRecibido: null })]);
+    const tx = buildTx([gestion("novedad", { montoRecibido: null })]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
     expect(await svc.construirMovimientosPorTienda("c1", tx)).toEqual([]);
   });
 
   it("ficha 301: una devuelta en un cierre mixto no mueve el saldo, con el flag en TRUE", async () => {
     // Y no es que el flag lo esconda: el flag esta ENCENDIDO. El concepto no nace.
-    const soloEntregada = buildTx([gestion("entregada")]);
-    const conDevuelta = buildTx([gestion("entregada"), gestion("devuelta", { montoRecibido: null })]);
+    const soloEntregada = buildTx([gestion("entregado")]);
+    const conDevuelta = buildTx([gestion("entregado"), gestion("novedad", { montoRecibido: null })]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
     expect(await svc.construirMovimientosPorTienda("c1", conDevuelta)).toEqual(
       await svc.construirMovimientosPorTienda("c1", soloEntregada),
@@ -220,7 +220,7 @@ describe("WalletTiendaFeedService — rechazada + interruptor Q3 (R10/R28; ficha
   });
 
   it("flag=FALSE: rechazada NO emite flete_devolucion/iva en la tienda", async () => {
-    const tx = buildTx([gestion("rechazada", { montoRecibido: null })]);
+    const tx = buildTx([gestion("devolucion_a_origen_por_rechazo", { montoRecibido: null })]);
     const svc = new WalletTiendaFeedService(FLAG_OFF);
     const movs = await svc.construirMovimientosPorTienda("c1", tx);
     expect(movs).toEqual([]); // ni credito (0) ni los 2 debitos de devolucion
@@ -228,8 +228,8 @@ describe("WalletTiendaFeedService — rechazada + interruptor Q3 (R10/R28; ficha
 
   it("flag=FALSE: en un cierre mixto, entregada intacta y rechazada sin sus 2 debitos", async () => {
     const tx = buildTx([
-      gestion("entregada"), // credito + 4 debitos
-      gestion("rechazada", { montoRecibido: null }), // descartada por el flag
+      gestion("entregado"), // credito + 4 debitos
+      gestion("devolucion_a_origen_por_rechazo", { montoRecibido: null }), // descartada por el flag
     ]);
     const svc = new WalletTiendaFeedService(FLAG_OFF);
     const cats = (await svc.construirMovimientosPorTienda("c1", tx)).map((m) => m.categoria);
@@ -243,7 +243,7 @@ describe("WalletTiendaFeedService — rechazada + interruptor Q3 (R10/R28; ficha
   it("R28: DEFAULT del flag es TRUE (sin config inyectada usa el singleton)", async () => {
     // Sin segundo argumento -> usa walletTiendaConfig (default true). Verificamos que
     // rechazada genera los 2 debitos de devolucion (ficha 301: la devuelta ya no).
-    const tx = buildTx([gestion("rechazada", { montoRecibido: null })]);
+    const tx = buildTx([gestion("devolucion_a_origen_por_rechazo", { montoRecibido: null })]);
     const svc = new WalletTiendaFeedService();
     const cats = (await svc.construirMovimientosPorTienda("c1", tx)).map((m) => m.categoria);
     expect(cats).toContain("flete_devolucion");
@@ -252,14 +252,14 @@ describe("WalletTiendaFeedService — rechazada + interruptor Q3 (R10/R28; ficha
 });
 
 describe("WalletTiendaFeedService — reprogramada, tarifa null, agregacion (R11/R14)", () => {
-  it("reprogramada -> ningun movimiento (ni credito ni debito)", async () => {
-    const tx = buildTx([gestion("reprogramada", { montoRecibido: null })]);
+  it("reprogramado -> ningun movimiento (ni credito ni debito)", async () => {
+    const tx = buildTx([gestion("reprogramado", { montoRecibido: null })]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
     expect(await svc.construirMovimientosPorTienda("c1", tx)).toEqual([]);
   });
 
   it("R9/R14: tarifa congelada ausente -> debitos 0.00 (omitidos) pero credito COD intacto, sin lanzar", async () => {
-    const tx = buildTx([gestion("entregada", { montoRecibido: "5000.00" })], { sinTarifa: true });
+    const tx = buildTx([gestion("entregado", { montoRecibido: "5000.00" })], { sinTarifa: true });
     const svc = new WalletTiendaFeedService(FLAG_ON);
     const movs = await svc.construirMovimientosPorTienda("c1", tx);
     const map = mapMovs(movs);
@@ -270,9 +270,9 @@ describe("WalletTiendaFeedService — reprogramada, tarifa null, agregacion (R11
 
   it("R11: agrega por (tienda, concepto) y separa por tienda; omite 0.00", async () => {
     const tx = buildTx([
-      gestion("entregada", { tiendaId: "t1", montoRecibido: "10000.00", cobraComision: false }),
-      gestion("entregada", { tiendaId: "t1", montoRecibido: "5000.00", cobraComision: false }),
-      gestion("entregada", { tiendaId: "t2", montoRecibido: "2000.00", cobraComision: false }),
+      gestion("entregado", { tiendaId: "t1", montoRecibido: "10000.00", cobraComision: false }),
+      gestion("entregado", { tiendaId: "t1", montoRecibido: "5000.00", cobraComision: false }),
+      gestion("entregado", { tiendaId: "t2", montoRecibido: "2000.00", cobraComision: false }),
     ]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
     const movs = await svc.construirMovimientosPorTienda("c1", tx);
@@ -290,7 +290,7 @@ describe("WalletTiendaFeedService — reprogramada, tarifa null, agregacion (R11
   it("R13: la TIENDA destinataria sale del SNAPSHOT, no de la orden viva", async () => {
     // El vector propio de la 43: `orden.tienda_id` decide A QUIEN se acredita/debita. Leerlo
     // vivo al aprobar permitia mover el dinero de ledger re-apuntando la orden.
-    const tx = buildTx([gestion("entregada", { tiendaId: "t-congelada" })]);
+    const tx = buildTx([gestion("entregado", { tiendaId: "t-congelada" })]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
 
     const movs = await svc.construirMovimientosPorTienda("c1", tx);
@@ -303,7 +303,7 @@ describe("WalletTiendaFeedService — reprogramada, tarifa null, agregacion (R11
   });
 
   it("R13: no consulta orden, zona ni tarifas vivas; de la gestion solo toma lo que ES suyo", async () => {
-    const tx = buildTx([gestion("entregada")]);
+    const tx = buildTx([gestion("entregado")]);
     const svc = new WalletTiendaFeedService(FLAG_ON);
 
     await svc.construirMovimientosPorTienda("c1", tx);
@@ -320,7 +320,7 @@ describe("WalletTiendaFeedService — reprogramada, tarifa null, agregacion (R11
   });
 
   it("R14: falta la fila congelada -> lanza y NO emite ningun movimiento (sin fallback)", async () => {
-    const tx = buildTx([gestion("entregada"), gestion("entregada", { tiendaId: "t2" })], {
+    const tx = buildTx([gestion("entregado"), gestion("entregado", { tiendaId: "t2" })], {
       omitirDetalleDe: [1],
     });
     const svc = new WalletTiendaFeedService(FLAG_ON);
@@ -344,8 +344,8 @@ describe("WalletTiendaFeedService — INVARIANTE R15 (cuadre con la 42, ambos es
     // siga cubriendo los DOS conceptos de devolucion; con una devuelta ya no habria ninguno
     // que cuadrar y el caso se volveria mudo sobre esa mitad de la formula.
     const gestiones = [
-      gestion("entregada", { tiendaId: "t1", montoRecibido: "10000.00" }),
-      gestion("rechazada", { tiendaId: "t1", montoRecibido: null }),
+      gestion("entregado", { tiendaId: "t1", montoRecibido: "10000.00" }),
+      gestion("devolucion_a_origen_por_rechazo", { tiendaId: "t1", montoRecibido: null }),
     ];
     const tx = buildTx(gestiones);
     const svc = new WalletTiendaFeedService(FLAG_ON);
@@ -393,7 +393,7 @@ describe("WalletTiendaFeedService — INVARIANTE R15 (cuadre con la 42, ambos es
     // Ficha 301: era `devuelta`. El invariante que este caso mide —que el flag mueve el
     // concepto de la tienda a Ordenex sin alterar la 42— solo tiene contenido donde el
     // concepto EXISTE, y desde el 2026-08-28 eso es `rechazada`.
-    const gestiones = [gestion("rechazada", { tiendaId: "t1", montoRecibido: null })];
+    const gestiones = [gestion("devolucion_a_origen_por_rechazo", { tiendaId: "t1", montoRecibido: null })];
     const tx = buildTx(gestiones);
     const svc = new WalletTiendaFeedService(FLAG_OFF);
     const movs = await svc.construirMovimientosPorTienda("c1", tx);
@@ -435,7 +435,7 @@ describe("WalletTiendaFeedService — reversion historica por ajuste compensator
     // ese tramo al pasar a la opcion 2, se emite un movimiento de AJUSTE compensatorio (categoria
     // propia, tipo credito que neutraliza el debito), NUNCA alterando la fila original.
     // El feed hacia adelante (flag=false) simplemente deja de generar ese debito.
-    const tx = buildTx([gestion("devuelta", { montoRecibido: null })]);
+    const tx = buildTx([gestion("novedad", { montoRecibido: null })]);
     const feedFwd = new WalletTiendaFeedService(FLAG_OFF);
     const adelante = await feedFwd.construirMovimientosPorTienda("c2", tx);
     // Hacia adelante ya no genera el debito de devolucion.
@@ -470,7 +470,7 @@ describe("FICHA 450/R3 · el feed del ledger por tienda no lanza dos consultas a
       },
     ],
     "gestionOrden.findMany": [
-      { ordenId: "o0", resultado: "entregada", montoRecibido: new Prisma.Decimal("10000.00") },
+      { ordenId: "o0", resultado: "entregado", montoRecibido: new Prisma.Decimal("10000.00") },
     ],
   };
 
@@ -495,7 +495,7 @@ describe("FICHA 450/R3 · el feed del ledger por tienda no lanza dos consultas a
     const svc = new WalletTiendaFeedService(FLAG_ON);
 
     const conVigilado = await svc.construirMovimientosPorTienda("c1", vigilado.tx);
-    const conNormal = await svc.construirMovimientosPorTienda("c1", buildTx([gestion("entregada")]));
+    const conNormal = await svc.construirMovimientosPorTienda("c1", buildTx([gestion("entregado")]));
 
     expect(conVigilado).toEqual(conNormal);
   });

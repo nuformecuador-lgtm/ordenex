@@ -45,10 +45,10 @@ describe("R5 — los mapas por RESULTADO clasifican `incidente` explicitamente",
     const src = leer(LIB, "services", "MisAsignacionesService.ts");
     const fn = src.slice(src.indexOf("function buildGestionData"));
     const casos: GestionResultado[] = [
-      "entregada",
-      "reprogramada",
-      "devuelta",
-      "rechazada",
+      "entregado",
+      "reprogramado",
+      "novedad",
+      "devolucion_a_origen_por_rechazo",
       "incidente",
     ];
     for (const caso of casos) expect(fn, `falta el case "${caso}"`).toContain(`case "${caso}":`);
@@ -109,8 +109,14 @@ describe("R5/R31 — la categoria nueva esta clasificada en la wallet", () => {
       path.join(APP, "(app)", "cierres-admin", "_components", "cierre-labels.ts"),
       "utf8",
     );
+    // FICHA 455 (2026-09-24, R4/R5): la etiqueta ya no es un literal escrito a mano («Incidentes»):
+    // sale de la fuente única (`nombreDeResultado`). Lo que se exige sigue siendo lo mismo: que la
+    // ÚNICA declaración clasifique `incidente`, ahora con su nombre derivado y su texto vacío.
     expect(etiquetas, "cierre-labels.ts sin etiqueta de incidente").toMatch(
-      /incidente:\s*"Incidentes"/,
+      /incidente:\s*nombreDeResultado\("incidente"\)/,
+    );
+    expect(etiquetas, "cierre-labels.ts sin texto de grupo vacio de incidente").toMatch(
+      /incidente:\s*textoResultadoVacio\("incidente"\)/,
     );
 
     for (const archivo of [
@@ -121,9 +127,9 @@ describe("R5/R31 — la categoria nueva esta clasificada en la wallet", () => {
       expect(src, `${path.basename(archivo)} no lee RESULTADO_LABEL de cierre-labels`).toMatch(
         /RESULTADO_LABEL/,
       );
-      expect(src, `${path.basename(archivo)} sin texto de grupo vacio`).toMatch(
-        /incidente:\s*"No hay incidentes\."/,
-      );
+      // FICHA 455 (2026-09-24): el texto vacío se declara UNA vez en `cierre-labels` (arriba) y
+      // los dos detalles lo LEEN; antes cada uno tenía su mapa con «No hay incidentes.».
+      expect(src, `${path.basename(archivo)} sin texto de grupo vacio`).toMatch(/RESULTADO_VACIO/);
     }
   });
 });

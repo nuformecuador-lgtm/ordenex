@@ -246,7 +246,7 @@ describe("columnasDetalle — un dato retirado no se pinta como cero ni como gui
     // una de esas columnas siguiera montada, `PriceLabel` pintaria el cero de un hueco —«esta
     // orden no paga flete»— que es una afirmacion FALSA, y peor que enseñar la cifra.
     const fila = recortarPorAlcance(
-      ordenDelDetalle({ id: "o1", resultadoDelDia: "entregada" }),
+      ordenDelDetalle({ id: "o1", resultadoDelDia: "entregado" }),
       "zona",
     );
     const { celdas } = pintar("zona", fila);
@@ -267,7 +267,7 @@ describe("columnasDetalle — un dato retirado no se pinta como cero ni como gui
     // hay. Montar las columnas de dinero sobre una fila recortada es exactamente el fallo que
     // R15 describe, y aqui se provoca a proposito.
     const fila = recortarPorAlcance(
-      ordenDelDetalle({ id: "o1", resultadoDelDia: "entregada" }),
+      ordenDelDetalle({ id: "o1", resultadoDelDia: "entregado" }),
       "zona",
     );
     const { celdas } = pintar("global", fila);
@@ -281,10 +281,10 @@ describe("columnasDetalle — un dato retirado no se pinta como cero ni como gui
 
 describe("columnasDetalle — «Resultado del día» (R22/R27)", () => {
   it("se etiqueta con el mapa compartido de estatus", () => {
-    const { tabla } = pintar("zona", ordenDelDetalle({ id: "o1", resultadoDelDia: "reprogramada" }));
+    const { tabla } = pintar("zona", ordenDelDetalle({ id: "o1", resultadoDelDia: "reprogramado" }));
     const columna = idsMontados("zona").indexOf(COLUMNA_RESULTADO_ID);
     const celda = tabla.querySelectorAll("tbody td")[columna];
-    expect(celda?.textContent?.trim()).toBe("Reprogramada");
+    expect(celda?.textContent?.trim()).toBe("Reprogramado");
   });
 
   it("sin gestion hoy pinta el marcador de vacio, no una cadena cruda ni un cero", () => {

@@ -393,7 +393,7 @@ export type GestionarInput = {
 } & (
   | {
       ordenId: string;
-      resultado: "entregada";
+      resultado: "entregado";
       montoRecibido: number;
       /**
        * Feature 212 (R12/R19): metodo ESCALAR de compatibilidad. `null` cuando el cliente ya
@@ -410,17 +410,17 @@ export type GestionarInput = {
       pagos: LineaPago[];
       evidencias: EvidenciaArchivo[];
     }
-  | { ordenId: string; resultado: "reprogramada"; fechaReprogramacion: string; motivo: string }
+  | { ordenId: string; resultado: "reprogramado"; fechaReprogramacion: string; motivo: string }
   // Feature 73/R10: la causa tipificada es un campo de la rama `devuelta` y SOLO de ella.
   // Feature 75: la evidencia pasa a ser obligatoria tambien en `devuelta` (espejo de rechazada).
   | {
       ordenId: string;
-      resultado: "devuelta";
+      resultado: "novedad";
       causaDevolucion: CausaDevolucion;
       motivo: string;
       evidencias: EvidenciaArchivo[];
     }
-  | { ordenId: string; resultado: "rechazada"; motivo: string; evidencias: EvidenciaArchivo[] }
+  | { ordenId: string; resultado: "devolucion_a_origen_por_rechazo"; motivo: string; evidencias: EvidenciaArchivo[] }
   // Feature 158 (R9/R10/R11): el INCIDENTE. Causa tipificada + motivo libre + 1..N fotos
   // OBLIGATORIAS en las TRES causas (Q-B). Sin `montoRecibido`/`metodoPago`: no hay recaudo.
   | {

@@ -101,7 +101,7 @@ describe("413/R2 — la lista de estados del reparto del mensajero tiene UNA fue
     //
     // ⏳ 2026-09-23 (FICHA 454, R37): sale `ayuda_tienda`. La orden con ayuda abierta sigue
     // `en_reparto` y el portal la separa por la DERIVACION, no por estado. Antes: tres estados.
-    expect([...ESTADOS_REPARTO_MENSAJERO]).toEqual(["por_recoger", "en_reparto"]);
+    expect([...ESTADOS_REPARTO_MENSAJERO]).toEqual(["mensajero_recogiendo_en_bodega", "en_reparto"]);
   });
 
   it("⭑ y la declara EL MÓDULO DE CONSTANTES, no otro sitio", () => {

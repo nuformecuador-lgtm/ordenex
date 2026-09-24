@@ -49,7 +49,7 @@ describe("registrarCambioEstado (R6/R7)", () => {
       {
         ordenId: "o1",
         estatusOrigenId: idEstado("en_reparto"),
-        estatusDestinoId: idEstado("entregada"),
+        estatusDestinoId: idEstado("entregado"),
         actorUsuarioId: "u1",
         origenTipo: "gestion",
         motivo: "cliente ausente",
@@ -78,7 +78,7 @@ describe("registrarCambioEstado (R6/R7)", () => {
       },
       {
         ordenId: "o2",
-        estatusOrigenId: idEstado("reprogramada"),
+        estatusOrigenId: idEstado("reprogramado"),
         estatusDestinoId: idEstado("en_bodega_central"),
         actorUsuarioId: null, // R21: sistema/cron
         origenTipo: "liberacion_reprogramada",
@@ -98,7 +98,7 @@ describe("registrarCambioEstado (R6/R7)", () => {
     });
     expect(arg.data[1]).toEqual({
       ordenId: "o2",
-      estatusOrigenId: idEstado("reprogramada"),
+      estatusOrigenId: idEstado("reprogramado"),
       estatusDestinoId: idEstado("en_bodega_central"),
       actorUsuarioId: null,
       origenTipo: "liberacion_reprogramada",
@@ -137,14 +137,14 @@ describe("findHistorialByOrden (R26/R5)", () => {
         id: "h2",
         ordenId: "o1",
         estatusOrigenId: idEstado("en_reparto"),
-        estatusDestinoId: idEstado("devuelta"),
+        estatusDestinoId: idEstado("novedad"),
         actorUsuarioId: null, // sistema
         origenTipo: "gestion",
         motivo: "cliente ausente",
         gestionOrdenId: "g1",
         createdAt: new Date("2026-07-13T12:00:00.000Z"),
         estatusOrigen: { value: "en_reparto" },
-        estatusDestino: { value: "devuelta" },
+        estatusDestino: { value: "novedad" },
         actor: null,
       },
     ]);
@@ -180,7 +180,7 @@ describe("findHistorialByOrden (R26/R5)", () => {
       {
         clase: "transicion",
         estatusOrigenValue: "en_reparto",
-        estatusDestinoValue: "devuelta",
+        estatusDestinoValue: "novedad",
         origenTipo: "gestion",
         actorNombre: null, // sistema (R21)
         motivo: "cliente ausente",
@@ -200,7 +200,7 @@ describe("findHistorialByOrden (R26/R5)", () => {
 function gestion(over: Partial<FilaGestionFake> = {}): FilaGestionFake {
   return {
     ordenId: "o1",
-    resultado: "devuelta",
+    resultado: "novedad",
     anuladaAt: null,
     cierreId: "c1",
     cierreEstado: "aprobado",
@@ -235,7 +235,7 @@ describe("contarIntentosVigentes — el criterio NUEVO (215/R1/R2/R3/R5/R8/R29/R
 
   // R1: los TRES resultados que cuentan. `rechazada` es NUEVO — con el criterio viejo no
   // contaba por ninguna via (su destino no era `devuelta` ni `reprogramada`).
-  it.each(["devuelta", "reprogramada", "rechazada"] as const)(
+  it.each(["novedad", "reprogramado", "devolucion_a_origen_por_rechazo"] as const)(
     "R1: el resultado `%s` en un cierre APROBADO cuenta como intento",
     async (resultado) => {
       const { repo } = repoSobre([gestion({ resultado })]);
@@ -244,7 +244,7 @@ describe("contarIntentosVigentes — el criterio NUEVO (215/R1/R2/R3/R5/R8/R29/R
   );
 
   // R2: la entrega lograda no es un intento fallido, y el incidente es un desenlace propio.
-  it.each(["entregada", "incidente"] as const)(
+  it.each(["entregado", "incidente"] as const)(
     "R2: el resultado `%s` NO cuenta, ni con el cierre aprobado",
     async (resultado) => {
       const { repo } = repoSobre([gestion({ resultado })]);
@@ -292,8 +292,8 @@ describe("contarIntentosVigentes — el criterio NUEVO (215/R1/R2/R3/R5/R8/R29/R
   // saldria 2: el cron escalaria antes de tiempo y se cobraria `cobroRechazado` (56) de mas.
   it("R29: DOS gestiones vigentes contables en el MISMO cierre aprobado -> 1, no 2", async () => {
     const { repo } = repoSobre([
-      gestion({ resultado: "devuelta", cierreId: "c1" }),
-      gestion({ resultado: "reprogramada", cierreId: "c1" }),
+      gestion({ resultado: "novedad", cierreId: "c1" }),
+      gestion({ resultado: "reprogramado", cierreId: "c1" }),
     ]);
     expect(await repo.contarIntentosVigentes("o1")).toBe(1);
   });
@@ -313,9 +313,9 @@ describe("contarIntentosVigentes — el criterio NUEVO (215/R1/R2/R3/R5/R8/R29/R
   // quedaria muerto.
   it("R30: 3 cierres aprobados distintos con resultado contable -> 3", async () => {
     const { repo } = repoSobre([
-      gestion({ cierreId: "c1", resultado: "devuelta" }),
-      gestion({ cierreId: "c2", resultado: "reprogramada" }),
-      gestion({ cierreId: "c3", resultado: "rechazada" }),
+      gestion({ cierreId: "c1", resultado: "novedad" }),
+      gestion({ cierreId: "c2", resultado: "reprogramado" }),
+      gestion({ cierreId: "c3", resultado: "devolucion_a_origen_por_rechazo" }),
     ]);
     expect(await repo.contarIntentosVigentes("o1")).toBe(3);
   });
@@ -333,7 +333,7 @@ describe("contarIntentosVigentes — el criterio NUEVO (215/R1/R2/R3/R5/R8/R29/R
   it("R31: el resultado cuenta aunque la orden ya haya cambiado de estado despues", async () => {
     // La fila de gestion es la MISMA se haya reprogramado la tienda (#22), liberado el cron SLA
     // (#19/#20) o recuperado bodega a mano (#23/#24): el predicado no mira la orden.
-    const { repo } = repoSobre([gestion({ resultado: "devuelta", cierreId: "c1" })]);
+    const { repo } = repoSobre([gestion({ resultado: "novedad", cierreId: "c1" })]);
     expect(await repo.contarIntentosVigentes("o1")).toBe(1);
   });
 
@@ -364,7 +364,7 @@ describe("contarIntentosVigentes — el criterio NUEVO (215/R1/R2/R3/R5/R8/R29/R
 
   // R8: `0` explicito, no ausencia de dato ni error.
   it("R8: orden sin gestiones contables -> 0", async () => {
-    const { repo } = repoSobre([gestion({ resultado: "entregada" })]);
+    const { repo } = repoSobre([gestion({ resultado: "entregado" })]);
     expect(await repo.contarIntentosVigentes("o1")).toBe(0);
   });
 
@@ -384,7 +384,7 @@ describe("contarIntentosVigentes — el criterio NUEVO (215/R1/R2/R3/R5/R8/R29/R
   it("INCLUSION: el filtro de resultados usa `in` y NO contiene ningun `notIn`", async () => {
     const where = await whereIndividual();
     expect(where.resultado).toEqual({
-      in: ["rechazada", "devuelta", "reprogramada"],
+      in: ["devolucion_a_origen_por_rechazo", "novedad", "reprogramado"],
     });
     expect(JSON.stringify(where)).not.toContain("notIn");
   });
@@ -440,10 +440,10 @@ describe("contarIntentosVigentesEnLote (215/R4/R7/R8/R29/R30)", () => {
   // gestiones de la misma orden en el mismo cierre colapsan a 1 tambien en el lote.
   it("R29: dos gestiones vigentes de la misma orden en el MISMO cierre -> 1 en el lote", async () => {
     const { repo } = repoSobre([
-      gestion({ ordenId: "o1", cierreId: "c1", resultado: "devuelta" }),
-      gestion({ ordenId: "o1", cierreId: "c1", resultado: "reprogramada" }),
-      gestion({ ordenId: "o2", cierreId: "c1", resultado: "devuelta" }),
-      gestion({ ordenId: "o2", cierreId: "c2", resultado: "devuelta" }),
+      gestion({ ordenId: "o1", cierreId: "c1", resultado: "novedad" }),
+      gestion({ ordenId: "o1", cierreId: "c1", resultado: "reprogramado" }),
+      gestion({ ordenId: "o2", cierreId: "c1", resultado: "novedad" }),
+      gestion({ ordenId: "o2", cierreId: "c2", resultado: "novedad" }),
     ]);
     const mapa = await repo.contarIntentosVigentesEnLote(["o1", "o2", "o3"]);
     expect(mapa.get("o1")).toBe(1);
@@ -491,10 +491,10 @@ describe("contarIntentosVigentesEnLote (215/R4/R7/R8/R29/R30)", () => {
 describe("whereIntentosVigentes — semantica del predicado (215/R1/R2/R3/R5/R29/R30)", () => {
   it("caso mixto: de 7 gestiones solo cuentan 2 cierres aprobados distintos", async () => {
     const { repo } = repoSobre([
-      gestion({ cierreId: "c1", resultado: "devuelta" }), // cuenta
-      gestion({ cierreId: "c1", resultado: "reprogramada" }), // mismo cierre -> no suma (R29)
-      gestion({ cierreId: "c2", resultado: "rechazada" }), // cuenta (cierre distinto, R30)
-      gestion({ cierreId: "c3", resultado: "entregada" }), // R2: no cuenta
+      gestion({ cierreId: "c1", resultado: "novedad" }), // cuenta
+      gestion({ cierreId: "c1", resultado: "reprogramado" }), // mismo cierre -> no suma (R29)
+      gestion({ cierreId: "c2", resultado: "devolucion_a_origen_por_rechazo" }), // cuenta (cierre distinto, R30)
+      gestion({ cierreId: "c3", resultado: "entregado" }), // R2: no cuenta
       gestion({ cierreId: "c4", resultado: "incidente" }), // R2: no cuenta
       gestion({ cierreId: "c5", cierreEstado: "solicitado" }), // R3: no cuenta
       gestion({ cierreId: "c6", anuladaAt: new Date("2026-08-01T00:00:00.000Z") }), // R5: no
@@ -515,9 +515,9 @@ describe("whereIntentosVigentes — semantica del predicado (215/R1/R2/R3/R5/R29
   // R4/R29: individual y lote dan EL MISMO numero para la misma orden sobre las MISMAS filas.
   it("R4: individual y lote coinciden sobre las mismas filas", async () => {
     const filas = [
-      gestion({ cierreId: "c1", resultado: "devuelta" }),
-      gestion({ cierreId: "c1", resultado: "rechazada" }),
-      gestion({ cierreId: "c2", resultado: "reprogramada" }),
+      gestion({ cierreId: "c1", resultado: "novedad" }),
+      gestion({ cierreId: "c1", resultado: "devolucion_a_origen_por_rechazo" }),
+      gestion({ cierreId: "c2", resultado: "reprogramado" }),
     ];
     const { repo } = repoSobre(filas);
     const individual = await repo.contarIntentosVigentes("o1");
@@ -542,7 +542,7 @@ describe("el discriminador de las gestiones SINTETICAS (215/R12/R18-b/R34) [💰
   it("R18-b: la sintetica del ESCALADO SLA no cuenta, aunque su cierre este APROBADO", async () => {
     const { repo } = repoSobre([
       gestion({
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         cierreId: "c1",
         cierreEstado: "aprobado",
         origenTiposHistorial: ["escalado_devuelta_sla"],
@@ -557,7 +557,7 @@ describe("el discriminador de las gestiones SINTETICAS (215/R12/R18-b/R34) [💰
   it("R12: la reprogramacion de la TIENDA no cuenta, aunque su cierre este APROBADO", async () => {
     const { repo } = repoSobre([
       gestion({
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         cierreId: "c1",
         cierreEstado: "aprobado",
         origenTiposHistorial: ["reprogramacion_tienda"],
@@ -574,9 +574,9 @@ describe("el discriminador de las gestiones SINTETICAS (215/R12/R18-b/R34) [💰
   // de tiempo — exactamente el doble conteo que `160/R2` evitaba.
   it("R12: `devuelta` real + reprogramacion de la tienda en OTRO cierre aprobado -> 1, no 2", async () => {
     const { repo } = repoSobre([
-      gestion({ resultado: "devuelta", cierreId: "c1", origenTiposHistorial: ["gestion"] }),
+      gestion({ resultado: "novedad", cierreId: "c1", origenTiposHistorial: ["gestion"] }),
       gestion({
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         cierreId: "c2",
         origenTiposHistorial: ["reprogramacion_tienda"],
       }),
@@ -586,9 +586,9 @@ describe("el discriminador de las gestiones SINTETICAS (215/R12/R18-b/R34) [💰
 
   it("R12: las dos en el MISMO cierre aprobado tambien -> 1 (R29 no lo tapa: es el origen)", async () => {
     const { repo } = repoSobre([
-      gestion({ resultado: "devuelta", cierreId: "c1", origenTiposHistorial: ["gestion"] }),
+      gestion({ resultado: "novedad", cierreId: "c1", origenTiposHistorial: ["gestion"] }),
       gestion({
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         cierreId: "c1",
         origenTiposHistorial: ["reprogramacion_tienda"],
       }),
@@ -601,7 +601,7 @@ describe("el discriminador de las gestiones SINTETICAS (215/R12/R18-b/R34) [💰
   // tienda); contar de mas cobra un rechazo antes de tiempo. Ante ausencia de dato, no se cuenta.
   it("R34-d: gestion contable, vigente y en cierre APROBADO pero SIN fila de historial -> 0", async () => {
     const { repo } = repoSobre([
-      gestion({ resultado: "devuelta", cierreId: "c1", origenTiposHistorial: [] }),
+      gestion({ resultado: "novedad", cierreId: "c1", origenTiposHistorial: [] }),
     ]);
     expect(await repo.contarIntentosVigentes("o1")).toBe(0);
   });
@@ -637,13 +637,13 @@ describe("el discriminador de las gestiones SINTETICAS (215/R12/R18-b/R34) [💰
       gestion({
         ordenId: "o1",
         cierreId: "c2",
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         origenTiposHistorial: ["reprogramacion_tienda"],
       }),
       gestion({
         ordenId: "o2",
         cierreId: "c3",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         origenTiposHistorial: ["escalado_devuelta_sla"],
       }),
       gestion({ ordenId: "o3", cierreId: "c4", origenTiposHistorial: [] }), // legada (R34-d)

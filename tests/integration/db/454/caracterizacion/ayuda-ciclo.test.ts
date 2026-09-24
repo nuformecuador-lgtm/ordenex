@@ -44,7 +44,7 @@ describeSiHayBase("454/C22 — ciclo de la ayuda a la tienda (Postgres real)", (
       const a3 = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000 });
       const a4 = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000 });
       const a5 = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000 });
-      const b = await e.sembrarOrden({ estatus: "devuelta", montoCobrar: 1000 });
+      const b = await e.sembrarOrden({ estatus: "novedad", montoCobrar: 1000 });
       for (const o of [a1, a2, a3, a4, a5]) {
         const p = await e.pedirAyuda(o.ordenId);
         if (p.status !== "ok") throw new Error(`pedirAyuda: ${JSON.stringify(p)}`);
@@ -55,7 +55,7 @@ describeSiHayBase("454/C22 — ciclo de la ayuda a la tienda (Postgres real)", (
       const pestanaOtra = await idsAyuda(otraTienda);
       const lista = await e.s.misAsignaciones.listarMisAsignaciones(e.actorMensajero);
       const conAyuda = lista.status === "ok" ? lista.conAyuda.map((o) => o.id) : null;
-      const gestionarConAyuda = await e.gestionar(a1.ordenId, "entregada", { monto: 1000 });
+      const gestionarConAyuda = await e.gestionar(a1.ordenId, "entregado", { monto: 1000 });
       const cierreConAyuda = await e.solicitarCierre();
       const hiloDuena = await notas.publicar({ ordenId: a1.ordenId, cuerpo: "La llamo ya" }, e.actorTienda);
       const hiloOtra = await notas.publicar({ ordenId: a1.ordenId, cuerpo: "hola" }, otraTienda);
@@ -69,17 +69,17 @@ describeSiHayBase("454/C22 — ciclo de la ayuda a la tienda (Postgres real)", (
       ]);
 
       // La tienda reprograma A5 desde ayuda.
-      const reprogramada = await e.gestionarDesdeAyuda(a5.ordenId, "reprogramada", {
+      const reprogramada = await e.gestionarDesdeAyuda(a5.ordenId, "reprogramado", {
         fechaReprogramacion: fechaRepartoComoTexto(diaCR(2)),
       });
 
       // Todas las rescatadas vuelven a ser gestionables.
       await e.recuperar(a1.ordenId);
       const gestionables = {
-        a1: (await e.gestionar(a1.ordenId, "entregada", { monto: 1000 })).status,
-        a2: (await e.gestionar(a2.ordenId, "entregada", { monto: 1000 })).status,
-        a3: (await e.gestionar(a3.ordenId, "entregada", { monto: 1000 })).status,
-        a4: (await e.gestionar(a4.ordenId, "entregada", { monto: 1000 })).status,
+        a1: (await e.gestionar(a1.ordenId, "entregado", { monto: 1000 })).status,
+        a2: (await e.gestionar(a2.ordenId, "entregado", { monto: 1000 })).status,
+        a3: (await e.gestionar(a3.ordenId, "entregado", { monto: 1000 })).status,
+        a4: (await e.gestionar(a4.ordenId, "entregado", { monto: 1000 })).status,
       };
 
       const solicitud = await e.solicitarCierre();
@@ -104,7 +104,7 @@ describeSiHayBase("454/C22 — ciclo de la ayuda a la tienda (Postgres real)", (
         recuperado: recuperado.status,
         habilitado: habilitado.status,
         porApi: porApi.resultados.map((x) => `${x.resultado}:${x.estado ?? ""}`),
-        reprogramada: reprogramada.status,
+        reprogramado: reprogramada.status,
         gestionables,
         solicitud: solicitud.status,
         cierreId,
@@ -166,12 +166,12 @@ describeSiHayBase("454/C22 — ciclo de la ayuda a la tienda (Postgres real)", (
     it("Recuperar, Habilitar y la API (rama A) la devuelven a gestionable; la rama B no cambia estado", () => {
       expect(r.recuperado).toBe("ok");
       expect(r.habilitado).toBe("ok");
-      expect(r.porApi).toEqual(["habilitada:en_reparto", "habilitada_sin_cambio_de_estado:devuelta"]);
+      expect(r.porApi).toEqual(["habilitada:en_reparto", "habilitada_sin_cambio_de_estado:novedad"]);
       expect(r.gestionables).toEqual({ a1: "ok", a2: "ok", a3: "ok", a4: "ok" });
     });
 
     it("la reprogramacion de la tienda desde ayuda va al cierre del mensajero y cuenta intento tras aprobar", () => {
-      expect(r.reprogramada).toBe("ok");
+      expect(r.reprogramado).toBe("ok");
       expect(r.solicitud).toBe("ok");
       expect(r.g5).toEqual({ cierreId: r.cierreId, mensajeroId: r.mensajeroId });
       expect(r.intentosAntes).toBe(0);
@@ -179,8 +179,8 @@ describeSiHayBase("454/C22 — ciclo de la ayuda a la tienda (Postgres real)", (
       expect(r.intentosDespues).toBe(1);
     });
 
-    it("el corte nocturno barre la orden con ayuda a `sin_gestionar` y la vincula al vencido", () => {
-      expect(corte.tras).toBe("sin_gestionar");
+    it("el corte nocturno barre la orden con ayuda a `novedad_interna` y la vincula al vencido", () => {
+      expect(corte.tras).toBe("novedad_interna");
       expect(corte.barridas).toEqual([corte.ordenId]);
     });
   });

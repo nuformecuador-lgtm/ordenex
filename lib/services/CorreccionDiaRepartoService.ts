@@ -57,7 +57,7 @@ import {
 // FICHA 454 (T1.17, R55): `ayuda_tienda` sale porque deja de ser estado (la orden con ayuda abierta
 // sigue `en_reparto`, que sigue aqui). Lo que ya no admite el cambio de dia es la orden con gestion
 // PENDIENTE de confirmar: guarda de abajo y re-lectura bajo candado en `corregirDiaRepartoLote`.
-const ESTADOS_CON_DIA_DE_REPARTO_VIVO = ["por_recoger", "en_reparto"];
+const ESTADOS_CON_DIA_DE_REPARTO_VIVO = ["mensajero_recogiendo_en_bodega", "en_reparto"];
 
 /** FICHA 454 (R55): el dia de una orden ya gestionada no decide nada. */
 const MSG_GESTION_PENDIENTE =

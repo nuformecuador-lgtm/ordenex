@@ -85,8 +85,8 @@ type HistorialRepoMethods = Pick<
 // El catalogo de estados sigue existiendo para la AUTORIZACION y para otros consumidores; el
 // conteo de intentos ya NO lo consulta (feature 215/R9).
 const ESTATUS: Record<string, string> = {
-  devuelta: "s-devuelta",
-  reprogramada: "s-reprogramada",
+  novedad: "s-devuelta",
+  reprogramado: "s-reprogramada",
 };
 
 function ordenRepo(overrides: Partial<OrdenRepoMethods> = {}): OrdenRepoMethods {
@@ -258,7 +258,7 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
   it("67/R23: `findHistorialByOrden` devuelve TODAS las filas (no filtra las de gestiones anuladas)", async () => {
     const eGestion = entrada({
       estatusOrigenValue: "en_reparto",
-      estatusDestinoValue: "devuelta",
+      estatusDestinoValue: "novedad",
       origenTipo: "gestion",
       motivo: "cliente ausente",
       createdAt: new Date("2026-07-14T12:00:00.000Z"),
@@ -365,7 +365,7 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     const e1 = entrada({ estatusDestinoValue: "en_preparacion", createdAt: new Date("2026-07-13T10:00:00.000Z") });
     const e2 = entrada({
       estatusOrigenValue: "en_reparto",
-      estatusDestinoValue: "devuelta",
+      estatusDestinoValue: "novedad",
       origenTipo: "gestion",
       actorNombre: null,
       motivo: "cliente ausente",

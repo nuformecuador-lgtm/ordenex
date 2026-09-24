@@ -26,14 +26,14 @@ describeSiHayBase("454/T1.10 — el corte excluye las ordenes con gestion pendie
     return conEscenario(mundo, async (e) => {
       // (B) gestion pendiente en un cierre RECHAZADO: sigue pendiente (R13).
       const b = await e.sembrarOrden({ estatus: "en_reparto" });
-      await e.gestionarOk(b.ordenId, "devuelta");
+      await e.gestionarOk(b.ordenId, "novedad");
       const rechazado = await e.solicitarCierreOk();
       const rechazo = await e.rechazar(rechazado);
       // (A) gestion pendiente SIN cierre: la primera noche el corte la vincula a su `vencido`. Es del
       // SEGUNDO mensajero: el primero queda bloqueado por su cierre rechazado (111/R1).
       const m2 = e.mensajero2Id;
       const a = await e.sembrarOrden({ estatus: "en_reparto", mensajeroId: m2 });
-      await e.gestionarOk(a.ordenId, "rechazada", { actor: e.actorMensajero2 });
+      await e.gestionarOk(a.ordenId, "devolucion_a_origen_por_rechazo", { actor: e.actorMensajero2 });
       // (H) control: una orden EN MANO, sin gestion. ESTA si se barre.
       const h = await e.sembrarOrden({ estatus: "en_reparto", mensajeroId: m2 });
 
@@ -93,8 +93,8 @@ describeSiHayBase("454/T1.10 — el corte excluye las ordenes con gestion pendie
     expect(r.corte2.vencidosCreados).toBeGreaterThanOrEqual(1);
   });
 
-  it("noche 1 — control positivo: la orden EN MANO se barre a `sin_gestionar`", () => {
-    expect(r.tras1.h).toBe("sin_gestionar");
+  it("noche 1 — control positivo: la orden EN MANO se barre a `novedad_interna`", () => {
+    expect(r.tras1.h).toBe("novedad_interna");
   });
 
   it("noche 1 — R43: la pendiente SIN cierre y la del cierre RECHAZADO NO se barren", () => {
@@ -107,7 +107,7 @@ describeSiHayBase("454/T1.10 — el corte excluye las ordenes con gestion pendie
   it("noche 2 — R43: la pendiente de un cierre VENCIDO tampoco se barre; la nueva en mano si", () => {
     expect(r.tras2.a).toBe("en_reparto");
     expect(r.tras2.b).toBe("en_reparto");
-    expect(r.tras2.h2).toBe("sin_gestionar");
+    expect(r.tras2.h2).toBe("novedad_interna");
   });
 
   it("R43: ni vinculo en `cierre_sin_gestion`, ni gestion sintetica, ni historial para las pendientes", () => {

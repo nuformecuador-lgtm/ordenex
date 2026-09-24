@@ -43,9 +43,9 @@ describe("276/R33 — esta feature NO toca el criterio de conteo de intentos", (
     // esta lista desde la 276 —o desde cualquier ficha que no sea la que decida cambiar el
     // criterio— sube el numero de casi toda orden, cierra puertas antes de tiempo y COBRA DE MAS.
     expect([...RESULTADOS_QUE_CUENTAN_COMO_INTENTO]).toEqual([
-      "rechazada",
-      "devuelta",
-      "reprogramada",
+      "devolucion_a_origen_por_rechazo",
+      "novedad",
+      "reprogramado",
     ]);
   });
 
@@ -95,13 +95,13 @@ describe("276/R33 — esta feature NO toca el criterio de conteo de intentos", (
     // real. No lo son: `entregada` no cuenta como intento Y esta permitida en el tope; `rechazada`
     // SI cuenta como intento Y esta permitida. Derivar una de otra romperia los dos casos.
     expect([...RESULTADOS_PERMITIDOS_EN_EL_TOPE]).toEqual([
-      "entregada",
-      "rechazada",
+      "entregado",
+      "devolucion_a_origen_por_rechazo",
       "incidente",
     ]);
     // La prueba de que NO son complementarias: `rechazada` esta en las dos.
-    expect([...RESULTADOS_PERMITIDOS_EN_EL_TOPE]).toContain("rechazada");
-    expect([...RESULTADOS_QUE_CUENTAN_COMO_INTENTO]).toContain("rechazada");
+    expect([...RESULTADOS_PERMITIDOS_EN_EL_TOPE]).toContain("devolucion_a_origen_por_rechazo");
+    expect([...RESULTADOS_QUE_CUENTAN_COMO_INTENTO]).toContain("devolucion_a_origen_por_rechazo");
     // Y el modulo del tope no importa el del conteo. Se mira el CODIGO, sin comentarios: la prosa
     // de ese fichero SI nombra la otra lista —para explicar que comparte forma y no fuente— y eso
     // es deseable.
@@ -124,7 +124,7 @@ describe("276/R33 — esta feature NO toca el criterio de conteo de intentos", (
 const DESTINOS_DE_CIRCULACION = [
   "en_bodega_central",
   "en_bodega_satelite",
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
 ] as const;
 
 /**
@@ -138,30 +138,30 @@ const DESTINOS_DE_CIRCULACION = [
  */
 const CENSO_DE_CIRCULACION: Record<string, string> = {
   // ── Las que la ficha 276 CIERRA ────────────────────────────────────────────────────────────
-  "reprogramada -> en_bodega_central via liberacion_reprogramada":
+  "reprogramado -> en_bodega_central via liberacion_reprogramada":
     "T6 · `LiberacionReprogramadaService.puedeLiberarse` — no libera mientras la gestion vigente pueda subir el contador",
-  "reprogramada -> en_bodega_satelite via liberacion_reprogramada":
+  "reprogramado -> en_bodega_satelite via liberacion_reprogramada":
     "T6 · `LiberacionReprogramadaService.puedeLiberarse`",
-  "en_bodega_central -> por_recoger via asignacion_bodega":
+  "en_bodega_central -> mensajero_recogiendo_en_bodega via asignacion_bodega":
     "T7 · `GuiaAsignacionService.asignarDesdeBodega` — guarda por lote con `MSG_TOPE_INTENTOS_ASIGNACION`",
-  "en_bodega_satelite -> por_recoger via asignacion_satelite":
+  "en_bodega_satelite -> mensajero_recogiendo_en_bodega via asignacion_satelite":
     "T8 · `AsignacionSateliteService.asignar` — la misma guarda y el MISMO motivo",
-  "sin_gestionar -> en_bodega_central via liberacion_sin_gestionar":
+  "novedad_interna -> en_bodega_central via liberacion_sin_gestionar":
     "T9 · `resolverCierre` parte el bloque: `>= umbral` va a `rechazada`, no a bodega",
-  "sin_gestionar -> en_bodega_satelite via liberacion_sin_gestionar":
+  "novedad_interna -> en_bodega_satelite via liberacion_sin_gestionar":
     "T9 · `resolverCierre` parte el bloque",
-  "devuelta -> en_bodega_central via liberacion_devuelta_sla":
+  "novedad -> en_bodega_central via liberacion_devuelta_sla":
     "T10 · `DevolucionSlaService` — la rama `not_found` ya escalaba en el umbral en vez de liberar (99/R16)",
-  "devuelta -> en_bodega_satelite via liberacion_devuelta_sla":
+  "novedad -> en_bodega_satelite via liberacion_devuelta_sla":
     "T10 · `DevolucionSlaService` — idem",
 
   // ── Las que quedan ABIERTAS, con su razon firmada ──────────────────────────────────────────
-  "devuelta -> en_bodega_central via recuperacion_manual":
+  "novedad -> en_bodega_central via recuperacion_manual":
     "Q3 (firmada 2026-08-24): SE CONSERVA INTACTA. Es un movimiento FISICO que la bodega necesita registrar; la orden queda en el estante y R18 impide que salga a repartir",
-  "devuelta -> en_bodega_satelite via recuperacion_manual": "Q3 (firmada): se conserva intacta",
-  "por_recoger -> en_bodega_central via deshacer_asignacion":
+  "novedad -> en_bodega_satelite via recuperacion_manual": "Q3 (firmada): se conserva intacta",
+  "mensajero_recogiendo_en_bodega -> en_bodega_central via deshacer_asignacion":
     "design §5.4: REVIERTE una asignacion, no crea una. Bloquearlo dejaria la orden atrapada en la mano de un mensajero",
-  "por_recoger -> en_bodega_satelite via deshacer_asignacion": "design §5.4: reversion, no salida",
+  "mensajero_recogiendo_en_bodega -> en_bodega_satelite via deshacer_asignacion": "design §5.4: reversion, no salida",
   "en_ruta_bodega_satelite -> en_bodega_central via deshacer_asignacion":
     "design §5.4: reversion de un ruteo, no salida a reparto",
 
@@ -177,7 +177,7 @@ const CENSO_DE_CIRCULACION: Record<string, string> = {
   "incidente -> en_bodega_central via incidente":
     "resolucion de un incidente (158): decision del admin sobre un paquete dañado/perdido, fuera del alcance de la 276",
   "incidente -> en_bodega_satelite via incidente": "resolucion de un incidente (158)",
-  "incidente -> por_recoger via incidente":
+  "incidente -> mensajero_recogiendo_en_bodega via incidente":
     "resolucion de un incidente (158). ⚠️ ES LA UNICA de esta lista que SI pone la orden en la mano de un mensajero sin pasar por la puerta del tope. Queda declarada como limite conocido de esta ficha: la decide un admin caso a caso sobre un paquete con incidente, no un flujo automatico",
 };
 
@@ -225,17 +225,17 @@ describe("276/R31/R32 — todas las vias hacia la circulacion estan enumeradas",
     const reales = aristasDeCirculacion();
     expect(reales.length).toBeGreaterThanOrEqual(15);
     // Y las CUATRO que la ficha cierra estan, nombradas.
-    expect(reales).toContain("reprogramada -> en_bodega_central via liberacion_reprogramada");
-    expect(reales).toContain("en_bodega_central -> por_recoger via asignacion_bodega");
-    expect(reales).toContain("en_bodega_satelite -> por_recoger via asignacion_satelite");
-    expect(reales).toContain("sin_gestionar -> en_bodega_central via liberacion_sin_gestionar");
+    expect(reales).toContain("reprogramado -> en_bodega_central via liberacion_reprogramada");
+    expect(reales).toContain("en_bodega_central -> mensajero_recogiendo_en_bodega via asignacion_bodega");
+    expect(reales).toContain("en_bodega_satelite -> mensajero_recogiendo_en_bodega via asignacion_satelite");
+    expect(reales).toContain("novedad_interna -> en_bodega_central via liberacion_sin_gestionar");
   });
 
   it("R32 — la salida de `reprogramada` hacia bodega sigue siendo la UNICA, y pasa por el cron", () => {
     // R32 dice que una orden no vuelve a estar disponible mientras exista sobre ella una gestion
     // de visita real que TODAVIA pueda subir su contador. La unica forma de sostenerlo es que
     // `reprogramada` no gane una segunda salida hacia bodega que no pase por `puedeLiberarse`.
-    const salidas = (TRANSICIONES.reprogramada ?? []) as readonly { to: string; via: string }[];
+    const salidas = (TRANSICIONES.reprogramado ?? []) as readonly { to: string; via: string }[];
     const aBodega = salidas.filter((a) =>
       (DESTINOS_DE_CIRCULACION as readonly string[]).includes(a.to),
     );
@@ -249,7 +249,7 @@ describe("276/R31/R32 — todas las vias hacia la circulacion estan enumeradas",
     // Es el destino terminal de las tres rutas que la 276 usa (la gestion, el corte y el cron
     // SLA). Si `rechazada` ganara una arista hacia una bodega o hacia `por_recoger`, la orden que
     // la ficha acaba de terminar podria volver a repartirse.
-    const salidas = (TRANSICIONES.rechazada ?? []) as readonly { to: string }[];
+    const salidas = (TRANSICIONES.devolucion_a_origen_por_rechazo ?? []) as readonly { to: string }[];
     const aCirculacion = salidas.filter((a) =>
       (DESTINOS_DE_CIRCULACION as readonly string[]).includes(a.to),
     );

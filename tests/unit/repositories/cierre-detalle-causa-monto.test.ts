@@ -213,7 +213,7 @@ describe("R34 — `toDetalleDTO` (reusado por CierresAdminService, 38) los deja 
 // --- No regresión (R35/R36) --------------------------------------------------------------
 
 describe("R35 — los CUATRO resultados previos no cambian: causa y monto en `null`", () => {
-  it.each(["entregada", "reprogramada", "devuelta", "rechazada"] as const)(
+  it.each(["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo"] as const)(
     "una gestión `%s` del detalle de admin llega con los dos campos en null",
     (resultado) => {
       const row = mapAdmin(filaAdmin({ resultado, causaIncidente: null, indemnizacion: null }));
@@ -226,7 +226,7 @@ describe("R35 — los CUATRO resultados previos no cambian: causa y monto en `nu
     },
   );
 
-  it.each(["entregada", "reprogramada", "devuelta", "rechazada"] as const)(
+  it.each(["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo"] as const)(
     "una gestión `%s` de la vista en vivo llega con los dos campos en null",
     (resultado) => {
       const row = mapEnVivo(filaEnVivo({ resultado, causaIncidente: null }));
@@ -240,7 +240,7 @@ describe("R35 — los CUATRO resultados previos no cambian: causa y monto en `nu
     const dto = toDetalleDTO(
       mapAdmin(
         filaAdmin({
-          resultado: "entregada",
+          resultado: "entregado",
           montoRecibido: new Prisma.Decimal("12.50"),
           metodoPago: "efectivo",
           motivo: null,
@@ -252,7 +252,7 @@ describe("R35 — los CUATRO resultados previos no cambian: causa y monto en `nu
       {},
     );
     expect(dto).toMatchObject({
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: "12.50",
       metodoPago: "efectivo",
       motivo: null,

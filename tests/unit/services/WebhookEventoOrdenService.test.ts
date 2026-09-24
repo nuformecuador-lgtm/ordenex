@@ -40,7 +40,7 @@ function datos(p: Partial<DatosEntregaEvento> = {}): DatosEntregaEvento {
     tipo: "gestion_registrada",
     createdAt: OCURRIDO,
     actorRol: "mensajero",
-    resultado: "devuelta",
+    resultado: "novedad",
     resultadoAnterior: null,
     gestionId: "g-1",
     causa: "wrong_address",
@@ -117,7 +117,8 @@ describe("454/T1.5 — WebhookEventoOrdenService", () => {
         numGuia: 12345,
         numRemision: "REM-1",
         gestionId: "g-1",
-        resultado: "devuelta",
+        resultado: "novedad",
+        resultadoNombre: "Novedad", // 455 (R25)
         motivo: "wrong_address",
         mensajero: MENSAJERO,
         pendienteConfirmacion: true,
@@ -129,6 +130,7 @@ describe("454/T1.5 — WebhookEventoOrdenService", () => {
       "numRemision",
       "gestionId",
       "resultado",
+      "resultadoNombre",
       "motivo",
       "mensajero",
       "pendienteConfirmacion",
@@ -154,11 +156,11 @@ describe("454/T1.5 — WebhookEventoOrdenService", () => {
   });
 
   it("gestion corregida: resultado nuevo y anterior, pendiente de confirmacion", async () => {
-    const m = montar({ d: datos({ tipo: "gestion_corregida", resultado: "rechazada", resultadoAnterior: "entregada", causa: null }) });
+    const m = montar({ d: datos({ tipo: "gestion_corregida", resultado: "devolucion_a_origen_por_rechazo", resultadoAnterior: "entregado", causa: null }) });
     await m.service.ejecutar(job());
     const c = cuerpoDe(m.entregar);
     expect(c.evento).toBe("orden.gestion_corregida");
-    expect(c.data).toMatchObject({ resultado: "rechazada", resultadoAnterior: "entregada", pendienteConfirmacion: true });
+    expect(c.data).toMatchObject({ resultado: "devolucion_a_origen_por_rechazo", resultadoNombre: "Devolución a origen por rechazo", resultadoAnterior: "entregado", resultadoAnteriorNombre: "Entregado", pendienteConfirmacion: true });
   });
 
   it("gestion anulada: sin `pendienteConfirmacion` ni `resultadoAnterior`", async () => {

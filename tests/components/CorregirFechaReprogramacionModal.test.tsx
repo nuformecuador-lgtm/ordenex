@@ -338,7 +338,7 @@ describe("un rechazo dice POR QUÉ, dentro del modal", () => {
     const user = userEvent.setup();
     corregirMock.mockResolvedValue({
       status: "conflict",
-      motivo: msgEstadoNoReprogramada("entregada"),
+      motivo: msgEstadoNoReprogramada("entregado"),
     });
     renderModal();
 
@@ -347,7 +347,7 @@ describe("un rechazo dice POR QUÉ, dentro del modal", () => {
 
     expect(
       await screen.findByText(
-        "Esta orden ya no está esperando una reprogramación (Entregada), así que su fecha ya no decide nada. Actualiza la lista.",
+        "Esta orden ya no está esperando una reprogramación (Entregado), así que su fecha ya no decide nada. Actualiza la lista.",
       ),
     ).toBeInTheDocument();
   });

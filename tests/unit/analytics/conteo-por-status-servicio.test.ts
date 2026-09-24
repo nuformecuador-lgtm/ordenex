@@ -47,9 +47,9 @@ describe("Servicio por status — el total", () => {
   it("es la suma exacta de los buckets", async () => {
     const service = new ConteoPorStatusService(
       repoQueDevuelve([
-        { status: "entregada", conteo: 20 },
+        { status: "entregado", conteo: 20 },
         { status: "en_reparto", conteo: 8 },
-        { status: "devuelta", conteo: 2 },
+        { status: "novedad", conteo: 2 },
       ]),
       cacheConMemoria().cache,
       { now: () => AHORA },
@@ -75,7 +75,7 @@ describe("Servicio por status — el total", () => {
   it("conserva el orden que trajo el repositorio", async () => {
     const service = new ConteoPorStatusService(
       repoQueDevuelve([
-        { status: "entregada", conteo: 20 },
+        { status: "entregado", conteo: 20 },
         { status: "en_reparto", conteo: 8 },
       ]),
       cacheConMemoria().cache,
@@ -83,7 +83,7 @@ describe("Servicio por status — el total", () => {
     );
 
     expect((await service.consultar(consultaDe())).porStatus.map((f) => f.status)).toEqual([
-      "entregada",
+      "entregado",
       "en_reparto",
     ]);
   });
@@ -92,7 +92,7 @@ describe("Servicio por status — el total", () => {
 describe("Servicio por status — el sello y la caché", () => {
   it("`lastSync` sale del reloj inyectado", async () => {
     const service = new ConteoPorStatusService(
-      repoQueDevuelve([{ status: "entregada", conteo: 1 }]),
+      repoQueDevuelve([{ status: "entregado", conteo: 1 }]),
       cacheConMemoria().cache,
       { now: () => AHORA },
     );
@@ -105,7 +105,7 @@ describe("Servicio por status — el sello y la caché", () => {
   it("con la caché caliente NO se refresca el sello, y la base se toca una vez", async () => {
     const { cache } = cacheConMemoria();
     let reloj = new Date("2026-08-17T12:00:00.000Z");
-    const repo = repoQueDevuelve([{ status: "entregada", conteo: 1 }]);
+    const repo = repoQueDevuelve([{ status: "entregado", conteo: 1 }]);
     const service = new ConteoPorStatusService(repo, cache, { now: () => reloj });
 
     const primera = await service.consultar(consultaDe());
@@ -148,7 +148,7 @@ describe("Las dos lecturas NO comparten entrada de caché", () => {
 /* -------------------------------------------------------------------------- */
 
 const DATOS: ConteoPorStatusDTO = {
-  porStatus: [{ status: "entregada", conteo: 20 }],
+  porStatus: [{ status: "entregado", conteo: 20 }],
   total: 20,
   lastSync: "2026-08-17T12:00:00.000Z",
 };

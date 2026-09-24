@@ -33,7 +33,7 @@ describeSiHayBase("454/C16 — dos gestiones vivas: solo aplica la mas reciente 
           data: {
             ordenId: o.ordenId,
             mensajeroId: e.mensajeroId,
-            resultado: "devuelta",
+            resultado: "novedad",
             causaDevolucion: "not_found",
             motivo: "No aparece",
           },
@@ -57,10 +57,10 @@ describeSiHayBase("454/C16 — dos gestiones vivas: solo aplica la mas reciente 
         where: { id: g1 },
         data: { createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
       });
-      const g2 = await e.gestionarOk(o.ordenId, "devuelta");
+      const g2 = await e.gestionarOk(o.ordenId, "novedad");
       const c2 = await e.solicitarCierreOk();
       const vigentes = await e.tx.gestionOrden.count({
-        where: { ordenId: o.ordenId, resultado: "devuelta", anuladaAt: null },
+        where: { ordenId: o.ordenId, resultado: "novedad", anuladaAt: null },
       });
 
       const aprobC1 = await e.aprobar(c1);
@@ -98,7 +98,7 @@ describeSiHayBase("454/C16 — dos gestiones vivas: solo aplica la mas reciente 
   });
 
   it("aprobar el cierre de la MAS RECIENTE la lleva a `devuelta`, anclada a ESA gestion", () => {
-    expect(r.trasC2).toBe("devuelta");
+    expect(r.trasC2).toBe("novedad");
     expect(r.anclaje).toEqual([{ gestionOrdenId: r.g2 }]);
   });
 

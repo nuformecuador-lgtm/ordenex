@@ -48,7 +48,7 @@ export class RankingRepository implements IRankingRepository {
     const rows = await this.prisma.gestionOrden.groupBy({
       by: ["mensajeroId"],
       where: {
-        resultado: "entregada", // solo entregas exitosas
+        resultado: "entregado", // solo entregas exitosas
         anuladaAt: null, // feature 67: solo gestiones VIGENTES (no intentos deshechos)
         createdAt: { gte: desde, lt: hasta }, // HOY(CR), half-open
       },

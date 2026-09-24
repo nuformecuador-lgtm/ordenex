@@ -495,7 +495,7 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
     expect(espiaDerivar).toHaveBeenCalledTimes(2);
     const [primera, segunda] = espiaDerivar.mock.calls;
     expect(primera[0]).toEqual({
-      resultado: "entregada",
+      resultado: "entregado",
       esCentral: false,
       // El distrito de la fila no esta marcado como zona especial: la cotizacion viaja con la
       // marca igual que con `esCentral`, y aqui vale `false`.
@@ -509,7 +509,7 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
     // sigue vivo y desde esa fecha no genera ingreso alguno. Si esto volviera a `devuelta`, la
     // cotizacion publicaria ceros y le prometeria al integrador que un retorno es gratis.
     expect(segunda[0]).toEqual({
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       esCentral: false,
       esZonaEspecial: false,
       montoCobrar: "25900",

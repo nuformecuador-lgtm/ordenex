@@ -31,14 +31,14 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 /** Estado de una novedad «en devolucion». Sale del punto unico, no de un literal propio. */
 const ESTATUS_NOVEDAD_DEVOLUCION = ESTATUS_POR_GRUPO.devolucion;
 /** `resultado` de la gestion que ancla la ventana (mismo valor que `DevolucionSlaRepository`). */
-const RESULTADO_DEVUELTA = "devuelta";
+const RESULTADO_DEVUELTA = "novedad";
 /**
  * ⚠️ EL ESTADO VIGILADO, Y ESTA MEDIDO (produccion 2026-09-10): `por_devolver` = 27 ordenes, media
  * 2,4 d, maximo 8,2 d, SIETE por encima de 3 d. `devolviendo_a_tienda` = 247 ordenes y NINGUNA por
  * encima de 3 d: ese estado FLUYE, R46 PROHIBE vigilarlo y hay un test de no-inclusion propio
  * contra Postgres real.
  */
-const ESTATUS_REPRESADA: OrderStatusValue = "por_devolver";
+const ESTATUS_REPRESADA: OrderStatusValue = "por_devolver_a_bodega_central";
 
 type AvisoAgregadoPrismaClient = Pick<PrismaClient, "orden">;
 

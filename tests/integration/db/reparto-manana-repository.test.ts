@@ -150,7 +150,7 @@ describeSiHayBase("413/R1 — el conteo del reparto de mañana, contra Postgres"
       await serializarEscriturasReales(tx);
       const zona = await crearZona(tx);
       const mensajero = await crearUsuario(tx, fks!.tiendaId, "mensajero A");
-      const porRecoger = await estatusIdDe(tx, "por_recoger");
+      const porRecoger = await estatusIdDe(tx, "mensajero_recogiendo_en_bodega");
       const base = {
         tiendaId: fks!.tiendaId,
         zonaId: zona,
@@ -198,7 +198,7 @@ describeSiHayBase("413/R1 — el conteo del reparto de mañana, contra Postgres"
       const zona = await crearZona(tx);
       const a = await crearUsuario(tx, fks!.tiendaId, "mensajero A");
       const b = await crearUsuario(tx, fks!.tiendaId, "mensajero B");
-      const porRecoger = await estatusIdDe(tx, "por_recoger");
+      const porRecoger = await estatusIdDe(tx, "mensajero_recogiendo_en_bodega");
       const base = {
         tiendaId: fks!.tiendaId,
         zonaId: zona,
@@ -261,7 +261,7 @@ describeSiHayBase("413/R3 — LA TRAMPA DE LAS SEIS HORAS, con el reloj a las 23
       await serializarEscriturasReales(tx);
       const zona = await crearZona(tx);
       const mensajero = await crearUsuario(tx, fks!.tiendaId, "mensajero 2350");
-      const porRecoger = await estatusIdDe(tx, "por_recoger");
+      const porRecoger = await estatusIdDe(tx, "mensajero_recogiendo_en_bodega");
       const base = {
         tiendaId: fks!.tiendaId,
         zonaId: zona,
@@ -316,7 +316,7 @@ describeSiHayBase("413/R3 — LA TRAMPA DE LAS SEIS HORAS, con el reloj a las 23
       const zona = await crearZona(tx);
       const soloManana = await crearUsuario(tx, fks!.tiendaId, "solo mañana");
       const soloHoy = await crearUsuario(tx, fks!.tiendaId, "solo hoy");
-      const porRecoger = await estatusIdDe(tx, "por_recoger");
+      const porRecoger = await estatusIdDe(tx, "mensajero_recogiendo_en_bodega");
       const base = {
         tiendaId: fks!.tiendaId,
         zonaId: zona,
@@ -352,7 +352,7 @@ describeSiHayBase("413/R3 — LA TRAMPA DE LAS SEIS HORAS, con el reloj a las 23
       await serializarEscriturasReales(tx);
       const zona = await crearZona(tx);
       const mensajero = await crearUsuario(tx, fks!.tiendaId, "mensajero medianoche");
-      const porRecoger = await estatusIdDe(tx, "por_recoger");
+      const porRecoger = await estatusIdDe(tx, "mensajero_recogiendo_en_bodega");
       await sembrarOrden(tx, {
         tiendaId: fks!.tiendaId,
         zonaId: zona,
@@ -398,7 +398,7 @@ describeSiHayBase("413/R4 — lo que NO se cuenta", () => {
       const zona = await crearZona(tx);
       const a = await crearUsuario(tx, fks!.tiendaId, "mensajero A");
       const b = await crearUsuario(tx, fks!.tiendaId, "mensajero B");
-      const porRecoger = await estatusIdDe(tx, "por_recoger");
+      const porRecoger = await estatusIdDe(tx, "mensajero_recogiendo_en_bodega");
       const base = {
         tiendaId: fks!.tiendaId,
         zonaId: zona,
@@ -448,7 +448,7 @@ describeSiHayBase("413/R4 — lo que NO se cuenta", () => {
         await sembrarOrden(tx, { ...base, estatusId: await estatusIdDe(tx, estado) });
       }
       // Y dos fuera de él: no pueden contar.
-      for (const estado of ["recolectando", "entregada"]) {
+      for (const estado of ["recolectando", "entregado"]) {
         await sembrarOrden(tx, { ...base, estatusId: await estatusIdDe(tx, estado) });
       }
 
@@ -476,7 +476,7 @@ describeSiHayBase("413/R4 — lo que NO se cuenta", () => {
       await serializarEscriturasReales(tx);
       const zona = await crearZona(tx);
       const mensajero = await crearUsuario(tx, fks!.tiendaId, "mensajero sin dia");
-      const porRecoger = await estatusIdDe(tx, "por_recoger");
+      const porRecoger = await estatusIdDe(tx, "mensajero_recogiendo_en_bodega");
       const base = {
         tiendaId: fks!.tiendaId,
         zonaId: zona,
@@ -551,7 +551,7 @@ describeSiHayBase("413 — ANTI-VACUIDAD: este archivo no puede pasar «por vac�
         zonaId: zona,
         provinciaId: fks!.provinciaId,
         cantonId: fks!.cantonId,
-        estatusId: await estatusIdDe(tx, "por_recoger"),
+        estatusId: await estatusIdDe(tx, "mensajero_recogiendo_en_bodega"),
         mensajeroId: mensajero,
         fechaReparto: "2026-09-12",
       });

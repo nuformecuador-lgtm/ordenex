@@ -25,6 +25,7 @@ import { AsignacionDetalle } from "../AsignacionDetalle";
 import { PosAmountRow } from "./PosAmountRow";
 import { PosCardHeader } from "./PosCardHeader";
 import { PosNavBlock } from "./PosNavBlock";
+import { marcasDeTarjeta, textoChipEstado } from "./pos-estado";
 import { textoMensajero } from "./pos-mensajero";
 import { seccionesVisibles, type PosSecciones } from "./pos-secciones";
 
@@ -56,8 +57,13 @@ export interface PosOrderCardProps {
    * enfocable.
    */
   onGestionar?: () => void;
-  /** Etiqueta de estado; por defecto se deriva de `esActiva`/`esDetalle`. */
-  estado?: string;
+  /**
+   * FICHA 455 (2026-09-24, R7/R8): NOTA propia del consumidor que la card pinta JUNTO al chip, nunca
+   * en su lugar (la ayuda de la 454, la causa de una novedad). El chip dice siempre el nombre del
+   * estado de la orden (`orden.estatusValue`); antes esta prop era `estado`, un rótulo que lo
+   * SUSTITUÍA («Por recoger», «En ayuda», «Recolectada»…).
+   */
+  nota?: string;
   /**
    * `false` para superficies sin ruta optimizada ("Por recoger"): oculta el nº de parada
    * de la cabecera y la marca "Pendiente de optimizar". Default `true`.
@@ -90,7 +96,7 @@ export interface PosOrderCardProps {
    * POR QUÉ UNA PROP Y NO UN CAMPO DE `MiAsignacionDTO`. Ese DTO es el contrato del PORTAL DEL
    * MENSAJERO; meter ahí el dato obligaría a sus dos listas a emitir un nombre que nadie lee.
    * El dato es PROPIO de `NovedadDTO` (ver su docstring), y esta card ya trata así todo lo que
-   * sólo tiene una de sus superficies: `estado` (el badge lo decide la tienda), `acciones` (el
+   * sólo tiene una de sus superficies: `nota` (la decide la tienda), `acciones` (el
    * panel lo pone el consumidor), `mostrarRuta`, `total`.
    *
    * POR QUÉ NO UNA COMPUERTA DE `PosSecciones`. Las compuertas APAGAN secciones donde la
@@ -110,7 +116,7 @@ export function PosOrderCard({
   esDetalle = false,
   bloqueado = false,
   onGestionar,
-  estado: estadoProp,
+  nota,
   mostrarRuta = true,
   secciones,
   acciones,
@@ -159,9 +165,9 @@ export function PosOrderCard({
 
   // La card responde a puntero/teclado solo si hay selección disponible y no está bloqueada.
   const seleccionable = Boolean(onGestionar) && !bloqueado;
-  const estado =
-    estadoProp ??
-    (esActiva ? "En gestión" : esDetalle ? "En detalle" : "En reparto");
+  // FICHA 455 (R7/R8): el chip es el estado de la orden; activa/detalle/nota van en marcas aparte.
+  const estado = textoChipEstado(orden);
+  const marcas = marcasDeTarjeta(esActiva, esDetalle, nota);
 
   return (
     <article
@@ -185,6 +191,7 @@ export function PosOrderCard({
         orden={orden}
         total={total}
         estado={estado}
+        marcas={marcas}
         mostrarParada={mostrarRuta}
       />
 

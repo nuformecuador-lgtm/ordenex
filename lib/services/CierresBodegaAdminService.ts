@@ -288,10 +288,10 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
     // feature 158) con el mapper reuso 37. Totales = snapshot del cierre_dia (R13).
     const cierres: CierreBodegaDetalleCierre[] = found.cierresDia.map((cd) => {
       const grupos: CierreGrupos = {
-        entregada: [],
-        reprogramada: [],
-        devuelta: [],
-        rechazada: [],
+        entregado: [],
+        reprogramado: [],
+        novedad: [],
+        devolucion_a_origen_por_rechazo: [],
         incidente: [], // feature 158/R18
       };
       for (const g of cd.gestiones) {

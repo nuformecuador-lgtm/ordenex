@@ -10,6 +10,10 @@
 // LOS LITERALES VAN A MANO a propósito: la nota se arma con `estatusLabel` y el mapa de etiquetas,
 // y compararla contra esa misma fuente la dejaría verde con cualquier contenido. Cuando la 455
 // renombre los estados, este archivo se actualiza a mano y ese es el control.
+//
+// ⏳ 2026-09-24 (FICHA 455, T2.1; R33): actualizado a mano con los nombres de la 455 (el del estado
+// homónimo de cada resultado: «Entregado», «Reprogramado», «Novedad», «Devolución a origen por
+// rechazo», «Incidente»). La nota de la ayuda no cambia.
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
@@ -23,10 +27,10 @@ import {
 afterEach(() => cleanup());
 
 const ESPERADAS = [
-  ["entregada", "Entregada · pendiente de confirmación"],
-  ["reprogramada", "Reprogramada · pendiente de confirmación"],
-  ["devuelta", "Devuelta · pendiente de confirmación"],
-  ["rechazada", "Rechazada · pendiente de confirmación"],
+  ["entregado", "Entregado · pendiente de confirmación"],
+  ["reprogramado", "Reprogramado · pendiente de confirmación"],
+  ["novedad", "Novedad · pendiente de confirmación"],
+  ["devolucion_a_origen_por_rechazo", "Devolución a origen por rechazo · pendiente de confirmación"],
   ["incidente", "Incidente · pendiente de confirmación"],
 ] as const;
 
@@ -53,8 +57,8 @@ describe("454/R29 — el chip de la nota", () => {
   });
 
   it("si llegaran las dos, gana la gestión (el hecho más reciente)", () => {
-    render(<NotaGestionPendiente resultadoPendiente="rechazada" ayudaAbierta />);
-    expect(screen.getByText("Rechazada · pendiente de confirmación")).toBeInTheDocument();
+    render(<NotaGestionPendiente resultadoPendiente="devolucion_a_origen_por_rechazo" ayudaAbierta />);
+    expect(screen.getByText("Devolución a origen por rechazo · pendiente de confirmación")).toBeInTheDocument();
     expect(screen.queryByText("Ayuda solicitada a la tienda")).toBeNull();
   });
 

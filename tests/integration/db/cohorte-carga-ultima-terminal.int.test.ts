@@ -69,7 +69,7 @@ describeSiHayBase("411/T4.3 — la ULTIMA transicion terminal clasifica, y solo 
       });
       await agregarTransicion(tx, base, orden, {
         at: instanteCR(D, "10:00"),
-        destino: "entregada",
+        destino: "entregado",
       });
       await agregarTransicion(tx, base, orden, {
         at: instanteCR(D, "12:00"),
@@ -121,7 +121,7 @@ describeSiHayBase("411/T4.3 — la ULTIMA transicion terminal clasifica, y solo 
       await agregarTransicion(tx, base, orden, {
         id: ID_EMPATE_A,
         at: mismoInstante,
-        destino: "entregada",
+        destino: "entregado",
       });
       await agregarTransicion(tx, base, orden, {
         id: ID_EMPATE_B,

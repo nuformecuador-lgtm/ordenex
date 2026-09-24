@@ -105,11 +105,11 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     fks = encontradas;
 
     const estatus = await prisma.orderStatus.findMany({
-      where: { value: { in: ["en_reparto", "ayuda_tienda", "sin_gestionar"] } },
+      where: { value: { in: ["en_reparto", "ayuda_tienda", "novedad_interna"] } },
       select: { id: true, value: true },
     });
     const porValue = new Map(estatus.map((e) => [e.value, e.id]));
-    for (const v of ["en_reparto", "ayuda_tienda", "sin_gestionar"]) {
+    for (const v of ["en_reparto", "ayuda_tienda", "novedad_interna"]) {
       if (!porValue.has(v)) {
         throw new Error(
           `falta el estatus «${v}» en el catalogo \`order_status\`. Corre \`pnpm run db:seed\`: ` +
@@ -120,7 +120,7 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     catalogo = {
       enReparto: porValue.get("en_reparto") as string,
       ayuda: porValue.get("ayuda_tienda") as string,
-      sinGestionar: porValue.get("sin_gestionar") as string,
+      sinGestionar: porValue.get("novedad_interna") as string,
     };
 
     const central = await prisma.zona.findFirst({
@@ -224,7 +224,7 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
       data: {
         ordenId: await sembrarOrden(tx, `g-${marca}`),
         mensajeroId,
-        resultado: "entregada",
+        resultado: "entregado",
         cierreId: opts.cierreId ?? null,
         ...(opts.anulada ? { anuladaAt: new Date("2026-08-21T23:59:00.000Z") } : {}),
         ...(opts.cuando ? { createdAt: opts.cuando } : {}),
@@ -586,7 +586,7 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
   // CASO 3 — EL BARRIDO Y LA VINCULACION SIGUEN SIENDO LOS DE SIEMPRE (R23, R24).
   // ===============================================================================================
 
-  it("R23/R24 · el barrido a `sin_gestionar`, la vinculacion y la idempotencia de la 2.ª corrida", async () => {
+  it("R23/R24 · el barrido a `novedad_interna`, la vinculacion y la idempotencia de la 2.ª corrida", async () => {
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
 

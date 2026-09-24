@@ -1,0 +1,28 @@
+Toggle Sidebar
+Reparto
+
+Órdenes en reparto por gestionar
+
+Tema claro activado.
+1 por hacer
+Salir
+Pendientes
+0
+Entregado
+1
+Por cobrar
+₡0
+Total a cobrar
+₡69.700
+Cantón
+Todos los cantones
+Distrito
+Todos los distritos
+En reparto / por gestionar
+Sincronizar ruta
+Trayecto desde aquí
+Buscar guías
+Mosaico
+Detalle
+
+No hay órdenes en reparto.

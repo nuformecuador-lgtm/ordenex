@@ -117,7 +117,7 @@ function prismaSemantico(filas: FilaOrden[]) {
 
 const ESTATUS_IDS: Record<string, string> = {
   en_reparto: "s-reparto",
-  sin_gestionar: "s-sin-gestionar",
+  novedad_interna: "s-sin-gestionar",
 };
 
 function build(filas: FilaOrden[]) {
@@ -216,10 +216,10 @@ describe("235/R26 → 454/R27 - `ejecutarCorte` llega al mensajero cuyo dia acab
     expect(ids).toEqual(["m-ayuda", "m-reparto"]);
   });
 
-  it("109/R5 sigue viva: el de `por_recoger` NO entra - nunca llego a recoger nada", async () => {
+  it("109/R5 sigue viva: el de `mensajero_recogiendo_en_bodega` NO entra - nunca llego a recoger nada", async () => {
     // El caso negativo. Sin el, un `where` que trajera cualquier orden pasaria los tres de arriba.
     const { service, crearCierre } = build([
-      { mensajeroAsignadoId: "m-espera", estatusValue: "por_recoger", deletedAt: null, zonaId: "z1" },
+      { mensajeroAsignadoId: "m-espera", estatusValue: "mensajero_recogiendo_en_bodega", deletedAt: null, zonaId: "z1" },
     ]);
 
     const res = await service.ejecutarCorte();

@@ -51,7 +51,7 @@ function fila(parcial: Partial<FilaProductoDTO> & { producto: string }): FilaPro
     tienda: "Tienda Uno",
     unidades: 1,
     ordenes: 1,
-    porStatus: [{ status: "entregada", conteo: 1 }],
+    porStatus: [{ status: "entregado", conteo: 1 }],
     ordenesAcompanadas: 0,
     dinero: null,
     ...parcial,
@@ -424,8 +424,8 @@ describe("FICHA 345 · las columnas (R46)", () => {
 
   it("R28 — la fila pinta EXACTAMENTE lo que devuelve `calcularEfectividad`", async () => {
     const porStatus = [
-      { status: "entregada", conteo: 8 },
-      { status: "rechazada", conteo: 6 },
+      { status: "entregado", conteo: 8 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
       { status: EN_CURSO, conteo: 2 },
     ];
     consultarMock.mockResolvedValue({
@@ -469,8 +469,8 @@ describe("FICHA 345 · las columnas (R46)", () => {
           producto: "Spray Protector",
           ordenes: 16,
           porStatus: [
-            { status: "entregada", conteo: 8 },
-            { status: "rechazada", conteo: 6 },
+            { status: "entregado", conteo: 8 },
+            { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
             { status: EN_CURSO, conteo: 2 },
           ],
         }),
@@ -503,7 +503,8 @@ describe("FICHA 346/442 · «En qué terminaron» suma la columna «Órdenes»",
     // +1: `DataTable` antepone la celda del control de desglose a cada fila.
     const td = tdsDeFila(nombreFila)[i + 1];
     const texto = td.textContent ?? "";
-    return [...texto.matchAll(/(\d+)\s/g)].map((m) => Number(m[1]));
+    // ⏳ 2026-09-24 (FICHA 455): la frase es «<Nombre>: <n> · …» — la cifra va tras los dos puntos.
+    return [...texto.matchAll(/: (\d+)/g)].map((m) => Number(m[1]));
   }
 
   /** La cifra de la columna «Órdenes» de una fila. */
@@ -518,10 +519,10 @@ describe("FICHA 346/442 · «En qué terminaron» suma la columna «Órdenes»",
     unidades: 29,
     ordenes: 24,
     porStatus: [
-      { status: "entregada", conteo: 3 },
-      { status: "rechazada", conteo: 2 },
-      { status: "devuelta", conteo: 4 },
-      { status: "reprogramada", conteo: 2 },
+      { status: "entregado", conteo: 3 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 2 },
+      { status: "novedad", conteo: 4 },
+      { status: "reprogramado", conteo: 2 },
       { status: EN_CURSO, conteo: 13 },
     ],
   });
@@ -561,7 +562,14 @@ describe("FICHA 346/442 · «En qué terminaron» suma la columna «Órdenes»",
     const texto = tdsDeFila("Crema Especial MLX")
       .map((td) => td.textContent ?? "")
       .join(" ");
-    for (const trozo of ["3 entregadas", "2 rechazadas", "4 devueltas", "2 reprogramadas", "13 en proceso"]) {
+    // ⏳ 2026-09-24 (FICHA 455, R2): nombres exactos, la cantidad al lado.
+    for (const trozo of [
+      "Entregado: 3",
+      "Devolución a origen por rechazo: 2",
+      "Novedad: 4",
+      "Reprogramado: 2",
+      "Sin desenlace todavía: 13",
+    ]) {
       expect(texto, trozo).toContain(trozo);
     }
     expect(PRODUCTOS_COLUMNAS.desenlaces).toBe("En qué terminaron");
@@ -583,7 +591,7 @@ describe("FICHA 346/442 · «En qué terminaron» suma la columna «Órdenes»",
     );
     expect(await screen.findByText("8,3%")).toBeInTheDocument();
     // Y el cubo «Otros resultados» con su composición, que la 347 puso y esta ficha no pierde.
-    expect(screen.getByText("4 devueltas · 2 reprogramadas")).toBeInTheDocument();
+    expect(screen.getByText("Novedad: 4 · Reprogramado: 2")).toBeInTheDocument();
   });
 
   it("y también en la vista de TELÉFONO, donde las cifras van apiladas", async () => {

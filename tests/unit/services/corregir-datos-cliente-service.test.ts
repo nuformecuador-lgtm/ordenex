@@ -264,7 +264,7 @@ describe("312/C2 + 327/R30 — el mismo resultado opaco para cuatro causas disti
     const ajena = await escenario().service.corregir(entrada(), OTRA_TIENDA);
     const rolAjeno = await escenario().service.corregir(entrada(), MENSAJERO);
     const bloqueada = await escenario({
-      ordenFila: orden({ estatusValue: "entregada" }),
+      ordenFila: orden({ estatusValue: "entregado" }),
     }).service.corregir(entrada(), MAESTRO);
 
     expect(inexistente).toEqual({ status: "forbidden" });
@@ -801,7 +801,7 @@ describe("327/C2 — R18/R31: la precarga cruza LA MISMA puerta", () => {
   it.each([
     ["orden ajena", { ordenFila: orden({ tiendaId: "tienda-ajena" }) }, ADMIN_TIENDA],
     ["orden inexistente o borrada", { ordenFila: null }, MAESTRO],
-    ["estado fuera de la ventana", { ordenFila: orden({ estatusValue: "entregada" }) }, MAESTRO],
+    ["estado fuera de la ventana", { ordenFila: orden({ estatusValue: "entregado" }) }, MAESTRO],
   ])("%s recibe el MISMO objeto opaco", async (_n, opciones, actor) => {
     const { service } = escenario(opciones as Parameters<typeof escenario>[0]);
     const r = await service.obtenerUbicacion(ORDEN_ID, actor as Actor);

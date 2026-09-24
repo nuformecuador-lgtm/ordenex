@@ -45,10 +45,10 @@ const GESTION_DESHACIBLE: GestionDeshacerRow = {
   gestionId: "11111111-1111-4111-8111-111111111111",
   ordenId: "o1",
   mensajeroId: "m1",
-  resultado: "entregada",
+  resultado: "entregado",
   cierreId: null,
   anuladaAt: null,
-  orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregada" },
+  orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregado" },
   desdeAyudaTienda: false, // feature 237 (D3): la registro el mensajero, no la tienda
   registradaComoPendiente: false, // ficha 454 (T1.11): rama LEGADA del deshacer
 };
@@ -146,7 +146,7 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
     tiendaId: "tienda-1",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "12.50",
     metodoPago: "efectivo",
     motivo: null,
@@ -313,7 +313,7 @@ describe("cierre-dia actions — flujo solicitarCierre ok (R13/R18)", () => {
       destinoTipo: "bodega_satelite",
       totales: { general: "20.00" },
     });
-    expect(despues.grupos.entregada).toHaveLength(0); // gestiones ya vinculadas al cierre
+    expect(despues.grupos.entregado).toHaveLength(0); // gestiones ya vinculadas al cierre
     expect(despues.puedesSolicitar).toBe(false); // R11: dia vacio
   });
 });

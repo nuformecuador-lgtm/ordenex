@@ -14,8 +14,9 @@ import type { RastreoPublicoDTO } from "@/lib/types/rastreo-publico";
 // R22 no se cumple "teniendo cuidado": se cumple porque la lista blanca es un MECANISMO
 // comprobable. Esta guardia lo comprueba por los dos lados a la vez:
 //
-//   1. FORMA — el conjunto EXACTO de claves del DTO publico es {numGuia, hitoVigente,
-//      actualizadoEn, linea}, y el de CADA entrada de `linea` es {hito, fecha}. Se compara el
+//   1. FORMA — el conjunto EXACTO de claves del DTO publico es {numGuia, nombreVigente,
+//      actualizadoEn, linea}, y el de CADA entrada de `linea` es {nombre, fecha} (FICHA 455,
+//      2026-09-24, T1.9: antes `hitoVigente` y `hito`; la lista sigue CERRADA). Se compara el
 //      conjunto entero, no una lista de "debe contener": un campo de mas es una fuga, no una
 //      mejora (G11/G14), y un `toContain` no lo veria nunca.
 //   2. CONTENIDO — ninguno de los valores sensibles de una orden poblada aparece en el
@@ -127,8 +128,8 @@ const TRANSICIONES: readonly FilaTransicionPoblada[] = [
   transicionPoblada("en_preparacion", "2026-03-01T15:00:00.000Z"),
   transicionPoblada("en_bodega_central", "2026-03-02T15:00:00.000Z"),
   transicionPoblada("en_reparto", "2026-03-03T15:00:00.000Z"),
-  transicionPoblada("devuelta", "2026-03-04T15:00:00.000Z"),
-  transicionPoblada("entregada", "2026-03-05T15:00:00.000Z"),
+  transicionPoblada("novedad", "2026-03-04T15:00:00.000Z"),
+  transicionPoblada("entregado", "2026-03-05T15:00:00.000Z"),
 ];
 
 class RepositorioPoblado implements IRastreoPublicoRepository {
@@ -224,13 +225,13 @@ function clavesProhibidasPresentes(valor: unknown): string[] {
 /* -------------------------------------------------------------------------- */
 
 describe("R22 — el DTO publico es una lista blanca CERRADA de cuatro campos", () => {
-  it("el DTO público tiene exactamente numGuia, hitoVigente, actualizadoEn y linea, y cada entrada solo hito y fecha", async () => {
+  it("el DTO público tiene exactamente numGuia, nombreVigente, actualizadoEn y linea, y cada entrada solo nombre y fecha", async () => {
     const envio = await proyectar();
 
     expect(Object.keys(envio).sort()).toEqual([
       "actualizadoEn",
-      "hitoVigente",
       "linea",
+      "nombreVigente",
       "numGuia",
     ]);
 
@@ -238,7 +239,7 @@ describe("R22 — el DTO publico es una lista blanca CERRADA de cuatro campos", 
     expect(envio.linea.length).toBeGreaterThan(0);
 
     for (const entrada of envio.linea) {
-      expect(Object.keys(entrada).sort()).toEqual(["fecha", "hito"]);
+      expect(Object.keys(entrada).sort()).toEqual(["fecha", "nombre"]);
     }
   });
 
@@ -250,13 +251,13 @@ describe("R22 — el DTO publico es una lista blanca CERRADA de cuatro campos", 
     const dtoFugado = { ...envio, direccion: SENSIBLES.direccion };
     expect(Object.keys(dtoFugado).sort()).not.toEqual([
       "actualizadoEn",
-      "hitoVigente",
       "linea",
+      "nombreVigente",
       "numGuia",
     ]);
 
     const entradaFugada = { ...envio.linea[0], motivo: SENSIBLES.motivo };
-    expect(Object.keys(entradaFugada).sort()).not.toEqual(["fecha", "hito"]);
+    expect(Object.keys(entradaFugada).sort()).not.toEqual(["fecha", "nombre"]);
   });
 });
 
@@ -303,9 +304,9 @@ describe("R23 — con una orden poblada, el resultado no contiene dirección, mo
     expect([...claves].sort()).toEqual([
       "actualizadoEn",
       "fecha",
-      "hito",
-      "hitoVigente",
       "linea",
+      "nombre",
+      "nombreVigente",
       "numGuia",
     ]);
   });

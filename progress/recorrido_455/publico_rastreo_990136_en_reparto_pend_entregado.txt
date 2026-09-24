@@ -1,0 +1,14 @@
+Rastrear envío
+
+Ingresa el número de guía y los últimos 4 dígitos del teléfono del destinatario.
+
+Número de guía
+Últimos 4 dígitos del teléfono
+Consultar
+Guía 990136
+Reprogramado · pendiente de confirmación
+En preparación
+2026-07-24 · 16:40
+Reprogramado · pendiente de confirmación
+2026-09-24 · 01:10
+Cerrar

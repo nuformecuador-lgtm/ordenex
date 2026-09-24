@@ -51,7 +51,7 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
     })),
     recogerAsignaciones: vi.fn(async () => ({ status: "ok" as const, recogidas: ["o1"] })),
     escogerParaGestion: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1" })),
-    gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "entregada" })),
+    gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "entregado" })),
     liberarGestion: vi.fn(async () => ({ status: "ok" as const })),
     ...overrides,
   };
@@ -120,7 +120,7 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "entregada");
+    fd.set("resultado", "entregado");
     fd.set("montoRecibido", "100");
     fd.set("metodoPago", "efectivo");
     for (const [k, v] of Object.entries(overrides)) fd.set(k, v);
@@ -133,7 +133,7 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     const r = await gestionar(fdEntrega(), { service, getActor: actorMensajero });
     expect(r.status).toBe("ok");
     const [input] = (service.gestionar as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(input.resultado).toBe("entregada");
+    expect(input.resultado).toBe("entregado");
     expect(input.montoRecibido).toBe(100);
     expect(input.metodoPago).toBe("efectivo");
     // Feature 119 (R5): la evidencia llega como LISTA de 1..N; el borde la lee via getAll.
@@ -177,7 +177,7 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "reprogramada");
+    fd.set("resultado", "reprogramado");
     fd.set("fechaReprogramacion", "2000-01-01");
     fd.set("motivo", "x");
     const r = await gestionar(fd, { service, getActor: actorMensajero });
@@ -191,13 +191,13 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "reprogramada");
+    fd.set("resultado", "reprogramado");
     fd.set("fechaReprogramacion", fechaFuturaISO());
     fd.set("motivo", "cliente no estaba");
     const r = await gestionar(fd, { service, getActor: actorMensajero });
     expect(r.status).toBe("ok");
     const [input] = (service.gestionar as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(input.resultado).toBe("reprogramada");
+    expect(input.resultado).toBe("reprogramado");
   });
 
   it("R27: devolucion sin motivo -> validation_error", async () => {
@@ -206,7 +206,7 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "devuelta");
+    fd.set("resultado", "novedad");
     fd.set("motivo", "");
     const r = await gestionar(fd, { service, getActor: actorMensajero });
     expect(r.status).toBe("validation_error");
@@ -218,7 +218,7 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "rechazada");
+    fd.set("resultado", "devolucion_a_origen_por_rechazo");
     fd.set("motivo", "cliente rechazo");
     const r = await gestionar(fd, { service, getActor: actorMensajero });
     expect(r.status).toBe("validation_error");
@@ -231,13 +231,13 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "rechazada");
+    fd.set("resultado", "devolucion_a_origen_por_rechazo");
     fd.set("motivo", "cliente rechazo");
     fd.set("evidencia", imagenFile());
     const r = await gestionar(fd, { service, getActor: actorMensajero });
     expect(r.status).toBe("ok");
     const [input] = (service.gestionar as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(input.resultado).toBe("rechazada");
+    expect(input.resultado).toBe("devolucion_a_origen_por_rechazo");
     expect(input.evidencias[0].bytes).toBeInstanceOf(Uint8Array);
   });
 });
@@ -265,7 +265,7 @@ describe("menor-1: withErrorHandler envuelve los cuerpos de las actions", () => 
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "devuelta");
+    fd.set("resultado", "novedad");
     // Feature 73/R6: sin causa este FormData ya no llegaria al service (moriria en el borde
     // como validation_error) y el test dejaria de probar lo suyo — que un error EXCEPCIONAL
     // del service pasa por withErrorHandler. Se añade la causa para que el input siga siendo
@@ -297,7 +297,7 @@ describe("menor-1: withErrorHandler envuelve los cuerpos de las actions", () => 
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "devuelta");
+    fd.set("resultado", "novedad");
     fd.set("motivo", "x");
     const r = await gestionar(fd, { service, getActor: noActor });
     expect(r.status).toBe("unauthenticated");
@@ -370,7 +370,7 @@ describe("ficha 440: INTERNAL es un desenlace, no una excepcion", () => {
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281");
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "devuelta");
+    fd.set("resultado", "novedad");
     fd.set("causaDevolucion", "not_found");
     fd.set("motivo", "cliente no estaba");
     fd.set("evidencia", imagenFile());

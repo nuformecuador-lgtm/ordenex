@@ -74,13 +74,13 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 /** La gestión sintética del cron de plazos vencidos, con la cadena EXACTA de producción. */
 const RECHAZO_AUTOMATICO = makeGestion({
   gestionId: "g-sla",
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   numRemision: "REM-SLA",
   esRechazoSla: true,
   motivo: "escalado SLA wrong_address",
@@ -89,7 +89,7 @@ const RECHAZO_AUTOMATICO = makeGestion({
 /** Un rechazo del mensajero, con su motivo escrito a mano. */
 const RECHAZO_MANUAL = makeGestion({
   gestionId: "g-manual",
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   numRemision: "REM-MAN",
   esRechazoSla: false,
   motivo: MOTIVO_LIBRE,
@@ -125,23 +125,23 @@ describe("R9 — donde está el marcador, la columna «Motivo» no lo repite", (
   it("la celda «Motivo» de un rechazo automático es exactamente «Dirección errada»", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] }}
         onVerEvidencia={() => {}}
       />,
     );
 
-    expect(celdaDe("Rechazadas", "REM-SLA", "Motivo")).toBe(DIRECCION_ERRADA);
+    expect(celdaDe("Devolución a origen por rechazo", "REM-SLA", "Motivo")).toBe(DIRECCION_ERRADA);
   });
 
   it("esa celda NO dice «automático» ni repite la nota del marcador", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] }}
         onVerEvidencia={() => {}}
       />,
     );
 
-    const celda = celdaDe("Rechazadas", "REM-SLA", "Motivo");
+    const celda = celdaDe("Devolución a origen por rechazo", "REM-SLA", "Motivo");
     expect(celda.toLowerCase()).not.toContain("automático");
     expect(celda).not.toContain(NOTA_MARCADOR_AUTOMATICO);
     expect(celda).not.toContain("plazo");
@@ -153,12 +153,12 @@ describe("R9 — donde está el marcador, la columna «Motivo» no lo repite", (
   it("el dato crudo no queda pintado en ninguna parte de la fila", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] }}
         onVerEvidencia={() => {}}
       />,
     );
 
-    const tabla = screen.getByRole("table", { name: "Rechazadas" });
+    const tabla = screen.getByRole("table", { name: "Devolución a origen por rechazo" });
     expect(within(tabla).queryByText("escalado SLA wrong_address")).toBeNull();
   });
 });
@@ -167,14 +167,14 @@ describe("R8 — el marcador de origen sigue diciendo lo que decía", () => {
   it("la fila mantiene el badge «Automático» con su nota accesible completa", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO] }}
         onVerEvidencia={() => {}}
       />,
     );
 
-    expect(celdaDe("Rechazadas", "REM-SLA", "Origen")).toBe("Automático");
+    expect(celdaDe("Devolución a origen por rechazo", "REM-SLA", "Origen")).toBe("Automático");
 
-    const tabla = screen.getByRole("table", { name: "Rechazadas" });
+    const tabla = screen.getByRole("table", { name: "Devolución a origen por rechazo" });
     const badge = within(tabla).getByLabelText(NOTA_MARCADOR_AUTOMATICO);
     expect(badge).toHaveTextContent("Automático");
     expect(badge).toHaveAttribute("title", NOTA_MARCADOR_AUTOMATICO);
@@ -183,12 +183,12 @@ describe("R8 — el marcador de origen sigue diciendo lo que decía", () => {
   it("un rechazo del mensajero sigue marcado «Manual»", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_MANUAL] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_MANUAL] }}
         onVerEvidencia={() => {}}
       />,
     );
 
-    expect(celdaDe("Rechazadas", "REM-MAN", "Origen")).toBe("Manual");
+    expect(celdaDe("Devolución a origen por rechazo", "REM-MAN", "Origen")).toBe("Manual");
   });
 });
 
@@ -196,13 +196,13 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
   it("las dos filas conviven: una traducida y la otra literal", () => {
     renderConToast(
       <DetalleSecciones
-        grupos={{ ...emptyGrupos(), rechazada: [RECHAZO_AUTOMATICO, RECHAZO_MANUAL] }}
+        grupos={{ ...emptyGrupos(), devolucion_a_origen_por_rechazo: [RECHAZO_AUTOMATICO, RECHAZO_MANUAL] }}
         onVerEvidencia={() => {}}
       />,
     );
 
-    expect(celdaDe("Rechazadas", "REM-SLA", "Motivo")).toBe(DIRECCION_ERRADA);
-    expect(celdaDe("Rechazadas", "REM-MAN", "Motivo")).toBe(MOTIVO_LIBRE);
+    expect(celdaDe("Devolución a origen por rechazo", "REM-SLA", "Motivo")).toBe(DIRECCION_ERRADA);
+    expect(celdaDe("Devolución a origen por rechazo", "REM-MAN", "Motivo")).toBe(MOTIVO_LIBRE);
   });
 
   it("una DEVUELTA con motivo libre tampoco se toca (la sección sin columna «Origen»)", () => {
@@ -210,10 +210,10 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
       <DetalleSecciones
         grupos={{
           ...emptyGrupos(),
-          devuelta: [
+          novedad: [
             makeGestion({
               gestionId: "g-dev",
-              resultado: "devuelta",
+              resultado: "novedad",
               numRemision: "REM-DEV",
               motivo: MOTIVO_LIBRE,
             }),
@@ -223,7 +223,7 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
       />,
     );
 
-    expect(celdaDe("Devueltas", "REM-DEV", "Motivo")).toBe(MOTIVO_LIBRE);
+    expect(celdaDe("Novedad", "REM-DEV", "Motivo")).toBe(MOTIVO_LIBRE);
   });
 
   it("un motivo ausente sigue pintando el guion de pantalla", () => {
@@ -231,10 +231,10 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
       <DetalleSecciones
         grupos={{
           ...emptyGrupos(),
-          rechazada: [
+          devolucion_a_origen_por_rechazo: [
             makeGestion({
               gestionId: "g-sin",
-              resultado: "rechazada",
+              resultado: "devolucion_a_origen_por_rechazo",
               numRemision: "REM-SIN",
               motivo: null,
             }),
@@ -246,6 +246,6 @@ describe("R2 — el motivo que escribió el mensajero sale intacto en la misma t
 
     // El `?? "—"` vive en el render, no dentro del traductor: en la hoja descargada esta misma
     // celda va VACÍA (R3).
-    expect(celdaDe("Rechazadas", "REM-SIN", "Motivo")).toBe("—");
+    expect(celdaDe("Devolución a origen por rechazo", "REM-SIN", "Motivo")).toBe("—");
   });
 });

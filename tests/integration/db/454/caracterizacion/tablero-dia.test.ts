@@ -22,7 +22,7 @@ describeSiHayBase("454/C25 — tablero del dia (Postgres real)", () => {
   beforeAll(async () => {
     mundo = await prepararMundo();
     fila = await conEscenario(mundo, async (e) => {
-      for (const res of ["entregada", "reprogramada", "devuelta", "rechazada", "incidente"] as const) {
+      for (const res of ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo", "incidente"] as const) {
         const o = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000 });
         await e.gestionarOk(o.ordenId, res, { monto: 1000 });
       }
@@ -30,7 +30,7 @@ describeSiHayBase("454/C25 — tablero del dia (Postgres real)", () => {
       const ay = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000 });
       const p = await e.pedirAyuda(ay.ordenId);
       if (p.status !== "ok") throw new Error(`pedirAyuda: ${JSON.stringify(p)}`);
-      await e.sembrarOrden({ estatus: "por_recoger", montoCobrar: 1000 });
+      await e.sembrarOrden({ estatus: "mensajero_recogiendo_en_bodega", montoCobrar: 1000 });
 
       const filas = await new TableroDiaRepository(e.cliente).contarPorMensajero(
         ventanaDelDiaEnCursoCR(new Date()),

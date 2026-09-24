@@ -22,7 +22,7 @@ import { GESTION_REPROGRAMADA_VIGENTE } from "@/lib/repositories/gestion-reprogr
 
 // Estatus de ORIGEN de la liberacion (una orden reprogramada). Valor de catalogo ya sembrado;
 // esta feature NO agrega estados. (El `resultado` de la gestion vive en la correlacion compartida.)
-const ESTATUS_REPROGRAMADA = "reprogramada";
+const ESTATUS_REPROGRAMADA = "reprogramado";
 
 const UN_DIA_MS = 24 * 60 * 60 * 1000;
 

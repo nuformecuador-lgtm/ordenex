@@ -122,10 +122,10 @@ function gestion(
 const CLAVES_DECLARADAS = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.clave);
 
 const LOS_CINCO: CierreResultado[] = [
-  "entregada",
-  "reprogramada",
-  "devuelta",
-  "rechazada",
+  "entregado",
+  "reprogramado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
   "incidente",
 ];
 
@@ -274,10 +274,10 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
       (resultado) => filaDescargaGestionFundida(gestion({ resultado })).resultado,
     );
     expect(etiquetas).toEqual([
-      "Entregada",
-      "Reprogramada",
-      "Devuelta",
-      "Rechazada",
+      "Entregado",
+      "Reprogramado",
+      "Novedad",
+      "Devolución a origen por rechazo",
       "Incidente",
     ]);
   });
@@ -317,7 +317,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     // y rompe el orden. El servidor ya entrega el día; aquí se afirma que la proyección no le
     // añade nada ni lo reformatea.
     const fila = filaDescargaGestionFundida(
-      gestion({ resultado: "entregada", fechaGestion: "2026-12-31", diaReparto: "2026-01-01" }),
+      gestion({ resultado: "entregado", fechaGestion: "2026-12-31", diaReparto: "2026-01-01" }),
     );
     expect(fila.fechaGestion).toBe("2026-12-31");
     expect(fila.diaReparto).toBe("2026-01-01");
@@ -333,7 +333,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     // desenlace legítimo, y la tentación es «arreglarlo» poniendo la fecha del cierre o la de
     // la gestión: eso inventaría un día de reparto que nadie escribió.
     const fila = filaDescargaGestionFundida(
-      gestion({ resultado: "devuelta", diaReparto: null, fechaGestion: "2026-07-12" }),
+      gestion({ resultado: "novedad", diaReparto: null, fechaGestion: "2026-07-12" }),
     );
     expect(fila.diaReparto).toBeNull();
     expect(fila.diaReparto).not.toBe(fila.fechaCierre);
@@ -348,8 +348,8 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     // El grano es la GESTIÓN: tres gestiones del mismo cierre y del mismo mensajero son TRES
     // filas, cada una con su remisión, y no un resumen por mensajero ni por resultado.
     const gestiones = [
-      gestion({ resultado: "entregada", numRemision: "REM-1" }),
-      gestion({ resultado: "reprogramada", numRemision: "REM-2" }),
+      gestion({ resultado: "entregado", numRemision: "REM-1" }),
+      gestion({ resultado: "reprogramado", numRemision: "REM-2" }),
       gestion({ resultado: "incidente", numRemision: "REM-3" }),
     ];
     const filas = gestiones.map(filaDescargaGestionFundida);
@@ -357,13 +357,13 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     expect(filas.map((f) => f.numRemision)).toEqual(["REM-1", "REM-2", "REM-3"]);
     // El orden recibido se conserva: la proyección no ordena ni agrupa nada (R11 lo garantiza
     // el servidor; aquí se afirma que esto no lo deshace).
-    expect(filas.map((f) => f.resultado)).toEqual(["Entregada", "Reprogramada", "Incidente"]);
+    expect(filas.map((f) => f.resultado)).toEqual(["Entregado", "Reprogramado", "Incidente"]);
   });
 
   it("la fila de una ENTREGADA puebla sus diez específicas y deja vacías las otras siete", () => {
     const fila = filaDescargaGestionFundida(
       gestion({
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: "1000.10",
         pagos: [{ metodo: "SINPE", monto: "1000.10" }],
       }),
@@ -387,7 +387,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
       // les da valores DISTINTOS, así que una celda que cogiera el contador equivocado pone
       // rojo este `toEqual` con el número en la mano.
       intentosEntrega: 5,
-      resultado: "Entregada",
+      resultado: "Entregado",
       montoCobrar: "1000.10",
       // El fixture de `ingreso()` trae `tarifa: null` (gap R9): sin tarifa congelada no hay
       // fulfillment que mostrar, y la celda queda vacía como el resto de lo que no se congeló.
@@ -413,7 +413,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
   it("la fila de una REPROGRAMADA solo puebla a cobrar, nueva fecha, motivo y pago", () => {
     const fila = filaDescargaGestionFundida(
       gestion({
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         fechaReprogramacion: "2026-07-20",
         motivo: "Nadie en casa",
       }),
@@ -436,7 +436,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
 
   it("la fila de una DEVUELTA puebla el flete de devolución AGRUPADO (2026-08-19)", () => {
     const fila = filaDescargaGestionFundida(
-      gestion({ resultado: "devuelta", motivo: "Rechazó el paquete" }),
+      gestion({ resultado: "novedad", motivo: "Rechazó el paquete" }),
     );
     // Antes poblaba el par partido y dejaba vacío el agrupado (D7). Ahora lee lo mismo que la
     // rechazada, que es lo que las dos tablas muestran.
@@ -448,7 +448,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
   it("la fila de una RECHAZADA puebla el flete de devolución AGRUPADO", () => {
     const fila = filaDescargaGestionFundida(
       gestion({
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         esRechazoSla: true,
         motivo: "Plazo vencido",
         ingresoBodegaRechazo: "12.00",
@@ -491,7 +491,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
   it("resultado, causa y origen salen como etiqueta legible (R45)", () => {
     const entregada = filaDescargaGestionFundida(
       gestion({
-        resultado: "entregada",
+        resultado: "entregado",
         pagos: [{ metodo: "efectivo", monto: "500.00" }],
       }),
     );
@@ -499,10 +499,10 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
       gestion({ resultado: "incidente", causaIncidente: "perdido" }),
     );
     const rechazada = filaDescargaGestionFundida(
-      gestion({ resultado: "rechazada", esRechazoSla: false }),
+      gestion({ resultado: "devolucion_a_origen_por_rechazo", esRechazoSla: false }),
     );
 
-    expect(entregada.resultado).toBe("Entregada");
+    expect(entregada.resultado).toBe("Entregado");
     expect(incidente.causa).toBe("Paquete perdido");
     expect(rechazada.origenRechazo).toBe("Manual");
     // El medio de pago ya no es una CELDA sino un ENCABEZADO, y ahí la etiqueta legible sigue
@@ -512,14 +512,14 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
 
     // Y NINGUNA de las tres celdas es el value del enum.
     for (const valor of [entregada.resultado, incidente.causa, rechazada.origenRechazo]) {
-      expect(["entregada", "incidente", "rechazada", "efectivo", "perdido"]).not.toContain(valor);
+      expect(["entregado", "incidente", "devolucion_a_origen_por_rechazo", "efectivo", "perdido"]).not.toContain(valor);
     }
   });
 
   it("los montos salen como el string del snapshot, sin símbolo ni separador (R43/R44)", () => {
     const fila = filaDescargaGestionFundida(
       gestion({
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: "1234567.89",
         pagos: [
           { metodo: "efectivo", monto: "1000000.00" },
@@ -552,7 +552,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
   it("un dato nulo deja la celda vacía y nunca el guion de pantalla (R46)", () => {
     const fila = filaDescargaGestionFundida(
       gestion({
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         numGuia: null,
         direccion: null,
         distritoNombre: null,
@@ -645,12 +645,12 @@ describe("las dos columnas de la ficha 385, con la de intentos sustituida por la
     // es un HECHO —«nadie ha intentado entregarla todavía»— y una celda vacía diría «no se
     // sabe». Un `|| null` o un `?? ""` en la proyección pone rojo esto.
     const conIntentos = filaDescargaGestionFundida(
-      gestion({ resultado: "entregada", intentosEntrega: 7 }),
+      gestion({ resultado: "entregado", intentosEntrega: 7 }),
     );
     expect(conIntentos.intentosEntrega).toBe(7);
 
     const sinIntentos = filaDescargaGestionFundida(
-      gestion({ resultado: "devuelta", intentosEntrega: 0 }),
+      gestion({ resultado: "novedad", intentosEntrega: 0 }),
     );
     expect(sinIntentos.intentosEntrega).toBe(0);
     expect(sinIntentos.intentosEntrega).not.toBeNull();
@@ -679,7 +679,7 @@ describe("las dos columnas de la ficha 385, con la de intentos sustituida por la
     // El servidor ya la entrega como día CR; aquí se afirma que la proyección no le añade nada.
     // Una hora dentro de la celda la convierte en texto y rompe el orden de la columna.
     const fila = filaDescargaGestionFundida(
-      gestion({ resultado: "entregada", fechaCreacionOrden: "2026-12-31" }),
+      gestion({ resultado: "entregado", fechaCreacionOrden: "2026-12-31" }),
     );
     expect(fila.fechaCreacionOrden).toBe("2026-12-31");
     expect(String(fila.fechaCreacionOrden)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -855,7 +855,7 @@ describe("FICHA 408 — el motivo del cron en la hoja fundida", () => {
   it("un rechazo automático emite «Dirección errada», no la plantilla cruda (R6)", () => {
     const fila = filaDescargaGestionFundida(
       gestion({
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         esRechazoSla: true,
         motivo: "escalado SLA wrong_address",
       }),
@@ -871,13 +871,13 @@ describe("FICHA 408 — el motivo del cron en la hoja fundida", () => {
   it("las otras dos causas también salen en castellano (R1)", () => {
     expect(
       filaDescargaGestionFundida(
-        gestion({ resultado: "rechazada", esRechazoSla: true, motivo: "escalado SLA not_found" }),
+        gestion({ resultado: "devolucion_a_origen_por_rechazo", esRechazoSla: true, motivo: "escalado SLA not_found" }),
       ).motivo,
     ).toBe("Cliente no localizado");
     expect(
       filaDescargaGestionFundida(
         gestion({
-          resultado: "rechazada",
+          resultado: "devolucion_a_origen_por_rechazo",
           esRechazoSla: true,
           motivo: "escalado SLA wrong_number",
         }),
@@ -888,7 +888,7 @@ describe("FICHA 408 — el motivo del cron en la hoja fundida", () => {
   it("el motivo que escribió el mensajero sale intacto (R2)", () => {
     const fila = filaDescargaGestionFundida(
       gestion({
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         esRechazoSla: false,
         motivo: "El cliente no contesta el timbre",
       }),

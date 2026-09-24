@@ -67,6 +67,7 @@ import { KpiCard } from "@/components/private/analytics/KpiCard";
 import { consultarConteoPorStatus } from "@/lib/actions/conteo-por-status";
 import { evaluarMadurezDeCohorte } from "@/lib/analytics/madurez-cohorte";
 import type { ResultadoConteoPorStatus } from "@/lib/types/conteo-por-status";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
 import {
   TEXTO_ERROR_PANEL,
@@ -79,11 +80,15 @@ import { CLAVE_TABLERO } from "../operativo/PanelOperativo";
 import { contarOrdenes, ORDENES, rotuloConBase } from "./base-del-kpi";
 import { EfectividadHeroe } from "./EfectividadHeroe";
 import { calcularEfectividad } from "./efectividad";
+import { ETIQUETA_EN_PROCESO } from "./desenlaces-de-fila";
 
+// FICHA 455 (2026-09-24, R5/R6): la tarjeta que cuenta UN desenlace lleva su nombre exacto
+// («Entregado»); la de las órdenes sin desenlace es un GRUPO y lleva el rótulo propio de la tabla
+// y del archivo (`ETIQUETA_EN_PROCESO`, antes «En proceso», un nombre retirado).
 const ETIQUETA = {
   efectividadGestion: "Efectividad de la gestión",
-  entregadas: "Entregadas",
-  enProceso: "En proceso",
+  entregadas: NOMBRE_ESTADO.entregado,
+  enProceso: ETIQUETA_EN_PROCESO,
 } as const;
 
 /**
@@ -103,7 +108,9 @@ const ETIQUETA = {
 function rotuloEfectividadGestion(total: number): string {
   return rotuloConBase(
     ETIQUETA.efectividadGestion,
-    `entregadas y rechazadas de ${contarOrdenes(total, ORDENES)}`,
+    // FICHA 455 (2026-09-24): los dos sumandos por su nombre vigente (antes «entregadas y rechazadas»).
+    `${NOMBRE_ESTADO.entregado} y ${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo} de ` +
+      `${contarOrdenes(total, ORDENES)}`,
   );
 }
 

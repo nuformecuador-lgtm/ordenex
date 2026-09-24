@@ -1,0 +1,154 @@
+# MUTACION R27-estatus
+archivo: lib/services/BulkOrdenService.ts
+linea: 135
+- "{ fila, numRemision, resultado, estado: estatus, estadoNombre: nombreDeEstado(estatus), ...resto }"
++ "{ fila, numRemision, resultado, estatus, ...resto }"
+tests: tests/integration/db/455/caracterizacion/api-lectura.test.ts tests/unit/services/bulk-orden-service.carga-api.test.ts
+exit vitest: 1
+Test Files  2 failed (2)
+Tests  5 failed | 50 passed (55)
+FAIL  tests/unit/services/bulk-orden-service.carga-api.test.ts > cargarViaApi — dueño y estado inicial (R8, D4) > 155/R20: sin fulfillment en la tarifa, nace en por_recolectar_en_tienda con guia
+FAIL  tests/unit/services/bulk-orden-service.carga-api.test.ts > cargarViaApi — resultado con num_guia (R10) > happy path: summary con num_guia por creada + bloque plano ordenes
+FAIL  tests/unit/services/bulk-orden-service.carga-api.test.ts > cargarViaApi — costoEnvio flete + IVA (feature 98) > R4/R6: filas duplicada y error NO llevan costoEnvio y conservan su shape
+FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > carga: la remision existente vuelve como duplicada con el estado de la orden que la ocupa
+FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R26, R27) > R27: la fila de la carga lleva `estado` + `estadoNombre` (y ya no `estatus`)
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/services/bulk-orden-service.carga-api.test.ts (46 tests | 3 failed) 97ms
+     × 155/R20: sin fulfillment en la tarifa, nace en por_recolectar_en_tienda con guia 8ms
+     × happy path: summary con num_guia por creada + bloque plano ordenes 5ms
+     × R4/R6: filas duplicada y error NO llevan costoEnvio y conservan su shape 3ms
+ ❯ tests/integration/db/455/caracterizacion/api-lectura.test.ts (9 tests | 2 failed) 602ms
+       × carga: la remision existente vuelve como duplicada con el estado de la orden que la ocupa 6ms
+       × R27: la fila de la carga lleva `estado` + `estadoNombre` (y ya no `estatus`) 1ms
+
+ Test Files  2 failed (2)
+      Tests  5 failed | 50 passed (55)
+   Start at  06:00:37
+   Duration  3.21s (transform 1.19s, setup 103ms, import 3.12s, tests 700ms, environment 0ms)
+
+(node:26744) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/services/bulk-orden-service.carga-api.test.ts > cargarViaApi — dueño y estado inicial (R8, D4) > 155/R20: sin fulfillment en la tarifa, nace en por_recolectar_en_tienda con guia
+AssertionError: expected undefined to be 'por_recolectar_en_tienda' // Object.is equality
+
+- Expected:
+"por_recolectar_en_tienda"
+
++ Received:
+undefined
+
+ ❯ tests/unit/services/bulk-orden-service.carga-api.test.ts:339:41
+    337|     expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_rut…
+    338|     if (r.status === "ok") {
+    339|       expect(r.summary.filas[0].estado).toBe("por_recolectar_en_tienda…
+       |                                         ^
+    340|       expect(r.summary.filas[0].estadoNombre).toBe("Por recolectar en …
+    341|       expect(r.summary.filas[0]).not.toHaveProperty("estatus");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/unit/services/bulk-orden-service.carga-api.test.ts > cargarViaApi — resultado con num_guia (R10) > happy path: summary con num_guia por creada + bloque plano ordenes
+AssertionError: expected { fila: 1, numRemision: 'REM-1', …(3) } to match object { resultado: 'creada', …(3) }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "estado": "por_recolectar_en_tienda",
+-   "estadoNombre": "Por recolectar en tienda",
+    "numGuia": 1000,
+    "resultado": "creada",
+  }
+
+ ❯ tests/unit/services/bulk-orden-service.carga-api.test.ts:411:34
+    409|       expect(r.summary.creadas).toBe(2);
+    410|       // Filas creadas extendidas con numGuia.
+    411|       expect(r.summary.filas[0]).toMatchObject({ resultado: "creada", …
+       |                                  ^
+    412|       expect(r.summary.filas[1]).toMatchObject({ resultado: "creada", …
+    413|       // Bloque plano `ordenes` (R10): id + numGuia + estado + costoEn…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/unit/services/bulk-orden-service.carga-api.test.ts > cargarViaApi — costoEnvio flete + IVA (feature 98) > R4/R6: filas duplicada y error NO llevan costoEnvio y conservan su shape
+AssertionError: expected { fila: 2, …(3) } to match object { resultado: 'duplicada', …(2) }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "estado": "entregado",
+-   "estadoNombre": "Entregado",
+    "resultado": "duplicada",
+  }
+
+ ❯ tests/unit/services/bulk-orden-service.carga-api.test.ts:623:19
+    621|       expect(err).not.toHaveProperty("costoEnvio");
+    622|       // Shape intacto: la duplicada expone `estatus`, la error expone…
+    623|       expect(dup).toMatchObject({ resultado: "duplicada", estado: "ent…
+       |                   ^
+    624|       expect(err.errores).toHaveProperty("provincia");
+    625|       // Y `ordenes` (una por creada) sí lleva costoEnvio, solo para l…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > carga: la remision existente vuelve como duplicada con el estado de la orden que la ocupa
+AssertionError: expected [ [ 'duplicada', '∅' ] ] to deeply equal [ [ 'duplicada', 'entregado' ] ]
+
+- Expected
++ Received
+
+  [
+    [
+      "duplicada",
+-     "entregado",
++     "∅",
+    ],
+  ]
+
+ ❯ tests/integration/db/455/caracterizacion/api-lectura.test.ts:196:60
+    194|
+    195|     it("carga: la remision existente vuelve como duplicada con el esta…
+    196|       expect(r.filas.map((f) => [f.resultado, f.estatus])).toEqual([["…
+       |                                                            ^
+    197|     });
+    198|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R26, R27) > R27: la fila de la carga lleva `estado` + `estadoNombre` (y ya no `estatus`)
+AssertionError: expected [ 'estatus', 'fila', …(2) ] to deeply equal [ 'estado', 'estadoNombre', …(3) ]
+
+- Expected
++ Received
+
+  [
+-   "estado",
+-   "estadoNombre",
++   "estatus",
+    "fila",
+    "numRemision",
+    "resultado",
+  ]
+
+ ❯ tests/integration/db/455/caracterizacion/api-lectura.test.ts:244:34
+    242|
+    243|     it("R27: la fila de la carga lleva `estado` + `estadoNombre` (y ya…
+    244|       expect(r.filas[0]?.claves).toEqual(["estado", "estadoNombre", "f…
+       |                                  ^
+    245|       expect(r.nombreFila).toEqual(["Entregado"]);
+    246|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+

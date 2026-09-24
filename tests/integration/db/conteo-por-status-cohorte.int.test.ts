@@ -87,7 +87,7 @@ describeSiHayBase("441 — el desglose por status cuenta las CARGADAS, no las ge
       await crearGestion(tx, {
         ordenId: a,
         mensajeroId: base.mensajero1,
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         at: instanteCR(D, "11:00"),
       });
 
@@ -101,7 +101,7 @@ describeSiHayBase("441 — el desglose por status cuenta las CARGADAS, no las ge
       await crearGestion(tx, {
         ordenId: b,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(D_MAS_10, "09:00"),
       });
 
@@ -132,7 +132,7 @@ describeSiHayBase("441 — el desglose por status cuenta las CARGADAS, no las ge
 
     // ⭑ LA MITAD QUE MUERE con la ventana vieja: A se cuela y pinta un bucket `rechazada`.
     expect(
-      porStatus.get("rechazada"),
+      porStatus.get("devolucion_a_origen_por_rechazo"),
       "entro una orden cargada antes del rango, solo porque se gestiono dentro",
     ).toBeUndefined();
   });
@@ -144,7 +144,7 @@ describeSiHayBase("441 — el desglose por status cuenta las CARGADAS, no las ge
     // ⭑ LA OTRA MITAD: con la ventana vieja, B se cae del rango porque su fecha efectiva es
     // nueve dias posterior al `hasta`.
     expect(
-      porStatus.get("entregada"),
+      porStatus.get("entregado"),
       "se perdio una orden cargada en el rango por gestionarse despues",
     ).toBe(1);
   });
@@ -154,7 +154,7 @@ describeSiHayBase("441 — el desglose por status cuenta las CARGADAS, no las ge
 
     // Sin nombrar el `value` concreto del catalogo: lo que se afirma es que existe un bucket que
     // no es ninguno de los dos desenlaces sembrados y que trae exactamente esa orden.
-    const sinGestion = filas.filter((f) => f.status !== "entregada" && f.status !== "rechazada");
+    const sinGestion = filas.filter((f) => f.status !== "entregado" && f.status !== "devolucion_a_origen_por_rechazo");
 
     expect(sinGestion, "la orden sin gestion desaparecio (¿el LATERAL dejo de ser LEFT?)").toHaveLength(
       1,

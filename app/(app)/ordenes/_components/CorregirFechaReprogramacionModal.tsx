@@ -32,7 +32,7 @@ import {
 /**
  * Forma MÍNIMA que el modal necesita de una orden; la cumple por estructura `OrdenListItemDTO`.
  * `fechaReprogramacion` llega YA RESUELTA por el servidor (la misma que pinta la columna
- * «Reprogramada para», ficha 367) y es opcional/nullable porque el DTO lo es: una orden sin fecha
+ * «Reprogramado para», ficha 367) y es opcional/nullable porque el DTO lo es: una orden sin fecha
  * existe, el servidor la rechaza, y la pantalla tiene que poder nombrarla en vez de dejar el hueco.
  */
 export interface CorregirFechaReprogramacionOrdenUI {

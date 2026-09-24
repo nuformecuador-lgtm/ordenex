@@ -12,22 +12,22 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
   it("contiene exactamente los 20 valores esperados", () => {
     expect([...ORDER_STATUS_SEED].sort()).toEqual(
       [
-        "devuelta",
+        "novedad",
         "devolviendo_a_tienda",
         "en_bodega_central",
         "en_preparacion",
-        "por_recoger",
+        "mensajero_recogiendo_en_bodega",
         "en_ruta_bodega_central",
         "en_ruta_bodega_satelite",
         "en_reparto",
-        "rechazada",
-        "entregada",
-        "reprogramada",
+        "devolucion_a_origen_por_rechazo",
+        "entregado",
+        "reprogramado",
         "en_bodega_satelite",
         "devuelta_a_tienda",
-        "sin_gestionar",
+        "novedad_interna",
         // feature 139: los 3 estados del flujo de devolucion de rechazadas
-        "por_devolver",
+        "por_devolver_a_bodega_central",
         "devolviendo_a_bodega_central",
         "por_devolver_a_tienda",
         // feature 154: los 2 estados del flujo v2
@@ -62,21 +62,21 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
   // fulfillment (que ocupaba el indice 4). Ni un rename, ni un reorden, ni otra baja.
   it("feature 155/R27: los 17 values previos siguen intactos y en su orden relativo", () => {
     const PREVIOS_17 = [
-      "entregada",
-      "devuelta",
+      "entregado",
+      "novedad",
       "devolviendo_a_tienda",
-      "reprogramada",
+      "reprogramado",
       "en_ruta_bodega_central",
       "en_bodega_central",
       "en_preparacion",
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_ruta_bodega_satelite",
       "en_reparto",
-      "rechazada",
+      "devolucion_a_origen_por_rechazo",
       "en_bodega_satelite",
       "devuelta_a_tienda",
-      "sin_gestionar",
-      "por_devolver",
+      "novedad_interna",
+      "por_devolver_a_bodega_central",
       "devolviendo_a_bodega_central",
       "por_devolver_a_tienda",
     ];
@@ -93,12 +93,12 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
 
   it("feature 139/R1: incluye los 3 estados del flujo de devolucion (indices 14/15/16 tras la 155)", () => {
     // Se APENDIERON al final; la 155 los corre UNA posicion al retirar un value previo.
-    expect(ORDER_STATUS_SEED[14]).toBe("por_devolver");
+    expect(ORDER_STATUS_SEED[14]).toBe("por_devolver_a_bodega_central");
     expect(ORDER_STATUS_SEED[15]).toBe("devolviendo_a_bodega_central");
     expect(ORDER_STATUS_SEED[16]).toBe("por_devolver_a_tienda");
     // El set completo incluye los 3 nuevos.
     const set = new Set(ORDER_STATUS_SEED);
-    expect(set.has("por_devolver")).toBe(true);
+    expect(set.has("por_devolver_a_bodega_central")).toBe(true);
     expect(set.has("devolviendo_a_bodega_central")).toBe(true);
     expect(set.has("por_devolver_a_tienda")).toBe(true);
   });
@@ -108,9 +108,9 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
   });
 
   // Los indices de aqui abajo bajaron UNO tras la 155 (el value retirado ocupaba el 4).
-  it("R5/R12: por_recoger conserva su lugar relativo (indice 7 tras la 155, feature 17)", () => {
-    expect(ORDER_STATUS_SEED).toContain("por_recoger");
-    expect(ORDER_STATUS_SEED[7]).toBe("por_recoger");
+  it("R5/R12: mensajero_recogiendo_en_bodega conserva su lugar relativo (indice 7 tras la 155, feature 17)", () => {
+    expect(ORDER_STATUS_SEED).toContain("mensajero_recogiendo_en_bodega");
+    expect(ORDER_STATUS_SEED[7]).toBe("mensajero_recogiendo_en_bodega");
   });
 
   it("R1: incluye en_ruta_bodega_satelite (indice 8 tras la 155, feature 30)", () => {
@@ -120,7 +120,7 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
 
   it("R5/R12: en_reparto y rechazada (indices 9 y 10 tras la 155, feature 36)", () => {
     expect(ORDER_STATUS_SEED[9]).toBe("en_reparto");
-    expect(ORDER_STATUS_SEED[10]).toBe("rechazada");
+    expect(ORDER_STATUS_SEED[10]).toBe("devolucion_a_origen_por_rechazo");
   });
 
   it("R1: incluye en_bodega_satelite (indice 11 tras la 155, feature 33)", () => {
@@ -133,9 +133,9 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
     expect(ORDER_STATUS_SEED[12]).toBe("devuelta_a_tienda");
   });
 
-  it("feature 109/R1: incluye sin_gestionar (indice 13 tras la 155)", () => {
-    expect(ORDER_STATUS_SEED).toContain("sin_gestionar");
-    expect(ORDER_STATUS_SEED[13]).toBe("sin_gestionar");
+  it("feature 109/R1: incluye novedad_interna (indice 13 tras la 155)", () => {
+    expect(ORDER_STATUS_SEED).toContain("novedad_interna");
+    expect(ORDER_STATUS_SEED[13]).toBe("novedad_interna");
   });
 
   // Feature 235 (T1.1, R1): el estatus propio de la SOLICITUD DE AYUDA. Caso nombrado, aparte del
@@ -182,25 +182,27 @@ describe("seedOrderStatus siembra los values renombrados de forma idempotente (R
         return row;
       },
     );
-    return { rows, upsert };
+    // FICHA 455 (R20): el sembrado mira antes si la base tiene un codigo anterior (aqui, nunca).
+    const findFirst = vi.fn(async () => null);
+    return { rows, upsert, findFirst };
   }
 
-  it("agrega por_recoger sin duplicar tras dos ejecuciones", async () => {
+  it("agrega mensajero_recogiendo_en_bodega sin duplicar tras dos ejecuciones", async () => {
     const fake = createFakeOrderStatus();
-    const client = { orderStatus: { upsert: fake.upsert } } as unknown as Pick<
+    const client = { orderStatus: { upsert: fake.upsert, findFirst: fake.findFirst } } as unknown as Pick<
       PrismaClient,
       "orderStatus"
     >;
 
     await seedOrderStatus(client);
-    expect(fake.rows.has("por_recoger")).toBe(true);
+    expect(fake.rows.has("mensajero_recogiendo_en_bodega")).toBe(true);
     expect(fake.rows.has("en_ruta_bodega_satelite")).toBe(true); // feature 30/R1
     expect(fake.rows.has("en_reparto")).toBe(true); // feature 36/R1
-    expect(fake.rows.has("rechazada")).toBe(true); // feature 36/R3
+    expect(fake.rows.has("devolucion_a_origen_por_rechazo")).toBe(true); // feature 36/R3
     expect(fake.rows.has("en_bodega_satelite")).toBe(true); // feature 33/R1
     expect(fake.rows.has("devuelta_a_tienda")).toBe(true); // cierre de devolucion
-    expect(fake.rows.has("sin_gestionar")).toBe(true); // feature 109
-    expect(fake.rows.has("por_devolver")).toBe(true); // feature 139
+    expect(fake.rows.has("novedad_interna")).toBe(true); // feature 109
+    expect(fake.rows.has("por_devolver_a_bodega_central")).toBe(true); // feature 139
     expect(fake.rows.has("devolviendo_a_bodega_central")).toBe(true); // feature 139
     expect(fake.rows.has("por_devolver_a_tienda")).toBe(true); // feature 139
     expect(fake.rows.has("por_recolectar_en_tienda")).toBe(true); // feature 154
@@ -213,11 +215,11 @@ describe("seedOrderStatus siembra los values renombrados de forma idempotente (R
     expect(fake.rows.has("devolucion_por_confirmar")).toBe(false); // 239 -> retirado por la 454
     expect(fake.rows.has("ayuda_tienda")).toBe(false); // 235 -> retirado por la 454
     expect(fake.rows.size).toBe(20); // 2026-08-19 (235): 21 -> 22; 2026-09-23 (454): 22 -> 20
-    const idPrimera = fake.rows.get("por_recoger")?.id;
+    const idPrimera = fake.rows.get("mensajero_recogiendo_en_bodega")?.id;
 
     await seedOrderStatus(client); // segunda ejecucion: idempotente
     expect(fake.rows.size).toBe(20); // no crece
-    expect(fake.rows.get("por_recoger")?.id).toBe(idPrimera); // id conservado
+    expect(fake.rows.get("mensajero_recogiendo_en_bodega")?.id).toBe(idPrimera); // id conservado
   });
 
   // Feature 154/R4: reaplicar el alta sobre un catalogo que YA tiene los dos values lo deja con
@@ -225,7 +227,7 @@ describe("seedOrderStatus siembra los values renombrados de forma idempotente (R
   // `INSERT ... WHERE NOT EXISTS` de la migracion A (idempotencia en tests/integration/db).
   it("feature 154/R4: el alta de los dos values nuevos es idempotente (19 filas, sin duplicar)", async () => {
     const fake = createFakeOrderStatus();
-    const client = { orderStatus: { upsert: fake.upsert } } as unknown as Pick<
+    const client = { orderStatus: { upsert: fake.upsert, findFirst: fake.findFirst } } as unknown as Pick<
       PrismaClient,
       "orderStatus"
     >;

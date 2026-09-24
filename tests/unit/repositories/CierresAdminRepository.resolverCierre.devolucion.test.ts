@@ -24,8 +24,8 @@ import {
 const ALCANCE_MAESTRO = { destinoTipo: "bodega_central" as const, destinoZonaId: null };
 
 const DEVOLUCION: DevolucionRechazadasConfig = {
-  rechazadaId: idEstado("rechazada"),
-  porDevolverId: idEstado("por_devolver"), // destino satelite
+  rechazadaId: idEstado("devolucion_a_origen_por_rechazo"),
+  porDevolverId: idEstado("por_devolver_a_bodega_central"), // destino satelite
   porDevolverATiendaId: idEstado("por_devolver_a_tienda"), // destino central
   centralZonaId: "z-central",
 };
@@ -195,7 +195,7 @@ beforeEach(async () => {
 });
 
 describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (feature 139/R5-R11)", () => {
-  it("R5: rutea por ZONA (central->por_devolver_a_tienda / satelite->por_devolver) con guarda estatus_id=rechazada", async () => {
+  it("R5: rutea por ZONA (central->por_devolver_a_tienda / satelite->por_devolver_a_bodega_central) con guarda estatus_id=rechazada", async () => {
     const prisma = buildDevolucionPrisma([
       { id: "o1", zonaId: "z-central" }, // -> por_devolver_a_tienda
       { id: "o2", zonaId: "z-sat" }, // -> por_devolver
@@ -208,15 +208,15 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     // R5: pre-SELECT de las `rechazada` del mensajero del cierre.
     expect(prisma.orden.findMany.mock.calls[0][0].where).toEqual({
       mensajeroAsignadoId: "m1",
-      estatusId: idEstado("rechazada"),
+      estatusId: idEstado("devolucion_a_origen_por_rechazo"),
       deletedAt: null,
     });
     // dos updateMany (uno por destino), cada uno GUARDADO por estatus_id=rechazada.
     const calls = updateManyDeOrden(prisma);
     const central = calls.find((c) => c.data.estatusId === idEstado("por_devolver_a_tienda"));
-    const sat = calls.find((c) => c.data.estatusId === idEstado("por_devolver"));
-    expect(central?.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("rechazada"), deletedAt: null });
-    expect(sat?.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("rechazada"), deletedAt: null });
+    const sat = calls.find((c) => c.data.estatusId === idEstado("por_devolver_a_bodega_central"));
+    expect(central?.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("devolucion_a_origen_por_rechazo"), deletedAt: null });
+    expect(sat?.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("devolucion_a_origen_por_rechazo"), deletedAt: null });
   });
 
   it("R8: money-neutral — el updateMany SOLO cambia estatus_id (NO mensajero/asignado_at/prioridad)", async () => {
@@ -226,7 +226,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     await aprobar(repo);
 
     const data = updateManyDeOrden(prisma)[0].data;
-    expect(data).toEqual({ estatusId: idEstado("por_devolver") });
+    expect(data).toEqual({ estatusId: idEstado("por_devolver_a_bodega_central") });
     expect(data).not.toHaveProperty("mensajeroAsignadoId");
     expect(data).not.toHaveProperty("asignadoAt");
     expect(data).not.toHaveProperty("prioridad");
@@ -242,8 +242,8 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     expect(entradas).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("rechazada"),
-        estatusDestinoId: idEstado("por_devolver"),
+        estatusOrigenId: idEstado("devolucion_a_origen_por_rechazo"),
+        estatusDestinoId: idEstado("por_devolver_a_bodega_central"),
         actorUsuarioId: "adm-maestro", // R11: el admin que aprobo
         origenTipo: "devolucion_rechazada", // R11
         motivo: null,
@@ -264,7 +264,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     // o de escalado SLA) entra igual (elegibilidad por estado, agnostica del camino).
     expect(prisma.orden.findMany.mock.calls[0][0].where.mensajeroAsignadoId).toBe("m-sla");
     expect(updateManyDeOrden(prisma)).toHaveLength(1);
-    expect(updateManyDeOrden(prisma)[0].data).toEqual({ estatusId: idEstado("por_devolver") });
+    expect(updateManyDeOrden(prisma)[0].data).toEqual({ estatusId: idEstado("por_devolver_a_bodega_central") });
   });
 
   it("R7/no-op: cierre sin rechazadas (0 filas) -> no updateMany de orden ni append", async () => {

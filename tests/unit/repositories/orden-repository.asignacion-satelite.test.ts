@@ -65,7 +65,7 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
       ["o1", "o2", "o3"],
       "m-1",
       "z-satelite",
-      idEstado("por_recoger"),
+      idEstado("mensajero_recogiendo_en_bodega"),
       idEstado("en_bodega_satelite"),
       HIST_ASIGNACION,
       FECHA_REPARTO,
@@ -85,7 +85,7 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
     const strings = (call[0] as string[]).join(" ");
     const values = call.slice(1);
     expect(values).toContain("m-1");
-    expect(values).toContain(idEstado("por_recoger"));
+    expect(values).toContain(idEstado("mensajero_recogiendo_en_bodega"));
     expect(values).toContain(idEstado("en_bodega_satelite"));
     expect(values).toContain("z-satelite");
     // R8: la sentencia NO menciona num_guia.
@@ -139,7 +139,7 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
       ["o1", "o2"],
       "m-1",
       "z-satelite",
-      idEstado("por_recoger"),
+      idEstado("mensajero_recogiendo_en_bodega"),
       idEstado("en_bodega_satelite"),
       HIST_ASIGNACION,
       FECHA_REPARTO,
@@ -153,7 +153,7 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
       {
         ordenId: "o1",
         estatusOrigenId: idEstado("en_bodega_satelite"),
-        estatusDestinoId: idEstado("por_recoger"),
+        estatusDestinoId: idEstado("mensajero_recogiendo_en_bodega"),
         actorUsuarioId: "adminsat-1",
         origenTipo: "asignacion_satelite",
         motivo: null,
@@ -171,7 +171,7 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
       ["o1"],
       "m-1",
       "z-satelite",
-      idEstado("por_recoger"),
+      idEstado("mensajero_recogiendo_en_bodega"),
       idEstado("en_bodega_satelite"),
       HIST_ASIGNACION,
       FECHA_REPARTO,
@@ -190,7 +190,7 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
         [],
         "m-1",
         "z-satelite",
-        idEstado("por_recoger"),
+        idEstado("mensajero_recogiendo_en_bodega"),
         idEstado("en_bodega_satelite"),
         HIST_ASIGNACION,
         FECHA_REPARTO,

@@ -7,6 +7,7 @@ import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
 import { listarRechazosSlaTiendaAction } from "@/lib/actions/rechazos-sla-tienda";
 import type { RechazoSlaTiendaDTO } from "@/lib/types/rechazo-sla-tienda";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
 // Feature 102 (T12, design §6.2) — sección/pestaña de solo-lectura "Rechazadas por SLA" DENTRO
 // de `/novedades` (Q3 default: pantalla que la tienda YA visita, sin ítem de menú nuevo). Es la
@@ -34,12 +35,15 @@ import type { RechazoSlaTiendaDTO } from "@/lib/types/rechazo-sla-tienda";
 const GUIA_LABEL = "Guía";
 const GUIA_SIN_ASIGNAR_LABEL = "sin asignar";
 const REMISION_LABEL = "Remisión";
-const LISTA_ARIA_LABEL = "Órdenes rechazadas por plazo vencido";
-const VACIO_TITULO = "No tenés órdenes rechazadas por plazo vencido";
+// FICHA 455 (2026-09-24): alineado con la pestaña («Devolución a origen por plazo vencido») y con
+// los nombres vigentes de los estados, leídos de la fuente.
+const LISTA_ARIA_LABEL = "Órdenes con devolución a origen por plazo vencido";
+const VACIO_TITULO = "No tenés órdenes con devolución a origen por plazo vencido";
 // Feature 308: la frase prometía "con su monto" y ese monto era el de la bodega. Sin importe en
 // la lista, prometerlo además sería prometer algo que ya no ocurre.
 const VACIO_DETALLE =
-  "Cuando una de tus órdenes en devolución llegue a rechazo por vencerse el plazo, aparecerá acá.";
+  `Cuando una de tus órdenes en ${NOMBRE_ESTADO.novedad} pase a ` +
+  `${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo} por vencerse el plazo, aparecerá acá.`;
 const PAGINACION_ARIA_LABEL = "Paginación de rechazos por plazo vencido";
 
 export interface RechazosSlaModuleProps {

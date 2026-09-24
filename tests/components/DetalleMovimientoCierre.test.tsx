@@ -86,7 +86,7 @@ function orden(over: Partial<OrdenAporteDTO> = {}): OrdenAporteDTO {
     guia: "48127",
     destinatario: "María Fernández",
     tiendaNombre: "Tienda Central",
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     aporte: "1700.00",
     ...over,
   };
@@ -312,7 +312,7 @@ describe("Ficha 344 — abrir una fila del libro (R1–R7)", () => {
 describe("Ficha 344 — qué dice el detalle (R9–R14)", () => {
   it("R10/R13/R14: cada orden muestra guía, destinatario, tienda, resultado y aporte", async () => {
     detalleMock.mockResolvedValue(
-      pagina([orden({ resultados: ["entregada"], aporte: "1700.00" })], 1),
+      pagina([orden({ resultados: ["entregado"], aporte: "1700.00" })], 1),
     );
     pintar();
 
@@ -329,21 +329,21 @@ describe("Ficha 344 — qué dice el detalle (R9–R14)", () => {
     // R14: la caja principal SÍ dice de qué tienda es cada orden.
     expect(dentro.getByText("Tienda Central")).toBeInTheDocument();
     // R13: la etiqueta legible del catálogo, NUNCA el valor del enum.
-    expect(dentro.getByText("Entregada")).toBeInTheDocument();
-    expect(dentro.queryByText("entregada")).toBeNull();
+    expect(dentro.getByText("Entregado")).toBeInTheDocument();
+    expect(dentro.queryByText("entregado")).toBeNull();
     expect(dentro.getByText("₡1.700")).toBeInTheDocument();
   });
 
   it("R20: una orden con DOS gestiones sale UNA vez y nombra los dos resultados", async () => {
     detalleMock.mockResolvedValue(
-      pagina([orden({ resultados: ["entregada", "reprogramada"], aporte: "1700.00" })], 1),
+      pagina([orden({ resultados: ["entregado", "reprogramado"], aporte: "1700.00" })], 1),
     );
     pintar();
 
     await abrir(ABRIR_FLETE);
     const region = await screen.findByRole("region", { name: PANEL_FLETE });
 
-    expect(within(region).getByText("Entregada · Reprogramada")).toBeInTheDocument();
+    expect(within(region).getByText("Entregado · Reprogramado")).toBeInTheDocument();
     // UNA fila de datos, no dos: el grano es la ORDEN.
     expect(filasDeDatos(region)).toHaveLength(1);
   });
@@ -654,7 +654,7 @@ describe("Ficha 344 — el detalle en un teléfono (R50/R52)", () => {
   it("R52: apilar cuatro columnas en una no esconde NINGÚN dato", async () => {
     fingirTelefono();
     detalleMock.mockResolvedValue(
-      pagina([orden({ resultados: ["entregada"], aporte: "1700.00" })], 1),
+      pagina([orden({ resultados: ["entregado"], aporte: "1700.00" })], 1),
     );
     pintar();
 
@@ -668,7 +668,7 @@ describe("Ficha 344 — el detalle en un teléfono (R50/R52)", () => {
     ).toBeInTheDocument();
     expect(dentro.getByText("María Fernández")).toBeInTheDocument();
     expect(dentro.getByText("Tienda Central")).toBeInTheDocument();
-    expect(dentro.getByText("Entregada")).toBeInTheDocument();
+    expect(dentro.getByText("Entregado")).toBeInTheDocument();
     expect(dentro.getByText("₡1.700")).toBeInTheDocument();
   });
 

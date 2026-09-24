@@ -32,7 +32,7 @@ describe("RankingRepository.contarEntregadasPorMensajero (R1 numerador)", () => 
       where: Record<string, unknown>;
     };
     expect(arg.by).toEqual(["mensajeroId"]);
-    expect(arg.where.resultado).toBe("entregada"); // solo entregas exitosas
+    expect(arg.where.resultado).toBe("entregado"); // solo entregas exitosas
     expect(arg.where.anuladaAt).toBeNull(); // feature 67: solo VIGENTES (excluye anuladas)
     expect(arg.where.createdAt).toEqual({ gte: DESDE, lt: HASTA }); // HOY(CR) half-open
   });

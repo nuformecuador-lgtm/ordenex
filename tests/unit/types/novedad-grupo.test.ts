@@ -33,8 +33,8 @@ describe("236/R5/R7 — los grupos de novedad estan declarados una sola vez", ()
     // tabla de acciones de la pantalla (R6/R20); uno de menos seria una pestaña que desaparece.
     expect(Object.keys(PREDICADO_POR_GRUPO).sort()).toEqual(["ayuda", "devolucion"]);
     expect(PREDICADO_POR_GRUPO.ayuda).toEqual({ tipo: "ayuda_abierta", estatus: "en_reparto" });
-    expect(PREDICADO_POR_GRUPO.devolucion).toEqual({ tipo: "estatus", estatus: "devuelta" });
-    expect(ESTATUS_POR_GRUPO).toEqual({ devolucion: "devuelta" });
+    expect(PREDICADO_POR_GRUPO.devolucion).toEqual({ tipo: "estatus", estatus: "novedad" });
+    expect(ESTATUS_POR_GRUPO).toEqual({ devolucion: "novedad" });
   });
 
   it("R7: el estado de cada grupo existe en `ORDER_STATUS_SEED` (el catalogo real)", () => {
@@ -76,12 +76,12 @@ describe("236/R5 — `grupoDeEstatus` es la INVERSA del mapa, no un segundo lite
     // ayuda abierta. Y los dos estados retirados, tampoco.
     for (const ajeno of [
       "en_reparto",
-      "sin_gestionar",
+      "novedad_interna",
       "en_bodega_central",
-      "entregada",
+      "entregado",
       "devolucion_por_confirmar",
       "ayuda_tienda",
-      "rechazada",
+      "devolucion_a_origen_por_rechazo",
     ]) {
       expect(grupoDeEstatus(ajeno), `${ajeno} no es de ningun grupo`).toBeNull();
     }
@@ -107,13 +107,13 @@ describe("454/T2.5 — `grupoDeFila`: el grupo lo pone la LISTA, el estado solo 
   });
 
   it("una fila `devuelta` es de devolucion la liste quien la liste: su estado basta (236)", () => {
-    expect(grupoDeFila("devuelta", "devolucion")).toBe("devolucion");
-    expect(grupoDeFila("devuelta", "ayuda")).toBe("devolucion");
+    expect(grupoDeFila("novedad", "devolucion")).toBe("devolucion");
+    expect(grupoDeFila("novedad", "ayuda")).toBe("devolucion");
   });
 
   it("R21: un estado que no casa con su lista deja la fila sin grupo (fallo cerrado)", () => {
     for (const grupo of GRUPOS_NOVEDAD) {
-      for (const ajeno of ["sin_gestionar", "entregada", "ayuda_tienda", "", "ayuda"]) {
+      for (const ajeno of ["novedad_interna", "entregado", "ayuda_tienda", "", "ayuda"]) {
         expect(grupoDeFila(ajeno, grupo), `${ajeno} bajo ${grupo}`).toBeNull();
       }
     }

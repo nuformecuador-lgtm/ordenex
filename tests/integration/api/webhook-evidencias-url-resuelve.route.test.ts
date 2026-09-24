@@ -166,7 +166,7 @@ function detalleDe(orden: Orden): ApiOrdenDetalleDTO {
   return {
     numGuia: orden.numGuia,
     numRemision: orden.numRemision,
-    estado: "incidente",
+    estado: "incidente", estadoNombre: "Incidente",
     destinatario: "Ana",
     telefonoDest: "0999999999",
     producto: "Caja",

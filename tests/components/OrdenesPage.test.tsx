@@ -132,7 +132,10 @@ describe("OrdenesPage", () => {
         numGuia: 1001,
         numRemision: "REM-001",
         estatusId: "est-1",
-        estatusValue: "En bodega",
+        // ⏳ 2026-09-24 (FICHA 455, R10): el fixture traía un TEXTO («En bodega») como código y el chip
+        // lo repetía crudo; ahora un código desconocido se lee «Estado no reconocido». Se usa un
+        // código real del catálogo, que es lo que la fila trae de verdad.
+        estatusValue: "en_bodega_central",
         destinatario: "Ana Pérez",
         tiendaId: "tienda-uuid-1",
         tiendaNombre: "Tienda Uno",
@@ -218,7 +221,7 @@ describe("OrdenesPage", () => {
     const c1 = within(rows[0]).getAllByRole("cell");
     expect(c1[0]).toHaveTextContent("1001"); // numGuia por column.id (R8)
     expect(c1[1]).toHaveTextContent("REM-001"); // numRemision por render-string (R7)
-    expect(c1[2]).toHaveTextContent("En bodega"); // estatusValue por render-función (R6)
+    expect(c1[2]).toHaveTextContent("En bodega central"); // estatusValue por render-función (R6)
     expect(c1[3]).toHaveTextContent("0"); // intentos de entrega (feature 160/R19)
     expect(c1[4]).toHaveTextContent("Ana Pérez"); // destinatario por column.id (R8)
     // Tienda ahora es la columna 8 (índice 7): Intentos, Producto y Dirección la preceden.

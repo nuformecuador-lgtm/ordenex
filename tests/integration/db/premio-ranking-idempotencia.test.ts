@@ -179,7 +179,7 @@ describeSiHayBase("293/T4.4 — el premio del ranking, contra Postgres", () => {
         data: {
           ordenId: orden.id,
           mensajeroId,
-          resultado: "entregada",
+          resultado: "entregado",
           cierreId: cierre.id,
           createdAt: dentroDelDia(dia), // lo que ATA el dia al cierre (design §4.2)
         },
@@ -449,7 +449,7 @@ describeSiHayBase("293/T4.4 — el premio del ranking, contra Postgres", () => {
         data: {
           ordenId: ordenOtro.id,
           mensajeroId: otroMensajero,
-          resultado: "entregada",
+          resultado: "entregado",
           cierreId: cierreDelOtro.id,
           createdAt: dentroDelDia(DIA),
         },
@@ -944,7 +944,7 @@ describeSiHayBase("293/T4.4 — el premio del ranking, contra Postgres", () => {
         data: {
           ordenId: orden.id,
           mensajeroId: s.mensajeroId,
-          resultado: "entregada",
+          resultado: "entregado",
           cierreId: segundo.id,
           createdAt: dentroDelDia(DIA),
         },
@@ -1013,7 +1013,7 @@ describeSiHayBase("293/T4.4 — el premio del ranking, contra Postgres", () => {
           data: {
             ordenId: orden.id,
             mensajeroId,
-            resultado: "entregada",
+            resultado: "entregado",
             cierreId: cierre.id,
             createdAt,
             ...(anulada ? { anuladaAt: new Date(`${DIA}T20:00:00.000Z`) } : {}),

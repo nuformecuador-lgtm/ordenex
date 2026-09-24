@@ -91,33 +91,33 @@ describeSiHayBase("454/R29 — señales de gestion pendiente y ayuda en los lect
       const ids = {} as Record<Caso, string>;
       for (const c of CASOS) ids[c] = await sembrar(e);
 
-      const gA = await e.gestionarOk(ids.A, "rechazada");
+      const gA = await e.gestionarOk(ids.A, "devolucion_a_origen_por_rechazo");
       const ayudaC = (await e.pedirAyuda(ids.C)).status;
       const ayudaD = (await e.pedirAyuda(ids.D)).status;
       const recuperadaD = (await e.recuperar(ids.D)).status;
-      const gE = await e.gestionarOk(ids.E, "entregada");
+      const gE = await e.gestionarOk(ids.E, "entregado");
       const deshacerE = (await e.s.cierreDia.deshacerGestion(gE, e.actorMensajero)).status;
       // F — LEGADA: la gestion existe (sin cierre, no anulada) pero NO tiene evento de registro.
       await e.tx.gestionOrden.create({
-        data: { ordenId: ids.F, mensajeroId: e.mensajeroId, resultado: "entregada" },
+        data: { ordenId: ids.F, mensajeroId: e.mensajeroId, resultado: "entregado" },
       });
       // G/H — la gestion se registra por el servicio real y luego se vincula a un cierre sembrado.
       // G: cierre APROBADO sin que la aplicacion moviera la orden (sigue `en_reparto`): lo que
       // tiene que apagar la señal es la condicion «cierre no aprobado», no el estado.
-      const gG = await e.gestionarOk(ids.G, "entregada");
-      const gH = await e.gestionarOk(ids.H, "entregada");
+      const gG = await e.gestionarOk(ids.G, "entregado");
+      const gH = await e.gestionarOk(ids.H, "entregado");
       const cG = await cierre(e, "aprobado");
       const cH = await cierre(e, "solicitado");
       await e.tx.gestionOrden.update({ where: { id: gG }, data: { cierreId: cG.id } });
       await e.tx.gestionOrden.update({ where: { id: gH }, data: { cierreId: cH.id } });
       // I — la gestion sigue sin cierre y sin anular, pero la orden ya no esta `en_reparto`.
-      await e.gestionarOk(ids.I, "entregada");
-      await e.tx.orden.update({ where: { id: ids.I }, data: { estatusId: e.id("entregada") } });
+      await e.gestionarOk(ids.I, "entregado");
+      await e.tx.orden.update({ where: { id: ids.I }, data: { estatusId: e.id("entregado") } });
 
       // El escenario HERMANO: otra tienda, otra zona, con su propia gestion pendiente.
       const otro = await crearEscenario(e.mundo, e.tx, e.cliente);
       const ajena = await sembrar(otro);
-      await otro.gestionarOk(ajena, "devuelta");
+      await otro.gestionarOk(ajena, "novedad");
 
       const registrada = async (gestionId: string) =>
         (
@@ -126,8 +126,8 @@ describeSiHayBase("454/R29 — señales de gestion pendiente y ayuda en los lect
             select: { createdAt: true },
           })
         ).createdAt.toISOString();
-      const esperadoA = { resultado: "rechazada", registradaAt: await registrada(gA) };
-      const esperadoH = { resultado: "entregada", registradaAt: await registrada(gH) };
+      const esperadoA = { resultado: "devolucion_a_origen_por_rechazo", registradaAt: await registrada(gA) };
+      const esperadoH = { resultado: "entregado", registradaAt: await registrada(gH) };
 
       // --- L1: /ordenes -------------------------------------------------------------------------
       const adminId = await e.crearUsuario("admin", null);
@@ -159,7 +159,7 @@ describeSiHayBase("454/R29 — señales de gestion pendiente y ayuda en los lect
       if (pagina.status !== "ok") throw new Error(`satelite no fue ok: ${pagina.status}`);
       const l2 = new Map(pagina.items.map((i) => [i.id, i]));
       const grupos = new Map(
-        (await e.s.ordenRepo.findRecepcionSateliteByZona(e.zonaSateliteId, ["en_reparto", "entregada"])).map((i) => [
+        (await e.s.ordenRepo.findRecepcionSateliteByZona(e.zonaSateliteId, ["en_reparto", "entregado"])).map((i) => [
           i.id,
           i,
         ]),
@@ -257,7 +257,7 @@ describeSiHayBase("454/R29 — señales de gestion pendiente y ayuda en los lect
 
     it("maestro y admin ven tambien la orden AJENA con su pendiente (`devuelta`)", () => {
       for (const rol of ["maestro", "admin"] as const) {
-        expect(r.l1[rol].get(r.ajena)?.gestionPendiente?.resultado, rol).toBe("devuelta");
+        expect(r.l1[rol].get(r.ajena)?.gestionPendiente?.resultado, rol).toBe("novedad");
       }
     });
 

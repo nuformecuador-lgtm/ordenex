@@ -250,8 +250,8 @@ describe("Feature 237 · el codigo y la base dicen lo mismo (R5/R6/R43)", () => 
       destinos.filter((d) => d.via === FAMILIA).map((d) => `${origen} -> ${d.to}`),
     );
     expect(conEstaVia.sort()).toEqual([
-      "en_reparto -> rechazada",
-      "en_reparto -> reprogramada",
+      "en_reparto -> devolucion_a_origen_por_rechazo",
+      "en_reparto -> reprogramado",
     ]);
   });
 });

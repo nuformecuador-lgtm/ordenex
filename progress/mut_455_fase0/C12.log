@@ -1,0 +1,29 @@
+=== MUTACION C12 — 2026-09-24T04:52:06-05:00
+archivo: lib/services/ApiOrdenLecturaService.ts
+perl: s/    if \(estado\) \{\n      \/\/ R8: el filtro solo acota/    if (false \&\& estado) {\n      \/\/ R8: el filtro solo acota/
+--- diff aplicado:
+diff --git a/lib/services/ApiOrdenLecturaService.ts b/lib/services/ApiOrdenLecturaService.ts
+index c87a8397..3ef1786c 100644
+--- a/lib/services/ApiOrdenLecturaService.ts
++++ b/lib/services/ApiOrdenLecturaService.ts
+@@ -155 +155 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
+-    if (estado) {
++    if (false && estado) {
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/api-lectura.test.ts
+ × tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > filtrar el listado por cada uno de los 7 codigos devuelve 200 y SOLO su orden, con ese estado 9ms
+   → expected { …(7) } to deeply equal { …(7) }
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > un codigo que no existe responde 422 1ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > detalle: la gestion de novedad aprobada lleva su resultado y su estado resultante 0ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > detalle: la gestion pendiente (454) no tiene estado resultante y va marcada 0ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > carga: la remision existente vuelve como duplicada con el estado de la orden que la ocupa 0ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R27) > el item del listado no lleva estadoNombre 0ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R27) > gestiones[] no lleva resultadoNombre ni estadoResultanteNombre 0ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R27) > la fila de la carga lleva `estatus` (no `estado`) 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > filtrar el listado por cada uno de los 7 codigos devuelve 200 y SOLO su orden, con ese estado
+AssertionError: expected { …(7) } to deeply equal { …(7) }
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

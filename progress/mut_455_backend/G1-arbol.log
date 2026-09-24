@@ -1,0 +1,49 @@
+# MUTACION G1-arbol
+archivo: lib/types/gestion-resultado.ts
+linea: 16
+- "export const RESULTADO_ES_ESTADO: ResultadoEsEstado = true;"
++ "export const RESULTADO_ES_ESTADO: ResultadoEsEstado = true;\nexport const MUTACION_G1 = \"devuelta\";"
+tests: tests/unit/guards/censo-order-status-rename.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 13 passed (14)
+FAIL  tests/unit/guards/censo-order-status-rename.test.ts > 455/R40 (G1) — el arbol no tiene codigos anteriores fuera de su excepcion > ningun archivo de app/ lib/ components/ hooks/ scripts/ tests/ e2e/ ni de los docs de integradores usa un codigo anterior
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/guards/censo-order-status-rename.test.ts (14 tests | 1 failed) 792ms
+     × ningun archivo de app/ lib/ components/ hooks/ scripts/ tests/ e2e/ ni de los docs de integradores usa un codigo anterior 6ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  06:28:45
+   Duration  8.44s (transform 133ms, setup 52ms, import 7.37s, tests 792ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/guards/censo-order-status-rename.test.ts > 455/R40 (G1) — el arbol no tiene codigos anteriores fuera de su excepcion > ningun archivo de app/ lib/ components/ hooks/ scripts/ tests/ e2e/ ni de los docs de integradores usa un codigo anterior
+AssertionError: un codigo ANTERIOR de la 455 volvio como codigo. Usa el vigente (`lib/types/order-status.ts`); si es para LEER un dato guardado antes de la ficha, traducelo con `codigoVigente`.: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "lib/types/gestion-resultado.ts:17 devuelta",
++ ]
+
+ ❯ tests/unit/guards/censo-order-status-rename.test.ts:494:7
+    492|       "un codigo ANTERIOR de la 455 volvio como codigo. Usa el vigente…
+    493|         "si es para LEER un dato guardado antes de la ficha, traducelo…
+    494|     ).toEqual([]);
+       |       ^
+    495|   });
+    496|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

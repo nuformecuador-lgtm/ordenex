@@ -25,8 +25,8 @@ describeSiHayBase("454/C06 — correccion de resultado #69 en cierre abierto (Po
       const central = await e.mensajeroCentral();
       const a = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 10000, mensajeroId: central.mensajeroId });
       const b = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 5000, mensajeroId: central.mensajeroId });
-      const gA = await e.gestionarOk(a.ordenId, "entregada", { monto: 10000, actor: central.actor });
-      await e.gestionarOk(b.ordenId, "entregada", {
+      const gA = await e.gestionarOk(a.ordenId, "entregado", { monto: 10000, actor: central.actor });
+      await e.gestionarOk(b.ordenId, "entregado", {
         monto: 5000,
         pagos: [{ metodo: "SINPE", monto: 5000 }],
         actor: central.actor,
@@ -124,19 +124,19 @@ describeSiHayBase("454/C06 — correccion de resultado #69 en cierre abierto (Po
     });
 
     it("la gestion queda sellada `rechazada`, sin cobro, con el ingreso de la tarifa, y su desglose BORRADO", () => {
-      expect(r.gestionA).toEqual({ resultado: "rechazada", ingreso: "164.00", pago: "0.00", montoRecibido: null });
+      expect(r.gestionA).toEqual({ resultado: "devolucion_a_origen_por_rechazo", ingreso: "164.00", pago: "0.00", montoRecibido: null });
       expect(r.pagosDeA).toBe(0);
     });
 
-    it("queda la bitacora `cierre_dia_gestion_corregida` entregada -> rechazada", () => {
-      expect(r.bitacora).toEqual([{ valorAnterior: "entregada", valorNuevo: "rechazada" }]);
+    it("queda la bitacora `cierre_dia_gestion_corregida` entregado -> devolucion_a_origen_por_rechazo", () => {
+      expect(r.bitacora).toEqual([{ valorAnterior: "entregado", valorNuevo: "devolucion_a_origen_por_rechazo" }]);
     });
 
     it("al aprobar: el libro de la tienda acredita SOLO el COD de B y la orden A sale a `por_devolver_a_tienda`", () => {
       expect(r.aprobacion).toBe("ok");
       expect(r.creditosCod).toEqual(["credito:5000.00"]);
       expect(r.estadoFinalA).toBe("por_devolver_a_tienda");
-      expect(r.estadoFinalB).toBe("entregada");
+      expect(r.estadoFinalB).toBe("entregado");
     });
   });
 

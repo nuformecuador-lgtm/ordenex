@@ -25,7 +25,7 @@ const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
 
 type Caso = {
   nombre: string;
-  estatus?: "en_reparto" | "entregada";
+  estatus?: "en_reparto" | "entregado";
   conEvento: boolean;
   anulada?: boolean;
   cierre: null | "solicitado" | "vencido" | "rechazado" | "aprobado";
@@ -72,7 +72,7 @@ describeSiHayBase("454/T1.3 — gestion pendiente de confirmar (Postgres real)",
       data: {
         ordenId: o.ordenId,
         mensajeroId: e.mensajeroId,
-        resultado: "entregada",
+        resultado: "entregado",
         cierreId: cierre?.id ?? null,
         anuladaAt: c.anulada ? new Date() : null,
       },
@@ -85,7 +85,7 @@ describeSiHayBase("454/T1.3 — gestion pendiente de confirmar (Postgres real)",
           tipo: "gestion_registrada",
           gestionOrdenId: g.id,
           familiaAplicacion: "gestion",
-          resultado: "entregada",
+          resultado: "entregado",
           mensajeroId: e.mensajeroId,
           actorUsuarioId: e.mensajeroId,
           actorRol: "mensajero",
@@ -138,7 +138,7 @@ describeSiHayBase("454/T1.3 — gestion pendiente de confirmar (Postgres real)",
 
   it("a nivel ORDEN exige `en_reparto`: la misma gestion pendiente sobre una orden `entregada` no la hace «con gestion pendiente»", async () => {
     const r = await conEscenario(mundo, async (e) => {
-      const ids = await sembrar(e, { nombre: "x", estatus: "entregada", conEvento: true, cierre: null, esperado: false });
+      const ids = await sembrar(e, { nombre: "x", estatus: "entregado", conEvento: true, cierre: null, esperado: false });
       return medir(e, ids);
     });
     // La GESTION sigue pendiente (su cierre no esta aprobado)...

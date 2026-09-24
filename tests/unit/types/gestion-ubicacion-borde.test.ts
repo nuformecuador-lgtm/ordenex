@@ -20,39 +20,39 @@ const FOTO = { type: "image/jpeg", size: 1024 };
 /** Los campos propios de cada rama, sin nada de ubicacion. */
 const RAMAS = [
   {
-    nombre: "entregada",
+    nombre: "entregado",
     base: {
       ordenId: "o1",
-      resultado: "entregada" as const,
+      resultado: "entregado" as const,
       montoRecibido: 0,
       metodoPago: "efectivo",
       evidencias: [FOTO],
     },
   },
   {
-    nombre: "reprogramada",
+    nombre: "reprogramado",
     base: {
       ordenId: "o1",
-      resultado: "reprogramada" as const,
+      resultado: "reprogramado" as const,
       fechaReprogramacion: "2099-01-01",
       motivo: "cliente ausente",
     },
   },
   {
-    nombre: "devuelta",
+    nombre: "novedad",
     base: {
       ordenId: "o1",
-      resultado: "devuelta" as const,
+      resultado: "novedad" as const,
       causaDevolucion: "not_found",
       motivo: "no se ubico",
       evidencias: [FOTO],
     },
   },
   {
-    nombre: "rechazada",
+    nombre: "devolucion_a_origen_por_rechazo",
     base: {
       ordenId: "o1",
-      resultado: "rechazada" as const,
+      resultado: "devolucion_a_origen_por_rechazo" as const,
       motivo: "cliente rechaza",
       evidencias: [FOTO],
     },
@@ -154,10 +154,10 @@ describe("Feature 193 — ubicacion en el borde de la gestion", () => {
     // Si manana nace una sexta rama, este caso obliga a anadirla arriba en vez de dejarla
     // sin cubrir por olvido.
     expect(RAMAS.map((r) => r.nombre)).toEqual([
-      "entregada",
-      "reprogramada",
-      "devuelta",
-      "rechazada",
+      "entregado",
+      "reprogramado",
+      "novedad",
+      "devolucion_a_origen_por_rechazo",
       "incidente",
     ]);
   });

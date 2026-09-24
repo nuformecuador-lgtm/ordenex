@@ -32,7 +32,7 @@ const ORDEN: OrdenAporteDTO = {
   guia: "501",
   destinatario: "Ana",
   tiendaNombre: "Tienda A",
-  resultados: ["entregada"],
+  resultados: ["entregado"],
   aporte: "1000.00",
 };
 

@@ -32,6 +32,7 @@ import type {
   BulkOrdenResult,
   CargaViaApiOrden,
   CargaViaApiResult,
+  CargaViaApiFila,
   CargaViaApiRow,
   CargaViaApiSummary,
   IBulkOrdenService,
@@ -56,6 +57,7 @@ import {
 } from "@/lib/services/geo-resolucion";
 import { parseCantonDistrito } from "@/lib/utils/canton-distrito";
 import { desgloseCargaApi, tieneFulfillment } from "@/lib/utils/ingreso-ordenex";
+import { nombreDeEstado } from "@/lib/types/order-status";
 
 // FEATURE 155/R19/R22: la constante `ESTATUS_INICIAL_API` (= `en_ruta_bodega_central`) se
 // RETIRO. Era la tercera regla de nacimiento del sistema y la peor: declaraba que una orden
@@ -118,6 +120,19 @@ interface PreloadedContext {
   // Feature 27/R18/R19 + 155/R4/R16: `value` del estatus inicial resuelto UNA sola vez por
   // LOTE (nunca por fila), reportado por fila creada y en el dedup.
   estatusInicialValue: string;
+}
+
+/**
+ * FICHA 455 (R27, design §5.1) — la fila tal como sale por el CANAL: el campo `estatus` de la fila
+ * interna (compartida con la pantalla de carga masiva) se publica como `estado`, con su
+ * `estadoNombre` al lado. «Un concepto, un nombre» tambien en el contrato: el resto del canal ya
+ * llamaba `estado` a este dato. Las demas claves viajan tal cual y en el mismo orden.
+ */
+function filaDelCanal(f: CargaViaApiRow): CargaViaApiFila {
+  const { fila, numRemision, resultado, estatus, ...resto } = f;
+  return estatus === undefined
+    ? { fila, numRemision, resultado, ...resto }
+    : { fila, numRemision, resultado, estado: estatus, estadoNombre: nombreDeEstado(estatus), ...resto };
 }
 
 export class BulkOrdenService implements IBulkOrdenService {
@@ -614,6 +629,7 @@ export class BulkOrdenService implements IBulkOrdenService {
         numRemision: creada.numRemision,
         numGuia: creada.numGuia,
         estado: creada.estatusValue,
+        estadoNombre: nombreDeEstado(creada.estatusValue), // FICHA 455 (R24)
         // Feature 98/R5/R7 + 274/R25: FLETE + IVA del flete de LA TARIFA DE ESTA ORDEN —la del
         // par (tienda, zona del distrito), no una unica del lote—, segun `esCentral` de su zona.
         // Las dos cosas se cruzan por `numRemision`, igual que el `numGuia`.
@@ -684,7 +700,9 @@ export class BulkOrdenService implements IBulkOrdenService {
       creadas: filas.filter((f) => f.resultado === "creada").length,
       duplicadas: filas.filter((f) => f.resultado === "duplicada").length,
       conError: filas.filter((f) => f.resultado === "error").length,
-      filas: filas.filter((f) => f.resultado !== "error"),
+      // FICHA 455 (R27): en el CANAL la fila publica su estado como `estado` + `estadoNombre` (la
+      // via sesion, `buildSummary`, sigue con `estatus`: su consumidor es la pantalla de carga).
+      filas: filas.filter((f) => f.resultado !== "error").map(filaDelCanal),
       // El contenido viaja TAL CUAL: mismo indice, misma remision y el mismo mapa por campo.
       // El `?? {}` es defensivo —toda fila en error se construye con su mapa— y evita que la
       // clave que da nombre a esta lista pueda faltar en uno de sus elementos.

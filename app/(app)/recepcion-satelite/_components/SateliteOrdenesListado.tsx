@@ -88,9 +88,9 @@ export const TITULO_BODEGA = "Órdenes de la bodega";
 /** Estados sobre los que cada acción de lote es válida. */
 const ESTADO_ASIGNABLE = "en_bodega_satelite";
 /** Feature 149 (R35): asignada a un mensajero que aún NO la recogió; la asignación se deshace. */
-const ESTADO_POR_RECOGER = "por_recoger";
-const ESTADO_POR_DEVOLVER = "por_devolver";
-const ESTADO_DEVUELTA = "devuelta";
+const ESTADO_POR_RECOGER = "mensajero_recogiendo_en_bodega";
+const ESTADO_POR_DEVOLVER = "por_devolver_a_bodega_central";
+const ESTADO_DEVUELTA = "novedad";
 
 /**
  * FICHA 355 — el catálogo `order_status` para el desplegable de estado.

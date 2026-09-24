@@ -106,8 +106,8 @@ const SUFIJO = `405-${Date.now().toString(36)}`;
 
 /** Instantes FIJOS del escenario, para que el orden esperado sea un literal y no un calculo. */
 const T = {
-  reprogramada: new Date("2026-09-02T15:41:07.000Z"),
-  devuelta: new Date("2026-09-04T18:02:55.000Z"),
+  reprogramado: new Date("2026-09-02T15:41:07.000Z"),
+  novedad: new Date("2026-09-04T18:02:55.000Z"),
   anulada: new Date("2026-09-05T09:00:00.000Z"),
   anuladaConFoto: new Date("2026-09-05T13:00:00.000Z"),
   legada: new Date("2026-09-06T11:30:00.000Z"),
@@ -150,12 +150,12 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
 
     const filas = await prisma.orderStatus.findMany({
       where: {
-        value: { in: ["en_bodega_central", "reprogramada", "devolucion_por_confirmar", "entregada"] },
+        value: { in: ["en_bodega_central", "reprogramado", "devolucion_por_confirmar", "entregado"] },
       },
       select: { id: true, value: true },
     });
     estatus = new Map(filas.map((f) => [f.value, f.id]));
-    for (const value of ["en_bodega_central", "reprogramada", "devolucion_por_confirmar", "entregada"]) {
+    for (const value of ["en_bodega_central", "reprogramado", "devolucion_por_confirmar", "entregado"]) {
       if (!estatus.has(value)) {
         throw new Error(
           `falta el estado \`${value}\` en el catalogo \`order_status\`: corre \`pnpm run db:seed\`.`,
@@ -204,7 +204,7 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
       const crearGestion = async (data: {
         ordenId: string;
         mensajeroId: string;
-        resultado: "entregada" | "reprogramada" | "devuelta" | "rechazada" | "incidente";
+        resultado: "entregado" | "reprogramado" | "novedad" | "devolucion_a_origen_por_rechazo" | "incidente";
         createdAt: Date;
         anuladaAt?: Date | null;
         causaDevolucion?: "not_found" | "wrong_number" | "wrong_address" | null;
@@ -254,8 +254,8 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
       const gReprogramada = await crearGestion({
         ordenId: propia,
         mensajeroId: mensajeroA.id,
-        resultado: "reprogramada",
-        createdAt: T.reprogramada,
+        resultado: "reprogramado",
+        createdAt: T.reprogramado,
         motivo: "TEXTO-LIBRE-el-cliente-no-contesto",
         // ⭑ CON FOTO. `reprogramada` es el unico resultado que NO la exige, pero la tiene en la
         //   mayoria de los casos reales (8 de 12 vigentes en la base local, medido el
@@ -264,7 +264,7 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
         //   contrato publico es la lista `["entregada","rechazada","incidente"]` del mapeo.
         evidenciaStoragePath: `ordenes/${SUFIJO}/reprogramada-con-foto.jpg`,
       });
-      await crearTransicion(propia, gReprogramada, "reprogramada", T.reprogramada);
+      await crearTransicion(propia, gReprogramada, "reprogramado", T.reprogramado);
 
       // (2) VIGENTE `devuelta` CON causa tipificada. Su gestion origina DOS transiciones: la
       //     primera al pre-estado de la 239 y una SEGUNDA, posterior, al anclaje. R6 dice que
@@ -272,8 +272,8 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
       const gDevuelta = await crearGestion({
         ordenId: propia,
         mensajeroId: mensajeroB.id,
-        resultado: "devuelta",
-        createdAt: T.devuelta,
+        resultado: "novedad",
+        createdAt: T.novedad,
         causaDevolucion: "wrong_address",
         motivo: "TEXTO-LIBRE-direccion-mal-escrita",
         // ⭑ CON FOTO, Y NO ES UN ADORNO: en una `devuelta` la evidencia es **OBLIGATORIA** desde
@@ -283,12 +283,12 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
         //   escenario imposible no prueba nada. La segunda fila que hace letal la mutacion.
         evidenciaStoragePath: `ordenes/${SUFIJO}/devuelta-con-foto.jpg`,
       });
-      await crearTransicion(propia, gDevuelta, "devolucion_por_confirmar", T.devuelta);
+      await crearTransicion(propia, gDevuelta, "devolucion_por_confirmar", T.novedad);
       await crearTransicion(
         propia,
         gDevuelta,
-        "entregada", // destino DISTINTO y POSTERIOR a proposito: si el mapeo tomara la ultima,
-        new Date(T.devuelta.getTime() + 60_000), // `estadoResultante` saldria `entregada`.
+        "entregado", // destino DISTINTO y POSTERIOR a proposito: si el mapeo tomara la ultima,
+        new Date(T.novedad.getTime() + 60_000), // `estadoResultante` saldria `entregada`.
       );
 
       // (3) ANULADA y LEGADA (sin foto): la excluye el `where` de la consulta —no casa con
@@ -299,7 +299,7 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
       const gAnulada = await crearGestion({
         ordenId: propia,
         mensajeroId: mensajeroA.id,
-        resultado: "devuelta",
+        resultado: "novedad",
         createdAt: T.anulada,
         anuladaAt: new Date("2026-09-05T10:00:00.000Z"),
         causaDevolucion: "not_found",
@@ -315,13 +315,13 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
       const gAnuladaConFoto = await crearGestion({
         ordenId: propia,
         mensajeroId: mensajeroB.id,
-        resultado: "entregada",
+        resultado: "entregado",
         createdAt: T.anuladaConFoto,
         anuladaAt: new Date("2026-09-05T14:00:00.000Z"),
         evidenciaStoragePath: `ordenes/${SUFIJO}/anulada-con-foto.jpg`,
         motivo: "TEXTO-LIBRE-de-la-ANULADA-con-foto",
       });
-      await crearTransicion(propia, gAnuladaConFoto, "entregada", T.anuladaConFoto);
+      await crearTransicion(propia, gAnuladaConFoto, "entregado", T.anuladaConFoto);
 
       // (4) LEGADA: vigente y SIN fila de historial que la respalde -> `estadoResultante: null`.
       //     Tampoco tiene foto, y las dos cosas van juntas: es una gestion anterior al historial
@@ -332,7 +332,7 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
       await crearGestion({
         ordenId: propia,
         mensajeroId: mensajeroA.id,
-        resultado: "entregada",
+        resultado: "entregado",
         createdAt: T.legada,
       });
 
@@ -351,8 +351,8 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
       await crearGestion({
         ordenId: ajena,
         mensajeroId: mensajeroB.id,
-        resultado: "entregada",
-        createdAt: T.reprogramada,
+        resultado: "entregado",
+        createdAt: T.reprogramado,
         motivo: "TEXTO-LIBRE-de-la-orden-AJENA",
       });
 
@@ -448,7 +448,7 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
     );
     // Y su evidencia sigue publicandose, como desde la 268: esta ficha declara que NO lo toca.
     expect(m.detalle!.evidencias).toHaveLength(1);
-    expect(m.detalle!.evidencias[0].resultado).toBe("entregada");
+    expect(m.detalle!.evidencias[0].resultado).toBe("entregado");
     expect(m.detalle!.evidencias[0].storagePath).toContain("anulada-con-foto.jpg");
   });
 
@@ -479,9 +479,9 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
       .map((g) => `${g.resultado}:${g.evidenciaStoragePath!.split("/").pop()}`)
       .sort();
     expect(conFoto).toEqual([
-      "devuelta:devuelta-con-foto.jpg",
-      "entregada:anulada-con-foto.jpg",
-      "reprogramada:reprogramada-con-foto.jpg",
+      "entregado:anulada-con-foto.jpg",
+      "novedad:devuelta-con-foto.jpg",
+      "reprogramado:reprogramada-con-foto.jpg",
     ]);
 
     // ⭑ Y SOLO UNA CRUZA. Si alguien anade `devuelta` o `reprogramada` a la lista del filtro en
@@ -489,7 +489,7 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
     // rojo con el nombre del archivo filtrado dentro.
     expect(
       m.detalle!.evidencias.map((e) => `${e.resultado}:${e.storagePath.split("/").pop()}`),
-    ).toEqual(["entregada:anulada-con-foto.jpg"]);
+    ).toEqual(["entregado:anulada-con-foto.jpg"]);
 
     // Las dos que NO deben cruzar existen y llevan foto: sin esto, el aserto de arriba pasaria
     // igual sobre un escenario que no tuviera ninguna (el falso verde por falta de datos).
@@ -508,9 +508,9 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
       "2026-09-06T11:30:00.000Z",
     ]);
     expect(m.detalle!.gestiones.map((g) => g.resultado)).toEqual([
-      "reprogramada",
-      "devuelta",
-      "entregada",
+      "reprogramado",
+      "novedad",
+      "entregado",
     ]);
     // R10: sin escrituras entre medias, la segunda lectura es identica byte a byte.
     expect(JSON.stringify(m.segundaLectura!.gestiones)).toBe(
@@ -522,7 +522,7 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
     const m = await escenario();
     const [reprogramada, devuelta, legada] = m.detalle!.gestiones;
 
-    expect(reprogramada.estadoResultante).toBe("reprogramada");
+    expect(reprogramada.estadoResultante).toBe("reprogramado");
     // ⭑ EL CASO DISCRIMINANTE: esta gestion origino DOS transiciones. La primera fue al
     // pre-estado de la 239; la segunda, un minuto despues, a `entregada`. Si el mapeo se quedara
     // con la ULTIMA —o con «cualquiera»—, aqui saldria `entregada`.

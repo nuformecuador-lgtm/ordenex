@@ -76,51 +76,51 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // `generacion_guia` ya no existe (generar guia no rutea a satelite).
   { n: "7", origen: "en_bodega_central", destino: "en_ruta_bodega_satelite", via: "ruteo_satelite", callSite: "GuiaAsignacionService.rutearABodegaSatelite (origen UNICO, 156)" },
   // #7c RETIRADA por la feature 156: `ORIGEN_RUTEO_SATELITE` vuelve a ser un solo origen.
-  { n: "8", origen: "en_bodega_central", destino: "por_recoger", via: "asignacion_bodega", callSite: "GuiaAsignacionService.asignarDesdeBodega" },
-  { n: "9", origen: "en_bodega_satelite", destino: "por_recoger", via: "asignacion_satelite", callSite: "AsignacionSateliteService.asignar" },
+  { n: "8", origen: "en_bodega_central", destino: "mensajero_recogiendo_en_bodega", via: "asignacion_bodega", callSite: "GuiaAsignacionService.asignarDesdeBodega" },
+  { n: "9", origen: "en_bodega_satelite", destino: "mensajero_recogiendo_en_bodega", via: "asignacion_satelite", callSite: "AsignacionSateliteService.asignar" },
   { n: "10", origen: "en_ruta_bodega_satelite", destino: "en_bodega_satelite", via: "recepcion_satelite", callSite: "RecepcionSateliteService.recibir" },
-  { n: "11", origen: "por_recoger", destino: "en_reparto", via: "recoleccion", callSite: "MisAsignacionesService.recogerAsignaciones" },
-  { n: "12", origen: "en_reparto", destino: "entregada", via: "gestion", callSite: "MisAsignacionesService.gestionar" },
-  { n: "13", origen: "en_reparto", destino: "reprogramada", via: "gestion", callSite: "gestionar" },
+  { n: "11", origen: "mensajero_recogiendo_en_bodega", destino: "en_reparto", via: "recoleccion", callSite: "MisAsignacionesService.recogerAsignaciones" },
+  { n: "12", origen: "en_reparto", destino: "entregado", via: "gestion", callSite: "MisAsignacionesService.gestionar" },
+  { n: "13", origen: "en_reparto", destino: "reprogramado", via: "gestion", callSite: "gestionar" },
   // Feature 239 (2026-08-19): #14 (`en_reparto -> devuelta` por la gestion) queda RETIRADA.
   // FICHA 454 (2026-09-23): #59 (`en_reparto -> devolucion_por_confirmar`, 239) queda RETIRADA con
   // su estado; la gestion se REGISTRA sin transicion y la aprobacion aplica `en_reparto -> devuelta`
   // (#70, abajo).
-  { n: "15", origen: "en_reparto", destino: "rechazada", via: "gestion", callSite: "gestionar" },
-  { n: "16", origen: "en_reparto", destino: "sin_gestionar", via: "corte_sin_gestionar", callSite: "CorteDiarioService -> CierreDiaRepository.crearCierre" },
-  { n: "17", origen: "sin_gestionar", destino: "en_bodega_central", via: "liberacion_sin_gestionar", callSite: "CierresAdminService.aprobarCierre -> resolverCierre" },
-  { n: "18", origen: "sin_gestionar", destino: "en_bodega_satelite", via: "liberacion_sin_gestionar", callSite: "resolverCierre" },
+  { n: "15", origen: "en_reparto", destino: "devolucion_a_origen_por_rechazo", via: "gestion", callSite: "gestionar" },
+  { n: "16", origen: "en_reparto", destino: "novedad_interna", via: "corte_sin_gestionar", callSite: "CorteDiarioService -> CierreDiaRepository.crearCierre" },
+  { n: "17", origen: "novedad_interna", destino: "en_bodega_central", via: "liberacion_sin_gestionar", callSite: "CierresAdminService.aprobarCierre -> resolverCierre" },
+  { n: "18", origen: "novedad_interna", destino: "en_bodega_satelite", via: "liberacion_sin_gestionar", callSite: "resolverCierre" },
   // Feature 276 (T3/T9): la TERCERA salida de `sin_gestionar`, y la unica que NO vuelve a bodega.
   // Misma transaccion, mismo actor y mismo bloque que #17/#18; lo que cambia es el destino cuando
   // la orden ya agoto sus intentos de entrega. Par NUEVO: `sin_gestionar -> rechazada` no estaba
   // declarado por nadie.
-  { n: "68", origen: "sin_gestionar", destino: "rechazada", via: "rechazo_tope_intentos", callSite: "CierresAdminService.aprobarCierre -> resolverCierre, bloque liberacionSinGestionar (276)" },
-  { n: "19", origen: "devuelta", destino: "en_bodega_central", via: "liberacion_devuelta_sla", callSite: "DevolucionSlaRepository.liberarDevueltaSla" },
-  { n: "20", origen: "devuelta", destino: "en_bodega_satelite", via: "liberacion_devuelta_sla", callSite: "liberarDevueltaSla" },
-  { n: "21", origen: "devuelta", destino: "rechazada", via: "escalado_devuelta_sla", callSite: "escalarDevueltaSla" },
-  { n: "22", origen: "devuelta", destino: "reprogramada", via: "reprogramacion_tienda", callSite: "ReprogramacionTiendaService.reprogramar" },
-  { n: "23", origen: "devuelta", destino: "en_bodega_central", via: "recuperacion_manual", callSite: "RecuperacionBodegaService.recuperar" },
-  { n: "24", origen: "devuelta", destino: "en_bodega_satelite", via: "recuperacion_manual", callSite: "recuperar" },
-  { n: "25", origen: "reprogramada", destino: "en_bodega_central", via: "liberacion_reprogramada", callSite: "LiberacionReprogramadaRepository.liberarOrden" },
-  { n: "26", origen: "reprogramada", destino: "en_bodega_satelite", via: "liberacion_reprogramada", callSite: "liberarOrden" },
+  { n: "68", origen: "novedad_interna", destino: "devolucion_a_origen_por_rechazo", via: "rechazo_tope_intentos", callSite: "CierresAdminService.aprobarCierre -> resolverCierre, bloque liberacionSinGestionar (276)" },
+  { n: "19", origen: "novedad", destino: "en_bodega_central", via: "liberacion_devuelta_sla", callSite: "DevolucionSlaRepository.liberarDevueltaSla" },
+  { n: "20", origen: "novedad", destino: "en_bodega_satelite", via: "liberacion_devuelta_sla", callSite: "liberarDevueltaSla" },
+  { n: "21", origen: "novedad", destino: "devolucion_a_origen_por_rechazo", via: "escalado_devuelta_sla", callSite: "escalarDevueltaSla" },
+  { n: "22", origen: "novedad", destino: "reprogramado", via: "reprogramacion_tienda", callSite: "ReprogramacionTiendaService.reprogramar" },
+  { n: "23", origen: "novedad", destino: "en_bodega_central", via: "recuperacion_manual", callSite: "RecuperacionBodegaService.recuperar" },
+  { n: "24", origen: "novedad", destino: "en_bodega_satelite", via: "recuperacion_manual", callSite: "recuperar" },
+  { n: "25", origen: "reprogramado", destino: "en_bodega_central", via: "liberacion_reprogramada", callSite: "LiberacionReprogramadaRepository.liberarOrden" },
+  { n: "26", origen: "reprogramado", destino: "en_bodega_satelite", via: "liberacion_reprogramada", callSite: "liberarOrden" },
   // #27 RETIRADA por la feature 139 (su R9): `rechazada -> devolviendo_a_tienda` NO existe.
   { n: "28", origen: "devolviendo_a_tienda", destino: "devuelta_a_tienda", via: "ajuste_estado", callSite: "RecepcionOrigenService.recibirEnOrigen" },
   { n: "29", origen: "en_bodega_central", destino: "devolviendo_a_tienda", via: "cancelacion_api", callSite: "OrdenRepository.cancelarViaApi" },
   { n: "30", origen: "en_ruta_bodega_central", destino: "devolviendo_a_tienda", via: "cancelacion_api", callSite: "cancelarViaApi" },
-  { n: "31", origen: "entregada", destino: "en_reparto", via: "deshacer_gestion", callSite: "CierreDiaService.deshacerGestion" },
+  { n: "31", origen: "entregado", destino: "en_reparto", via: "deshacer_gestion", callSite: "CierreDiaService.deshacerGestion" },
   // ⭑ FICHA 398 (#69) — LA CORRECCION EN SITIO de una entrega mal declarada dentro de un cierre
   // ABIERTO. Es la SEGUNDA salida de `entregada`, y la unica que no es un deshacer del
   // mensajero. Llega CON su productor, que es lo que 235/R12 exige de toda arista nueva.
-  { n: "69", origen: "entregada", destino: "rechazada", via: "correccion_resultado_gestion", callSite: "CierresAdminRepository.corregirResultadoGestionEnCierre (398)" },
-  { n: "32", origen: "reprogramada", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion" },
-  { n: "33", origen: "rechazada", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion" },
+  { n: "69", origen: "entregado", destino: "devolucion_a_origen_por_rechazo", via: "correccion_resultado_gestion", callSite: "CierresAdminRepository.corregirResultadoGestionEnCierre (398)" },
+  { n: "32", origen: "reprogramado", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion" },
+  { n: "33", origen: "devolucion_a_origen_por_rechazo", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion" },
   { n: "34", origen: "en_bodega_central", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion (rama devuelta)" },
   { n: "35", origen: "en_bodega_satelite", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion (rama devuelta)" },
-  { n: "36", origen: "devuelta", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion (defensa filas legadas)" },
+  { n: "36", origen: "novedad", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion (defensa filas legadas)" },
   { n: "37", origen: "en_ruta_bodega_central", destino: "en_bodega_central", via: "recepcion_bodega_central", callSite: "RecepcionBodegaCentralService (138)" },
-  { n: "38", origen: "rechazada", destino: "por_devolver", via: "devolucion_rechazada", callSite: "CierresAdminRepository.resolverCierre (139, zona satelite)" },
-  { n: "39", origen: "rechazada", destino: "por_devolver_a_tienda", via: "devolucion_rechazada", callSite: "resolverCierre (139, zona central)" },
-  { n: "40", origen: "por_devolver", destino: "devolviendo_a_bodega_central", via: "ajuste_estado", callSite: "EnvioDevolucionCentralService.enviarACentral (139)" },
+  { n: "38", origen: "devolucion_a_origen_por_rechazo", destino: "por_devolver_a_bodega_central", via: "devolucion_rechazada", callSite: "CierresAdminRepository.resolverCierre (139, zona satelite)" },
+  { n: "39", origen: "devolucion_a_origen_por_rechazo", destino: "por_devolver_a_tienda", via: "devolucion_rechazada", callSite: "resolverCierre (139, zona central)" },
+  { n: "40", origen: "por_devolver_a_bodega_central", destino: "devolviendo_a_bodega_central", via: "ajuste_estado", callSite: "EnvioDevolucionCentralService.enviarACentral (139)" },
   { n: "41", origen: "devolviendo_a_bodega_central", destino: "por_devolver_a_tienda", via: "recepcion_bodega_central", callSite: "RecepcionBodegaCentralService state-aware (139)" },
   { n: "42", origen: "por_devolver_a_tienda", destino: "devolviendo_a_tienda", via: "ajuste_estado", callSite: "DevolucionOrigenService.devolverATienda (139)" },
   // #43/#44: feature 154. DECLARADAS Y SIN PRODUCTOR — ningun service las ejecuta todavia; el
@@ -141,8 +141,8 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // TRES aristas son pares NUEVOS (no repiten ningun par ya declarado), por eso suben tanto el
   // recuento de aristas (42 -> 45) como el de pares unicos (39 -> 42).
   { n: "45", origen: "en_ruta_bodega_satelite", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso b)" },
-  { n: "46", origen: "por_recoger", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "DeshacerAsignacionService.deshacer -> OrdenRepository.deshacerAsignacionLote (149, caso a central)" },
-  { n: "47", origen: "por_recoger", destino: "en_bodega_satelite", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso a satelite)" },
+  { n: "46", origen: "mensajero_recogiendo_en_bodega", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "DeshacerAsignacionService.deshacer -> OrdenRepository.deshacerAsignacionLote (149, caso a central)" },
+  { n: "47", origen: "mensajero_recogiendo_en_bodega", destino: "en_bodega_satelite", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso a satelite)" },
   // Feature 158, PR 1 (Q-D, 2026-07-30): DESHACER un `incidente` del mensajero. Es un par
   // NUEVO, asi que sube tanto el recuento de aristas (41 -> 42) como el de pares unicos
   // (39 -> 40).
@@ -161,7 +161,7 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "49", origen: "en_bodega_satelite", destino: "incidente", via: "incidente", callSite: "IncidenteAdminRepository.reportar (158)" },
   { n: "50", origen: "en_ruta_bodega_central", destino: "incidente", via: "incidente", callSite: "IncidenteAdminRepository.reportar (158)" },
   { n: "51", origen: "en_ruta_bodega_satelite", destino: "incidente", via: "incidente", callSite: "IncidenteAdminRepository.reportar (158)" },
-  { n: "52", origen: "por_recoger", destino: "incidente", via: "incidente", callSite: "IncidenteAdminRepository.reportar (158; Q-K: NO toca mensajero_asignado_id)" },
+  { n: "52", origen: "mensajero_recogiendo_en_bodega", destino: "incidente", via: "incidente", callSite: "IncidenteAdminRepository.reportar (158; Q-K: NO toca mensajero_asignado_id)" },
   // Las cinco inversas. El destino de cada reversion se DERIVA del historial
   // (`findOrigenesReversion`, 149) y se valida contra el conjunto cerrado de los 5 origenes: no
   // hay destino fijo escrito en el codigo (R57/R58).
@@ -169,7 +169,7 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "55", origen: "incidente", destino: "en_bodega_satelite", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
   { n: "56", origen: "incidente", destino: "en_ruta_bodega_central", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
   { n: "57", origen: "incidente", destino: "en_ruta_bodega_satelite", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
-  { n: "58", origen: "incidente", destino: "por_recoger", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
+  { n: "58", origen: "incidente", destino: "mensajero_recogiendo_en_bodega", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
   // FICHA 454 (2026-09-23): #62-#66, la ayuda a la tienda como ESTADO (235: #62 solicitud, #63
   // rescate, #64 corte; 237: #65/#66 gestion de la tienda), quedan RETIRADAS con el estado. La ayuda
   // es un evento (`orden_evento`) sobre una orden que sigue `en_reparto`; el corte la barre por #16
@@ -183,7 +183,7 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // NO se retira #21: el cron sigue escalando por su cuenta las devoluciones que nadie resuelve.
   // Las dos vias conviven y la carrera entre ellas la cierra la guarda del `updateMany` (quien
   // llegue segundo obtiene count = 0 y no deja efectos), no una exclusion en el grafo.
-  { n: "67", origen: "devuelta", destino: "rechazada", via: "rechazo_tienda", callSite: "RechazoTiendaService.rechazar -> GestionOrdenRepository.rechazarDesdeDevuelta (240)" },
+  { n: "67", origen: "novedad", destino: "devolucion_a_origen_por_rechazo", via: "rechazo_tienda", callSite: "RechazoTiendaService.rechazar -> GestionOrdenRepository.rechazarDesdeDevuelta (240)" },
   // FICHA 454 (2026-09-23, design §2) — ALTA de `en_reparto -> devuelta` con familia
   // `anclaje_devolucion`. Es el PAR de la vieja #14 (retirada por la 239), pero NO la reabre: la #14
   // era la gestion del mensajero llevando a `devuelta` al instante; esta la produce SOLO la
@@ -191,12 +191,12 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   //
   // Las BAJAS de la 454 (#59-#66 y las dos claves de los estados retirados) viajan con el retiro de
   // los dos values del catalogo (fase 2 de la 454, 2026-09-23).
-  { n: "70", origen: "en_reparto", destino: "devuelta", via: "anclaje_devolucion", callSite: "CierresAdminRepository.resolverCierre, bloque APLICACION DE GESTIONES (454)" },
+  { n: "70", origen: "en_reparto", destino: "novedad", via: "anclaje_devolucion", callSite: "CierresAdminRepository.resolverCierre, bloque APLICACION DE GESTIONES (454)" },
   // FICHA 454 (2026-09-23, design §2) — METADATO de la gestion de la TIENDA desde una ayuda abierta
   // (237), que ahora se aplica desde `en_reparto` al aprobar el cierre, con familia
   // `gestion_tienda_ayuda`. Mismo par que #13/#15: suman arista y NO suman par.
-  { n: "71", origen: "en_reparto", destino: "reprogramada", via: "gestion_tienda_ayuda", callSite: "CierresAdminRepository.resolverCierre, bloque APLICACION DE GESTIONES (454; gestion registrada por GestionDesdeAyudaService)" },
-  { n: "72", origen: "en_reparto", destino: "rechazada", via: "gestion_tienda_ayuda", callSite: "CierresAdminRepository.resolverCierre, bloque APLICACION DE GESTIONES (454; gestion registrada por GestionDesdeAyudaService)" },
+  { n: "71", origen: "en_reparto", destino: "reprogramado", via: "gestion_tienda_ayuda", callSite: "CierresAdminRepository.resolverCierre, bloque APLICACION DE GESTIONES (454; gestion registrada por GestionDesdeAyudaService)" },
+  { n: "72", origen: "en_reparto", destino: "devolucion_a_origen_por_rechazo", via: "gestion_tienda_ayuda", callSite: "CierresAdminRepository.resolverCierre, bloque APLICACION DE GESTIONES (454; gestion registrada por GestionDesdeAyudaService)" },
 ];
 
 /**

@@ -122,7 +122,7 @@ function gestion(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
     distritoNombre: "Carmen",
     producto: "Caja",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "8000.00",
     metodoPago: null,
     pagos: [{ metodo: "efectivo", monto: "8000.00" }],
@@ -142,10 +142,10 @@ function gestion(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
 
 function grupos(g: CierreDetalleGestion): CierreGrupos {
   const vacios: Record<CierreResultado, CierreDetalleGestion[]> = {
-    entregada: [],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: [],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
   return { ...vacios, [g.resultado]: [g] };
@@ -227,7 +227,7 @@ describe("R16 — la corrección se ofrece sobre una gestión `entregada`, y só
   it("sobre una gestión YA rechazada NO se ofrece: no hay entrega que corregir", async () => {
     await abrirRenglon(
       gestion({
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         montoRecibido: null,
         pagos: [],
         motivo: "Cliente ausente",
@@ -240,7 +240,7 @@ describe("R16 — la corrección se ofrece sobre una gestión `entregada`, y só
   });
 
   it("sobre una devuelta, una reprogramada o un incidente tampoco", async () => {
-    for (const resultado of ["devuelta", "reprogramada", "incidente"] as const) {
+    for (const resultado of ["novedad", "reprogramado", "incidente"] as const) {
       await abrirRenglon(
         gestion({ resultado, montoRecibido: null, pagos: [], motivo: "Nadie" }),
         vi.fn(),
@@ -509,7 +509,7 @@ describe("el diálogo de la corrección", () => {
     renderDialogo(gestion());
     const aviso = screen.getByRole("region", { name: "Al corregir:" });
     expect(aviso).toHaveTextContent(
-      "La orden sigue «En reparto» hasta entonces: su estado pasa a «Rechazada» al aprobar el cierre.",
+      "La orden sigue «En reparto» hasta entonces: su estado pasa a «Devolución a origen por rechazo» al aprobar el cierre.",
     );
   });
 

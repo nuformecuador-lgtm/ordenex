@@ -30,13 +30,13 @@ const MOTIVO = "el cliente lo rechazo";
 /** Las gestiones que el recalculo lee del cierre, con sus snapshots YA congelados. */
 const GESTIONES_DEL_CIERRE = [
   {
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     pagoMensajero: new Prisma.Decimal("0.00"),
     ingresoBodegaRechazo: new Prisma.Decimal("1000.00"),
     pagos: [],
   },
   {
-    resultado: "entregada",
+    resultado: "entregado",
     // ⚠️ Congelado con OTRA tarifa. Si el recalculo re-derivara con la viva, este numero cambiaria.
     pagoMensajero: new Prisma.Decimal("900.00"),
     ingresoBodegaRechazo: new Prisma.Decimal("0.00"),
@@ -110,8 +110,8 @@ function clienteFalso(
     // El choke point del historial de estados valida contra el catalogo con `$queryRaw` y
     // despues escribe. Se sirven las DOS filas que necesita.
     $queryRaw: vi.fn(async () => [
-      { id: ESTATUS_ENTREGADA, value: "entregada" },
-      { id: ESTATUS_RECHAZADA, value: "rechazada" },
+      { id: ESTATUS_ENTREGADA, value: "entregado" },
+      { id: ESTATUS_RECHAZADA, value: "devolucion_a_origen_por_rechazo" },
     ]),
     $executeRaw: vi.fn(async () => 0),
     $queryRawUnsafe: vi.fn(async () => []),
@@ -187,7 +187,7 @@ describe("💰 398 — el SELLO es la unica guardia que decide", () => {
     const where = whereDe(tx.gestionOrden.updateMany);
     expect(where.id).toBe(GESTION);
     expect(where.anuladaAt).toBeNull(); // una gestion ANULADA no se corrige
-    expect(where.resultado).toBe("entregada"); // ⭑ solo una ENTREGA se corrige a rechazo
+    expect(where.resultado).toBe("entregado"); // ⭑ solo una ENTREGA se corrige a rechazo
     expect(where.cierre).toEqual({
       is: { estado: { in: ["solicitado", "vencido"] }, destinoTipo: "bodega_central" },
     });
@@ -285,7 +285,7 @@ describe("💰 398 — lo que la correccion escribe, y con que aritmetica", () =
     await corregir(repo);
 
     const data = dataDe(tx.gestionOrden.updateMany);
-    expect(data.resultado).toBe("rechazada");
+    expect(data.resultado).toBe("devolucion_a_origen_por_rechazo");
     expect(data.motivo).toBe(MOTIVO);
     expect(data.montoRecibido).toBeNull();
     expect(data.metodoPago).toBeNull();
@@ -365,8 +365,8 @@ describe("💰 398 — lo que la correccion escribe, y con que aritmetica", () =
       accion: "cierre_dia_gestion_corregida",
       entidadTipo: "gestion_orden",
       entidadId: GESTION,
-      valorAnterior: "entregada",
-      valorNuevo: "rechazada",
+      valorAnterior: "entregado",
+      valorNuevo: "devolucion_a_origen_por_rechazo",
       actorNombre: "Admin Uno",
       actorRol: "admin",
     });

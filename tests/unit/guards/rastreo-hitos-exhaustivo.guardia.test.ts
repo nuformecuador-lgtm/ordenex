@@ -1,143 +1,102 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, it, expect } from "vitest";
 
-import { ORDER_STATUS_SEED, type OrderStatusValue } from "@/lib/types/order-status";
-import {
-  ETIQUETA_POR_HITO,
-  HITOS_PUBLICOS,
-  HITO_POR_DEFECTO,
-  HITO_POR_ESTATUS,
-  HITO_POR_ESTATUS_RETIRADO,
-  hitoDeEstatus,
-  type HitoPublico,
-} from "@/lib/types/rastreo-publico";
+import { NOMBRE_ESTADO, ORDER_STATUS_SEED, nombrePublicoDeEstado } from "@/lib/types/order-status";
+import * as contratoRastreo from "@/lib/types/rastreo-publico";
 
-// Feature 229 — GUARDIA de exhaustividad del mapeo estatus interno -> hito publico
-// (T1.3, cubre R16 y R17).
+// Feature 229 — GUARDIA de exhaustividad del vocabulario público del rastreo (T1.3, R16/R17).
 //
-// El `satisfies Record<OrderStatusValue, HitoPublico>` del mapa ya rompe el BUILD si alguien
-// añade un value al catalogo sin darle hito; esta guardia cubre lo que el compilador no ve:
-// que la transcripcion coincide EXACTAMENTE con la tabla firmada en `requirements.md` §D2
-// —un mapeo puede estar completo y aun asi decir lo que no se firmo— y que una fila
-// huerfana (feature 155) cae en el hito neutral en vez de publicar el value crudo.
+// ⏳ REESCRITA EL 2026-09-24 (FICHA 455, T1.9; design DF/§4; R31/R34). Hasta la 455 esta guardia
+// comparaba el mapa estado -> HITO (`HITO_POR_ESTATUS`, nueve hitos + el neutral «En proceso») con la
+// tabla firmada de la 229, transcrita a mano. La 455 RETIRA los hitos: por transparencia total el
+// destinatario ve el NOMBRE VISIBLE de cada estado, el mismo que la app interna (`nombrePublicoDeEstado`,
+// la fuente única). Así que la guardia pasa a afirmar la AUSENCIA de hitos y la lectura pública de
+// los 20 vigentes, de los 4 retirados y de un código desconocido — con las tablas escritas A MANO
+// (si se derivaran de la función, la guardia diría que la función coincide consigo misma).
 
-/**
- * La tabla firmada del gate (G5-G8), transcrita aqui A MANO y por SEGUNDA VEZ a proposito:
- * si esta lista se derivara del mapa, la guardia diria que el mapa coincide consigo mismo.
- */
-const TABLA_FIRMADA: Record<OrderStatusValue, HitoPublico> = {
-  en_preparacion: "registrado",
-  por_recolectar_en_tienda: "registrado",
-  recolectando: "registrado",
-  por_recoger: "en_bodega",
-  en_bodega_central: "en_bodega",
-  en_bodega_satelite: "en_bodega",
-  en_ruta_bodega_central: "en_transito",
-  en_ruta_bodega_satelite: "en_transito",
-  en_reparto: "en_reparto",
-  sin_gestionar: "en_reparto",
-  entregada: "entregado",
-  reprogramada: "reprogramado",
-  devuelta: "no_entregado",
-  rechazada: "no_entregado",
-  incidente: "no_entregado",
-  por_devolver: "devolucion_en_curso",
-  devolviendo_a_bodega_central: "devolucion_en_curso",
-  por_devolver_a_tienda: "devolucion_en_curso",
-  devolviendo_a_tienda: "devolucion_en_curso",
-  devuelta_a_tienda: "devuelto",
-  // ⏳ 2026-09-23 (FICHA 454, R37/R40): aqui estaban `devolucion_por_confirmar: "no_entregado"`
-  // (239/R28) y `ayuda_tienda: "en_reparto"` (235/R38). Salen del catalogo; sus decisiones firmadas
-  // se conservan para las filas HISTORICAS en `HITO_POR_ESTATUS_RETIRADO` y las afirma el caso
-  // «454/R40» de abajo, transcritas a mano igual que esta tabla.
+const RAIZ = path.resolve(__dirname, "../../..");
+
+/** La lectura pública de los 20 vigentes: su nombre visible (requirements 455 §0.1), a mano. */
+const NOMBRE_PUBLICO_ESPERADO: Record<string, string> = {
+  entregado: "Entregado",
+  novedad: "Novedad",
+  devolviendo_a_tienda: "Devolviendo a tienda",
+  reprogramado: "Reprogramado",
+  en_ruta_bodega_central: "En ruta a bodega central",
+  en_bodega_central: "En bodega central",
+  en_preparacion: "En preparación",
+  mensajero_recogiendo_en_bodega: "Mensajero recogiendo en la bodega",
+  en_ruta_bodega_satelite: "En ruta a bodega satélite",
+  en_reparto: "En reparto",
+  devolucion_a_origen_por_rechazo: "Devolución a origen por rechazo",
+  en_bodega_satelite: "En bodega satélite",
+  devuelta_a_tienda: "Devuelta a tienda",
+  novedad_interna: "Novedad interna",
+  por_devolver_a_bodega_central: "Por devolver a bodega central",
+  devolviendo_a_bodega_central: "Devolviendo a bodega central",
+  por_devolver_a_tienda: "Por devolver a tienda",
+  por_recolectar_en_tienda: "Por recolectar en tienda",
+  incidente: "Incidente",
+  recolectando: "Recolectando",
 };
 
-/** 454/R40 — la lectura firmada de los dos estados retirados, transcrita a mano. */
-const TABLA_FIRMADA_RETIRADOS: Record<string, string> = {
-  devolucion_por_confirmar: "no_entregado", // 239/R28
-  ayuda_tienda: "en_reparto", // 235/R38
+/** R34 — los retirados se pliegan al nombre de su vigente equivalente (design §1.1), a mano. */
+const RETIRADO_PLEGADO_ESPERADO: Record<string, string> = {
+  devolucion_por_confirmar: "Novedad",
+  ayuda_tienda: "En reparto",
+  en_fulfillment: "En preparación",
+  pendiente: "En preparación",
 };
 
-describe("R16 — el mapeo de hitos cubre el catalogo vigente entero", () => {
-  // 2026-08-19 (feature 239): 20 -> 21 values. El añadido es `devolucion_por_confirmar`.
-  // 2026-09-23 (ficha 454): 22 -> 20 (salen `devolucion_por_confirmar` y `ayuda_tienda`).
-  it("454/R40: las filas historicas de los dos estados retirados se leen con su hito firmado de siempre", () => {
-    expect(Object.keys(HITO_POR_ESTATUS_RETIRADO).sort()).toEqual(
-      Object.keys(TABLA_FIRMADA_RETIRADOS).sort(),
-    );
-    for (const [value, hito] of Object.entries(TABLA_FIRMADA_RETIRADOS)) {
-      expect(hitoDeEstatus(value), value).toBe(hito);
-      expect(value in HITO_POR_ESTATUS, `${value} no debe seguir en el mapa vigente`).toBe(false);
+describe("455/R31 — el rastreo ya no tiene vocabulario de hitos", () => {
+  it("el contrato del rastreo no exporta ningún símbolo de hitos", () => {
+    const exportados = Object.keys(contratoRastreo);
+    for (const retirado of [
+      "HITOS_PUBLICOS",
+      "ETIQUETA_POR_HITO",
+      "HITO_POR_ESTATUS",
+      "HITO_POR_ESTATUS_RETIRADO",
+      "HITO_POR_DEFECTO",
+      "hitoDeEstatus",
+      "NOMBRE_RESULTADO_PENDIENTE",
+    ]) {
+      expect(exportados, retirado).not.toContain(retirado);
     }
   });
 
-  it("los 20 values del catalogo tienen hito publico asignado y coinciden con la tabla firmada (incluidos recolectando→registrado, incidente→no_entregado y sin_gestionar→en_reparto)", () => {
-    const sinHito = ORDER_STATUS_SEED.filter((value) => !(value in HITO_POR_ESTATUS));
-    expect(sinHito).toEqual([]);
+  it("ni el servicio ni el modal nombran un hito", () => {
+    for (const rel of ["lib/services/RastreoPublicoService.ts", "app/_landing/RastreoDialog.tsx"]) {
+      const codigo = readFileSync(path.join(RAIZ, rel), "utf8");
+      expect(codigo, rel).not.toMatch(/hitoDeEstatus|ETIQUETA_POR_HITO|hitoVigente|\.hito\b/);
+    }
+  });
+});
 
+describe("455/R31 · R34 · R10 — la lectura pública de cada estado", () => {
+  it("los 20 vigentes se leen con su nombre visible exacto", () => {
+    expect(Object.keys(NOMBRE_PUBLICO_ESPERADO).sort()).toEqual([...ORDER_STATUS_SEED].sort());
     for (const value of ORDER_STATUS_SEED) {
-      expect(hitoDeEstatus(value)).toBe(TABLA_FIRMADA[value]);
-    }
-
-    // Las tres asignaciones con nota propia en el gate, nombradas una a una para que su
-    // cambio no pase como "un value mas del bucle".
-    expect(hitoDeEstatus("recolectando")).toBe("registrado"); // G6
-    expect(hitoDeEstatus("incidente")).toBe("no_entregado"); // G7
-    expect(hitoDeEstatus("sin_gestionar")).toBe("en_reparto"); // G8, riesgo aceptado
-  });
-
-  it("el mapa no inventa estatus que no esten en el catalogo vigente", () => {
-    const catalogo = new Set<string>(ORDER_STATUS_SEED);
-    const sobrantes = Object.keys(HITO_POR_ESTATUS).filter((value) => !catalogo.has(value));
-    expect(sobrantes).toEqual([]);
-  });
-
-  it("todo hito asignado pertenece al vocabulario publico y tiene etiqueta", () => {
-    const vocabulario = new Set<string>(HITOS_PUBLICOS);
-    for (const hito of Object.values(HITO_POR_ESTATUS)) {
-      expect(vocabulario.has(hito)).toBe(true);
-      expect(ETIQUETA_POR_HITO[hito]).toBeTruthy();
+      expect(nombrePublicoDeEstado(value), value).toBe(NOMBRE_PUBLICO_ESPERADO[value]);
     }
   });
-});
 
-describe("R17 — un estatus fuera del catalogo cae en el hito por defecto y no se publica crudo", () => {
-  it("una fila huerfana (el caso real de la feature 155) recibe el hito neutral", () => {
-    // `en_fulfillment` salio del seed en la 155 y su fila SOBREVIVE en la base si el
-    // historial la referencia: el historial es inmutable.
-    expect(hitoDeEstatus("en_fulfillment")).toBe(HITO_POR_DEFECTO);
-    expect(hitoDeEstatus("un_estatus_que_no_existe")).toBe(HITO_POR_DEFECTO);
-    expect(hitoDeEstatus("")).toBe(HITO_POR_DEFECTO);
-  });
-
-  it("el hito por defecto es neutral, tiene etiqueta y NO es el value crudo", () => {
-    expect(HITO_POR_DEFECTO).toBe("en_proceso");
-    expect(ETIQUETA_POR_HITO[HITO_POR_DEFECTO]).toBe("En proceso");
-    expect(new Set<string>(ORDER_STATUS_SEED).has(HITO_POR_DEFECTO)).toBe(false);
-  });
-
-  it("nunca devuelve undefined para un value arbitrario", () => {
-    for (const value of ["", " ", "ENTREGADA", "entregada ", "algo/raro", "123"]) {
-      expect(HITOS_PUBLICOS).toContain(hitoDeEstatus(value));
+  it("los 4 retirados se pliegan al nombre de su equivalente, nunca a su nombre histórico", () => {
+    for (const [value, esperado] of Object.entries(RETIRADO_PLEGADO_ESPERADO)) {
+      expect(nombrePublicoDeEstado(value), value).toBe(esperado);
+      expect(nombrePublicoDeEstado(value), value).not.toMatch(/estado retirado/);
     }
   });
-});
 
-describe("R15/R16 — el texto publico no es vocabulario interno", () => {
-  it("ninguna etiqueta publica coincide con un order_status.value del catalogo", () => {
-    const catalogo = new Set<string>(ORDER_STATUS_SEED);
-    for (const etiqueta of Object.values(ETIQUETA_POR_HITO)) {
-      expect(catalogo.has(etiqueta)).toBe(false);
-    }
-    // OJO, colision CONOCIDA y no accidental: el hito firmado `en_reparto` (G5) se escribe
-    // igual que el `order_status.value` `en_reparto`, y su etiqueta "En reparto" normalizada
-    // volveria a serlo. Es homonimia del vocabulario firmado, no una fuga: el publico recibe
-    // un hito del vocabulario de nueve, que da la casualidad de llamarse igual. Quien escriba
-    // la guardia de R15 (T4.3) debe compararlo contra el vocabulario publico, no contra un
-    // `includes` ciego del resultado serializado.
-    expect(ETIQUETA_POR_HITO.en_reparto).toBe("En reparto");
+  it("un código desconocido se lee «Estado no reconocido», nunca crudo", () => {
+    expect(nombrePublicoDeEstado("estado_inventado_manana")).toBe("Estado no reconocido");
   });
 
-  it("cada hito del vocabulario publico tiene su etiqueta y no sobra ninguna", () => {
-    expect(Object.keys(ETIQUETA_POR_HITO).sort()).toEqual([...HITOS_PUBLICOS].sort());
+  it("todo lo que el rastreo puede publicar está en el catálogo de nombres (o es el de R10)", () => {
+    const publicables = new Set<string>([...Object.values(NOMBRE_ESTADO), "Estado no reconocido"]);
+    for (const value of [...ORDER_STATUS_SEED, ...Object.keys(RETIRADO_PLEGADO_ESPERADO), "x_y"]) {
+      expect(publicables.has(nombrePublicoDeEstado(value)), value).toBe(true);
+    }
   });
 });

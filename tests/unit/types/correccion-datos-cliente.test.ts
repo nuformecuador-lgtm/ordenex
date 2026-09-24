@@ -78,18 +78,18 @@ describe("312/A1 — D3: la ventana de estado", () => {
     // R11. Se compara contra la fuente unica: si un dia entra un cuarto terminal en el catalogo,
     // esta ficha lo hereda sin que nadie edite una lista, y este test lo confirma en vez de
     // congelar la foto de hoy.
-    expect([...ESTADOS_SIN_CORRECCION]).toEqual([...ESTADOS_TERMINALES, "rechazada"]);
+    expect([...ESTADOS_SIN_CORRECCION]).toEqual([...ESTADOS_TERMINALES, "devolucion_a_origen_por_rechazo"]);
     expect(ESTADOS_SIN_CORRECCION).toHaveLength(4);
   });
 
-  it.each([...ESTADOS_TERMINALES, "rechazada"])(
+  it.each([...ESTADOS_TERMINALES, "devolucion_a_origen_por_rechazo"])(
     "`%s` NO admite correccion",
     (estatusValue) => {
       expect(estadoAdmiteCorreccion(estatusValue)).toBe(false);
     },
   );
 
-  it.each(["en_reparto", "devuelta", "ayuda_tienda", "en_bodega_central", "por_recoger"])(
+  it.each(["en_reparto", "novedad", "ayuda_tienda", "en_bodega_central", "mensajero_recogiendo_en_bodega"])(
     "`%s` SI admite correccion",
     (estatusValue) => {
       expect(estadoAdmiteCorreccion(estatusValue)).toBe(true);
@@ -110,7 +110,7 @@ describe("312/A1 — R8: maestro y admin", () => {
     ["maestro", MAESTRO],
     ["admin", ADMIN],
   ])("%s corrige en cualquier estado dentro de la ventana", (_nombre, rol) => {
-    for (const estatusValue of ["en_reparto", "devuelta", "ayuda_tienda", "en_bodega_central"]) {
+    for (const estatusValue of ["en_reparto", "novedad", "ayuda_tienda", "en_bodega_central"]) {
       expect(rolAdmiteCorreccion(rol, estatusValue, false)).toBe(true);
     }
   });
@@ -149,7 +149,7 @@ describe("312/A1 — R9: adminTienda, en LOS DOS grupos de /novedades", () => {
     }
   });
 
-  it.each(["en_reparto", "por_recoger", "en_bodega_central", "reprogramada"])(
+  it.each(["en_reparto", "mensajero_recogiendo_en_bodega", "en_bodega_central", "reprogramado"])(
     "NO corrige en `%s`: fuera de los dos grupos, aunque el estado no este bloqueado",
     (estatusValue) => {
       // La asimetria de la regla: `maestro` SI puede ahi, la tienda no. Se comprueban las dos
@@ -175,10 +175,10 @@ describe("312/A1 — R10: los tres roles que nunca corrigen", () => {
   ])("%s recibe false en TODO el catalogo de estados", (_nombre, rol) => {
     for (const estatusValue of [
       "en_reparto",
-      "devuelta",
+      "novedad",
       "ayuda_tienda",
       "en_bodega_central",
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       ...ESTADOS_SIN_CORRECCION,
     ]) {
       expect(rolAdmiteCorreccion(rol, estatusValue, false)).toBe(false);

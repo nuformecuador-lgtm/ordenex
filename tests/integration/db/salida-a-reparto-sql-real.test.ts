@@ -229,7 +229,7 @@ async function sembrar(tx: Tx): Promise<Escenario> {
   /** La gestion REAL que acompaña a una `reprogramada`. Es lo que mide el criterio INGENUO. */
   const gestionReprogramada = async (ordenId: string): Promise<void> => {
     await tx.gestionOrden.create({
-      data: { ordenId, mensajeroId: mensajero, resultado: "reprogramada", motivo: "no estaba" },
+      data: { ordenId, mensajeroId: mensajero, resultado: "reprogramado", motivo: "no estaba" },
     });
   };
 
@@ -244,12 +244,12 @@ async function sembrar(tx: Tx): Promise<Escenario> {
 
   // (3) Salio, la reprogramaron y volvio a la central.
   const salioYReprogramada = await crearOrden("salio-reprog", zonaCentral, "en_bodega_central");
-  await transicion(salioYReprogramada, "en_bodega_central", "por_recoger", "asignacion_bodega");
-  await transicion(salioYReprogramada, "por_recoger", "en_reparto", "recoleccion");
-  await transicion(salioYReprogramada, "en_reparto", "reprogramada", "gestion");
+  await transicion(salioYReprogramada, "en_bodega_central", "mensajero_recogiendo_en_bodega", "asignacion_bodega");
+  await transicion(salioYReprogramada, "mensajero_recogiendo_en_bodega", "en_reparto", "recoleccion");
+  await transicion(salioYReprogramada, "en_reparto", "reprogramado", "gestion");
   await transicion(
     salioYReprogramada,
-    "reprogramada",
+    "reprogramado",
     "en_bodega_central",
     "liberacion_reprogramada",
   );
@@ -258,22 +258,22 @@ async function sembrar(tx: Tx): Promise<Escenario> {
   // (4) ⭐ Salio, NADIE la gestiono y el corte de la noche la mando a `sin_gestionar`. Sin una
   // sola fila de `gestion_orden`: es la fila que el criterio ingenuo clasificaria como «nueva».
   const salioSinGestion = await crearOrden("salio-sin-gestion", zonaCentral, "en_bodega_central");
-  await transicion(salioSinGestion, "en_bodega_central", "por_recoger", "asignacion_bodega");
-  await transicion(salioSinGestion, "por_recoger", "en_reparto", "recoleccion");
-  await transicion(salioSinGestion, "en_reparto", "sin_gestionar", "corte_sin_gestionar");
+  await transicion(salioSinGestion, "en_bodega_central", "mensajero_recogiendo_en_bodega", "asignacion_bodega");
+  await transicion(salioSinGestion, "mensajero_recogiendo_en_bodega", "en_reparto", "recoleccion");
+  await transicion(salioSinGestion, "en_reparto", "novedad_interna", "corte_sin_gestionar");
   await transicion(
     salioSinGestion,
-    "sin_gestionar",
+    "novedad_interna",
     "en_bodega_central",
     "liberacion_sin_gestionar",
   );
 
   // (5) Se le puso mensajero y se deshizo ANTES de que saliera. Decision humana: es NUEVA.
   const asignadaYDesasignada = await crearOrden("asig-desasig", zonaCentral, "en_bodega_central");
-  await transicion(asignadaYDesasignada, "en_bodega_central", "por_recoger", "asignacion_bodega");
+  await transicion(asignadaYDesasignada, "en_bodega_central", "mensajero_recogiendo_en_bodega", "asignacion_bodega");
   await transicion(
     asignadaYDesasignada,
-    "por_recoger",
+    "mensajero_recogiendo_en_bodega",
     "en_bodega_central",
     "deshacer_asignacion",
   );
@@ -296,12 +296,12 @@ async function sembrar(tx: Tx): Promise<Escenario> {
 
   const satSalioSinGestion = await crearOrden("sat-salio-sin-g", zonaSat, "en_bodega_satelite");
   await rutearYRecibir(satSalioSinGestion);
-  await transicion(satSalioSinGestion, "en_bodega_satelite", "por_recoger", "asignacion_satelite");
-  await transicion(satSalioSinGestion, "por_recoger", "en_reparto", "recoleccion");
-  await transicion(satSalioSinGestion, "en_reparto", "sin_gestionar", "corte_sin_gestionar");
+  await transicion(satSalioSinGestion, "en_bodega_satelite", "mensajero_recogiendo_en_bodega", "asignacion_satelite");
+  await transicion(satSalioSinGestion, "mensajero_recogiendo_en_bodega", "en_reparto", "recoleccion");
+  await transicion(satSalioSinGestion, "en_reparto", "novedad_interna", "corte_sin_gestionar");
   await transicion(
     satSalioSinGestion,
-    "sin_gestionar",
+    "novedad_interna",
     "en_bodega_satelite",
     "liberacion_sin_gestionar",
   );
@@ -311,14 +311,14 @@ async function sembrar(tx: Tx): Promise<Escenario> {
   await transicion(
     satSalioYReprogramada,
     "en_bodega_satelite",
-    "por_recoger",
+    "mensajero_recogiendo_en_bodega",
     "asignacion_satelite",
   );
-  await transicion(satSalioYReprogramada, "por_recoger", "en_reparto", "recoleccion");
-  await transicion(satSalioYReprogramada, "en_reparto", "reprogramada", "gestion");
+  await transicion(satSalioYReprogramada, "mensajero_recogiendo_en_bodega", "en_reparto", "recoleccion");
+  await transicion(satSalioYReprogramada, "en_reparto", "reprogramado", "gestion");
   await transicion(
     satSalioYReprogramada,
-    "reprogramada",
+    "reprogramado",
     "en_bodega_satelite",
     "liberacion_reprogramada",
   );
@@ -329,12 +329,12 @@ async function sembrar(tx: Tx): Promise<Escenario> {
   await transicion(
     satAsignadaYDesasignada,
     "en_bodega_satelite",
-    "por_recoger",
+    "mensajero_recogiendo_en_bodega",
     "asignacion_satelite",
   );
   await transicion(
     satAsignadaYDesasignada,
-    "por_recoger",
+    "mensajero_recogiendo_en_bodega",
     "en_bodega_satelite",
     "deshacer_asignacion",
   );

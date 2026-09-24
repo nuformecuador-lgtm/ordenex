@@ -92,7 +92,7 @@ function build(ordenes: (OrdenParaHabilitacionApi | null)[] = []) {
 // =================================================================================================
 describe("266/R3-R4 — el owner sale del actor y una guia ajena es opaca", () => {
   it("busca la orden con el usuario de la key como owner, y no con ningun id del cuerpo", async () => {
-    const { service, findParaHabilitacionApi } = build([orden("devuelta", null)]);
+    const { service, findParaHabilitacionApi } = build([orden("novedad", null)]);
     await service.habilitarLote(ACTOR, [fila(100234)]);
     expect(findParaHabilitacionApi).toHaveBeenCalledWith(100234, "store-1"); // R3
   });
@@ -104,6 +104,7 @@ describe("266/R3-R4 — el owner sale del actor y una guia ajena es opaca", () =
       numGuia: 999999,
       resultado: "error",
       estado: null,
+      estadoNombre: null,
       ayudaCerrada: false,
       error: { codigo: "no_encontrada", mensaje: expect.any(String) },
     });
@@ -125,6 +126,7 @@ describe("266/R3-R4 — el owner sale del actor y una guia ajena es opaca", () =
       numGuia: 100234,
       resultado: "error",
       estado: null,
+      estadoNombre: null,
       ayudaCerrada: false,
       error: { codigo: "no_encontrada", mensaje: expect.any(String) },
     });
@@ -157,7 +159,7 @@ describe("266/R7 — una fila mal formada se marca sola y no tumba el lote", () 
   });
 
   it("una nota de exactamente 200 caracteres SI se acepta (el tope es inclusivo)", async () => {
-    const { service, registrar } = build([orden("devuelta", null)]);
+    const { service, registrar } = build([orden("novedad", null)]);
     const nota = "x".repeat(TOPE_CARACTERES_NOTA_HABILITAR);
     const res = await service.habilitarLote(ACTOR, [fila(100234, nota)]);
     expect(res.resultados[0].resultado).toBe("habilitada_sin_cambio_de_estado");
@@ -165,7 +167,7 @@ describe("266/R7 — una fila mal formada se marca sola y no tumba el lote", () 
   });
 
   it("la nota se persiste RECORTADA, no como llego", async () => {
-    const { service, registrar } = build([orden("devuelta", null)]);
+    const { service, registrar } = build([orden("novedad", null)]);
     await service.habilitarLote(ACTOR, [fila(100234, "  direccion corregida  ")]);
     expect(registrar).toHaveBeenCalledWith(
       expect.objectContaining({ nota: "direccion corregida" }),
@@ -174,7 +176,7 @@ describe("266/R7 — una fila mal formada se marca sola y no tumba el lote", () 
 
   it("las filas SANAS del mismo lote se procesan igual que si la mala no existiera", async () => {
     // R7 + R9: la promesa de «nunca un 4xx global que tire el lote entero», afirmada.
-    const { service, registrar } = build([orden("devuelta", null), orden("devuelta", null, "o3")]);
+    const { service, registrar } = build([orden("novedad", null), orden("novedad", null, "o3")]);
     const res = await service.habilitarLote(ACTOR, [fila(1), fila(0), fila(3)]);
     expect(res.resultados.map((r) => r.resultado)).toEqual([
       "habilitada_sin_cambio_de_estado",
@@ -187,7 +189,7 @@ describe("266/R7 — una fila mal formada se marca sola y no tumba el lote", () 
 
 describe("266/R8 — la misma guia repetida en el lote solo se procesa la primera vez", () => {
   it("la segunda aparicion devuelve duplicada_en_lote y no vuelve a registrar nada", async () => {
-    const { service, registrar, findParaHabilitacionApi } = build([orden("devuelta", null)]);
+    const { service, registrar, findParaHabilitacionApi } = build([orden("novedad", null)]);
     const res = await service.habilitarLote(ACTOR, [fila(100234, "una"), fila(100234, "otra")]);
     expect(res.resultados[0].resultado).toBe("habilitada_sin_cambio_de_estado");
     expect(res.resultados[1]).toMatchObject({
@@ -204,7 +206,7 @@ describe("266/R8 — la misma guia repetida en el lote solo se procesa la primer
 // =================================================================================================
 describe("266/R11 — la salida conserva orden y cardinalidad de la entrada", () => {
   it("tres filas de entrada devuelven tres resultados, en el mismo orden y con su guia", async () => {
-    const { service } = build([orden("devuelta", null), null, enAyuda("m1", "o3")]);
+    const { service } = build([orden("novedad", null), null, enAyuda("m1", "o3")]);
     const res = await service.habilitarLote(ACTOR, [fila(11), fila(22), fila(33)]);
     expect(res.resultados).toHaveLength(3);
     expect(res.resultados.map((r) => r.numGuia)).toEqual([11, 22, 33]);
@@ -219,7 +221,7 @@ describe("266/R11 — la salida conserva orden y cardinalidad de la entrada", ()
 
 describe("266/R9-R10 — el resumen cuadra y el estado viaja en los dos desenlaces de exito", () => {
   it("total = habilitadas + habilitadasSinCambioDeEstado + conError, con un lote de los tres tipos", async () => {
-    const { service } = build([enAyuda("m1"), orden("devuelta", null, "o2"), null]);
+    const { service } = build([enAyuda("m1"), orden("novedad", null, "o2"), null]);
     const res = await service.habilitarLote(ACTOR, [fila(11), fila(22), fila(33)]);
     expect(res.resumen).toEqual({
       total: 3,
@@ -232,10 +234,10 @@ describe("266/R9-R10 — el resumen cuadra y el estado viaja en los dos desenlac
   });
 
   it("las dos filas de exito llevan `estado` poblado y la fila con error lo lleva en null", async () => {
-    const { service } = build([enAyuda("m1"), orden("devuelta", null, "o2"), null]);
+    const { service } = build([enAyuda("m1"), orden("novedad", null, "o2"), null]);
     const res = await service.habilitarLote(ACTOR, [fila(11), fila(22), fila(33)]);
     expect(res.resultados[0].estado).toBe("en_reparto");
-    expect(res.resultados[1].estado).toBe("devuelta");
+    expect(res.resultados[1].estado).toBe("novedad");
     expect(res.resultados[2].estado).toBeNull();
     expect(res.resultados[2].error).not.toBeNull();
   });
@@ -258,7 +260,7 @@ describe("266/R12-R16 → 454/R24 — rama A: ayuda ABIERTA con mensajero: se ci
     expect(res.resultados[0]).toEqual({
       numGuia: 100234,
       resultado: "habilitada",
-      estado: "en_reparto",
+      estado: "en_reparto", estadoNombre: "En reparto",
       ayudaCerrada: true,
       error: null,
     });
@@ -289,13 +291,13 @@ describe("266/R12-R22 — rama B: el paquete ya esta en bodega, solo se deja log
   });
 
   it("R14-b: una `devuelta` cae SIEMPRE en rama B y NUNCA se manda a `en_reparto`", async () => {
-    const { service, registrarAyudaResuelta, registrar } = build([orden("devuelta", null)]);
+    const { service, registrarAyudaResuelta, registrar } = build([orden("novedad", null)]);
     const res = await service.habilitarLote(ACTOR, [fila(100234, "reintento pactado")]);
     expect(registrarAyudaResuelta).not.toHaveBeenCalled();
     expect(res.resultados[0]).toEqual({
       numGuia: 100234,
       resultado: "habilitada_sin_cambio_de_estado",
-      estado: "devuelta",
+      estado: "novedad", estadoNombre: "Novedad",
       ayudaCerrada: false,
       error: null,
     });
@@ -304,7 +306,7 @@ describe("266/R12-R22 — rama B: el paquete ya esta en bodega, solo se deja log
       actorUsuarioId: "store-1",
       nota: "reintento pactado",
       cambioDeEstado: false, // R21
-      estadoResultante: "devuelta",
+      estadoResultante: "novedad",
     });
   });
 });
@@ -314,18 +316,19 @@ describe("266/R12-R22 — rama B: el paquete ya esta en bodega, solo se deja log
 // =================================================================================================
 describe("266/R13-R14 — la guarda de estado del llamador rechaza lo que no es habilitable", () => {
   it("R13-b: `reprogramada` NO es habilitable — ni escribe nada ni deja registro", async () => {
-    const { service, registrarAyudaResuelta, registrar } = build([orden("reprogramada", "m1")]);
+    const { service, registrarAyudaResuelta, registrar } = build([orden("reprogramado", "m1")]);
     const res = await service.habilitarLote(ACTOR, [fila(100234)]);
     expect(res.resultados[0]).toMatchObject({
       resultado: "error",
       estado: null,
+      estadoNombre: null,
       error: { codigo: "estado_no_habilitable" },
     });
     expect(registrarAyudaResuelta).not.toHaveBeenCalled();
     expect(registrar).not.toHaveBeenCalled();
   });
 
-  it.each(["entregada", "rechazada", "en_reparto", "incidente", "sin_gestionar"])(
+  it.each(["entregado", "devolucion_a_origen_por_rechazo", "en_reparto", "incidente", "novedad_interna"])(
     "una orden en `%s` SIN ayuda abierta devuelve estado_no_habilitable sin escribir nada",
     async (estado) => {
       // ATAQUE DIRECTO a la guarda: es la PRIMERA red y vive en este service. Con mensajero

@@ -23,7 +23,7 @@ describeSiHayBase("454/C15 — cambio de dia de reparto (Postgres real)", () => 
       const hoy = diaCR(0);
       const g = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000, fechaReparto: hoy });
       const m = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000, fechaReparto: hoy });
-      await e.gestionarOk(g.ordenId, "entregada", { monto: 1000 });
+      await e.gestionarOk(g.ordenId, "entregado", { monto: 1000 });
 
       const svc = new CorreccionDiaRepartoService(e.s.ordenRepo);
       const gestionada = await svc.corregir(

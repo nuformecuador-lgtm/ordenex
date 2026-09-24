@@ -14,7 +14,7 @@ import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 // catalogo ya sembrados (ORDER_STATUS_SEED); esta feature NO agrega estados.
 const ESTATUS_EN_BODEGA = "en_bodega_central"; // central
 const ESTATUS_EN_BODEGA_SATELITE = "en_bodega_satelite"; // satelite
-const ESTATUS_REPROGRAMADA = "reprogramada"; // origen (guarda de idempotencia)
+const ESTATUS_REPROGRAMADA = "reprogramado"; // origen (guarda de idempotencia)
 
 /**
  * FEATURE 276 (T6.2, R12/R15) — el UNICO estado de cierre que cierra la puerta del contador.

@@ -38,7 +38,9 @@ import {
 // medidos en producción el 2026-08-19, la pestaña de ENTRADA de esta pantalla va a estar vacía los
 // primeros días. Por eso su estado vacío tiene requisito propio (R16) y texto firmado.
 
-const TAB_RECHAZOS_SLA_LABEL = "Rechazadas por plazo vencido";
+// FICHA 455 (2026-09-24): «Rechazadas» es un nombre retirado; la pestaña agrupa las órdenes que el
+// plazo vencido pasó a «Devolución a origen por rechazo».
+const TAB_RECHAZOS_SLA_LABEL = "Devolución a origen por plazo vencido";
 const TABS_ARIA_LABEL = "Vistas de novedades";
 
 export interface NovedadesTabsProps {

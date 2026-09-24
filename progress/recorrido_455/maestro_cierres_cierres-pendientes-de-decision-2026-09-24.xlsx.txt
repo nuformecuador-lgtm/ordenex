@@ -1,0 +1,2 @@
+Estado	Mensajero	Fecha	Destino	Total general	Pago mensajero	Ingreso bodega
+Solicitado	Marco Mensajero	2026-09-24	Bodega central · GAM	6500.00	11900.00	2000.00

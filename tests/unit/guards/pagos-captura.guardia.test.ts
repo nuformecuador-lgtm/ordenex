@@ -486,7 +486,7 @@ describe("R32 — el borde de escritura sigue aceptando `metodoPago` escalar", (
   const entregaConEscalar = {
     ordenId: "o1",
     ubicacion: { lat: 9.9281, lng: -84.0907 },
-    resultado: "entregada",
+    resultado: "entregado",
     evidencias: [{ type: "image/jpeg", size: 1024 }],
     montoRecibido: 8000,
     metodoPago: "efectivo",
@@ -496,7 +496,7 @@ describe("R32 — el borde de escritura sigue aceptando `metodoPago` escalar", (
     const r = gestionarSchema.safeParse(entregaConEscalar);
 
     expect(r.success, "el borde dejó de aceptar la forma escalar: eso es la ficha 214").toBe(true);
-    if (r.success && r.data.resultado === "entregada") {
+    if (r.success && r.data.resultado === "entregado") {
       expect(r.data.metodoPago).toBe("efectivo");
       expect(r.data.pagos).toBeUndefined();
     }

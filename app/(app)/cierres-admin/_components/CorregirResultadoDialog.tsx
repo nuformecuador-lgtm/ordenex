@@ -56,7 +56,7 @@ const CONSECUENCIAS = [
   // resultado en la gestión, y el estado se APLICA al aprobar el cierre. Hasta hoy la orden pasaba
   // a rechazada en el acto; decirlo evita que quien corrige busque ese cambio y no lo encuentre. El
   // nombre del estado sale del mapa de etiquetas, no se escribe a mano.
-  `La orden sigue «${estatusLabel("en_reparto")}» hasta entonces: su estado pasa a «${estatusLabel("rechazada")}» al aprobar el cierre.`,
+  `La orden sigue «${estatusLabel("en_reparto")}» hasta entonces: su estado pasa a «${estatusLabel("devolucion_a_origen_por_rechazo")}» al aprobar el cierre.`,
 ] as const;
 
 const AVISO =

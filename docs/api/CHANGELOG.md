@@ -21,6 +21,91 @@
 
 ---
 
+## 2026-09-24 — ⚠️ RUPTURA — Los estados cambian de código y ganan su nombre
+
+> **Fecha de despliegue: PENDIENTE — se avisará con antelación y se escribirá aquí.** Este cambio
+> **rompe** a quien compare códigos de estado o de resultado: hasta ese día el canal sigue
+> respondiendo con los códigos anteriores.
+
+**Qué cambia, en una frase:** cada estado de una orden se llama igual en todas partes —en la
+aplicación, en el rastreo público y en este canal—. Siete estados cambian de **código**, los cuatro
+resultados de gestión que compartían nombre con ellos cambian con ellos, y toda respuesta que lleva
+un código lleva ahora, **al lado**, su nombre visible.
+
+**1. Siete códigos de estado cambian** (el resto no cambia):
+
+| Código anterior | Código vigente | Nombre visible |
+|---|---|---|
+| `entregada` | `entregado` | Entregado |
+| `devuelta` | `novedad` | Novedad |
+| `reprogramada` | `reprogramado` | Reprogramado |
+| `por_recoger` | `mensajero_recogiendo_en_bodega` | Mensajero recogiendo en la bodega |
+| `rechazada` | `devolucion_a_origen_por_rechazo` | Devolución a origen por rechazo |
+| `sin_gestionar` | `novedad_interna` | Novedad interna |
+| `por_devolver` | `por_devolver_a_bodega_central` | Por devolver a bodega central |
+
+**2. Los resultados de gestión se llaman como su estado destino** (`gestiones[].resultado`,
+`evidencias[].resultado`, `data.resultado` / `data.resultadoAnterior` de los eventos de gestión):
+
+| Resultado anterior | Resultado vigente | Nombre visible |
+|---|---|---|
+| `entregada` | `entregado` | Entregado |
+| `reprogramada` | `reprogramado` | Reprogramado |
+| `devuelta` | `novedad` | Novedad |
+| `rechazada` | `devolucion_a_origen_por_rechazo` | Devolución a origen por rechazo |
+
+`incidente` no cambia. Los valores que un evento o una fila **ya entregados** llevaban no se
+reescriben: el cambio aplica a lo que se responde y se entrega desde el despliegue.
+
+**3. Campos NUEVOS `…Nombre`, al lado de cada código** (aditivos, siempre presentes; `null` cuando su
+código es `null`). El nombre es la **misma cadena** que ve la aplicación:
+- `GET /api/ordenes/api-key` y `GET /api/ordenes/api-key/orden/{id}`: `estadoNombre`;
+  `gestiones[].resultadoNombre` y `gestiones[].estadoResultanteNombre`; `evidencias[].resultadoNombre`.
+- `PUT /api/ordenes/api-key/{numGuia}/cancelar`: `estadoAnteriorNombre` y `estadoNombre`.
+- `DELETE /api/ordenes/api-key/orden/{id}`: `estadoNombre`.
+- `POST /api/ordenes/api-key/habilitar`: `resultados[].estadoNombre`.
+- `POST /api/ordenes/api-key/carga`: `ordenes[].estadoNombre`.
+- Webhook `orden.estado_actualizado`: `data.estadoNombre`, **inmediatamente detrás de `data.estado`**.
+  La firma cubre el cuerpo entero: el texto firmado cambia (verificá sobre el cuerpo crudo, como
+  siempre).
+- Webhooks `orden.gestion_*`: `data.resultadoNombre` y, en `orden.gestion_corregida`,
+  `data.resultadoAnteriorNombre`, cada uno detrás de su código.
+
+**4. Campo RENOMBRADO en la carga: `filas[].estatus` → `filas[].estado`** (con `filas[].estadoNombre`
+al lado). «Un concepto, un nombre»: el resto del canal ya llamaba `estado` a este dato.
+
+**5. Filtrar por un código anterior responde `422`**, no una página vacía. El mensaje nombra el
+código que lo sustituye:
+
+```json
+{
+  "status": "error",
+  "code": "VALIDATION_ERROR",
+  "message": "Los datos enviados no son validos.",
+  "details": { "fieldErrors": { "estado": [
+    "'devuelta' ya no existe: ahora se llama 'novedad' («Novedad»). Ver docs/api/CHANGELOG.md."
+  ] } }
+}
+```
+
+**6. El `enum` de estados del contrato enumera ahora los 20 códigos vigentes** (antes documentaba 15:
+faltaban `novedad_interna`, `por_devolver_a_bodega_central`, `devolviendo_a_bodega_central`,
+`por_devolver_a_tienda` y `recolectando`, que una orden ya podía alcanzar).
+
+**7. Lo que NO cambia:** los paths, la autenticación, la firma y su verificación, y el **`eventoId`**
+de `orden.estado_actualizado` (se calcula con identificadores, no con el código): un evento
+encolado antes del despliegue y entregado después llega con el código vigente y el MISMO `eventoId`.
+
+**Qué hacer, antes del despliegue:**
+1. Buscá en tu código los once literales anteriores (los siete estados y los cuatro resultados de
+   las tablas de arriba) y cambialos por los vigentes; ojo con `por_devolver`, que es prefijo de
+   `por_devolver_a_tienda` y de `por_devolver_a_bodega_central`.
+2. Si en tu pantalla mostrabas el estado con una traducción propia, usá el campo `…Nombre`.
+3. Si leías `filas[].estatus` de la respuesta de la carga, leé `filas[].estado`.
+4. Si validás el esquema en estricto, **regenerá tu modelo** contra el contrato actualizado.
+
+---
+
 ## 2026-09-23 — El estado de una gestión se aplica al APROBAR el cierre; la ayuda deja de ser un estado; eventos NUEVOS
 
 **Qué cambia en la operación, en una frase:** cuando el mensajero registra una gestión (entregada,

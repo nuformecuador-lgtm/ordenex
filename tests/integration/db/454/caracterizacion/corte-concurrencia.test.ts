@@ -67,7 +67,7 @@ describeSiHayBase("454/C02 — corte y gestion concurrentes (Postgres real, dos 
         const svc = montarServicios(clienteConTransaccionAnidada(txA));
         await svc.misAsignaciones.escogerParaGestion(ordenId, s.actorMensajero);
         const r = await svc.misAsignaciones.gestionar(
-          entradaGestion(ordenId, "entregada", { monto: 4000 }),
+          entradaGestion(ordenId, "entregado", { monto: 4000 }),
           s.actorMensajero,
         );
         aListo();

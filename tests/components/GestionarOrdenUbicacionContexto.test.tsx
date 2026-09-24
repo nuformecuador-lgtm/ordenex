@@ -158,7 +158,7 @@ function ultimoToastDeError(): string {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  gestionarMock.mockResolvedValue({ status: "ok", estado: "reprogramada" } as never);
+  gestionarMock.mockResolvedValue({ status: "ok", estado: "reprogramado" } as never);
   instalarGeolocationDenegada();
   instalarPermissions(null); // sin Permissions API, como en la mayoria de los casos reales
 });

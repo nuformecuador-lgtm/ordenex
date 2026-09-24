@@ -543,12 +543,12 @@ function gestion(i: number, resultado: CierreResultado): CierreDetalleGestion {
     producto: "Caja mediana",
     tiendaNombre: "Tienda X",
     resultado,
-    montoRecibido: resultado === "entregada" ? "1000.10" : null,
-    metodoPago: resultado === "entregada" ? "SINPE" : null,
+    montoRecibido: resultado === "entregado" ? "1000.10" : null,
+    metodoPago: resultado === "entregado" ? "SINPE" : null,
     // Feature 212/R31: el DTO gana el desglose y CONSERVA el escalar de arriba; una entrega
     // de un solo metodo lleva UNA linea, y lo que no se entrego no lleva ninguna.
     pagos:
-      resultado === "entregada" ? [{ metodo: "SINPE" as const, monto: "1000.10" }] : [],
+      resultado === "entregado" ? [{ metodo: "SINPE" as const, monto: "1000.10" }] : [],
     motivo: null,
     fechaReprogramacion: null,
     evidenciaUrl: null,
@@ -564,10 +564,10 @@ function gestion(i: number, resultado: CierreResultado): CierreDetalleGestion {
 
 function gruposCon(n: number): CierreGrupos {
   return {
-    entregada: Array.from({ length: n }, (_, i) => gestion(i, "entregada")),
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: Array.from({ length: n }, (_, i) => gestion(i, "entregado")),
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 }
@@ -833,7 +833,7 @@ describe("T M.1 · R53 — los 3 listados del Anexo IV siguen completos, sin con
 
     // La sección de «Entregadas» es la del Anexo IV; la OTRA tabla de este módulo («Cierres
     // solicitados») sí pagina, y por eso la comprobación se acota a la región del grupo.
-    const seccion = screen.getByRole("region", { name: "Entregadas" });
+    const seccion = screen.getByRole("region", { name: "Entregado" });
     expect(within(seccion).getAllByRole("row")).toHaveLength(FILAS_ANEXO_IV + 1);
     // El contador por grupo, que es lo que paginar volvería mentira: diría «(25)» de 30.
     expect(seccion).toHaveTextContent(`(${FILAS_ANEXO_IV})`);
@@ -850,14 +850,14 @@ describe("T M.1 · R53 — los 3 listados del Anexo IV siguen completos, sin con
       <DetalleSecciones grupos={gruposCon(FILAS_ANEXO_IV)} onVerEvidencia={() => {}} />,
     );
 
-    const seccion = screen.getByRole("region", { name: "Entregadas" });
+    const seccion = screen.getByRole("region", { name: "Entregado" });
     expect(within(seccion).getAllByRole("row")).toHaveLength(FILAS_ANEXO_IV + 1);
     expect(seccion).toHaveTextContent(`(${FILAS_ANEXO_IV})`);
     expect(screen.queryAllByRole("navigation")).toHaveLength(0);
 
     // Las secciones con el grupo VACÍO no se pintan: es la otra mitad de lo que paginar rompe
     // (con páginas, una sección vacía podría ser sólo «esta página no trae ninguna»).
-    expect(screen.queryByRole("region", { name: "Rechazadas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Devolución a origen por rechazo" })).not.toBeInTheDocument();
   });
 
   it("el censo del Anexo IV son TRES, con motivo, y su descarga no relee nada (R30)", () => {

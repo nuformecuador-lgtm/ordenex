@@ -25,7 +25,7 @@ const BORRADA_EL = new Date("2026-08-20T00:00:00Z");
 function ordenRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
   return {
     id: "o1",
-    estatusValue: "entregada",
+    estatusValue: "entregado",
     numGuia: 1234,
     deletedAt: BORRADA_EL,
     zonaId: "z-central",
@@ -90,7 +90,7 @@ describe("RecuperarOrdenService", () => {
     // Deliberado, y es la asimetria con el borrado: la regla «sin gestionar» protege de borrar
     // trabajo real; aplicarla aqui dejaria irrecuperable justo la orden borrada por error sobre
     // la que alguien alcanzo a trabajar.
-    const estados = ["en_bodega_central", "en_reparto", "entregada", "rechazada"];
+    const estados = ["en_bodega_central", "en_reparto", "entregado", "devolucion_a_origen_por_rechazo"];
     const ordenes = estados.map((estatusValue, i) =>
       ordenRow({ id: `o${i}`, estatusValue }),
     );

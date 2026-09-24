@@ -51,22 +51,28 @@
 // `20260729140000_order_status_retiro_en_fulfillment` reasigna las ordenes vivas y solo borra la
 // fila del catalogo si NADIE la referencia (el historial pasado es inmutable), asi que en una base
 // con historial real la fila SOBREVIVE huerfana y deliberadamente inalcanzable desde el codigo.
+//
+// FICHA 455 (2026-09-24, R1/R13/R14) — «un solo nombre por estado». Siete values cambian de
+// CODIGO conservando su POSICION (y, en la base, su `id`: la migracion
+// `20260924120000_order_status_nombre_unico` es un UPDATE sobre el catalogo). La correspondencia
+// vive SOLO en `CODIGO_VIGENTE_DE_ANTERIOR`, abajo; los comentarios de cada entrada conservan la
+// historia de su feature. El nombre visible de cada uno vive en `NOMBRE_ESTADO`.
 export const ORDER_STATUS_SEED = [
-  "entregada",
-  "devuelta",
+  "entregado",
+  "novedad",
   "devolviendo_a_tienda", // feature 135 (antes en el flujo de devolucion)
-  "reprogramada",
+  "reprogramado",
   "en_ruta_bodega_central", // feature 135
   "en_bodega_central", // feature 135
   "en_preparacion",
-  "por_recoger", // feature 17 (renombrado en feature 135)
+  "mensajero_recogiendo_en_bodega", // feature 17 (renombrado en feature 135)
   "en_ruta_bodega_satelite", // feature 30
   "en_reparto", // feature 36: recogida por el mensajero / en reparto (renombrado en feature 135 y en la 153)
-  "rechazada", // feature 36: resultado RECHAZO de la gestion
+  "devolucion_a_origen_por_rechazo", // feature 36: resultado RECHAZO de la gestion
   "en_bodega_satelite", // feature 33: recibida en la bodega satelite de su zona
   "devuelta_a_tienda", // 13er valor (14mo antes de la 155): cierre del flujo de devolucion, la tienda de origen la recibio (renombrado en feature 135)
-  "sin_gestionar", // feature 109 (14mo; 15mo antes de la 155): orden que quedo en en_reparto al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
-  "por_devolver", // feature 139 (15mo; 16mo antes de la 155): rechazada de bodega satelite tras APROBAR el cierre; el adminSatelite la envia a la central (por lote)
+  "novedad_interna", // feature 109 (14mo; 15mo antes de la 155): orden que quedo en en_reparto al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
+  "por_devolver_a_bodega_central", // feature 139 (15mo; 16mo antes de la 155): rechazada de bodega satelite tras APROBAR el cierre; el adminSatelite la envia a la central (por lote)
   "devolviendo_a_bodega_central", // feature 139 (16mo; 17mo antes de la 155): en transito satelite -> central (tras "enviar a central")
   "por_devolver_a_tienda", // feature 139 (17mo; 18mo antes de la 155): en la central (llego por cierre central directo o por recepcion central); maestro/admin la envia a la tienda (por lote)
   "por_recolectar_en_tienda", // feature 154 (18mo; 19no antes de la 155): estado de ESPERA en la tienda; ahi NACE la rama (b) de la 155 y de ahi sale hacia en_ruta_bodega_central (#43, feature 157)
@@ -83,9 +89,9 @@ export const ORDER_STATUS_SEED = [
   // cierre; la ayuda pasa a ser un evento (`orden_evento`), no un estado. El catalogo vuelve a 20.
   // La migracion `20260923120200_retiro_estados_454` mueve las ordenes vivas y borra la fila del
   // catalogo solo si nadie la referencia (en una base con historial sobrevive huerfana, como la
-  // del estado de fulfillment de la 155). Las filas historicas se siguen leyendo (R40) por los
-  // mapas de retirados: `HITO_POR_ESTATUS_RETIRADO` (rastreo) y `ORDER_STATUS_LABELS_RETIRADOS`
-  // (etiquetas, `EstatusBadge.tsx`).
+  // del estado de fulfillment de la 155). Las filas historicas se siguen leyendo (R40) por
+  // `ESTADO_RETIRADO`, abajo (FICHA 455: absorbe los dos mapas de retirados que tenian el rastreo
+  // y el chip de `/ordenes`).
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];
@@ -97,13 +103,147 @@ export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];
  * una fila HISTORICA se siga leyendo igual en vez de caer a «no consta». Es el unico sitio de
  * `lib/types` donde se escriben (guardia `sin-estados-retirados`: solo en mapas `*_RETIRADO(S)`).
  */
-export const ORDER_STATUS_RETIRADOS = ["devolucion_por_confirmar", "ayuda_tienda"] as const;
+export const ORDER_STATUS_RETIRADOS = [
+  "devolucion_por_confirmar",
+  "ayuda_tienda",
+] as const satisfies readonly (keyof typeof ESTADO_RETIRADO)[];
 
 export type OrderStatusRetirado = (typeof ORDER_STATUS_RETIRADOS)[number];
 
 /** `true` si `value` es uno de los values retirados por la 454 (lectura de filas historicas). */
 export function esOrderStatusRetirado(value: string): value is OrderStatusRetirado {
   return (ORDER_STATUS_RETIRADOS as readonly string[]).includes(value);
+}
+
+// =================================================================================================
+// FICHA 455 (2026-09-24, design §1.1) — LA FUENTE UNICA DEL NOMBRE VISIBLE.
+//
+// Antes cada superficie tenia su mapa (el chip de `/ordenes`, el rastreo, WhatsApp, analitica, la API,
+// los webhooks) porque `lib/` no puede importar de `app/`: por eso divergian. Aqui vive el unico
+// `codigo -> nombre visible`; los demas modulos lo reexportan o lo llaman. Los nombres son LITERALES
+// de contrato (tabla §0.1 del spec, aprobada por el humano) y los ancla
+// `tests/unit/types/nombre-estado-catalogo.test.ts` contra la tabla escrita a mano y contra
+// `specs/456-tooltip-estados/textos-aprobados.md`.
+// =================================================================================================
+
+/** R1/R43 — el nombre visible de cada uno de los 20 estados vigentes. */
+export const NOMBRE_ESTADO = {
+  entregado: "Entregado",
+  novedad: "Novedad",
+  devolviendo_a_tienda: "Devolviendo a tienda",
+  reprogramado: "Reprogramado",
+  en_ruta_bodega_central: "En ruta a bodega central",
+  en_bodega_central: "En bodega central",
+  en_preparacion: "En preparación",
+  mensajero_recogiendo_en_bodega: "Mensajero recogiendo en la bodega",
+  en_ruta_bodega_satelite: "En ruta a bodega satélite",
+  en_reparto: "En reparto",
+  devolucion_a_origen_por_rechazo: "Devolución a origen por rechazo",
+  en_bodega_satelite: "En bodega satélite",
+  devuelta_a_tienda: "Devuelta a tienda",
+  novedad_interna: "Novedad interna",
+  por_devolver_a_bodega_central: "Por devolver a bodega central",
+  devolviendo_a_bodega_central: "Devolviendo a bodega central",
+  por_devolver_a_tienda: "Por devolver a tienda",
+  por_recolectar_en_tienda: "Por recolectar en tienda",
+  incidente: "Incidente",
+  recolectando: "Recolectando",
+} as const satisfies Record<OrderStatusValue, string>;
+
+/**
+ * R11/R34 — los estados que ya no estan en el catalogo vigente pero que filas historicas referencian.
+ * Absorbe a `ORDER_STATUS_RETIRADOS` (454), que es su subconjunto. `nombreHistorico` es el texto que la
+ * app mostraba mientras fueron estados (el del estado de fulfillment se recupero de
+ * `git show c21a719f^:app/(app)/ordenes/_components/EstatusBadge.tsx`; `pendiente` nunca tuvo etiqueta
+ * propia). `equivalente` es el estado vigente al que se pliega en el rastreo publico (R34), que nunca
+ * los enseno.
+ */
+export const ESTADO_RETIRADO = {
+  devolucion_por_confirmar: { nombreHistorico: "Devolución por confirmar", equivalente: "novedad" },
+  ayuda_tienda: { nombreHistorico: "Ayuda solicitada a la tienda", equivalente: "en_reparto" },
+  en_fulfillment: { nombreHistorico: "En fulfillment", equivalente: "en_preparacion" },
+  pendiente: { nombreHistorico: "Pendiente", equivalente: "en_preparacion" },
+} as const satisfies Record<string, { nombreHistorico: string; equivalente: OrderStatusValue }>;
+
+/**
+ * R22/R23/R26 — la correspondencia de la 455: codigo ANTERIOR -> codigo vigente. Es el UNICO sitio del
+ * arbol (fuera de las migraciones y de sus tests) donde se escriben los codigos anteriores: la guardia
+ * G1 (`censo-order-status-rename.test.ts`, brazo 455) lo tiene en su lista de excepciones. Lo usan los
+ * lectores de snapshots (`historial_accion.valor_*`), el parametro `estado` de URLs internas y el `422`
+ * explicativo de la API por API key.
+ */
+export const CODIGO_VIGENTE_DE_ANTERIOR = {
+  entregada: "entregado",
+  devuelta: "novedad",
+  reprogramada: "reprogramado",
+  por_recoger: "mensajero_recogiendo_en_bodega",
+  rechazada: "devolucion_a_origen_por_rechazo",
+  sin_gestionar: "novedad_interna",
+  por_devolver: "por_devolver_a_bodega_central",
+} as const satisfies Record<string, OrderStatusValue>;
+
+export type CodigoAnterior = keyof typeof CODIGO_VIGENTE_DE_ANTERIOR;
+
+/** R10 — lo que se muestra ante un codigo que no es vigente ni retirado. */
+export const NOMBRE_NO_RECONOCIDO = "Estado no reconocido";
+
+/** Sufijo de un estado retirado en superficies internas (R11). */
+export const SUFIJO_ESTADO_RETIRADO = " (estado retirado)";
+
+const tiene = <T extends object>(o: T, k: string): k is Extract<keyof T, string> =>
+  Object.prototype.hasOwnProperty.call(o, k);
+
+/** `true` si `value` es un codigo vigente del catalogo. */
+export function esCodigoVigente(value: string): value is OrderStatusValue {
+  return tiene(NOMBRE_ESTADO, value);
+}
+
+/** `true` si `value` es un codigo ANTERIOR de la 455 (no es un estado: se traduce o se rechaza). */
+export function esCodigoAnterior(value: string): value is CodigoAnterior {
+  return tiene(CODIGO_VIGENTE_DE_ANTERIOR, value);
+}
+
+/**
+ * R2/R10/R11 — el nombre visible de un codigo en una superficie INTERNA:
+ *  - vigente -> su nombre (`NOMBRE_ESTADO`);
+ *  - retirado -> «<nombre historico> (estado retirado)»;
+ *  - cualquier otra cosa -> «Estado no reconocido» (nunca el codigo crudo, R3).
+ * `null`/vacio -> «—» (la celda vacia de siempre, precedente `estatusLabel`).
+ * NO traduce codigos anteriores: quien lee un snapshot llama antes a `codigoVigente` (R23).
+ */
+export function nombreDeEstado(value: string | null | undefined): string {
+  if (!value) return "—";
+  if (tiene(NOMBRE_ESTADO, value)) return NOMBRE_ESTADO[value];
+  if (tiene(ESTADO_RETIRADO, value)) return `${ESTADO_RETIRADO[value].nombreHistorico}${SUFIJO_ESTADO_RETIRADO}`;
+  return NOMBRE_NO_RECONOCIDO;
+}
+
+/**
+ * R31/R34 — el nombre visible en el rastreo PUBLICO: un retirado se lee como su estado vigente
+ * equivalente (el destinatario nunca vio los retirados); lo desconocido, «Estado no reconocido».
+ */
+export function nombrePublicoDeEstado(value: string): string {
+  if (tiene(NOMBRE_ESTADO, value)) return NOMBRE_ESTADO[value];
+  if (tiene(ESTADO_RETIRADO, value)) return NOMBRE_ESTADO[ESTADO_RETIRADO[value].equivalente];
+  return NOMBRE_NO_RECONOCIDO;
+}
+
+/**
+ * R22/R23 — traduce un codigo ANTERIOR a su vigente; cualquier otro valor sale tal cual. Para leer
+ * snapshots (texto guardado en su dia) y parametros de URL guardados antes de la 455.
+ */
+export function codigoVigente(value: string): string {
+  return tiene(CODIGO_VIGENTE_DE_ANTERIOR, value) ? CODIGO_VIGENTE_DE_ANTERIOR[value] : value;
+}
+
+/**
+ * R26 — el mensaje del `422` cuando un integrador filtra por un codigo ANTERIOR: nombra el codigo
+ * vigente que lo sustituye y donde esta el aviso. Sin fecha escrita aqui: la fija el despliegue y
+ * vive en `docs/api/CHANGELOG.md`.
+ */
+export function mensajeCodigoAnterior(anterior: CodigoAnterior): string {
+  const vigente = CODIGO_VIGENTE_DE_ANTERIOR[anterior];
+  return `'${anterior}' ya no existe: ahora se llama '${vigente}' («${NOMBRE_ESTADO[vigente]}»). Ver docs/api/CHANGELOG.md.`;
 }
 
 // Feature 63/A1 (R1-R4): resultado tipado y discriminado de la Server Action

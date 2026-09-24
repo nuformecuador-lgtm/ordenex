@@ -58,10 +58,10 @@ type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 /** El criterio VIEJO, escrito aqui tal cual era, para poder medir el «antes» en la misma corrida. */
 const LISTA_BLANCA_VIEJA = [
   "en_bodega_satelite",
-  "por_recoger",
-  "por_devolver",
+  "mensajero_recogiendo_en_bodega",
+  "por_devolver_a_bodega_central",
   "devolviendo_a_bodega_central",
-  "devuelta",
+  "novedad",
 ] as const;
 
 interface Escenario {
@@ -211,7 +211,7 @@ async function sembrar(tx: Tx): Promise<Escenario> {
       data: {
         ordenId,
         estatusOrigenId: estatus("en_bodega_central"),
-        estatusDestinoId: estatus("por_recoger"),
+        estatusDestinoId: estatus("mensajero_recogiendo_en_bodega"),
         actorUsuarioId: null,
         origenTipo: "asignacion_bodega",
       },
@@ -227,26 +227,26 @@ async function sembrar(tx: Tx): Promise<Escenario> {
     });
   };
 
-  const entregadaPasoPorA = await crearOrden("entregada-paso-a", zonaA, "entregada");
+  const entregadaPasoPorA = await crearOrden("entregada-paso-a", zonaA, "entregado");
   await sembrarPasoPorBodega(entregadaPasoPorA, adminA);
 
-  const entregadaSinBodega = await crearOrden("entregada-sin-bodega", zonaA, "entregada");
-  await sembrarSinBodega(entregadaSinBodega, "entregada");
+  const entregadaSinBodega = await crearOrden("entregada-sin-bodega", zonaA, "entregado");
+  await sembrarSinBodega(entregadaSinBodega, "entregado");
 
-  const entregadaPasoPorB = await crearOrden("entregada-paso-b", zonaB, "entregada");
+  const entregadaPasoPorB = await crearOrden("entregada-paso-b", zonaB, "entregado");
   await sembrarPasoPorBodega(entregadaPasoPorB, adminB);
 
-  const devueltaSinBodega = await crearOrden("devuelta-sin-bodega", zonaA, "devuelta");
-  await sembrarSinBodega(devueltaSinBodega, "devuelta");
+  const devueltaSinBodega = await crearOrden("devuelta-sin-bodega", zonaA, "novedad");
+  await sembrarSinBodega(devueltaSinBodega, "novedad");
 
-  const rechazadaPasoPorA = await crearOrden("rechazada-paso-a", zonaA, "rechazada");
+  const rechazadaPasoPorA = await crearOrden("rechazada-paso-a", zonaA, "devolucion_a_origen_por_rechazo");
   await sembrarPasoPorBodega(rechazadaPasoPorA, adminA);
 
   // SIN historial a proposito: reproduce las filas que existen hoy en la base (medidas: SEIS
   // ordenes en `en_bodega_satelite` sin ninguna transicion que las haya llevado ahi).
   const enBodegaSinHistorial = await crearOrden("en-bodega-sin-hist", zonaA, "en_bodega_satelite");
 
-  const borradaPasoPorA = await crearOrden("borrada-paso-a", zonaA, "entregada", {
+  const borradaPasoPorA = await crearOrden("borrada-paso-a", zonaA, "entregado", {
     borrada: true,
   });
   await sembrarPasoPorBodega(borradaPasoPorA, adminA);
@@ -475,8 +475,8 @@ describeSiHayBase("FICHA 357 · el alcance de la satelite es SU BODEGA, no su zo
     // No-vacuidad, y ADEMAS que la siembra ejercite estados NUEVOS de la ficha (no solo los
     // cinco de siempre): sin esto, la comprobacion de abajo estaria verde con una sola fila.
     expect(observados.size).toBeGreaterThanOrEqual(3);
-    expect(observados).toContain("entregada");
-    expect(observados).toContain("rechazada");
+    expect(observados).toContain("entregado");
+    expect(observados).toContain("devolucion_a_origen_por_rechazo");
     for (const estado of observados) {
       expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain(estado);
     }

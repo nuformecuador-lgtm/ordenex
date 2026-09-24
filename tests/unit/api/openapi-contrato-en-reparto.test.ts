@@ -30,8 +30,8 @@ function esEnumDeEstado(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.every((v) => typeof v === "string") &&
-    (value as string[]).includes("entregada") &&
-    (value as string[]).includes("por_recoger")
+    (value as string[]).includes("entregado") &&
+    (value as string[]).includes("mensajero_recogiendo_en_bodega")
   );
 }
 
@@ -151,7 +151,9 @@ describe("155/R42 — el contrato del canal por API key tras el retiro", () => {
       openApiSpec.paths["/api/ordenes/api-key/carga"].post.responses["200"],
     );
     expect(ejemplo).not.toContain('"estatus":"en_ruta_bodega_central"');
-    expect(ejemplo).toContain(`"estatus":"${VALUE_NACIMIENTO_API}"`);
+    // 455 (R27): la fila de la carga publica `estado` (antes `estatus`), con su nombre al lado.
+    expect(ejemplo).not.toContain(`"estatus":`);
+    expect(ejemplo).toContain(`"estado":"${VALUE_NACIMIENTO_API}","estadoNombre":"Por recolectar en tienda"`);
     expect(ejemplo).toContain(`"estado":"${VALUE_NACIMIENTO_API}"`);
   });
 });
@@ -194,10 +196,10 @@ describe("153/R13 — eventos publicos de webhook", () => {
       "en_ruta_bodega_central",
       "en_bodega_central",
       "en_reparto",
-      "entregada",
-      "reprogramada",
-      "devuelta",
-      "rechazada",
+      "entregado",
+      "reprogramado",
+      "novedad",
+      "devolucion_a_origen_por_rechazo",
       "devolviendo_a_tienda",
       "devuelta_a_tienda",
       "por_recolectar_en_tienda",
@@ -252,7 +254,8 @@ describe("268/R15/R16 → 454 — `incidente` sigue publicado en los 4 enums; `a
     for (const lista of enumsTs) {
       expect(lista).not.toContain("ayuda_tienda");
       expect(lista).toContain("incidente");
-      expect(lista.slice(-2)).toEqual(["devuelta_a_tienda", "incidente"]);
+      // 455 (R29): el enum es `ORDER_STATUS_SEED` entero; `incidente` va detras de `por_recolectar_en_tienda`.
+      expect(lista.slice(-3)).toEqual(["por_recolectar_en_tienda", "incidente", "recolectando"]);
     }
   });
 
@@ -260,7 +263,7 @@ describe("268/R15/R16 → 454 — `incidente` sigue publicado en los 4 enums; `a
     const enumsYaml = enumsDelYaml(yaml);
     expect(enumsYaml).toHaveLength(4);
     for (let i = 0; i < enumsYaml.length; i++) {
-      expect(enumsYaml[i].slice(-2)).toEqual(["devuelta_a_tienda", "incidente"]);
+      expect(enumsYaml[i].slice(-3)).toEqual(["por_recolectar_en_tienda", "incidente", "recolectando"]);
       expect(enumsYaml[i]).toEqual(enumsTs[i]);
     }
     // Y ninguna linea del .yaml publica ya `ayuda_tienda` como value de un enum.
@@ -281,7 +284,7 @@ describe("268/R31 — `Evidencia.resultado` admite `incidente`, en el TS y en el
   const resultadoTs = openApiSpec.components.schemas.Evidencia.properties.resultado;
 
   it("el enum del objeto TS son exactamente los tres resultados, con `incidente` al final", () => {
-    expect(resultadoTs.enum).toEqual(["entregada", "rechazada", "incidente"]);
+    expect(resultadoTs.enum).toEqual(["entregado", "devolucion_a_origen_por_rechazo", "incidente"]);
     // Y NO es el catalogo de estados: no contiene `por_recoger`, asi que `esEnumDeEstado` no lo
     // cuenta y los cuatro bloques del guard de arriba siguen siendo cuatro.
     expect(esEnumDeEstado(resultadoTs.enum)).toBe(false);
@@ -294,6 +297,6 @@ describe("268/R31 — `Evidencia.resultado` admite `incidente`, en el TS y en el
       .split("\n")
       .filter((l) => l.trim() !== "")
       .map((l) => l.trim().replace(/^-\s+/, ""));
-    expect(values).toEqual(["entregada", "rechazada", "incidente"]);
+    expect(values).toEqual(["entregado", "devolucion_a_origen_por_rechazo", "incidente"]);
   });
 });

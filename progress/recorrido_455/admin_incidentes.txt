@@ -1,0 +1,56 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Wallet
+Cierres del día
+Incidentes
+Histórico
+Ayuda
+AA
+Ana Admin
+Administrador
+Incidentes
+
+Revisá los paquetes reportados como dañados, perdidos o robados y decidí si se indemnizan
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Pendientes de decisión (0)
+Descargar
+Nº Remisión	Nº Guía	Destinatario	Zona	Causa	Reportado por	Fecha	Acciones
+
+
+No hay incidentes pendientes de decisión.
+
+Sin resultados
+«
+‹
+1
+›
+»
+10
+25
+50
+Histórico
+Descargar
+Estado	Nº Remisión	Destinatario	Causa	Indemnización	Resuelto por	Fecha resuelta	Motivo	Acciones
+
+
+Aún no hay incidentes resueltos.
+
+Sin resultados
+«
+‹
+1
+›
+»
+10
+25
+50

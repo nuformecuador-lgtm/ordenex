@@ -42,7 +42,7 @@ function ordenBase(i: number): OrdenListItemDTO {
     numGuia: 1000 + i,
     numRemision: `REM-${String(i).padStart(3, "0")}`,
     estatusId: "est-uuid",
-    estatusValue: "entregada",
+    estatusValue: "entregado",
     destinatario: `Destinatario ${i}`,
     telefonoDest: "0999999999",
     tiendaId: "tienda-uuid",
@@ -60,7 +60,7 @@ function ordenBase(i: number): OrdenListItemDTO {
     createdAt: new Date("2026-07-15T20:00:00Z"),
     updatedAt: new Date("2026-07-16T10:00:00Z"),
     relaciones: {
-      estatus: { id: "est-uuid", value: "entregada" },
+      estatus: { id: "est-uuid", value: "entregado" },
       tienda: {
         id: "tienda-uuid",
         nombre: "Tienda Relación",

@@ -10,6 +10,7 @@ import type {
 } from "@/lib/interfaces/services/IApiHabilitacionService";
 import { TOPE_CARACTERES_NOTA_HABILITAR } from "@/lib/config/habilitacion-api";
 import { esEstadoHabilitableApi } from "@/lib/types/habilitacion-api";
+import { nombreDeEstado } from "@/lib/types/order-status";
 
 // Feature 266 (T4.1, design §4.4) — el corazon del endpoint de HABILITACION POR LOTE del canal
 // por API key. Sin HTTP, sin Prisma y sin Next: recibe el actor ya autenticado y las filas ya
@@ -77,6 +78,7 @@ function filaConError(
     numGuia,
     resultado: "error",
     estado: null,
+    estadoNombre: null, // FICHA 455 (R24)
     ayudaCerrada: false,
     error: { codigo, mensaje: MENSAJE[codigo] },
   };
@@ -170,6 +172,7 @@ export class ApiHabilitacionService implements IApiHabilitacionService {
       numGuia,
       resultado: "habilitada_sin_cambio_de_estado",
       estado: orden.estatusValue,
+      estadoNombre: nombreDeEstado(orden.estatusValue), // FICHA 455 (R24)
       ayudaCerrada: false,
       error: null,
     };
@@ -213,6 +216,7 @@ export class ApiHabilitacionService implements IApiHabilitacionService {
       numGuia,
       resultado: "habilitada",
       estado: ESTATUS_EN_REPARTO,
+      estadoNombre: nombreDeEstado(ESTATUS_EN_REPARTO), // FICHA 455 (R24)
       ayudaCerrada: true,
       error: null,
     };

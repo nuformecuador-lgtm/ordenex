@@ -141,7 +141,7 @@ const EN_REPARTO = orden("a", "en_reparto", {
 });
 
 /** Asignada, sin recoger, para HOY. */
-const POR_RECOGER_HOY = orden("c", "por_recoger", {
+const POR_RECOGER_HOY = orden("c", "mensajero_recogiendo_en_bodega", {
   numGuia: 17001,
   destinatario: "Carlos Sin Recoger",
   direccion: "Avenida Escazú 100, casa azul",
@@ -149,7 +149,7 @@ const POR_RECOGER_HOY = orden("c", "por_recoger", {
 });
 
 /** Asignada, sin recoger, RESERVADA para el día siguiente. */
-const POR_RECOGER_MANANA = orden("d", "por_recoger", {
+const POR_RECOGER_MANANA = orden("d", "mensajero_recogiendo_en_bodega", {
   numGuia: 17002,
   destinatario: "Diana Para Mañana",
   esParaManana: true,
@@ -256,7 +256,7 @@ describe("(1) la orden asignada y sin recoger YA tiene conversación", () => {
   it("la cabecera cuenta TODAS las asignadas, no solo las de reparto", async () => {
     const modal = await chatDesdeReparto();
 
-    expect(within(modal).getByText("3 asignadas")).toBeInTheDocument();
+    expect(within(modal).getByText("3 asignados")).toBeInTheDocument();
   });
 
   it("cada grupo tiene su sección, así lo de hoy no se mezcla con lo de otro día", async () => {
@@ -394,10 +394,11 @@ describe("(4) conversar no es aceptar: el chat no ofrece trabajar la orden", () 
     expect(within(modal).queryByRole("button", { name: /más tarde/i })).toBeNull();
   });
 
-  it("la fila de la asignada se anuncia como «Por recoger», no como en reparto", async () => {
+  // ⏳ 2026-09-24 (FICHA 455, R7): el chip dice el NOMBRE del estado de la orden, no «Por recoger».
+  it("la fila de la asignada se anuncia con su estado, «Mensajero recogiendo en la bodega», no como en reparto", async () => {
     const modal = await chatDesdeReparto();
 
-    expect(fila(modal, "Carlos Sin Recoger")).toHaveTextContent("Por recoger");
+    expect(fila(modal, "Carlos Sin Recoger")).toHaveTextContent("Mensajero recogiendo en la bodega");
   });
 });
 
@@ -420,7 +421,7 @@ describe("(5) «Por recoger» monta el MISMO chat, con la MISMA lista", () => {
     expect(fila(modal, "Ana Ya Recogida")).toBeInTheDocument();
     expect(fila(modal, "Carlos Sin Recoger")).toBeInTheDocument();
     expect(fila(modal, "Diana Para Mañana")).toBeInTheDocument();
-    expect(within(modal).getByText("3 asignadas")).toBeInTheDocument();
+    expect(within(modal).getByText("3 asignados")).toBeInTheDocument();
   });
 
   it("y la marca del día viaja con ella: no depende de desde qué pantalla se abra", async () => {

@@ -318,7 +318,7 @@ describeSiHayBase("ficha 415 — zona y costo por orden, contra Postgres real", 
       );
 
       // (3) CIERRE RECHAZADO — la otra mitad: el filtro funciona Y la fila NO se borro (69/R10).
-      const conRechazado = await crearOrden("rechazada", tiendaPropia.id, zonaA.id);
+      const conRechazado = await crearOrden("devolucion_a_origen_por_rechazo", tiendaPropia.id, zonaA.id);
       await congelar(
         rechazado,
         conRechazado,

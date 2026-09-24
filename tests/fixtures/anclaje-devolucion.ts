@@ -22,10 +22,10 @@ import { idEstado } from "@/tests/fixtures/catalogo-estados";
 export const APLICACION_GESTIONES: AplicacionGestionesConfig = {
   enRepartoId: idEstado("en_reparto"),
   destinoPorResultado: {
-    entregada: idEstado("entregada"),
-    reprogramada: idEstado("reprogramada"),
-    rechazada: idEstado("rechazada"),
-    devuelta: idEstado("devuelta"),
+    entregado: idEstado("entregado"),
+    reprogramado: idEstado("reprogramado"),
+    devolucion_a_origen_por_rechazo: idEstado("devolucion_a_origen_por_rechazo"),
+    novedad: idEstado("novedad"),
     incidente: idEstado("incidente"),
   },
 };

@@ -1,0 +1,27 @@
+=== MUTACION C01 — 2026-09-24T04:50:29-05:00
+archivo: lib/services/OrdenService.ts
+perl: s/where\[FILTER_TO_COLUMN\.status_id\] = input\.filter\.status_id;/where[FILTER_TO_COLUMN.status_id] = { notIn: [input.filter.status_id].flat() };/
+--- diff aplicado:
+diff --git a/lib/services/OrdenService.ts b/lib/services/OrdenService.ts
+index 049b505d..46614787 100644
+--- a/lib/services/OrdenService.ts
++++ b/lib/services/OrdenService.ts
+@@ -196 +196 @@ export class OrdenService implements IOrdenService {
+-      where[FILTER_TO_COLUMN.status_id] = input.filter.status_id;
++      where[FILTER_TO_COLUMN.status_id] = { notIn: [input.filter.status_id].flat() };
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/filtro-ordenes-por-estado.test.ts
+ ✓ tests/integration/db/455/caracterizacion/filtro-ordenes-por-estado.test.ts > 455/C01 — filtro por estado de /ordenes y vista guardada (Postgres real) > precondicion: sin filtro de estado salen las 16 ordenes del escenario 2ms
+ × tests/integration/db/455/caracterizacion/filtro-ordenes-por-estado.test.ts > 455/C01 — filtro por estado de /ordenes y vista guardada (Postgres real) > filtrar por el id de cada uno de los 7 estados renombrados devuelve SUS dos ordenes 8ms
+   → expected { entregado: [ …(14) ], …(6) } to deeply equal { …(7) }
+ × tests/integration/db/455/caracterizacion/filtro-ordenes-por-estado.test.ts > 455/C01 — filtro por estado de /ordenes y vista guardada (Postgres real) > una vista guardada con dos estados devuelve exactamente sus cuatro ordenes 1ms
+   → expected [ 'enReparto#1', 'enReparto#2', …(10) ] to deeply equal [ 'novedad#1', 'novedad#2', …(2) ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/filtro-ordenes-por-estado.test.ts > 455/C01 — filtro por estado de /ordenes y vista guardada (Postgres real) > filtrar por el id de cada uno de los 7 estados renombrados devuelve SUS dos ordenes
+AssertionError: expected { entregado: [ …(14) ], …(6) } to deeply equal { …(7) }
+ FAIL  tests/integration/db/455/caracterizacion/filtro-ordenes-por-estado.test.ts > 455/C01 — filtro por estado de /ordenes y vista guardada (Postgres real) > una vista guardada con dos estados devuelve exactamente sus cuatro ordenes
+AssertionError: expected [ 'enReparto#1', 'enReparto#2', …(10) ] to deeply equal [ 'novedad#1', 'novedad#2', …(2) ]
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

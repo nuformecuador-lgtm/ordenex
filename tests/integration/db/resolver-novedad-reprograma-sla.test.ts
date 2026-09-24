@@ -37,8 +37,8 @@ const noopJobRepo = {} as unknown as ConstructorParameters<typeof GestionOrdenRe
 // ---------------------------------------------------------------------------------------------
 
 const ESTATUS: Record<string, string> = {
-  devuelta: idEstado("devuelta"),
-  reprogramada: idEstado("reprogramada"),
+  novedad: idEstado("novedad"),
+  reprogramado: idEstado("reprogramado"),
   en_bodega_central: idEstado("en_bodega_central"),
   en_bodega_satelite: idEstado("en_bodega_satelite"),
 };
@@ -80,7 +80,7 @@ function makeDb() {
   const ordenes: OrdenRow[] = [
     {
       id: "o1",
-      estatusId: ESTATUS.devuelta, // reposa en `devuelta` (feature 99)
+      estatusId: ESTATUS.novedad, // reposa en `devuelta` (feature 99)
       deletedAt: null,
       zonaId: "z1",
       mensajeroAsignadoId: "m1",
@@ -96,7 +96,7 @@ function makeDb() {
       id: "g-devuelta",
       ordenId: "o1",
       mensajeroId: "m1",
-      resultado: "devuelta", // la gestion que ancla la ventana SLA (99) y el mensajero (R5)
+      resultado: "novedad", // la gestion que ancla la ventana SLA (99) y el mensajero (R5)
       anuladaAt: null,
       createdAt: new Date("2026-07-20T18:00:00.000Z"),
       fechaReprogramacion: null,
@@ -320,8 +320,8 @@ function reprogramar(db: Db, fecha: string) {
   const repo = new GestionOrdenRepository(db.prisma as unknown as PrismaClient, noopJobRepo);
   return repo.reprogramarDesdeDevuelta({
     ordenId: "o1",
-    estatusDevueltaId: ESTATUS.devuelta,
-    estatusReprogramadaId: ESTATUS.reprogramada,
+    estatusDevueltaId: ESTATUS.novedad,
+    estatusReprogramadaId: ESTATUS.reprogramado,
     fechaReprogramacion: fecha,
     motivo: "cliente pidio otra fecha",
     actorUsuarioId: "tienda-1",
@@ -360,7 +360,7 @@ describe("Feature 100 T5.1 — reprogramar saca la orden de `devuelta`: el cron 
     expect(ok).toBe(true);
 
     // La orden salio de `devuelta` -> `reprogramada`.
-    expect(db.ordenes[0].estatusId).toBe(ESTATUS.reprogramada);
+    expect(db.ordenes[0].estatusId).toBe(ESTATUS.reprogramado);
     // El cron SLA 99 filtra `estatus = devuelta`: ya no la incluye (la salta, sin escalar ni liberar).
     const devueltas = await slaRepo(db).findDevueltasSla();
     expect(devueltas).toEqual([]);
@@ -373,7 +373,7 @@ describe("Feature 100 T5.1 — el cron 46 mantiene bloqueada la reprogramada y l
     await reprogramar(db, "2026-07-25");
 
     // Se creo la gestion sintetica `reprogramada` con la fecha elegida (la que lee el cron 46).
-    const sintetica = db.gestiones.find((g) => g.resultado === "reprogramada");
+    const sintetica = db.gestiones.find((g) => g.resultado === "reprogramado");
     expect(sintetica?.fechaReprogramacion).toEqual(new Date("2026-07-25T00:00:00.000Z"));
 
     // hoyCR = 2026-07-24 (antes de la fecha) -> NO liberable.
@@ -405,7 +405,7 @@ describe("Feature 100 T5.1 — el cron 46 mantiene bloqueada la reprogramada y l
     const ok = await cron46Repo(db).liberarOrden({
       ordenId: "o1",
       destinoEstatusId: ESTATUS.en_bodega_central,
-      estatusReprogramadaId: ESTATUS.reprogramada,
+      estatusReprogramadaId: ESTATUS.reprogramado,
       corridaAt: new Date("2026-07-25T06:00:00.000Z"),
     });
 

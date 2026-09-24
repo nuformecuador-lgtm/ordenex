@@ -44,7 +44,7 @@ function serieCon(metricaId: string, valor: number): SerieOperativa {
     unidad: "conteo",
     unidadDeConteo: "gestion",
     rango: RANGO,
-    puntos: [{ fecha: "2026-08-01", dimension: "entregada", valor }],
+    puntos: [{ fecha: "2026-08-01", dimension: "entregado", valor }],
     cobertura: { fechasNoComparables: [], penumbra: PENUMBRA },
   };
 }
@@ -101,7 +101,7 @@ describe("Feature 134 (R1) — las filas salen de la Server Action y de ninguna 
     expect(resultado.filas).toHaveLength(PANEL.metricas.length);
     expect(resultado.filas.map((f) => f.valor)).toEqual([4242, 7]);
     expect(resultado.filas.map((f) => f.metrica)).toEqual(["Entregas", "Devoluciones"]);
-    expect(resultado.filas.map((f) => f.dimension)).toEqual(["entregada", "entregada"]);
+    expect(resultado.filas.map((f) => f.dimension)).toEqual(["entregado", "entregado"]);
   });
 
   it("y no hay una segunda lectura por metrica: el archivo no consulta dos veces", async () => {

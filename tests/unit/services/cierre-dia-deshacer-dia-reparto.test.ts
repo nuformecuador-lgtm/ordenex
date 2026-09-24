@@ -39,10 +39,10 @@ function gestionDeshacer(over: Partial<GestionDeshacerRow> = {}): GestionDeshace
     gestionId: "g1",
     ordenId: "o1",
     mensajeroId: "m1",
-    resultado: "entregada",
+    resultado: "entregado",
     cierreId: null,
     anuladaAt: null,
-    orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregada" },
+    orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregado" },
     desdeAyudaTienda: false,
     registradaComoPendiente: false, // ficha 454 (T1.11): rama LEGADA del deshacer
     ...over,

@@ -1,0 +1,26 @@
+=== MUTACION C02 — 2026-09-24T04:50:37-05:00
+archivo: lib/utils/estados-bodega-satelite.ts
+perl: s/\n  "por_devolver", \/\/ Por devolver[^\n]*//
+--- diff aplicado:
+diff --git a/lib/utils/estados-bodega-satelite.ts b/lib/utils/estados-bodega-satelite.ts
+index 16515a6d..5ab9ca44 100644
+--- a/lib/utils/estados-bodega-satelite.ts
++++ b/lib/utils/estados-bodega-satelite.ts
+@@ -205 +204,0 @@ export const ESTADOS_BODEGA_SATELITE = [
+-  "por_devolver", // Por devolver — feature 139/R21
+lineas cambiadas: 1
+--- tests: tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts
+ × tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts > 455/C02 — filtro por codigo del listado satelite (Postgres real) > invariantes > precondicion: sin filtro de estado el adminSatelite ve las 6 de su bodega y ninguna ajena 7ms
+   → expected [ 'enReparto#1', 'enReparto#2', …(2) ] to deeply equal [ 'enReparto#1', 'enReparto#2', …(4) ]
+ × tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts > 455/C02 — filtro por codigo del listado satelite (Postgres real) > invariantes > la seleccion [porDevolverCentral, rechazo] devuelve exactamente sus cuatro ordenes 1ms
+   → expected [ 'rechazo#1', 'rechazo#2' ] to deeply equal [ 'porDevolverCentral#1', …(3) ]
+ ✓ tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts > 455/C02 — filtro por codigo del listado satelite (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R22) > la URL con los dos codigos de hoy se lee como esa seleccion y devuelve las mismas cuatro 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts > 455/C02 — filtro por codigo del listado satelite (Postgres real) > invariantes > precondicion: sin filtro de estado el adminSatelite ve las 6 de su bodega y ninguna ajena
+AssertionError: expected [ 'enReparto#1', 'enReparto#2', …(2) ] to deeply equal [ 'enReparto#1', 'enReparto#2', …(4) ]
+ FAIL  tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts > 455/C02 — filtro por codigo del listado satelite (Postgres real) > invariantes > la seleccion [porDevolverCentral, rechazo] devuelve exactamente sus cuatro ordenes
+AssertionError: expected [ 'rechazo#1', 'rechazo#2' ] to deeply equal [ 'porDevolverCentral#1', …(3) ]
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

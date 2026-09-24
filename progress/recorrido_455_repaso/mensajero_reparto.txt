@@ -1,0 +1,73 @@
+Toggle Sidebar
+Reparto
+
+Órdenes en reparto por gestionar
+
+Tema claro activado.
+1 por hacer
+Salir
+Pendientes
+1
+Entregado
+1
+Por cobrar
+₡11.200
+Total a cobrar
+₡80.900
+
+Guía 97865841
+
+1 orden en reparto
+
+EN REPARTO
+PEDIDO
+Nº GUÍA
+97865841
+NOMBRE
+Alejandra Mena
+TELÉFONO
+87400001
+PRODUCTO
+Juego de toallas
+ENTREGA
+
+Colón, Mora
+
+Colón, Mora
+
+PROVINCIA
+San José
+CANTÓN
+Mora
+DISTRITO
+Colón
+NOTAS
+—
+INTENTOS
+0
+COBRO
+VALOR A COBRAR
+₡11.200
+LLAMAR
+MENSAJE
+NAVEGAR
+AYUDA
+Notas con la tienda
+
+Todavía no hay notas en esta orden.
+
+Acá queda la conversación sobre esta orden, con el autor y la hora de cada nota.
+
+Agregar nota
+
+¿Cómo terminó la gestión?
+
+Entregar
+Rechazar
+Reprogramar
+Devolver
+
+El paquete ya no se puede entregar ni devolver: está dañado, perdido o robado.
+
+Reportar incidente
+Cancelar gestión

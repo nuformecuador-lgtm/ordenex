@@ -98,7 +98,7 @@ describe("TableroDiaService.detalle — el orden de la pagina (R4)", () => {
     const montaje = montar(
       {
         filas: [
-          filaDelDia("o1", { resultadoDelDia: "entregada", asignadoAt: "2026-08-08T13:00:00.000Z" }),
+          filaDelDia("o1", { resultadoDelDia: "entregado", asignadoAt: "2026-08-08T13:00:00.000Z" }),
           filaDelDia("o2", { resultadoDelDia: null, asignadoAt: "2026-08-08T09:00:00.000Z" }),
         ],
         total: 2,
@@ -109,7 +109,7 @@ describe("TableroDiaService.detalle — el orden de la pagina (R4)", () => {
     const detalle = await detalleDe(montaje);
 
     expect(detalle.ordenes.map((o) => [o.id, o.resultadoDelDia, o.asignadoAt])).toEqual([
-      ["o1", "entregada", "2026-08-08T13:00:00.000Z"],
+      ["o1", "entregado", "2026-08-08T13:00:00.000Z"],
       ["o2", null, "2026-08-08T09:00:00.000Z"],
     ]);
   });

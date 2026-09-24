@@ -90,16 +90,16 @@ describeSiHayBase("backfill historico contra Postgres (feature 125)", () => {
           mensajeroId: base.mensajero1,
           createdAt: naceEnD,
         });
-        await agregarTransicion(tx, base, a, { at: naceEnD, destino: "pendiente" });
+        await agregarTransicion(tx, base, a, { at: naceEnD, destino: "en_preparacion" });
 
         const entregaAt = instanteCR(FECHA_D, "14:00");
         await crearGestion(tx, {
           ordenId: a,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: entregaAt,
         });
-        await agregarTransicion(tx, base, a, { at: entregaAt, destino: "entregada" });
+        await agregarTransicion(tx, base, a, { at: entregaAt, destino: "entregado" });
 
         const primera = await backfill(tx, FECHA_D_MENOS_1, FECHA_D_MAS_1);
         expect(primera.resumen.fallidas).toBe(0);
@@ -128,7 +128,7 @@ describeSiHayBase("backfill historico contra Postgres (feature 125)", () => {
           tiendaId: base.tienda2,
           createdAt: nace,
         });
-        await agregarTransicion(tx, base, o, { at: nace, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nace, destino: "en_preparacion" });
 
         const escritura = await backfill(tx, FECHA_D, FECHA_D_MAS_1);
         const previo = new Map(
@@ -168,7 +168,7 @@ describeSiHayBase("backfill historico contra Postgres (feature 125)", () => {
         await crearGestion(tx, {
           ordenId: huerfana,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: instanteCR(FECHA_D, "15:00"),
         });
 
@@ -198,11 +198,11 @@ describeSiHayBase("backfill historico contra Postgres (feature 125)", () => {
           mensajeroId: base.mensajero1,
           createdAt: nace,
         });
-        await agregarTransicion(tx, base, o, { at: nace, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nace, destino: "en_preparacion" });
         await crearGestion(tx, {
           ordenId: o,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: instanteCR(FECHA_D, "15:00"),
         });
 

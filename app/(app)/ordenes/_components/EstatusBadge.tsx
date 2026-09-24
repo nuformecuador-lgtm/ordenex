@@ -2,56 +2,26 @@ import type { VariantProps } from "class-variance-authority";
 
 import { Badge, badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { OrderStatusValue } from "@/lib/types/order-status";
+import {
+  esOrderStatusRetirado,
+  NOMBRE_ESTADO,
+  nombreDeEstado,
+  type OrderStatusValue,
+} from "@/lib/types/order-status";
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
 /**
- * Mapa de estatus de orden -> etiqueta legible. Se reusa en cualquier lugar
- * donde haya que mostrar un estatus con el mismo look & feel.
+ * FICHA 455 (2026-09-24, design DA; R1/R2/R42) — el nombre visible de cada estado ya NO se escribe
+ * aquí: es `NOMBRE_ESTADO`, la fuente única de `lib/types/order-status.ts`. `ORDER_STATUS_LABELS` se
+ * conserva como REEXPORTACIÓN (mismo objeto) para los consumidores que ya la importaban. Hasta la
+ * 455 este archivo tenía su propio mapa («Entregada», «Por recoger», «Sin gestionar»…) y cada
+ * superficie de `lib/` el suyo: por eso divergían.
+ *
+ * Las filas HISTÓRICAS de un estado retirado (454/155) ya no tienen mapa propio: `nombreDeEstado`
+ * las lee como «<nombre histórico> (estado retirado)» (R11).
  */
-export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
-  en_preparacion: "En preparación",
-  // Feature 155/R28: el estado interno de fulfillment en bodega salió del catálogo
-  // (las órdenes que ya están en bodega nacen en `en_preparacion`), así que sale de
-  // este mapa. Un value fuera del catálogo del build degrada al chip neutro con el
-  // texto crudo (R41), abajo en `EstatusBadge`.
-  en_bodega_central: "En bodega central", // feature 135 (R8): value legible directo
-  en_ruta_bodega_central: "En ruta a bodega central", // feature 135 (R8)
-  entregada: "Entregada",
-  devuelta: "Devuelta",
-  devolviendo_a_tienda: "Devolviendo a tienda", // feature 135
-  reprogramada: "Reprogramada",
-  por_recoger: "Por recoger", // feature 17 (renombrado en feature 135)
-  en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30 (R8: value legible directo)
-  en_reparto: "En reparto", // feature 36 (renombrado en la 135 y de vuelta en la 153/R9)
-  rechazada: "Rechazada", // feature 36
-  en_bodega_satelite: "En bodega satélite", // feature 33 (R8: value legible directo)
-  devuelta_a_tienda: "Devuelta a tienda", // feature 135: cierre del flujo de devolución, la tienda de origen la recibió
-  sin_gestionar: "Sin gestionar", // feature 109/R25: orden que quedó en en_reparto al pasar de día (congelada hasta aprobar el cierre)
-  por_devolver: "Por devolver", // feature 139/R4: rechazada de bodega satélite tras aprobar el cierre (elegible para "enviar a central")
-  devolviendo_a_bodega_central: "Devolviendo a bodega central", // feature 139/R4: en tránsito satélite → central
-  por_devolver_a_tienda: "Por devolver a tienda", // feature 139/R4: en la central, elegible para "enviar a la tienda"
-  por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29: espera en la tienda a que el mensajero la recolecte
-  recolectando: "Recolectando", // feature 157 (ampliacion): ya tiene mensajero y va en camino a la tienda
-  incidente: "Incidente", // feature 154/R30: resultado terminal de la gestión
-  // FICHA 454 (2026-09-23, R37): salen `devolucion_por_confirmar` (239) y la ayuda a la tienda
-  // (235) con su retiro del catálogo. Sus filas HISTÓRICAS se siguen leyendo igual (R40) por
-  // `ORDER_STATUS_LABELS_RETIRADOS`, abajo.
-};
-
-/**
- * FICHA 454 (R40) — etiquetas de los estados RETIRADOS del catálogo que el historial todavía
- * referencia (línea de tiempo, cierres barridos). Mismo texto que tenían mientras fueron estados
- * vigentes: una fila pasada se lee como se leía. NO es un estado ofrecible (no está en
- * `ORDER_STATUS_SEED`, así que ningún filtro lo lista) ni un tipo (`OrderStatusValue` no lo
- * incluye). Es el ÚNICO sitio de la UI donde se escriben esos dos `value`: la guardia
- * `sin-estados-retirados.guardia.test.ts` solo los admite dentro de un mapa `*_RETIRADOS`.
- */
-export const ORDER_STATUS_LABELS_RETIRADOS: Readonly<Record<string, string>> = {
-  devolucion_por_confirmar: "Devolución por confirmar", // 239/R26
-  ayuda_tienda: "Ayuda solicitada a la tienda", // 235/R37
-};
+export const ORDER_STATUS_LABELS: Readonly<Record<OrderStatusValue, string>> = NOMBRE_ESTADO;
 
 /**
  * Estatus -> variante semántica de la primitiva `Badge`. La semántica se conserva
@@ -64,24 +34,24 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   en_preparacion: "secondary",
   en_bodega_central: "secondary",
   en_ruta_bodega_central: "info",
-  entregada: "success",
-  devuelta: "warning",
+  entregado: "success",
+  novedad: "warning",
   devolviendo_a_tienda: "danger",
-  reprogramada: "warning",
-  por_recoger: "info", // feature 17
+  reprogramado: "warning",
+  mensajero_recogiendo_en_bodega: "info", // feature 17
   en_ruta_bodega_satelite: "info", // feature 30
   en_reparto: "secondary", // feature 36
-  rechazada: "danger", // feature 36
+  devolucion_a_origen_por_rechazo: "danger", // feature 36
   en_bodega_satelite: "info", // feature 33
   // Terminal y NO error: reusa la variante de `entregada` (success), el otro cierre
   // sano del flujo. `devolviendo_a_tienda` sigue en danger por ser el tránsito.
   devuelta_a_tienda: "success",
   // Feature 109/R25: estado de EXCEPCIÓN (orden sin gestionar, congelada) -> variante de alerta.
-  sin_gestionar: "warning",
+  novedad_interna: "warning",
   // Feature 139/R4: estados del flujo de devolución de rechazadas. Los estados de ESPERA
   // (por devolver / por devolver a tienda) usan `warning` (acción pendiente); el de TRÁNSITO
   // (devolviendo a bodega central) usa `info`, como el resto de estados en ruta.
-  por_devolver: "warning",
+  por_devolver_a_bodega_central: "warning",
   devolviendo_a_bodega_central: "info",
   por_devolver_a_tienda: "warning",
   // Feature 154/R29/R30 (Q5 confirmada por el humano). Mismo criterio que los estados ya
@@ -112,44 +82,29 @@ const ORDER_STATUS_CLASS: Partial<Record<OrderStatusValue, string>> = {
   // fijos para decir "tinta y realce del tema". `foreground` hace lo mismo con un
   // solo token y en claro es el mismo azul (#12233f vs #0b2545).
   en_bodega_central: "text-foreground dark:bg-foreground/10",
-  reprogramada: "border-hivis/60 dark:border-hivis/40",
+  reprogramado: "border-hivis/60 dark:border-hivis/40",
 };
 
 function isKnownStatus(value: string): value is OrderStatusValue {
-  return value in ORDER_STATUS_LABELS;
+  return value in ORDER_STATUS_VARIANT;
 }
 
 /**
- * Chip de estatus de orden. Si `value` no matchea ningún estatus conocido, cae
- * a un chip neutro con el valor crudo (no rompe la UI ante datos inesperados).
+ * Chip de estatus de orden. El texto es SIEMPRE `nombreDeEstado(value)` (R2/R10/R11): el nombre
+ * visible exacto; un estado retirado, «<histórico> (estado retirado)»; un código desconocido,
+ * «Estado no reconocido» (nunca el código crudo, R3).
  *
- * Feature 30/R15: para `en_ruta_bodega_satelite` el destino es la bodega de la
- * ZONA de la orden. Cuando el consumidor pasa `zonaNombre` (derivado por fila de
- * `orden.zonaId`), el label se vuelve legible como "En ruta a bodega <zona>"; sin
- * él, cae al label estático genérico (el único estado con nombre derivado; el
- * resto de estados ignora `zonaNombre`).
+ * FICHA 455 (2026-09-24, R2): se retira la derivación «En ruta a bodega <zona>» de la feature 30:
+ * el nombre del estado no interpola ningún dato. La zona es columna propia en los listados.
  */
-export function EstatusBadge({
-  value,
-  zonaNombre,
-}: {
-  value: string;
-  zonaNombre?: string;
-}) {
+export function EstatusBadge({ value }: { value: string }) {
   const known = isKnownStatus(value);
-  // FICHA 454 (R40): un estado RETIRADO (fila histórica) se lee con su etiqueta de siempre y la
-  // variante `warning` que tenían los dos; no cae al texto crudo.
-  const retirado = known ? undefined : ORDER_STATUS_LABELS_RETIRADOS[value];
-  const label =
-    value === "en_ruta_bodega_satelite" && zonaNombre
-      ? `En ruta a bodega ${zonaNombre}`
-      : known
-        ? ORDER_STATUS_LABELS[value]
-        : (retirado ?? value);
-  // Estatus desconocido -> variante neutra (no rompe la UI ante datos inesperados).
+  const label = nombreDeEstado(value);
+  // Estado retirado por la 454 (fila histórica, R40) -> la variante `warning` que tenían; el de la
+  // 155 y cualquier desconocido -> variante neutra (no rompe la UI ante datos inesperados).
   const variant = known
     ? ORDER_STATUS_VARIANT[value]
-    : retirado !== undefined
+    : esOrderStatusRetirado(value)
       ? "warning"
       : "secondary";
   const extra = known ? ORDER_STATUS_CLASS[value] : undefined;

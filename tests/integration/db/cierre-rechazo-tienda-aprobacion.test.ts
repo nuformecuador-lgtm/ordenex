@@ -83,10 +83,10 @@ const URLS_NO_USADAS: ISignedUrlProvider = {
 };
 
 const ESTATUS_USADOS = [
-  "entregada",
-  "rechazada",
-  "devuelta",
-  "por_devolver",
+  "entregado",
+  "devolucion_a_origen_por_rechazo",
+  "novedad",
+  "por_devolver_a_bodega_central",
   "por_devolver_a_tienda",
 ] as const;
 type EstatusUsado = (typeof ESTATUS_USADOS)[number];
@@ -184,7 +184,7 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
     g: {
       ordenId: string;
       mensajeroId: string;
-      resultado: "entregada" | "rechazada";
+      resultado: "entregado" | "devolucion_a_origen_por_rechazo";
       origenTipo: OrdenHistorialOrigenTipo;
       efectivo?: string;
     },
@@ -361,7 +361,7 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
       for (const remision of ["NA-947", "NA-981", "NA-1103"]) {
         const o = await sembrarOrden(tx, {
           mensajeroId: p.mensajeroId,
-          estatus: "devuelta",
+          estatus: "novedad",
           zonaId: centralZonaId,
           montoCobrar: "25000.00",
           remision,
@@ -370,7 +370,7 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
           data: {
             ordenId: o.ordenId,
             mensajeroId: p.mensajeroId,
-            resultado: "devuelta",
+            resultado: "novedad",
             cierreId: viejo.id,
             createdAt: new Date("2026-09-09T20:00:00.000Z"),
           },
@@ -379,14 +379,14 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
         // mensajero de la devolucion y con `cierre_id` NULL. Exactamente como nacio NA-981.
         const aplicado = await ctx.gestionRepo.rechazarDesdeDevuelta({
           ordenId: o.ordenId,
-          estatusDevueltaId: idDe("devuelta"),
-          estatusRechazadaId: idDe("rechazada"),
+          estatusDevueltaId: idDe("novedad"),
+          estatusRechazadaId: idDe("devolucion_a_origen_por_rechazo"),
           motivo: "La tienda no recibe la devolucion",
           actorUsuarioId: fks.tiendaId,
         });
         if (!aplicado) throw new Error(`rechazarDesdeDevuelta no aplico sobre ${remision}`);
         const g = await tx.gestionOrden.findFirstOrThrow({
-          where: { ordenId: o.ordenId, resultado: "rechazada" },
+          where: { ordenId: o.ordenId, resultado: "devolucion_a_origen_por_rechazo" },
           select: { id: true },
         });
         ordenes.push({ ordenId: o.ordenId, gestionRechazoId: g.id, numRemision: o.numRemision });
@@ -450,27 +450,27 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
 
       const entregada = await sembrarOrden(tx, {
         mensajeroId: p.mensajeroId,
-        estatus: "entregada",
+        estatus: "entregado",
         zonaId: centralZonaId,
         montoCobrar: "12500.00",
       });
       await sembrarGestionSuelta(tx, {
         ordenId: entregada.ordenId,
         mensajeroId: p.mensajeroId,
-        resultado: "entregada",
+        resultado: "entregado",
         origenTipo: "gestion",
         efectivo: "12500.00",
       });
       const rechazadaCalle = await sembrarOrden(tx, {
         mensajeroId: p.mensajeroId,
-        estatus: "rechazada",
+        estatus: "devolucion_a_origen_por_rechazo",
         zonaId: centralZonaId,
         montoCobrar: "9000.00",
       });
       const gestionCalle = await sembrarGestionSuelta(tx, {
         ordenId: rechazadaCalle.ordenId,
         mensajeroId: p.mensajeroId,
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         origenTipo: "gestion",
       });
 
@@ -479,13 +479,13 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
       if (tienda !== null) {
         const central = await sembrarOrden(tx, {
           mensajeroId: p.mensajeroId,
-          estatus: "rechazada",
+          estatus: "devolucion_a_origen_por_rechazo",
           zonaId: centralZonaId,
           montoCobrar: "7000.00",
         });
         const satelite = await sembrarOrden(tx, {
           mensajeroId: p.mensajeroId,
-          estatus: "rechazada",
+          estatus: "devolucion_a_origen_por_rechazo",
           zonaId: p.zonaSateliteId,
           montoCobrar: "8000.00",
         });
@@ -496,7 +496,7 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
             await sembrarGestionSuelta(tx, {
               ordenId,
               mensajeroId: p.mensajeroId,
-              resultado: "rechazada",
+              resultado: "devolucion_a_origen_por_rechazo",
               origenTipo: "rechazo_tienda",
             }),
           );
@@ -558,27 +558,27 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
       const sembrarDia = async () => {
         const e = await sembrarOrden(tx, {
           mensajeroId: p.mensajeroId,
-          estatus: "entregada",
+          estatus: "entregado",
           zonaId: centralZonaId,
           montoCobrar: "5000.00",
         });
         await sembrarGestionSuelta(tx, {
           ordenId: e.ordenId,
           mensajeroId: p.mensajeroId,
-          resultado: "entregada",
+          resultado: "entregado",
           origenTipo: "gestion",
           efectivo: "5000.00",
         });
         const r = await sembrarOrden(tx, {
           mensajeroId: p.mensajeroId,
-          estatus: "rechazada",
+          estatus: "devolucion_a_origen_por_rechazo",
           zonaId: centralZonaId,
           montoCobrar: "6000.00",
         });
         const g = await sembrarGestionSuelta(tx, {
           ordenId: r.ordenId,
           mensajeroId: p.mensajeroId,
-          resultado: "rechazada",
+          resultado: "devolucion_a_origen_por_rechazo",
           origenTipo: "rechazo_tienda",
         });
         return { ordenRechazo: r.ordenId, gestionRechazo: g };
@@ -675,7 +675,7 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
       for (const zonaId of [centralZonaId, p.zonaSateliteId]) {
         const o = await sembrarOrden(tx, {
           mensajeroId: p.mensajeroId,
-          estatus: "devuelta",
+          estatus: "novedad",
           zonaId,
           montoCobrar: "18000.00",
         });
@@ -683,15 +683,15 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
           data: {
             ordenId: o.ordenId,
             mensajeroId: p.mensajeroId,
-            resultado: "devuelta",
+            resultado: "novedad",
             cierreId: viejo.id,
             createdAt: new Date("2026-09-09T20:00:00.000Z"),
           },
         });
         const aplicado = await ctx.gestionRepo.rechazarDesdeDevuelta({
           ordenId: o.ordenId,
-          estatusDevueltaId: idDe("devuelta"),
-          estatusRechazadaId: idDe("rechazada"),
+          estatusDevueltaId: idDe("novedad"),
+          estatusRechazadaId: idDe("devolucion_a_origen_por_rechazo"),
           motivo: "La tienda no recibe la devolucion",
           actorUsuarioId: fks.tiendaId,
         });
@@ -778,7 +778,7 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
   // ============================ Escenario 1 — NA-981 reproducido ============================
 
   it("R13: NA-947, NA-981 y NA-1103 salen de `rechazada` sin edicion manual (via real + corte + aprobacion)", () => {
-    expect(na981.antes.map((o) => o.estatus)).toEqual(["rechazada", "rechazada", "rechazada"]);
+    expect(na981.antes.map((o) => o.estatus)).toEqual(["devolucion_a_origen_por_rechazo", "devolucion_a_origen_por_rechazo", "devolucion_a_origen_por_rechazo"]);
     // Sonda: el mensajero no puede pedirlo el; lo crea el corte, y el lo re-solicita.
     expect(na981.sonda).toMatchObject({ status: "conflict" });
     expect(na981.vencidosCreados).toBe(1);
@@ -800,7 +800,7 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
   it("R12: cada salida queda en el historial con el admin como actor, sin tocar mensajero, prioridad ni importe", () => {
     for (const filas of na981.historial) {
       expect(filas).toEqual([
-        { actor: na981.adminId, origen: "rechazada", destino: "por_devolver_a_tienda" },
+        { actor: na981.adminId, origen: "devolucion_a_origen_por_rechazo", destino: "por_devolver_a_tienda" },
       ]);
     }
     const sinEstatus = (o: EstadoDeOrden) => ({ ...o, estatus: undefined });
@@ -831,15 +831,15 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
     expect(sinRechazos.aprobacion.status).toBe("ok");
   });
 
-  it("R11: el rechazo de zona CENTRAL va a `por_devolver_a_tienda` y el de SATELITE a `por_devolver`", () => {
-    expect(conRechazos.antes.map((o) => o.estatus)).toEqual(["rechazada", "rechazada"]);
-    expect(conRechazos.despues.map((o) => o.estatus)).toEqual(["por_devolver_a_tienda", "por_devolver"]);
+  it("R11: el rechazo de zona CENTRAL va a `por_devolver_a_tienda` y el de SATELITE a `por_devolver_a_bodega_central`", () => {
+    expect(conRechazos.antes.map((o) => o.estatus)).toEqual(["devolucion_a_origen_por_rechazo", "devolucion_a_origen_por_rechazo"]);
+    expect(conRechazos.despues.map((o) => o.estatus)).toEqual(["por_devolver_a_tienda", "por_devolver_a_bodega_central"]);
   });
 
   it("R12: las dos salidas llevan al admin en el historial y no tocan mensajero, prioridad ni importe", () => {
     expect(conRechazos.historial).toEqual([
-      [{ actor: conRechazos.adminId, origen: "rechazada", destino: "por_devolver_a_tienda" }],
-      [{ actor: conRechazos.adminId, origen: "rechazada", destino: "por_devolver" }],
+      [{ actor: conRechazos.adminId, origen: "devolucion_a_origen_por_rechazo", destino: "por_devolver_a_tienda" }],
+      [{ actor: conRechazos.adminId, origen: "devolucion_a_origen_por_rechazo", destino: "por_devolver_a_bodega_central" }],
     ]);
     const sinEstatus = (o: EstadoDeOrden) => ({ ...o, estatus: undefined });
     expect(conRechazos.despues.map(sinEstatus)).toEqual(conRechazos.antes.map(sinEstatus));
@@ -867,7 +867,7 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
   it("R20: rechazar el cierre conserva su vinculo y NO saca la orden de `rechazada`", () => {
     expect(rechazado.rechazo).toMatchObject({ status: "ok", estado: "rechazado" });
     expect(rechazado.cierresDelVinculoTrasRechazar).toEqual([rechazado.c1]);
-    expect(rechazado.ordenTrasRechazar.estatus).toBe("rechazada");
+    expect(rechazado.ordenTrasRechazar.estatus).toBe("devolucion_a_origen_por_rechazo");
   });
 
   it("R20/R3: el cierre posterior se lleva SOLO el rechazo nuevo, y al re-solicitar el viejo sigue siendo suyo", () => {
@@ -884,23 +884,23 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
     expect(adminP1.vencidosCreados).toBe(1);
     expect(adminP1.aprobacion).toBe("conflict");
     expect(adminP1.estadoFinal).toBe("vencido");
-    expect(adminP1.despues.map((o) => o.estatus)).toEqual(["rechazada", "rechazada"]);
+    expect(adminP1.despues.map((o) => o.estatus)).toEqual(["devolucion_a_origen_por_rechazo", "devolucion_a_origen_por_rechazo"]);
     expect(adminP1.historial).toEqual([[], []]);
   });
 
   it("P2 (R11/R13): el admin DESTRABA el `vencido` y lo aprueba; las ordenes salen hacia su destino sin que el mensajero haga nada", () => {
-    expect(adminP2.antes.map((o) => o.estatus)).toEqual(["rechazada", "rechazada"]);
+    expect(adminP2.antes.map((o) => o.estatus)).toEqual(["devolucion_a_origen_por_rechazo", "devolucion_a_origen_por_rechazo"]);
     // Primero el efecto que importa: la zona CENTRAL va a `por_devolver_a_tienda`, la SATELITE a
     // `por_devolver`.
-    expect(adminP2.despues.map((o) => o.estatus)).toEqual(["por_devolver_a_tienda", "por_devolver"]);
+    expect(adminP2.despues.map((o) => o.estatus)).toEqual(["por_devolver_a_tienda", "por_devolver_a_bodega_central"]);
     expect(adminP2.aprobacion).toBe("ok");
     expect(adminP2.estadoFinal).toBe("aprobado");
   });
 
   it("P2 (R12): cada salida lleva al admin en el historial y no toca mensajero, prioridad ni importe", () => {
     expect(adminP2.historial).toEqual([
-      [{ actor: adminP2.adminId, origen: "rechazada", destino: "por_devolver_a_tienda" }],
-      [{ actor: adminP2.adminId, origen: "rechazada", destino: "por_devolver" }],
+      [{ actor: adminP2.adminId, origen: "devolucion_a_origen_por_rechazo", destino: "por_devolver_a_tienda" }],
+      [{ actor: adminP2.adminId, origen: "devolucion_a_origen_por_rechazo", destino: "por_devolver_a_bodega_central" }],
     ]);
     const sinEstatus = (o: EstadoDeOrden) => ({ ...o, estatus: undefined });
     expect(adminP2.despues.map(sinEstatus)).toEqual(adminP2.antes.map(sinEstatus));

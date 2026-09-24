@@ -93,7 +93,7 @@ const ESCRITURAS_DE_LA_APROBACION = [
     // cada uno con la suite que lo nombra (antes las tres escrituras citaban una sola suite).
     escritura: "tx.orden.updateMany",
     que:
-      "Comparten esta escritura: liberacion de `sin_gestionar` (109) y su rechazo por tope (276), " +
+      "Comparten esta escritura: liberacion de `novedad_interna` (109) y su rechazo por tope (276), " +
       "devolucion de `rechazada` (139, seleccion por gestion desde la 454) y, fuera de la " +
       "aprobacion, la transicion #69 de la correccion LEGADA (398). Todas rutean por ids y van " +
       "guardadas por su estado de origen.",

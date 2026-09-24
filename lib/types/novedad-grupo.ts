@@ -74,7 +74,7 @@ export const PREDICADO_POR_GRUPO = {
   ayuda: { tipo: "ayuda_abierta", estatus: "en_reparto" },
   // Feature 239: devolucion ANCLADA — confirmada al aprobar el cierre, con el reloj del plazo
   // corriendo.
-  devolucion: { tipo: "estatus", estatus: "devuelta" },
+  devolucion: { tipo: "estatus", estatus: "novedad" },
 } as const satisfies Record<
   GrupoNovedad,
   { readonly tipo: "estatus" | "ayuda_abierta"; readonly estatus: OrderStatusValue }

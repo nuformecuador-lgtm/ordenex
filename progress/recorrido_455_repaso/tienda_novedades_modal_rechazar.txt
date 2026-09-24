@@ -1,0 +1,14 @@
+Rechazar la orden
+
+El paquete de Cliente Recorrido 9 (guía 44203146) vuelve a tu bodega y la orden pasa a Devolución a origen por rechazo.
+
+Esto le cobra a tu tienda el flete por rechazo y no se puede deshacer. Si preferís volver a intentar la entrega, usá «Reprogramar».
+
+Motivo del rechazo
+
+Queda guardado con la orden: es lo único que explicará esta decisión si alguien pregunta más adelante.
+
+Escribí el motivo para poder rechazar.
+
+Cancelar
+Rechazar

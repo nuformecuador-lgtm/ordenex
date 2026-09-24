@@ -91,14 +91,14 @@ describeSiHayBase("261/B11 — el dia de reparto en el `WHERE` de recogerLote, c
       );
     }
     const estados = await prisma.orderStatus.findMany({
-      where: { value: { in: ["por_recoger", "en_reparto"] } },
+      where: { value: { in: ["mensajero_recogiendo_en_bodega", "en_reparto"] } },
       select: { id: true, value: true },
     });
-    const porRecogerId = estados.find((e) => e.value === "por_recoger")?.id;
+    const porRecogerId = estados.find((e) => e.value === "mensajero_recogiendo_en_bodega")?.id;
     const enRepartoId = estados.find((e) => e.value === "en_reparto")?.id;
     if (!porRecogerId || !enRepartoId) {
       throw new Error(
-        "el catalogo `order_status` no tiene `por_recoger` y/o `en_reparto`: sin ellos no hay " +
+        "el catalogo `order_status` no tiene `mensajero_recogiendo_en_bodega` y/o `en_reparto`: sin ellos no hay " +
           "transicion que medir. Corre el seed del catalogo.",
       );
     }
@@ -190,7 +190,7 @@ describeSiHayBase("261/B11 — el dia de reparto en el `WHERE` de recogerLote, c
     expect(afectadas).toBe(3);
   });
 
-  it("R1: la reservada SIGUE en `por_recoger` — el UPDATE no la toco", async () => {
+  it("R1: la reservada SIGUE en `mensajero_recogiendo_en_bodega` — el UPDATE no la toco", async () => {
     const { estatus, porRecogerId } = await conCorpus(async (ctx) => {
       await ctx.repo.recogerLote(
         [...ctx.idPorClave.values()],

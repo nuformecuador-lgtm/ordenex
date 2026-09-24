@@ -5,6 +5,7 @@ import path from "node:path";
 import { conAyudaAbiertaDe } from "@/lib/repositories/ayuda-abierta";
 import { whereGestionPendiente } from "@/lib/repositories/gestion-pendiente";
 import { HAY_BASE_DE_DATOS } from "../_postgres-real";
+import { enLaEraAnterior455 } from "../455/_era-anterior";
 import { conEscenario, prepararMundo, type Escenario, type Mundo } from "./_escenario";
 
 /**
@@ -88,7 +89,7 @@ describeSiHayBase("454/T1.24 — M3 contra Postgres real", () => {
       data: {
         ordenId: o.ordenId,
         mensajeroId: e.mensajeroId,
-        resultado: "devuelta",
+        resultado: "novedad",
         causaDevolucion: "wrong_number",
         createdAt: new Date(Date.now() - 7200_000),
       },
@@ -149,7 +150,7 @@ describeSiHayBase("454/T1.24 — M3 contra Postgres real", () => {
       const enCatalogo = async (value: string) => (await e.tx.orderStatus.count({ where: { value } })) === 1;
 
       // ── UP ──
-      await e.tx.$executeRawUnsafe(UP);
+      await enLaEraAnterior455(e.tx, UP);
       const up1 = {
         estados: await estados(todas),
         rastros: await rastros(),
@@ -173,18 +174,18 @@ describeSiHayBase("454/T1.24 — M3 contra Postgres real", () => {
       };
 
       // ── UP otra vez: idempotente ──
-      await e.tx.$executeRawUnsafe(UP);
+      await enLaEraAnterior455(e.tx, UP);
       const up2 = { estados: await estados(todas), rastros: await rastros(), eventos: await eventos() };
 
       // ── Actividad del modelo NUEVO antes del down ──
       const rescate = (await e.recuperar(ayRescatada)).status;
       const nPend = await e.sembrarOrden({ estatus: "en_reparto" });
-      const gNPend = await e.gestionarOk(nPend.ordenId, "rechazada");
+      const gNPend = await e.gestionarOk(nPend.ordenId, "devolucion_a_origen_por_rechazo");
       const nAy = await e.sembrarOrden({ estatus: "en_reparto" });
       const pedida = (await e.pedirAyuda(nAy.ordenId)).status;
 
       // ── DOWN ──
-      await e.tx.$executeRawUnsafe(DOWN);
+      await enLaEraAnterior455(e.tx, DOWN);
       const down = {
         estados: await estados(todas),
         nPend: await e.estadoDe(nPend.ordenId),
@@ -207,7 +208,7 @@ describeSiHayBase("454/T1.24 — M3 contra Postgres real", () => {
       };
 
       // ── UP de nuevo ──
-      await e.tx.$executeRawUnsafe(UP);
+      await enLaEraAnterior455(e.tx, UP);
       const up3 = {
         estados: await estados(todas),
         nPend: await e.estadoDe(nPend.ordenId),
@@ -233,7 +234,7 @@ describeSiHayBase("454/T1.24 — M3 contra Postgres real", () => {
     return conEscenario(mundo, async (e) => {
       await prep(e);
       try {
-        await e.tx.$executeRawUnsafe(UP);
+        await enLaEraAnterior455(e.tx, UP);
         return "sin error";
       } catch (err) {
         return String((err as Error).message);
@@ -275,7 +276,7 @@ describeSiHayBase("454/T1.24 — M3 contra Postgres real", () => {
     expect(r.up1.eventoDpc).toEqual({
       gestionOrdenId: r.ids.dpcGestion,
       familiaAplicacion: "gestion",
-      resultado: "devuelta",
+      resultado: "novedad",
       actorUsuarioId: r.mensajeroId,
       actorRol: "mensajero",
       motivo: "wrong_number",
@@ -312,15 +313,15 @@ describeSiHayBase("454/T1.24 — M3 contra Postgres real", () => {
 
   it("(f) R41: down aplica al modelo viejo la gestion pendiente y la ayuda abierta NUEVAS", () => {
     expect(r.pedida).toBe("ok");
-    expect(r.down.nPend).toBe("rechazada");
-    expect(r.down.filaNPend).toEqual([{ fila: "gestion:en_reparto->rechazada", actor: true, gestion: true }]);
+    expect(r.down.nPend).toBe("devolucion_a_origen_por_rechazo");
+    expect(r.down.filaNPend).toEqual([{ fila: "gestion:en_reparto->devolucion_a_origen_por_rechazo", actor: true, gestion: true }]);
     expect(r.down.nAy).toBe("ayuda_tienda");
     expect(r.down.filaNAy).toEqual(["solicitud_ayuda_tienda:en_reparto->ayuda_tienda"]);
   });
 
   it("(g) up → down → up: sin error y en el estado del primer up", () => {
     expect(r.up3.estados).toEqual(["en_reparto", "en_reparto", "en_reparto", "en_reparto"]);
-    expect(r.up3.nPend).toBe("rechazada");
+    expect(r.up3.nPend).toBe("devolucion_a_origen_por_rechazo");
     expect(r.up3.nAy).toBe("en_reparto");
     expect(r.up3.abiertas).toEqual([r.ids.ay, r.ids.ayBorrada, r.ids.nAy].sort());
     expect(r.up3.pendienteDpc).toBe(1);

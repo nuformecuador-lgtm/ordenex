@@ -65,8 +65,8 @@ function datosEntrega(over: Partial<DatosEntregaEvento> = {}): DatosEntregaEvent
     tipo: "gestion_corregida",
     createdAt: new Date("2026-09-23T15:00:00.000Z"),
     gestionId: "g-1",
-    resultado: "rechazada",
-    resultadoAnterior: "entregada",
+    resultado: "devolucion_a_origen_por_rechazo",
+    resultadoAnterior: "entregado",
     causa: null,
     actorRol: "maestro",
     mensajero: { id: "m-1", nombre: "Carlos" },
@@ -110,7 +110,9 @@ describe("454/R33/R36 — `WebhookOrdenEvento`: los eventos y la forma que el se
       "numRemision",
       "gestionId",
       "resultado",
+      "resultadoNombre",
       "resultadoAnterior",
+      "resultadoAnteriorNombre",
       "motivo",
       "mensajero",
       "pendienteConfirmacion",
@@ -148,7 +150,7 @@ describe("454/R32/R24/R36 — las dos claves NUEVAS de las respuestas REST", () 
   it("`HabilitacionRowResult.ayudaCerrada` es boolean y requerida, en el TS y en el .yaml", () => {
     const fila = schemas.HabilitacionRowResult;
     expect((fila.properties as Record<string, Nodo>).ayudaCerrada.type).toBe("boolean");
-    expect(fila.required).toEqual(["numGuia", "resultado", "estado", "ayudaCerrada", "error"]);
+    expect(fila.required).toEqual(["numGuia", "resultado", "estado", "estadoNombre", "ayudaCerrada", "error"]);
     const bloque = bloqueYaml("HabilitacionRowResult");
     expect(bloque).toContain("        - ayudaCerrada");
     expect(bloque).toMatch(/\n {8}ayudaCerrada:\n {10}type: boolean\n/);

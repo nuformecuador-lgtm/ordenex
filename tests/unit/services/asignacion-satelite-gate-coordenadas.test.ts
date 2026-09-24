@@ -90,7 +90,7 @@ describe("R8 — AsignacionSateliteService.asignar", () => {
 
     expect(r.status).toBe("partial");
     if (r.status === "partial") {
-      expect(r.resultados).toEqual([{ ordenId: "o2", estado: "por_recoger" }]);
+      expect(r.resultados).toEqual([{ ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" }]);
       expect(r.bloqueadas).toEqual([{ ordenId: "o1", motivo: estado }]);
     }
     expect(repo.asignarSateliteLote).toHaveBeenCalledTimes(1);
@@ -145,7 +145,7 @@ describe("R8 — AsignacionSateliteService.asignar", () => {
         return ids.map((id) =>
           id === "o2"
             ? ordenRow({ id, zonaId: "z-otra" })
-            : ordenRow({ id, estatusValue: "por_recoger" }),
+            : ordenRow({ id, estatusValue: "mensajero_recogiendo_en_bodega" }),
         );
       }),
       // Solo 1 de las 2 asignables (o2, o3) se escribio de verdad -> dispara el chequeo de carrera.
@@ -374,9 +374,9 @@ describe("400/R6-R7, R31-R33, R35 — AsignacionSateliteService con ordenes `asi
     expect(r).toEqual({
       status: "ok",
       resultados: [
-        { ordenId: "o1", estado: "por_recoger" },
-        { ordenId: "o2", estado: "por_recoger" },
-        { ordenId: "o3", estado: "por_recoger" },
+        { ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o3", estado: "mensajero_recogiendo_en_bodega" },
       ],
     });
     expect(Object.keys(r)).not.toContain("sinUbicacion");
@@ -659,9 +659,9 @@ describe("407/R1, R6-R8, R10-R11 — AsignacionSateliteService.asignar con la ma
     expect(r).toEqual({
       status: "ok",
       resultados: [
-        { ordenId: "o1", estado: "por_recoger" },
-        { ordenId: "o2", estado: "por_recoger" },
-        { ordenId: "o3", estado: "por_recoger" },
+        { ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o3", estado: "mensajero_recogiendo_en_bodega" },
       ],
     });
   });

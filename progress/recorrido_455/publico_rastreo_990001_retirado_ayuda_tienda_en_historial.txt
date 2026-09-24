@@ -1,0 +1,32 @@
+Rastrear envío
+
+Ingresa el número de guía y los últimos 4 dígitos del teléfono del destinatario.
+
+Número de guía
+Últimos 4 dígitos del teléfono
+Consultar
+Guía 990001
+Por devolver a tienda
+En preparación
+2026-07-22 · 11:59
+Mensajero recogiendo en la bodega
+2026-07-22 · 13:29
+En reparto
+2026-07-22 · 14:59
+Reprogramado
+2026-07-24 · 17:14
+En bodega central
+2026-08-13 · 14:18
+Mensajero recogiendo en la bodega
+2026-08-13 · 14:20
+En reparto
+2026-08-13 · 14:20
+Entregado
+2026-08-13 · 14:22
+En reparto
+2026-08-19 · 14:38
+Devolución a origen por rechazo
+2026-08-20 · 04:07
+Por devolver a tienda
+2026-08-20 · 04:48
+Cerrar

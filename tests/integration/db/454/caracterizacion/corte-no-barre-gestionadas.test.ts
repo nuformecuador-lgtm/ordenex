@@ -28,8 +28,8 @@ describeSiHayBase("454/C01 — el corte no barre las ordenes gestionadas (Postgr
       const o4 = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 2000 });
       const o5 = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000, fechaReparto: diaCR(1) });
 
-      const g1 = await e.gestionarOk(o1.ordenId, "entregada", { monto: 5000 });
-      const g2 = await e.gestionarOk(o2.ordenId, "rechazada");
+      const g1 = await e.gestionarOk(o1.ordenId, "entregado", { monto: 5000 });
+      const g2 = await e.gestionarOk(o2.ordenId, "devolucion_a_origen_por_rechazo");
       const estadoTrasGestionar = { o1: await e.estadoDe(o1.ordenId), o2: await e.estadoDe(o2.ordenId) };
       const ayuda = await e.pedirAyuda(o4.ordenId);
       if (ayuda.status !== "ok") throw new Error(`pedirAyuda: ${JSON.stringify(ayuda)}`);
@@ -90,16 +90,16 @@ describeSiHayBase("454/C01 — el corte no barre las ordenes gestionadas (Postgr
   });
 
   describe("invariantes", () => {
-    it("el corte crea UN vencido y barre O3 (en mano) y O4 (con ayuda) a `sin_gestionar`", () => {
+    it("el corte crea UN vencido y barre O3 (en mano) y O4 (con ayuda) a `novedad_interna`", () => {
       expect(r.vencidosCreados).toBe(1);
-      expect(r.trasCorte.o3).toBe("sin_gestionar");
-      expect(r.trasCorte.o4).toBe("sin_gestionar");
+      expect(r.trasCorte.o3).toBe("novedad_interna");
+      expect(r.trasCorte.o4).toBe("novedad_interna");
       expect([...r.barridas].sort()).toEqual([r.ids.o3, r.ids.o4].sort());
     });
 
     it("O1 y O2 (gestionadas) y O5 (reservada para mañana) NO se barren ni se vinculan en cierre_sin_gestion", () => {
-      expect(r.trasCorte.o1).not.toBe("sin_gestionar");
-      expect(r.trasCorte.o2).not.toBe("sin_gestionar");
+      expect(r.trasCorte.o1).not.toBe("novedad_interna");
+      expect(r.trasCorte.o2).not.toBe("novedad_interna");
       expect(r.trasCorte.o5).toBe("en_reparto");
       expect(r.barridas).not.toContain(r.ids.o1);
       expect(r.barridas).not.toContain(r.ids.o2);
@@ -117,9 +117,9 @@ describeSiHayBase("454/C01 — el corte no barre las ordenes gestionadas (Postgr
     it("tras re-solicitar y aprobar: O1 `entregada`, O2 `por_devolver_a_tienda` con UNA sola gestion `rechazada`", () => {
       expect(r.resolicitud).toEqual({ status: "ok", via: "resolicitado" });
       expect(r.aprobacion.status).toBe("ok");
-      expect(r.final.o1).toBe("entregada");
+      expect(r.final.o1).toBe("entregado");
       expect(r.final.o2).toBe("por_devolver_a_tienda");
-      expect(r.gestionesO2Final.filter((g) => g.resultado === "rechazada")).toHaveLength(1);
+      expect(r.gestionesO2Final.filter((g) => g.resultado === "devolucion_a_origen_por_rechazo")).toHaveLength(1);
       expect(r.final.o5).toBe("en_reparto");
     });
   });

@@ -1,0 +1,54 @@
+# MUTACION R22-url-anterior
+archivo: lib/utils/filtros-url.ts
+linea: 144
+- "      return crudos.map(codigoVigente).filter((valor) => declarados.has(valor));"
++ "      return crudos.filter((valor) => declarados.has(valor));"
+tests: tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 3 passed (4)
+FAIL  tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts > 455/C02 — filtro por codigo del listado satelite (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R22) > R22: un enlace con los codigos ANTERIORES aplica los vigentes y devuelve las mismas cuatro
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts (4 tests | 1 failed) 487ms
+       × R22: un enlace con los codigos ANTERIORES aplica los vigentes y devuelve las mismas cuatro 6ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  06:22:53
+   Duration  6.15s (transform 1.15s, setup 52ms, import 5.40s, tests 487ms, environment 0ms)
+
+(node:23900) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts > 455/C02 — filtro por codigo del listado satelite (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R22) > R22: un enlace con los codigos ANTERIORES aplica los vigentes y devuelve las mismas cuatro
+AssertionError: expected {} to deeply equal { estado: [ …(2) ] }
+
+- Expected
++ Received
+
+- {
+-   "estado": [
+-     "por_devolver_a_bodega_central",
+-     "devolucion_a_origen_por_rechazo",
+-   ],
+- }
++ {}
+
+ ❯ tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts:122:31
+    120|
+    121|     it("R22: un enlace con los codigos ANTERIORES aplica los vigentes …
+    122|       expect(r.desdeUrlVieja).toEqual({ [CLAVE_ESTADO]: [C.porDevolver…
+       |                               ^
+    123|       expect(r.urlVieja).toEqual(r.barra);
+    124|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

@@ -116,7 +116,7 @@ describe("TableroDiaRepository.contarEntregasPorHora — el SQL", () => {
     const consulta = await emitir({ tipo: "global" });
 
     expect(consulta.text).toMatch(/r\.resultado = \$\d+::"gestion_resultado"/);
-    expect(consulta.text).not.toContain("'entregada'");
+    expect(consulta.text).not.toContain("'entregado'");
     expect(consulta.values).toContain(RESULTADO_ENTREGADA);
   });
 

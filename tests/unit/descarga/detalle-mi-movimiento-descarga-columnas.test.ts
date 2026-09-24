@@ -17,7 +17,7 @@ const ORDEN: OrdenAporteDTO = {
   destinatario: "María Fernández",
   // Llega en el DTO y la proyección lo DESCARTA. Si algún día se colara, el caso de R14 cae.
   tiendaNombre: "Tienda Central",
-  resultados: ["entregada"],
+  resultados: ["entregado"],
   aporte: "98765432109.87",
 };
 
@@ -61,14 +61,14 @@ describe("columnas de descarga del detalle de un movimiento de la tienda", () =>
   });
 
   it("emite el resultado como ETIQUETA LEGIBLE, nunca como valor del enum (R13)", () => {
-    expect(filaDescargaDetalleMiMovimiento(ORDEN).resultado).toBe("Entregada");
-    expect(filaDescargaDetalleMiMovimiento(ORDEN).resultado).not.toBe("entregada");
+    expect(filaDescargaDetalleMiMovimiento(ORDEN).resultado).toBe("Entregado");
+    expect(filaDescargaDetalleMiMovimiento(ORDEN).resultado).not.toBe("entregado");
     expect(
       filaDescargaDetalleMiMovimiento({
         ...ORDEN,
-        resultados: ["entregada", "reprogramada"],
+        resultados: ["entregado", "reprogramado"],
       }).resultado,
-    ).toBe("Entregada · Reprogramada");
+    ).toBe("Entregado · Reprogramado");
   });
 
   it("emite valores CRUDOS: texto, número o celda vacía, nunca objetos", () => {

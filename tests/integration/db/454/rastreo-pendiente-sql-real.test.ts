@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import { RastreoPublicoRepository } from "@/lib/repositories/RastreoPublicoRepository";
 import { RastreoPublicoService } from "@/lib/services/RastreoPublicoService";
-import { hitoDeEstatus } from "@/lib/types/rastreo-publico";
+import { nombrePublicoDeEstado } from "@/lib/types/order-status";
 import { HAY_BASE_DE_DATOS } from "../_postgres-real";
 import { conEscenario, prepararMundo, type Mundo } from "./_escenario";
 
@@ -16,6 +16,15 @@ import { conEscenario, prepararMundo, type Mundo } from "./_escenario";
  * la sustituye el hito confirmado (sin marca).
  *
  * Mutaciones registradas en `progress/impl_454_backend.md` (§Mutaciones T1.19).
+ *
+ * FICHA 455 (2026-09-24, T1.9, design DF/§4; R31-R33) — TRADUCCION 1:1 DEL VOCABULARIO, no cambio de
+ * invariante. El DTO del rastreo deja de publicar hitos: cada entrada lleva el NOMBRE VISIBLE del
+ * estado (`nombre`) y la pendiente, el del RESULTADO (que la 454 publicaba aparte en
+ * `nombreResultado`). Asi: `{ hito: "entregado", nombreResultado: "Entregada" }` ->
+ * `{ nombre: "Entregado" }`; `{ hito: "no_entregado", nombreResultado: "Rechazada" }` ->
+ * `{ nombre: "Devolución a origen por rechazo" }`; `hitoVigente` -> `nombreVigente`. La vida entera
+ * de la marca (aparece, sigue con el cierre solicitado, desaparece al anular, muestra el corregido,
+ * la sustituye la entrada confirmada) se afirma con la misma forma (`toEqual` literal).
  */
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
@@ -53,7 +62,7 @@ describeSiHayBase("454/T1.19 — rastreo publico con gestion pendiente (Postgres
       const p = await e.sembrarOrden({ estatus: "en_reparto" });
       await enReparto(p.ordenId);
       const antes = await consultar(p.numGuia);
-      const gP = await e.gestionarOk(p.ordenId, "entregada");
+      const gP = await e.gestionarOk(p.ordenId, "entregado");
       const conPendiente = await consultar(p.numGuia);
       const deshacer = await e.s.cierreDia.deshacerGestion(gP, e.actorMensajero);
       const trasDeshacer = await consultar(p.numGuia);
@@ -62,7 +71,7 @@ describeSiHayBase("454/T1.19 — rastreo publico con gestion pendiente (Postgres
       const central = await e.mensajeroCentral();
       const c = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 4000, mensajeroId: central.mensajeroId });
       await enReparto(c.ordenId);
-      const gC = await e.gestionarOk(c.ordenId, "entregada", { monto: 4000, actor: central.actor });
+      const gC = await e.gestionarOk(c.ordenId, "entregado", { monto: 4000, actor: central.actor });
       const cierreId = await e.solicitarCierreOk(central.actor);
       const conCierreSolicitado = await consultar(c.numGuia);
       const correccion = await e.s.cierresAdmin.corregirResultadoGestion(
@@ -80,8 +89,8 @@ describeSiHayBase("454/T1.19 — rastreo publico con gestion pendiente (Postgres
       // X — gestion pendiente, pero la orden la MOVIO otra via (ya no esta `en_reparto`): sin marca.
       const x = await e.sembrarOrden({ estatus: "en_reparto" });
       await enReparto(x.ordenId);
-      await e.gestionarOk(x.ordenId, "devuelta");
-      await e.tx.orden.update({ where: { id: x.ordenId }, data: { estatusId: e.id("sin_gestionar") } });
+      await e.gestionarOk(x.ordenId, "novedad");
+      await e.tx.orden.update({ where: { id: x.ordenId }, data: { estatusId: e.id("novedad_interna") } });
       const movidaX = await consultar(x.numGuia);
       return {
         nuevoCicloC,
@@ -122,22 +131,20 @@ describeSiHayBase("454/T1.19 — rastreo publico con gestion pendiente (Postgres
     // FICHA 454 (decision del humano 2026-09-24): la entrada pendiente lleva ademas el NOMBRE del
     // resultado, texto y no codigo. Se añade al literal (es el contrato), no se relaja el `toEqual`.
     expect(ultima(r.conPendiente.linea)).toEqual({
-      hito: "entregado",
+      nombre: "Entregado",
       fecha: expect.any(String),
       pendiente: true,
-      nombreResultado: "Entregada",
     });
-    expect(r.conPendiente.hitoVigente).toBe("entregado");
+    expect(r.conPendiente.nombreVigente).toBe("Entregado");
     // Y la linea de antes no tenia ninguna marca.
     expect(r.antes.linea.some((h) => "pendiente" in h)).toBe(false);
   });
 
   it("R31: con el cierre SOLICITADO (aun sin aprobar) la marca sigue", () => {
     expect(ultima(r.conCierreSolicitado.linea)).toEqual({
-      hito: "entregado",
+      nombre: "Entregado",
       fecha: expect.any(String),
       pendiente: true,
-      nombreResultado: "Entregada",
     });
   });
 
@@ -146,20 +153,18 @@ describeSiHayBase("454/T1.19 — rastreo publico con gestion pendiente (Postgres
   });
 
   it("R31: al corregirse, muestra el resultado CORREGIDO (sigue pendiente)", () => {
-    // El nombre es el del resultado CORREGIDO («Rechazada»), no el hito compartido «No entregado».
+    // El nombre es el del resultado CORREGIDO («Devolución a origen por rechazo»).
     expect(ultima(r.trasCorregir.linea)).toEqual({
-      hito: "no_entregado",
+      nombre: "Devolución a origen por rechazo",
       fecha: expect.any(String),
       pendiente: true,
-      nombreResultado: "Rechazada",
     });
   });
 
   it("R31: al aprobar lo sustituye el hito CONFIRMADO del historial, sin marca", () => {
     expect(r.trasAprobar.linea.some((h) => "pendiente" in h)).toBe(false);
-    expect(r.trasAprobar.linea.some((h) => "nombreResultado" in h)).toBe(false);
-    expect(r.trasAprobar.hitoVigente).toBe(hitoDeEstatus(r.estadoFinalC));
-    expect(r.trasAprobar.linea.map((h) => h.hito)).toContain("no_entregado");
+    expect(r.trasAprobar.nombreVigente).toBe(nombrePublicoDeEstado(r.estadoFinalC));
+    expect(r.trasAprobar.linea.map((h) => h.nombre)).toContain("Devolución a origen por rechazo");
   });
 
   it("R31: la gestion de un cierre APROBADO no se marca aunque la orden vuelva a `en_reparto`", () => {

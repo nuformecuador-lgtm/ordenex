@@ -103,7 +103,7 @@ export interface RecogerModuleProps {
 // Feature 114: textos del buscador (separados para i18n futura, lenguaje claro). La
 // región y la etiqueta del campo son DISTINTAS a propósito: si coincidieran, el nombre
 // accesible del `searchbox` (de su `<label>`) chocaría con el de la región.
-const BUSCADOR_REGION = "Buscar guías por recoger";
+const BUSCADOR_REGION = "Buscar guías para recoger";
 const BUSCADOR_LABEL = "Buscar guías";
 const BUSCADOR_PLACEHOLDER =
   "Filtra por número de guía, remisión, teléfono o nombre";
@@ -111,10 +111,10 @@ const BUSCADOR_PLACEHOLDER =
 // Feature 277 (R28): los nombres accesibles de esta pantalla son los TRES distintos —la región
 // sigue siendo «Por recoger», el buscador conserva el suyo y el grupo de pestañas estrena el de
 // abajo—. Si coincidieran, el nombre accesible de uno chocaría con el de otro.
-const TABLIST_LABEL = "Grupos de órdenes por recoger";
+const TABLIST_LABEL = "Grupos de órdenes para recoger";
 // Y los dos listados también se llaman distinto: sin esto, saber en qué grupo estás dependería de
 // mirar cuál pestaña se ve resaltada. El del grupo de hoy CONSERVA su nombre de siempre.
-const LISTADO_HOY_LABEL = "Órdenes por recoger";
+const LISTADO_HOY_LABEL = "Órdenes para recoger";
 const LISTADO_OTRO_DIA_LABEL = "Órdenes para otro día";
 
 /** Cuál de los dos grupos tiene el mensajero a la vista. */
@@ -178,8 +178,8 @@ export function RecogerModule({
    *
    * Sin `onGestionar`: aquí no hay nada que gestionar, así que la card es de
    * solo-visualización (ni clickeable ni enfocable). `mostrarRuta={false}` porque estas
-   * órdenes todavía no entraron en la ruta optimizada, y `estado` fijo porque no se deriva
-   * de un puntero de gestión que en esta pantalla no existe.
+   * órdenes todavía no entraron en la ruta optimizada. FICHA 455 (R7): el chip dice el estado de
+   * la orden («Mensajero recogiendo en la bodega»), no un rótulo fijo de la pantalla.
    */
   function renderCardPorRecoger(
     orden: MiAsignacionDTO,
@@ -192,7 +192,6 @@ export function RecogerModule({
       <CardVista
         orden={orden}
         total={total}
-        estado="Por recoger"
         mostrarRuta={false}
       />
     );
@@ -306,7 +305,7 @@ export function RecogerModule({
       {/* `aria-label` y no un `<h2>` visible: el `<h1>` de la página ya dice "Por
           recoger" y repetirlo debajo sería ruido. El nombre accesible se conserva porque
           es por donde la región se identifica (y por donde la buscan los tests). */}
-      <section aria-label="Por recoger" className="flex flex-col gap-3">
+      <section aria-label="Recoger en bodega" className="flex flex-col gap-3">
         {/* Buscador y conmutador de vista comparten fila: son los dos controles de la
             lista. En pantallas angostas se apilan (`flex-col`) para que el input no se
             estruje; desde `sm` van en la MISMA línea, el input ocupando el espacio libre

@@ -18,9 +18,10 @@ import { ResetRateLimiter } from "@/lib/utils/reset-rate-limit";
 
 const ENVIO: RastreoPublicoDTO = {
   numGuia: 4321,
-  hitoVigente: "entregado",
+  // FICHA 455 (2026-09-24, T1.9): el DTO publica el NOMBRE del estado, no un hito.
+  nombreVigente: "Entregado",
   actualizadoEn: "2026-08-13T11:00-06:00",
-  linea: [{ hito: "entregado", fecha: "2026-08-13T11:00-06:00" }],
+  linea: [{ nombre: "Entregado", fecha: "2026-08-13T11:00-06:00" }],
 };
 
 function buildService(resultado: ResultadoConsultaRastreo = { estado: "ok", envio: ENVIO }) {

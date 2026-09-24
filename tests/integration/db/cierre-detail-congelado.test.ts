@@ -135,7 +135,7 @@ function makeDb() {
       id: "g1",
       ordenId: "o1",
       mensajeroId: "m1",
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: dec("10000.00"),
       cierreId: null,
       anuladaAt: null,

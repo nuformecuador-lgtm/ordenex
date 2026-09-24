@@ -51,7 +51,7 @@ function gestionEntregada(over: Record<string, unknown> = {}) {
       createdAt: new Date("2026-02-06T03:00:00.000Z"),
       intentosContacto: 4,
     },
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: dec("15000.50"),
     metodoPago: "efectivo",
     motivo: null,
@@ -323,7 +323,7 @@ describe("DTO de la hoja fundida (feature 230, T2.1/T7.1)", () => {
     expect(where.anuladaAt).toBeNull(); // la deshecha no cuenta
     expect(where.cierre).toEqual({ estado: "aprobado" }); // el cierre sin aprobar tampoco
     expect(where.cierreId).toEqual({ not: null });
-    expect(where.resultado).toEqual({ in: ["rechazada", "devuelta", "reprogramada"] });
+    expect(where.resultado).toEqual({ in: ["devolucion_a_origen_por_rechazo", "novedad", "reprogramado"] });
     // Lista de INCLUSIÓN: un `notIn` haría que un `resultado` futuro del enum empezara a contar
     // solo, que es exactamente lo que la 215 prohíbe.
     expect(JSON.stringify(where)).not.toContain("notIn");

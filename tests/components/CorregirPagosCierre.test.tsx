@@ -61,7 +61,7 @@ function gestion(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
     distritoNombre: "Carmen",
     producto: "Caja",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "8000.00",
     metodoPago: null,
     pagos: [{ metodo: "efectivo", monto: "8000.00" }],
@@ -81,10 +81,10 @@ function gestion(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
 
 function grupos(g: CierreDetalleGestion): CierreGrupos {
   return {
-    entregada: g.resultado === "entregada" ? [g] : [],
-    reprogramada: [],
-    devuelta: g.resultado === "devuelta" ? [g] : [],
-    rechazada: [],
+    entregado: g.resultado === "entregado" ? [g] : [],
+    reprogramado: [],
+    novedad: g.resultado === "novedad" ? [g] : [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 }
@@ -166,7 +166,7 @@ describe("dónde se ofrece corregir el desglose", () => {
 
   it("un resultado que no es entrega tampoco: no hay desglose que corregir", async () => {
     await abrirRenglon(
-      gestion({ resultado: "devuelta", montoRecibido: null, pagos: [], motivo: "Nadie" }),
+      gestion({ resultado: "novedad", montoRecibido: null, pagos: [], motivo: "Nadie" }),
       vi.fn(),
     );
     expect(screen.queryByRole("button", { name: BOTON_CORREGIR })).toBeNull();

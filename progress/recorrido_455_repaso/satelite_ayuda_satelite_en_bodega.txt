@@ -1,0 +1,70 @@
+Ayuda
+
+Cómo funciona cada pantalla, explicado para tu trabajo.
+
+24/09/2026
+Claro
+Tema claro activado.
+Salir
+Buscar en la ayuda
+
+BODEGAS SATÉLITE
+En bodega
+Mi bodega
+Por recibir
+OFICINA
+Cierres
+Incidentes
+Monitoreo
+COMPARTIDO
+Analítica
+SIN INICIAR SESIÓN
+Entrar y recuperar la contraseña
+Postularse para trabajar
+Rastrear un paquete
+En bodega
+
+Es tu pantalla de trabajo: todo lo que tenés en la bodega y desde acá lo repartís entre tus mensajeros.
+
+Solo ves órdenes de tu zona. No hace falta filtrar por bodega — la pantalla ya viene acotada.
+
+Asignar a un mensajero
+
+Seleccionás las órdenes, elegís el mensajero y confirmás. Podés asignar varias de una vez.
+
+Si te equivocaste, Deshacer asignación la devuelve a la bodega para volver a repartirla.
+
+Una orden sin ubicación en el mapa no se puede rutear bien, así que la app te pide que autorices la asignación sin ubicación antes de dejarte seguir. Es un aviso, no un bloqueo: confirmás y se asigna igual. Sirve para que sepas que ese paquete no va a entrar en la ruta optimizada del mensajero.
+Enviar a central
+
+Lo que no corresponde a tu zona o vuelve para atrás lo mandás con Enviar a central. Al hacerlo se genera el envío y podés descargar el manifiesto para que viaje con la carga.
+
+Buscar y filtrar
+
+El buscador cubre guía, remisión, teléfono, destinatario y producto a la vez.
+
+Con Filtros agregás: estado, mensajero, provincia, cantón, distrito, fecha de creación y salida a reparto —que separa las que ya salieron alguna vez con un mensajero de las que solo tienen la guía generada—.
+
+Cosas que te pueden pasar
+
+Te aparece un aviso de dinero pendiente de conciliar. Es un aviso, no un freno: te dice cuánto efectivo consolidaste que la central todavía no marcó como recibido, y cuánto lleva esperando el más antiguo. Podés seguir asignando con normalidad. Sirve para que sepas qué tenés pendiente de entregar, no para pararte.
+
+Antes esto sí te frenaba: mientras la central no aprobara tu cierre de bodega, no podías repartir trabajo nuevo. Eso se quitó, porque dejaba a la bodega parada esperando una firma.
+
+Un mensajero no aparece en la lista. Solo salen los mensajeros de tu zona. Si falta alguno, hay que revisar a qué zona está asignado — eso lo hace la oficina.
+
+Asignaste y no se aplicó ninguna. Las asignaciones van en lote y son todo o nada: si una falla, no se aplica ninguna. Así no te quedás sin saber cuáles entraron y cuáles no.
+
+Lo que esta pantalla NO hace
+No se reciben paquetes acá. Eso es Por recibir.
+No se cierra el día. Los cierres de tus mensajeros están en Cierres.
+El aviso de dinero pendiente no te bloquea. Ahí se avisa, no se frena.
+Lo que SÍ te sigue frenando al consolidar
+
+Cuando vayas a consolidar para enviarle el efectivo a la central, la app te va a parar si alguno de tus mensajeros tiene su cierre del día sin resolver. Ese control no se quitó, y no es el mismo de antes: consolidar es cuadrar la caja, y no se puede cuadrar con cierres a medias.
+
+Se arregla resolviendo esos cierres en Cierres, y después consolidás.
+
+Actualizado el 16/09/2026
+
+Siguiente: Mi bodega

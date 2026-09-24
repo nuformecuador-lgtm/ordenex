@@ -29,10 +29,10 @@ const HORA = 60 * 60 * 1000;
 const DIA = 24 * HORA;
 
 const ESTATUS: Record<string, string> = {
-  devuelta: "os-devuelta",
+  novedad: "os-devuelta",
   en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
-  rechazada: "os-rechazada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
 };
 
 function row(ancladaAt: Date, causa: DevueltaSlaRow["causa"]): DevueltaSlaRow {

@@ -104,7 +104,7 @@ const TRAMOS: { nombre: string; codigo: string }[] = (() => {
 /** Fila mínima de cierre con el desglose que se le pase. Solo importa lo que suma. */
 function gestion(
   pagos: CierreGestionPendienteRow["pagos"],
-  resultado: CierreGestionPendienteRow["resultado"] = "entregada",
+  resultado: CierreGestionPendienteRow["resultado"] = "entregado",
 ): CierreGestionPendienteRow {
   return {
     gestionId: `g-${pagos.map((p) => p.metodo).join("-")}-${resultado}`,

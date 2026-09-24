@@ -32,6 +32,7 @@ import type { IWalletIndemnizacionFeedService } from "@/lib/interfaces/services/
 import type { ICajaCodFeedService } from "@/lib/interfaces/services/ICajaCodFeedService";
 import { CajaCodFeedService } from "@/lib/services/CajaCodFeedService";
 import type { CierreEstado } from "@/lib/types/cierre";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import type {
   CierreRechazoDeTienda,
   IngresoOrdenexDTO,
@@ -86,8 +87,12 @@ import {
  * fila la va a leer un admin en el detalle de un cierre y va a sostener un cobro
  * (`cobroRechazado`, 56). `tests/unit/guards/tope-intentos-pii.guardia.test.ts` lo comprueba.
  */
+// FICHA 455 (2026-09-24): nombra los dos estados con su nombre vigente, leido de la fuente (antes
+// «rechazada … sin gestionar», dos nombres retirados). Solo afecta a las filas NUEVAS: las ya
+// escritas dicen lo que dijeron.
 export const MOTIVO_RECHAZO_TOPE_INTENTOS =
-  "rechazada al aprobar el cierre: sin gestionar y sin intentos de entrega disponibles";
+  `${nombreDeEstado("devolucion_a_origen_por_rechazo")} al aprobar el cierre: estaba en ` +
+  `${nombreDeEstado("novedad_interna")} y sin intentos de entrega disponibles`;
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
 // FICHA 398: `computeTotales` recalcula los CUATRO totales del recaudo (la MISMA funcion que los
@@ -141,11 +146,11 @@ const ESTADOS_REABRIBLES: CierreEstado[] = ["vencido", "rechazado"];
 const ESTADOS_ABIERTOS: CierreEstado[] = ["solicitado", "vencido"];
 
 // El unico resultado con desglose que corregir: los otros cuatro no cobran nada (R8/R25).
-const RESULTADO_ENTREGADA = "entregada" as const;
+const RESULTADO_ENTREGADA = "entregado" as const;
 // FICHA 398: el UNICO destino que esta ficha concede. La pareja `entregada -> rechazada` esta
 // escrita con dos constantes y no se acepta como dato: `nuevoResultado` no viaja en la peticion
 // justamente para que aceptar el destino desde el cliente no abra las otras por accidente.
-const RESULTADO_RECHAZADA = "rechazada" as const;
+const RESULTADO_RECHAZADA = "devolucion_a_origen_por_rechazo" as const;
 const ESTADO_SOLICITADO: CierreEstado = "solicitado";
 
 /**
@@ -2071,7 +2076,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
                     data: {
                       ordenId,
                       mensajeroId: cierre.mensajeroId,
-                      resultado: "rechazada",
+                      resultado: "devolucion_a_origen_por_rechazo",
                       cierreId: null,
                       motivo: MOTIVO_RECHAZO_TOPE_INTENTOS,
                     },
@@ -2209,7 +2214,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
                 .map((g) => {
                   // (5) R8 — familia y actor de la transicion aplicada.
                   const registro = g.eventos[0];
-                  if (g.resultado === "devuelta") {
+                  if (g.resultado === "novedad") {
                     // D8: el reloj del plazo de la tienda lee ESTA familia; actor = el aprobador.
                     return {
                       ordenId: g.ordenId,
@@ -2284,7 +2289,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
               const gRechazadas = await tx.gestionOrden.findMany({
                 where: {
                   ordenId: { in: rechazadas.map((o) => o.id) },
-                  resultado: "rechazada",
+                  resultado: "devolucion_a_origen_por_rechazo",
                   anuladaAt: null,
                 },
                 orderBy: [{ ordenId: "asc" }, { createdAt: "desc" }],

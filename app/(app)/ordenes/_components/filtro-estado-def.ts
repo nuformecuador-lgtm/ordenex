@@ -62,14 +62,11 @@ export const BUSCADOR_ESTADO = "Filtrar estados…";
 /** Texto cuando lo tecleado en el buscador interno no casa con ningún estado. */
 export const SIN_ESTADOS_COINCIDENTES = "Ningún estado coincide";
 
-/**
- * Exclusión por defecto, por `value`: el borrador transitorio recién sembrado.
- *
- * Es el mismo default que `EXCLUDE_POR_ROL` aplica a un rol sin override
- * (`app/(app)/ordenes/exclude-por-rol.ts`), escrito aquí para que una superficie que monta el
- * control sin pasar `exclude` obtenga exactamente lo que obtiene maestro/admin.
- */
-export const EXCLUDE_ESTADO_DEFAULT: readonly string[] = ["pendiente"];
+// FICHA 455 (2026-09-24, design §2.2; R18): aquí vivía `EXCLUDE_ESTADO_DEFAULT = ["pendiente"]`, la
+// exclusión por defecto del borrador transitorio. Era redundante: `estadosOfrecidos` ya descarta todo
+// value que no esté en `ORDER_STATUS_SEED` (`VALUES_VIGENTES`), y `pendiente` es un estado RETIRADO
+// que la migración 455 (M3) borra del catálogo si nadie lo referencia. Sin `exclude`, se ofrece el
+// catálogo vigente entero.
 
 /**
  * Values que el código RECONOCE hoy.
@@ -98,7 +95,7 @@ export interface OpcionesEstadoOpts {
    * parámetro explícito y cerrado, no una función que cada llamador escriba a su manera.
    */
   valor?: ValorDeEstado;
-  /** Estados que NO se ofrecen, por `value`. Default: `EXCLUDE_ESTADO_DEFAULT`. */
+  /** Estados que NO se ofrecen, por `value`. Default: ninguno (solo cuenta el catálogo vigente). */
   exclude?: readonly string[];
 }
 
@@ -111,7 +108,7 @@ export interface OpcionesEstadoOpts {
  */
 export function estadosOfrecidos(
   catalogo: readonly OrderStatusLiteRow[] | null | undefined,
-  exclude: readonly string[] = EXCLUDE_ESTADO_DEFAULT,
+  exclude: readonly string[] = [],
 ): OrderStatusLiteRow[] {
   return (catalogo ?? []).filter(
     (s) => VALUES_VIGENTES.has(s.value) && !exclude.includes(s.value),

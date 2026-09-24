@@ -79,7 +79,7 @@ function novedad(over: Partial<NovedadDTO> & { id: string }): NovedadDTO {
   return {
     numGuia: 12345,
     numRemision: "REM-001",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     intentosContacto: 0,
     mensajeroNombre: "Marta Mensajera",
     destinatario: "Ana Cliente",

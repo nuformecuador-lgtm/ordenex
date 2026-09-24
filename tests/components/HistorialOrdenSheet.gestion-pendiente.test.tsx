@@ -41,17 +41,17 @@ async function abrirCon(resultado: Ok): Promise<HTMLElement> {
 }
 
 describe("454/R29 — el detalle de la orden pinta la nota de la gestión pendiente", () => {
-  it("gestión pendiente: «Reprogramada · pendiente de confirmación»", async () => {
+  it("gestión pendiente: «Reprogramado · pendiente de confirmación»", async () => {
     const dialogo = await abrirCon(
       ok({
         gestionPendiente: {
-          resultado: "reprogramada",
+          resultado: "reprogramado",
           registradaAt: "2026-09-23T21:00:00.000Z",
         },
       }),
     );
     expect(
-      await within(dialogo).findByText("Reprogramada · pendiente de confirmación"),
+      await within(dialogo).findByText("Reprogramado · pendiente de confirmación"),
     ).toBeInTheDocument();
   });
 

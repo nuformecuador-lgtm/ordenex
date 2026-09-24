@@ -20,34 +20,48 @@ import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 // (`CAUSA_INCIDENTE_LABEL`), y el vocabulario es el aprobado el 2026-07-15 (feature 73).
 import { CAUSA_DEVOLUCION_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-devolucion-options";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
+import { nombreDeResultado } from "@/lib/types/gestion-resultado";
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
-export const RESULTADO_LABEL: Record<CierreResultado, string> = {
-  entregada: "Entregadas",
-  reprogramada: "Reprogramadas",
-  devuelta: "Devueltas",
-  rechazada: "Rechazadas",
-  incidente: "Incidentes", // feature 158/R18
-};
 
 /**
- * Feature 230 (T1.3, design §6.1) — el resultado de UNA gestion, en SINGULAR.
+ * FICHA 455 (2026-09-24, design §2.1; R4/R5): el resultado de una gestión se rotula con el nombre
+ * EXACTO de su estado homónimo (`nombreDeResultado`, la fuente única) en TODOS los sitios: la
+ * pestaña/sección de la pantalla, la celda de la descarga, la confirmación física y el wallet.
  *
- * `RESULTADO_LABEL` esta en plural porque nombra la SECCION de la pantalla («Entregadas»). La
- * hoja fundida emite una celda POR FILA, y una fila es una gestion: «Entregada».
- *
- * Es un segundo mapa y NO una derivacion del primero (nada de quitarle la «s»): las dos formas
- * son textos de interfaz, i18n-ready, y una regla morfologica del castellano incrustada en el
- * codigo se rompe en el primer idioma —o en el primer resultado— que no la cumpla.
- *
- * R45 exige que la celda sea SIEMPRE esta etiqueta y jamas el value del enum.
+ * Hasta la 455 había DOS mapas escritos a mano: `RESULTADO_LABEL` en plural para las secciones
+ * («Entregadas», «Devueltas», «Rechazadas») y `RESULTADO_FILA_LABEL` en singular para las celdas
+ * (feature 230). Con un solo nombre por estado (R2: «sin plural») vuelven a ser UNO: la pestaña y
+ * la columna de la descarga dicen exactamente lo mismo. `RESULTADO_FILA_LABEL` se conserva como
+ * alias del mismo objeto para sus consumidores.
  */
-export const RESULTADO_FILA_LABEL: Record<CierreResultado, string> = {
-  entregada: "Entregada",
-  reprogramada: "Reprogramada",
-  devuelta: "Devuelta",
-  rechazada: "Rechazada",
-  incidente: "Incidente",
+export const RESULTADO_LABEL: Readonly<Record<CierreResultado, string>> = {
+  entregado: nombreDeResultado("entregado"),
+  reprogramado: nombreDeResultado("reprogramado"),
+  novedad: nombreDeResultado("novedad"),
+  devolucion_a_origen_por_rechazo: nombreDeResultado("devolucion_a_origen_por_rechazo"),
+  incidente: nombreDeResultado("incidente"), // feature 158/R18
+};
+
+/** Alias de `RESULTADO_LABEL` (feature 230; R45: la celda es SIEMPRE esta etiqueta, nunca el enum). */
+export const RESULTADO_FILA_LABEL: Readonly<Record<CierreResultado, string>> = RESULTADO_LABEL;
+
+/**
+ * FICHA 455 (2026-09-24, R5): el texto de la sección VACÍA de un resultado, con su nombre exacto.
+ * Antes era un mapa escrito a mano en cada detalle («No hay devoluciones.» para `novedad`, «No hay
+ * rechazos.» para la devolución a origen por rechazo): otro vocabulario para el mismo estado.
+ */
+export function textoResultadoVacio(resultado: CierreResultado): string {
+  return `No hay gestiones con resultado «${RESULTADO_LABEL[resultado]}».`;
+}
+
+/** El texto vacío de cada resultado (feature 158/R18: `incidente` incluido), derivado de arriba. */
+export const RESULTADO_VACIO: Readonly<Record<CierreResultado, string>> = {
+  entregado: textoResultadoVacio("entregado"),
+  reprogramado: textoResultadoVacio("reprogramado"),
+  novedad: textoResultadoVacio("novedad"),
+  devolucion_a_origen_por_rechazo: textoResultadoVacio("devolucion_a_origen_por_rechazo"),
+  incidente: textoResultadoVacio("incidente"),
 };
 
 export const METODO_LABEL: Record<MetodoPagoValue, string> = {

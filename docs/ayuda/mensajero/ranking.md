@@ -14,18 +14,18 @@ fuentes:
 # Ranking
 
 El ranking del día, con el podio de los mensajeros que mejor van. Se mide por **efectividad**:
-entregadas sobre asignadas, del día en curso.
+entregados sobre asignados, del día en curso.
 
 ## Cómo se calcula
 
 ```
-efectividad = entregadas / asignadas   (hoy)
+efectividad = entregados / asignados   (hoy)
 ```
 
 Nada más. No pondera zonas, ni distancias, ni el tamaño del paquete: de lo que te asignaron hoy,
 cuánto entregaste.
 
-En la tabla ves las dos cifras por separado —**asignadas** y **entregadas**— además del porcentaje, así
+En la tabla ves las dos cifras por separado —**entregados** y **asignados**— además del porcentaje, así
 que siempre podés comprobar de dónde sale tu número.
 
 ## El podio

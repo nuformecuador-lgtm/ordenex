@@ -63,7 +63,7 @@ function makeWalletStore() {
 function makeOrdenStore() {
   const ordenes = [
     // o1 entrego (gestion LEGADA, ya aplicada al registrarse): la aplicacion no la toca.
-    { id: "o1", estatusId: idEstado("entregada"), deletedAt: null as Date | null },
+    { id: "o1", estatusId: idEstado("entregado"), deletedAt: null as Date | null },
     // o2 es la devolucion de ESTE cierre (gestion g2, modelo nuevo): la que tiene que aplicarse.
     { id: "o2", estatusId: idEstado("en_reparto"), deletedAt: null as Date | null },
     // La testigo: MISMO resultado `devuelta` y MISMO estado, pero su gestion (g3) es de OTRO
@@ -119,9 +119,9 @@ function makeOrdenStore() {
 // FICHA 454: `registrada` = la gestion tiene su evento `gestion_registrada` (modelo nuevo). g1 es
 // LEGADA; g2 y g3 son devoluciones del modelo nuevo, pendientes hasta que su cierre se apruebe.
 const GESTIONES_EN_BASE = [
-  { id: "g1", ordenId: "o1", cierreId: "c1", resultado: "entregada", anuladaAt: null as Date | null, registrada: false },
-  { id: "g2", ordenId: "o2", cierreId: "c1", resultado: "devuelta", anuladaAt: null as Date | null, registrada: true },
-  { id: "g3", ordenId: "o3", cierreId: "c2", resultado: "devuelta", anuladaAt: null as Date | null, registrada: true },
+  { id: "g1", ordenId: "o1", cierreId: "c1", resultado: "entregado", anuladaAt: null as Date | null, registrada: false },
+  { id: "g2", ordenId: "o2", cierreId: "c1", resultado: "novedad", anuladaAt: null as Date | null, registrada: true },
+  { id: "g3", ordenId: "o3", cierreId: "c2", resultado: "novedad", anuladaAt: null as Date | null, registrada: true },
 ];
 
 type WhereGestion = {
@@ -356,7 +356,7 @@ describe("wallet idempotencia (R6/R13)", () => {
     // (g2) del cierre. Ya no los pone, asi que el cierre trae ademas un RECHAZO —el resultado
     // que si los factura— para que este caso siga deduplicando los SEIS conceptos y no cuatro.
     const gestiones = gestionOrdenFake([
-      { id: "g4", ordenId: "o4", cierreId: "c1", resultado: "rechazada", anuladaAt: null, registrada: false },
+      { id: "g4", ordenId: "o4", cierreId: "c1", resultado: "devolucion_a_origen_por_rechazo", anuladaAt: null, registrada: false },
     ]);
     const prisma = buildPrisma(store, makeOrdenStore(), gestiones);
     const repo = makeRepo(prisma);
@@ -437,8 +437,8 @@ describe("wallet idempotencia (R6/R13)", () => {
     // OTRO cierre y sigue `en_reparto` con su gestion pendiente: mientras ese cierre no se
     // apruebe, ni se ve ni corre su plazo —y por tanto NO se le puede cobrar el rechazo.
     expect(estado()).toEqual({
-      o1: idEstado("entregada"),
-      o2: APLICACION_GESTIONES.destinoPorResultado.devuelta,
+      o1: idEstado("entregado"),
+      o2: APLICACION_GESTIONES.destinoPorResultado.novedad,
       o3: idEstado("en_reparto"),
     });
 
@@ -448,7 +448,7 @@ describe("wallet idempotencia (R6/R13)", () => {
       (c[0] as readonly string[]).join(" ? ").includes('UPDATE "orden" SET "estatus_id" ='),
     );
     expect(updates).toHaveLength(1);
-    expect(updates[0][1]).toBe(APLICACION_GESTIONES.destinoPorResultado.devuelta);
+    expect(updates[0][1]).toBe(APLICACION_GESTIONES.destinoPorResultado.novedad);
     expect((updates[0][2] as { values: string[] }).values).toEqual(["o2"]);
     expect(updates[0][3]).toBe(APLICACION_GESTIONES.enRepartoId);
     const sql = (updates[0][0] as readonly string[]).join(" ? ").replace(/\s+/g, " ");
@@ -463,8 +463,8 @@ describe("wallet idempotencia (R6/R13)", () => {
     // R12: la guarda por `en_reparto` no encuentra nada -> ni cambio de estado ni segunda fila de
     // historial. La idempotencia no la da un `if`, la da el WHERE.
     expect(estado()).toEqual({
-      o1: idEstado("entregada"),
-      o2: APLICACION_GESTIONES.destinoPorResultado.devuelta,
+      o1: idEstado("entregado"),
+      o2: APLICACION_GESTIONES.destinoPorResultado.novedad,
       o3: idEstado("en_reparto"),
     });
     const updatesTrasLaSegunda = (ordenStore.$queryRaw.mock.calls as unknown[][]).filter((c) =>

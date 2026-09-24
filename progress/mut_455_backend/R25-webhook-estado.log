@@ -1,0 +1,55 @@
+# MUTACION R25-webhook-estado
+archivo: lib/services/WebhookEstadoService.ts
+linea: 279
+- "estadoNombre: datos.estado === null ? null : nombreDeEstado(datos.estado),"
++ "estadoNombre: datos.estado,"
+tests: tests/integration/db/455/caracterizacion/webhook-estado.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 4 passed (5)
+FAIL  tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R25) > R25: el nombre es el visible de cada destino
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/db/455/caracterizacion/webhook-estado.test.ts (5 tests | 1 failed) 603ms
+       × R25: el nombre es el visible de cada destino 7ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  06:00:41
+   Duration  3.22s (transform 943ms, setup 55ms, import 2.36s, tests 603ms, environment 0ms)
+
+(node:26240) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R25) > R25: el nombre es el visible de cada destino
+AssertionError: expected [ 'novedad', 'entregado', …(1) ] to deeply equal [ 'Novedad', 'Entregado', …(1) ]
+
+- Expected
++ Received
+
+  [
+-   "Novedad",
+-   "Entregado",
+-   "Devolución a origen por rechazo",
++   "novedad",
++   "entregado",
++   "devolucion_a_origen_por_rechazo",
+  ]
+
+ ❯ tests/integration/db/455/caracterizacion/webhook-estado.test.ts:196:53
+    194|
+    195|     it("R25: el nombre es el visible de cada destino", () => {
+    196|       expect(r.entregas.map((x) => x.estadoNombre)).toEqual(["Novedad"…
+       |                                                     ^
+    197|     });
+    198|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

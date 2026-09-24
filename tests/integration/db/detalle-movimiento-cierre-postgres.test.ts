@@ -99,7 +99,7 @@ const SEMILLA: Semilla[] = [
     valorFlete: "1000.00",
     montoCobrar: "14900.00",
     cobraComision: true,
-    gestiones: [{ resultado: "entregada", montoRecibido: "14900.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "14900.00" }],
   },
   {
     // Cobra comision y NO tenia COD: su aporte a la comision es 0,00 y NO se muestra (Q2).
@@ -109,34 +109,34 @@ const SEMILLA: Semilla[] = [
     valorFlete: "2000.00",
     montoCobrar: null,
     cobraComision: true,
-    gestiones: [{ resultado: "entregada", montoRecibido: null }],
+    gestiones: [{ resultado: "entregado", montoRecibido: null }],
   },
   {
-    clave: "rechazada",
+    clave: "devolucion_a_origen_por_rechazo",
     tienda: "A",
     numGuia: 503,
     valorFlete: "3000.00",
     montoCobrar: "9000.00",
     cobraComision: true,
-    gestiones: [{ resultado: "rechazada", montoRecibido: null }],
+    gestiones: [{ resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null }],
   },
   {
-    clave: "devuelta",
+    clave: "novedad",
     tienda: "A",
     numGuia: 504,
     valorFlete: "4000.00",
     montoCobrar: "1000.00",
     cobraComision: true,
-    gestiones: [{ resultado: "devuelta", montoRecibido: null }],
+    gestiones: [{ resultado: "novedad", montoRecibido: null }],
   },
   {
-    clave: "reprogramada",
+    clave: "reprogramado",
     tienda: "A",
     numGuia: 505,
     valorFlete: "4500.00",
     montoCobrar: "1000.00",
     cobraComision: true,
-    gestiones: [{ resultado: "reprogramada", montoRecibido: "250.00" }],
+    gestiones: [{ resultado: "reprogramado", montoRecibido: "250.00" }],
   },
   {
     clave: "incidente",
@@ -155,7 +155,7 @@ const SEMILLA: Semilla[] = [
     valorFlete: null,
     montoCobrar: "20000.00",
     cobraComision: true,
-    gestiones: [{ resultado: "entregada", montoRecibido: "20000.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "20000.00" }],
   },
   {
     // R20: DOS gestiones de la MISMA orden en el MISMO cierre. Y su guia congelada REPITE la de
@@ -167,8 +167,8 @@ const SEMILLA: Semilla[] = [
     montoCobrar: "8000.00",
     cobraComision: true,
     gestiones: [
-      { resultado: "entregada", montoRecibido: "3000.00" },
-      { resultado: "entregada", montoRecibido: "5000.00" },
+      { resultado: "entregado", montoRecibido: "3000.00" },
+      { resultado: "entregado", montoRecibido: "5000.00" },
     ],
   },
   {
@@ -179,7 +179,7 @@ const SEMILLA: Semilla[] = [
     valorFlete: "777.00",
     montoCobrar: "1000.00",
     cobraComision: false,
-    gestiones: [{ resultado: "entregada", montoRecibido: "1000.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "1000.00" }],
   },
 ];
 
@@ -459,7 +459,7 @@ describeSiHayBase("ficha 344 — el detalle de un movimiento contra Postgres", (
       // Los intrusos, uno a uno y por su nombre: quitar la restriccion de `resultado` del
       // `WHERE` mete estos cinco y el caso cae nombrandolos.
       const vistos = new Set(r.data.ordenes.map((o) => o.ordenId));
-      for (const intruso of ["rechazada", "devuelta", "reprogramada", "incidente", "sin-tarifa"]) {
+      for (const intruso of ["devolucion_a_origen_por_rechazo", "novedad", "reprogramado", "incidente", "sin-tarifa"]) {
         expect(vistos.has(s.ordenPorClave.get(intruso)!), `se colo la orden «${intruso}»`).toBe(false);
       }
     });
@@ -557,7 +557,7 @@ describeSiHayBase("ficha 344 — el detalle de un movimiento contra Postgres", (
       expect(dos, "la orden con dos gestiones no salio exactamente una vez").toHaveLength(1);
       // 5 000,00 de flete por CADA una de sus dos gestiones entregadas.
       expect(dos[0].aporte).toBe("10000.00");
-      expect(dos[0].resultados).toEqual(["entregada", "entregada"]);
+      expect(dos[0].resultados).toEqual(["entregado", "entregado"]);
       // Y la Σ del conjunto sigue cuadrando con esa fila dentro.
       expect(sumar(r.data.ordenes.map((o) => o.aporte))).toBe(await s.montoCaja("ingreso_flete"));
     });
@@ -748,7 +748,7 @@ describeSiHayBase("ficha 344 — el detalle de un movimiento contra Postgres", (
       // Las cuatro ordenes de A que recaudaron algo; las que recaudaron 0 no se muestran (Q2).
       expect(new Set(ordenes.map((o) => o.ordenId))).toEqual(
         new Set(
-          ["entregada-con-cod", "reprogramada", "sin-tarifa", "dos-gestiones"].map((c) =>
+          ["entregada-con-cod", "reprogramado", "sin-tarifa", "dos-gestiones"].map((c) =>
             s.ordenPorClave.get(c),
           ),
         ),
@@ -757,7 +757,7 @@ describeSiHayBase("ficha 344 — el detalle de un movimiento contra Postgres", (
       // La `reprogramada` recaudo 250,00: un resultado que NO aporta a ningun concepto derivado
       // SI aporta al credito COD. Es la prueba de que este criterio es el suyo y no una copia.
       const reprogramada = ordenes.find(
-        (o) => o.ordenId === s.ordenPorClave.get("reprogramada"),
+        (o) => o.ordenId === s.ordenPorClave.get("reprogramado"),
       );
       expect(reprogramada?.aporte).toBe("250.00");
     });

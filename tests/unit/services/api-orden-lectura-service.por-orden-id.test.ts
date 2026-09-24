@@ -33,7 +33,7 @@ function row(overrides: Partial<ApiOrdenRow> = {}): ApiOrdenRow {
   return {
     numGuia: 10234,
     numRemision: "REM-1",
-    estatusValue: "entregada",
+    estatusValue: "entregado",
     destinatario: "Ana",
     telefonoDest: "0991234567",
     producto: "Caja",
@@ -81,7 +81,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
   it("R16: orden propia con evidencias -> DTO con URLs firmadas al TTL de la 106, sin storagePath", async () => {
     const filaConEvidencia: ApiOrdenDetalleRow = detalleRow({
       evidencias: [
-        { resultado: "entregada", storagePath: "ordenes/o1/e.jpg", contentType: "image/jpeg" },
+        { resultado: "entregado", storagePath: "ordenes/o1/e.jpg", contentType: "image/jpeg" },
       ],
     });
     const repo = fakeRepo(filaConEvidencia);
@@ -94,10 +94,10 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
       ["ordenes/o1/e.jpg"],
       gestionConfig.SIGNED_URL_TTL_SECONDS,
     );
-    expect(res).toMatchObject({ numGuia: 10234, estado: "entregada" });
+    expect(res).toMatchObject({ numGuia: 10234, estado: "entregado", estadoNombre: "Entregado" });
     expect(res!.evidencias).toEqual([
       {
-        resultado: "entregada",
+        resultado: "entregado", resultadoNombre: "Entregado",
         contentType: "image/jpeg",
         url: "https://signed/e.jpg",
         expiraEnSegundos: gestionConfig.SIGNED_URL_TTL_SECONDS,
@@ -184,6 +184,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId — `mensajero` (feature 404)
       "destinatario",
       "direccion",
       "estado",
+      "estadoNombre",
       "evidencias",
       "gestiones",
       "mensajero",
@@ -298,7 +299,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId — evidencias de incidente (
       prismaDetalleRow({
         gestiones: [
           {
-            resultado: "incidente",
+            resultado: "incidente", resultadoNombre: "Incidente",
             evidenciaStoragePath: "ordenes/o1/incidente-mensajero.jpg",
             evidenciaContentType: "image/jpeg",
             createdAt: new Date("2026-08-22T10:00:00.000Z"),
@@ -316,7 +317,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId — evidencias de incidente (
     );
     expect(res!.evidencias).toEqual([
       {
-        resultado: "incidente",
+        resultado: "incidente", resultadoNombre: "Incidente",
         contentType: "image/jpeg",
         url: "https://signed/mensajero.jpg",
         expiraEnSegundos: TTL,
@@ -342,7 +343,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId — evidencias de incidente (
     expect(provider.createSignedUrls).toHaveBeenCalledWith(["incidentes/i1/portada.jpg"], TTL);
     expect(res!.evidencias).toEqual([
       {
-        resultado: "incidente",
+        resultado: "incidente", resultadoNombre: "Incidente",
         contentType: "image/png",
         url: "https://signed/admin.jpg",
         expiraEnSegundos: TTL,
@@ -355,7 +356,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId — evidencias de incidente (
       prismaDetalleRow({
         gestiones: [
           {
-            resultado: "incidente",
+            resultado: "incidente", resultadoNombre: "Incidente",
             evidenciaStoragePath: "ordenes/o1/incidente-mensajero.jpg",
             evidenciaContentType: "image/jpeg",
             createdAt: new Date("2026-08-22T10:00:00.000Z"),
@@ -398,7 +399,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId — evidencias de incidente (
       prismaDetalleRow({
         gestiones: [
           {
-            resultado: "incidente",
+            resultado: "incidente", resultadoNombre: "Incidente",
             evidenciaStoragePath: "ordenes/o1/incidente-mensajero.jpg",
             evidenciaContentType: "image/jpeg",
             createdAt: new Date("2026-08-22T10:00:00.000Z"),

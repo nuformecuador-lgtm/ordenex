@@ -36,7 +36,7 @@ function consultaDe(raw: object = {}, rol = "maestro", usuarioId = "u1"): Consul
 
 function filaVolumen(
   producto: string,
-  status = "entregada",
+  status = "entregado",
   n = 1,
   tiendaId = T1,
   tiendaNombre = "Tienda Uno",
@@ -151,8 +151,8 @@ describe("R12 · el importe COMPLETO de la orden cuenta en CADA producto", () =>
 describe("R13 · las ordenes ACOMPANADAS, en el lado del volumen", () => {
   it("cuenta las ordenes con DOS O MAS productos distintos, y es aditiva", () => {
     const { filas } = fundir([
-      filaVolumen("1 * Base C. 1 * Dr Melaxin.", "entregada", 3),
-      filaVolumen("1 * Base C", "entregada", 5),
+      filaVolumen("1 * Base C. 1 * Dr Melaxin.", "entregado", 3),
+      filaVolumen("1 * Base C", "entregado", 5),
     ]);
     const baseC = filas.find((f) => f.producto === "Base C");
     const melaxin = filas.find((f) => f.producto === "Dr Melaxin");
@@ -164,15 +164,15 @@ describe("R13 · las ordenes ACOMPANADAS, en el lado del volumen", () => {
   });
 
   it("el mismo producto repetido en una orden NO la hace acompanada", () => {
-    const { filas } = fundir([filaVolumen("2 * Base C. 1 * base c.", "entregada", 4)]);
+    const { filas } = fundir([filaVolumen("2 * Base C. 1 * base c.", "entregado", 4)]);
     expect(filas[0].ordenesAcompanadas).toBe(0);
     expect(filas[0].ordenes).toBe(4);
   });
 
   it("nunca supera a `ordenes`", () => {
     const { filas } = fundir([
-      filaVolumen("1 * A. 1 * B.", "entregada", 2),
-      filaVolumen("1 * A", "rechazada", 7),
+      filaVolumen("1 * A. 1 * B.", "entregado", 2),
+      filaVolumen("1 * A", "devolucion_a_origen_por_rechazo", 7),
     ]);
     for (const f of filas) expect(f.ordenesAcompanadas).toBeLessThanOrEqual(f.ordenes);
   });
@@ -216,7 +216,7 @@ describe("R19 · ⚠ MUTACION M3 · el retorno NO entra en el reparto", () => {
     const c = grupo(
       [
         filaDinero({ ordenId: "o1" }),
-        filaDinero({ ordenId: "o2", resultado: "rechazada", montoRecibido: null }),
+        filaDinero({ ordenId: "o2", resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null }),
       ],
       "base c",
     );
@@ -367,7 +367,7 @@ describe("R5 · con el dinero DENEGADO, el repositorio de dinero NO se llama ni 
 describe("R78 · UNA sola lectura: volumen y dinero en la misma fila y el mismo instante", () => {
   it("las cifras de dinero se adosan a la fila de volumen que YA tiene esa clave", async () => {
     const service = new ConteoProductosService(
-      repoVolumen([filaVolumen("1 * Base C", "entregada", 6)]),
+      repoVolumen([filaVolumen("1 * Base C", "entregado", 6)]),
       cacheFalsa(),
       dineroFalso([
         filaDinero({ ordenId: "o1" }),
@@ -426,7 +426,7 @@ describe("R78 · UNA sola lectura: volumen y dinero en la misma fila y el mismo 
 describe("R76 · el tope: o van todas las ordenes, o no va ninguna", () => {
   it("`limite_excedido` apaga TODAS las cifras y deja el volumen intacto", async () => {
     const service = new ConteoProductosService(
-      repoVolumen([filaVolumen("1 * Base C", "entregada", 9)]),
+      repoVolumen([filaVolumen("1 * Base C", "entregado", 9)]),
       cacheFalsa(),
       dineroFalso([], { estado: "limite_excedido", limite: descargaConfig.MAX_FILAS }),
       { now: () => AHORA },

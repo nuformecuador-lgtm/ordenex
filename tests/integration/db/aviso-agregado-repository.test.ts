@@ -30,8 +30,8 @@ import {
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 const AHORA = new Date("2091-06-15T12:00:00.000Z");
-const ESTATUS_NOVEDAD = "devuelta";
-const ESTATUS_REPRESADA = "por_devolver";
+const ESTATUS_NOVEDAD = "novedad";
+const ESTATUS_REPRESADA = "por_devolver_a_bodega_central";
 const ESTATUS_EN_TRANSITO = "devolviendo_a_tienda";
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
@@ -337,7 +337,7 @@ describeSiHayBase("409/T4.1 — el resumen de NOVEDADES por tienda", () => {
       // La gestion `devuelta` VIGENTE (no anulada) es de donde sale la causa.
       await tx.$executeRawUnsafe(
         `INSERT INTO "gestion_orden" ("id","orden_id","mensajero_id","resultado","causa_devolucion","created_at")
-         VALUES ($1, $2, $3, 'devuelta'::"gestion_resultado", 'wrong_address'::"gestion_causa_devolucion", $4)`,
+         VALUES ($1, $2, $3, 'novedad'::"gestion_resultado", 'wrong_address'::"gestion_causa_devolucion", $4)`,
         randomUUID(),
         orden,
         fks!.tiendaId, // cualquier usuario sirve de actor para el FK
@@ -470,7 +470,7 @@ describeSiHayBase("409/T4.1 — el predicado de REPRESADAS (R45/R46)", () => {
     expect(r.porZona!.masAntiguaAt.toISOString()).toBe(hace(4).toISOString());
   });
 
-  it("⭑ el ancla es la ULTIMA transicion a `por_devolver`, no la primera", async () => {
+  it("⭑ el ancla es la ULTIMA transicion a `por_devolver_a_bodega_central`, no la primera", async () => {
     // Una orden que salio de `por_devolver` y volvio a entrar HOY no es una represada de hace
     // semanas. Con un `where` sobre la relacion —«existe ALGUNA transicion antigua»— entraria; con
     // la ULTIMA, no. Es la diferencia entre avisar de un atasco real y avisar de uno resuelto.

@@ -120,7 +120,7 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
     tiendaId: "tienda-1",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "10.00",
     metodoPago: "efectivo",
     motivo: null,
@@ -309,7 +309,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle — ingreso y gananci
             gestiones: [
               gestionRow({
                 gestionId: "g1",
-                resultado: "entregada",
+                resultado: "entregado",
                 ingresoOrdenex: conIngreso({
                   flete: "2500.00",
                   ivaFlete: "325.00",
@@ -324,7 +324,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle — ingreso y gananci
             gestiones: [
               gestionRow({
                 gestionId: "g2",
-                resultado: "rechazada",
+                resultado: "devolucion_a_origen_por_rechazo",
                 ingresoOrdenex: conIngreso({
                   fleteDevolucion: "1000.00",
                   ivaFleteDevolucion: "130.00",
@@ -372,7 +372,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle — ingreso y gananci
           {
             resumen: detalleCierreRow({ cierreDiaId: "cd1", totalPagoMensajero: "2000.00" }),
             // Una reprogramación no aporta a ningún concepto.
-            gestiones: [gestionRow({ gestionId: "g1", resultado: "reprogramada" })],
+            gestiones: [gestionRow({ gestionId: "g1", resultado: "reprogramado" })],
           },
         ],
       })),
@@ -398,10 +398,10 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
           {
             resumen: detalleCierreRow({ cierreDiaId: "cd1" }),
             gestiones: [
-              gestionRow({ gestionId: "g1", resultado: "entregada", montoRecibido: "10.00" }),
+              gestionRow({ gestionId: "g1", resultado: "entregado", montoRecibido: "10.00" }),
               gestionRow({
                 gestionId: "g2",
-                resultado: "reprogramada",
+                resultado: "reprogramado",
                 montoRecibido: null,
                 metodoPago: null,
                 motivo: "ausente",
@@ -410,7 +410,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
           },
           {
             resumen: detalleCierreRow({ cierreDiaId: "cd2", mensajeroId: "m2", mensajeroNombre: "Beto" }),
-            gestiones: [gestionRow({ gestionId: "g3", resultado: "devuelta", montoRecibido: null, metodoPago: null })],
+            gestiones: [gestionRow({ gestionId: "g3", resultado: "novedad", montoRecibido: null, metodoPago: null })],
           },
         ],
       })),
@@ -428,14 +428,14 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
     // un elemento por cierre_dia.
     expect(r.cierres.map((c) => c.cierreDiaId)).toEqual(["cd1", "cd2"]);
     // grupos por resultado (4 claves siempre).
-    expect(r.cierres[0].grupos.entregada.map((g) => g.gestionId)).toEqual(["g1"]);
-    expect(r.cierres[0].grupos.reprogramada.map((g) => g.gestionId)).toEqual(["g2"]);
-    expect(r.cierres[0].grupos.devuelta).toEqual([]);
-    expect(r.cierres[0].grupos.rechazada).toEqual([]);
-    expect(r.cierres[1].grupos.devuelta.map((g) => g.gestionId)).toEqual(["g3"]);
+    expect(r.cierres[0].grupos.entregado.map((g) => g.gestionId)).toEqual(["g1"]);
+    expect(r.cierres[0].grupos.reprogramado.map((g) => g.gestionId)).toEqual(["g2"]);
+    expect(r.cierres[0].grupos.novedad).toEqual([]);
+    expect(r.cierres[0].grupos.devolucion_a_origen_por_rechazo).toEqual([]);
+    expect(r.cierres[1].grupos.novedad.map((g) => g.gestionId)).toEqual(["g3"]);
     // montos string escala 2.
-    expect(r.cierres[0].grupos.entregada[0].montoRecibido).toBe("10.00");
-    expect(typeof r.cierres[0].grupos.entregada[0].montoRecibido).toBe("string");
+    expect(r.cierres[0].grupos.entregado[0].montoRecibido).toBe("10.00");
+    expect(typeof r.cierres[0].grupos.entregado[0].montoRecibido).toBe("string");
   });
 
   it("R12: firma en LOTE las evidencias de todos los cierre_dia; expone SOLO URL firmada, no el path", async () => {
@@ -446,13 +446,13 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
           {
             resumen: detalleCierreRow({ cierreDiaId: "cd1" }),
             gestiones: [
-              gestionRow({ gestionId: "g1", resultado: "rechazada", montoRecibido: null, metodoPago: null, evidenciaStoragePath: "o1/r.jpg" }),
+              gestionRow({ gestionId: "g1", resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null, metodoPago: null, evidenciaStoragePath: "o1/r.jpg" }),
             ],
           },
           {
             resumen: detalleCierreRow({ cierreDiaId: "cd2" }),
             gestiones: [
-              gestionRow({ gestionId: "g2", resultado: "entregada", evidenciaStoragePath: "o2/e.jpg" }),
+              gestionRow({ gestionId: "g2", resultado: "entregado", evidenciaStoragePath: "o2/e.jpg" }),
             ],
           },
         ],
@@ -465,10 +465,10 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
     // una sola llamada en lote con ambos paths.
     expect(signedUrls.createSignedUrls).toHaveBeenCalledTimes(1);
     expect(signedUrls.createSignedUrls).toHaveBeenCalledWith(["o1/r.jpg", "o2/e.jpg"], expect.any(Number));
-    const g1 = r.cierres[0].grupos.rechazada[0];
+    const g1 = r.cierres[0].grupos.devolucion_a_origen_por_rechazo[0];
     expect(g1.evidenciaUrl).toBe("https://signed/o1/r.jpg");
     expect(g1).not.toHaveProperty("evidenciaStoragePath");
-    expect(r.cierres[1].grupos.entregada[0].evidenciaUrl).toBe("https://signed/o2/e.jpg");
+    expect(r.cierres[1].grupos.entregado[0].evidenciaUrl).toBe("https://signed/o2/e.jpg");
   });
 
   it("R20: el detalle expone el pago al mensajero snapshoteado por cierre_dia, por gestion y el agregado", async () => {
@@ -478,7 +478,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
         cierresDia: [
           {
             resumen: detalleCierreRow({ cierreDiaId: "cd1", totalPagoMensajero: "12.00" }),
-            gestiones: [gestionRow({ gestionId: "g1", resultado: "entregada", pagoMensajero: "12.00" })],
+            gestiones: [gestionRow({ gestionId: "g1", resultado: "entregado", pagoMensajero: "12.00" })],
           },
         ],
       })),
@@ -491,7 +491,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
     // R20: por cada cierre_dia incluido.
     expect(r.cierres[0].totalPagoMensajero).toBe("12.00");
     // R20: por gestion (snapshot leido, no recomputado).
-    expect(r.cierres[0].grupos.entregada[0].pagoMensajero).toBe("12.00");
+    expect(r.cierres[0].grupos.entregado[0].pagoMensajero).toBe("12.00");
     expect(typeof r.cierre.totalPagoMensajero).toBe("string"); // R23
   });
 
@@ -503,7 +503,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
           {
             resumen: detalleCierreRow({ cierreDiaId: "cd1", totalIngresoBodegaRechazos: "9.00" }),
             gestiones: [
-              gestionRow({ gestionId: "g1", resultado: "rechazada", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "3.00" }),
+              gestionRow({ gestionId: "g1", resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "3.00" }),
             ],
           },
         ],
@@ -517,7 +517,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
     // R19: por cada cierre_dia incluido (snapshot, sin recomputar).
     expect(r.cierres[0].totalIngresoBodegaRechazos).toBe("9.00");
     // R19: por gestion rechazada (snapshot leido).
-    expect(r.cierres[0].grupos.rechazada[0].ingresoBodegaRechazo).toBe("3.00");
+    expect(r.cierres[0].grupos.devolucion_a_origen_por_rechazo[0].ingresoBodegaRechazo).toBe("3.00");
     expect(typeof r.cierre.totalIngresoBodegaRechazos).toBe("string"); // R22
   });
 
@@ -856,7 +856,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle — las dos cascadas 
             gestiones: [
               gestionRow({
                 gestionId: "g1",
-                resultado: "entregada",
+                resultado: "entregado",
                 ingresoOrdenex: conIngreso({
                   flete: "2500.55",
                   ivaFlete: "325.07",
@@ -879,7 +879,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle — las dos cascadas 
             gestiones: [
               gestionRow({
                 gestionId: "g2",
-                resultado: "entregada",
+                resultado: "entregado",
                 ingresoOrdenex: conIngreso({
                   flete: "1800.35",
                   ivaFlete: "234.05",
@@ -892,7 +892,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle — las dos cascadas 
               }),
               gestionRow({
                 gestionId: "g3",
-                resultado: "rechazada",
+                resultado: "devolucion_a_origen_por_rechazo",
                 ingresoOrdenex: conIngreso({
                   fleteDevolucion: "1200.45",
                   ivaFleteDevolucion: "156.06",
@@ -1165,7 +1165,7 @@ describe("396/D1 — `verCierreBodegaDetalle` emite el desglose por tienda en lo
       ordenId: "o-ana-1",
       tiendaId: "t-norte",
       tiendaNombre: "Tienda Norte",
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: "100000.00",
       metodoPago: "efectivo",
       ingresoOrdenex: ingreso({
@@ -1183,7 +1183,7 @@ describe("396/D1 — `verCierreBodegaDetalle` emite el desglose por tienda en lo
       ordenId: "o-ana-2",
       tiendaId: "t-norte",
       tiendaNombre: "Tienda Norte",
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       montoRecibido: null,
       metodoPago: null,
       ingresoOrdenex: ingreso({
@@ -1202,7 +1202,7 @@ describe("396/D1 — `verCierreBodegaDetalle` emite el desglose por tienda en lo
       ordenId: "o-beto-1",
       tiendaId: "t-sur",
       tiendaNombre: "Tienda Sur",
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: "40000.00",
       metodoPago: "SINPE",
       ingresoOrdenex: ingreso({
@@ -1220,7 +1220,7 @@ describe("396/D1 — `verCierreBodegaDetalle` emite el desglose por tienda en lo
       ordenId: "o-beto-2",
       tiendaId: "t-norte",
       tiendaNombre: "Tienda Norte",
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: "25000.00",
       metodoPago: "efectivo",
       ingresoOrdenex: ingreso({

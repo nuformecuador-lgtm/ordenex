@@ -29,7 +29,7 @@ function fakeAsignacionRow(overrides: Record<string, unknown> = {}) {
     mensajeroAsignadoId: "m1",
     // Feature 246 (T3.7, R35): dia de reparto CRUDO (`@db.Date`: medianoche UTC de la fecha CR).
     fechaReparto: new Date("2026-08-21T00:00:00.000Z"),
-    estatus: { value: "por_recoger" },
+    estatus: { value: "mensajero_recogiendo_en_bodega" },
     tienda: { nombre: "Tienda X" },
     zona: { nombre: "Centro" },
     provincia: { nombre: "Pichincha" },
@@ -48,17 +48,17 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
     const findMany = vi.fn(async () => [fakeAsignacionRow()]);
     const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
 
-    const rows = await repo.findMisAsignaciones("m1", ["por_recoger", "en_reparto"]);
+    const rows = await repo.findMisAsignaciones("m1", ["mensajero_recogiendo_en_bodega", "en_reparto"]);
 
     expect(findMany).toHaveBeenCalledTimes(1);
     const arg = (findMany.mock.calls[0] as unknown[])[0] as { where: Record<string, unknown> };
     expect(arg.where.mensajeroAsignadoId).toBe("m1");
     expect(arg.where.deletedAt).toBeNull();
-    expect(arg.where.estatus).toEqual({ value: { in: ["por_recoger", "en_reparto"] } });
+    expect(arg.where.estatus).toEqual({ value: { in: ["mensajero_recogiendo_en_bodega", "en_reparto"] } });
     // Proyeccion: nombres legibles + montoCobrar como number.
     expect(rows[0].tiendaNombre).toBe("Tienda X");
     expect(rows[0].montoCobrar).toBe(100);
-    expect(rows[0].estatusValue).toBe("por_recoger");
+    expect(rows[0].estatusValue).toBe("mensajero_recogiendo_en_bodega");
   });
 
   // Feature 246 (T3.7, R35/R26): el dia de reparto viaja en la proyeccion QUE YA EXISTE. Sin
@@ -67,7 +67,7 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
     const findMany = vi.fn(async () => [fakeAsignacionRow()]);
     const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
 
-    const rows = await repo.findMisAsignaciones("m1", ["por_recoger"]);
+    const rows = await repo.findMisAsignaciones("m1", ["mensajero_recogiendo_en_bodega"]);
 
     const arg = (findMany.mock.calls[0] as unknown[])[0] as { select: Record<string, unknown> };
     expect(arg.select.fechaReparto).toBe(true);
@@ -85,7 +85,7 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
     const findMany = vi.fn(async () => [fakeAsignacionRow({ fechaReparto: null })]);
     const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
 
-    const rows = await repo.findMisAsignaciones("m1", ["por_recoger"]);
+    const rows = await repo.findMisAsignaciones("m1", ["mensajero_recogiendo_en_bodega"]);
 
     expect(rows[0].fechaReparto).toBeNull();
   });
@@ -150,7 +150,7 @@ describe("GestionOrdenRepository.contarEntregadas (feature 61)", () => {
     // ⏳ 2026-09-23 (FICHA 454, T1.12/R53): antes `{ value: "entregada" }`. La entrega de HOY sigue
     // `en_reparto` (pendiente de confirmar) hasta que se aprueba su cierre; el KPI la cuenta igual.
     // Lo que decide es la gestion `entregada` vigente de hoy (caso de abajo).
-    expect(arg.where.estatus).toEqual({ value: { in: ["entregada", "en_reparto"] } });
+    expect(arg.where.estatus).toEqual({ value: { in: ["entregado", "en_reparto"] } });
   });
 
   // El KPI es de JORNADA, no acumulado: el acote va sobre la GESTION vigente que entrego
@@ -165,7 +165,7 @@ describe("GestionOrdenRepository.contarEntregadas (feature 61)", () => {
     const arg = (count.mock.calls[0] as unknown[])[0] as { where: { gestiones: { some: unknown } } };
     expect(arg.where.gestiones.some).toEqual({
       mensajeroId: "m1", // ancla a QUIEN entrego: una reasignacion posterior no regala el KPI
-      resultado: "entregada",
+      resultado: "entregado",
       anuladaAt: null, // feature 67/R11: una entrega deshecha deja de contar
       createdAt: { gte: DIA.desde, lt: DIA.hasta }, // `lt`, NO `lte`
     });
@@ -242,7 +242,7 @@ describe("GestionOrdenRepository.sumMontoCobrarGestionadas (KPI 'Total a cobrar'
     const cuenta = (estatus: string) => !arg.where.OR[0].estatus.value.notIn.includes(estatus);
 
     expect(cuenta("en_reparto")).toBe(false);
-    for (const dentro of ["entregada", "reprogramada", "rechazada", "devuelta", "incidente"]) {
+    for (const dentro of ["entregado", "reprogramado", "devolucion_a_origen_por_rechazo", "novedad", "incidente"]) {
       expect(cuenta(dentro), `${dentro} SI cuenta como gestionada del dia`).toBe(true);
     }
   });
@@ -342,7 +342,7 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
     const n = await repo.recogerLote(
       ["o1", "o2"],
       "m1",
-      idEstado("por_recoger"),
+      idEstado("mensajero_recogiendo_en_bodega"),
       idEstado("en_reparto"),
       DIA_CR,
     );
@@ -357,7 +357,7 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
     expect(strings).toMatch(/deleted_at" IS NULL/);
     expect(strings).toMatch(/RETURNING "id"/);
     expect(values).toContain("m1"); // propiedad
-    expect(values).toContain(idEstado("por_recoger")); // origen
+    expect(values).toContain(idEstado("mensajero_recogiendo_en_bodega")); // origen
     expect(values).toContain(idEstado("en_reparto")); // destino en_reparto
   });
 
@@ -369,7 +369,7 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
   it("261/R1: el `WHERE` lleva el dia de reparto, y el dia entra como TEXTO con `::date`", async () => {
     const { repo, $queryRaw } = buildRecogerRepo([{ id: "o1" }]);
 
-    await repo.recogerLote(["o1"], "m1", idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
+    await repo.recogerLote(["o1"], "m1", idEstado("mensajero_recogiendo_en_bodega"), idEstado("en_reparto"), DIA_CR);
 
     const call = $queryRaw.mock.calls[0] as unknown[];
     const strings = (call[0] as string[]).join(" ");
@@ -393,13 +393,13 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
   it("R16/R8: registra historial (recoleccion) solo de los ids retornados", async () => {
     const { repo, createMany } = buildRecogerRepo([{ id: "o1" }]); // solo 1 de 2 gano la guarda
 
-    await repo.recogerLote(["o1", "o2"], "m1", idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
+    await repo.recogerLote(["o1", "o2"], "m1", idEstado("mensajero_recogiendo_en_bodega"), idEstado("en_reparto"), DIA_CR);
 
     const arg = (createMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("por_recoger"),
+        estatusOrigenId: idEstado("mensajero_recogiendo_en_bodega"),
         estatusDestinoId: idEstado("en_reparto"),
         actorUsuarioId: "m1", // el mensajero que recoge
         origenTipo: "recoleccion",
@@ -550,7 +550,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: {
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: 100,
         metodoPago: "efectivo",
         evidenciaStoragePath: "o1/entregada-1.jpg",
@@ -560,7 +560,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
 
     expect(r).toEqual({ gestionId: "g1", ordenEventoId: "ev1" });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
-    expect(gArg.data.resultado).toBe("entregada");
+    expect(gArg.data.resultado).toBe("entregado");
     expect(gArg.data.evidenciaStoragePath).toBe("o1/entregada-1.jpg");
     expect((gArg.data.montoRecibido as Prisma.Decimal).toString()).toBe("100");
     // R1: ni `orden.update` ni fila de historial.
@@ -573,7 +573,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
         tipo: "gestion_registrada",
         gestionOrdenId: "g1",
         familiaAplicacion: "gestion",
-        resultado: "entregada",
+        resultado: "entregado",
         mensajeroId: "m1",
         actorUsuarioId: "m1",
         actorRol: "mensajero",
@@ -593,7 +593,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
     const r = await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "entregada", montoRecibido: 1, metodoPago: "efectivo", pagos: [{ metodo: "efectivo", monto: 1 }] },
+      gestion: { resultado: "entregado", montoRecibido: 1, metodoPago: "efectivo", pagos: [{ metodo: "efectivo", monto: 1 }] },
     });
     expect(r).toBeNull();
     expect(gestionCreate).not.toHaveBeenCalled();
@@ -607,7 +607,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
     await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
+      gestion: { resultado: "reprogramado", fechaReprogramacion: "2027-01-01", motivo: "x" },
     });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.fechaReprogramacion).toBeInstanceOf(Date);
@@ -651,7 +651,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
     expect((eventoCreate.mock.calls[0] as unknown[])[0]).toMatchObject({
       data: { familiaAplicacion: "incidente", motivo: "danado" },
     });
-    for (const resultado of ["entregada", "reprogramada", "devuelta"] as const) {
+    for (const resultado of ["entregado", "reprogramado", "novedad"] as const) {
       const b = buildTxRepo();
       await b.repo.registrarGestionPendiente({
         ordenId: "o1",
@@ -671,7 +671,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
     await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "devuelta", causaDevolucion: "wrong_number", motivo: "telefono errado" },
+      gestion: { resultado: "novedad", causaDevolucion: "wrong_number", motivo: "telefono errado" },
     });
     const data = ((eventoCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> }).data;
     expect(data.motivo).toBe("wrong_number");
@@ -686,7 +686,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
     await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "devuelta", causaDevolucion: "wrong_number", motivo: "telefono errado" },
+      gestion: { resultado: "novedad", causaDevolucion: "wrong_number", motivo: "telefono errado" },
     });
 
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
@@ -707,7 +707,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
       repo.registrarGestionPendiente({
         ordenId: "o1",
         mensajeroId: "m1",
-        gestion: { resultado: "devuelta", causaDevolucion: "wrong_address", motivo: "x" },
+        gestion: { resultado: "novedad", causaDevolucion: "wrong_address", motivo: "x" },
       }),
     ).rejects.toThrow("evento falla");
   });
@@ -720,7 +720,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
       mensajeroId: "m1",
       // ⏳ 2026-09-23 (FICHA 454): antes `rechazada`; su aviso N1 sale ahora en este metodo y
       // necesitaria el cliente de notificaciones. `reprogramada` es igual de «sin causa».
-      gestion: { resultado: "reprogramada", fechaReprogramacion: "2099-01-01", motivo: "otro dia" },
+      gestion: { resultado: "reprogramado", fechaReprogramacion: "2099-01-01", motivo: "otro dia" },
     });
 
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
@@ -736,7 +736,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: {
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: 8000,
         metodoPago: null, // R19: mixta -> la columna deprecada va NULL
         pagos: [
@@ -763,7 +763,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: {
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: 99.99,
         metodoPago: null,
         pagos: [
@@ -794,7 +794,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
         ordenId: "o1",
         mensajeroId: "m1",
         gestion: {
-          resultado: "entregada",
+          resultado: "entregado",
           montoRecibido: 5000,
           metodoPago: "efectivo",
           pagos: [{ metodo: "efectivo", monto: 5000 }],
@@ -812,7 +812,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
     await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "entregada", montoRecibido: 0, metodoPago: null, pagos: [] },
+      gestion: { resultado: "entregado", montoRecibido: 0, metodoPago: null, pagos: [] },
     });
 
     expect(pagoCreateMany).not.toHaveBeenCalled();
@@ -828,7 +828,7 @@ describe("GestionOrdenRepository.registrarGestionPendiente (ficha 454; antes cre
       ordenId: "o1",
       mensajeroId: "m1",
       // ⏳ 2026-09-23 (FICHA 454): antes `rechazada` (ver la nota del caso R10/R16).
-      gestion: { resultado: "devuelta", causaDevolucion: "not_found", motivo: "no aparece" },
+      gestion: { resultado: "novedad", causaDevolucion: "not_found", motivo: "no aparece" },
     });
 
     expect(pagoCreateMany).not.toHaveBeenCalled();

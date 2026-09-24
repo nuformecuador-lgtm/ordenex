@@ -4,45 +4,36 @@ import {
   RESULTADO_LABEL,
 } from "@/app/(app)/cierres-admin/_components/cierre-labels";
 
-// Feature 230 — Tanda 1 (T1.3, design §6.1, R45) — la etiqueta SINGULAR del resultado de una
-// gestion.
+// Feature 230 — Tanda 1 (T1.3, design §6.1, R45) — la etiqueta del resultado de una gestion en la
+// celda de la hoja fundida.
 //
-// Por que hace falta un segundo mapa, y por que este archivo mide algo: `RESULTADO_LABEL` esta
-// en PLURAL porque nombra la SECCION de la pantalla («Entregadas»). La hoja fundida emite una
-// celda por FILA, y una fila es una gestion: «Entregada».
-//
-// La mutacion que estos casos matan es la tentadora: derivar el singular del plural quitandole
-// la «s». Funciona con los cinco valores de HOY, y por eso un caso que solo comparase textos
-// pasaria igual. Aqui se afirma ademas que los dos mapas son declaraciones INDEPENDIENTES y que
-// ninguno de los cinco valores del enum se queda sin etiqueta.
+// ⏳ REESCRITO EL 2026-09-24 (FICHA 455, T2.4; design §2.1; R4/R5). La 230 tenia DOS mapas: el
+// plural de las secciones («Entregadas») y el singular de la celda («Entregada»), declarados por
+// separado para no derivar uno del otro quitando la «s». La 455 fija UN nombre por estado, sin
+// plural (R2), y el resultado se llama como su estado homonimo (R4): la pestaña, la seccion y la
+// celda de la descarga dicen EXACTAMENTE lo mismo. Los dos mapas vuelven a ser uno
+// (`RESULTADO_FILA_LABEL` es un alias de `RESULTADO_LABEL`). Se afirma:
+//   - el contrato, literal y a mano (requirements 455 §0.2);
+//   - que la celda y la seccion son el MISMO mapa (la mutacion que se caza ahora es la contraria:
+//     que alguien vuelva a declarar un segundo mapa y los dos diverjan);
+//   - que ninguna etiqueta es el value del enum (R45).
 
 const ESPERADO = {
-  entregada: "Entregada",
-  reprogramada: "Reprogramada",
-  devuelta: "Devuelta",
-  rechazada: "Rechazada",
+  entregado: "Entregado",
+  reprogramado: "Reprogramado",
+  novedad: "Novedad",
+  devolucion_a_origen_por_rechazo: "Devolución a origen por rechazo",
   incidente: "Incidente",
 } as const;
 
-describe("RESULTADO_FILA_LABEL (feature 230, T1.3)", () => {
-  it("fija los cinco textos en singular, literalmente", () => {
+describe("RESULTADO_FILA_LABEL (feature 230, T1.3 → 455)", () => {
+  it("fija los cinco nombres exactos, literalmente", () => {
     expect(RESULTADO_FILA_LABEL).toEqual(ESPERADO);
+    expect(RESULTADO_LABEL).toEqual(ESPERADO);
   });
 
-  it("cubre EXACTAMENTE los mismos resultados que el mapa de secciones (ni uno menos)", () => {
-    // Si el enum gana un resultado, `RESULTADO_LABEL` lo obliga por tipo y este caso obliga a
-    // que la hoja fundida tambien lo tenga: una celda vacia en la columna «Resultado» seria un
-    // dato perdido, no una celda que «no aplica» (R10).
-    expect(Object.keys(RESULTADO_FILA_LABEL).sort()).toEqual(Object.keys(RESULTADO_LABEL).sort());
-  });
-
-  it("NO se deriva del plural quitando la «s»: son dos declaraciones distintas", () => {
-    for (const [clave, plural] of Object.entries(RESULTADO_LABEL)) {
-      const singular = RESULTADO_FILA_LABEL[clave as keyof typeof RESULTADO_FILA_LABEL];
-      expect(singular).not.toBe(plural);
-    }
-    // Y el plural NO se toca (R3 del espiritu de la feature: lo que ya existe sigue igual).
-    expect(RESULTADO_LABEL.entregada).toBe("Entregadas");
+  it("la celda y la sección son el MISMO mapa: no pueden divergir", () => {
+    expect(RESULTADO_FILA_LABEL).toBe(RESULTADO_LABEL);
   });
 
   it("ninguna etiqueta es el value del enum (R45)", () => {

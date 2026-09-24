@@ -280,7 +280,7 @@ const NOTA_SHELL_REDUCIDO =
   "AnaliticaShell.tsx desde 91ea5618 por decisión humana. Reactivar al descomentarlas.";
 
 /** El título de la sección que HOY pinta el único slot vivo (`destacado`). */
-const TITULO_SECCION_ENTREGAS = "Detalle - Movimiento de las ordenes";
+const TITULO_SECCION_ENTREGAS = "Detalle - Movimiento de las órdenes";
 
 /**
  * ANTI-VACÍO. NO ES DECORACIÓN — no lo borres el día que estorbe.

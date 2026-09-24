@@ -56,7 +56,7 @@ describe("ApiOrdenEliminacionService — la orden propia y eliminable (R1)", () 
 
     expect(res).toEqual({
       status: "ok",
-      data: { numGuia: 100234, numRemision: "REM-0001", estado: "en_bodega_central" },
+      data: { numGuia: 100234, numRemision: "REM-0001", estado: "en_bodega_central", estadoNombre: "En bodega central" },
     });
   });
 
@@ -74,7 +74,7 @@ describe("ApiOrdenEliminacionService — la orden propia y eliminable (R1)", () 
 
     expect(res).toEqual({
       status: "ok",
-      data: { numGuia: null, numRemision: "REM-0002", estado: "en_preparacion" },
+      data: { numGuia: null, numRemision: "REM-0002", estado: "en_preparacion", estadoNombre: "En preparación" },
     });
   });
 });
@@ -245,8 +245,8 @@ describe("ApiOrdenEliminacionService — el criterio por INTENTOS (2026-09-04)",
     expect(porEstado).toEqual(porIntentos);
   });
 
-  it("cero intentos sobre un estado nuevo de la lista (`por_recoger`) SI borra", async () => {
-    const repo = repoDoble(ordenEn("por_recoger"));
+  it("cero intentos sobre un estado nuevo de la lista (`mensajero_recogiendo_en_bodega`) SI borra", async () => {
+    const repo = repoDoble(ordenEn("mensajero_recogiendo_en_bodega"));
     expect((await servicio(repo, 0).eliminar(ACTOR, ORDEN_ID)).status).toBe("ok");
   });
 

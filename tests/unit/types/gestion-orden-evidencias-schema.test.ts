@@ -42,7 +42,7 @@ function entregada(evidencias: unknown[]) {
   return {
     ordenId: "o1",
     ubicacion: UBICACION_193,
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: 100,
     metodoPago: "efectivo",
     evidencias,
@@ -52,7 +52,7 @@ function rechazada(evidencias: unknown[]) {
   return {
     ordenId: "o1",
     ubicacion: UBICACION_193,
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     motivo: "cliente rechazo",
     evidencias,
   };
@@ -61,7 +61,7 @@ function devuelta(evidencias: unknown[]) {
   return {
     ordenId: "o1",
     ubicacion: UBICACION_193,
-    resultado: "devuelta",
+    resultado: "novedad",
     causaDevolucion: "wrong_address",
     motivo: "no vive",
     evidencias,
@@ -69,9 +69,9 @@ function devuelta(evidencias: unknown[]) {
 }
 
 const RAMAS_CON_FOTO = [
-  ["entregada", entregada],
-  ["rechazada", rechazada],
-  ["devuelta", devuelta],
+  ["entregado", entregada],
+  ["devolucion_a_origen_por_rechazo", rechazada],
+  ["novedad", devuelta],
 ] as const;
 
 describe("R5: las 3 ramas con foto aceptan una LISTA de 1..MAX evidencias", () => {
@@ -84,7 +84,7 @@ describe("R5: las 3 ramas con foto aceptan una LISTA de 1..MAX evidencias", () =
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "reprogramada",
+      resultado: "reprogramado",
       fechaReprogramacion: fechaFuturaISO(),
       motivo: "reagendar",
     });
@@ -138,13 +138,13 @@ describe("R8: validacion POR ARCHIVO — una foto invalida invalida el envio", (
 // el schema ya NO acepta el campo singular. Un objeto con `evidencia` (y sin `evidencias`) cae
 // en `min(1)` -> invalido, con el error colgando del campo lista `evidencias`.
 describe("sin puente: el campo singular `evidencia` ya no se pliega", () => {
-  it.each(["entregada", "rechazada", "devuelta"] as const)("%s: `evidencia` sin `evidencias` -> invalido", (nombre) => {
+  it.each(["entregado", "devolucion_a_origen_por_rechazo", "novedad"] as const)("%s: `evidencia` sin `evidencias` -> invalido", (nombre) => {
     const raw =
-      nombre === "entregada"
-        ? { ordenId: "o1", resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencia: fotoValida() }
-        : nombre === "rechazada"
-          ? { ordenId: "o1", resultado: "rechazada", motivo: "x", evidencia: fotoValida() }
-          : { ordenId: "o1", resultado: "devuelta", causaDevolucion: "wrong_address", motivo: "x", evidencia: fotoValida() };
+      nombre === "entregado"
+        ? { ordenId: "o1", resultado: "entregado", montoRecibido: 100, metodoPago: "efectivo", evidencia: fotoValida() }
+        : nombre === "devolucion_a_origen_por_rechazo"
+          ? { ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo", motivo: "x", evidencia: fotoValida() }
+          : { ordenId: "o1", resultado: "novedad", causaDevolucion: "wrong_address", motivo: "x", evidencia: fotoValida() };
     const r = gestionarSchema.safeParse(raw);
     expect(r.success).toBe(false);
     if (!r.success) expect(fieldErrorsDe(r.error).evidencias).toBeDefined();

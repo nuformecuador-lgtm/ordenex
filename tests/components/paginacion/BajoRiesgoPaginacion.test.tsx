@@ -368,7 +368,7 @@ function conjunto<T>(fila: (i: number) => T): T[] {
 }
 
 function gruposVacios(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 // --- Andamiaje -------------------------------------------------------------

@@ -21,7 +21,7 @@ export const EXCLUDE_POR_ROL: Record<string, string[]> = {
   [RolValue.admin]: ["pendiente"],
   [RolValue.adminTienda]: [
     "pendiente",
-    "devuelta",
+    "novedad",
     "en_bodega_central",
     "en_bodega_satelite",
     "en_ruta_bodega_satelite",
@@ -36,7 +36,7 @@ export const EXCLUDE_POR_ROL: Record<string, string[]> = {
 // Estados del flujo de devolución de RECHAZADAS (feature 139). Ninguno debe quedar excluido
 // para maestro/admin (R19) ni para adminTienda (R20). Exportado para blindar esa regla en test.
 export const ESTADOS_FLUJO_DEVOLUCION = [
-  "por_devolver",
+  "por_devolver_a_bodega_central",
   "devolviendo_a_bodega_central",
   "por_devolver_a_tienda",
   "devolviendo_a_tienda",

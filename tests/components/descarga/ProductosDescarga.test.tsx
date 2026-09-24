@@ -56,8 +56,8 @@ const FILAS: FilaProductoDTO[] = [
     unidades: 19,
     ordenes: 16,
     porStatus: [
-      { status: "entregada", conteo: 8 },
-      { status: "rechazada", conteo: 6 },
+      { status: "entregado", conteo: 8 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
       { status: EN_CURSO, conteo: 2 },
     ],
     ordenesAcompanadas: 0,
@@ -70,8 +70,8 @@ const FILAS: FilaProductoDTO[] = [
     unidades: 31,
     ordenes: 29,
     porStatus: [
-      { status: "entregada", conteo: 20 },
-      { status: "devuelta", conteo: 5 },
+      { status: "entregado", conteo: 20 },
+      { status: "novedad", conteo: 5 },
       { status: EN_CURSO, conteo: 4 },
     ],
     ordenesAcompanadas: 0,

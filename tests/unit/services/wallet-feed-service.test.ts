@@ -84,7 +84,7 @@ describe("WalletFeedService.construirMovimientosDeIngreso (R5/R10)", () => {
   it("cierre solo-entregada con comision: 4 conceptos, todos origen cierre_dia + tipo ingreso", async () => {
     // 2 ordenes distintas, ambas entregadas (los importes se duplican, como antes de la 69).
     const tx = buildTx(
-      [gestion("entregada", "o1"), gestion("entregada", "o2")],
+      [gestion("entregado", "o1"), gestion("entregado", "o2")],
       [detalle({ ordenId: "o1" }), detalle({ ordenId: "o2" })],
     );
     const svc = new WalletFeedService();
@@ -106,7 +106,7 @@ describe("WalletFeedService.construirMovimientosDeIngreso (R5/R10)", () => {
 
   it("R10: cierre con devoluciones -> emite conceptos de devolucion (hasta 6 categorias mixtas)", async () => {
     const tx = buildTx(
-      [gestion("entregada", "o1"), gestion("devuelta", "o2"), gestion("rechazada", "o3")],
+      [gestion("entregado", "o1"), gestion("novedad", "o2"), gestion("devolucion_a_origen_por_rechazo", "o3")],
       [detalle({ ordenId: "o1" }), detalle({ ordenId: "o2" }), detalle({ ordenId: "o3" })],
     );
     const svc = new WalletFeedService();
@@ -125,7 +125,7 @@ describe("WalletFeedService.construirMovimientosDeIngreso (R5/R10)", () => {
   });
 
   it("R10: cierre sin comision (cobraComision=false) -> NO emite comision ni su IVA", async () => {
-    const tx = buildTx([gestion("entregada")], [detalle({ cobraComision: false })]);
+    const tx = buildTx([gestion("entregado")], [detalle({ cobraComision: false })]);
     const svc = new WalletFeedService();
     const movs = await svc.construirMovimientosDeIngreso("c1", tx);
     const cats = movs.map((m) => m.categoria);
@@ -136,7 +136,7 @@ describe("WalletFeedService.construirMovimientosDeIngreso (R5/R10)", () => {
 
   it("R10: cierre solo reprogramadas -> ningun movimiento", async () => {
     const tx = buildTx(
-      [gestion("reprogramada", "o1"), gestion("reprogramada", "o2")],
+      [gestion("reprogramado", "o1"), gestion("reprogramado", "o2")],
       [detalle({ ordenId: "o1" }), detalle({ ordenId: "o2" })],
     );
     const svc = new WalletFeedService();
@@ -148,7 +148,7 @@ describe("WalletFeedService.construirMovimientosDeIngreso (R5/R10)", () => {
     // El gap (c) se PRESERVA tal cual: conceptos 0.00, no bloquea. Lo que cambia con la 69 es
     // que ahora queda RASTRO consultable (`tarifa_* IS NULL` en la fila).
     const tx = buildTx(
-      [gestion("entregada", "o1"), gestion("devuelta", "o2")],
+      [gestion("entregado", "o1"), gestion("novedad", "o2")],
       [detalle({ ordenId: "o1", sinTarifa: true }), detalle({ ordenId: "o2", sinTarifa: true })],
     );
     const svc = new WalletFeedService();
@@ -157,7 +157,7 @@ describe("WalletFeedService.construirMovimientosDeIngreso (R5/R10)", () => {
   });
 
   it("central (esCentral) usa flete GAM", async () => {
-    const tx = buildTx([gestion("entregada")], [detalle({ esCentral: true, cobraComision: false })]);
+    const tx = buildTx([gestion("entregado")], [detalle({ esCentral: true, cobraComision: false })]);
     const svc = new WalletFeedService();
     const movs = await svc.construirMovimientosDeIngreso("c1", tx);
     const map = Object.fromEntries(movs.map((m) => [m.categoria, m.monto]));
@@ -167,7 +167,7 @@ describe("WalletFeedService.construirMovimientosDeIngreso (R5/R10)", () => {
 
 describe("Feature 69/R12 — el feed deriva del SNAPSHOT y no de los datos vivos", () => {
   it("R12: lee cierre_detail por cierreId y NO consulta orden, zona ni tarifas", async () => {
-    const tx = buildTx([gestion("entregada")], [detalle()]);
+    const tx = buildTx([gestion("entregado")], [detalle()]);
     const svc = new WalletFeedService();
 
     await svc.construirMovimientosDeIngreso("c1", tx);
@@ -185,7 +185,7 @@ describe("Feature 69/R12 — el feed deriva del SNAPSHOT y no de los datos vivos
   });
 
   it("R12: de gestion_orden solo toma ordenId y resultado (lo que ES de la gestion)", async () => {
-    const tx = buildTx([gestion("entregada")], [detalle()]);
+    const tx = buildTx([gestion("entregado")], [detalle()]);
     const svc = new WalletFeedService();
 
     await svc.construirMovimientosDeIngreso("c1", tx);
@@ -201,7 +201,7 @@ describe("Feature 69/R12 — el feed deriva del SNAPSHOT y no de los datos vivos
     // aporta conceptos; la `entregada` si. Si el feed exigiera 1 gestion por fila, esto
     // reventaria; si duplicara la fila, cobraria el flete dos veces.
     const tx = buildTx(
-      [gestion("reprogramada", "o1"), gestion("entregada", "o1")],
+      [gestion("reprogramado", "o1"), gestion("entregado", "o1")],
       [detalle({ ordenId: "o1", cobraComision: false })],
     );
     const svc = new WalletFeedService();
@@ -218,7 +218,7 @@ describe("Feature 69/R14 — falta la fila congelada: aborta, sin fallback", () 
     // Sin fallback a datos vivos (decision (a)): preferimos una aprobacion ABORTADA Y VISIBLE
     // a un descuadre silencioso en un libro append-only. El backfill (R26/R27) hace que este
     // caso no deba ocurrir en produccion.
-    const tx = buildTx([gestion("entregada", "o1"), gestion("entregada", "o-huerfana")], [detalle({ ordenId: "o1" })]);
+    const tx = buildTx([gestion("entregado", "o1"), gestion("entregado", "o-huerfana")], [detalle({ ordenId: "o1" })]);
     const svc = new WalletFeedService();
 
     await expect(svc.construirMovimientosDeIngreso("c1", tx)).rejects.toThrow(
@@ -227,7 +227,7 @@ describe("Feature 69/R14 — falta la fila congelada: aborta, sin fallback", () 
   });
 
   it("R14: el error identifica el cierre y la orden sin snapshot", async () => {
-    const tx = buildTx([gestion("entregada", "o-huerfana")], []);
+    const tx = buildTx([gestion("entregado", "o-huerfana")], []);
     const svc = new WalletFeedService();
 
     await expect(svc.construirMovimientosDeIngreso("c1", tx)).rejects.toMatchObject({
@@ -253,7 +253,7 @@ describe("Feature 69/R14 — falta la fila congelada: aborta, sin fallback", () 
 describe("FICHA 450/R3 · el feed de ingreso no lanza dos consultas a la vez", () => {
   const RESPUESTAS = {
     "cierreDetail.findMany": [detalle({ ordenId: "o1" })],
-    "gestionOrden.findMany": [gestion("entregada", "o1")],
+    "gestionOrden.findMany": [gestion("entregado", "o1")],
   };
 
   it("no hay ningun solape sobre el cliente de la transaccion", async () => {
@@ -277,7 +277,7 @@ describe("FICHA 450/R3 · el feed de ingreso no lanza dos consultas a la vez", (
     const conVigilado = await svc.construirMovimientosDeIngreso("c1", vigilado.tx);
     const conNormal = await svc.construirMovimientosDeIngreso(
       "c1",
-      buildTx([gestion("entregada", "o1")], [detalle({ ordenId: "o1" })]),
+      buildTx([gestion("entregado", "o1")], [detalle({ ordenId: "o1" })]),
     );
 
     // Mismos conceptos, mismos montos y MISMO ORDEN de emision: secuenciar las lecturas no

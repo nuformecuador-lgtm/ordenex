@@ -38,7 +38,7 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import {
-  esOrderStatusRetirado,
+  nombreDeEstado,
   type OrderStatusRetirado,
   type OrderStatusValue,
 } from "@/lib/types/order-status";
@@ -1394,7 +1394,10 @@ const FOOTER_RECAUDADO_LABEL = "Total recaudado";
 const FOOTER_ENTREGAS_LABEL = "entregas";
 
 // --- Feature 264: rótulos de la sección de órdenes SIN GESTIONAR (i18n-ready) ---
-const SIN_GESTION_TITULO = "Órdenes sin gestionar";
+// FICHA 455 (2026-09-24): «Sin gestionar» es el nombre RETIRADO de `novedad_interna`, el estado al
+// que el corte pasa estas órdenes; el rótulo lo nombra con su nombre vigente, leído de la fuente.
+const NOVEDAD_INTERNA = nombreDeEstado("novedad_interna");
+const SIN_GESTION_TITULO = `Pasaron a ${NOVEDAD_INTERNA}`;
 /**
  * R17 — la nota fija. Dice las dos cosas que hacen falta para leer la sección sin equivocarse:
  * de dónde salieron estas órdenes (el corte del día) y por qué no tienen ni una columna de
@@ -1408,50 +1411,39 @@ const SIN_GESTION_NOTA =
  * la razón de existir de `sinGestionRegistrado`.
  */
 const SIN_GESTION_NO_REGISTRADO =
-  "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.";
+  `Este cierre es anterior al registro de las órdenes que pasan a ${NOVEDAD_INTERNA}: no se conserva la lista.`;
 /** Nombre accesible de la lista, para que su recuento no dependa de una clase. */
-const SIN_GESTION_LISTA_LABEL = "Lista de órdenes sin gestionar";
+const SIN_GESTION_LISTA_LABEL = `Lista de órdenes que pasaron a ${NOVEDAD_INTERNA}`;
 
 /**
  * [Q6/R32] El estado del que la orden SALIÓ, traducido. Distingue el paquete que se quedó en la
  * mano del mensajero del que esperaba respuesta de la tienda, y eso cambia qué se hace con él.
  *
- * `Partial` y no `Record` exhaustivo A PROPÓSITO: el corte solo barre desde `ESTADOS_A_BARRER`
- * (`en_reparto`, `ayuda_tienda`), así que sólo esos dos pueden llegar. Cualquier otro valor —o
- * `null`, que es lo que viaja cuando NO CONSTA— hace que la pieza se OMITA (R32). Nada de un
- * «—» permanente: un marcador de ausencia fijo es el mismo silencio ambiguo de R28 en pequeño.
- *
- * Las etiquetas son las CORTAS del `design.md §4` y no las de `ORDER_STATUS_LABELS`
- * («Ayuda solicitada a la tienda», 28 caracteres): esto va incrustado en la línea del producto,
- * no en un chip de una tabla de estados.
+ * El corte solo barre desde `ESTADOS_A_BARRER`. `null` —lo que viaja cuando NO CONSTA— hace que
+ * la pieza se OMITA (R32). Nada de un «—» permanente: un marcador de ausencia fijo es el mismo
+ * silencio ambiguo de R28 en pequeño.
  *
  * FICHA 454 (2026-09-23): el corte ya barre desde UN solo origen (`en_reparto`, con o sin ayuda
  * abierta; la ayuda dejó de ser estado). El origen de ayuda sobrevive SOLO para las filas
- * históricas de cierres barridos antes de la ficha (R40), en `SIN_GESTION_ORIGEN_LABEL_RETIRADOS`.
+ * históricas de cierres barridos antes de la ficha (R40).
  * Una barrida nueva con ayuda abierta se lee «En reparto» (Pregunta abierta 4 del spec).
  */
-const SIN_GESTION_ORIGEN_LABEL: Partial<Record<OrderStatusValue, string>> = {
-  en_reparto: "En reparto",
-};
-
-/** FICHA 454 (R40): la lectura de siempre para el origen retirado de las barridas históricas. */
-const SIN_GESTION_ORIGEN_LABEL_RETIRADOS: Readonly<Partial<Record<OrderStatusRetirado, string>>> = {
-  ayuda_tienda: "Ayuda de la tienda",
-};
-
-/** El rótulo del origen: vigente o retirado; `undefined` si no hay (se OMITE, R32). */
+//
+// FICHA 455 (2026-09-24, design §2.1; R2/R11): el rótulo del origen es `nombreDeEstado(origen)`, la
+// fuente única. Aquí vivían dos mapas propios («En reparto» y, para las barridas históricas, «Ayuda
+// de la tienda», un nombre que el estado nunca tuvo): un origen vigente se lee con su nombre y el
+// retirado de la 454 como «Ayuda solicitada a la tienda (estado retirado)» (R11), igual que en la
+// línea de tiempo. `null`/ausente sigue OMITIENDO la pieza (R32).
 function rotuloOrigen(origen: OrderStatusValue | OrderStatusRetirado): string | undefined {
-  return esOrderStatusRetirado(origen)
-    ? SIN_GESTION_ORIGEN_LABEL_RETIRADOS[origen]
-    : SIN_GESTION_ORIGEN_LABEL[origen];
+  return origen ? nombreDeEstado(origen) : undefined;
 }
 
 /** Tono de la píldora de conteo de cada pestaña, por resultado. */
 const TAB_TONO: Record<CierreResultado, "success" | "warning" | "neutral"> = {
-  entregada: "success",
-  reprogramada: "warning",
-  devuelta: "neutral",
-  rechazada: "neutral",
+  entregado: "success",
+  reprogramado: "warning",
+  novedad: "neutral",
+  devolucion_a_origen_por_rechazo: "neutral",
   // Feature 158/R18: `incidente` es un cierre EN ERROR. `EstatusBadge` lo pinta `danger`,
   // pero esta píldora no ofrece ese tono; `warning` es el más cercano y lo separa de las
   // salidas rutinarias (devuelta/rechazada), que sí van en neutro.
@@ -1772,7 +1764,7 @@ function FilaGestion({
                 </Badge>
               </span>
             ) : null}
-            {g.resultado === "rechazada" ? (
+            {g.resultado === "devolucion_a_origen_por_rechazo" ? (
               <>
                 <DatoFila
                   label={INGRESO_BODEGA_RECHAZOS_LABEL}
@@ -1833,7 +1825,7 @@ function FilaGestion({
             {/* Solo donde hay algo que repartir: una ENTREGA que cobró. Los otros resultados no
                 tienen desglose, y una entrega sin cobro no reparte cero colones entre métodos
                 (misma regla que el servidor, que rechaza las dos cosas). */}
-            {onCorregirPagos && g.resultado === "entregada" && g.pagos.length > 0 ? (
+            {onCorregirPagos && g.resultado === "entregado" && g.pagos.length > 0 ? (
               <Button
                 type="button"
                 size="sm"
@@ -1850,7 +1842,7 @@ function FilaGestion({
                 entrega declarada sin dinero también puede no haber ocurrido, y el servidor solo
                 mira el `resultado` (R4). Que el cierre esté ABIERTO lo decide el padre, que es
                 quien conoce su estado: aquí llega como la ausencia del callback. */}
-            {onCorregirResultado && g.resultado === "entregada" ? (
+            {onCorregirResultado && g.resultado === "entregado" ? (
               <Button
                 type="button"
                 size="sm"
@@ -1880,8 +1872,12 @@ function FilaGestion({
 // --- FICHA 425: rótulos de la sección de rechazos de tienda (i18n-ready) ---
 /** R16 — el rótulo que aprobó el humano el 2026-09-14 (`design.md §5.4`, Q3), literal. */
 const RECHAZOS_TITULO = "Rechazados por la tienda";
-/** Nombre accesible de la lista, para que su recuento no dependa de una clase. */
-const RECHAZOS_LISTA_LABEL = "Lista de órdenes rechazadas por la tienda";
+/**
+ * Nombre accesible de la lista, para que su recuento no dependa de una clase. FICHA 455 (m8): en
+ * masculino, como el título aprobado (se habla del paquete), para que no se lea como el estado
+ * retirado «Rechazada»; es el rechazo de la TIENDA (425), no un estado.
+ */
+const RECHAZOS_LISTA_LABEL = "Lista de paquetes rechazados por la tienda";
 /**
  * Los DOS CONTEOS de la forma aprobada, cada uno con lo que HACE: las gestiones del mensajero
  * «paga» —entran en su liquidación— y los rechazos de la tienda «revisar» —se separan y no se
@@ -1928,7 +1924,7 @@ function separarParaDevolucion(cuantas: number): string {
  */
 function efectoAlAprobar(cuantas: number): string {
   const central = ORDER_STATUS_LABELS.por_devolver_a_tienda;
-  const satelite = ORDER_STATUS_LABELS.por_devolver;
+  const satelite = ORDER_STATUS_LABELS.por_devolver_a_bodega_central;
   return cuantas === 1
     ? `Al aprobar el cierre, la orden pasa sola a «${central}» (si es de zona satélite, a «${satelite}»).`
     : `Al aprobar el cierre, las ${cuantas} pasan solas a «${central}» (las de zona satélite, a «${satelite}»).`;
@@ -2289,7 +2285,7 @@ export function CierreFacturaDetalle({
   );
   // Arranca en la primera sección CON órdenes: abrir en una pestaña vacía no dice nada.
   const [tab, setTab] = useState<CierreResultado>(
-    ORDEN_RESULTADOS.find((r) => (grupos[r]?.length ?? 0) > 0) ?? "entregada",
+    ORDEN_RESULTADOS.find((r) => (grupos[r]?.length ?? 0) > 0) ?? "entregado",
   );
   const filas = grupos[tab] ?? [];
 
@@ -2567,7 +2563,7 @@ export function CierreFacturaDetalle({
           <b className="font-medium text-foreground tabular-nums">
             {money(cierre.totales.general)}
           </b>{" "}
-          · {grupos.entregada?.length ?? 0} {FOOTER_ENTREGAS_LABEL}
+          · {grupos.entregado?.length ?? 0} {FOOTER_ENTREGAS_LABEL}
         </span>
         {cierre.motivoRechazo ? (
           <span className="text-xs text-muted-foreground">

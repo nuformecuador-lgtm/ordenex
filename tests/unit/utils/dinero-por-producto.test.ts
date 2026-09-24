@@ -52,7 +52,7 @@ function congelada(opts: Partial<OrdenCongelada> = {}): OrdenCongelada {
 
 function g(opts: Partial<GestionDeDinero> = {}): GestionDeDinero {
   return {
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "10000.00",
     cierreEstado: "aprobado",
     congelada: congelada(),
@@ -63,7 +63,7 @@ function g(opts: Partial<GestionDeDinero> = {}): GestionDeDinero {
 describe("R24 · el criterio del recaudo y los resultados se DERIVAN, no se escriben", () => {
   it("el criterio de recaudo es SOLO `entregada`, con supresion de ceros", () => {
     // Escrito a mano: es el contrato de ⟨Q1⟩, no una copia de la constante.
-    expect([...CRITERIO_RECAUDO_ENTREGA.resultados]).toEqual(["entregada"]);
+    expect([...CRITERIO_RECAUDO_ENTREGA.resultados]).toEqual(["entregado"]);
     expect(CRITERIO_RECAUDO_ENTREGA.exigeMontoRecibido).toBe(true);
     // El recaudo EXISTE sin cierre: es lo cobrado, no lo derivado.
     expect(CRITERIO_RECAUDO_ENTREGA.exigeTarifa).toBe(false);
@@ -72,7 +72,7 @@ describe("R24 · el criterio del recaudo y los resultados se DERIVAN, no se escr
   });
 
   it("hoy la lista vale exactamente `entregada` + `rechazada`", () => {
-    expect([...RESULTADOS_QUE_APORTAN]).toEqual(["entregada", "rechazada"]);
+    expect([...RESULTADOS_QUE_APORTAN]).toEqual(["devolucion_a_origen_por_rechazo", "entregado"]);
   });
 
   it("y sale de la UNION de los seis conceptos: no hay ninguna lista escrita", () => {
@@ -109,7 +109,7 @@ describe("R24 · EL CASO DEL CONCEPTO INYECTADO — la unica prueba de que se DE
         ...real.CRITERIO_DE_APORTE,
         // Un concepto que hoy no existe, con un resultado que hoy no aporta.
         ingreso_inventado: {
-          resultados: ["reprogramada"],
+          resultados: ["reprogramado"],
           exigeCobraComision: false,
           exigeTarifa: true,
           exigeMontoCobrar: false,
@@ -119,7 +119,7 @@ describe("R24 · EL CASO DEL CONCEPTO INYECTADO — la unica prueba de que se DE
     }));
 
     const mod = await import("@/lib/utils/dinero-por-producto");
-    expect([...mod.RESULTADOS_QUE_APORTAN]).toEqual(["entregada", "rechazada", "reprogramada"]);
+    expect([...mod.RESULTADOS_QUE_APORTAN]).toEqual(["devolucion_a_origen_por_rechazo", "entregado", "reprogramado"]);
   });
 });
 
@@ -186,7 +186,7 @@ describe("R14 / R15 / R20 · el reparto de una entrega liquidada", () => {
 
 describe("R19 · el RETORNO entra, pero FUERA del reparto", () => {
   it("una rechazada liquidada aporta retorno y NO toca `ordenex` ni `tienda`", () => {
-    const r = repartoDeOrden([g({ resultado: "rechazada", montoRecibido: null })]);
+    const r = repartoDeOrden([g({ resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null })]);
 
     // Un rechazo NO recauda: no hay plata recogida que repartir.
     expect(r.recaudado).toBe("0.00");
@@ -198,7 +198,7 @@ describe("R19 · el RETORNO entra, pero FUERA del reparto", () => {
   it("R20 sigue siendo cierta con una entrega Y un rechazo en la misma orden", () => {
     const r = repartoDeOrden([
       g(),
-      g({ resultado: "rechazada", montoRecibido: null }),
+      g({ resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null }),
     ]);
 
     expect(r.retorno).toBe("2260.00");
@@ -209,7 +209,7 @@ describe("R19 · el RETORNO entra, pero FUERA del reparto", () => {
   });
 
   it("una `devuelta` no aporta NADA (regla de la ficha 301, que esta ficha lee y no reescribe)", () => {
-    const r = repartoDeOrden([g({ resultado: "devuelta", montoRecibido: null })]);
+    const r = repartoDeOrden([g({ resultado: "novedad", montoRecibido: null })]);
     expect(r.recaudado).toBe("0.00");
     expect(r.retorno).toBe("0.00");
     expect(r.ordenex).toBe("0.00");
@@ -277,7 +277,7 @@ describe("R18 · una orden en DOS cierres: los aportes se SUMAN, con el snapshot
 
 describe("R25 · determinismo", () => {
   it("la misma entrada da la misma salida, sin reloj y sin orden de llegada", () => {
-    const gestiones = [g(), g({ resultado: "rechazada", montoRecibido: null })];
+    const gestiones = [g(), g({ resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null })];
     expect(repartoDeOrden(gestiones)).toEqual(repartoDeOrden(gestiones));
     // El orden de las gestiones no cambia ninguna cifra: solo hay sumas.
     expect(repartoDeOrden([...gestiones].reverse())).toEqual(repartoDeOrden(gestiones));
@@ -307,7 +307,7 @@ describe("R39 · que orden NO aporta nada", () => {
   });
 
   it("una rechazada liquidada SI aporta aunque no recaude: su retorno no es cero", () => {
-    const r = repartoDeOrden([g({ resultado: "rechazada", montoRecibido: null })]);
+    const r = repartoDeOrden([g({ resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null })]);
     expect(aporteEsCero(r)).toBe(false);
   });
 });

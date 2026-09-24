@@ -96,7 +96,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           tiendaId: base.tienda1,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, x, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, x, { at: nacida, destino: "en_preparacion" });
 
         const yaEsManana = instanteCR(FECHA_D_MAS_1, "00:00:00");
         const y = await crearOrden(tx, base, {
@@ -105,7 +105,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           tiendaId: base.tienda2,
           createdAt: yaEsManana,
         });
-        await agregarTransicion(tx, base, y, { at: yaEsManana, destino: "pendiente" });
+        await agregarTransicion(tx, base, y, { at: yaEsManana, destino: "en_preparacion" });
 
         await correr(tx, FECHA_D);
         expect(await resumenes(tx, base, FECHA_D)).toEqual([
@@ -113,7 +113,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: null,
-            estatus: "pendiente",
+            estatus: "en_preparacion",
             causa: null,
             ordenesCreadas: 1,
             ordenesEstadoStock: 1,
@@ -126,7 +126,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: null,
-            estatus: "pendiente",
+            estatus: "en_preparacion",
             causa: null,
             ordenesEstadoStock: 1, // la de las 23:59:59 sigue viva, pero NO nacio este dia
           },
@@ -134,7 +134,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda2",
             mensajero: null,
-            estatus: "pendiente",
+            estatus: "en_preparacion",
             causa: null,
             ordenesCreadas: 1,
             ordenesEstadoStock: 1,
@@ -152,11 +152,11 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           tiendaId: base.tienda1,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
         // El corte diario escribe esta transicion EXACTAMENTE en el instante del corte de D.
         await agregarTransicion(tx, base, o, {
           at: instanteCR(FECHA_D_MAS_1, "00:00:00"),
-          destino: "sin_gestionar",
+          destino: "novedad_interna",
           origenTipo: "corte_sin_gestionar",
         });
 
@@ -164,7 +164,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         const filas = await leerFilas(tx, base, FECHA_D);
         expect(filas).toHaveLength(1);
         // Con `<=` en vez de `<` esto seria "sin_gestionar" y el embudo se moveria un dia.
-        expect(filas[0].estatus).toBe("pendiente");
+        expect(filas[0].estatus).toBe("en_preparacion");
       });
     });
 
@@ -182,7 +182,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             tiendaId: tienda,
             createdAt: nacida,
           });
-          await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+          await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
         }
 
         await correr(tx, FECHA_D_MENOS_1);
@@ -215,7 +215,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           mensajeroId: null,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
 
         await correr(tx, FECHA_D);
         const crudas = await tx.$queryRaw<{ mensajero_id: string | null; n: bigint }[]>`
@@ -235,17 +235,17 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           mensajeroId: base.mensajero1, // el MENSAJERO es de la zona B
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
         const entrega = instanteCR(FECHA_D, "12:00:00");
         const g = await crearGestion(tx, {
           ordenId: o,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: entrega,
         });
         await agregarTransicion(tx, base, o, {
           at: entrega,
-          destino: "entregada",
+          destino: "entregado",
           origenTipo: "gestion",
           gestionOrdenId: g,
         });
@@ -256,7 +256,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA", // con la zona del USUARIO esto seria "zonaB"
             tienda: "tienda1",
             mensajero: "mensajero1",
-            estatus: "entregada",
+            estatus: "entregado",
             causa: null,
             ordenesCreadas: 1,
             ordenesEstadoStock: 1, // cerro DENTRO del dia (D2-B2 rama b)
@@ -279,17 +279,17 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           mensajeroId: null, // ya desasignada en el momento de la corrida
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
         const gestionada = instanteCR(FECHA_D, "12:00:00");
         const g = await crearGestion(tx, {
           ordenId: o,
           mensajeroId: base.mensajero1,
-          resultado: "reprogramada",
+          resultado: "reprogramado",
           at: gestionada,
         });
         await agregarTransicion(tx, base, o, {
           at: gestionada,
-          destino: "reprogramada",
+          destino: "reprogramado",
           origenTipo: "gestion",
           gestionOrdenId: g,
         });
@@ -300,7 +300,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: null, // medidas de ORDEN: `orden.mensajero_asignado_id`
-            estatus: "reprogramada",
+            estatus: "reprogramado",
             causa: null,
             ordenesCreadas: 1,
             ordenesEstadoStock: 1,
@@ -309,7 +309,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: "mensajero1", // medidas de GESTION: `gestion_orden.mensajero_id`
-            estatus: "reprogramada",
+            estatus: "reprogramado",
             causa: null,
             reprogramaciones: 1,
           },
@@ -359,11 +359,11 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           createdAt: nacida,
           deletedAt: instanteCR(FECHA_D, "23:00:00"),
         });
-        await agregarTransicion(tx, base, borrada, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, borrada, { at: nacida, destino: "en_preparacion" });
         await crearGestion(tx, {
           ordenId: borrada,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: instanteCR(FECHA_D, "12:00:00"),
         });
 
@@ -374,7 +374,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           tiendaId: base.tienda2,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, viva, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, viva, { at: nacida, destino: "en_preparacion" });
 
         await correr(tx, FECHA_D);
         expect(await resumenes(tx, base, FECHA_D)).toEqual([
@@ -382,7 +382,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda2",
             mensajero: null,
-            estatus: "pendiente",
+            estatus: "en_preparacion",
             causa: null,
             ordenesCreadas: 1,
             ordenesEstadoStock: 1,
@@ -404,20 +404,20 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           tiendaId: base.tienda1,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
         await agregarTransicion(tx, base, o, {
           at: instanteCR(FECHA_D, "12:00:00"),
           destino: "en_reparto",
         });
         await agregarTransicion(tx, base, o, {
           at: instanteCR(FECHA_D, "20:00:00"),
-          destino: "reprogramada",
+          destino: "reprogramado",
         });
 
         await correr(tx, FECHA_D);
         const filas = await leerFilas(tx, base, FECHA_D);
-        // Con la PRIMERA transicion del dia en vez de la ultima, esto seria "pendiente".
-        expect(filas.map((f) => f.estatus)).toEqual(["reprogramada"]);
+        // Con la PRIMERA transicion del dia en vez de la ultima, esto seria "en_preparacion".
+        expect(filas.map((f) => f.estatus)).toEqual(["reprogramado"]);
         expect(filas[0].ordenesEstadoStock).toBe(1);
       });
     });
@@ -431,7 +431,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           tiendaId: base.tienda1,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
         const empate = instanteCR(FECHA_D, "12:00:00");
         // Se inserta PRIMERO la del id menor: sin el desempate `id DESC`, el `DISTINCT ON`
         // se queda con la que el motor lee antes (la insertada primero) y gana "en_reparto".
@@ -442,7 +442,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         });
         await agregarTransicion(tx, base, o, {
           at: empate,
-          destino: "reprogramada",
+          destino: "reprogramado",
           id: "ffffffff-0000-4000-8000-000000000002",
         });
 
@@ -451,7 +451,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         await correr(tx, FECHA_D);
         const segunda = await leerFilas(tx, base, FECHA_D);
 
-        expect(primera.map((f) => f.estatus)).toEqual(["reprogramada"]);
+        expect(primera.map((f) => f.estatus)).toEqual(["reprogramado"]);
         expect(segunda.map((f) => f.estatus)).toEqual(primera.map((f) => f.estatus));
       });
     });
@@ -468,11 +468,11 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         });
         await agregarTransicion(tx, base, vieja, {
           at: instanteCR("2001-06-05", "09:00:00"),
-          destino: "pendiente",
+          destino: "en_preparacion",
         });
         await agregarTransicion(tx, base, vieja, {
           at: instanteCR("2001-06-12", "12:00:00"),
-          destino: "entregada",
+          destino: "entregado",
         });
 
         // (b) cierra HOY: aparece en el estatus en que cerro.
@@ -483,10 +483,10 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           tiendaId: base.tienda1,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, hoy, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, hoy, { at: nacida, destino: "en_preparacion" });
         await agregarTransicion(tx, base, hoy, {
           at: instanteCR(FECHA_D, "18:00:00"),
-          destino: "entregada",
+          destino: "entregado",
         });
 
         await correr(tx, FECHA_D);
@@ -495,7 +495,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: null,
-            estatus: "entregada",
+            estatus: "entregado",
             causa: null,
             ordenesCreadas: 1,
             ordenesEstadoStock: 1,
@@ -516,11 +516,11 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           mensajeroId: base.mensajero1,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
         await crearGestion(tx, {
           ordenId: o,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: instanteCR(FECHA_D, "12:00:00"),
           anuladaAt: instanteCR(FECHA_D, "20:00:00"),
         });
@@ -531,7 +531,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: "mensajero1",
-            estatus: "pendiente",
+            estatus: "en_preparacion",
             causa: null,
             ordenesCreadas: 1,
             ordenesEstadoStock: 1,
@@ -545,7 +545,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         const nacida = instanteCR(FECHA_D, "08:00:00");
         const sembrarConGestion = async (
           clave: string,
-          resultado: "entregada" | "devuelta",
+          resultado: "entregado" | "novedad",
           causa: "not_found" | null,
         ): Promise<void> => {
           const o = await crearOrden(tx, base, {
@@ -555,7 +555,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             mensajeroId: base.mensajero1,
             createdAt: nacida,
           });
-          await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+          await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
           await crearGestion(tx, {
             ordenId: o,
             mensajeroId: base.mensajero1,
@@ -564,9 +564,9 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             causaDevolucion: causa,
           });
         };
-        await sembrarConGestion("entregada", "entregada", null);
-        await sembrarConGestion("devuelta-con-causa", "devuelta", "not_found");
-        await sembrarConGestion("devuelta-sin-causa", "devuelta", null);
+        await sembrarConGestion("entregado", "entregado", null);
+        await sembrarConGestion("devuelta-con-causa", "novedad", "not_found");
+        await sembrarConGestion("devuelta-sin-causa", "novedad", null);
 
         await correr(tx, FECHA_D);
         const filas = await leerFilas(tx, base, FECHA_D);
@@ -575,7 +575,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: "mensajero1",
-            estatus: "pendiente",
+            estatus: "en_preparacion",
             causa: null,
             ordenesCreadas: 3,
             ordenesEstadoStock: 3,
@@ -587,7 +587,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: "mensajero1",
-            estatus: "pendiente",
+            estatus: "en_preparacion",
             causa: "not_found",
             devoluciones: 1,
           },
@@ -610,11 +610,11 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           mensajeroId: base.mensajero1,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, limpia, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, limpia, { at: nacida, destino: "en_preparacion" });
         await crearGestion(tx, {
           ordenId: limpia,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: instanteCR(FECHA_D, "12:00:00"),
         });
 
@@ -630,7 +630,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         });
         await agregarTransicion(tx, base, reintentada, {
           at: instanteCR("2001-06-13", "09:00:00"),
-          destino: "pendiente",
+          destino: "en_preparacion",
         });
         const cierreAprobado = await crearCierreAprobado(tx, {
           mensajeroId: base.mensajero1,
@@ -640,20 +640,20 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         const devolucion = await crearGestion(tx, {
           ordenId: reintentada,
           mensajeroId: base.mensajero1,
-          resultado: "devuelta",
+          resultado: "novedad",
           at: instanteCR("2001-06-13", "13:00:00"),
           cierreId: cierreAprobado,
         });
         await agregarTransicion(tx, base, reintentada, {
           at: instanteCR("2001-06-13", "13:00:00"),
-          destino: "devuelta",
+          destino: "novedad",
           origenTipo: "gestion",
           gestionOrdenId: devolucion,
         });
         await crearGestion(tx, {
           ordenId: reintentada,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: instanteCR(FECHA_D, "12:00:00"),
         });
 
@@ -661,8 +661,8 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         const filas = await leerFilas(tx, base, FECHA_D);
         // Las dos entregas son del mismo mensajero y del mismo dia: lo unico que separa sus
         // cubos es el estatus al corte, y lo unico que las distingue es `primer_intento_ok`.
-        const trasDevolucion = filas.find((f) => f.estatus === "devuelta");
-        const alPrimerIntento = filas.find((f) => f.estatus === "pendiente");
+        const trasDevolucion = filas.find((f) => f.estatus === "novedad");
+        const alPrimerIntento = filas.find((f) => f.estatus === "en_preparacion");
         expect(trasDevolucion).toBeDefined();
         expect(alPrimerIntento).toBeDefined();
         expect([trasDevolucion?.entregas, trasDevolucion?.primerIntentoOk]).toEqual([1, 0]);
@@ -680,10 +680,10 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           tiendaId: base.tienda1,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
         await agregarTransicion(tx, base, o, {
           at: instanteCR(FECHA_D, "15:00:00"),
-          destino: "entregada",
+          destino: "entregado",
         });
 
         // La fecha de CREACION no lleva ciclo: el dia D-5 solo ve una orden viva.
@@ -693,7 +693,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: null,
-            estatus: "pendiente",
+            estatus: "en_preparacion",
             causa: null,
             ordenesCreadas: 1,
             ordenesEstadoStock: 1,
@@ -706,7 +706,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: null,
-            estatus: "entregada",
+            estatus: "entregado",
             causa: null,
             ordenesEstadoStock: 1,
             segCicloAcum: 5 * 86400 + 6 * 3600,
@@ -725,10 +725,10 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           tiendaId: base.tienda1,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
         await agregarTransicion(tx, base, o, {
           at: instanteCR(FECHA_D, "12:00:00"),
-          destino: "entregada",
+          destino: "entregado",
         });
         await agregarTransicion(tx, base, o, {
           at: instanteCR(FECHA_D, "14:00:00"),
@@ -736,7 +736,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         });
         await agregarTransicion(tx, base, o, {
           at: instanteCR(FECHA_D, "18:00:00"),
-          destino: "entregada",
+          destino: "entregado",
         });
 
         await correr(tx, FECHA_D);
@@ -760,7 +760,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         tiendaId: base.tienda1,
         createdAt: nacida,
       });
-      await agregarTransicion(tx, base, sinAsignar, { at: nacida, destino: "pendiente" });
+      await agregarTransicion(tx, base, sinAsignar, { at: nacida, destino: "en_preparacion" });
 
       const conGestion = await crearOrden(tx, base, {
         clave: "mezcla-gestionada",
@@ -769,11 +769,11 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         mensajeroId: base.mensajero1,
         createdAt: nacida,
       });
-      await agregarTransicion(tx, base, conGestion, { at: nacida, destino: "pendiente" });
+      await agregarTransicion(tx, base, conGestion, { at: nacida, destino: "en_preparacion" });
       const gestionId = await crearGestion(tx, {
         ordenId: conGestion,
         mensajeroId: base.mensajero1,
-        resultado: "devuelta",
+        resultado: "novedad",
         at: instanteCR(FECHA_D, "12:00:00"),
         causaDevolucion: "wrong_address",
       });
@@ -839,7 +839,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         zonaId: base.zonaA,
         tiendaId: base.tienda1,
         mensajeroId: base.mensajero1,
-        estatusId: estatusId(base, "pendiente"),
+        estatusId: estatusId(base, "en_preparacion"),
         causaDevolucion: null,
         ordenesCreadas: 0,
         ordenesEstadoStock: 0,
@@ -863,7 +863,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         tiendaId: base.tienda1,
         createdAt: nacida,
       });
-      await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+      await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
     }
 
     it("un fallo a mitad de la escritura deja la fecha EXACTAMENTE como estaba (R30)", async () => {
@@ -956,7 +956,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         zonaId: base.zonaA,
         tiendaId: base.tienda1,
         mensajeroId: base.mensajero1,
-        estatusId: estatusId(base, "pendiente"),
+        estatusId: estatusId(base, "en_preparacion"),
         causaDevolucion: null,
         ordenesCreadas: 0,
         ordenesEstadoStock: 0,
@@ -1055,7 +1055,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
         mensajeroId: base.mensajero1,
         createdAt: nacida,
       });
-      await agregarTransicion(tx, base, o, { at: nacida, destino: "pendiente" });
+      await agregarTransicion(tx, base, o, { at: nacida, destino: "en_preparacion" });
       return o;
     }
 
@@ -1063,22 +1063,22 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
       await conBase(async (tx, base) => {
         const o = await sembrarParaR49(tx, base);
         await correr(tx, FECHA_D);
-        expect((await leerFilas(tx, base, FECHA_D)).map((f) => f.estatus)).toEqual(["pendiente"]);
+        expect((await leerFilas(tx, base, FECHA_D)).map((f) => f.estatus)).toEqual(["en_preparacion"]);
 
         // La orden se mueve DESPUES del corte de D (y tambien cambia `orden.estatus_id`).
         await agregarTransicion(tx, base, o, {
           at: instanteCR("2001-06-17", "10:00:00"),
-          destino: "entregada",
+          destino: "entregado",
         });
         await tx.orden.update({
           where: { id: o },
-          data: { estatusId: estatusId(base, "entregada") },
+          data: { estatusId: estatusId(base, "entregado") },
         });
 
         await correr(tx, FECHA_D);
         // Coordenada CONGELADA: `orden_historial_estado` es append-only, asi que el estatus
         // al corte de D se reproduce para siempre.
-        expect((await leerFilas(tx, base, FECHA_D)).map((f) => f.estatus)).toEqual(["pendiente"]);
+        expect((await leerFilas(tx, base, FECHA_D)).map((f) => f.estatus)).toEqual(["en_preparacion"]);
       });
     });
 
@@ -1091,7 +1091,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaA",
             tienda: "tienda1",
             mensajero: "mensajero1",
-            estatus: "pendiente",
+            estatus: "en_preparacion",
             causa: null,
             ordenesCreadas: 1,
             ordenesEstadoStock: 1,
@@ -1114,7 +1114,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
             zona: "zonaB",
             tienda: "tienda2",
             mensajero: "mensajero2",
-            estatus: "pendiente",
+            estatus: "en_preparacion",
             causa: null,
             ordenesCreadas: 1,
             ordenesEstadoStock: 1,
@@ -1169,7 +1169,7 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           tiendaId: base.tienda2,
           createdAt: nacida,
         });
-        await agregarTransicion(tx, base, control, { at: nacida, destino: "pendiente" });
+        await agregarTransicion(tx, base, control, { at: nacida, destino: "en_preparacion" });
 
         await correr(tx, FECHA_D);
         const filas: FilaLeida[] = await leerFilas(tx, base, FECHA_D);

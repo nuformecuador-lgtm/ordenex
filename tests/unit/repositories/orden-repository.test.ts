@@ -180,7 +180,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const res = await repo.list({
-      where: { estatusId: idEstado("reprogramada") },
+      where: { estatusId: idEstado("reprogramado") },
       sortBy: "num_guia",
       sortDir: "asc",
       skip: 0,
@@ -223,7 +223,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.include.gestiones).toMatchObject({
-      where: { resultado: "reprogramada", anuladaAt: null },
+      where: { resultado: "reprogramado", anuladaAt: null },
       orderBy: { createdAt: "desc" },
       take: 1,
     });
@@ -414,7 +414,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     prisma.orden.count.mockResolvedValue(0);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const ids = [idEstado("en_bodega_central"), idEstado("entregada")];
+    const ids = [idEstado("en_bodega_central"), idEstado("entregado")];
     await repo.list({
       where: { estatusId: ids },
       sortBy: "created_at",
@@ -805,7 +805,7 @@ describe("239/R25 — el pre-estado no se ofrece para asignacion, ruteo, recolec
     // (antes `["devuelta", "en_reparto"]`). Ahora no tiene NINGUNA: lo que R25(b) protegia —que
     // nada lo lleve a asignacion, ruteo ni recoleccion— se cumple con mas fuerza.
     expect(Object.keys(TRANSICIONES)).not.toContain(PRE_ESTADO);
-    for (const destino of ["por_recoger", "en_ruta_bodega_satelite", "recolectando"] as const) {
+    for (const destino of ["mensajero_recogiendo_en_bodega", "en_ruta_bodega_satelite", "recolectando"] as const) {
       expect(() =>
         assertTransicionValida(PRE_ESTADO as unknown as OrderStatusValue, destino),
       ).toThrow(TransicionIlegalError);
@@ -922,7 +922,7 @@ describe("235/R14/R17 — la orden en ayuda no es parada de ruta ni se ofrece pa
     // que R17(b) vigila —que nada la lleve a asignacion, ruteo ni recoleccion— se cumple igual.
     expect(Object.keys(TRANSICIONES)).not.toContain(AYUDA);
     for (const destino of [
-      "por_recoger", // asignacion a mensajero
+      "mensajero_recogiendo_en_bodega", // asignacion a mensajero
       "en_ruta_bodega_satelite", // ruteo a satelite
       "recolectando", // asignacion de recoleccion en tienda
       "en_bodega_central", // recuperacion manual

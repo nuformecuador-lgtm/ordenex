@@ -1,0 +1,25 @@
+=== MUTACION C08 — 2026-09-24T04:51:48-05:00
+archivo: lib/utils/ingreso-ordenex.ts
+perl: s/if \(input\.resultado === "rechazada"\) \{/if (input.resultado === "devuelta") {/
+--- diff aplicado:
+diff --git a/lib/utils/ingreso-ordenex.ts b/lib/utils/ingreso-ordenex.ts
+index d6e2d797..077c9504 100644
+--- a/lib/utils/ingreso-ordenex.ts
++++ b/lib/utils/ingreso-ordenex.ts
+@@ -182 +182 @@ export function derivarIngresoOrden(
+-  if (input.resultado === "rechazada") {
++  if (input.resultado === "devuelta") {
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts
+ ✓ tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts > 455/C08 — dinero de la aprobacion con los cinco resultados (Postgres real) > los totales congelados al solicitar 1ms
+ × tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts > 455/C08 — dinero de la aprobacion con los cinco resultados (Postgres real) > los movimientos de los feeds de la aprobacion, con importes exactos 7ms
+   → expected [ …(18) ] to deeply equal [ …(18) ]
+ ✓ tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts > 455/C08 — dinero de la aprobacion con los cinco resultados (Postgres real) > re-aprobar no emite nada mas 0ms
+ ✓ tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts > 455/C08 — dinero de la aprobacion con los cinco resultados (Postgres real) > el estado final de cada orden tras aprobar 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts > 455/C08 — dinero de la aprobacion con los cinco resultados (Postgres real) > los movimientos de los feeds de la aprobacion, con importes exactos
+AssertionError: expected [ …(18) ] to deeply equal [ …(18) ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

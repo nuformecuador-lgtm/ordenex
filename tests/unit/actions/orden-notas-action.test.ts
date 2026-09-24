@@ -43,7 +43,7 @@ function serviceDoble(): IOrdenNotaService {
 }
 
 /** El service REAL sobre un repositorio en memoria. `filas` es la evidencia de «no crea nota». */
-function servicioReal(estatusValue = "devuelta") {
+function servicioReal(estatusValue = "novedad") {
   const filas: OrdenNotaRow[] = [];
   const repo: IOrdenNotaRepository = {
     listarPorOrden: vi.fn(async () => filas),

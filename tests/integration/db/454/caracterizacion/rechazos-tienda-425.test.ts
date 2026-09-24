@@ -21,32 +21,32 @@ describeSiHayBase("454/C28 — rechazos de tienda como material de revision (Pos
   function correr() {
     return conEscenario(mundo, async (e) => {
       const ent = await e.sembrarOrden({ estatus: "en_reparto", montoCobrar: 1000 });
-      await e.gestionarOk(ent.ordenId, "entregada", { monto: 1000 });
+      await e.gestionarOk(ent.ordenId, "entregado", { monto: 1000 });
 
-      const dev = await e.sembrarOrden({ estatus: "devuelta", montoCobrar: 5000 });
-      await e.sembrarIntentoPasado(dev.ordenId, { resultado: "devuelta" });
+      const dev = await e.sembrarOrden({ estatus: "novedad", montoCobrar: 5000 });
+      await e.sembrarIntentoPasado(dev.ordenId, { resultado: "novedad" });
       const rechazo = await e.s.gestionRepo.rechazarDesdeDevuelta({
         ordenId: dev.ordenId,
-        estatusDevueltaId: e.id("devuelta"),
-        estatusRechazadaId: e.id("rechazada"),
+        estatusDevueltaId: e.id("novedad"),
+        estatusRechazadaId: e.id("devolucion_a_origen_por_rechazo"),
         motivo: "La tienda no la recibe",
         actorUsuarioId: e.tiendaId,
       });
       const gTienda = await e.tx.gestionOrden.findFirstOrThrow({
-        where: { ordenId: dev.ordenId, resultado: "rechazada" },
+        where: { ordenId: dev.ordenId, resultado: "devolucion_a_origen_por_rechazo" },
         select: { id: true },
       });
 
       // FILA CRUZADA: `rechazada` suelta cuya familia es la de la reprogramacion de escritorio.
-      const cruz = await e.sembrarOrden({ estatus: "rechazada", montoCobrar: 1000 });
+      const cruz = await e.sembrarOrden({ estatus: "devolucion_a_origen_por_rechazo", montoCobrar: 1000 });
       const gCruz = await e.tx.gestionOrden.create({
-        data: { ordenId: cruz.ordenId, mensajeroId: e.mensajeroId, resultado: "rechazada", cierreId: null },
+        data: { ordenId: cruz.ordenId, mensajeroId: e.mensajeroId, resultado: "devolucion_a_origen_por_rechazo", cierreId: null },
         select: { id: true },
       });
       await e.tx.ordenHistorialEstado.create({
         data: {
           ordenId: cruz.ordenId,
-          estatusDestinoId: e.id("rechazada"),
+          estatusDestinoId: e.id("devolucion_a_origen_por_rechazo"),
           origenTipo: "reprogramacion_tienda",
           gestionOrdenId: gCruz.id,
         },

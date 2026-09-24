@@ -94,7 +94,7 @@ function fila(parcial: Partial<FilaProductoDTO> & { producto: string }): FilaPro
     unidades: 6,
     ordenes: 5,
     porStatus: [
-      { status: "entregada", conteo: 4 },
+      { status: "entregado", conteo: 4 },
       { status: EN_CURSO, conteo: 1 },
     ],
     ordenesAcompanadas: 3,
@@ -694,7 +694,7 @@ describe("FICHA 347 · el detalle orden por orden (R32/R33/R34)", () => {
             ordenId: "o1",
             guia: "77001",
             destinatario: "Ana Pérez",
-            resultados: ["entregada" as const],
+            resultados: ["entregado" as const],
             estado: "liquidada" as const,
             recaudado: "35000.00",
             ordenex: "6215.00",
@@ -797,7 +797,7 @@ describe("FICHA 347 · el detalle orden por orden (R32/R33/R34)", () => {
     const enlace = within(panel).getByRole("link", { name: DETALLE_DINERO_TEXTOS.verOrden("77001") });
     expect(enlace).toHaveAttribute("href", "/ordenes?q=77001");
     // R37 — y dice el resultado que la hizo aportar y si está liquidada.
-    expect(within(panel).getByText("Entregadas")).toBeInTheDocument();
+    expect(within(panel).getByText("Entregado")).toBeInTheDocument(); // FICHA 455: nombre exacto
     expect(within(panel).getByText(DETALLE_DINERO_TEXTOS.estado.liquidada)).toBeInTheDocument();
   });
 
@@ -842,10 +842,10 @@ describe("FICHA 347 · la composición de «Otros resultados» (R50/R54/R57)", (
     unidades: 29,
     ordenes: 24,
     porStatus: [
-      { status: "entregada", conteo: 3 },
-      { status: "rechazada", conteo: 2 },
-      { status: "devuelta", conteo: 4 },
-      { status: "reprogramada", conteo: 2 },
+      { status: "entregado", conteo: 3 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 2 },
+      { status: "novedad", conteo: 4 },
+      { status: "reprogramado", conteo: 2 },
       { status: EN_CURSO, conteo: 13 },
     ],
   });
@@ -863,7 +863,7 @@ describe("FICHA 347 · la composición de «Otros resultados» (R50/R54/R57)", (
     );
 
     expect(await valorDeDetalle(PRODUCTOS_COLUMNAS.otrosResultados)).toBe("6");
-    expect(screen.getByText("4 devueltas · 2 reprogramadas")).toBeInTheDocument();
+    expect(screen.getByText("Novedad: 4 · Reprogramado: 2")).toBeInTheDocument();
     // Y la ETIQUETA NO enumera: mentiría el día que el catálogo gane un desenlace, que es el
     // defecto que la 346 acaba de reparar.
     expect(PRODUCTOS_COLUMNAS.otrosResultados).toBe("Otros resultados");
@@ -883,7 +883,7 @@ describe("FICHA 347 · la composición de «Otros resultados» (R50/R54/R57)", (
 
     // Un tooltip no existe en táctil, no se copia y los lectores de pantalla lo tratan
     // distinto. Esta tabla ya tuvo DOS arreglos de ancho medidos a 390 px.
-    const linea = await screen.findByText("4 devueltas · 2 reprogramadas");
+    const linea = await screen.findByText("Novedad: 4 · Reprogramado: 2");
     expect(linea.getAttribute("title")).toBeNull();
     expect(linea.closest("[role='tooltip']")).toBeNull();
   });
@@ -896,8 +896,8 @@ describe("FICHA 347 · la composición de «Otros resultados» (R50/R54/R57)", (
         fila({
           producto: "Spray Protector",
           porStatus: [
-            { status: "entregada", conteo: 8 },
-            { status: "rechazada", conteo: 6 },
+            { status: "entregado", conteo: 8 },
+            { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
           ],
         }),
       ]),
@@ -946,8 +946,8 @@ describe("FICHA 347/442 · la vista de TELÉFONO lleva lo mismo (R64)", () => {
         fila({
           producto: "Crema Especial MLX",
           porStatus: [
-            { status: "entregada", conteo: 3 },
-            { status: "devuelta", conteo: 4 },
+            { status: "entregado", conteo: 3 },
+            { status: "novedad", conteo: 4 },
             { status: EN_CURSO, conteo: 13 },
           ],
         }),
@@ -975,7 +975,7 @@ describe("FICHA 347/442 · la vista de TELÉFONO lleva lo mismo (R64)", () => {
     }
     expect(screen.getByText(money("45000.00"))).toBeInTheDocument();
     // …y la frase de desenlaces, entera (R57).
-    expect(screen.getByText(/3 entregadas/)).toBeInTheDocument();
+    expect(screen.getByText(/Entregado: 3/)).toBeInTheDocument();
 
     // Y el resto vive en la MISMA fila desplegable que en escritorio: ni un dato menos (R64).
     await usuario.click(
@@ -1162,7 +1162,7 @@ describe("FICHA 449 · el fulfillment en el detalle de la fila", () => {
             ordenId: "o1",
             guia: "77001",
             destinatario: "Ana Pérez",
-            resultados: ["entregada" as const],
+            resultados: ["entregado" as const],
             estado: "liquidada" as const,
             recaudado: "35000.00",
             ordenex: "6215.00",

@@ -66,7 +66,7 @@ describeSiHayBase("454/T1.4 — registro concurrente: exactamente uno (Postgres 
   const desdeAyuda = (cliente: PrismaClient, s: Comprometido) =>
     montarServicios(cliente)
       .gestionDesdeAyuda.gestionar(
-        { ordenId: s.ordenIds[0], resultado: "rechazada", motivo: "El cliente no la quiere", evidencias: FOTO } as never,
+        { ordenId: s.ordenIds[0], resultado: "devolucion_a_origen_por_rechazo", motivo: "El cliente no la quiere", evidencias: FOTO } as never,
         s.actorTienda,
       )
       .then((x) => x.status);
@@ -84,7 +84,7 @@ describeSiHayBase("454/T1.4 — registro concurrente: exactamente uno (Postgres 
       const mensajero = async () => {
         const svc = montarServicios(c2);
         await svc.solicitudAyuda.recuperar({ ordenId: b.ordenIds[0] }, b.actorMensajero);
-        return (await svc.misAsignaciones.gestionar(entradaGestion(b.ordenIds[0], "devuelta"), b.actorMensajero)).status;
+        return (await svc.misAsignaciones.gestionar(entradaGestion(b.ordenIds[0], "novedad"), b.actorMensajero)).status;
       };
       const estadosB = await Promise.all([desdeAyuda(c1, b), mensajero()]);
       mensajeroYTienda.push(await medir(b.ordenIds[0], estadosB));

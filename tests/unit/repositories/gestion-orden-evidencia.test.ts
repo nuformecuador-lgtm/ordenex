@@ -66,7 +66,7 @@ describe("registrarGestionPendiente — N filas hijas en la misma tx (R9)", () =
     const r = await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencias: evidencias3 },
+      gestion: { resultado: "entregado", montoRecibido: 100, metodoPago: "efectivo", evidencias: evidencias3 },
     });
 
     expect(r?.gestionId).toBe("g1");
@@ -90,7 +90,7 @@ describe("registrarGestionPendiente — N filas hijas en la misma tx (R9)", () =
     await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "devuelta", motivo: "x", evidencias: evidencias3 },
+      gestion: { resultado: "novedad", motivo: "x", evidencias: evidencias3 },
     });
     const arg = (evidenciaCreateMany.mock.calls[0] as unknown[])[0] as { data: { indice: number }[] };
     expect(arg.data.map((e) => e.indice)).toEqual([0, 1, 2]);
@@ -103,7 +103,7 @@ describe("crearGestionYTransicionar — dual-write de la portada (R12)", () => {
     await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencias: evidencias3 },
+      gestion: { resultado: "entregado", montoRecibido: 100, metodoPago: "efectivo", evidencias: evidencias3 },
     });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.evidenciaStoragePath).toBe("o1/entregada-1-0.jpg");
@@ -119,7 +119,7 @@ describe("crearGestionYTransicionar — dual-write de la portada (R12)", () => {
     await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "devuelta", motivo: "x", evidencias: desordenadas },
+      gestion: { resultado: "novedad", motivo: "x", evidencias: desordenadas },
     });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.evidenciaStoragePath).toBe("p0");
@@ -133,7 +133,7 @@ describe("crearGestionYTransicionar — ramas sin foto (reprogramada)", () => {
     await repo.registrarGestionPendiente({
       ordenId: "o1",
       mensajeroId: "m1",
-      gestion: { resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
+      gestion: { resultado: "reprogramado", fechaReprogramacion: "2027-01-01", motivo: "x" },
     });
     expect(evidenciaCreateMany).not.toHaveBeenCalled();
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };

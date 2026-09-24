@@ -161,10 +161,10 @@ function etiqueta(i: number): string {
  */
 function estadoDe(i: number): string {
   if (i <= 30) return "en_bodega_satelite";
-  if (i <= 40) return "por_recoger";
-  if (i <= 50) return "por_devolver";
+  if (i <= 40) return "mensajero_recogiendo_en_bodega";
+  if (i <= 50) return "por_devolver_a_bodega_central";
   if (i <= 55) return "devolviendo_a_bodega_central";
-  return "devuelta";
+  return "novedad";
 }
 
 function geografiaDe(i: number): {
@@ -582,8 +582,8 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     );
     expect([...estadosDeLaPagina].sort()).toEqual([
       "en_bodega_satelite",
-      "por_devolver",
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
+      "por_devolver_a_bodega_central",
     ]);
 
     // Sin nada marcado no se ofrece ninguna acción: no hay lote sobre el que actuar.

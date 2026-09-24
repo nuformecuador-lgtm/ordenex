@@ -319,7 +319,7 @@ type ClaveEspecifica = (typeof CLAVES_ESPECIFICAS)[number];
  * lee sumado. El DTO los sigue trayendo por separado para el desglose de la fila desplegable.
  */
 const ESPECIFICAS_POR_RESULTADO: Record<CierreResultado, readonly ClaveEspecifica[]> = {
-  entregada: [
+  entregado: [
     "montoCobrar",
     "fulfillment",
     "recibido",
@@ -331,8 +331,8 @@ const ESPECIFICAS_POR_RESULTADO: Record<CierreResultado, readonly ClaveEspecific
     "ingresoTotal",
     "pagoMensajero",
   ],
-  reprogramada: ["montoCobrar", "fulfillment", "nuevaFecha", "motivo", "pagoMensajero"],
-  devuelta: [
+  reprogramado: ["montoCobrar", "fulfillment", "nuevaFecha", "motivo", "pagoMensajero"],
+  novedad: [
     "montoCobrar",
     "fulfillment",
     "motivo",
@@ -340,7 +340,7 @@ const ESPECIFICAS_POR_RESULTADO: Record<CierreResultado, readonly ClaveEspecific
     "ingresoTotal",
     "pagoMensajero",
   ],
-  rechazada: [
+  devolucion_a_origen_por_rechazo: [
     "montoCobrar",
     "fulfillment",
     "origenRechazo",

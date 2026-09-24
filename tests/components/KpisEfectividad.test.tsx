@@ -59,8 +59,8 @@ afterEach(cleanup);
 describe("El reparto de la efectividad", () => {
   it("mide entregadas sobre el universo ENTERO, en proceso incluido", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 60 },
-      { status: "devuelta", conteo: 20 },
+      { status: "entregado", conteo: 60 },
+      { status: "novedad", conteo: 20 },
       { status: "en_reparto", conteo: 20 },
     ]);
 
@@ -71,9 +71,9 @@ describe("El reparto de la efectividad", () => {
   // llegó, encontró al destinatario y resolvió la orden — lo que falló fue la venta.
   it("la efectividad de la gestión suma entregadas y rechazadas sobre el MISMO total", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 60 },
-      { status: "rechazada", conteo: 15 },
-      { status: "devuelta", conteo: 5 },
+      { status: "entregado", conteo: 60 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 15 },
+      { status: "novedad", conteo: 5 },
       { status: "en_reparto", conteo: 20 },
     ]);
 
@@ -86,9 +86,9 @@ describe("El reparto de la efectividad", () => {
   // orden se quedó sin resolver o volvió.
   it("solo los rechazos se suman: los otros desenlaces no", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 1 },
-      { status: "devuelta", conteo: 1 },
-      { status: "reprogramada", conteo: 1 },
+      { status: "entregado", conteo: 1 },
+      { status: "novedad", conteo: 1 },
+      { status: "reprogramado", conteo: 1 },
       { status: "incidente", conteo: 1 },
     ]);
 
@@ -100,7 +100,7 @@ describe("El reparto de la efectividad", () => {
   // desaparecería de este KPI en silencio mientras el anillo sí lo contaría en «Otros».
   it("un estado del catálogo que nadie previó cuenta como en proceso", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 5 },
+      { status: "entregado", conteo: 5 },
       { status: "estado_inventado_manana", conteo: 5 },
     ]);
 
@@ -110,9 +110,9 @@ describe("El reparto de la efectividad", () => {
   // Los cinco desenlaces YA no están en proceso, aunque no sean «entregada».
   it("los desenlaces que no son entrega no cuentan como en proceso", () => {
     const r = calcularEfectividad([
-      { status: "devuelta", conteo: 1 },
-      { status: "rechazada", conteo: 1 },
-      { status: "reprogramada", conteo: 1 },
+      { status: "novedad", conteo: 1 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 1 },
+      { status: "reprogramado", conteo: 1 },
       { status: "incidente", conteo: 1 },
     ]);
 
@@ -140,8 +140,8 @@ describe("Las tarjetas de efectividad", () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
-        { status: "entregada", conteo: 60 },
-        { status: "devuelta", conteo: 20 },
+        { status: "entregado", conteo: 60 },
+        { status: "novedad", conteo: 20 },
         { status: "en_reparto", conteo: 20 },
       ]),
     });
@@ -157,13 +157,15 @@ describe("Las tarjetas de efectividad", () => {
     expect(screen.getByText("Efectividad de entrega")).toBeInTheDocument();
     expect(screen.getByText("de 100 órdenes cargadas")).toBeInTheDocument();
     expect(
-      screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 100 órdenes)"),
+      screen.getByText("Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 100 órdenes)"),
     ).toBeInTheDocument();
     // Las dos tarjetas de CONTEO no llevan base: su cifra ya ES un conteo de órdenes, y un
     // «(100 órdenes)» junto a un «60» sería el denominador de nada.
     // En plural: el rótulo de la tarjeta y la entrada de la leyenda del héroe dicen lo mismo.
-    expect(screen.getAllByText("Entregadas").length).toBeGreaterThan(0);
-    expect(screen.getByText("En proceso")).toBeInTheDocument();
+    // ⏳ 2026-09-24 (FICHA 455, R5/R6): «Entregado» (un desenlace, nombre exacto) y el grupo sin
+    // desenlace con su rótulo propio (antes «En proceso», nombre retirado).
+    expect(screen.getAllByText("Entregado").length).toBeGreaterThan(0);
+    expect(screen.getByText("Sin desenlace todavía")).toBeInTheDocument();
     // 60 entregadas y 20 en proceso. En plural: la barra de madurez del héroe repite las dos
     // cifras en su leyenda, a propósito — es la misma partición vista dos veces.
     expect(screen.getAllByText("60").length).toBeGreaterThan(0);
@@ -175,7 +177,7 @@ describe("Las tarjetas de efectividad", () => {
   it("consulta el desglose por status una sola vez y sin filtro", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
-      datos: datos([{ status: "entregada", conteo: 40 }]),
+      datos: datos([{ status: "entregado", conteo: 40 }]),
     });
     renderKpis();
 
@@ -213,9 +215,9 @@ describe("Las tarjetas de efectividad", () => {
  * igual lea la cifra que lea, y varios de los casos de abajo no distinguirían nada.
  */
 const CASO_REPORTADO: ConteoDeStatus[] = [
-  { status: "entregada", conteo: 259 },
-  { status: "rechazada", conteo: 80 },
-  { status: "devuelta", conteo: 138 },
+  { status: "entregado", conteo: 259 },
+  { status: "devolucion_a_origen_por_rechazo", conteo: 80 },
+  { status: "novedad", conteo: 138 },
   { status: "incidente", conteo: 20 },
   { status: "en_reparto", conteo: 380 },
 ];
@@ -237,7 +239,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
       status: "ok",
       datos: datosConTotalDescuadrado(
         [
-          { status: "entregada", conteo: 30 },
+          { status: "entregado", conteo: 30 },
           { status: "en_reparto", conteo: 70 },
         ],
         999,
@@ -247,7 +249,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
 
     expect(await screen.findByText("de 100 órdenes cargadas")).toBeInTheDocument();
     expect(
-      screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 100 órdenes)"),
+      screen.getByText("Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 100 órdenes)"),
     ).toBeInTheDocument();
     // 30/100. El `total` del DTO no aparece por ningún lado.
     expect(screen.getAllByText(/30\s?%/).length).toBeGreaterThan(0);
@@ -271,7 +273,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
     renderKpis();
 
     expect(
-      await screen.findByText("Efectividad de la gestión (entregadas y rechazadas de 877 órdenes)"),
+      await screen.findByText("Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 877 órdenes)"),
     ).toBeInTheDocument();
     expect(screen.getByText(/38,7\s?%/)).toBeInTheDocument();
     // Las dos bases son la MISMA cifra —877 aquí y 877 en el héroe— aunque desde la ficha 441
@@ -290,7 +292,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
-        { status: "entregada", conteo: 1000 },
+        { status: "entregado", conteo: 1000 },
         { status: "en_reparto", conteo: 234 },
       ]),
     });
@@ -304,13 +306,13 @@ describe("La base de los porcentajes — de dónde sale", () => {
   it("concuerda en singular con una sola orden", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
-      datos: datos([{ status: "entregada", conteo: 1 }]),
+      datos: datos([{ status: "entregado", conteo: 1 }]),
     });
     renderKpis();
 
     expect(await screen.findByText("de 1 orden cargada")).toBeInTheDocument();
     expect(
-      screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 1 orden)"),
+      screen.getByText("Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 1 orden)"),
     ).toBeInTheDocument();
     // ⚠ Y CON UNA SOLA ORDEN NO HAY PORCENTAJE (ficha 441): una orden vale 100 puntos. El héroe
     // enseña las órdenes —«1 entregada de 1 orden»— y la tarjeta de gestión comparte el veto
@@ -319,7 +321,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
     // «100 %» es la cifra que NO puede aparecer. (Se busca esa y no un «%» cualquiera: la
     // propia frase que explica el veto nombra la tolerancia, que se escribe en por ciento.)
     expect(screen.queryByText(/100\s?%/)).toBeNull();
-    expect(screen.getByText("1 entregada de 1 orden")).toBeInTheDocument();
+    expect(screen.getByText("Entregado: 1 de 1 orden")).toBeInTheDocument();
   });
 });
 
@@ -373,7 +375,7 @@ describe("La base de los porcentajes — cuándo NO se escribe", () => {
 
     expect(await screen.findByText("de 0 órdenes cargadas")).toBeInTheDocument();
     expect(
-      screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 0 órdenes)"),
+      screen.getByText("Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 0 órdenes)"),
     ).toBeInTheDocument();
     // La CIFRA no se escribe: un «0 %» afirmaría que se falló cada entrega. En el héroe, además,
     // tampoco es un guion — es una frase (ficha 441), porque un `null` mudo se lee como «no se

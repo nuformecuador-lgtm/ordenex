@@ -1,0 +1,97 @@
+Historial de la orden QA-R-0016
+
+Cambios de estado y correcciones del día de reparto, en orden cronológico.
+
+Novedad · pendiente de confirmación
+
+Creación
+·
+En preparación
+
+23 jul 2026, 9:59 a. m.
+
+Por Tania Tienda
+
+En preparación
+→
+En bodega central
+
+23 ago 2026, 2:03 a. m.
+
+Por Maestro QA
+
+En bodega central
+→
+Mensajero recogiendo en la bodega
+
+23 ago 2026, 2:09 a. m.
+
+Por Maestro QA
+
+Día de reparto
+
+Del 24 de agosto al 23 de agosto
+
+23 ago 2026, 2:14 a. m.
+
+Por Maestro QA
+
+Motivo: La bodega marco el lote para el dia siguiente por error.
+
+Mensajero recogiendo en la bodega
+→
+En reparto
+
+23 ago 2026, 2:16 a. m.
+
+Por Marco Mensajero
+
+Día de reparto
+
+Del 23 de agosto al 24 de agosto
+
+23 ago 2026, 2:17 a. m.
+
+Por Maestro QA
+
+Motivo: El paquete no sale hoy, se reprograma al dia siguiente.
+
+Día de reparto
+
+Del 24 de agosto al 23 de agosto
+
+23 ago 2026, 2:20 a. m.
+
+Por Maestro QA
+
+Motivo: El paquete ya va en la moto, se entrega hoy mismo.
+
+Día de reparto
+
+Del 23 de agosto al 24 de agosto
+
+23 ago 2026, 2:22 a. m.
+
+Por Maestro QA
+
+Motivo: Se reprograma al dia siguiente por peticion del cliente.
+
+Día de reparto
+
+Del 24 de agosto al 23 de agosto
+
+23 ago 2026, 2:24 a. m.
+
+Por Maestro QA
+
+Motivo: El paquete ya va en la moto: se entrega hoy mismo.
+
+Gestión registrada
+
+Resultado: Novedad
+
+24 sept 2026, 12:56 a. m.
+
+Por Marco Mensajero (Mensajero)
+
+Close

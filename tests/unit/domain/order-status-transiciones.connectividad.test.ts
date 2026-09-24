@@ -84,7 +84,7 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
     // `devuelta_a_tienda` cierra el flujo de devolucion: salida 0 esperada.
     expect(grados.get("devuelta_a_tienda")!.salidas).toBe(0);
     // `entregada` conserva la salida legitima #31 (deshacer gestion): el test EXIME, no prohibe.
-    expect(grados.get("entregada")!.salidas).toBeGreaterThan(0);
+    expect(grados.get("entregado")!.salidas).toBeGreaterThan(0);
   });
 
   // Feature 154/R16 + feature 158/R13/R61 — REESCRITO DOS VECES, nunca borrado.
@@ -119,7 +119,7 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
         rol: "maestro/admin/adminSatelite (de la zona)",
       }, // #57
       {
-        to: "por_recoger",
+        to: "mensajero_recogiendo_en_bodega",
         via: "incidente",
         rol: "maestro/admin/adminSatelite (de la zona)",
       }, // #58
@@ -157,7 +157,7 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
       "en_bodega_satelite",
       "en_ruta_bodega_central",
       "en_ruta_bodega_satelite",
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
     ]);
     // SIMETRIA: cada origen desde el que se reporta es un destino al que se puede revertir.
     expect(inversas).toEqual(entradasAdmin);
@@ -183,7 +183,7 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
     expect(TRANSICIONES.en_preparacion.map((d) => d.to)).toEqual(["en_bodega_central"]);
     // `por_recoger` sigue alimentado por la asignacion desde bodega central y satelite;
     // `en_ruta_bodega_satelite`, por el ruteo desde la bodega central.
-    expect(grados.get("por_recoger")!.entradas).toBeGreaterThan(0);
+    expect(grados.get("mensajero_recogiendo_en_bodega")!.entradas).toBeGreaterThan(0);
     expect(grados.get("en_ruta_bodega_satelite")!.entradas).toBeGreaterThan(0);
   });
 

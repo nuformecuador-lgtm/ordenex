@@ -104,9 +104,9 @@ const TEXTO = {
     "Esto le cobra a tu tienda el flete por rechazo y no se puede deshacer. Si preferís volver a intentar la entrega, usá «Reprogramar».",
   motivoLabel: "Motivo del rechazo",
   bloqueo: "Escribí el motivo para poder rechazar.",
-  exito: "Orden rechazada. El paquete vuelve a tu bodega.",
+  exito: "La orden pasó a Devolución a origen por rechazo. El paquete vuelve a tu bodega.",
   conflicto:
-    "Esta orden ya no estaba en devolución, así que no se rechazó. Actualizá la pantalla.",
+    "Esta orden ya no estaba en Novedad, así que no se rechazó. Actualizá la pantalla.",
   forbidden: "No tenés permiso para rechazar esta orden.",
 } as const;
 
@@ -114,7 +114,7 @@ const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({
   id: "o1",
   numGuia: 12345,
   numRemision: "REM-90210",
-  estatusValue: "devuelta",
+  estatusValue: "novedad",
   intentosContacto: 0,
   mensajeroNombre: "Marta Mensajera",
   destinatario: "Ana Cliente",
@@ -527,5 +527,20 @@ describe("240 — los desenlaces que no mueven nada", () => {
     // única línea que alguien leería el día de la disputa.
     expect(within(segunda).getByLabelText(TEXTO.motivoLabel)).toHaveValue("");
     expect(segunda).toHaveTextContent("Beto Cliente");
+  });
+});
+
+// FICHA 455 (2026-09-24, recorrido F4): la ventana decía «la orden se cierra como rechazada», con el
+// nombre retirado «Rechazada». Ahora nombra el estado al que pasa con su nombre vigente. Literal de
+// contrato a propósito (memoria «Aserción contra su propia fuente»).
+describe("455/F4 — la ventana nombra el estado al que pasa la orden", () => {
+  it("dice «pasa a Devolución a origen por rechazo» y no «rechazada»", async () => {
+    const user = userEvent.setup();
+    montar();
+    const dialog = await abrir(user);
+    expect(dialog).toHaveTextContent(
+      "vuelve a tu bodega y la orden pasa a Devolución a origen por rechazo.",
+    );
+    expect(dialog.textContent ?? "").not.toMatch(/rechazada/i);
   });
 });

@@ -732,18 +732,21 @@ describe("Feature 259 · R24/R25 — el nombre accesible de la tarjeta dice «pa
     render(<MensajeroCard fila={fila()} onSeleccionar={() => {}} />);
     const etiqueta = tarjetaDe("m-1").getAttribute("aria-label") ?? "";
 
-    expect(etiqueta).toContain("Ana Rojas: 21 asignadas para hoy");
+    // FICHA 455 (2026-09-24): «Asignadas» era el rótulo retirado de la tarjeta del mensajero; el
+    // contador habla del paquete y pasa a masculino («Asignados»), también en el nombre accesible.
+    expect(etiqueta).toContain("Ana Rojas: 21 asignados para hoy");
     // Y la frase vieja, exigida AUSENTE: «asignadas hoy» sin el «para» es el texto de antes.
     expect(
       etiqueta,
       "volvió el texto anterior: la tarjeta se anuncia por el día en que se asignó",
-    ).not.toMatch(/asignadas hoy/i);
+    ).not.toMatch(/asignad[ao]s hoy/i);
   });
 
-  it("⛔ la etiqueta del contador sigue siendo «Asignadas»", () => {
+  it("⛔ la etiqueta del contador es «Asignados» (455: ya no «Asignadas»)", () => {
     // R25 — lo que dejó de ser cierto es el «hoy» que la acompaña, no el contador. Si alguien
     // renombra esta etiqueta, se pasó del alcance de la 259.
     render(<MensajeroCard fila={fila()} onSeleccionar={() => {}} />);
-    expect(contador(tarjetaDe("m-1"), "asignadas")).toHaveTextContent("Asignadas");
+    expect(contador(tarjetaDe("m-1"), "asignadas")).toHaveTextContent("Asignados");
+    expect(contador(tarjetaDe("m-1"), "asignadas")).not.toHaveTextContent("Asignadas");
   });
 });

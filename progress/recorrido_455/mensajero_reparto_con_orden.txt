@@ -1,0 +1,111 @@
+Toggle Sidebar
+Reparto
+
+Órdenes en reparto por gestionar
+
+Tema claro activado.
+1 por hacer
+Salir
+Pendientes
+1
+Entregado
+1
+Por cobrar
+₡11.200
+Total a cobrar
+₡80.900
+Cantón
+Todos los cantones
+Distrito
+Todos los distritos
+En reparto / por gestionar
+Sincronizar ruta
+Trayecto desde aquí
+El orden mostrado no está actualizado
+La ruta cambió desde el último cálculo. Pulsa «Sincronizar ruta» para recalcular el orden de entrega.
+Mapa de ruta
+Ocultar mapa
+
+El punto de partida es aproximado (no se usó tu ubicación GPS reciente).
+
+?
++
+−
+ Leaflet | © OpenStreetMap contributors
+
+Guía 97865841
+
+1 orden en reparto
+
+EN REPARTO
+PEDIDO
+Nº GUÍA
+97865841
+NOMBRE
+Alejandra Mena
+TELÉFONO
+87400001
+PRODUCTO
+Juego de toallas
+ENTREGA
+
+Colón, Mora
+
+Colón, Mora
+
+PROVINCIA
+San José
+CANTÓN
+Mora
+DISTRITO
+Colón
+NOTAS
+—
+INTENTOS
+0
+COBRO
+VALOR A COBRAR
+₡11.200
+LLAMAR
+MENSAJE
+NAVEGAR
+AYUDA
+Notas con la tienda
+
+Todavía no hay notas en esta orden.
+
+Acá queda la conversación sobre esta orden, con el autor y la hora de cada nota.
+
+Agregar nota
+Gestionar esta orden
+Buscar guías
+Mosaico
+Detalle
+·
+
+QA-R-0017
+
+Sin posición · —
+
+En reparto
+Abierta en detalle
+
+Alejandra Mena
+
+Juego de toallas
+
+Intentos: 0
+
+Mora · Colón
+Colón, Mora
+Pendiente de optimizar
+COBRAR
+₡11.200
+VER DETALLE COMPLETO
+Gestionar más tarde
+Gestionar
+Anterior
+
+Orden 1 de 1
+
+Siguiente

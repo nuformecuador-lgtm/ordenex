@@ -397,15 +397,17 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     // del desplegable, no como enlace (ver `Sidebar.tsx`)—, pero se conserva porque
     // identifica al ítem (clave de React y posición relativa a "Recolección").
     //
-    // "Por recoger" y no "Recoger" a secas: el ítem hermano "Recolección" (167) es la
+    // "Recoger en bodega" y no "Recoger" a secas: el ítem hermano "Recolección" (167) es la
     // recolección EN TIENDA, otro flujo. La etiqueta larga los mantiene distinguibles.
+    // FICHA 455 (2026-09-24, R6): antes decía "Por recoger", que era el nombre de un estado; el
+    // menú nombra la ACCIÓN. La ruta no cambia (R51).
     label: "Entregas",
     href: "/mis-asignaciones",
     iconKey: "truck",
     roles: ["mensajero"],
     children: [
       { label: "Reparto", href: "/mis-asignaciones/reparto" },
-      { label: "Por recoger", href: "/mis-asignaciones/recoger" },
+      { label: "Recoger en bodega", href: "/mis-asignaciones/recoger" },
     ],
   },
   {

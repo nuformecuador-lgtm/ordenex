@@ -104,7 +104,7 @@ function escenario(opciones: { filas?: FilaFake[]; ordenes?: Record<string, Part
     ordenes.set(id, {
       tiendaId: TIENDA,
       mensajeroAsignadoId: MENSAJERO,
-      estatusValue: "devuelta",
+      estatusValue: "novedad",
       // FICHA 454 (U12): la DERIVACION «ayuda abierta» que proyecta el repositorio del hilo. Por
       // defecto cerrada; los casos de la ayuda la abren.
       ayudaAbierta: false,
@@ -357,16 +357,16 @@ describe("R14 — ventana de escritura ASIMETRICA por rol", () => {
   it("la tienda publica solo en devuelta y el mensajero solo en en_reparto (matriz rol × estatus)", async () => {
     // La matriz completa, explicita. `esperado` = cuantas filas debe haber DESPUES de publicar.
     const matriz: { estatus: string; actor: Actor; permitido: boolean }[] = [
-      { estatus: "devuelta", actor: actorTienda, permitido: true },
-      { estatus: "devuelta", actor: actorMensajero, permitido: false },
+      { estatus: "novedad", actor: actorTienda, permitido: true },
+      { estatus: "novedad", actor: actorMensajero, permitido: false },
       { estatus: "en_reparto", actor: actorTienda, permitido: false },
       { estatus: "en_reparto", actor: actorMensajero, permitido: true },
-      { estatus: "entregada", actor: actorTienda, permitido: false },
-      { estatus: "entregada", actor: actorMensajero, permitido: false },
-      { estatus: "reprogramada", actor: actorTienda, permitido: false },
-      { estatus: "reprogramada", actor: actorMensajero, permitido: false },
-      { estatus: "rechazada", actor: actorTienda, permitido: false },
-      { estatus: "rechazada", actor: actorMensajero, permitido: false },
+      { estatus: "entregado", actor: actorTienda, permitido: false },
+      { estatus: "entregado", actor: actorMensajero, permitido: false },
+      { estatus: "reprogramado", actor: actorTienda, permitido: false },
+      { estatus: "reprogramado", actor: actorMensajero, permitido: false },
+      { estatus: "devolucion_a_origen_por_rechazo", actor: actorTienda, permitido: false },
+      { estatus: "devolucion_a_origen_por_rechazo", actor: actorMensajero, permitido: false },
     ];
 
     for (const caso of matriz) {
@@ -392,7 +392,7 @@ describe("R14 — ventana de escritura ASIMETRICA por rol", () => {
     // se la abre el tercer parametro, la derivacion. El solape pasa a ser esa SITUACION (caso de
     // abajo). Antes: `["devuelta", "ayuda_tienda"]` y `["en_reparto", "ayuda_tienda"]`.
     expect(VENTANA_ESCRITURA).toEqual({
-      adminTienda: ["devuelta"],
+      adminTienda: ["novedad"],
       mensajero: ["en_reparto"],
     });
   });
@@ -446,7 +446,7 @@ describe("R14 — ventana de escritura ASIMETRICA por rol", () => {
     });
     expect(enReparto.filas).toHaveLength(0);
 
-    const entregada = escenario({ ordenes: { [ORDEN]: { estatusValue: "entregada" } } });
+    const entregada = escenario({ ordenes: { [ORDEN]: { estatusValue: "entregado" } } });
     expect(await entregada.service.publicar({ ordenId: ORDEN, cuerpo: "x" }, actorMensajero)).toEqual(
       { status: "forbidden" },
     );
@@ -473,8 +473,8 @@ describe("R14 — ventana de escritura ASIMETRICA por rol", () => {
     expect(estaEnVentanaDeEscritura("adminTienda", "en_reparto", false)).toBe(false);
   });
 
-  it("`por_recoger` NO abre ventana para nadie (decision deliberada del design §2.2)", async () => {
-    const { service, filas } = escenario({ ordenes: { [ORDEN]: { estatusValue: "por_recoger" } } });
+  it("`mensajero_recogiendo_en_bodega` NO abre ventana para nadie (decision deliberada del design §2.2)", async () => {
+    const { service, filas } = escenario({ ordenes: { [ORDEN]: { estatusValue: "mensajero_recogiendo_en_bodega" } } });
     expect(await service.publicar({ ordenId: ORDEN, cuerpo: "x" }, actorMensajero)).toEqual({
       status: "forbidden",
     });
@@ -485,7 +485,7 @@ describe("R14 — ventana de escritura ASIMETRICA por rol", () => {
   });
 
   it("`puedeEscribir` de la lectura es POR ROL, no «la orden esta en devuelta»", async () => {
-    const enDevuelta = escenario({ ordenes: { [ORDEN]: { estatusValue: "devuelta" } } });
+    const enDevuelta = escenario({ ordenes: { [ORDEN]: { estatusValue: "novedad" } } });
     const tiendaEnDevuelta = await enDevuelta.service.listar({ ordenId: ORDEN }, actorTienda);
     const mensajeroEnDevuelta = await enDevuelta.service.listar({ ordenId: ORDEN }, actorMensajero);
     expect(tiendaEnDevuelta).toMatchObject({ status: "ok", puedeEscribir: true });
@@ -517,7 +517,7 @@ describe("R15 — leer siempre, en cualquier estatus", () => {
       }),
     ];
 
-    for (const estatus of ["en_reparto", "entregada", "rechazada"]) {
+    for (const estatus of ["en_reparto", "entregado", "devolucion_a_origen_por_rechazo"]) {
       const { service } = escenario({
         filas: escritas.map((f) => ({ ...f })),
         ordenes: { [ORDEN]: { estatusValue: estatus } },
@@ -771,7 +771,7 @@ describe("R35 — fuera de la ventana, las notas quedan congeladas", () => {
           cuerpo: "propia del mensajero",
         }),
       ],
-      ordenes: { [ORDEN]: { estatusValue: "devuelta" } },
+      ordenes: { [ORDEN]: { estatusValue: "novedad" } },
     });
     expect(await mensajero.service.borrar({ ordenId: ORDEN, notaId: "n1" }, actorMensajero)).toEqual({
       status: "forbidden",
@@ -781,7 +781,7 @@ describe("R35 — fuera de la ventana, las notas quedan congeladas", () => {
     // Y en un estatus terminal, nadie borra nada.
     const terminal = escenario({
       filas: [fila({ id: "n1" })],
-      ordenes: { [ORDEN]: { estatusValue: "entregada" } },
+      ordenes: { [ORDEN]: { estatusValue: "entregado" } },
     });
     expect(await terminal.service.borrar({ ordenId: ORDEN, notaId: "n1" }, actorTienda)).toEqual({
       status: "forbidden",
@@ -790,7 +790,7 @@ describe("R35 — fuera de la ventana, las notas quedan congeladas", () => {
 
     // Dentro de la ventana propia, el borrado SI procede (contraprueba de R31: sin ella este
     // test pasaria igual con un service que rechazara SIEMPRE).
-    const dentro = escenario({ filas: [fila({ id: "n1" })], ordenes: { [ORDEN]: { estatusValue: "devuelta" } } });
+    const dentro = escenario({ filas: [fila({ id: "n1" })], ordenes: { [ORDEN]: { estatusValue: "novedad" } } });
     expect(await dentro.service.borrar({ ordenId: ORDEN, notaId: "n1" }, actorTienda)).toEqual({
       status: "ok",
     });

@@ -212,7 +212,7 @@ describe("235/R26 → 454/R27 — la seleccion del corte alcanza la orden con ay
     expect(casa("ayuda_tienda")).toBe(false);
     // Y los que NO: `por_recoger` es la guarda de la 109/R5 (el mensajero ni siquiera la recogio),
     // y los desenlaces ya estan cerrados.
-    for (const fuera of ["por_recoger", "entregada", "sin_gestionar", "recolectando", "devuelta"]) {
+    for (const fuera of ["mensajero_recogiendo_en_bodega", "entregado", "novedad_interna", "recolectando", "novedad"]) {
       expect(casa(fuera), `${fuera} NO debe barrerse`).toBe(false);
     }
     // Censo CERRADO: ni uno mas. Un tercer estado aqui barreria trabajo que no toca.

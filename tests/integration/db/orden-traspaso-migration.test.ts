@@ -146,6 +146,12 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       // `devolucion_por_confirmar`. Toca `orden`, `orden_historial_estado`, `orden_evento` y
       // `order_status`; no toca `orden_traspaso_mensajero` ni crea ningun enum.
       "20260923120200_retiro_estados_454",
+      // Ficha 455 (2026-09-24): M1 renombra 7 values de `order_status` (UPDATE de catalogo), M2
+      // renombra 4 etiquetas de `gestion_resultado` (RENAME VALUE) y M3 retira los dos huerfanos del
+      // catalogo si nadie los referencia. Ninguna toca `orden_traspaso_mensajero` ni crea ningun enum.
+      "20260924120000_order_status_nombre_unico",
+      "20260924120100_gestion_resultado_nombre_unico",
+      "20260924120200_order_status_retiro_huerfanos",
     ]);
   });
 });

@@ -20,7 +20,7 @@ function repoQueDevuelve(porDesenlace: Record<string, number>): IConteoEntregasR
 
 /** Los seis buckets, con los que no se nombren en cero. */
 function seis(parcial: Record<string, number>): Record<string, number> {
-  return { entregada: 0, devuelta: 0, rechazada: 0, reprogramada: 0, incidente: 0, otros: 0, ...parcial };
+  return { entregado: 0, novedad: 0, devolucion_a_origen_por_rechazo: 0, reprogramado: 0, incidente: 0, otros: 0, ...parcial };
 }
 
 /**
@@ -49,15 +49,15 @@ describe("Servicio del conteo — las tres cifras", () => {
   // cierto por construcción y no por coincidencia de dos consultas independientes.
   it("el total es la suma de los seis buckets", async () => {
     const service = new ConteoEntregasService(
-      repoQueDevuelve(seis({ entregada: 20, devuelta: 5, rechazada: 3, reprogramada: 7, incidente: 1, otros: 64 })),
+      repoQueDevuelve(seis({ entregado: 20, novedad: 5, devolucion_a_origen_por_rechazo: 3, reprogramado: 7, incidente: 1, otros: 64 })),
       cacheConMemoria().cache,
       { now: () => AHORA },
     );
 
     const datos = await service.consultar(consultaDe());
 
-    expect(datos.porDesenlace.entregada).toBe(20);
-    expect(datos.porDesenlace.devuelta).toBe(5);
+    expect(datos.porDesenlace.entregado).toBe(20);
+    expect(datos.porDesenlace.novedad).toBe(5);
     expect(datos.total).toBe(100);
     expect(Object.values(datos.porDesenlace).reduce((s, n) => s + n, 0)).toBe(datos.total);
   });
@@ -77,7 +77,7 @@ describe("Servicio del conteo — las tres cifras", () => {
 
 describe("Servicio del conteo — el sello `lastSync`", () => {
   it("es un ISO-8601 y sale del reloj inyectado, no de `Date.now()`", async () => {
-    const service = new ConteoEntregasService(repoQueDevuelve(seis({ entregada: 1, otros: 1 })), cacheConMemoria().cache, {
+    const service = new ConteoEntregasService(repoQueDevuelve(seis({ entregado: 1, otros: 1 })), cacheConMemoria().cache, {
       now: () => AHORA,
     });
 
@@ -94,7 +94,7 @@ describe("Servicio del conteo — el sello `lastSync`", () => {
   it("con la caché caliente NO se refresca: dice cuándo se LEYÓ, no cuándo se sirvió", async () => {
     const { cache, ejecuciones } = cacheConMemoria();
     let reloj = new Date("2026-08-17T12:00:00.000Z");
-    const repo = repoQueDevuelve(seis({ entregada: 20, otros: 80 }));
+    const repo = repoQueDevuelve(seis({ entregado: 20, otros: 80 }));
     const service = new ConteoEntregasService(repo, cache, { now: () => reloj });
 
     const primera = await service.consultar(consultaDe());
@@ -112,7 +112,7 @@ describe("Servicio del conteo — el sello `lastSync`", () => {
 
   it("el sello viaja DENTRO del valor cacheado", async () => {
     const { cache, entradas } = cacheConMemoria();
-    const service = new ConteoEntregasService(repoQueDevuelve(seis({ entregada: 1, otros: 1 })), cache, { now: () => AHORA });
+    const service = new ConteoEntregasService(repoQueDevuelve(seis({ entregado: 1, otros: 1 })), cache, { now: () => AHORA });
 
     await service.consultar(consultaDe());
 
@@ -125,7 +125,7 @@ describe("Servicio del conteo — la clave de caché", () => {
   // adminTienda. No es una cifra equivocada: es una fuga entre inquilinos.
   it("dos alcances distintos NO comparten entrada", async () => {
     const { cache, ejecuciones } = cacheConMemoria();
-    const service = new ConteoEntregasService(repoQueDevuelve(seis({ entregada: 1, otros: 1 })), cache, { now: () => AHORA });
+    const service = new ConteoEntregasService(repoQueDevuelve(seis({ entregado: 1, otros: 1 })), cache, { now: () => AHORA });
     const base = consultaDe();
 
     await service.consultar({ ...base, alcance: { tipo: "global" } });
@@ -137,7 +137,7 @@ describe("Servicio del conteo — la clave de caché", () => {
 
   it("dos filtros distintos NO comparten entrada, y el mismo filtro SÍ", async () => {
     const { cache, ejecuciones } = cacheConMemoria();
-    const service = new ConteoEntregasService(repoQueDevuelve(seis({ entregada: 1, otros: 1 })), cache, { now: () => AHORA });
+    const service = new ConteoEntregasService(repoQueDevuelve(seis({ entregado: 1, otros: 1 })), cache, { now: () => AHORA });
 
     await service.consultar(consultaDe({ rango: "semana", zona_id: ["z1"] }));
     await service.consultar(consultaDe({ rango: "semana", zona_id: ["z2"] }));

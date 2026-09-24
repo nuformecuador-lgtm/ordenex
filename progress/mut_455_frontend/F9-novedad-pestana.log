@@ -1,0 +1,851 @@
+MUTACION F9-novedad-pestana
+archivo: app/(app)/novedades/_components/novedad-grupo-textos.ts
+cambio (numstat): 1	1	app/(app)/novedades/_components/novedad-grupo-textos.ts
+-     pestana: "Novedad",
++     pestana: "En devolución",
+tests: ['tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts', 'tests/components/NovedadesTabs.test.tsx', 'tests/unit/guards/nombres-estado-retirados.guardia.test.ts']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts (6 tests | 1 failed) 48ms
+     × ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2 6ms
+ ❯ tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts (4 tests | 1 failed) 459ms
+       × los rotulos de las dos pestañas: «Novedad» y «Ayuda solicitada» 7ms
+ ❯ tests/components/NovedadesTabs.test.tsx (10 tests | 4 failed) 1186ms
+     × R1/R13: hay TRES pestañas, con sus rótulos en español y sin jerga 140ms
+     × T4.2: cada panel tiene SUS nombres accesibles, no los del otro 251ms
+     × cambiar de pestaña y volver NO reinicia la página de la otra 90ms
+     × R7: con `superficieInicial="devolucion"` la pestaña activa es «Novedad» 10ms
+
+ Test Files  3 failed (3)
+      Tests  6 failed | 14 passed (20)
+   Start at  08:10:18
+   Duration  9.32s (transform 2.46s, setup 267ms, import 11.58s, tests 1.69s, environment 1.31s)
+
+(node:19572) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/components/NovedadesTabs.test.tsx > NovedadesTabs — las tres superficies (236/R1/R13) > R1/R13: hay TRES pestañas, con sus rótulos en español y sin jerga
+AssertionError: expected [ 'Ayuda solicitada', …(2) ] to deeply equal [ 'Ayuda solicitada', 'Novedad', …(1) ]
+
+- Expected
++ Received
+
+  [
+    "Ayuda solicitada",
+-   "Novedad",
++   "En devolución",
+    "Rechazadas por plazo vencido",
+  ]
+
+ ❯ tests/components/NovedadesTabs.test.tsx:134:7
+    132|         .getAllByRole("tab")
+    133|         .map((t) => t.textContent),
+    134|     ).toEqual([
+       |       ^
+    135|       "Ayuda solicitada",
+    136|       "Novedad",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/components/NovedadesTabs.test.tsx > NovedadesTabs — las tres superficies (236/R1/R13) > T4.2: cada panel tiene SUS nombres accesibles, no los del otro
+TestingLibraryElementError: Unable to find an accessible element with the role "tab" and name "Novedad"
+
+Here are the accessible roles:
+
+  tablist:
+
+  Name "Vistas de novedades":
+  <div
+    aria-label="Vistas de novedades"
+    class="scrollbar-on-hover flex w-full items-center gap-2 overflow-x-auto rounded-lg bg-transparent p-1"
+    data-activation-direction="none"
+    data-orientation="horizontal"
+    data-slot="tabs-list"
+    role="tablist"
+  />
+
+  --------------------------------------------------
+  tab:
+
+  Name "Ayuda solicitada":
+  <button
+    aria-controls="base-ui-_r_28_"
+    aria-disabled="false"
+    aria-selected="true"
+    class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+    data-activation-direction="none"
+    data-active=""
+    data-composite-item-active=""
+    data-orientation="horizontal"
+    data-slot="tabs-trigger"
+    id="base-ui-_r_25_"
+    role="tab"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "En devolución":
+  <button
+    aria-controls="base-ui-_r_30_"
+    aria-disabled="false"
+    aria-selected="false"
+    class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+    data-activation-direction="none"
+    data-orientation="horizontal"
+    data-slot="tabs-trigger"
+    id="base-ui-_r_26_"
+    role="tab"
+    tabindex="-1"
+    type="button"
+  />
+
+  Name "Rechazadas por plazo vencido":
+  <button
+    aria-controls="base-ui-_r_3i_"
+    aria-disabled="false"
+    aria-selected="false"
+    class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+    data-activation-direction="none"
+    data-orientation="horizontal"
+    data-slot="tabs-trigger"
+    id="base-ui-_r_27_"
+    role="tab"
+    tabindex="-1"
+    type="button"
+  />
+
+  --------------------------------------------------
+  tabpanel:
+
+  Name "Ayuda solicitada":
+  <div
+    aria-labelledby="base-ui-_r_25_"
+    class="mt-4 outline-none"
+    data-activation-direction="none"
+    data-index="0"
+    data-orientation="horizontal"
+    data-slot="tabs-content"
+    id="base-ui-_r_28_"
+    role="tabpanel"
+    tabindex="0"
+  />
+
+  --------------------------------------------------
+  region:
+
+  Name "Filtros de las órdenes con ayuda solicitada":
+  <section
+    aria-label="Filtros de las órdenes con ayuda solicitada"
+    class="flex flex-col gap-1"
+  />
+
+  --------------------------------------------------
+  searchbox:
+
+  Name "Buscar entre las órdenes con ayuda solicitada":
+  <input
+    aria-label="Buscar entre las órdenes con ayuda solicitada"
+    class="min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 h-full w-full pr-9 pl-8 text-ellipsis [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
+    data-slot="input"
+    id="base-ui-_r_2a_"
+    placeholder="Guía, remisión, teléfono, destinatario o producto"
+    type="search"
+    value=""
+  />
+
+  --------------------------------------------------
+  button:
+
+  Name "Filtros":
+  <button
+    aria-expanded="false"
+    aria-haspopup="dialog"
+    class="group/button inline-flex cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 shrink-0 gap-2 font-normal h-8"
+    data-base-ui-click-trigger=""
+    id="base-ui-_r_2c_"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Descargar Ayuda solicitada":
+  <button
+    aria-label="Descargar Ayuda solicitada"
+    class="group/button inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-brand bg-background text-brand hover:bg-brand-soft hover:text-brand-dark aria-expanded:bg-brand-soft aria-expanded:text-brand-dark focus-visible:border-brand dark:bg-transparent dark:text-brand-light dark:hover:bg-brand/15 dark:hover:text-brand-light h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"
+    data-slot="button"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Mosaico":
+  <button
+    aria-pressed="true"
+    class="group/button inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"
+    data-slot="button"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Detalle":
+  <button
+    aria-pressed="false"
+    class="group/button inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"
+    data-slot="button"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Ver en el mapa la ruta hasta Av. Central 120":
+  <button
+    aria-label="Ver en el mapa la ruta hasta Av. Central 120"
+    class="flex w-full items-center gap-2 rounded-lg bg-navy px-2 py-1.5 text-left text-white transition-colors hover:bg-navy-deep"
+    type="button"
+  />
+
+  Name "Ver detalle completo":
+  <button
+    aria-disabled="false"
+    aria-expanded="false"
+    class="flex w-full cursor-pointer items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground"
+    data-slot="collapsible-trigger"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Llamar a Ana Cliente":
+  <button
+    aria-label="Llamar a Ana Cliente"
+    class="group/button inline-flex cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 size-8 shrink-0"
+    data-base-ui-tooltip-trigger=""
+    data-slot="tooltip-trigger"
+    id="base-ui-_r_2g_"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "WhatsApp a Ana Cliente":
+  <button
+    aria-label="WhatsApp a Ana Cliente"
+    class="group/button inline-flex cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 size-8 shrink-0"
+    data-base-ui-tooltip-trigger=""
+    data-slot="tooltip-trigger"
+    id="base-ui-_r_2i_"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Reprogramar la orden de Ana Cliente":
+  <button
+    aria-label="Reprogramar la orden de Ana Cliente"
+    class="group/button inline-flex cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 size-8 shrink-0"
+    data-base-ui-tooltip-trigger=""
+    data-slot="tooltip-trigger"
+    id="base-ui-_r_2l_"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Rechazar la orden de Ana Cliente":
+  <button
+    aria-label="Rechazar la orden de Ana Cliente"
+    class="group/button inline-flex cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 size-8 shrink-0"
+    data-base-ui-tooltip-trigger=""
+    data-slot="tooltip-trigger"
+    id="base-ui-_r_2n_"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Habilitar la orden de Ana Cliente":
+  <button
+    aria-label="Habilitar la orden de Ana Cliente"
+    class="group/button inline-flex cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 size-8 shrink-0"
+    data-base-ui-tooltip-trigger=""
+    data-slot="tooltip-trigger"
+    id="base-ui-_r_2p_"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Abrir la conversación de la orden de Ana Cliente":
+  <button
+    aria-label="Abrir la conversación de la orden de Ana Cliente"
+    class="group/button inline-flex cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 size-8 shrink-0"
+    data-base-ui-tooltip-trigger=""
+    data-slot="tooltip-trigger"
+    id="base-ui-_r_2r_"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Corregir los datos del cliente de la orden de Ana Cliente":
+  <button
+    aria-label="Corregir los datos del cliente de la orden de Ana Cliente"
+    class="group/button inline-flex cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 size-8 shrink-0"
+    data-base-ui-tooltip-trigger=""
+    data-slot="tooltip-trigger"
+    id="base-ui-_r_2t_"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Registrar un intento de contacto con la orden de Ana Cliente":
+  <button
+    aria-label="Registrar un intento de contacto con la orden de Ana Cliente"
+    class="group/button inline-flex cursor-pointer items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 size-8 shrink-0"
+    data-base-ui-tooltip-trigger=""
+    data-slot="tooltip-trigger"
+    id="base-ui-_r_2v_"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "Página anterior":
+  <button
+    aria-label="Página anterior"
+    class="pointer-events-auto inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground"
+    disabled=""
+    type="button"
+  />
+
+  Name "Página siguiente":
+  <button
+    aria-label="Página siguiente"
+    class="pointer-events-auto inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground"
+    disabled=""
+    type="button"
+  />
+
+  --------------------------------------------------
+  status:
+
+  Name "":
+  <p
+    class="mt-1 h-4 text-xs text-muted-foreground"
+    id="_r_29_-minimo"
+    role="status"
+  />
+
+  --------------------------------------------------
+  group:
+
+  Name "Vista de las órdenes":
+  <div
+    aria-label="Vista de las órdenes"
+    class="flex w-fit items-stretch *:focus-visible:relative *:focus-visible:z-10 has-[>[data-slot=button-group]]:gap-2 has-[select[aria-hidden=true]:last-child]:[&>[data-slot=select-trigger]:last-of-type]:rounded-r-lg [&>[data-slot=select-trigger]:not([class*='w-'])]:w-fit [&>input]:flex-1 *:data-slot:rounded-r-none [&>[data-slot]:not(:has(~[data-slot]))]:rounded-r-lg! [&>[data-slot]~[data-slot]]:rounded-l-none [&>[data-slot]~[data-slot]]:border-l-0"
+    data-slot="button-group"
+    role="group"
+  />
+
+  --------------------------------------------------
+  list:
+
+  Name "Órdenes con ayuda solicitada":
+  <ul
+    aria-label="Órdenes con ayuda solicitada"
+    class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 "
+  />
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  <li />
+
+  --------------------------------------------------
+  article:
+
+  Name "Orden Guía 12345 · Ana Cliente":
+  <article
+    aria-label="Orden Guía 12345 · Ana Cliente"
+    class="flex flex-col gap-2.5 rounded-xl border bg-card p-3 shadow-sm transition-all border-border "
+  />
+
+  --------------------------------------------------
+  banner:
+
+  Name "":
+  <header
+    class="flex items-start justify-between gap-2"
+  />
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  <p
+    class="truncate font-mono text-xs font-bold tracking-wide text-foreground"
+  />
+
+  Name "":
+  <p
+    class="mt-0.5 text-[11px] font-semibold text-muted-foreground"
+  />
+
+  Name "":
+  <p
+    class="truncate text-sm font-bold text-foreground"
+  />
+
+  Name "":
+  <p
+    class="flex items-center gap-1 truncate font-mono text-[11px] text-muted-foreground"
+  />
+
+  Name "":
+  <p
+    class="mt-0.5 text-[11px] font-semibold text-muted-foreground"
+  />
+
+  Name "":
+  <p
+    class="mt-0.5 truncate text-[11px] font-semibold text-muted-foreground"
+  />
+
+  --------------------------------------------------
+  navigation:
+
+  Name "Paginación de las órdenes con ayuda solicitada":
+  <nav
+    aria-label="Paginación de las órdenes con ayuda solicitada"
+    class="flex flex-wrap items-center justify-center gap-3 py-4"
+  />
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      data-activation-direction="none"
+      data-orientation="horizontal"
+      data-slot="tabs"
+    >
+      <div
+        class=""
+      >
+        <div
+          aria-label="Vistas de novedades"
+          class="scrollbar-on-hover flex w-full items-center gap-2 overflow-x-auto rounded-lg bg-transparent p-1"
+          data-activation-direction="none"
+          data-orientation="horizontal"
+          data-slot="tabs-list"
+          role="tablist"
+        >
+          <button
+            aria-controls="base-ui-_r_28_"
+            aria-disabled="false"
+            aria-selected="true"
+            class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+            data-activation-direction="none"
+            data-active=""
+            data-composite-item-active=""
+            data-orientation="horizontal"
+            data-slot="tabs-trigger"
+            id="base-ui-_r_25_"
+            role="tab"
+            tabindex="0"
+            type="button"
+          >
+            Ayuda solicitada
+          </button>
+          <button
+            aria-controls="base-ui-_r_30_"
+            aria-disabled="false"
+            aria-selected="false"
+            class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+            data-activation-direction="none"
+            data-orientation="horizontal"
+            data-slot="tabs-trigger"
+            id="base-ui-_r_26_"
+            role="tab"
+            tabindex="-1"
+            type="button"
+          >
+            En devolución
+          </button>
+          <button
+            aria-controls="base-ui-_r_3i_"
+            aria-disabled="false"
+            aria-selected="false"
+            class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+            data-activation-direction="none"
+            data-orientation="horizontal"
+            data-slot="tabs-trigger"
+            id="base-ui-_r_27_"
+            role="tab"
+            tabindex="-1"
+            type="button"
+          >
+            Rechazadas por plazo vencido
+          </button>
+        </div>
+      </div>
+      <div
+        class=""
+      >
+        <div
+          aria-labelledby="base-ui-_r_25_"
+          class="mt-4 outline-none"
+          data-activation-direction="none"
+          data-index="0"
+          data-orientation="horizontal"
+          data-slot="tabs-content"
+          id="base-ui-_r_28_"
+          role="tabpanel"
+          tabindex="0"
+        >
+          <div
+            class="flex flex-col gap-4"
+          >
+            <section
+              aria-label="Filtros de las órdenes con ayuda solicitada"
+              class="flex flex-col gap-1"
+            >
+              <div
+                class="w-full"
+              >
+                <div
+                  class="flex w-full flex-wrap items-center gap-2"
+                >
+                  <div
+                    class="relative flex min-w-[250px] flex-1 items-center h-8"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      class="lucide lucide-search pointer-events-none absolute left-2.5 size-4 text-muted-foreground"
+                      fill="none"
+                      height="24"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                      width="24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="m21 21-4.34-4.34"
+                      />
+                      <circle
+                        cx="11"
+                        cy="11"
+                        r="8"
+  ...
+ ❯ Object.getElementError ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/components/NovedadesTabs.test.tsx:233:29
+    231|     // Pestaña de DEVOLUCIÓN: el espejo exacto, que es lo que conviert…
+    232|     // arriba en una afirmación y no en «no había nada montado».
+    233|     await user.click(screen.getByRole("tab", { name: "Novedad" }));
+       |                             ^
+    234|     const devolucion = await waitFor(() => {
+    235|       const p = screen
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/components/NovedadesTabs.test.tsx > NovedadesTabs — R12: la paginación sobrevive al cambio de pestaña > cambiar de pestaña y volver NO reinicia la página de la otra
+TestingLibraryElementError: Unable to find an accessible element with the role "tab" and name "Novedad"
+
+Here are the accessible roles:
+
+  tablist:
+
+  Name "Vistas de novedades":
+  <div
+    aria-label="Vistas de novedades"
+    class="scrollbar-on-hover flex w-full items-center gap-2 overflow-x-auto rounded-lg bg-transparent p-1"
+    data-activation-direction="none"
+    data-orientation="horizontal"
+    data-slot="tabs-list"
+    role="tablist"
+  />
+
+  --------------------------------------------------
+  tab:
+
+  Name "Ayuda solicitada":
+  <button
+    aria-controls="base-ui-_r_3n_"
+    aria-disabled="false"
+    aria-selected="true"
+    class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+    data-activation-direction="none"
+    data-active=""
+    data-composite-item-active=""
+    data-orientation="horizontal"
+    data-slot="tabs-trigger"
+    id="base-ui-_r_3k_"
+    role="tab"
+    tabindex="0"
+    type="button"
+  />
+
+  Name "En devolución":
+  <button
+    aria-controls="base-ui-_r_3o_"
+    aria-disabled="false"
+    aria-selected="false"
+    class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+    data-activation-direction="none"
+    data-orientation="horizontal"
+    data-slot="tabs-trigger"
+    id="base-ui-_r_3l_"
+    role="tab"
+    tabindex="-1"
+    type="button"
+  />
+
+  Name "Rechazadas por plazo vencido":
+  <button
+    aria-controls="base-ui-_r_4a_"
+    aria-disabled="false"
+    aria-selected="false"
+    class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+    data-activation-direction="none"
+    data-orientation="horizontal"
+    data-slot="tabs-trigger"
+    id="base-ui-_r_3m_"
+    role="tab"
+    tabindex="-1"
+    type="button"
+  />
+
+  --------------------------------------------------
+  tabpanel:
+
+  Name "Ayuda solicitada":
+  <div
+    aria-labelledby="base-ui-_r_3k_"
+    class="mt-4 outline-none"
+    data-activation-direction="none"
+    data-index="0"
+    data-orientation="horizontal"
+    data-slot="tabs-content"
+    id="base-ui-_r_3n_"
+    role="tabpanel"
+    tabindex="0"
+  />
+
+  --------------------------------------------------
+  status:
+
+  Name "":
+  <div
+    class="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center"
+    role="status"
+  />
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  <p
+    class="text-base font-medium text-foreground"
+  />
+
+  Name "":
+  <p
+    class="text-sm text-muted-foreground"
+  />
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      data-activation-direction="none"
+      data-orientation="horizontal"
+      data-slot="tabs"
+    >
+      <div
+        class=""
+      >
+        <div
+          aria-label="Vistas de novedades"
+          class="scrollbar-on-hover flex w-full items-center gap-2 overflow-x-auto rounded-lg bg-transparent p-1"
+          data-activation-direction="none"
+          data-orientation="horizontal"
+          data-slot="tabs-list"
+          role="tablist"
+        >
+          <button
+            aria-controls="base-ui-_r_3n_"
+            aria-disabled="false"
+            aria-selected="true"
+            class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+            data-activation-direction="none"
+            data-active=""
+            data-composite-item-active=""
+            data-orientation="horizontal"
+            data-slot="tabs-trigger"
+            id="base-ui-_r_3k_"
+            role="tab"
+            tabindex="0"
+            type="button"
+          >
+            Ayuda solicitada
+          </button>
+          <button
+            aria-controls="base-ui-_r_3o_"
+            aria-disabled="false"
+            aria-selected="false"
+            class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+            data-activation-direction="none"
+            data-orientation="horizontal"
+            data-slot="tabs-trigger"
+            id="base-ui-_r_3l_"
+            role="tab"
+            tabindex="-1"
+            type="button"
+          >
+            En devolución
+          </button>
+          <button
+            aria-controls="base-ui-_r_4a_"
+            aria-disabled="false"
+            aria-selected="false"
+            class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 border border-foreground bg-transparent text-foreground hover:bg-foreground/10 aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10"
+            data-activation-direction="none"
+            data-orientation="horizontal"
+            data-slot="tabs-trigger"
+            id="base-ui-_r_3m_"
+            role="tab"
+            tabindex="-1"
+            type="button"
+          >
+            Rechazadas por plazo vencido
+          </button>
+        </div>
+      </div>
+      <div
+        class=""
+      >
+        <div
+          aria-labelledby="base-ui-_r_3k_"
+          class="mt-4 outline-none"
+          data-activation-direction="none"
+          data-index="0"
+          data-orientation="horizontal"
+          data-slot="tabs-content"
+          id="base-ui-_r_3n_"
+          role="tabpanel"
+          tabindex="0"
+        >
+          <div
+            class="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center"
+            role="status"
+          >
+            <p
+              class="text-base font-medium text-foreground"
+            >
+              Ningún mensajero te pidió ayuda
+            </p>
+            <p
+              class="text-sm text-muted-foreground"
+            >
+              Cuando un mensajero necesite que resuelvas algo de una orden que lleva encima, aparecerá acá con su mensaje.
+            </p>
+          </div>
+        </div>
+        <div
+          aria-labelledby="base-ui-_r_3l_"
+          class="mt-4 outline-none"
+          data-activation-direction="none"
+          data-hidden=""
+          data-index="1"
+          data-orientation="horizontal"
+          data-slot="tabs-content"
+          hidden=""
+          id="base-ui-_r_3o_"
+          inert=""
+          role="tabpanel"
+          tabindex="-1"
+        >
+          <div
+            class="flex flex-col gap-4"
+          >
+            <section
+              aria-label="Filtros de las órdenes en novedad"
+              class="flex flex-col gap-1"
+            >
+              <div
+                class="w-full"
+              >
+                <div[...
+ ❯ Object.getElementError ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/components/NovedadesTabs.test.tsx:270:29
+    268|     });
+    269|
+    270|     await user.click(screen.getByRole("tab", { name: "Novedad" }));
+       |                             ^
+    271|     const paginacion = await screen.findByRole("navigation", {
+    272|       name: "Paginación de novedades",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/components/NovedadesTabs.test.tsx > NovedadesTabs — la superficie inicial (409/R7) > R7: con `superficieInicial="devolucion"` la pestaña activa es «Novedad»
+Error: expect(element).toHaveTextContent()
+
+Expected element to have text content:
+  Novedad
+Received:
+  En devolución
+ ❯ tests/components/NovedadesTabs.test.tsx:414:20
+    412|     ).getAllByRole("tab");
+    413|     const activa = tabs.find((t) => t.getAttribute("aria-selected") ==…
+    414|     expect(activa).toHaveTextContent("Novedad");
+       |                    ^
+    415|     // Y la de entrada DEJA de estarlo: sin esta mitad, dos pestañas s…
+    416|     expect(tabs[0]).toHaveAttribute("aria-selected", "false");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/unit/guards/nombres-estado-retirados.guardia.test.ts > 455/R41 · R9 · R37 (G2) — el arbol > ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2
+AssertionError: un nombre de estado RETIRADO (requirements 455 §0.3) volvio como texto visible. Usa el nombre de `NOMBRE_ESTADO` (`nombreDeEstado`) o, si es un grupo/accion, un texto propio (R6).: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "app/(app)/novedades/_components/novedad-grupo-textos.ts:92 En devolución",
++ ]
+
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts:200:7
+    198|       "un nombre de estado RETIRADO (requirements 455 §0.3) volvio com…
+    199|         "de `NOMBRE_ESTADO` (`nombreDeEstado`) o, si es un grupo/accio…
+    200|     ).toEqual([]);
+       |       ^
+    201|   });
+    202|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts > 455/C14 — pestañas de novedades y ayuda de la tienda (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R5/R6) > los rotulos de las dos pestañas: «Novedad» y «Ayuda solicitada»
+AssertionError: expected 'En devolución' to be 'Novedad' // Object.is equality
+
+Expected: "Novedad"
+Received: "En devolución"
+
+ ❯ tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts:102:51
+    100|     // (R5); la de ayuda es un grupo (454) y conserva su texto propio …
+    101|     it("los rotulos de las dos pestañas: «Novedad» y «Ayuda solicitada…
+    102|       expect(TEXTOS_POR_GRUPO.devolucion.pestana).toBe("Novedad");
+       |                                                   ^
+    103|       expect(TEXTOS_POR_GRUPO.ayuda.pestana).toBe("Ayuda solicitada");
+    104|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+RESTAURADO_LIMPIO=True

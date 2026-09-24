@@ -40,26 +40,28 @@ import { SateliteOrderCard } from "./SateliteOrderCard";
 export interface PorRecibirModuleProps {
   /** Órdenes en `en_ruta_bodega_satelite` de la zona del `adminSatelite`. */
   porRecibir: RecepcionSateliteDTO[];
-  /** Nombre de la zona del actor (para el estado legible de la tarjeta); `null` si no tiene. */
+  /**
+   * Nombre de la zona del actor; `null` si no tiene. FICHA 455 (R2): ya no se interpola en el estado
+   * de la tarjeta; se conserva en el contrato de la página.
+   */
   zonaNombre: string | null;
   /** `true` si el `adminSatelite` no tiene zona asignada (R25/R26). */
   sinZona: boolean;
 }
 
 /**
- * Estado legible "en ruta a bodega satélite de <zona>" (R9): deriva del `estatusValue`
- * (etiqueta de `estatusLabel`) y del nombre de zona de la orden, con el de la zona del
- * actor como respaldo.
+ * Estado legible de la tarjeta: el nombre visible EXACTO del estado de la orden (R9 de la 33).
+ *
+ * FICHA 455 (2026-09-24, R2): antes interpolaba la zona («En ruta a bodega satélite de <zona>»). El
+ * nombre de un estado no lleva datos dentro: la zona ya está a la vista en la franja de ubicación de
+ * la tarjeta (`SateliteOrderCard`).
  */
-function estadoLegible(orden: RecepcionSateliteDTO, zonaNombre: string | null): string {
-  const base = estatusLabel(orden.estatusValue);
-  const zona = orden.zonaNombre || zonaNombre;
-  return zona ? `${base} de ${zona}` : base;
+function estadoLegible(orden: RecepcionSateliteDTO): string {
+  return estatusLabel(orden.estatusValue);
 }
 
 export function PorRecibirModule({
   porRecibir,
-  zonaNombre,
   sinZona,
 }: Readonly<PorRecibirModuleProps>) {
   const router = useRouter();
@@ -93,7 +95,7 @@ export function PorRecibirModule({
         renderItem={(orden) => (
           <SateliteOrderCard
             orden={orden}
-            estadoLegible={estadoLegible(orden, zonaNombre)}
+            estadoLegible={estadoLegible(orden)}
           />
         )}
       />

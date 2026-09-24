@@ -295,7 +295,7 @@ function validarRecaudoEntrega(
   valor: z.infer<typeof gestionarUnionSchema>,
   ctx: z.RefinementCtx,
 ): void {
-  if (valor.resultado !== "entregada") return;
+  if (valor.resultado !== "entregado") return;
   const { montoRecibido, metodoPago, pagos } = valor;
   const tieneEscalar = metodoPago !== undefined;
   const tieneDesglose = pagos !== undefined;
@@ -362,7 +362,7 @@ function validarRecaudoEntrega(
 const gestionarUnionSchema = z.discriminatedUnion("resultado", [
   z.object({
     ordenId: z.string().min(1),
-    resultado: z.literal("entregada"),
+    resultado: z.literal("entregado"),
     // >= 0: una entrega SIN cobro (montoCobrar 0/null) recauda 0 y es válida. El
     // servicio revalida que el monto CUADRE con el `montoCobrar` de la orden (R22).
     montoRecibido: z.number().nonnegative("monto invalido"),
@@ -381,14 +381,14 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
   }),
   z.object({
     ordenId: z.string().min(1),
-    resultado: z.literal("reprogramada"),
+    resultado: z.literal("reprogramado"),
     fechaReprogramacion: fechaFuturaSchema,
     motivo: motivoSchema,
     ...camposUbicacion, // feature 92/R22 + feature 193/R14
   }),
   z.object({
     ordenId: z.string().min(1),
-    resultado: z.literal("devuelta"),
+    resultado: z.literal("novedad"),
     // Feature 73/R10: la causa vive SOLO en esta variante. Al ser una discriminatedUnion, un
     // cliente que la envie en `entregada`/`reprogramada`/`rechazada` no la consigue persistir:
     // el campo no existe en el tipo parseado de esas ramas.
@@ -401,7 +401,7 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
   }),
   z.object({
     ordenId: z.string().min(1),
-    resultado: z.literal("rechazada"),
+    resultado: z.literal("devolucion_a_origen_por_rechazo"),
     motivo: motivoSchema,
     // Feature 119 (R5): lista de 1..N fotos (antes una sola).
     evidencias: evidenciasSchema,
