@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
+import { createElement, Fragment, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
 import { columnasHistorialAcciones } from "@/app/(app)/historico/acciones/_components/historial-acciones-columnas";
 import { HistorialAccionRepository } from "@/lib/repositories/HistorialAccionRepository";
 import { HistorialAccionService } from "@/lib/services/HistorialAccionService";
@@ -50,7 +53,12 @@ describeSiHayBase("455/C16 — snapshot de la correccion de resultado (Postgres 
       const filas: HistorialAccionDTO[] = listado.status === "ok" ? listado.items : [];
       const pintar = (id: string, f: HistorialAccionDTO): unknown => {
         const render = columnasHistorialAcciones.find((c) => c.id === id)?.render;
-        return typeof render === "function" ? render(f) : `sin render: ${String(render)}`;
+        // ⏳ 2026-09-24 (FICHA 456, T3.13/R10): la celda pinta el resultado con `EstadoConInfo` (nombre
+        // + botón de información), así que `render` devuelve un elemento y no una cadena. Se lee su
+        // TEXTO visible (el botón no tiene texto: solo `aria-label`); la aserción no cambia.
+        const textoDe = (n: ReactNode) =>
+          typeof n === "string" ? n : renderToStaticMarkup(createElement(Fragment, null, n)).replace(/<[^>]+>/g, "");
+        return typeof render === "function" ? textoDe(render(f)) : `sin render: ${String(render)}`;
       };
       const pintado = filas.map((f) => ({ anterior: pintar("anterior", f), nuevo: pintar("nuevo", f) }));
       return {
