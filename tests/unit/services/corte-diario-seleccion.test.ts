@@ -34,6 +34,11 @@ import type { ITarifaZonaMensajeroRepository } from "@/lib/interfaces/repositori
 // REAL, y ese repositorio sobre un doble de Prisma CON SEMANTICA — el `orden.findMany` aplica de
 // verdad el `where` que recibe sobre un conjunto de filas. Asi, romper el `where` del repositorio
 // cambia el resultado de `ejecutarCorte`, que es donde el fallo se veia.
+//
+// ⏳ 2026-09-23 (FICHA 454, R27/R43): la ayuda deja de ser el estado `ayuda_tienda` —la orden con
+// ayuda abierta sigue `en_reparto`— y la seleccion excluye ademas las ordenes con gestion PENDIENTE
+// de confirmar. El doble aprende la exclusion (`gestiones.none`) con la marca `conGestionPendiente`
+// de cada fila; la semantica SQL real la mide `454/corte-excluye-pendientes-sql-real`.
 // =================================================================================================
 
 interface FilaOrden {
@@ -46,6 +51,8 @@ interface FilaOrden {
    * `undefined` en los casos de la 235 = como `null`: orden sin reserva, se barre como siempre.
    */
   fechaReparto?: Date | null;
+  /** FICHA 454: la orden tiene una gestion PENDIENTE de confirmar (sigue `en_reparto`). */
+  conGestionPendiente?: boolean;
 }
 
 /** El `where` que este repositorio construye, tal como Prisma lo interpretaria. */
@@ -55,6 +62,8 @@ interface WhereOrden {
   mensajeroAsignadoId: { not: null };
   /** Feature 246 (R11): `[{ fechaReparto: null }, { fechaReparto: { lte: diaCerrado } }]`. */
   OR?: { fechaReparto?: null | { lte?: Date } }[];
+  /** FICHA 454 (R43): `gestiones: { none: <gestion pendiente> }`. */
+  gestiones?: { none?: unknown };
 }
 
 /**
@@ -83,7 +92,9 @@ function prismaSemantico(filas: FilaOrden[]) {
       const v = where.estatus.value;
       const casaEstatus =
         typeof v === "string" ? f.estatusValue === v : v.in.includes(f.estatusValue);
-      return casaEstatus && casaFecha(f);
+      // FICHA 454 (R43): con el `none` de la gestion pendiente, la orden pendiente NO casa.
+      const casaPendiente = where.gestiones?.none === undefined || f.conGestionPendiente !== true;
+      return casaEstatus && casaFecha(f) && casaPendiente;
     };
     const vistos = new Set<string>();
     const out: { mensajeroAsignadoId: string; mensajeroAsignado: { zonaId: string | null } }[] = [];
@@ -106,7 +117,6 @@ function prismaSemantico(filas: FilaOrden[]) {
 
 const ESTATUS_IDS: Record<string, string> = {
   en_reparto: "s-reparto",
-  ayuda_tienda: "s-ayuda",
   sin_gestionar: "s-sin-gestionar",
 };
 
@@ -142,14 +152,15 @@ function build(filas: FilaOrden[]) {
   return { service, crearCierre, prisma };
 }
 
+/** FICHA 454: la orden con ayuda ABIERTA — sigue `en_reparto` (antes `ayuda_tienda`). */
 const enAyuda: FilaOrden = {
   mensajeroAsignadoId: "m-ayuda",
-  estatusValue: "ayuda_tienda",
+  estatusValue: "en_reparto",
   deletedAt: null,
   zonaId: "z9",
 };
 
-describe("235/R26 - `ejecutarCorte` llega al mensajero cuyo dia acabo en `ayuda_tienda`", () => {
+describe("235/R26 → 454/R27 - `ejecutarCorte` llega al mensajero cuyo dia acabo con ayudas abiertas", () => {
   it("le CREA su cierre `vencido` y le pasa los ids del barrido (EL CASO DE LA REGRESION)", async () => {
     const { service, crearCierre } = build([enAyuda]);
 
@@ -164,8 +175,20 @@ describe("235/R26 - `ejecutarCorte` llega al mensajero cuyo dia acabo en `ayuda_
     expect(input.mensajeroId).toBe("m-ayuda");
     expect(input.estado).toBe("vencido");
     // Y con el cableado completo, para que el barrido de la escritura tenga de donde partir.
-    expect(input.corteSinGestionar?.ayudaEstatusId).toBe("s-ayuda");
+    // (454: un solo origen; `ayudaEstatusId` desaparece del input.)
     expect(input.corteSinGestionar?.enRepartoEstatusId).toBe("s-reparto");
+    expect(input.corteSinGestionar).not.toHaveProperty("ayudaEstatusId");
+  });
+
+  it("454/R43: una orden con gestion PENDIENTE no arrastra al mensajero al corte", async () => {
+    // Su unico trabajo del dia ya esta gestionado (pendiente de que se apruebe su cierre): no hay
+    // nada que barrer. Barrerla podria acabar en un rechazo por tope que COBRA (D4).
+    const { service, crearCierre } = build([{ ...enAyuda, conGestionPendiente: true }]);
+
+    const res = await service.ejecutarCorte();
+
+    expect(res).toEqual({ mensajerosEvaluados: 0, vencidosCreados: 0, mensajerosSinZona: 0 });
+    expect(crearCierre).not.toHaveBeenCalled();
   });
 
   it("el de `en_reparto` sigue entrando: es UNION, no sustitucion (109/R4 intacta)", async () => {

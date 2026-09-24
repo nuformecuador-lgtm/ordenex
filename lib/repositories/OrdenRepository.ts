@@ -195,7 +195,6 @@ import type {
   OrdenParaEliminacionApi,
   OrdenParaHabilitacionApi,
   ParadaRutaRow,
-  TransicionAyudaInput,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 // Feature 260 (B3): el recorte de alcance del tablero del dia, como TIPO. La union de dos
 // variantes viaja hasta el `WHERE` sin pasar por un `string | undefined` que convertiria
@@ -5311,18 +5310,19 @@ export class OrdenRepository implements IOrdenRepository {
     tiendaId: string,
     grupo: GrupoNovedad,
     // FICHA 454 (T1.16, design §4.3; R22): los ids con ayuda ABIERTA de esta tienda. La ayuda deja
-    // de ser estado: la pestaña de ayuda lista las ordenes cuya ayuda esta abierta por la
-    // DERIVACION (`ayuda-abierta.ts`). El estado del mapa se conserva como disyuncion por las filas
-    // legadas en `ayuda_tienda` (la migracion M3 las deja en cero).
+    // de ser estado: el discriminante del grupo `ayuda` pasa a ser la DERIVACION de
+    // `ayuda-abierta.ts` (la letra de la D1 de la 236 se revisa; su principio —nada que apagar— se
+    // respeta: `orden_evento` es append-only y cualquier transicion cierra la ayuda). La migracion
+    // M3 lleva a `en_reparto` + evento abierto toda orden que estuviera en `ayuda_tienda`, asi que
+    // no queda poblacion legada que listar por estado. `devolucion` sigue siendo `estatus = devuelta`.
     idsAyudaAbierta: readonly string[] = [],
   ): Prisma.OrdenWhereInput {
-    const porEstado: Prisma.OrdenWhereInput = { estatus: { value: ESTATUS_POR_GRUPO[grupo] } };
     return {
       tiendaId, // R10: acotada a la tienda del actor
       deletedAt: null, // R10: excluye borradas
       ...(grupo === "ayuda"
-        ? { OR: [porEstado, { id: { in: [...idsAyudaAbierta] } }] }
-        : porEstado),
+        ? { id: { in: [...idsAyudaAbierta] } }
+        : { estatus: { value: ESTATUS_POR_GRUPO[grupo] } }),
     };
   }
 

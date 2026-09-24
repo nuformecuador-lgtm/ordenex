@@ -70,6 +70,7 @@ function servicioReal(estatusValue = "devuelta") {
             // puerta al adminTienda. Se retiro con la columna: la ventana vuelve a depender SOLO
             // del estatus (R36), que es lo que estos casos ya median.
             estatusValue,
+            ayudaAbierta: false, // ficha 454 (U12)
             deletedAt: null,
             // Feature 261 (B15): obligatorio en `OrdenParaHilo`. El hilo de notas no lo consume.
             fechaReparto: null,

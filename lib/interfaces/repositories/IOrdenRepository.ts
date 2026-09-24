@@ -581,44 +581,9 @@ export class CorreccionDiaConflictoError extends Error {
   }
 }
 
-/**
- * Feature 235 (T2.2, R8/R10) — los datos de UNA transicion del ciclo de ayuda, para el punto
- * unico de escritura. Los dos sentidos comparten forma; lo que los distingue son los ids y la
- * FAMILIA, que es lo que queda escrito en el historial.
- *
- * Todos los ids los resuelve el SERVICE (`findEstatusIdByValue`), no el repo: si el catalogo no
- * resuelve, la operacion se rechaza entera antes de tocar nada (fallo cerrado, design §3.3).
- */
-export interface TransicionAyudaInput {
-  ordenId: string;
-  /** LA GUARDA: la escritura solo ocurre si la orden sigue EXACTAMENTE en este estado (R9). */
-  estatusOrigenId: string;
-  estatusDestinoId: string;
-  /**
-   * El usuario que la provoco (R10): el mensajero que pide o recupera, o la tienda que habilita.
-   * NUNCA `null` en los dos sentidos de esta feature — el corte de la noche es otra transicion, en
-   * otro repo, y esa si es del sistema.
-   */
-  actorUsuarioId: string;
-  /**
-   * `solicitud_ayuda_tienda` (ida), `rescate_ayuda_tienda` (vuelta) o `habilitacion_api` (la
-   * vuelta pedida por el INTEGRADOR, feature 266). Ninguna de las tres es visita real
-   * (235/R11, 266/R26).
-   *
-   * Feature 266 (T2.2, design §2.3) — el tercer miembro es **ADITIVO y no cambia el comportamiento
-   * de ningun llamador existente**: los dos services actuales (`SolicitudAyudaService.solicitar` y
-   * `rescatarOrdenAyuda`) siguen pasando su literal de siempre, y ninguna firma se toca.
-   *
-   * Y NO es «anadir props» en el sentido que la decision (1) de la ficha 266 prohibe: no se toca
-   * la firma de `rescatarOrdenAyuda`, ni la de `HabilitarNovedadService.habilitar`, ni ningun
-   * parametro de COMPORTAMIENTO. Lo que se amplia es el CENSO de familias que el punto unico sabe
-   * registrar, que es literalmente para lo que este campo existe.
-   */
-  origenTipo: Extract<
-    OrdenHistorialOrigenTipo,
-    "solicitud_ayuda_tienda" | "rescate_ayuda_tienda" | "habilitacion_api"
-  >;
-}
+// ⏳ 2026-09-23 (FICHA 454, T1.15): aqui vivia `TransicionAyudaInput`, el input de
+// `OrdenRepository.transicionarAyuda` (235/266). La ayuda deja de ser una transicion: la sustituyen
+// `registrarAyudaSolicitada` y `registrarAyudaResuelta` (eventos `orden_evento`, sin cambio de estado).
 
 /**
  * Feature 266 (T3.1, design §4.2) — la lectura MINIMA que el service de habilitacion por API key

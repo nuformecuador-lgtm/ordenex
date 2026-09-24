@@ -29,8 +29,8 @@ import {
 } from "@/lib/repositories/gestion-pendiente";
 import { conAyudaAbiertaDe, sqlAyudaAbierta } from "@/lib/repositories/ayuda-abierta";
 import { encolarWebhookEvento } from "@/lib/services/jobs/webhook-evento-encolado";
-import { emitirOrdenRechazada } from "@/lib/notificaciones/emitir";
-import { NotificacionRepository } from "@/lib/repositories/NotificacionRepository";
+import { emitirOrdenRechazadaEnTransaccion } from "@/lib/notificaciones/emitir";
+import type { NotificacionTxClient } from "@/lib/interfaces/repositories/INotificacionRepository";
 // Feature 261 (B5): el dia de reparto entra al SQL crudo como texto `YYYY-MM-DD` con `::date`.
 // NO se importa `startOfDayCR`: este repositorio NO resuelve ningun dia, lo RECIBE resuelto.
 import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
@@ -44,7 +44,12 @@ const ESTADO_EN_REPARTO = "en_reparto";
 // tanto aporta el OTRO sumando de `totalACobrar` (`porCobrar`, calculado sobre
 // `porGestionar ∪ conAyuda` en `MisAsignacionesService`). Los dos sumandos se mantienen disjuntos
 // excluyendo AQUI exactamente ese conjunto.
-const ESTADOS_EN_MANO_DEL_MENSAJERO = [ESTADO_EN_REPARTO, "ayuda_tienda"];
+//
+// FICHA 454 (T1.15/T1.23, R37): `ayuda_tienda` sale de la lista. La ayuda deja de ser estatus: una
+// orden con ayuda abierta sigue `en_reparto`, que ya esta aqui. La disjuncion se conserva: el otro
+// sumando es `porGestionar ∪ conAyuda` (en mano, SIN gestion pendiente) y este, lo que no esta en
+// mano MAS lo pendiente de confirmar (`whereOrdenConGestionPendiente`).
+const ESTADOS_EN_MANO_DEL_MENSAJERO = [ESTADO_EN_REPARTO];
 
 // Feature 100 — `resultado` de la gestion que ancla la ventana en `devuelta` (R5: de ahi se deriva
 // el mensajero de la gestion sintetica) y `resultado` de la gestion sintetica de reprogramacion
@@ -787,17 +792,13 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           where: { id: ordenId },
           select: { tiendaId: true, zonaId: true, numGuia: true, numRemision: true },
         });
-        await emitirOrdenRechazada(
-          new NotificacionRepository(tx),
-          {
-            ordenId,
-            tiendaId: orden.tiendaId,
-            zonaId: orden.zonaId ?? null,
-            numGuia: orden.numGuia ?? null,
-            numRemision: orden.numRemision,
-          },
-          tx,
-        );
+        await emitirOrdenRechazadaEnTransaccion(tx as unknown as NotificacionTxClient, {
+          ordenId,
+          tiendaId: orden.tiendaId,
+          zonaId: orden.zonaId ?? null,
+          numGuia: orden.numGuia ?? null,
+          numRemision: orden.numRemision,
+        });
       }
       // (7) Namespace `:inmediato:` disjunto del `:debounce:` (ver `encolarOptimizacionInmediata`).
       await encolarOptimizacionInmediata(

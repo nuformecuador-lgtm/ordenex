@@ -44,7 +44,7 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
     expect(esEventoPublico("devuelta")).toBe(true);
   });
 
-  it("la lista es EXACTAMENTE estos 13 values (los 12 de la 268 + `en_preparacion`)", () => {
+  it("la lista es EXACTAMENTE estos 12 values (454: sale `ayuda_tienda`)", () => {
     // Congelada por CONTENIDO (R18), no por conteo. Si esto cambia, alguien toco el contrato
     // publico sin pasar por la puerta humana. El `size` de abajo ACOMPANA a la igualdad; jamas la
     // sustituye.
@@ -54,6 +54,12 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
     // fulfillment. Sigue sin relajarse a un aserto de tamano (alternativa A6, descartada en la 268):
     // un `size` no detecta un intercambio —un value entra y otro sale— y convierte la puerta humana
     // en un contador.
+    //
+    // ⏳ 2026-09-23 — FICHA 454 (R34, puerta humana del spec aprobado): SALE `ayuda_tienda`. La ayuda
+    // deja de ser un estado —la orden sigue `en_reparto`—, asi que nunca mas se emite
+    // `orden.estado_actualizado` con ese valor; el integrador recibe en su lugar los eventos nuevos
+    // `orden.ayuda_*` (webhook `webhook_evento`, R33). Es la UNICA salida del contrato y esta
+    // declarada; el resto no cambia.
     expect([...EVENTOS_PUBLICOS].sort()).toEqual(
       [
         // Los DIEZ vigentes antes de la 268. R3: el cambio es estrictamente ADITIVO y ninguno de
@@ -68,14 +74,13 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
         "rechazada",
         "devolviendo_a_tienda",
         "devuelta_a_tienda",
-        // Los DOS que trae la 268.
-        "ayuda_tienda", // R1
+        // Los DOS que trajo la 268. `ayuda_tienda` (R1) SALE con la 454 (R34).
         "incidente", // R2
         // El que trae el parche del 2026-08-31.
         "en_preparacion",
       ].sort(),
     );
-    expect(EVENTOS_PUBLICOS.size).toBe(13);
+    expect(EVENTOS_PUBLICOS.size).toBe(12);
   });
 
   it("`en_preparacion` SI es evento publico, y es de NACIMIENTO: no hay arista hacia el", () => {
@@ -109,9 +114,12 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
   // el vocabulario no crece por esta feature», con `EVENTOS_PUBLICOS.size === 10`. El caso se
   // INVIERTE en vez de borrarse, para que quede rastro de que 235/P4 se revirtio a proposito
   // (268/R1/R2) y no por descuido.
-  it("268/R1/R2 (invierte 235/R39): `ayuda_tienda` e `incidente` SI son eventos publicos", () => {
-    expect(EVENTOS_PUBLICOS.has("ayuda_tienda")).toBe(true);
-    expect(esEventoPublico("ayuda_tienda")).toBe(true);
+  it("268/R2: `incidente` SI es evento publico; 454/R34: `ayuda_tienda` YA NO", () => {
+    // ⏳ 2026-09-23 (FICHA 454, R34): la mitad `ayuda_tienda` de este caso se invierte OTRA vez, con
+    // otro motivo que el de la 235: no es que no se quiera avisar, es que el estado deja de existir
+    // y la ayuda viaja como evento propio (`orden.ayuda_solicitada`/`orden.ayuda_cerrada`, R33).
+    expect(EVENTOS_PUBLICOS.has("ayuda_tienda")).toBe(false);
+    expect(esEventoPublico("ayuda_tienda")).toBe(false);
     expect(EVENTOS_PUBLICOS.has("incidente")).toBe(true);
     expect(esEventoPublico("incidente")).toBe(true);
   });
@@ -228,8 +236,10 @@ describe("268 — la exencion por familia queda VACIA, pero el MECANISMO sigue e
   // estado destino no es publico (...) si algun dia `ayuda_tienda` entrara en `EVENTOS_PUBLICOS`,
   // este caso caeria y obligaria a decidir si la ida debe emitirse». Ese dia es hoy y la decision
   // esta tomada: la IDA emite (268/R1/R8).
-  it("268/R8 (invierte 235): la IDA `-> ayuda_tienda` SI emite", () => {
-    expect(esTransicionEmitible("ayuda_tienda", "solicitud_ayuda_tienda")).toBe(true);
+  it("268/R8 → 454/R34: la familia de la IDA sigue sin exencion, pero su destino ya no es publico", () => {
+    // ⏳ 2026-09-23 (FICHA 454): la exencion POR FAMILIA sigue vacia (el mecanismo de la 268 no se
+    // toca); lo que cambia es el DESTINO, que deja de ser evento publico. Antes: `true`.
+    expect(esTransicionEmitible("ayuda_tienda", "solicitud_ayuda_tienda")).toBe(false);
     expect(esFamiliaSinEventoPublico("solicitud_ayuda_tienda")).toBe(false);
   });
 

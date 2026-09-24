@@ -357,7 +357,13 @@ describe("resolverCierre — APLICACION de las gestiones de calle (454/R7/R8/R14
       [
         fila({ id: "gE", ordenId: "oE", resultado: "entregada" }),
         fila({ id: "gD", ordenId: "oD", resultado: "devuelta", motivo: "no estaba" }),
-        fila({ id: "gI", ordenId: "oI", resultado: "incidente", motivo: "robo" }),
+        fila({
+          id: "gI",
+          ordenId: "oI",
+          resultado: "incidente",
+          motivo: "robo",
+          registro: { familia: "incidente", actor: "m1" },
+        }),
         fila({
           id: "gT",
           ordenId: "oT",

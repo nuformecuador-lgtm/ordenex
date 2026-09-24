@@ -54,17 +54,38 @@ function makeWalletStore() {
 // agujero que la escritura vieja tuvo durante toda su vida. Este store honra el `where` como lo
 // haria Postgres, asi que la GUARDA por `estatus_id` se comporta como la guarda que dice ser: la
 // idempotencia se ve de verdad, no se afirma de palabra.
+//
+// ⏳ 2026-09-23 (FICHA 454, T1.7): el anclaje se GENERALIZA a la APLICACION de las gestiones de
+// calle al aprobar, y escribe con `UPDATE "orden" SET "estatus_id" = $destino WHERE "id" IN (…) AND
+// "estatus_id" = $enReparto … RETURNING "id"` (`$queryRaw`). El store emula ESA sentencia honrando
+// la guarda, que sigue siendo la idempotencia. Las ordenes de devolucion ya no estan en el
+// pre-estado: la gestion nueva las deja `en_reparto` hasta la aprobacion.
 function makeOrdenStore() {
   const ordenes = [
-    // o1 entrego: nunca entra en el pre-estado.
+    // o1 entrego (gestion LEGADA, ya aplicada al registrarse): la aplicacion no la toca.
     { id: "o1", estatusId: idEstado("entregada"), deletedAt: null as Date | null },
-    // o2 es la devolucion de ESTE cierre (gestion g2): la que tiene que quedar anclada.
-    { id: "o2", estatusId: APLICACION_GESTIONES.preEstadoId, deletedAt: null as Date | null },
-    // La testigo: MISMO resultado `devuelta` y MISMO pre-estado, pero su gestion (g3) es de OTRO
+    // o2 es la devolucion de ESTE cierre (gestion g2, modelo nuevo): la que tiene que aplicarse.
+    { id: "o2", estatusId: idEstado("en_reparto"), deletedAt: null as Date | null },
+    // La testigo: MISMO resultado `devuelta` y MISMO estado, pero su gestion (g3) es de OTRO
     // cierre. Solo el `cierreId` la separa, asi que si la guardia desapareciera del WHERE, esta
-    // orden se anclaria sola — con la aprobacion de un cierre que no es el suyo.
-    { id: "o3", estatusId: APLICACION_GESTIONES.preEstadoId, deletedAt: null as Date | null },
+    // orden se aplicaria sola — con la aprobacion de un cierre que no es el suyo.
+    { id: "o3", estatusId: idEstado("en_reparto"), deletedAt: null as Date | null },
   ];
+  /** La sentencia de la aplicacion; cualquier otra (`emitirWebhooksEstado`) recibe `[]`. */
+  const $queryRaw = vi.fn(async (...c: unknown[]) => {
+    const sql = (c[0] as readonly string[]).join(" ? ");
+    if (!sql.includes('UPDATE "orden" SET "estatus_id" =')) return [];
+    const destinoId = c[1] as string;
+    const ids = (c[2] as { values: string[] }).values;
+    const guarda = c[3] as string;
+    const movidas: { id: string }[] = [];
+    for (const o of ordenes) {
+      if (!ids.includes(o.id) || o.estatusId !== guarda || o.deletedAt !== null) continue;
+      o.estatusId = destinoId;
+      movidas.push({ id: o.id });
+    }
+    return movidas;
+  });
   type WhereOrden = {
     id?: { in?: string[] };
     estatusId?: string;
@@ -87,7 +108,7 @@ function makeOrdenStore() {
       },
     ),
   };
-  return { ordenes, orden };
+  return { ordenes, orden, $queryRaw };
 }
 
 // Las gestiones que ve la transaccion, con la forma REAL de las dos consultas que las leen: el
@@ -95,10 +116,12 @@ function makeOrdenStore() {
 // despues `{ ordenId: { in }, resultado, anuladaAt }`). El doble honra el `where` en vez de
 // devolver siempre la misma lista: si no lo hiciera, la GUARDIA de `cierreId` del anclaje no se
 // estaria probando (devolveria las de todos los cierres y el test pasaria igual).
+// FICHA 454: `registrada` = la gestion tiene su evento `gestion_registrada` (modelo nuevo). g1 es
+// LEGADA; g2 y g3 son devoluciones del modelo nuevo, pendientes hasta que su cierre se apruebe.
 const GESTIONES_EN_BASE = [
-  { id: "g1", ordenId: "o1", cierreId: "c1", resultado: "entregada", anuladaAt: null as Date | null },
-  { id: "g2", ordenId: "o2", cierreId: "c1", resultado: "devuelta", anuladaAt: null as Date | null },
-  { id: "g3", ordenId: "o3", cierreId: "c2", resultado: "devuelta", anuladaAt: null as Date | null },
+  { id: "g1", ordenId: "o1", cierreId: "c1", resultado: "entregada", anuladaAt: null as Date | null, registrada: false },
+  { id: "g2", ordenId: "o2", cierreId: "c1", resultado: "devuelta", anuladaAt: null as Date | null, registrada: true },
+  { id: "g3", ordenId: "o3", cierreId: "c2", resultado: "devuelta", anuladaAt: null as Date | null, registrada: true },
 ];
 
 type WhereGestion = {
@@ -107,6 +130,8 @@ type WhereGestion = {
   resultado?: string | { in?: string[] };
   anuladaAt?: Date | null;
   ordenId?: { in?: string[] };
+  /** FICHA 454: el filtro de «gestion de calle con evento de registro». */
+  eventos?: { some?: { tipo?: string } };
 };
 
 /** `resultado` llega escalar desde el anclaje (239) y como `{ in }` desde la confirmacion (238). */
@@ -139,9 +164,17 @@ function gestionOrdenFake(extras: readonly (typeof GESTIONES_EN_BASE)[number][] 
             (where.cierreId === undefined || g.cierreId === where.cierreId) &&
             casaResultado(g.resultado, where.resultado) &&
             (where.anuladaAt === undefined || g.anuladaAt === where.anuladaAt) &&
-            (where.ordenId?.in === undefined || where.ordenId.in.includes(g.ordenId)),
+            (where.ordenId?.in === undefined || where.ordenId.in.includes(g.ordenId)) &&
+            (where.eventos?.some?.tipo !== "gestion_registrada" || g.registrada),
         )
-        .map((g) => ({ ...g })),
+        .map((g) => ({
+          ...g,
+          mensajeroId: "m1",
+          motivo: null,
+          eventos: g.registrada
+            ? [{ id: `ev-${g.id}`, familiaAplicacion: "gestion", actorUsuarioId: "m1" }]
+            : [],
+        })),
     ),
     updateMany: vi.fn(
       async ({ where, data }: { where: WhereGestion; data: Record<string, unknown> }) => {
@@ -259,6 +292,7 @@ function buildPrisma(
     cierreDetail: { findMany: vi.fn().mockResolvedValue(detalle) },
     walletMovimiento: store.walletMovimiento,
     orden: ordenStore.orden,
+    $queryRaw: ordenStore.$queryRaw, // ficha 454: la sentencia de la aplicacion
     // Feature 239 (T2.2): el anclaje registra la transicion por el choke point. El doble tiene
     // que existir o la tx muere; lo que escribe se afirma en el caso de abajo.
     ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 0 })) },
@@ -322,7 +356,7 @@ describe("wallet idempotencia (R6/R13)", () => {
     // (g2) del cierre. Ya no los pone, asi que el cierre trae ademas un RECHAZO —el resultado
     // que si los factura— para que este caso siga deduplicando los SEIS conceptos y no cuatro.
     const gestiones = gestionOrdenFake([
-      { id: "g4", ordenId: "o4", cierreId: "c1", resultado: "rechazada", anuladaAt: null },
+      { id: "g4", ordenId: "o4", cierreId: "c1", resultado: "rechazada", anuladaAt: null, registrada: false },
     ]);
     const prisma = buildPrisma(store, makeOrdenStore(), gestiones);
     const repo = makeRepo(prisma);
@@ -373,7 +407,12 @@ describe("wallet idempotencia (R6/R13)", () => {
   // efecto) porque mide lo mismo que medía: la unica escritura de la tx que NO esta protegida
   // por el indice unico de la wallet ni por `skipDuplicates`, sino por ser idempotente por
   // construccion. Lo que cambia es de que escritura hablamos.
-  it("R6/239-R4/R8: aprobar ANCLA solo la devolucion de ESTE cierre, y re-aprobar no cambia nada", async () => {
+  // ⏳ 2026-09-23 (FICHA 454, T1.7): el ANCLAJE de la 239 se generaliza a la APLICACION de las
+  // gestiones al aprobar. El enunciado se conserva —R6: doble aprobacion, un solo efecto— porque
+  // mide la unica escritura de la tx que no protege el indice de la wallet sino su GUARDA de
+  // estado. Cambia la forma: la orden va de `en_reparto` a `devuelta` (no del pre-estado) y la
+  // escritura es el `UPDATE … RETURNING` crudo, no un `updateMany`.
+  it("R6/454-R7/R12: aprobar APLICA solo la devolucion de ESTE cierre, y re-aprobar no cambia nada", async () => {
     const store = makeWalletStore();
     const ordenStore = makeOrdenStore();
     const prisma = buildPrisma(store, ordenStore);
@@ -384,7 +423,7 @@ describe("wallet idempotencia (R6/R13)", () => {
         cierreId: "c1",
         alcance: ALCANCE,
         nuevoEstado: "aprobado",
-        aplicacionGestiones: APLICACION_GESTIONES, // feature 239/T2.1: obligatorio al aprobar
+        aplicacionGestiones: APLICACION_GESTIONES, // ficha 454/T1.7: obligatorio al aprobar
         confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm",
         motivoRechazo: null,
@@ -393,42 +432,45 @@ describe("wallet idempotencia (R6/R13)", () => {
     await aprobar();
 
     const estado = () => Object.fromEntries(ordenStore.ordenes.map((o) => [o.id, o.estatusId]));
-    // o2 es la unica `devuelta` de c1: pasa del pre-estado a `devuelta` (queda ANCLADA: visible
-    // para la tienda y con el reloj corriendo). o1 entrego. o3 se devolvio en OTRO cierre y se
-    // queda en el pre-estado: mientras ese cierre no se apruebe, ni se ve ni corre su reloj —y
-    // por tanto NO se le puede cobrar el rechazo.
+    // o2 es la unica `devuelta` de c1: pasa de `en_reparto` a `devuelta` (visible para la tienda
+    // y con el reloj corriendo desde la gestion, R47). o1 entrego (legada). o3 se devolvio en
+    // OTRO cierre y sigue `en_reparto` con su gestion pendiente: mientras ese cierre no se
+    // apruebe, ni se ve ni corre su plazo —y por tanto NO se le puede cobrar el rechazo.
     expect(estado()).toEqual({
       o1: idEstado("entregada"),
-      o2: APLICACION_GESTIONES.devueltaId,
-      o3: APLICACION_GESTIONES.preEstadoId,
+      o2: APLICACION_GESTIONES.destinoPorResultado.devuelta,
+      o3: idEstado("en_reparto"),
     });
 
-    // El WHERE tal cual sale del repositorio: acota a los ids derivados de ESTE cierre y va
-    // GUARDADO por el pre-estado. Se mira el argumento porque es lo que separa "escribio en las
-    // filas correctas por casualidad" de "pidio exactamente esas filas". Y el `data` lleva SOLO
-    // `estatusId`: money-neutral (R10).
-    expect(prisma.orden.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: { in: ["o2"] },
-        estatusId: APLICACION_GESTIONES.preEstadoId,
-        deletedAt: null,
-      },
-      data: { estatusId: APLICACION_GESTIONES.devueltaId },
-    });
+    // La sentencia tal cual sale del repositorio: ids derivados de ESTE cierre y GUARDA por
+    // `en_reparto`. Y el `SET` lleva SOLO `estatus_id`: money-neutral (R10 de la 239).
+    const updates = (ordenStore.$queryRaw.mock.calls as unknown[][]).filter((c) =>
+      (c[0] as readonly string[]).join(" ? ").includes('UPDATE "orden" SET "estatus_id" ='),
+    );
+    expect(updates).toHaveLength(1);
+    expect(updates[0][1]).toBe(APLICACION_GESTIONES.destinoPorResultado.devuelta);
+    expect((updates[0][2] as { values: string[] }).values).toEqual(["o2"]);
+    expect(updates[0][3]).toBe(APLICACION_GESTIONES.enRepartoId);
+    const sql = (updates[0][0] as readonly string[]).join(" ? ").replace(/\s+/g, " ");
+    expect(sql.slice(sql.indexOf("SET"), sql.indexOf("WHERE")).trim()).toBe('SET "estatus_id" = ?');
+    // Y el `updateMany` de `orden` NO participa en la aplicacion.
+    expect(prisma.orden.updateMany).not.toHaveBeenCalled();
 
-    const llamadasTrasLaPrimera = prisma.orden.updateMany.mock.calls.length;
     const historialTrasLaPrimera = prisma.ordenHistorialEstado.createMany.mock.calls.length;
-    expect(historialTrasLaPrimera).toBe(1); // R7: la transicion deja su fila
+    expect(historialTrasLaPrimera).toBe(1); // R8: la transicion deja su fila
 
     await aprobar(); // segunda aprobacion del MISMO cierre
-    // R8: la guarda por el pre-estado no encuentra nada -> `count = 0` -> ni cambio de estado ni
-    // segunda fila de historial. La idempotencia no la da un `if`, la da el WHERE.
+    // R12: la guarda por `en_reparto` no encuentra nada -> ni cambio de estado ni segunda fila de
+    // historial. La idempotencia no la da un `if`, la da el WHERE.
     expect(estado()).toEqual({
       o1: idEstado("entregada"),
-      o2: APLICACION_GESTIONES.devueltaId,
-      o3: APLICACION_GESTIONES.preEstadoId,
+      o2: APLICACION_GESTIONES.destinoPorResultado.devuelta,
+      o3: idEstado("en_reparto"),
     });
-    expect(prisma.orden.updateMany.mock.calls.length).toBe(llamadasTrasLaPrimera + 1); // se INTENTA
+    const updatesTrasLaSegunda = (ordenStore.$queryRaw.mock.calls as unknown[][]).filter((c) =>
+      (c[0] as readonly string[]).join(" ? ").includes('UPDATE "orden" SET "estatus_id" ='),
+    );
+    expect(updatesTrasLaSegunda).toHaveLength(2); // se INTENTA
     expect(prisma.ordenHistorialEstado.createMany.mock.calls.length).toBe(historialTrasLaPrimera); // y no escribe
   });
 

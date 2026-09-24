@@ -38,6 +38,14 @@
 // un mensaje que dice qué patrón dejó de casar y en qué archivo. Una guardia estática que no
 // encuentra nada y lo reporta como «no hay infracciones» es peor que no tenerla.
 //
+// ⏳ **2026-09-23 (FICHA 454, design §4.3/U12) — la AYUDA deja de ser un estatus.** La orden con
+// ayuda abierta sigue `en_reparto`; el grupo `ayuda` de `/novedades` pasa a listarse por la
+// DERIVACION «ayuda abierta» (`id: { in: … }`, `ayuda-abierta.ts`) y la ventana del `adminTienda`
+// sobre ella la abre el tercer parametro de `estaEnVentanaDeEscritura`. Lo que esta guardia protege
+// no cambia —cada rol tiene donde escribir, la tienda ve exactamente lo que puede contestar, y los
+// dos roles comparten la ayuda abierta—; cambia DONDE se lee: la parte por estatus sigue en el mapa
+// y la de la ayuda se afirma sobre la funcion de la ventana y el cuerpo del predicado.
+//
 // La selecciona `pnpm exec vitest run guard` por el nombre del archivo.
 import { describe, it, expect } from "vitest";
 
@@ -48,6 +56,7 @@ import { ESTATUS_POR_GRUPO, GRUPOS_NOVEDAD } from "@/lib/types/novedad-grupo";
 import {
   ROLES_CON_HILO,
   VENTANA_ESCRITURA,
+  estaEnVentanaDeEscritura,
   type RolConHilo,
 } from "@/lib/types/ventana-hilo-notas";
 import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
@@ -178,7 +187,30 @@ export function estatusDeNovedades(): string[] {
   // De `GRUPOS_NOVEDAD` y no de `Object.values`, para que el conjunto sea el de los grupos
   // DECLARADOS: un grupo que estuviera en el mapa y no en la lista de pestañas no se lista, y esta
   // guardia mide lo que la pantalla lista.
-  return GRUPOS_NOVEDAD.map((grupo) => ESTATUS_POR_GRUPO[grupo]);
+  //
+  // ⏳ FICHA 454: SIN los grupos que se listan por DERIVACION (la ayuda abierta): su valor en el
+  // mapa ya no es lo que el predicado usa. `ayudaPorDerivacionEnNovedadWhere` ata esa rama.
+  return GRUPOS_NOVEDAD.filter((grupo) => !GRUPOS_POR_DERIVACION.includes(grupo)).map(
+    (grupo) => ESTATUS_POR_GRUPO[grupo],
+  );
+}
+
+/** FICHA 454 (design §4.3): los grupos cuyo discriminante es la DERIVACION, no un estatus. */
+const GRUPOS_POR_DERIVACION: readonly string[] = ["ayuda"];
+
+/**
+ * FICHA 454 — `true` si el cuerpo de `novedadWhere` lista el grupo `ayuda` por la DERIVACION
+ * (`grupo === "ayuda"` → `id: { in: … }`) y NO por un estatus. Si alguien devolviera la ayuda a una
+ * igualdad de estado, esto cae.
+ */
+export function ayudaPorDerivacionEnNovedadWhere(fuente: string, ruta = RUTA_ORDEN_REPO): boolean {
+  const cuerpo = cuerpoDeMiembro(
+    fuente,
+    ruta,
+    /private\s+novedadWhere\s*\(/,
+    "la declaración de `novedadWhere`",
+  );
+  return /grupo\s*===\s*["']ayuda["']/.test(cuerpo) && /\bid\s*:\s*\{\s*in\s*:/.test(cuerpo);
 }
 
 /**
@@ -304,7 +336,11 @@ describe("0 — el detector de esta guardia no está roto", () => {
     // de un `OR`. El número se conserva a propósito: el día que la pantalla gane un tercer grupo,
     // esto se pone rojo y hay que venir a decidir qué significa para la ventana de escritura — que
     // es exactamente lo que pasó las dos veces anteriores.
-    expect(ESTATUS_DE_NOVEDADES.length).toBe(2);
+    //
+    // ⏳ 2026-09-23 (FICHA 454): los grupos siguen siendo DOS, pero solo UNO se lista por estatus;
+    // el de ayuda, por la derivación (afirmado aparte).
+    expect(GRUPOS_NOVEDAD.length).toBe(2);
+    expect(ESTATUS_DE_NOVEDADES.length).toBe(1);
     expect(ESTATUS_DEL_PANEL_MENSAJERO.length).toBeGreaterThan(0);
   });
 
@@ -360,8 +396,21 @@ describe("0 — el detector de esta guardia no está roto", () => {
     // misma convención que usa el test de repositorio.
     expect(predicado).not.toMatch(new RegExp(["ayu", "da"].join("") + "\\s*:\\s*true"));
     expect(predicado).not.toMatch(new RegExp(["gestion", "Aprobada"].join("")));
-    // Y el conjunto de la pantalla sigue siendo el par de siempre.
-    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["ayuda_tienda", "devuelta"]);
+    // Y el conjunto que la pantalla lista POR ESTATUS es `devuelta`; la ayuda, por derivación.
+    // ⏳ FICHA 454: antes `["ayuda_tienda", "devuelta"]`.
+    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["devuelta"]);
+    expect(ayudaPorDerivacionEnNovedadWhere(FUENTE_ORDEN_REPO)).toBe(true);
+  });
+
+  it("454: la rama de AYUDA de `novedadWhere` es la derivación, y el detector lo distingue", () => {
+    expect(ayudaPorDerivacionEnNovedadWhere(FUENTE_ORDEN_REPO)).toBe(true);
+    const porEstado = `
+      class OrdenRepository {
+        private novedadWhere(tiendaId: string, grupo: GrupoNovedad): Prisma.OrdenWhereInput {
+          return { tiendaId, deletedAt: null, estatus: { value: ESTATUS_POR_GRUPO[grupo] } };
+        }
+      }`;
+    expect(ayudaPorDerivacionEnNovedadWhere(porEstado, "falso.ts")).toBe(false);
   });
 
   it("la extracción REVIENTA si el patrón deja de encontrarse (nunca «nada → verde»)", () => {
@@ -555,7 +604,9 @@ describe("227 / R38 — el hilo es bidireccional de hecho", () => {
 // =============================================================================================
 
 describe("227 / R36 — el panel del mensajero sigue leyendo lo que leía", () => {
-  it("listarMisAsignaciones lee exactamente por_recoger, en_reparto y ayuda_tienda", () => {
+  // ⏳ 2026-09-23 (FICHA 454): el censo vuelve de 3 a 2. La orden con ayuda abierta sigue
+  // `en_reparto` y el servicio la separa por la DERIVACION (`findPendientesYAyudas`), no por estado.
+  it("listarMisAsignaciones lee exactamente por_recoger y en_reparto", () => {
     // Censo CERRADO, y a propósito: ni uno más ni uno menos. Uno menos rompería R38 (el
     // mensajero se quedaría sin la orden en la que publica); uno de más sería una feature
     // ensanchando el corte de la 167 por la puerta de atrás.
@@ -566,17 +617,13 @@ describe("227 / R36 — el panel del mensajero sigue leyendo lo que leía", () =
     // seguía siendo parada del mapa y gestionable. La propiedad que este censo protege se
     // conserva: sigue siendo CERRADO y `recolectando` SIGUE FUERA, que es exactamente lo que la
     // 167 aisló.
-    expect([...ESTATUS_DEL_PANEL_MENSAJERO].sort()).toEqual([
-      "ayuda_tienda",
-      "en_reparto",
-      "por_recoger",
-    ]);
-    expect(ESTATUS_DEL_PANEL_MENSAJERO).toHaveLength(3);
+    expect([...ESTATUS_DEL_PANEL_MENSAJERO].sort()).toEqual(["en_reparto", "por_recoger"]);
+    expect(ESTATUS_DEL_PANEL_MENSAJERO).toHaveLength(2);
     // Lo que la 167 aisló, dicho como negativo para que no se pierda al crecer el censo.
     expect(ESTATUS_DEL_PANEL_MENSAJERO).not.toContain("recolectando");
   });
 
-  it("y `/novedades` lista exactamente `devuelta` (devolución) y `ayuda_tienda` (ayuda)", () => {
+  it("y `/novedades` lista `devuelta` por estatus (devolución) y la ayuda por derivación", () => {
     // La otra mitad del cruce, dicha también como valor: si el predicado central de novedades
     // cambiara de estatus, la ventana del adminTienda tendría que moverse con él.
     //
@@ -590,22 +637,32 @@ describe("227 / R36 — el panel del mensajero sigue leyendo lo que leía", () =
     // bajo una sola pestaña — son DOS PESTAÑAS, cada una con su predicado. El conjunto que este
     // caso fija es el mismo; lo que cambió es que ahora una orden vive en exactamente una de las
     // dos, por construcción (una orden tiene un `estatus_id` y solo uno).
-    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["ayuda_tienda", "devuelta"]);
-    expect(ESTATUS_DE_NOVEDADES).toHaveLength(2);
+    //
+    // ⏳ 2026-09-23 (FICHA 454): la pestaña de ayuda deja de ser una igualdad de estado. Antes:
+    // `["ayuda_tienda", "devuelta"]`.
+    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["devuelta"]);
+    expect(ayudaPorDerivacionEnNovedadWhere(FUENTE_ORDEN_REPO)).toBe(true);
   });
 
   // 2026-08-19 (feature 235/R34/R35) — EL SOLAPE, afirmado por sí mismo. Es lo que convierte el
   // hilo en una conversación y no en dos monólogos: hay UN estado en el que los dos roles pueden
   // escribir sobre la misma orden, y los dos lo tienen en su pantalla.
-  it("235/R34: `ayuda_tienda` es el ÚNICO estado en el que los dos roles pueden escribir", () => {
+  // ⏳ 2026-09-23 (FICHA 454, U12): el solape deja de ser un ESTADO (`ayuda_tienda`) y pasa a ser
+  // una SITUACION: la orden `en_reparto` con la ayuda ABIERTA. Por estatus los dos roles ya no
+  // comparten ninguno; comparten la ayuda abierta por la funcion de la ventana.
+  it("235/R34 → 454: la AYUDA ABIERTA es la única situación en la que los dos roles pueden escribir", () => {
     const tienda = VENTANA_ESCRITURA.adminTienda as readonly string[];
     const mensajero = VENTANA_ESCRITURA.mensajero as readonly string[];
-    const solape = tienda.filter((e) => mensajero.includes(e));
-    expect(solape).toEqual(["ayuda_tienda"]);
-    // Y ese estado está en las DOS pantallas: sin eso, el permiso sería inejercitable para uno de
-    // los dos (R35) y el hilo volvería a ser unidireccional de hecho.
-    expect(PANTALLA_POR_ROL.adminTienda.estatus).toContain("ayuda_tienda");
-    expect(PANTALLA_POR_ROL.mensajero.estatus).toContain("ayuda_tienda");
+    expect(tienda.filter((e) => mensajero.includes(e))).toEqual([]);
+    // Con la ayuda abierta sobre una orden `en_reparto`, los DOS pueden escribir...
+    expect(estaEnVentanaDeEscritura("adminTienda", "en_reparto", true)).toBe(true);
+    expect(estaEnVentanaDeEscritura("mensajero", "en_reparto", true)).toBe(true);
+    // ...y sin ella, la tienda NO (la orden en la calle es del mensajero).
+    expect(estaEnVentanaDeEscritura("adminTienda", "en_reparto", false)).toBe(false);
+    // Y esa orden está en las DOS pantallas: el panel del mensajero la lee por `en_reparto` y
+    // `/novedades` por la derivación. Sin eso, el permiso sería inejercitable para uno de los dos.
+    expect(PANTALLA_POR_ROL.mensajero.estatus).toContain("en_reparto");
+    expect(ayudaPorDerivacionEnNovedadWhere(FUENTE_ORDEN_REPO)).toBe(true);
   });
 });
 
@@ -640,8 +697,11 @@ const MONTAJE_DEL_HILO: Record<RolConHilo, { pantalla: string; modal: string }> 
   },
 };
 
-/** El estatus en el que los dos roles se cruzan: la solicitud de ayuda viva. */
-const ESTATUS_AYUDA = "ayuda_tienda";
+/**
+ * El estatus en el que los dos roles se cruzan: la orden `en_reparto` con la solicitud de ayuda
+ * viva. ⏳ FICHA 454: antes `"ayuda_tienda"`; la ayuda abierta se pasa como tercer parametro.
+ */
+const ESTATUS_AYUDA = "en_reparto";
 
 /**
  * `true` si `fuente` MONTA el componente (`<Modal …`), no si sólo lo importa. Importarlo y no
@@ -662,9 +722,9 @@ export function montaEl(fuente: string, modal: string): boolean {
 }
 
 describe("236 / R36 — ningún rol con ventana sobre la ayuda se queda sin dónde escribir", () => {
-  it("los DOS roles con ventana sobre `ayuda_tienda` tienen su hilo MONTADO", () => {
+  it("los DOS roles con ventana sobre la ayuda abierta tienen su hilo MONTADO", () => {
     const conVentanaSobreAyuda = ROLES_CON_HILO.filter((rol) =>
-      (VENTANA_ESCRITURA[rol] as readonly string[]).includes(ESTATUS_AYUDA),
+      estaEnVentanaDeEscritura(rol, ESTATUS_AYUDA, true),
     );
     // Anti-vacuidad: si nadie tuviera ventana sobre la ayuda, el bucle de abajo no ejercería nada
     // y este bloque pasaría diciendo cero.

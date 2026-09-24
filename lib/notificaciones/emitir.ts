@@ -200,100 +200,50 @@ export async function emitirOrdenRechazada(
   );
 }
 
-/** Estado destino y familia de origen que identifican el rechazo DEL DESTINATARIO (R18/R19). */
-const DESTINO_RECHAZO: OrderStatusValue = "rechazada";
-const ORIGEN_RECHAZO_DEL_DESTINATARIO = "gestion";
-
-// ⚠️ FEATURE 237 (D4, firmada el 2026-08-20) — `gestion_tienda_ayuda` QUEDA FUERA A PROPOSITO, y
-// esto se escribe aqui para que la AUSENCIA sea una DECISION y no un olvido.
+// ⏳ 2026-09-23 — FICHA 454 (design DD; R35): EL DISPARO SE MUDA DEL CHOKE POINT AL REGISTRO.
 //
-// Desde la 237 la TIENDA puede rechazar una orden desde su pestaña de ayuda. Esa transicion
-// tambien aterriza en `rechazada`, pero con `origen_tipo = gestion_tienda_ayuda`, asi que la
-// igualdad de arriba NO la alcanza y el aviso NO se emite.
+// Hasta la 454 el aviso salia de `emisorNotificacionReal`, enganchado a `appendCambioEstado`, que
+// filtraba el lote por `destino === "rechazada" && origenTipo === "gestion"` (y por eso el escalado
+// por SLA, `escalado_devuelta_sla`, no avisaba: R19 de la 146). Con la 454 la gestion ya NO
+// transiciona al registrarse: la transicion `en_reparto -> rechazada` la escribe la APROBACION del
+// cierre, horas despues. Un emisor en el choke point avisaria TARDE y, con el registro avisando
+// tambien, DOS veces. El aviso sale ahora de `emitirOrdenRechazadaEnTransaccion`, que llama
+// `GestionOrdenRepository.registrarGestionPendiente` dentro de SU transaccion y SOLO para una
+// gestion `rechazada` del MENSAJERO: el mismo instante que antes (cero regresion de tiempo).
 //
-// POR QUE NO SE AMPLIA EL FILTRO: el texto del aviso es «Una orden fue rechazada POR EL
-// DESTINATARIO», y aqui eso seria FALSO — rechazo la tienda, sobre un paquete que el destinatario
-// no llego a ver. Este repo tiene escrito lo que cuesta un dato que miente con formato de dato
-// (236/D3, la columna «Sin causa registrada»). Y el aviso no es el mecanismo de nada: el paquete
-// llega igual a `por_devolver`/`por_devolver_a_tienda` al aprobar el cierre (139), que es donde
-// bodega lo ve.
+// ⚠️ FEATURE 237 (D4, firmada el 2026-08-20) — la gestion de la TIENDA (`gestion_tienda_ayuda`)
+// QUEDA FUERA A PROPOSITO, y esto se escribe aqui para que la AUSENCIA sea una DECISION y no un
+// olvido. El texto del aviso es «Una orden fue rechazada POR EL DESTINATARIO», y sobre un rechazo
+// de la tienda seria FALSO: rechazo la tienda, sobre un paquete que el destinatario no llego a ver.
+// Desde la 454 la ausencia la sostiene el SITIO del disparo: `crearGestionDesdeAyuda` no llama a
+// este emisor (afirmado en `tests/unit/services/gestion-desde-ayuda-cierre-aprobacion.test.ts`).
+// LO QUE SE PIERDE, DECLARADO: los admins no reciben el aviso anticipado de esa clase de rechazo;
+// si el humano lo quiere, hace falta un TEXTO PROPIO y es otra decision.
 //
-// LO QUE SE PIERDE, DECLARADO: los admins no reciben el aviso anticipado de que viene un rechazo de
-// esta clase. Si el humano lo quiere, hace falta un TEXTO PROPIO y es otra decision — no ensanchar
-// esta igualdad. Afirmado en `tests/unit/services/gestion-desde-ayuda-cierre-aprobacion.test.ts`.
-//
-// ⚠️ FEATURE 240 (R45) — `rechazo_tienda` QUEDA FUERA POR LA MISMA RAZON, y se escribe aparte
-// porque es un caso distinto que llega al mismo sitio.
-//
-// Desde la 240 la tienda puede rechazar a mano una devolucion ya anclada (`devuelta -> rechazada`,
-// familia `rechazo_tienda`). Tambien aterriza en `rechazada` y tampoco la alcanza la igualdad de
-// arriba, asi que el aviso NO se emite. Y aqui el texto seria todavia mas falso que en el caso de
-// la 237: el paquete ni siquiera esta en la calle — volvio a la bodega, se escaneo al aprobar el
-// cierre (238) y lleva dias esperando. Decir «rechazada por el destinatario» sobre eso es contar un
-// hecho que no ocurrio.
-//
-// Y como en la 237, el aviso no es el mecanismo de nada: la orden llega igual a
-// `por_devolver`/`por_devolver_a_tienda` al aprobarse el cierre que recoja la gestion sintetica
-// (139). Afirmado con su CONTROL POSITIVO en
-// `tests/unit/repositories/notificacion-orden-rechazada.test.ts`.
-
-/** FICHA 454 (DD): el aviso N1 sale al REGISTRAR la gestion, no desde el choke point. */
-const EMISOR_N1_DESDE_CHOKE_POINT_RETIRADO = true;
+// ⚠️ FEATURE 240 (R45) — `rechazo_tienda` (la tienda rechaza a mano una devolucion ya anclada)
+// QUEDA FUERA POR LA MISMA RAZON: el paquete ni siquiera esta en la calle. Y el escalado por SLA
+// (146/R19), tambien: ninguno de los dos pasa por el registro de una gestion del mensajero.
 
 /**
- * Emisor REAL usado por defecto en `appendCambioEstado` (design §4.1). Filtra el lote por
- * `destino === "rechazada" && origenTipo === "gestion"`: el escalado por SLA
- * (`escalado_devuelta_sla`) tambien aterriza en `rechazada` y NO notifica (R19).
- *
- * GUARD DEFENSIVO (patron `emisorWebhookEstadoReal`): los ~18 call-sites historicos del choke
- * point tienen tests unitarios que mockean `tx` con SOLO `ordenHistorialEstado`. Si el `tx`
- * no expone las tablas de esta feature no hay nada real que emitir y se retorna sin tocar
- * nada, para no romper esas suites. En produccion el `tx` es el de `$transaction`, completo.
+ * Emisor por defecto de `appendCambioEstado` (design §4.1 de la 146). FICHA 454: NO-OP — el choke
+ * point ya no avisa de ningun rechazo (ver arriba). Se conserva la exportacion y la firma porque el
+ * choke point la recibe por parametro (y los tests de sus call-sites inyectan la suya).
  */
-export const emisorNotificacionReal: NotificacionEmisor = async (
-  tx,
-  entradas,
-  valuePorEstatusId,
-) => {
-  // ⏳ 2026-09-23 (FICHA 454, design DD; R35) — EL DISPARO DESDE EL CHOKE POINT SE RETIRA. Con la
-  // 454 la gestion del mensajero ya no transiciona al registrarse: la transicion `en_reparto ->
-  // rechazada` (familia `gestion`) la escribe la APROBACION del cierre. Si este emisor siguiera
-  // vivo, el aviso saldria al aprobar —tarde— y ademas por SEGUNDA vez, porque desde la 454 lo emite
-  // `GestionOrdenRepository.registrarGestionPendiente` en el instante del registro, que es el mismo
-  // instante que hoy (cero regresion de tiempo). El filtro de abajo se conserva como documentacion
-  // de QUE disparaba; ya no se evalua.
-  if (EMISOR_N1_DESDE_CHOKE_POINT_RETIRADO) return;
-  const rechazos = entradas.filter(
-    (e) =>
-      e.origenTipo === ORIGEN_RECHAZO_DEL_DESTINATARIO &&
-      valuePorEstatusId.get(e.estatusDestinoId) === DESTINO_RECHAZO,
-  );
-  if (rechazos.length === 0) return; // caso mayoritario: ni una consulta
-  if (typeof (tx as { orden?: unknown }).orden !== "object" || tx.orden === null) return;
-  if (typeof (tx as { notificacion?: unknown }).notificacion !== "object") return;
+export const emisorNotificacionReal: NotificacionEmisor = async () => {};
 
-  const ordenIds = Array.from(new Set(rechazos.map((e) => e.ordenId)));
-  const ordenes = await tx.orden.findMany({
-    where: { id: { in: ordenIds } },
-    select: { id: true, tiendaId: true, zonaId: true, numGuia: true, numRemision: true },
-  });
-  if (!Array.isArray(ordenes)) return;
-
-  const repo = new NotificacionRepository(tx);
-  for (const orden of ordenes) {
-    await emitirOrdenRechazada(
-      repo,
-      {
-        ordenId: orden.id,
-        tiendaId: orden.tiendaId,
-        zonaId: orden.zonaId ?? null,
-        numGuia: orden.numGuia ?? null,
-        numRemision: orden.numRemision,
-      },
-      tx,
-    );
-  }
-};
+/**
+ * FICHA 454 (T1.6, DD; R35) — el aviso N1 DENTRO de la transaccion del registro de la gestion
+ * `rechazada` del mensajero. Construye su repositorio con `tx` para que el aviso y la gestion se
+ * guarden o se pierdan juntos (R20/R21 de la 146). `orden_rechazada` NO es elegible para push, y
+ * dentro de una transaccion el decorador del canal se retira igual (R27 de la 410): por eso este es
+ * el unico `new NotificacionRepository` de este modulo (`push-cableado-unico.guardia`).
+ */
+export async function emitirOrdenRechazadaEnTransaccion(
+  tx: NotificacionTxClient,
+  orden: OrdenRechazadaContexto,
+): Promise<number> {
+  return emitirOrdenRechazada(new NotificacionRepository(tx), orden, tx);
+}
 
 // ---------------------------------------------------------------------------
 // §4.2 — Carga masiva terminada (R22, R39). BEST-EFFORT en los call-sites.

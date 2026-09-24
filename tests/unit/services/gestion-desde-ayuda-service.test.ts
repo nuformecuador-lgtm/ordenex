@@ -10,7 +10,7 @@ import {
 } from "@/lib/services/GestionDesdeAyudaService";
 import { ESTATUS_POR_RESULTADO } from "@/lib/types/gestion-destino";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
-import { VENTANA_ESCRITURA } from "@/lib/types/ventana-hilo-notas";
+import { estaEnVentanaDeEscritura } from "@/lib/types/ventana-hilo-notas";
 
 // Feature 237 (T5.3, design §6) — LAS OCHO COMPROBACIONES del servicio, una por caso.
 //
@@ -224,8 +224,10 @@ describe("gestionar — la puerta (R19/R20/R21/R22)", () => {
   it("R20: y el mensajero PASA la puerta del hilo — el rechazo viene de la regla propia, no de ella", () => {
     // El contraste que hace que el caso de arriba diga algo: si el mensajero ya cayera en
     // `autorizarSobreHilo`, el paso 2 seria decorativo y podria borrarse sin que nada fallara.
-    expect(VENTANA_ESCRITURA.mensajero as readonly string[]).toContain("ayuda_tienda");
-    expect(VENTANA_ESCRITURA.adminTienda as readonly string[]).toContain("ayuda_tienda");
+    // ⏳ 2026-09-23 (FICHA 454, U12): la ayuda abierta abre la ventana de LOS DOS roles sobre una
+    // orden `en_reparto` (antes: los dos tenian `ayuda_tienda` en su lista).
+    expect(estaEnVentanaDeEscritura("mensajero", "en_reparto", true)).toBe(true);
+    expect(estaEnVentanaDeEscritura("adminTienda", "en_reparto", true)).toBe(true);
   });
 
   it("R22: una tienda AJENA y una orden INEXISTENTE devuelven exactamente lo mismo", async () => {

@@ -105,6 +105,9 @@ function escenario(opciones: { filas?: FilaFake[]; ordenes?: Record<string, Part
       tiendaId: TIENDA,
       mensajeroAsignadoId: MENSAJERO,
       estatusValue: "devuelta",
+      // FICHA 454 (U12): la DERIVACION «ayuda abierta» que proyecta el repositorio del hilo. Por
+      // defecto cerrada; los casos de la ayuda la abren.
+      ayudaAbierta: false,
       // Feature 235 (T5.1, R36): aqui vivia `ayuda: false`, la bandera de la SEGUNDA PUERTA. Se
       // retiro con la columna y la ventana vuelve a depender SOLO del estatus, que es lo que todos
       // los casos de este archivo ya median.
@@ -155,6 +158,7 @@ function escenario(opciones: { filas?: FilaFake[]; ordenes?: Record<string, Part
             tiendaId: o.tiendaId,
             mensajeroAsignadoId: o.mensajeroAsignadoId,
             estatusValue: o.estatusValue,
+            ayudaAbierta: o.ayudaAbierta, // ficha 454 (U12)
             deletedAt: o.deletedAt,
             fechaReparto: o.fechaReparto, // feature 261 (B15)
           }
@@ -382,9 +386,14 @@ describe("R14 — ventana de escritura ASIMETRICA por rol", () => {
     // Feature 235 (T5.1): pasa de UN valor por rol a una LISTA por rol. La asimetria se conserva
     // —cada uno tiene el estado de SU pantalla— y aparece el UNICO solape: `ayuda_tienda`, que es
     // el estado en el que los dos miran la misma orden a la vez (R34).
+    //
+    // ⏳ 2026-09-23 (FICHA 454, U12): `ayuda_tienda` sale de las DOS listas. La ayuda ya no es un
+    // estatus: la orden con ayuda abierta sigue `en_reparto` (ventana del mensajero) y a la tienda
+    // se la abre el tercer parametro, la derivacion. El solape pasa a ser esa SITUACION (caso de
+    // abajo). Antes: `["devuelta", "ayuda_tienda"]` y `["en_reparto", "ayuda_tienda"]`.
     expect(VENTANA_ESCRITURA).toEqual({
-      adminTienda: ["devuelta", "ayuda_tienda"],
-      mensajero: ["en_reparto", "ayuda_tienda"],
+      adminTienda: ["devuelta"],
+      mensajero: ["en_reparto"],
     });
   });
 
@@ -405,14 +414,19 @@ describe("R14 — ventana de escritura ASIMETRICA por rol", () => {
   // conteste— que es literalmente el fallo que la guardia `hilo-ventana-alcanzable` existe para
   // impedir.
   // ===============================================================================================
-  it("235/R34: en `ayuda_tienda` publican LOS DOS — la tienda y el mensajero asignado", async () => {
-    const tienda = escenario({ ordenes: { [ORDEN]: { estatusValue: "ayuda_tienda" } } });
+  // ⏳ 2026-09-23 (FICHA 454): «en `ayuda_tienda`» pasa a ser `en_reparto` con la ayuda ABIERTA.
+  it("235/R34 → 454: con la ayuda ABIERTA publican LOS DOS — la tienda y el mensajero asignado", async () => {
+    const tienda = escenario({
+      ordenes: { [ORDEN]: { estatusValue: "en_reparto", ayudaAbierta: true } },
+    });
     expect(
       await tienda.service.publicar({ ordenId: ORDEN, cuerpo: "te llamo ya" }, actorTienda),
     ).toMatchObject({ status: "ok" });
     expect(tienda.filas).toHaveLength(1);
 
-    const mensajero = escenario({ ordenes: { [ORDEN]: { estatusValue: "ayuda_tienda" } } });
+    const mensajero = escenario({
+      ordenes: { [ORDEN]: { estatusValue: "en_reparto", ayudaAbierta: true } },
+    });
     expect(
       await mensajero.service.publicar(
         { ordenId: ORDEN, cuerpo: "el porton esta cerrado" },
@@ -548,6 +562,10 @@ describe("R25 — la nota de la TIENDA no se toca", () => {
         // autorizar») ya tiene precedente en el archivo: `mensajeroAsignadoId` vive aqui y lo
         // consume UN solo consumidor, ese mismo servicio. El hilo de notas NO lo lee, y este
         // caso lo sigue demostrando: la lista sigue CERRADA y `notas` sigue fuera.
+        //
+        // ⏳ FICHA 454 (U12, 2026-09-23): ENTRA `ayudaAbierta`, la DERIVACION (no una bandera
+        // persistida) que abre la ventana de la tienda sobre la orden con ayuda abierta.
+        "ayudaAbierta",
         "deletedAt",
         "estatusValue",
         "fechaReparto",

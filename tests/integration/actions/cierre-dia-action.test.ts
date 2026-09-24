@@ -50,6 +50,7 @@ const GESTION_DESHACIBLE: GestionDeshacerRow = {
   anuladaAt: null,
   orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregada" },
   desdeAyudaTienda: false, // feature 237 (D3): la registro el mensajero, no la tienda
+  registradaComoPendiente: false, // ficha 454 (T1.11): rama LEGADA del deshacer
 };
 
 // Repo en memoria: findGestionesPendientes solo devuelve las NO vinculadas;
@@ -70,6 +71,8 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
     findGestionParaDeshacer: vi.fn(async () => GESTION_DESHACIBLE),
     findUltimaGestionNoAnuladaId: vi.fn(async () => GESTION_DESHACIBLE.gestionId),
     anularGestionYDevolverAGestion: vi.fn(async () => true),
+    // FICHA 454 (T1.11): la rama NUEVA del deshacer (gestion pendiente, sin transicion).
+    anularGestionPendiente: vi.fn(async () => true),
     crearCierre: vi.fn(async (input: CrearCierreInput) => {
       const id = `c-${cierres.length + 1}`;
       cierres.push({

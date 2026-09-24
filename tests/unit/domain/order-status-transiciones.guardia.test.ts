@@ -108,11 +108,14 @@ describe("235+237 — el estatus de ayuda: sus CUATRO salidas, y ni una mas (235
     },
   );
 
+  // ⏳ 2026-09-23 (FICHA 454, design §2): `en_reparto` gana `devuelta` (#70, `anclaje_devolucion`,
+  // productor: la APLICACION al aprobar el cierre). Antes la lista no la tenia (239 retiro la #14).
   it("235: `en_reparto` conserva sus SEIS salidas previas — pedir ayuda no sustituye a ninguna", () => {
     const destinos = TRANSICIONES.en_reparto.map((d) => d.to).sort();
     expect(destinos).toEqual([
       "ayuda_tienda",
       "devolucion_por_confirmar",
+      "devuelta",
       "entregada",
       "incidente",
       "rechazada",
@@ -517,8 +520,12 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     // Ficha 398 (2026-09-08): 63 -> 64 y 60 -> 61. Suma #69 (`entregada -> rechazada`, la
     // correccion en sitio de una entrega mal declarada dentro de un cierre abierto) y NO retira
     // ninguna. Es par NUEVO: de `entregada` solo se salia deshaciendo la gestion del dia.
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(64); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +1: 240; +1: 276; +1: 398
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(61); // ... +1: 276 (par nuevo); +1: 398 (par nuevo)
+    // Ficha 454 (2026-09-23): 64 -> 65 y 61 -> 62. Suma #70 (`en_reparto -> devuelta`, familia
+    // `anclaje_devolucion`, productor la APLICACION al aprobar el cierre). Par NUEVO en el
+    // inventario vigente (su gemela #14 la retiro la 239). Las bajas de la 454 (#59-#66) viajan con
+    // el retiro de los dos values del catalogo.
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(65); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +1: 240; +1: 276; +1: 398; +1: 454
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(62); // ... +1: 276 (par nuevo); +1: 398 (par nuevo); +1: 454 (par nuevo)
   });
 });
 
@@ -718,10 +725,10 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
   // rechazada`): sube la arista y NO sube el par. Es el tercer duplicado historico del inventario.
   // Ficha 398 (2026-09-08): 63/60/2 -> 64/61/2 con #69 (`entregada -> rechazada`, la correccion
   // en sitio), que es un par NUEVO: de `entregada` solo se salia deshaciendo la gestion.
-  it("los recuentos del inventario son 64 flujo / 61 pares / 2 creacion", () => {
+  it("los recuentos del inventario son 65 flujo / 62 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 64, // ficha 398 (2026-09-08): 63 -> 64, una alta y ninguna baja
-      paresUnicos: 61, // ficha 398: la alta es un par NUEVO, asi que los pares suben con ella
+      aristasFlujo: 65, // ficha 454 (2026-09-23): 64 -> 65, la alta #70
+      paresUnicos: 62, // ficha 454: la alta es un par NUEVO, asi que los pares suben con ella
       aristasCreacion: 2,
     });
   });
@@ -774,12 +781,19 @@ describe("276/R21/R22 — `sin_gestionar -> rechazada` es legal, y por su famili
 // haya podido ver la novedad). Por eso se afirma que LANZA, no que "no se usa".
 // ---------------------------------------------------------------------------------------------
 describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto -> devuelta`", () => {
-  it("R2/R29: `en_reparto -> devuelta` ya es ILEGAL (arista #14 retirada)", () => {
-    expect(() => assertTransicionValida("en_reparto", "devuelta")).toThrow(TransicionIlegalError);
-    // Y no queda declarada por ninguna otra familia: el par entero desaparecio del mapa.
-    expect(
-      INVENTARIO_FLUJO.filter((a) => a.origen === "en_reparto" && a.destino === "devuelta"),
-    ).toHaveLength(0);
+  // ⏳ 2026-09-23 (FICHA 454, design §2 y §16 «rojos esperados»): el par vuelve a ser LEGAL, pero
+  // NO por la #14 (la gestion del mensajero llevando a `devuelta` al instante, el cobro prematuro
+  // que la 239 cerro): lo declara UNA sola arista, #70, de familia `anclaje_devolucion`, cuyo unico
+  // productor es la aprobacion del cierre. Antes: el par era ilegal y no lo declaraba nadie.
+  it("R2/R29 → 454: `en_reparto -> devuelta` es legal SOLO por la aplicacion al aprobar (#70)", () => {
+    expect(() => assertTransicionValida("en_reparto", "devuelta")).not.toThrow();
+    const aristas = INVENTARIO_FLUJO.filter(
+      (a) => a.origen === "en_reparto" && a.destino === "devuelta",
+    );
+    // UNA, con la familia del anclaje: ninguna de `gestion` (la #14 no vuelve).
+    expect(aristas.map((a) => [a.n, a.via])).toEqual([["70", "anclaje_devolucion"]]);
+    const enMapa = TRANSICIONES.en_reparto.filter((d) => d.to === "devuelta");
+    expect(enMapa.map((d) => d.via)).toEqual(["anclaje_devolucion"]);
   });
 
   it("R2/#59: gestionar una devolucion lleva la orden al PRE-ESTADO, y eso es legal", () => {

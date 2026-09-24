@@ -2220,7 +2220,13 @@ export class CierresAdminRepository implements ICierresAdminRepository {
                       gestionOrdenId: g.id,
                     };
                   }
-                  const deLaTienda = registro?.familiaAplicacion === "gestion_tienda_ayuda";
+                  // La familia es la que el REGISTRO dejo escrita en su evento (`gestion`,
+                  // `incidente` o `gestion_tienda_ayuda`, CHECK de M2): una sola fuente, la misma
+                  // que decidio el registro. El `??` es defensa: la guarda del `where` exige el evento.
+                  const familia =
+                    registro?.familiaAplicacion ??
+                    (g.resultado === "incidente" ? ("incidente" as const) : ("gestion" as const));
+                  const deLaTienda = familia === "gestion_tienda_ayuda";
                   return {
                     ordenId: g.ordenId,
                     estatusOrigenId: enRepartoId,
@@ -2228,11 +2234,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
                     // La visita la hizo el mensajero (y cuenta intento por eso); en la 237 la
                     // registro la persona de la tienda, que es quien firma la transicion.
                     actorUsuarioId: deLaTienda ? (registro?.actorUsuarioId ?? g.mensajeroId) : g.mensajeroId,
-                    origenTipo: deLaTienda
-                      ? ("gestion_tienda_ayuda" as const)
-                      : g.resultado === "incidente"
-                        ? ("incidente" as const)
-                        : ("gestion" as const),
+                    origenTipo: familia,
                     motivo: g.motivo ?? null,
                     gestionOrdenId: g.id,
                   };

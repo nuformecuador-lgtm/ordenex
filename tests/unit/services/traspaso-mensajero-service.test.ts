@@ -69,6 +69,7 @@ interface Dobles {
     findMensajerosConOrdenesEn: ReturnType<typeof vi.fn>;
     findUsuarioNombre: ReturnType<typeof vi.fn>;
     traspasarMensajeroLote: ReturnType<typeof vi.fn>;
+    findIdsConGestionPendiente: ReturnType<typeof vi.fn>; // ficha 454 (R54)
   };
 }
 

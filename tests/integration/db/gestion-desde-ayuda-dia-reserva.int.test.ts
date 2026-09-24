@@ -165,7 +165,9 @@ describeSiHayBase("261/B18 — el `where` del `updateMany` de la tienda, contra 
     const orden: OrdenParaHilo = {
       tiendaId: ctx.tiendaId,
       mensajeroAsignadoId: ctx.mensajeroId,
-      estatusValue: "ayuda_tienda",
+      // ⏳ 2026-09-23 (FICHA 454): la ayuda es un hecho; la orden sigue `en_reparto`.
+      estatusValue: "en_reparto",
+      ayudaAbierta: true,
       deletedAt: null,
       fechaReparto: fechaRepartoQueVeElServicio,
     };

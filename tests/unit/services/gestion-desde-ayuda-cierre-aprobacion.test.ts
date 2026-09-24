@@ -266,16 +266,23 @@ describe("R37 — esta ficha NO escribe dentro de la transaccion de aprobacion",
 /* -------------------------------------------------------------------------- */
 
 describe("R44/D4 — el rechazo de la tienda NO emite «orden rechazada por el destinatario»", () => {
-  it("el emisor filtra por `origen_tipo === 'gestion'`, y la familia nueva no lo es", () => {
-    // El hecho tecnico que lo hace facil de creer: la ausencia sale sola porque el filtro es una
-    // IGUALDAD. Pero eso es una coincidencia, no una garantia — el dia que alguien convierta esa
-    // igualdad en un `in` «para cubrir mas casos», el aviso empezaria a salir. Por eso lleva test.
-    const src = quitarComentarios(fuente("lib/notificaciones/emitir.ts"));
-    expect(src).toMatch(/const ORIGEN_RECHAZO_DEL_DESTINATARIO = "gestion";/);
-    expect(src).toMatch(/e\.origenTipo === ORIGEN_RECHAZO_DEL_DESTINATARIO/);
-    // NO es un `in` ni un `includes`: si lo fuera, la familia nueva podria colarse.
-    expect(src).not.toMatch(/ORIGEN_RECHAZO_DEL_DESTINATARIO\.includes/);
-    expect(src).not.toContain("gestion_tienda_ayuda\",");
+  // ⏳ 2026-09-23 (FICHA 454, design DD): el aviso ya no sale del choke point filtrando por
+  // `origen_tipo === 'gestion'`: sale del REGISTRO de la gestion del mensajero. La ausencia para la
+  // tienda la sostiene ahora el SITIO del disparo, y eso es lo que se afirma: el registro del
+  // mensajero lo llama, el de la tienda no. Antes se afirmaba la igualdad del filtro de `emitir.ts`.
+  it("el aviso sale SOLO del registro del mensajero: la via de la tienda no lo dispara", () => {
+    const src = quitarComentarios(fuente("lib/repositories/GestionOrdenRepository.ts"));
+    const cuerpoDe = (metodo: string) => {
+      const i = src.indexOf(`async ${metodo}(`);
+      expect(i, `no se encontro ${metodo}`).toBeGreaterThan(-1);
+      const siguiente = src.indexOf("\n  async ", i + 1);
+      return src.slice(i, siguiente === -1 ? undefined : siguiente);
+    };
+    expect(cuerpoDe("registrarGestionPendiente")).toContain("emitirOrdenRechazadaEnTransaccion");
+    expect(cuerpoDe("crearGestionDesdeAyuda")).not.toContain("emitirOrdenRechazada");
+    // Y el choke point ya no avisa de nada (su emisor por defecto es un no-op).
+    const emitir = quitarComentarios(fuente("lib/notificaciones/emitir.ts"));
+    expect(emitir).toMatch(/export const emisorNotificacionReal: NotificacionEmisor = async \(\) => \{\};/);
   });
 
   it("la AUSENCIA esta escrita como decision en el propio archivo, con su porque", () => {

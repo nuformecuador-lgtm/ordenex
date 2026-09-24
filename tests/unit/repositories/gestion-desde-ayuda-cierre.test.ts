@@ -686,10 +686,12 @@ describe("R36 — el «Total a cobrar del dia» del mensajero no cambia: la orde
     );
     expect(bloque).not.toBeNull();
     const lista = (bloque as RegExpMatchArray)[1];
-    // Los DOS estatus en los que el paquete sigue con el mensajero. Si `ayuda_tienda` saliera de
-    // aqui, una orden en ayuda contaria en los DOS sumandos y su COD se sumaria dos veces.
+    // ⏳ 2026-09-23 (FICHA 454): la ayuda deja de ser estatus; la orden con ayuda abierta sigue
+    // `en_reparto`, asi que la lista queda en UN estatus y sigue cubriendo a la orden en ayuda. Si
+    // `en_reparto` saliera de aqui, esa orden contaria en los DOS sumandos y su COD se sumaria dos
+    // veces. Antes se exigia ademas el literal `"ayuda_tienda"`.
     expect(lista).toContain("ESTADO_EN_REPARTO");
-    expect(lista).toContain('"ayuda_tienda"');
+    expect(lista).not.toContain('"ayuda_tienda"');
     // Y el `where` de lo gestionado los excluye (`notIn`), que es lo que los hace disjuntos.
     expect(fuente).toMatch(
       /estatus: \{ value: \{ notIn: ESTADOS_EN_MANO_DEL_MENSAJERO \} \}/,

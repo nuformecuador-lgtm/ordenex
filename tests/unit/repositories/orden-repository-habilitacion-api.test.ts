@@ -9,9 +9,14 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 const OWNER = "usuario-dedicado-de-la-key";
 const NUM_GUIA = 100234;
 
-function buildPrisma(findFirstResult: unknown = null) {
+/**
+ * FICHA 454 (R24): la lectura gana `ayudaAbierta`, la DERIVACION de `ayuda-abierta.ts`, resuelta con
+ * `$queryRaw`. El doble responde con los ids que tienen la ayuda abierta.
+ */
+function buildPrisma(findFirstResult: unknown = null, idsConAyudaAbierta: string[] = []) {
   return {
     orden: { findFirst: vi.fn().mockResolvedValue(findFirstResult) },
+    $queryRaw: vi.fn(async () => idsConAyudaAbierta.map((id) => ({ id }))),
   };
 }
 
@@ -50,20 +55,26 @@ describe("Feature 266 · T3.1 — OrdenRepository.findParaHabilitacionApi", () =
     await expect(repoCon(prisma).findParaHabilitacionApi(999999, OWNER)).resolves.toBeNull();
   });
 
-  it("aplana la fila a los TRES campos del discriminador (R12), con el estatus.value resuelto", async () => {
-    const prisma = buildPrisma({
-      id: "orden-1",
-      mensajeroAsignadoId: "mensajero-7",
-      estatus: { value: "ayuda_tienda" },
-    });
+  // ⏳ 2026-09-23 (FICHA 454, R24): el discriminador gana un CUARTO campo, `ayudaAbierta` (la
+  // orden con ayuda abierta sigue `en_reparto`; antes era el estatus `ayuda_tienda`).
+  it("aplana la fila a los campos del discriminador (R12), con el estatus.value y la ayuda abierta", async () => {
+    const prisma = buildPrisma(
+      {
+        id: "orden-1",
+        mensajeroAsignadoId: "mensajero-7",
+        estatus: { value: "en_reparto" },
+      },
+      ["orden-1"],
+    );
     const res = await repoCon(prisma).findParaHabilitacionApi(NUM_GUIA, OWNER);
     // `toEqual` y no `objectContaining`: la AUSENCIA de `estatusId` es parte del contrato. El
     // origen del `WHERE` guardado lo resuelve el service por value (R19), asi que devolverlo aqui
     // seria un dato que nadie lee.
     expect(res).toEqual({
       id: "orden-1",
-      estatusValue: "ayuda_tienda",
+      estatusValue: "en_reparto",
       mensajeroAsignadoId: "mensajero-7",
+      ayudaAbierta: true,
     });
   });
 
@@ -76,6 +87,7 @@ describe("Feature 266 · T3.1 — OrdenRepository.findParaHabilitacionApi", () =
     const res = await repoCon(prisma).findParaHabilitacionApi(NUM_GUIA, OWNER);
     expect(res?.mensajeroAsignadoId).toBeNull();
     expect(res?.estatusValue).toBe("devuelta");
+    expect(res?.ayudaAbierta).toBe(false); // la derivacion no la devolvio
   });
 
   it("el select esta ACOTADO: no pide montos ni la fila entera", async () => {

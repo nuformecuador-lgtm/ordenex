@@ -51,9 +51,19 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({
       deletedAt: null,
-      // Feature 235 (R26): la rama (b) barre los DOS estados. UNION, no sustitucion.
-      estatus: { value: { in: ["en_reparto", "ayuda_tienda"] } },
+      // Feature 235 (R26): la rama (b) barria los DOS estados. ⏳ 2026-09-23 (FICHA 454, R27): la
+      // ayuda deja de ser estado — una orden con ayuda abierta sigue `en_reparto` — y queda UNO.
+      estatus: { value: { in: ["en_reparto"] } },
       mensajeroAsignadoId: { not: null },
+      // FICHA 454 (R43): y sin las ordenes con gestion PENDIENTE de confirmar (literal: es el
+      // contrato; su semantica la mide `454/corte-excluye-pendientes-sql-real`).
+      gestiones: {
+        none: {
+          anuladaAt: null,
+          eventos: { some: { tipo: "gestion_registrada" } },
+          OR: [{ cierreId: null }, { cierre: { estado: { not: "aprobado" } } }],
+        },
+      },
     });
     expect(arg.distinct).toEqual(["mensajeroAsignadoId"]);
     expect(rows).toEqual([{ mensajeroId: "m2", zonaId: "z2" }]);
@@ -165,8 +175,11 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
 // debajo de donde fallaba. Se conserva —mide la ESCRITURA, que tambien hay que medir— y aqui se
 // añade la mitad que faltaba: la SELECCION.
 // =================================================================================================
-describe("235/R26 — la seleccion del corte alcanza `ayuda_tienda`", () => {
-  it("incluye al mensajero cuyo dia entero acabo en `ayuda_tienda`, SIN gestiones pendientes", async () => {
+// ⏳ 2026-09-23 (FICHA 454, R27): la ayuda deja de ser el estado `ayuda_tienda`: la orden con ayuda
+// abierta sigue `en_reparto`, y por eso la rama (b) la sigue pescando con UN solo estado. Lo que la
+// 235 protegia (el mensajero cuyo dia acabo con ayudas abiertas recibe su cierre) se conserva.
+describe("235/R26 → 454/R27 — la seleccion del corte alcanza la orden con ayuda abierta", () => {
+  it("incluye al mensajero cuyo dia entero acabo con ayudas ABIERTAS, SIN gestiones pendientes", async () => {
     const prisma = buildPrisma();
     // Rama (a) vacia a proposito: pedir ayuda no crea `gestion_orden`, asi que este mensajero solo
     // puede entrar por la rama (b). Es EL caso de la regresion.
@@ -181,7 +194,7 @@ describe("235/R26 — la seleccion del corte alcanza `ayuda_tienda`", () => {
     expect(rows).toEqual([{ mensajeroId: "m-ayuda", zonaId: "z9" }]);
   });
 
-  it("el predicado, aplicado a filas, pesca `en_reparto` Y `ayuda_tienda` y deja fuera el resto", async () => {
+  it("el predicado, aplicado a filas, pesca `en_reparto` (con o sin ayuda abierta) y deja fuera el resto", async () => {
     // El `where` es lo unico que decide (este doble no ejecuta SQL), asi que se le da semantica.
     // Sin esto, el caso de arriba pasaria igual con un `where` que trajera CUALQUIER orden.
     const prisma = buildPrisma();
@@ -193,16 +206,17 @@ describe("235/R26 — la seleccion del corte alcanza `ayuda_tienda`", () => {
     };
     const casa = (estatus: string) => where.estatus.value.in.includes(estatus);
 
-    // Los DOS que el corte barre.
+    // El que el corte barre (donde vive tambien la ayuda abierta).
     expect(casa("en_reparto")).toBe(true);
-    expect(casa("ayuda_tienda")).toBe(true);
+    // 454/R37: el estatus retirado NO se barre (no quedan ordenes ahi tras la migracion M3).
+    expect(casa("ayuda_tienda")).toBe(false);
     // Y los que NO: `por_recoger` es la guarda de la 109/R5 (el mensajero ni siquiera la recogio),
     // y los desenlaces ya estan cerrados.
     for (const fuera of ["por_recoger", "entregada", "sin_gestionar", "recolectando", "devuelta"]) {
       expect(casa(fuera), `${fuera} NO debe barrerse`).toBe(false);
     }
     // Censo CERRADO: ni uno mas. Un tercer estado aqui barreria trabajo que no toca.
-    expect([...where.estatus.value.in].sort()).toEqual(["ayuda_tienda", "en_reparto"]);
+    expect([...where.estatus.value.in].sort()).toEqual(["en_reparto"]);
   });
 
   it("UNION sin duplicar: el mensajero con gestiones Y una orden en ayuda aparece UNA vez", async () => {

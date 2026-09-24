@@ -10,7 +10,7 @@ import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/reposi
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 import {
-  ANCLAJE_DEVOLUCION,
+  APLICACION_GESTIONES,
   gestionOrdenSinDevoluciones,
 } from "@/tests/fixtures/anclaje-devolucion";
 
@@ -182,7 +182,7 @@ function aprobar(repo: CierresAdminRepository) {
     cierreId: "c1",
     alcance: ALCANCE_MAESTRO,
     nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // ficha 454 (T1.7): obligatorio al aprobar (sustituye al anclaje 239)
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
     resueltoPor: "adm-maestro",
     motivoRechazo: null,
@@ -305,7 +305,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // ficha 454 (T1.7): obligatorio al aprobar (sustituye al anclaje 239)
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,

@@ -222,7 +222,8 @@ describe("GestionOrdenRepository.sumMontoCobrarGestionadas (KPI 'Total a cobrar'
     // gestion PENDIENTE de confirmar (sigue `en_reparto` pero ya se gestiono y el portal no la cuenta
     // en `porCobrar`). La condicion pasa a un `OR` de las dos.
     const or = arg.where.OR as Record<string, unknown>[];
-    expect(or[0]).toEqual({ estatus: { value: { notIn: ["en_reparto", "ayuda_tienda"] } } });
+    // Y `ayuda_tienda` sale de la lista (R37): la orden con ayuda abierta sigue `en_reparto`.
+    expect(or[0]).toEqual({ estatus: { value: { notIn: ["en_reparto"] } } });
     expect(or[1]).toMatchObject({ estatus: { value: "en_reparto" } });
     expect(arg.where.mensajeroAsignadoId).toBe("m1");
     expect(arg.where.deletedAt).toBeNull();
@@ -230,7 +231,7 @@ describe("GestionOrdenRepository.sumMontoCobrarGestionadas (KPI 'Total a cobrar'
 
   // Feature 235 (R21): el predicado, aplicado a filas, para que el caso de arriba no afirme solo
   // una forma. Los dos estados «en la mano» quedan fuera; los desenlaces, dentro.
-  it("235/R21: el predicado deja fuera `en_reparto` Y `ayuda_tienda`, y deja dentro los desenlaces", async () => {
+  it("235/R21 → 454: el predicado deja fuera `en_reparto` (con o sin ayuda) y deja dentro los desenlaces", async () => {
     const { repo, aggregate } = repoConAggregate(null);
 
     await repo.sumMontoCobrarGestionadas("m1", DIA);
@@ -241,8 +242,7 @@ describe("GestionOrdenRepository.sumMontoCobrarGestionadas (KPI 'Total a cobrar'
     const cuenta = (estatus: string) => !arg.where.OR[0].estatus.value.notIn.includes(estatus);
 
     expect(cuenta("en_reparto")).toBe(false);
-    expect(cuenta("ayuda_tienda")).toBe(false);
-    for (const dentro of ["entregada", "reprogramada", "rechazada", "devolucion_por_confirmar"]) {
+    for (const dentro of ["entregada", "reprogramada", "rechazada", "devuelta", "incidente"]) {
       expect(cuenta(dentro), `${dentro} SI cuenta como gestionada del dia`).toBe(true);
     }
   });

@@ -13,7 +13,6 @@ import {
   compensarEvidencias,
   subirEvidenciasCompensadas,
 } from "@/lib/services/evidencias-compensadas";
-import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 // FEATURE 276 (T5, R1/R3/R4/R7): la MISMA regla y el MISMO motivo que el panel del mensajero. El
 // modulo del tope es puro y el motivo vive en `mensajes-bloqueo`: dos superficies, un solo texto.
 import { alcanzaElTope, permitidoEnElTope } from "@/lib/types/tope-intentos";

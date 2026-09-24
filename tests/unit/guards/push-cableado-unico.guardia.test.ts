@@ -204,8 +204,10 @@ const LISTA_BLANCA: readonly EntradaAutorizada[] = [
     ruta: "lib/notificaciones/emitir.ts",
     apariciones: 1,
     motivo:
-      "`emisorNotificacionReal` construye el suyo con `tx` para emitir DENTRO de la transaccion " +
-      "del cambio de estado. HOY ES INOFENSIVO POR DOS RAZONES INDEPENDIENTES, y ninguna es " +
+      // ⏳ 2026-09-23 (FICHA 454): el constructor se muda de `emisorNotificacionReal` (hoy no-op) a
+      // `emitirOrdenRechazadaEnTransaccion`, que llama el registro de la gestion. Mismo evento.
+      "`emitirOrdenRechazadaEnTransaccion` construye el suyo con `tx` para emitir DENTRO de la " +
+      "transaccion del registro de la gestion. HOY ES INOFENSIVO POR DOS RAZONES INDEPENDIENTES, y ninguna es " +
       "'nadie se acuerda': (a) el unico evento que emite es `orden_rechazada`, que NO es elegible " +
       "para push; y (b) el decorador se retira solo cuando hay `tx` (R27), asi que aunque pasara " +
       "por `repoReal()` tampoco empujaria. ⚠️ LO QUE ESTO SIGNIFICA PARA MANANA: el dia que un " +

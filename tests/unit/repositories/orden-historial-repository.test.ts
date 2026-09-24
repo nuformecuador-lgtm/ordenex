@@ -620,10 +620,11 @@ describe("el discriminador de las gestiones SINTETICAS (215/R12/R18-b/R34) [💰
     // INCLUSION — (1) la fila de historial de una familia de visita real, con el `ordenId` repetido,
     // y (2) el evento `gestion_registrada` de una gestion de calle del modelo nuevo. La intencion del
     // caso no cambia: un solo criterio y lista de INCLUSION (`in`, ningun `none`/`notIn`).
-    expect(where.OR[0].historialEstados).toEqual({
+    const via = (where as unknown as { OR: [{ historialEstados: unknown }, unknown] }).OR;
+    expect(via[0].historialEstados).toEqual({
       some: { ordenId: "o1", origenTipo: { in: ["gestion", "gestion_tienda_ayuda"] } },
     });
-    expect(where.OR[1]).toEqual({ eventos: { some: { tipo: "gestion_registrada" } } });
+    expect(via[1]).toEqual({ eventos: { some: { tipo: "gestion_registrada" } } });
     const json = JSON.stringify(where);
     expect(json).not.toContain("none");
     expect(json).not.toContain("notIn");

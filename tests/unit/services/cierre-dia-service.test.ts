@@ -107,6 +107,8 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     findGestionParaDeshacer: vi.fn(async () => gestionDeshacer()),
     findUltimaGestionNoAnuladaId: vi.fn(async () => "g1"),
     anularGestionYDevolverAGestion: vi.fn(async () => true),
+    // FICHA 454 (T1.11): la rama NUEVA del deshacer (gestion pendiente, sin transicion).
+    anularGestionPendiente: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -124,6 +126,7 @@ function gestionDeshacer(overrides: Partial<GestionDeshacerRow> = {}): GestionDe
     // Feature 237 (T5.5, D3): el default es «la registro el mensajero», que es el caso feliz del
     // deshacer. Los casos de la 237 lo ponen en `true`.
     desdeAyudaTienda: false,
+    registradaComoPendiente: false, // ficha 454 (T1.11): rama LEGADA del deshacer
     ...overrides,
   };
 }
@@ -210,9 +213,11 @@ describe("listarCierreDia — autorizacion y alcance (R1/R2)", () => {
     // Feature 246: y un TERCER argumento, el dia CR con el que se descarta lo reservado para
     // despues. `expect.any(Date)` basta aqui —este test es sobre el ACOTAMIENTO POR ACTOR—; que el
     // dia sea el correcto lo afirma el bloque «Feature 246» de mas abajo, con el reloj inyectado.
+    // ⏳ 2026-09-23 (FICHA 454, R37): `ayuda_tienda` sale de la lista. La ayuda deja de ser estado:
+    // la orden con ayuda abierta sigue `en_reparto`, que ya esta aqui y la cubre.
     expect(repo.contarOrdenesPendientesGestion).toHaveBeenCalledWith(
       "m1",
-      ["por_recoger", "en_reparto", "ayuda_tienda"],
+      ["por_recoger", "en_reparto"],
       expect.any(Date),
     );
     expect(repo.findCierresByMensajero).toHaveBeenCalledWith("m1");
@@ -2175,7 +2180,10 @@ describe("listarCierreDia — el DTO de gestion expone el desglose del recaudo (
 // NOMBRE. Eso es todo el cambio funcional, y estos casos son lo que lo vuelve auditable.
 // =================================================================================================
 describe("235 · el bloqueo del cierre (T4.1, R22/R23)", () => {
-  it("R23: la lista de estados pendientes NOMBRA `ayuda_tienda`", async () => {
+  // ⏳ 2026-09-23 (FICHA 454): la 235 temia que el bloqueo desapareciera «el dia que la orden dejara
+  // de estar en `en_reparto`». La 454 hace lo contrario: la orden con ayuda abierta VUELVE a estar
+  // `en_reparto`, que la lista nombra por su nombre. `ayuda_tienda` se retira (R37).
+  it("R23 → 454: la lista de estados pendientes NOMBRA `en_reparto` (donde vive la ayuda abierta)", async () => {
     // Se lee de la llamada real al repo, no de una constante importada: `ESTADOS_PENDIENTES` es
     // privado del modulo y afirmar una copia seria un espejo de si mismo.
     const { service, repo } = newService();
@@ -2184,9 +2192,10 @@ describe("235 · el bloqueo del cierre (T4.1, R22/R23)", () => {
 
     const estados = (repo.contarOrdenesPendientesGestion as ReturnType<typeof vi.fn>).mock
       .calls[0][1] as string[];
-    expect(estados).toContain("ayuda_tienda");
+    expect(estados).toContain("en_reparto");
+    expect(estados).not.toContain("ayuda_tienda");
     // Censo CERRADO: uno de mas bloquearia a mensajeros que no tienen nada en la mano.
-    expect(estados).toEqual(["por_recoger", "en_reparto", "ayuda_tienda"]);
+    expect(estados).toEqual(["por_recoger", "en_reparto"]);
   });
 
   it("R22: con una orden en `ayuda_tienda`, `solicitarCierre` devuelve conflict con motivo accionable", async () => {

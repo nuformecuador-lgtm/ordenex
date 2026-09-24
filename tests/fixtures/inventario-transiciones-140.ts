@@ -217,6 +217,14 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // Las dos vias conviven y la carrera entre ellas la cierra la guarda del `updateMany` (quien
   // llegue segundo obtiene count = 0 y no deja efectos), no una exclusion en el grafo.
   { n: "67", origen: "devuelta", destino: "rechazada", via: "rechazo_tienda", callSite: "RechazoTiendaService.rechazar -> GestionOrdenRepository.rechazarDesdeDevuelta (240)" },
+  // FICHA 454 (2026-09-23, design §2) — ALTA de `en_reparto -> devuelta` con familia
+  // `anclaje_devolucion`. Es el PAR de la vieja #14 (retirada por la 239), pero NO la reabre: la #14
+  // era la gestion del mensajero llevando a `devuelta` al instante; esta la produce SOLO la
+  // aprobacion del cierre, que es lo que la 239 pedia. Par NUEVO en el inventario vigente.
+  //
+  // Las BAJAS de la 454 (#59-#66 y las dos claves de los estados retirados) viajan con el retiro de
+  // los dos values del catalogo (T1.1/T1.24); ver `progress/impl_454_backend.md` §BLOQUEO-2.
+  { n: "70", origen: "en_reparto", destino: "devuelta", via: "anclaje_devolucion", callSite: "CierresAdminRepository.resolverCierre, bloque APLICACION DE GESTIONES (454)" },
 ];
 
 /**
@@ -267,7 +275,8 @@ export const RECUENTO_INVENTARIO = {
   // 2026-08-20 (feature 240): 61 -> 62. Suma UNA (#67) y NO retira NINGUNA.
   // 2026-08-24 (feature 276): 62 -> 63. Suma UNA (#68) y NO retira ninguna.
   // 2026-09-08 (ficha 398): 63 -> 64. Suma UNA (#69) y NO retira ninguna.
-  aristasFlujo: 64, // +2 (157); +3 -1 (239); +3 (235); +2 (237); +1 (240); +1 (276); +1 (398)
+  // 2026-09-23 (ficha 454): 64 -> 65. Suma UNA (#70); sus bajas van con el retiro del catalogo.
+  aristasFlujo: 65, // +2 (157); +3 -1 (239); +3 (235); +2 (237); +1 (240); +1 (276); +1 (398); +1 (454)
   // 52 -> 54 (239) -> 57 (235) -> 59 (237): las dos altas de la 237 son pares NUEVOS
   // (`ayuda_tienda -> reprogramada` y `ayuda_tienda -> rechazada`; ninguno estaba declarado, y
   // hasta la 237 de `ayuda_tienda` solo se salia rescatando o por el corte), igual que las tres de
@@ -291,6 +300,8 @@ export const RECUENTO_INVENTARIO = {
   // `entregada` solo se salia deshaciendo la gestion—, asi que la aritmetica de pares sigue a la de
   // aristas y la diferencia `aristas - pares` se queda en 3 (los duplicados #19/#23, #20/#24 y
   // #21/#67).
-  paresUnicos: 61,
+  // 2026-09-23 (ficha 454): 61 -> 62. La arista #70 (`en_reparto -> devuelta`) es un par NUEVO en
+  // el inventario vigente (su gemela #14 la retiro la 239), asi que la diferencia se queda en 3.
+  paresUnicos: 62,
   aristasCreacion: 2,
 } as const;

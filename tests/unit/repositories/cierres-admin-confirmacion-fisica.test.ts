@@ -379,17 +379,20 @@ describe("238/R18 — las dos guardas del WHERE, con su caso testigo cada una", 
   });
 
   it("R18: al lanzar, NADA de la aprobacion queda aplicado (la tx revierte entera)", async () => {
-    const base = buildBase(gestiones(), { "o-dev": APLICACION_GESTIONES.preEstadoId });
+    // ⏳ 2026-09-23 (FICHA 454): antes la orden estaba en el pre-estado y el ANCLAJE (239) iba
+    // DESPUES de este bloque, asi que «ni siquiera corria». Con la 454 la APLICACION va ANTES
+    // (design §7.1); lo que protege R18 es que el error propaga y la `$transaction` real revierte
+    // TODO —feeds, aprobacion y aplicacion—, cosa que este doble no emula y que se mide contra
+    // Postgres en `tests/integration/db/454/aplicacion-al-aprobar-sql-real.test.ts` (R11). Aqui el
+    // corpus es LEGADO (sin evento de registro): la aplicacion no toca nada y la orden sigue igual.
+    const base = buildBase(gestiones(), { "o-dev": idEstado("en_reparto") });
     const repo = makeRepo(base.prisma);
 
     await expect(aprobar(repo, [G_DEV, G_INC])).rejects.toBeInstanceOf(
       ConfirmacionFisicaNoAplicableError,
     );
 
-    // El bloque de ANCLAJE (239) va DESPUES de este, asi que al lanzar aqui ni siquiera corre: la
-    // orden se queda en el pre-estado y no hay fila de historial. Con `$transaction` real, ademas,
-    // se revertiria lo que hubiera pasado antes (los cinco feeds y la propia aprobacion).
-    expect(base.ordenes["o-dev"]).toBe(APLICACION_GESTIONES.preEstadoId);
+    expect(base.ordenes["o-dev"]).toBe(idEstado("en_reparto"));
     expect(base.prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 });
