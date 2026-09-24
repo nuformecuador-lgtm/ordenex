@@ -74,9 +74,24 @@ const CLASE_ENVIAR =
  * ningún `order_status.value` ni ningún resultado interno, y no empieza a conocerlos aquí. Tampoco
  * decide nada: solo lee la marca que el servidor puso.
  */
+//
+// Actualizado 2026-09-24 (decisión del humano, `progress/impl_454_datos.md` §2): el servidor
+// publica en la entrada pendiente el NOMBRE del resultado (`nombreResultado`: «Entregada»,
+// «Rechazada»…), y es ése el que se pinta —«Rechazada · pendiente de confirmación», no «No
+// entregado · …»—. Si una respuesta pendiente llegara sin él, cae a la etiqueta del hito.
 function textoEntrada(entrada: HitoPublicoEntrada): string {
   const etiqueta = ETIQUETA_POR_HITO[entrada.hito];
-  return entrada.pendiente === true ? textoPendienteConfirmacion(etiqueta) : etiqueta;
+  if (entrada.pendiente !== true) return etiqueta;
+  return textoPendienteConfirmacion(entrada.nombreResultado ?? etiqueta);
+}
+
+/** La cabecera: el hito vigente, o —si la última entrada está pendiente— su mismo texto (R20). */
+function textoCabecera(envio: {
+  readonly hitoVigente: HitoPublicoEntrada["hito"];
+  readonly linea: readonly HitoPublicoEntrada[];
+}): string {
+  const ultima = envio.linea.at(-1);
+  return ultima?.pendiente === true ? textoEntrada(ultima) : ETIQUETA_POR_HITO[envio.hitoVigente];
 }
 
 /**
@@ -283,9 +298,7 @@ export function RastreoDialog({ className, children, guiaInicial = null }: Rastr
               <span className="text-base font-semibold text-navy-deep">
                 {/* FICHA 454 (R31): el hito vigente ES la última entrada de la línea (R20); si esa
                     entrada está pendiente, la cabecera lo dice igual que la línea. */}
-                {envio.linea.at(-1)?.pendiente === true
-                  ? textoPendienteConfirmacion(ETIQUETA_POR_HITO[envio.hitoVigente])
-                  : ETIQUETA_POR_HITO[envio.hitoVigente]}
+                {textoCabecera(envio)}
               </span>
             </div>
 

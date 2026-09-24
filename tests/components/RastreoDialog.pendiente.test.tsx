@@ -8,6 +8,11 @@
 //
 // Los textos esperados se escriben A MANO: compararlos con la función que los genera los dejaría
 // verdes con cualquier contenido.
+//
+// ⏳ 2026-09-24 (FICHA 454, decisión del humano, `progress/impl_454_datos.md` §2): la entrada
+// pendiente trae además `nombreResultado` y el modal pinta ESE nombre («Entregada · …»,
+// «Rechazada · …») en vez de la etiqueta del hito («Entregado · …», «No entregado · …»). Los
+// literales de abajo pasan de «Entregado · pendiente…» a «Entregada · pendiente…».
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -31,7 +36,32 @@ const CON_PENDIENTE: ResultadoRastreoPublico = {
     linea: [
       { hito: "registrado", fecha: "2026-09-21T18:05-06:00" },
       { hito: "en_reparto", fecha: "2026-09-23T07:40-06:00" },
-      { hito: "entregado", fecha: "2026-09-23T15:00-06:00", pendiente: true },
+      {
+        hito: "entregado",
+        fecha: "2026-09-23T15:00-06:00",
+        pendiente: true,
+        nombreResultado: "Entregada",
+      },
+    ],
+  },
+};
+
+/** Rechazada pendiente: el hito público es «No entregado», el nombre es el del resultado. */
+const RECHAZADA_PENDIENTE: ResultadoRastreoPublico = {
+  estado: "ok",
+  envio: {
+    numGuia: 4321,
+    hitoVigente: "no_entregado",
+    actualizadoEn: "2026-09-23T15:00-06:00",
+    linea: [
+      { hito: "registrado", fecha: "2026-09-21T18:05-06:00" },
+      { hito: "en_reparto", fecha: "2026-09-23T07:40-06:00" },
+      {
+        hito: "no_entregado",
+        fecha: "2026-09-23T15:00-06:00",
+        pendiente: true,
+        nombreResultado: "Rechazada",
+      },
     ],
   },
 };
@@ -85,10 +115,22 @@ describe("454/R31 — el rastreo público muestra la gestión pendiente de confi
     ).toEqual([
       "Envío registrado2026-09-21 · 18:05",
       "En reparto2026-09-23 · 07:40",
-      "Entregado · pendiente de confirmación2026-09-23 · 15:00",
+      "Entregada · pendiente de confirmación2026-09-23 · 15:00",
     ]);
     // La cabecera (hito vigente) lo dice igual: son el mismo hito (R20).
-    expect(within(modal).getAllByText("Entregado · pendiente de confirmación")).toHaveLength(2);
+    expect(within(modal).getAllByText("Entregada · pendiente de confirmación")).toHaveLength(2);
+    // Y no la etiqueta del hito: el nombre es el del resultado.
+    expect(within(modal).queryByText("Entregado · pendiente de confirmación")).toBeNull();
+  });
+
+  it("rechazada pendiente: dice «Rechazada · pendiente de confirmación», no «No entregado · …»", async () => {
+    const modal = await consultarCon(RECHAZADA_PENDIENTE);
+
+    expect(within(modal).getAllByRole("listitem").at(-1)?.textContent).toBe(
+      "Rechazada · pendiente de confirmación2026-09-23 · 15:00",
+    );
+    expect(within(modal).getAllByText("Rechazada · pendiente de confirmación")).toHaveLength(2);
+    expect(within(modal).queryByText(/No entregado/)).toBeNull();
   });
 
   it("sin gestión pendiente (ya aprobada): el hito se lee como siempre, sin la coletilla", async () => {
@@ -101,6 +143,6 @@ describe("454/R31 — el rastreo público muestra la gestión pendiente de confi
   it("no expone nada del mensajero ni del motivo: solo el hito público y la fecha", async () => {
     const modal = await consultarCon(CON_PENDIENTE);
     const ultima = within(modal).getAllByRole("listitem").at(-1) as HTMLElement;
-    expect(ultima.textContent).toBe("Entregado · pendiente de confirmación2026-09-23 · 15:00");
+    expect(ultima.textContent).toBe("Entregada · pendiente de confirmación2026-09-23 · 15:00");
   });
 });

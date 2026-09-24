@@ -208,6 +208,16 @@ const ESTADO_EN_BODEGA = "en_bodega_central";
  */
 const MOTIVO_SIN_ACCIONES = BLOQUEO_SIN_AVISO;
 
+/**
+ * FICHA 454 (R54/R55) — una orden `en_reparto` con su gestión de calle ya registrada y el cierre
+ * del día sin aprobar NO se traspasa ni se le cambia el día: el servidor rechaza las dos cosas.
+ * Ofrecerlas llevaría a un botón que siempre termina en conflicto, así que la fila no se marca y
+ * el «!» dice por qué (a diferencia de `MOTIVO_SIN_ACCIONES`, aquí el bloqueo SÍ sorprende: la
+ * vecina `en_reparto` sin gestión se marca y ofrece las dos acciones).
+ */
+const MOTIVO_GESTION_PENDIENTE =
+  "Tiene una gestión pendiente de confirmación: no se puede traspasar ni cambiar el día hasta que se apruebe el cierre del mensajero.";
+
 // FICHA 355: aquí estaba `labelDe`, la tercera copia del mismo mapa de etiquetas. La
 // declaración compartida usa `estatusLabel` (`./estatus-label`), que lee ese mismo
 // `ORDER_STATUS_LABELS` y es lo que ya pinta el chip de la tabla.
@@ -665,7 +675,10 @@ export function OrdenesListado({
     onRun: abrirRecuperarEliminada,
   };
 
-  function accionesDe(estatusValue: string | undefined): AccionLote[] {
+  function accionesDe(
+    orden: Pick<OrdenListItemDTO, "estatusValue" | "gestionPendiente">,
+  ): AccionLote[] {
+    const estatusValue = orden.estatusValue;
     // FICHA 358 — LA PUERTA DE LAS ACCIONES DE FLUJO, en el único punto por el que salen todas.
     //
     // Hasta hoy `accionesLote` decidía dos cosas a la vez —«hay casillas» y «hay acciones de
@@ -754,8 +767,14 @@ export function OrdenesListado({
       // (`sin_gestionar`).
       // FICHA 454 (2026-09-23): el `case` de la ayuda a la tienda se va con su estado (R37); una
       // orden con ayuda abierta ESTÁ en `en_reparto` y sigue siendo traspasable (R28).
+      //
+      // FICHA 454 (R54/R55): salvo que tenga una gestión pendiente de confirmar —la señal la
+      // decide el servidor (`gestionPendiente`)—: entonces ninguna de las dos (el servidor las
+      // rechaza) y `bloqueoSeleccion` explica por qué. La de ayuda abierta NO entra aquí.
       case "en_reparto":
-        return [accionTraspasarMensajero, accionCambiarDia];
+        return orden.gestionPendiente != null
+          ? []
+          : [accionTraspasarMensajero, accionCambiarDia];
       // FICHA 371 — la orden ya no está en circulación: espera a la fecha de su reprogramación, y
       // esa fecha es lo ÚNICO que decide cuándo vuelve a la bodega. Si está equivocada, hasta hoy
       // no había forma de corregirla (este `case` no existía y el estado caía en el `default`).
@@ -1147,7 +1166,7 @@ export function OrdenesListado({
     //   - alguna fila con estado eliminable y el rol que puede borrar: "Eliminar" las alcanza.
     // Si no se cumple ninguna, la columna no se monta: casillas que no llevan a ningún botón.
     if (verEliminadas) return items.length > 0;
-    if (items.some((row) => accionesDe(row.estatusValue).length > 0)) return true;
+    if (items.some((row) => accionesDe(row).length > 0)) return true;
     return puedeEliminar && items.some((row) => row.eliminable === true);
   }
 
@@ -1174,10 +1193,13 @@ export function OrdenesListado({
     // —y no solo la primera, como antes del 2026-08-26— porque hoy "Eliminar" es una acción
     // más que puede ser la única de la fila.
     if (
-      accionesDe(value).length === 0 &&
+      accionesDe(row).length === 0 &&
       !(puedeEliminar && row.eliminable === true)
     ) {
-      return MOTIVO_SIN_ACCIONES;
+      // FICHA 454: si lo que la deja sin acciones es la gestión pendiente, se dice.
+      return accionesLote && value === "en_reparto" && row.gestionPendiente != null
+        ? MOTIVO_GESTION_PENDIENTE
+        : MOTIVO_SIN_ACCIONES;
     }
     if (value === ESTADO_DEVUELTA) {
       return row.zonaEsGam === true ? null : MOTIVO_DEVUELTA_NO_CENTRAL;
@@ -1215,7 +1237,7 @@ export function OrdenesListado({
       { accion: AccionLote; ordenes: OrdenListItemDTO[] }
     >();
     for (const orden of seleccionadas) {
-      for (const accion of accionesDe(orden.estatusValue)) {
+      for (const accion of accionesDe(orden)) {
         const entrada = porKey.get(accion.key);
         if (entrada) entrada.ordenes.push(orden);
         else porKey.set(accion.key, { accion, ordenes: [orden] });

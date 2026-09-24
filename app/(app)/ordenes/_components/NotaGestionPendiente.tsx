@@ -2,6 +2,7 @@ import type { GestionResultado } from "@prisma/client";
 
 import { NOTA_AYUDA_SOLICITADA } from "@/components/shared/nota-pendiente-confirmacion";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 import { notaGestionPendiente } from "./estatus-label";
 
@@ -24,19 +25,18 @@ export interface NotaGestionPendienteProps {
   resultadoPendiente: GestionResultado | null;
   /** `true` si la orden tiene una ayuda a la tienda abierta. */
   ayudaAbierta?: boolean;
+  /** Clases extra de colocación (p. ej. `self-start` dentro de un contenedor en columna). */
+  className?: string;
 }
 
 /**
- * @sin-superficie espera su dato: el DTO del listado de `/ordenes` (y el de la satélite) todavía no
- * trae la gestión pendiente ni la ayuda abierta de cada fila (design §11 U9: «el DTO del listado
- * gana `gestionPendiente: { resultado } | null`»), y derivarlas en el cliente sería una segunda
- * definición del predicado. Queda devuelto como BLOQUEO de la fase 2 de la 454
- * (`progress/impl_454_frontend.md`). La anotación CADUCA: se retira al montarlo junto al
- * `EstatusBadge` de `OrdenesListado` y `SateliteOrdenesListado`.
+ * Montado junto al `EstatusBadge` en la columna «Estado» compartida (`ordenes-columns.tsx`, que
+ * pintan `/ordenes` y la bodega satélite) y en el detalle de la orden (`HistorialOrdenSheet`).
  */
 export function NotaGestionPendiente({
   resultadoPendiente,
   ayudaAbierta = false,
+  className,
 }: NotaGestionPendienteProps) {
   const texto =
     resultadoPendiente !== null
@@ -46,7 +46,7 @@ export function NotaGestionPendiente({
         : null;
   if (texto === null) return null;
   return (
-    <Badge variant="outline" className="font-normal">
+    <Badge variant="outline" className={cn("font-normal", className)}>
       {texto}
     </Badge>
   );
