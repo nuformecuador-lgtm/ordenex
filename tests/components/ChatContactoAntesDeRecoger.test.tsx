@@ -256,7 +256,7 @@ describe("(1) la orden asignada y sin recoger YA tiene conversación", () => {
   it("la cabecera cuenta TODAS las asignadas, no solo las de reparto", async () => {
     const modal = await chatDesdeReparto();
 
-    expect(within(modal).getByText("3 asignadas")).toBeInTheDocument();
+    expect(within(modal).getByText("3 asignados")).toBeInTheDocument();
   });
 
   it("cada grupo tiene su sección, así lo de hoy no se mezcla con lo de otro día", async () => {
@@ -421,7 +421,7 @@ describe("(5) «Por recoger» monta el MISMO chat, con la MISMA lista", () => {
     expect(fila(modal, "Ana Ya Recogida")).toBeInTheDocument();
     expect(fila(modal, "Carlos Sin Recoger")).toBeInTheDocument();
     expect(fila(modal, "Diana Para Mañana")).toBeInTheDocument();
-    expect(within(modal).getByText("3 asignadas")).toBeInTheDocument();
+    expect(within(modal).getByText("3 asignados")).toBeInTheDocument();
   });
 
   it("y la marca del día viaja con ella: no depende de desde qué pantalla se abra", async () => {

@@ -188,7 +188,7 @@ function pintar(
 
 /** La sección nueva, localizada por su NOMBRE ACCESIBLE (nunca por una clase). */
 function seccion(): HTMLElement {
-  return screen.getByRole("region", { name: "Órdenes sin gestionar" });
+  return screen.getByRole("region", { name: "Pasaron a Novedad interna" });
 }
 
 /**
@@ -312,7 +312,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
   it("R15: registrado y sin ninguna orden ⇒ la sección NO está en el DOM", () => {
     pintar([], true);
     expect(
-      screen.queryByRole("region", { name: "Órdenes sin gestionar" }),
+      screen.queryByRole("region", { name: "Pasaron a Novedad interna" }),
       "con la marca en `true` y cero órdenes, la lectura correcta es «no hubo ninguna» y eso se " +
         "dice callando: la sección no se pinta",
     ).toBeNull();
@@ -323,7 +323,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
     const s = seccion();
     expect(
       within(s).getByText(
-        "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.",
+        "Este cierre es anterior al registro de las órdenes que pasan a Novedad interna: no se conserva la lista.",
       ),
     ).toBeInTheDocument();
   });
@@ -353,7 +353,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
 
     pintar([], true);
     const sinSeccion = screen.queryByRole("region", {
-      name: "Órdenes sin gestionar",
+      name: "Pasaron a Novedad interna",
     });
 
     expect(
@@ -368,7 +368,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
     const s = seccion();
     expect(
       within(s).getByText(
-        "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.",
+        "Este cierre es anterior al registro de las órdenes que pasan a Novedad interna: no se conserva la lista.",
       ),
     ).toBeInTheDocument();
     expect(within(s).queryAllByRole("listitem")).toHaveLength(0);

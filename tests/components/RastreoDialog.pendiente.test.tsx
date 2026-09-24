@@ -227,3 +227,35 @@ describe("455/R31 · R34 · T2.8 — el destinatario ve los mismos nombres que l
     expect(modal.textContent).not.toMatch(/ayuda_tienda|devolucion_por_confirmar|estado retirado/);
   });
 });
+
+// FICHA 455 (2026-09-24, recorrido F9): la clave de cada entrada era `nombre-fecha`, y una entrada
+// confirmada y la pendiente del mismo instante chocaban («Encountered two children with the same
+// key»). El servicio ya no publica las dos (test contra Postgres real en
+// `tests/integration/db/455/rastreo-retirado-y-pendiente-sql-real.test.ts`); la página, además, no
+// puede volver a duplicar una clave aunque le llegue una línea así.
+describe("455/F9 — la línea no repite claves aunque dos entradas compartan nombre y fecha", () => {
+  it("pinta las dos y React no avisa de una clave duplicada", async () => {
+    const avisos = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const modal = await consultarCon({
+        estado: "ok",
+        envio: {
+          numGuia: 4321,
+          nombreVigente: "Novedad",
+          actualizadoEn: "2026-08-20T17:48-06:00",
+          linea: [
+            { nombre: "Novedad", fecha: "2026-08-20T17:48-06:00" },
+            { nombre: "Novedad", fecha: "2026-08-20T17:48-06:00", pendiente: true },
+          ],
+        },
+      });
+      expect(within(modal).getAllByRole("listitem")).toHaveLength(2);
+      const duplicada = avisos.mock.calls.some((args) =>
+        args.some((a) => typeof a === "string" && /same key/i.test(a)),
+      );
+      expect(duplicada, "React avisó de una clave duplicada en la línea del rastreo").toBe(false);
+    } finally {
+      avisos.mockRestore();
+    }
+  });
+});

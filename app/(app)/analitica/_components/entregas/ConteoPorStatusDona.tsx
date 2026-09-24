@@ -40,7 +40,7 @@ import {
 } from "../operativo/textos";
 import { CLAVE_TABLERO } from "../operativo/PanelOperativo";
 
-const TITULO = "Detalle de las ordenes";
+const TITULO = "Detalle de las órdenes";
 
 /** La unidad del formateador: son ordenes contadas, no dinero ni porcentaje. */
 const UNIDAD = "conteo";

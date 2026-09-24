@@ -11,6 +11,7 @@ import {
 } from "@/lib/utils/dia-reparto-textos";
 
 import { estatusLabel, resultadoLabel } from "./estatus-label";
+import { motivoVisible } from "./motivo-historial";
 
 // Feature 49 (T6.1, R29/R30) — linea de tiempo de PRESENTACION pura del historial de una
 // orden. Recibe las entradas ya resueltas por PROPS (R28: no fetchea por si mismo) y las
@@ -180,7 +181,9 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
                 </p>
                 {sello}
                 <p className="text-xs text-muted-foreground">Por {actor}</p>
-                {entrada.motivo ? <p className="text-sm">Motivo: {entrada.motivo}</p> : null}
+                {/* FICHA 455 (F10): el motivo de las migraciones de retiro llega con el código
+                    crudo; `motivoVisible` lo nombra con el formato de R11. */}
+                {entrada.motivo ? <p className="text-sm">Motivo: {motivoVisible(entrada.motivo)}</p> : null}
               </li>
             );
           }

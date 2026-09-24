@@ -365,13 +365,13 @@ describe("OrdenesListado — catálogo no autorizado (R20)", () => {
   });
 });
 
-// FICHA 367 — "Reprogramada para" (antes "Liberada el") es SIEMPRE visible en el
+// FICHA 367 — "Reprogramado para" (antes "Liberada el") es SIEMPRE visible en el
 // listado. El dato (`fechaReprogramacion`) viaja en TODAS las filas desde el repo
 // (gestión `reprogramada` vigente no anulada), así que la columna deja de estar
 // atada a que el filtro esté acotado a exactamente el estado `reprogramada`. Antes
 // de esta ficha desaparecía sin filtro, mezclando estados, y en cuanto el cron de
 // liberación sacaba la orden de `reprogramada` no se volvía a ver nunca.
-describe("OrdenesListado — columna 'Reprogramada para' siempre visible", () => {
+describe("OrdenesListado — columna 'Reprogramado para' siempre visible", () => {
   // Catálogo propio: el CATALOGO compartido fija el número de opciones que asertan
   // otros tests (R13/R14), así que `reprogramada` se añade solo aquí.
   const CATALOGO_CON_REPROGRAMADA = [
@@ -397,7 +397,7 @@ describe("OrdenesListado — columna 'Reprogramada para' siempre visible", () =>
     renderListado(<OrdenesListado />);
 
     expect(
-      await screen.findByRole("columnheader", { name: "Reprogramada para" }),
+      await screen.findByRole("columnheader", { name: "Reprogramado para" }),
     ).toBeInTheDocument();
     expect(await screen.findByText("2026-07-20")).toBeInTheDocument();
   });
@@ -410,7 +410,7 @@ describe("OrdenesListado — columna 'Reprogramada para' siempre visible", () =>
     await user.click(screen.getByRole("option", { name: /reprogramado/i }));
 
     expect(
-      await screen.findByRole("columnheader", { name: "Reprogramada para" }),
+      await screen.findByRole("columnheader", { name: "Reprogramado para" }),
     ).toBeInTheDocument();
     expect(await screen.findByText("2026-07-20")).toBeInTheDocument();
   });
@@ -421,13 +421,13 @@ describe("OrdenesListado — columna 'Reprogramada para' siempre visible", () =>
     await abrirFiltro(user);
 
     await user.click(screen.getByRole("option", { name: /reprogramado/i }));
-    await screen.findByRole("columnheader", { name: "Reprogramada para" });
+    await screen.findByRole("columnheader", { name: "Reprogramado para" });
     await user.click(screen.getByRole("option", { name: OPT_ENTREGADA }));
 
     // Ya no depende de que el filtro esté acotado a un único estado: sigue montada.
     await waitFor(() =>
       expect(
-        screen.getByRole("columnheader", { name: "Reprogramada para" }),
+        screen.getByRole("columnheader", { name: "Reprogramado para" }),
       ).toBeInTheDocument(),
     );
   });

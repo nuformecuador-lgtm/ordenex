@@ -160,12 +160,12 @@ describe("los grupos: lo que el mensajero tiene en la mano decide el sitio", () 
 
 describe("los textos de la cabecera", () => {
   it("el contador concuerda en singular", () => {
-    expect(contadorContactos(1)).toBe("1 asignada");
+    expect(contadorContactos(1)).toBe("1 asignado");
   });
 
   it("y en plural", () => {
-    expect(contadorContactos(0)).toBe("0 asignadas");
-    expect(contadorContactos(4)).toBe("4 asignadas");
+    expect(contadorContactos(0)).toBe("0 asignados");
+    expect(contadorContactos(4)).toBe("4 asignados");
   });
 
   it("ya no dice «en reparto»: con esta ficha la lista deja de ser solo de reparto", () => {

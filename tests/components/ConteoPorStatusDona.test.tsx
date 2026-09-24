@@ -73,6 +73,9 @@ describe("Dona por estado — los segmentos", () => {
     expect(await screen.findByText(/Entregado: 20/)).toBeInTheDocument();
     expect(screen.getByText(/En reparto: 8/)).toBeInTheDocument();
     expect(screen.getByText(/Novedad: 2/)).toBeInTheDocument();
+    // FICHA 455 (recorrido F5): el título iba sin tilde («Detalle de las ordenes»).
+    expect(document.body.textContent ?? "").toContain("Detalle de las órdenes · 30");
+    expect(document.body.textContent ?? "").not.toContain("de las ordenes");
   });
 
   // Los buckets vacíos no viajan (decisión del 2026-08-18), así que la dona no puede inventar

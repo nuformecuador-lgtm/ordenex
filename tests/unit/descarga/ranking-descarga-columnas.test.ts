@@ -26,7 +26,7 @@ import { COLUMNAS_DESCARGA_RANKING } from "@/app/(app)/ranking/_components/ranki
 //   viaja SIN el símbolo `%` (es el STRING del servidor), así que la unidad la dice el
 //   encabezado y solo el encabezado: si alguien lo reescribe, la columna deja de decir qué es.
 // - «Entregadas» y «Asignadas» NO son rótulos de la tabla: la pantalla pinta una sola celda
-//   «Entregadas / asignadas» con `5/5`, y el archivo la parte en dos números crudos (R7).
+//   «Entregados / asignados» con `5/5`, y el archivo la parte en dos números crudos (R7).
 //   Son los dos únicos encabezados de esta constante que no tienen gemelo en pantalla.
 //
 // Lo que la constante NO lleva, y este caso también sujeta: ni `mensajeroId` (uuid interno,
@@ -46,7 +46,7 @@ describe("orden de las columnas de descarga del ranking del día", () => {
       "Mensajero",
       "% del día",
       "Entregado",
-      "Asignadas",
+      "Asignados",
     ]);
   });
 });

@@ -134,7 +134,7 @@ describe("NovedadesTabs — las tres superficies (236/R1/R13)", () => {
     ).toEqual([
       "Ayuda solicitada",
       "Novedad",
-      "Rechazadas por plazo vencido",
+      "Devolución a origen por plazo vencido",
     ]);
   });
 

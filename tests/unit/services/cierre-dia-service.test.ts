@@ -2208,7 +2208,11 @@ describe("235 · el bloqueo del cierre (T4.1, R22/R23)", () => {
 
     expect(r.status).toBe("conflict");
     if (r.status !== "conflict") return;
-    expect(r.motivo).toContain("gestionalas antes de cerrar");
+    expect(r.motivo).toContain("gestionalos antes de cerrar");
+    // FICHA 455 (recorrido F3): sin «sin gestionar» (nombre retirado de `novedad_interna`) y con tildes.
+    expect(r.motivo).toBe(
+      "Tenés paquetes en reparto que todavía no gestionaste; gestionalos antes de cerrar.",
+    );
     // Sin PII (R46): el motivo no nombra la orden, ni al mensajero, ni al cierre.
     expect(r.motivo).not.toMatch(/m1|o1|c1/);
     expect(repo.crearCierre).not.toHaveBeenCalled();
@@ -2227,7 +2231,7 @@ describe("235 · el bloqueo del cierre (T4.1, R22/R23)", () => {
     expect(r.puedesSolicitar).toBe(false);
     // Los dos consumidores de la lista dicen lo mismo: el gate y la precondicion. Si divergieran,
     // el boton estaria activo y la accion fallaria al pulsarlo.
-    expect(r.motivoBloqueo).toContain("gestionalas antes de cerrar");
+    expect(r.motivoBloqueo).toContain("gestionalos antes de cerrar");
   });
 });
 

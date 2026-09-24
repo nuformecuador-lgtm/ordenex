@@ -103,7 +103,7 @@ export interface RecogerModuleProps {
 // Feature 114: textos del buscador (separados para i18n futura, lenguaje claro). La
 // región y la etiqueta del campo son DISTINTAS a propósito: si coincidieran, el nombre
 // accesible del `searchbox` (de su `<label>`) chocaría con el de la región.
-const BUSCADOR_REGION = "Buscar guías por recoger";
+const BUSCADOR_REGION = "Buscar guías para recoger";
 const BUSCADOR_LABEL = "Buscar guías";
 const BUSCADOR_PLACEHOLDER =
   "Filtra por número de guía, remisión, teléfono o nombre";
@@ -111,10 +111,10 @@ const BUSCADOR_PLACEHOLDER =
 // Feature 277 (R28): los nombres accesibles de esta pantalla son los TRES distintos —la región
 // sigue siendo «Por recoger», el buscador conserva el suyo y el grupo de pestañas estrena el de
 // abajo—. Si coincidieran, el nombre accesible de uno chocaría con el de otro.
-const TABLIST_LABEL = "Grupos de órdenes por recoger";
+const TABLIST_LABEL = "Grupos de órdenes para recoger";
 // Y los dos listados también se llaman distinto: sin esto, saber en qué grupo estás dependería de
 // mirar cuál pestaña se ve resaltada. El del grupo de hoy CONSERVA su nombre de siempre.
-const LISTADO_HOY_LABEL = "Órdenes por recoger";
+const LISTADO_HOY_LABEL = "Órdenes para recoger";
 const LISTADO_OTRO_DIA_LABEL = "Órdenes para otro día";
 
 /** Cuál de los dos grupos tiene el mensajero a la vista. */

@@ -1394,7 +1394,10 @@ const FOOTER_RECAUDADO_LABEL = "Total recaudado";
 const FOOTER_ENTREGAS_LABEL = "entregas";
 
 // --- Feature 264: rótulos de la sección de órdenes SIN GESTIONAR (i18n-ready) ---
-const SIN_GESTION_TITULO = "Órdenes sin gestionar";
+// FICHA 455 (2026-09-24): «Sin gestionar» es el nombre RETIRADO de `novedad_interna`, el estado al
+// que el corte pasa estas órdenes; el rótulo lo nombra con su nombre vigente, leído de la fuente.
+const NOVEDAD_INTERNA = nombreDeEstado("novedad_interna");
+const SIN_GESTION_TITULO = `Pasaron a ${NOVEDAD_INTERNA}`;
 /**
  * R17 — la nota fija. Dice las dos cosas que hacen falta para leer la sección sin equivocarse:
  * de dónde salieron estas órdenes (el corte del día) y por qué no tienen ni una columna de
@@ -1408,9 +1411,9 @@ const SIN_GESTION_NOTA =
  * la razón de existir de `sinGestionRegistrado`.
  */
 const SIN_GESTION_NO_REGISTRADO =
-  "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.";
+  `Este cierre es anterior al registro de las órdenes que pasan a ${NOVEDAD_INTERNA}: no se conserva la lista.`;
 /** Nombre accesible de la lista, para que su recuento no dependa de una clase. */
-const SIN_GESTION_LISTA_LABEL = "Lista de órdenes sin gestionar";
+const SIN_GESTION_LISTA_LABEL = `Lista de órdenes que pasaron a ${NOVEDAD_INTERNA}`;
 
 /**
  * [Q6/R32] El estado del que la orden SALIÓ, traducido. Distingue el paquete que se quedó en la

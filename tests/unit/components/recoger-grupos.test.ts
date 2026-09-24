@@ -154,10 +154,10 @@ describe("separarPorDia — los dos grupos de «Por recoger» (277/R2-R5)", () =
 
 describe("Los textos de la partición (277/R10/R11/R25/R26/R29)", () => {
   it("los vacíos, literales a mano, y distintos entre sí", () => {
-    expect(VACIO_GRUPO_HOY).toBe("No hay órdenes por recoger hoy.");
+    expect(VACIO_GRUPO_HOY).toBe("No hay órdenes para recoger hoy.");
     expect(VACIO_GRUPO_OTRO_DIA).toBe("No hay órdenes para otro día.");
     expect(SIN_RESULTADOS_RECOGER).toBe(
-      "Ninguna guía por recoger coincide con la búsqueda.",
+      "Ninguna guía para recoger coincide con la búsqueda.",
     );
     // R10: el vacío por no tener órdenes y el vacío por una búsqueda sin coincidencias no pueden
     // leerse igual, o el mensajero no sabría si le falta trabajo o le sobra filtro.
@@ -167,10 +167,10 @@ describe("Los textos de la partición (277/R10/R11/R25/R26/R29)", () => {
     ).toBe(3);
   });
 
-  it("R29: el contador concuerda — «1 orden nueva asignada» / «2 órdenes nuevas asignadas»", () => {
-    expect(contadorNuevasAsignadas(1)).toBe("1 orden nueva asignada");
-    expect(contadorNuevasAsignadas(2)).toBe("2 órdenes nuevas asignadas");
-    expect(contadorNuevasAsignadas(7)).toBe("7 órdenes nuevas asignadas");
+  it("R29: el contador concuerda — «1 orden nueva para recoger» / «2 órdenes nuevas para recoger»", () => {
+    expect(contadorNuevasAsignadas(1)).toBe("1 orden nueva para recoger");
+    expect(contadorNuevasAsignadas(2)).toBe("2 órdenes nuevas para recoger");
+    expect(contadorNuevasAsignadas(7)).toBe("7 órdenes nuevas para recoger");
   });
 
   it("R11/R29: el puntero sin búsqueda cuenta ÓRDENES, y concuerda", () => {

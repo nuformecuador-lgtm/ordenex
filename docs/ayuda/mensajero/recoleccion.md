@@ -27,7 +27,7 @@ Igual que en Recoger en bodega, dos formas y las dos valen:
 
 Elegís el paquete, confirmás la recolección y queda registrado a tu nombre.
 
-## Recolectadas hoy
+## Recogidos en tienda hoy
 
 Debajo tenés la lista de **lo que llevás recolectado hoy**, para que puedas comprobar de un vistazo
 que no se te quedó nada y que no contaste dos veces lo mismo.

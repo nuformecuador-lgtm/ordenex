@@ -434,9 +434,9 @@ export const PREMIOS_RANKING = {
    * una raya.
    */
   entregadasAsignadas: (entregadas: number, asignadas: number) =>
-    `${entregadas} / ${asignadas} entregadas`,
+    `${entregadas} / ${asignadas} entregados`,
   entregadasAyuda:
-    "Entregadas de asignadas ese día. Quien no entregó nada no ocupa podio ni cobra premio.",
+    "Entregados de asignados ese día. Quien no entregó nada no ocupa podio ni cobra premio.",
   /** R7/R9 — la fila no tenía premio congelado ese día. */
   sinPremio: "Sin premio asignado ese día.",
   /**

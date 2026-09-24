@@ -157,7 +157,7 @@ describe("Las tarjetas de efectividad", () => {
     expect(screen.getByText("Efectividad de entrega")).toBeInTheDocument();
     expect(screen.getByText("de 100 órdenes cargadas")).toBeInTheDocument();
     expect(
-      screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 100 órdenes)"),
+      screen.getByText("Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 100 órdenes)"),
     ).toBeInTheDocument();
     // Las dos tarjetas de CONTEO no llevan base: su cifra ya ES un conteo de órdenes, y un
     // «(100 órdenes)» junto a un «60» sería el denominador de nada.
@@ -249,7 +249,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
 
     expect(await screen.findByText("de 100 órdenes cargadas")).toBeInTheDocument();
     expect(
-      screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 100 órdenes)"),
+      screen.getByText("Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 100 órdenes)"),
     ).toBeInTheDocument();
     // 30/100. El `total` del DTO no aparece por ningún lado.
     expect(screen.getAllByText(/30\s?%/).length).toBeGreaterThan(0);
@@ -273,7 +273,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
     renderKpis();
 
     expect(
-      await screen.findByText("Efectividad de la gestión (entregadas y rechazadas de 877 órdenes)"),
+      await screen.findByText("Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 877 órdenes)"),
     ).toBeInTheDocument();
     expect(screen.getByText(/38,7\s?%/)).toBeInTheDocument();
     // Las dos bases son la MISMA cifra —877 aquí y 877 en el héroe— aunque desde la ficha 441
@@ -312,7 +312,7 @@ describe("La base de los porcentajes — de dónde sale", () => {
 
     expect(await screen.findByText("de 1 orden cargada")).toBeInTheDocument();
     expect(
-      screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 1 orden)"),
+      screen.getByText("Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 1 orden)"),
     ).toBeInTheDocument();
     // ⚠ Y CON UNA SOLA ORDEN NO HAY PORCENTAJE (ficha 441): una orden vale 100 puntos. El héroe
     // enseña las órdenes —«1 entregada de 1 orden»— y la tarjeta de gestión comparte el veto
@@ -375,7 +375,7 @@ describe("La base de los porcentajes — cuándo NO se escribe", () => {
 
     expect(await screen.findByText("de 0 órdenes cargadas")).toBeInTheDocument();
     expect(
-      screen.getByText("Efectividad de la gestión (entregadas y rechazadas de 0 órdenes)"),
+      screen.getByText("Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 0 órdenes)"),
     ).toBeInTheDocument();
     // La CIFRA no se escribe: un «0 %» afirmaría que se falló cada entrega. En el héroe, además,
     // tampoco es un guion — es una frase (ficha 441), porque un `null` mudo se lee como «no se

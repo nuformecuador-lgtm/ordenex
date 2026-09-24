@@ -86,13 +86,13 @@ describe("los rótulos del tablero operativo — la otra mitad del texto visible
     // El `titulo` es el nombre accesible de la región (`GraficaMarco` lo usa como `aria-label`):
     // es lo que el maestro lee como encabezado del panel Y lo que un lector de pantalla anuncia.
     // Dos NO son etiquetas de métrica y por eso no salen del catálogo ni pueden cruzarse con él:
-    // «Resultado de las gestiones» (el panel junta cuatro) y «Órdenes sin gestionar» (la métrica
+    // «Resultado de las gestiones» (el panel junta cuatro) y «Órdenes en Novedad interna» (la métrica
     // se llama «Novedad interna» —FICHA 455, antes «Sin gestionar»—; el panel la describe).
     expect(PANELES_OPERATIVOS.map((p) => p.titulo)).toEqual([
       "Órdenes creadas",
       "Órdenes por estado",
       "Resultado de las gestiones",
-      "Órdenes sin gestionar",
+      "Órdenes en Novedad interna",
       "Tasa de entrega",
       "Tiempo de ciclo",
     ]);

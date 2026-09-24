@@ -306,7 +306,9 @@ describe("R10 · novedad_interna se describe como del dia, no como acumulada", (
     // frase lo dejaria pasar.
     if (tokens.includes("dia")) {
       expect(
-        /\bsin gestionar\s+(?:hoy|de hoy|del dia)\b/.test(descripcion),
+        // FICHA 455 (2026-09-24, recorrido F3): la descripcion nombra la metrica por su nombre
+        // vigente («en Novedad interna HOY»); «sin gestionar» es un nombre retirado.
+        /\ben novedad interna\s+(?:hoy|de hoy|del dia)\b/.test(descripcion),
         "novedad_interna no se describe como del dia (HOY) junto al nombre de la metrica",
       ).toBe(true);
     }

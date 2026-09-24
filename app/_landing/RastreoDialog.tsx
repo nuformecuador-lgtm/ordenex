@@ -293,8 +293,13 @@ export function RastreoDialog({ className, children, guiaInicial = null }: Rastr
             </div>
 
             <ol className="flex flex-col gap-2">
-              {envio.linea.map((entrada) => (
-                <li key={`${entrada.nombre}-${entrada.fecha}`} className="flex items-start gap-2">
+              {/* FICHA 455 (recorrido F9): la clave lleva la posición y la marca de pendiente; con
+                  nombre + fecha, una entrada confirmada y la pendiente del mismo instante chocaban. */}
+              {envio.linea.map((entrada, i) => (
+                <li
+                  key={`${i}-${entrada.nombre}-${entrada.fecha}-${entrada.pendiente === true ? "p" : "c"}`}
+                  className="flex items-start gap-2"
+                >
                   <span
                     aria-hidden="true"
                     className="mt-1.5 size-2 shrink-0 rounded-full bg-brand"

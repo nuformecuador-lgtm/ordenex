@@ -27,7 +27,8 @@ la dirección no aparece, el cliente no estaba. Vos tenés el dato que falta.
 **Novedad.** Órdenes en estado **Novedad**: el mensajero no pudo entregarlas, y aparecen con la causa.
 Vos decidís si se vuelve a intentar o se devuelven.
 
-**Rechazadas por plazo vencido.** Las que se pasaron del plazo sin resolverse. Es una lista de consulta:
+**Devolución a origen por plazo vencido.** Las que se pasaron del plazo sin resolverse y pasaron a
+**Devolución a origen por rechazo**. Es una lista de consulta:
 se mira para saber qué pasó, no se actúa desde ahí.
 
 ## Qué podés hacer

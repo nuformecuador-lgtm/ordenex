@@ -20,7 +20,7 @@ import { ContadoresTablero } from "./ContadoresTablero";
 import { DENSIDAD_INICIAL, type DensidadTablero } from "./densidad";
 import { iniciales } from "./filtrar-mensajeros";
 
-const ETIQUETA_ASIGNADAS = "Asignadas";
+const ETIQUETA_ASIGNADAS = "Asignados";
 /** Se lee con lector de pantalla como parte del nombre accesible del control. */
 const ACCION_TARJETA = "ver el detalle de sus órdenes de hoy";
 /** Prefijo del nombre accesible de la barra de composicion de ESTA tarjeta (R68). */

@@ -123,7 +123,7 @@ con nota fechada.
 - [x] **T1.8 — Contrato publicado** (§5.3): `openapi-spec.ts` derivado + `.yaml` espejo + Postman + entrada del
   CHANGELOG + `docs/ayuda/oficina/configuracion-api.md` + `docs/api/manual-metricas-por-mensajero.md`.
   Dep: T1.6, T1.7. **Hecho:** tests de contrato verdes; G5 verde; el CHANGELOG contiene la tabla de 7+4 filas.
-- [ ] **T1.9 — Rastreo público** (⛔ 2026-09-24: BLOQUEO-1 de `progress/impl_455_backend.md`, el DTO exige tocar `app/_landing/RastreoDialog.tsx`) (§4): DTO de nombres, fusión de tramos, retirados plegados al equivalente,
+- [x] **T1.9 — Rastreo público** (2026-09-24: hecho; el BLOQUEO-1 de `progress/impl_455_backend.md` lo cerró la Fase 2 en `app/_landing/RastreoDialog.tsx`, y el recorrido F9 lo afinó en `progress/impl_455_fix.md`) (§4): DTO de nombres, fusión de tramos, retirados plegados al equivalente,
   pendiente 454 con `SENAL_PENDIENTE`; `rastreo-sin-estatus-crudo.guardia` y `rastreo-hitos-exhaustivo.guardia`
   reescritas con fecha (la segunda se retira o pasa a afirmar la ausencia de hitos). `[P]` con T1.6-T1.8.
   **Hecho:** R31-R34 verdes; C13 invariante intacto.
@@ -139,7 +139,7 @@ con nota fechada.
 - [x] **T1.12 (parte lib; la columna que pinta el snapshot es UI, C16 [INTERMEDIO] pasa a la Fase 2) — Snapshots y URLs internas** (§2.2, §3.4): `codigoVigente` en el lector de
   `historial_accion.valor_*` y en el parser del parámetro `estado` de la bodega satélite (y los demás de T0.3).
   **Hecho:** R22, R23 verdes; C02 y C16 `[INTERMEDIO]` reescritos.
-- [ ] **T1.13 — Cierre de la Fase 1.** `./init.sh` completo verde (`INIT_EXIT=0` escrito dentro del log, sin
+- [x] **T1.13 — Cierre de la Fase 1.** (2026-09-24: su gate dio `INIT_EXIT=1` por el BLOQUEO-2; lo cerró el gate completo de la Fase 2, `progress/gate_455_frontend.log`, `INIT_EXIT=0`) `./init.sh` completo verde (`INIT_EXIT=0` escrito dentro del log, sin
   `tail`; memorias «El exit code que tapa un echo», «Log largo sin tail»), `skipped` de `integration/db` = 0.
   **Hecho:** `progress/impl_455_backend.md` con la tabla de trazabilidad backend y los logs; commit y rama
   verificados (memoria «Verificar el blob commiteado»).
@@ -151,32 +151,32 @@ con nota fechada.
 Ninguna pantalla nueva: son textos y chips. Si alguien propone una pantalla nueva, pasa por `/design`.
 Sin «SLA» en textos (memoria). Todas `[P]` entre sí salvo T2.1.
 
-- [ ] **T2.1 — Presentación base**: `EstatusBadge` y `estatus-label` sobre la fuente única; se retira la derivación
+- [x] **T2.1 — Presentación base**: `EstatusBadge` y `estatus-label` sobre la fuente única; se retira la derivación
   por zona; `filtro-estado-def.ts` sin `EXCLUDE_ESTADO_DEFAULT`. **Hecho:** R2, R10, R18 (selector) verdes;
   `EstatusBadgeCatalogoV2.test.tsx` reescrito con fecha.
-- [ ] **T2.2 — Portal del mensajero**: `pos-estado.ts` (colores por código, marcador «Gestionando ahora»/«Abierta
+- [x] **T2.2 — Portal del mensajero**: `pos-estado.ts` (colores por código, marcador «Gestionando ahora»/«Abierta
   en detalle», nota de ayuda), `RepartoModule`, `RecogerModule`, recolección y recolectadas del día (con el
   `estatusValue` que T1.4/T0.3 añadió al DTO), chat (`chat-format.ts`), KPIs, menú y título «Recoger en bodega».
   **Hecho:** R7, R8, R12 verdes por componente.
-- [ ] **T2.3 — Monitoreo y tablero**: `contadores.ts` (resultados y buckets). **Hecho:** R5, R6 verdes; C04
+- [x] **T2.3 — Monitoreo y tablero**: `contadores.ts` (resultados y buckets). **Hecho:** R5, R6 verdes; C04
   `[INTERMEDIO]` reescrito.
-- [ ] **T2.4 — Cierres** (mensajero, admin, bodega de SF-001): `cierre-labels.ts` a un solo mapa,
+- [x] **T2.4 — Cierres** (mensajero, admin, bodega de SF-001): `cierre-labels.ts` a un solo mapa,
   `cierre-factura.tsx`, `CierreDiaModule`, `CorregirResultadoDialog`, confirmación física, descargas.
   **Hecho:** R4, R5, R39 verdes; las pestañas y la columna de la descarga dicen lo mismo (test).
-- [ ] **T2.5 — Novedades de la tienda**: `novedad-grupo-textos.ts`, modales (reprogramar, rechazar, habilitar,
+- [x] **T2.5 — Novedades de la tienda**: `novedad-grupo-textos.ts`, modales (reprogramar, rechazar, habilitar,
   gestionar desde ayuda), descargas. **Hecho:** R5, R6 verdes; C14 `[INTERMEDIO]` reescrito.
-- [ ] **T2.6 — Analítica y ranking**: dona sin `etiquetaDeStatus`, cohorte, KPIs, productos, descargas, histórico
+- [x] **T2.6 — Analítica y ranking**: dona sin `etiquetaDeStatus`, cohorte, KPIs, productos, descargas, histórico
   de ranking. **Hecho:** R3, R5, R52 verdes; C05 `[INTERMEDIO]` reescrito.
-- [ ] **T2.7 — Órdenes, satélite y mensajes de error**: `OrdenesListado`, `SateliteOrdenesListado`, recepción,
+- [x] **T2.7 — Órdenes, satélite y mensajes de error**: `OrdenesListado`, `SateliteOrdenesListado`, recepción,
   escáneres, `*-error-messages.ts`, línea de tiempo (retirados con « (estado retirado)»). **Hecho:** R2, R11 verdes.
-- [ ] **T2.8 — Página del rastreo público**: pinta `nombre` y la señal pendiente. **Hecho:** test de
+- [x] **T2.8 — Página del rastreo público**: pinta `nombre` y la señal pendiente. **Hecho:** test de
   componente con los 20 nombres y un retirado.
-- [ ] **T2.9 — Resto del inventario de T0.3** (lo que no cayó en T2.2-T2.8). **Hecho:** G2 y G3 verdes sin
+- [x] **T2.9 — Resto del inventario de T0.3** (lo que no cayó en T2.2-T2.8). **Hecho:** G2 y G3 verdes sin
   añadir ninguna excepción nueva a sus allowlists.
-- [ ] **T2.10 — Ayuda y asistente (SF-001)** (§7): `docs/ayuda/**` con los nombres exactos, título «Recoger en
+- [x] **T2.10 — Ayuda y asistente (SF-001)** (§7): `docs/ayuda/**` con los nombres exactos, título «Recoger en
   bodega», slugs intactos; texto fijo del asistente si existe. **Hecho:** R37, R38 verdes (G2 sobre
   `contextoPara` para los 5 roles y el público).
-- [ ] **T2.11 — Cierre de la Fase 2.** `./init.sh` completo verde con las mismas condiciones que T1.13.
+- [x] **T2.11 — Cierre de la Fase 2.** `./init.sh` completo verde con las mismas condiciones que T1.13.
   **Hecho:** `progress/impl_455_frontend.md`.
 
 ---
@@ -231,58 +231,65 @@ Sin «SLA» en textos (memoria). Todas `[P]` entre sí salvo T2.1.
 
 ## Trazabilidad R → test
 
-| R | Test (archivo › caso) |
+> 2026-09-24 (revisión 455, M4/m7): la tabla original citaba 11 archivos que no existen
+> (`estatus-label.test.ts`, `gestion-resultado.test.ts`, `cierre-labels.test.ts`, `novedad-grupo-textos.test.ts`,
+> `pos-estado.test.ts`, `recoger-module.test.tsx`, `chat-format.test.ts`, `pos-order-card.test.tsx`,
+> `historial-orden-timeline.test.tsx`, `filtro-estado-def.test.ts`, `satelite-ordenes-filtros.test.ts`). Cada R
+> apunta ahora al archivo REAL, verificado en disco (base: `progress/review_455.md` §1). `Cnn` =
+> `tests/integration/db/455/caracterizacion/<archivo de la tabla de la Fase 0>.test.ts`.
+
+| R | Test (archivo real) |
 |---|---|
-| R1 | `tests/unit/types/nombre-estado-catalogo.test.ts` › «20 códigos, un nombre cada uno, igual a la tabla aprobada» |
-| R2 | `tests/unit/components/estatus-badge.test.tsx` › «pinta el nombre exacto de los 20, sin zona»; recorrido T3.2 |
-| R3 | `tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts` (G3) › «nadie humaniza un código»; `estatus-label.test.ts` › «nunca devuelve el código» |
-| R4 | `tests/unit/types/gestion-resultado.test.ts` › «el nombre del resultado es el del estado homónimo»; `cierre-labels.test.ts` |
-| R5 | `contadores.test.ts`, `cierre-labels.test.ts`, `novedad-grupo-textos.test.ts`, `kpis-*.test.tsx` › «rotula con el nombre exacto» |
-| R6 | `tests/unit/guards/nombres-estado-retirados.guardia.test.ts` (G2) › «ninguna etiqueta de grupo coincide con un nombre» |
-| R7 | `pos-estado.test.ts`, `recoger-module.test.tsx`, `recoleccion-*.test.tsx`, `chat-format.test.ts` › «el chip es el estado de la orden» |
-| R8 | `pos-order-card.test.tsx` › «activa: chip con el estado y marcador aparte» |
-| R9 | G2 › «no hay B. por bodega» |
-| R10 | `tests/unit/types/order-status.test.ts` › «código desconocido → Estado no reconocido» |
-| R11 | `order-status.test.ts` › «retirado interno»; `historial-orden-timeline.test.tsx` |
-| R12 | G3 › «ningún mapa de presentación indexado por texto visible» |
-| R13 | G1 (`censo-order-status-rename.test.ts` brazo 455) |
-| R14 | `tests/integration/db/455/migracion.test.ts` › «ids y FK preservados» |
-| R15 | `migracion.test.ts` › «gestiones y eventos intactos salvo la etiqueta» |
-| R16 | `migracion.test.ts` › «segunda pasada sin cambios» |
-| R17 | `migracion.test.ts` › «down restaura la foto; sin CREATE TYPE» |
-| R18 | `migracion.test.ts` › «huérfanos: borrado condicional»; `filtro-estado-def.test.ts` › «no se ofrecen» |
-| R19 | `migracion.test.ts` › «0 jobs, 0 notificaciones, 0 historial» |
-| R20 | `tests/integration/db/455/seed.test.ts` › «falla ante un código anterior sin insertar» |
-| R21 | C01 |
-| R22 | C02 `[INTERMEDIO]` + `satelite-ordenes-filtros.test.ts` › «URL vieja aplica el código vigente» |
-| R23 | C16 `[INTERMEDIO]` |
-| R24 | C12 `[INTERMEDIO]` + `api-orden-lectura-service.test.ts` › «cada código lleva su Nombre» |
-| R25 | `webhook-estado-service.test.ts` y `webhook-evento-orden-service.test.ts` › «XNombre tras X» |
-| R26 | `app/api/ordenes/api-key` route test › «código anterior → 422 con el vigente» |
-| R27 | `carga-api-*.test.ts` › «filas[].estado + estadoNombre, sin estatus» |
-| R28 | C11 |
-| R29 | `openapi-contrato-en-reparto.test.ts`, `openapi-webhook-contrato.test.ts` (G5) |
-| R30 | `tests/unit/api/changelog-455.test.ts` › «la entrada existe y tiene la tabla»; G1 sobre `docs/` |
-| R31 | C13 + `rastreo-publico-service.test.ts` › «nombres y fusión de tramos» |
-| R32 | `rastreo-sin-estatus-crudo.guardia.test.ts` (reescrita) |
-| R33 | `gestion-resultado.test.ts` › «SENAL_PENDIENTE»; recorrido T3.2 |
-| R34 | `rastreo-publico-service.test.ts` › «retirado plegado al equivalente» |
-| R35 | C15 `[INTERMEDIO]` + `plantilla-datos.test.ts` |
-| R36 | `notificacion-orden-rechazada.test.ts` › «el texto contiene el nombre» |
-| R37 | G2 › «docs/ayuda sin nombres retirados» |
-| R38 | G2 › «contexto del asistente por rol» |
-| R39 | Tests de T2.4/T2.7 sobre pantallas de SF-001; recorrido T3.2 (adminSatelite) |
-| R40 | G1 |
-| R41 | G2 |
-| R42 | G3 |
-| R43 | G4 |
-| R44 | Casos de mutación dentro de G1-G4 + T3.1 |
+| R1 | `tests/unit/types/nombre-estado-catalogo.test.ts` (G4; lee `textos-aprobados.md` del disco) |
+| R2 | `tests/unit/components/estatus-badge.test.tsx` › «los 20, sin zona»; `tests/components/PorRecibirModule.test.tsx`; `tests/unit/types/nombre-de-estado.test.ts`; `tests/unit/components/textos-455-recorrido.test.ts` (M1); recorrido T3.2 |
+| R3 | `tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts` (G3); `tests/unit/components/estatus-badge.test.tsx` › R10; C05 `[INTERMEDIO]`; `tests/components/HistorialOrdenTimeline.motivo-migracion.test.tsx` (F10) |
+| R4 | `tests/unit/types/nombre-de-estado.test.ts` › «R4»; `tests/components/textos-estado-455.test.tsx` (cierres); `tests/unit/components/cierre-resultado-fila-label.test.ts` |
+| R5 | `tests/components/textos-estado-455.test.tsx` (KPIs, monitoreo, cierres, novedades, analítica); `tests/unit/components/textos-455-recorrido.test.ts`; C04 `[INTERMEDIO]`; C14 `[INTERMEDIO]` |
+| R6 | `tests/unit/guards/nombres-estado-retirados.guardia.test.ts` (G2, brazos de igualdad, cita y «contiene»); `tests/components/textos-estado-455.test.tsx` |
+| R7 | `tests/components/PosOrderCard.estado-455.test.tsx`; `tests/components/RepartoAyuda.test.tsx`; `tests/components/textos-estado-455.test.tsx` (chat) |
+| R8 | `tests/components/PosOrderCard.estado-455.test.tsx` |
+| R9 | `tests/unit/components/estatus-badge.test.tsx` › «bodega siempre entera»; G2 (abreviatura) |
+| R10 | `tests/unit/types/nombre-de-estado.test.ts` › «R10/R3»; `tests/unit/components/estatus-badge.test.tsx` |
+| R11 | `tests/unit/types/nombre-de-estado.test.ts` › «R11»; `tests/components/HistorialOrdenTimeline.evento-orden.test.tsx`; `tests/components/CierreFacturaSinGestionar.test.tsx`; `tests/components/HistorialOrdenTimeline.motivo-migracion.test.tsx` |
+| R12 | `tests/components/PosOrderCard.estado-455.test.tsx` › «R12»; `tests/components/textos-estado-455.test.tsx` (chat); G3 |
+| R13 | `tests/unit/guards/censo-order-status-rename.test.ts` (G1, brazo 455) |
+| R14 | `tests/integration/db/455/migracion.test.ts` |
+| R15 | `tests/integration/db/455/migracion.test.ts` |
+| R16 | `tests/integration/db/455/migracion.test.ts` |
+| R17 | `tests/integration/db/455/migracion.test.ts` |
+| R18 | `tests/integration/db/455/migracion.test.ts`; `tests/components/SateliteFiltroEstadoAlcance.test.tsx`; `tests/unit/components/satelite-filtro-estado.test.ts` |
+| R19 | `tests/integration/db/455/migracion.test.ts` |
+| R20 | `tests/integration/db/455/seed.test.ts` |
+| R21 | C01 (`filtro-ordenes-por-estado`) |
+| R22 | C02 (`filtro-satelite-por-codigo`) `[INTERMEDIO]`; `tests/unit/types/nombre-de-estado.test.ts` › «codigoVigente» |
+| R23 | C16 (`snapshot-correccion`) `[INTERMEDIO]`; `tests/integration/db/455/snapshot-lectura.test.ts` |
+| R24 | C12 (`api-lectura`) `[INTERMEDIO]`; `tests/integration/api/ordenes-api-key-orden-consulta.route.test.ts`; `tests/unit/services/api-orden-lectura-service.test.ts` |
+| R25 | C11 (`webhook-estado`) `[INTERMEDIO]`; `tests/unit/services/WebhookEventoOrdenService.test.ts`; `tests/unit/services/webhook-estado-service.test.ts` |
+| R26 | `tests/integration/api/ordenes-api-key-listado-codigo-anterior.route.test.ts`; C12 |
+| R27 | C12; `tests/unit/repositories/orden-repository.carga-api.test.ts`; `tests/unit/services/bulk-orden-service.carga-api.test.ts` |
+| R28 | C11 (invariantes) |
+| R29 | `tests/unit/api/openapi-nombres-455.guardia.test.ts` (G5); `tests/unit/api/openapi-contrato-en-reparto.test.ts`; `tests/unit/api/openapi-webhook-contrato.test.ts` |
+| R30 | `tests/unit/api/changelog-455.test.ts`; G1 sobre los docs de integradores |
+| R31 | C13 (`rastreo`); `tests/integration/db/454/rastreo-pendiente-sql-real.test.ts`; `tests/unit/services/rastreo-publico-service.test.ts`; `tests/components/RastreoDialog.pendiente.test.tsx`; `tests/integration/db/455/rastreo-retirado-y-pendiente-sql-real.test.ts` (F9) |
+| R32 | `tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts`; `tests/unit/guards/rastreo-hitos-exhaustivo.guardia.test.ts` |
+| R33 | `tests/unit/types/nombre-de-estado.test.ts` › «R33»; `tests/components/RastreoDialog.pendiente.test.tsx`; `tests/components/NotaGestionPendiente.test.tsx`; recorrido T3.2 |
+| R34 | `tests/unit/services/rastreo-publico-service.test.ts` › «235/R38»; `tests/unit/types/nombre-de-estado.test.ts` › «R34»; `tests/integration/db/455/rastreo-retirado-y-pendiente-sql-real.test.ts` › «control (R34)» |
+| R35 | C15 (`plantilla-estatus`) `[INTERMEDIO]`; `tests/unit/types/plantilla-datos.test.ts` |
+| R36 | `tests/unit/repositories/notificacion-orden-rechazada.test.ts` |
+| R37 | G2 › «el arbol» (`docs/ayuda/**`) |
+| R38 | G2 › «el contexto del asistente, rol por rol» |
+| R39 | `tests/components/PorRecibirModule.test.tsx`; `tests/components/SateliteFiltroEstadoAlcance.test.tsx`; `tests/components/SateliteOrdenesListado.gestion-pendiente.test.tsx`; `tests/components/CierreFacturaSinGestionar.test.tsx`; `tests/unit/components/textos-455-recorrido.test.ts` (M1); G2/G3; recorrido T3.2 |
+| R40 | G1 (`tests/unit/guards/censo-order-status-rename.test.ts`) |
+| R41 | G2 (`tests/unit/guards/nombres-estado-retirados.guardia.test.ts`), con el brazo de «contiene» y las comillas “ ” (M3) |
+| R42 | G3; `tests/unit/tablero-dia/frontera.guardia.test.ts` |
+| R43 | G4 (`tests/unit/types/nombre-estado-catalogo.test.ts`) |
+| R44 | Casos `MUTACION` dentro de G1-G5 (G2: M1, M2/F1-F8 y la excepción por texto); tablas de mutaciones de `progress/impl_455_*.md` |
 | R45 | C01, C02 |
-| R46 | C03-C07 |
-| R47 | C08 |
-| R48 | C10 |
-| R49 | C09 |
+| R46 | C03-C07 (`sql-crudo-*`) |
+| R47 | C08 (`dinero-aprobacion`) |
+| R48 | C10 (`transiciones`) |
+| R49 | C09 (`intentos-y-tope`) |
 | R50 | C11 |
-| R51 | `tests/unit/auth/menu-visibility.test.ts` (rutas y roles intactos) + recorrido T3.2 |
+| R51 | `tests/unit/auth/menu-visibility.test.ts`; recorrido T3.2 |
 | R52 | C04, C05 |
-| R53 | Suite de caracterización de la 454 (`tests/integration/db/454/**`) verde con los códigos vigentes |
+| R53 | `tests/integration/db/454/**` verde con los códigos vigentes |

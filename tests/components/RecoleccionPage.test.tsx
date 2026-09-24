@@ -130,7 +130,7 @@ describe("RecoleccionPage — el apartado del mensajero (R1/R2/R6)", () => {
       screen.getByRole("region", { name: "Por recolectar en tienda" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Recolectadas hoy" }),
+      screen.getByRole("region", { name: "Recogidos en tienda hoy" }),
     ).toBeInTheDocument();
   });
 
@@ -206,7 +206,7 @@ describe("RecoleccionPage — el apartado del mensajero (R1/R2/R6)", () => {
     expect(listarMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText("REM-P1")).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "Recolectadas hoy" })).getByText("REM-H1"),
+      within(screen.getByRole("region", { name: "Recogidos en tienda hoy" })).getByText("REM-H1"),
     ).toBeInTheDocument();
     // El flag de recorte también viaja por props (R31).
     expect(screen.getByText(/se muestran las 100 más recientes de hoy/i)).toBeInTheDocument();

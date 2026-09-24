@@ -52,9 +52,10 @@ que la gestionés bien.
 
 Es la vía correcta para corregir, en vez de dejar que se apruebe algo que no pasó.
 
-## Órdenes que quedaron sin gestionar
+## Órdenes que pasaron a Novedad interna
 
-Si al cerrar te quedaron paquetes encima sin gestionar, aparecen en el cierre como una lista aparte,
+Si al cerrar te quedaron paquetes encima que no gestionaste, pasan a **Novedad interna** y aparecen en
+el cierre como una lista aparte («Pasaron a Novedad interna»),
 para que quede constancia de qué tenías en la mano ese día.
 
 **Los paquetes reservados para otro día no entran acá.** Se quedan con vos, esperando su fecha.

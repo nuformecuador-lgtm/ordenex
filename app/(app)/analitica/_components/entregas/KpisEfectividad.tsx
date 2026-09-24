@@ -108,7 +108,9 @@ const ETIQUETA = {
 function rotuloEfectividadGestion(total: number): string {
   return rotuloConBase(
     ETIQUETA.efectividadGestion,
-    `entregadas y rechazadas de ${contarOrdenes(total, ORDENES)}`,
+    // FICHA 455 (2026-09-24): los dos sumandos por su nombre vigente (antes «entregadas y rechazadas»).
+    `${NOMBRE_ESTADO.entregado} y ${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo} de ` +
+      `${contarOrdenes(total, ORDENES)}`,
   );
 }
 

@@ -370,14 +370,14 @@ describe("CierreDiaModule", () => {
   it("R10/R11: sin poder solicitar, el botón está deshabilitado y se muestra el motivo", () => {
     renderModule({
       puedesSolicitar: false,
-      motivoBloqueo: "Tenés órdenes sin gestionar; gestionalas antes de cerrar.",
+      motivoBloqueo: "Tenés paquetes en reparto que todavía no gestionaste; gestionalos antes de cerrar.",
     });
 
     expect(
       screen.getByRole("button", { name: "Solicitar cierre" }),
     ).toBeDisabled();
     expect(
-      screen.getByText("Tenés órdenes sin gestionar; gestionalas antes de cerrar."),
+      screen.getByText("Tenés paquetes en reparto que todavía no gestionaste; gestionalos antes de cerrar."),
     ).toBeInTheDocument();
   });
 

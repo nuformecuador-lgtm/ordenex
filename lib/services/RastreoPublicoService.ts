@@ -9,7 +9,7 @@ import type {
   ResultadoConsultaRastreo,
 } from "@/lib/interfaces/services/IRastreoPublicoService";
 import { nombreDeResultado } from "@/lib/types/gestion-resultado";
-import { nombrePublicoDeEstado } from "@/lib/types/order-status";
+import { nombrePublicoDeEstado, type ESTADO_RETIRADO } from "@/lib/types/order-status";
 import type { EntradaLineaPublica } from "@/lib/types/rastreo-publico";
 import { normalizarTelefonoCR } from "@/lib/utils/telefono-cr";
 
@@ -25,6 +25,12 @@ import { normalizarTelefonoCR } from "@/lib/utils/telefono-cr";
  * nunca alcanza el minimo exigido y nunca puede coincidir con un factor valido.
  */
 const TELEFONO_CENTINELA = "";
+
+/**
+ * FICHA 455 (recorrido F9) — el estado retirado que, antes de la 454, representaba una gestion aun
+ * sin confirmar. Se lee de `ESTADO_RETIRADO` para que un renombre de la clave no lo deje colgado.
+ */
+const POR_CONFIRMAR_RETIRADO: keyof typeof ESTADO_RETIRADO = "devolucion_por_confirmar";
 
 /**
  * `true` si el texto de la fila es un resultado de gestion. Se lee de las claves de
@@ -113,7 +119,6 @@ export class RastreoPublicoService implements IRastreoPublicoService {
 
     // R21 — UNA sola lectura del historial por consulta.
     const transiciones = await this.repo.listarTransiciones(fila.id);
-    const linea = this.proyectarLinea(transiciones);
     // FICHA 454 (T1.19, design §12.3; R31): la gestion PENDIENTE de confirmar se ve AL INSTANTE,
     // como ultima entrada, marcada. Sin actor, sin motivo, sin mensajero: solo su resultado y su
     // instante. Al anularse desaparece; al corregirse muestra el corregido (la gestion lleva el
@@ -125,13 +130,16 @@ export class RastreoPublicoService implements IRastreoPublicoService {
     const pendiente = await this.repo.buscarGestionPendiente(fila.id);
     // El resultado llega como texto de la fila; si no es un codigo del catalogo no se publica nada
     // (el mismo descarte que hacia la 454 cuando el resultado no tenia estado destino).
-    if (pendiente !== null && esResultadoDeGestion(pendiente.resultado)) {
-      linea.push({
-        nombre: nombreDeResultado(pendiente.resultado),
-        fecha: formatearEnZona(pendiente.createdAt, this.config.ZONA_HORARIA),
-        pendiente: true,
-      });
-    }
+    const entradaPendiente: EntradaLineaPublica | null =
+      pendiente !== null && esResultadoDeGestion(pendiente.resultado)
+        ? {
+            nombre: nombreDeResultado(pendiente.resultado),
+            fecha: formatearEnZona(pendiente.createdAt, this.config.ZONA_HORARIA),
+            pendiente: true,
+          }
+        : null;
+    const linea = this.proyectarLinea(transiciones, entradaPendiente?.fecha ?? null);
+    if (entradaPendiente !== null) linea.push(entradaPendiente);
 
     // Sin transiciones no hay nada OCURRIDO que contar (G10) y `nombreVigente` no podria
     // derivarse de la misma linea (R20). Se responde como los demas casos sin envio.
@@ -159,14 +167,31 @@ export class RastreoPublicoService implements IRastreoPublicoService {
    * futura (G10): el flujo puede desviarse a devolucion y prometer un paso que no llegara
    * es peor que no decir nada.
    */
-  private proyectarLinea(transiciones: readonly TransicionRastreoFila[]): EntradaLineaPublica[] {
+  private proyectarLinea(
+    transiciones: readonly TransicionRastreoFila[],
+    fechaPendiente: string | null,
+  ): EntradaLineaPublica[] {
     const ascendente = [...transiciones].sort(
       (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
     );
-    const entradas: EntradaLineaPublica[] = ascendente.map((transicion) => ({
-      nombre: nombrePublicoDeEstado(transicion.estatusValue),
-      fecha: formatearEnZona(transicion.createdAt, this.config.ZONA_HORARIA),
-    }));
+    const entradas: EntradaLineaPublica[] = [];
+    for (const transicion of ascendente) {
+      const fecha = formatearEnZona(transicion.createdAt, this.config.ZONA_HORARIA);
+      // FICHA 455 (2026-09-24, recorrido F9): antes de la 454, registrar una gestion movia la orden a
+      // `devolucion_por_confirmar`; esa fila es la MISMA gestion que hoy se lee como pendiente, del
+      // mismo instante. Plegada a «Novedad» (R34) se publicaba dos veces —una confirmada y otra
+      // pendiente—, fuera de orden (la migracion 454 devolvio la orden a `en_reparto` DESPUES) y con
+      // la misma clave en la pagina. Mientras esa gestion siga pendiente, la fila vieja no se
+      // publica: la entrada pendiente la sustituye, y la racha de «En reparto» se vuelve a fundir.
+      if (
+        fechaPendiente !== null &&
+        transicion.estatusValue === POR_CONFIRMAR_RETIRADO &&
+        fecha === fechaPendiente
+      ) {
+        continue;
+      }
+      entradas.push({ nombre: nombrePublicoDeEstado(transicion.estatusValue), fecha });
+    }
     return colapsarRachas(entradas);
   }
 }

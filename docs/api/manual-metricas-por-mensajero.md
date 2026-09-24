@@ -139,7 +139,7 @@ donde `{id}` es el **número de guía** o el **número de remisión**.
 - **Tiempos**: restá los `createdAt` consecutivos, o el primero contra la fecha de creación de la
   orden. Vienen en UTC con formato ISO.
 - **Reintentos**: contá elementos —leyendo antes la advertencia de abajo.
-- La clave **viaja siempre**; una orden sin gestionar trae `"gestiones": []`, nunca `null`.
+- La clave **viaja siempre**; una orden que todavía no tiene gestiones trae `"gestiones": []`, nunca `null`.
 - Las **ocho** claves de cada elemento están siempre presentes, con `null` donde no aplica (cada código
   viaja con su nombre visible al lado: `resultadoNombre`, `estadoResultanteNombre`).
 - Llega **completo y sin paginar**. Sobre datos reales el máximo en una orden son 5 y el promedio

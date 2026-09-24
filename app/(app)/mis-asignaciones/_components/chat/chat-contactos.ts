@@ -105,10 +105,11 @@ export const SECCION_CON_EL_PAQUETE = "En reparto";
  *
  * ANTES DECÍA «N en reparto» Y ESO SE VOLVIÓ FALSO con esta ficha: la lista ya no es sólo de
  * órdenes en reparto. Concuerda en singular por el mismo motivo que `contadorNuevasAsignadas`
- * (277/R29): con una sola orden, «1 asignadas» se lee como un descuido.
+ * (277/R29): con una sola orden, «1 asignados» se lee como un descuido. FICHA 455 (2026-09-24): en
+ * masculino, porque habla del paquete y «Asignada» era un rótulo retirado de la tarjeta.
  */
 export function contadorContactos(cuantas: number): string {
-  return cuantas === 1 ? "1 asignada" : `${cuantas} asignadas`;
+  return cuantas === 1 ? "1 asignado" : `${cuantas} asignados`;
 }
 
 /** Vacío SIN búsqueda: el mensajero no tiene ninguna orden asignada, ni recogida ni por recoger. */

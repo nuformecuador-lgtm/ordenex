@@ -63,7 +63,7 @@ describe("El período del diseño: 790 cargadas, 424 entregadas, 265 vivas", () 
     // 424/525 = 80,8 % sobre las que ya cerraron, con SU sustantivo y no «cerradas».
     expect(
       screen.getByText(
-        norm(`${formatearValor(424 / 525, "porcentaje")} de las 525 órdenes con desenlace terminaron entregadas`),
+        norm(`${formatearValor(424 / 525, "porcentaje")} de las 525 órdenes con desenlace terminaron en Entregado`),
       ),
     ).toBeInTheDocument();
   });

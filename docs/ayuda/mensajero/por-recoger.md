@@ -35,7 +35,7 @@ Usá la que te sirva. Si la cámara no abre o el código está estropeado, escri
 
 ## Las dos pestañas
 
-**Órdenes por recoger** — las que podés recoger hoy.
+**Órdenes para recoger** — las que podés recoger hoy.
 
 **Órdenes para otro día** — las que te asignaron pero están reservadas para una fecha posterior.
 
@@ -47,7 +47,7 @@ fecha y hay que respetarla.
 
 ## Buscar
 
-El buscador filtra entre tus paquetes por recoger. Escribí el número de guía y te lo deja a la vista.
+El buscador filtra entre tus paquetes para recoger. Escribí el número de guía y te lo deja a la vista.
 
 ## Escribirle al cliente
 

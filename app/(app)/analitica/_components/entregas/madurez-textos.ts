@@ -155,7 +155,8 @@ export function fraseSobreCerradas(
   if (sobreCerradas.valor !== null) {
     return (
       `${formatearValor(sobreCerradas.valor, "porcentaje")} de las ` +
-      `${contarOrdenes(sobreCerradas.base, ORDENES_CON_DESENLACE)} terminaron entregadas`
+      `${contarOrdenes(sobreCerradas.base, ORDENES_CON_DESENLACE)} terminaron en ` +
+      NOMBRE_ESTADO.entregado
     );
   }
 

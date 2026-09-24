@@ -30,7 +30,7 @@ export const RANKING_HISTORICO_COLUMNAS = {
   porcentaje: RANKING_COLUMNAS.porcentaje,
   // FICHA 455 (2026-09-24, R5): cuenta UN resultado, lleva su nombre exacto.
   entregadas: NOMBRE_ESTADO.entregado,
-  asignadas: "Asignadas",
+  asignadas: "Asignados",
   premio: "Premio",
 } as const;
 

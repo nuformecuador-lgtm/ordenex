@@ -108,16 +108,16 @@ describe("ordenesColumns — feature 30 → 455 (R2: el estado no interpola la z
   });
 });
 
-// FICHA 367: la columna "Reprogramada para" (antes "Liberada el") es la fecha PARA
+// FICHA 367: la columna "Reprogramado para" (antes "Liberada el") es la fecha PARA
 // LA QUE quedó reprogramada la orden, no cuándo el cron de liberación (feature 46)
 // la desbloquea. El valor llega del repo ya como `YYYY-MM-DD`; se renderiza tal
 // cual, sin reinterpretarlo como Date en el cliente (eso reintroduciría el
 // off-by-one de zona horaria).
-describe("ordenesColumnsReprogramada — columna 'Reprogramada para'", () => {
+describe("ordenesColumnsReprogramada — columna 'Reprogramado para'", () => {
   it("añade la columna al final, con su encabezado, sin perder ninguna de las base", () => {
     expect(ordenesColumnsReprogramada.length).toBe(ordenesColumns.length + 1);
     expect(ordenesColumnsReprogramada.at(-1)?.id).toBe("liberada");
-    expect(ordenesColumnsReprogramada.at(-1)?.value).toBe("Reprogramada para");
+    expect(ordenesColumnsReprogramada.at(-1)?.value).toBe("Reprogramado para");
     // Las base se conservan en su orden original.
     expect(ordenesColumnsReprogramada.slice(0, -1)).toEqual(ordenesColumns);
   });
@@ -155,7 +155,7 @@ describe("ordenesColumnsReprogramada — columna 'Reprogramada para'", () => {
     expect(celdas.at(-1)).toHaveTextContent("—");
   });
 
-  it("las columnas base NO incluyen 'Reprogramada para' (solo la variante que la añade)", () => {
+  it("las columnas base NO incluyen 'Reprogramado para' (solo la variante que la añade)", () => {
     expect(ordenesColumns.some((c) => c.id === "liberada")).toBe(false);
   });
 });
@@ -163,7 +163,7 @@ describe("ordenesColumnsReprogramada — columna 'Reprogramada para'", () => {
 // ---------------------------------------------------------------------------------
 // Feature 160 (T16) — el conteo de intentos de entrega como COLUMNA propia (D6/R17),
 // insertada INMEDIATAMENTE despues de `estatus` (design §5.2) y no al final. Los
-// asserts de "ordenesColumnsReprogramada — columna 'Reprogramada para'" de mas arriba
+// asserts de "ordenesColumnsReprogramada — columna 'Reprogramado para'" de mas arriba
 // (length + 1, ultima = `liberada` con su encabezado, `slice(0,-1)` = base) siguen
 // verdes SIN tocarlos: insertar en el medio no cambia ninguna de esas verdades. Esa
 // compatibilidad es una de las tres razones por las que la posicion es esa.

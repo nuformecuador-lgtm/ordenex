@@ -48,7 +48,7 @@ export const COLUMNAS_DESCARGA_RANKING: DescargaColumna[] = [
   { clave: "porcentaje", encabezado: RANKING_COLUMNAS.porcentaje },
   // FICHA 455 (2026-09-24, R5): cuenta UN resultado, lleva su nombre exacto.
   { clave: "entregadas", encabezado: NOMBRE_ESTADO.entregado },
-  { clave: "asignadas", encabezado: "Asignadas" },
+  { clave: "asignadas", encabezado: "Asignados" },
 ];
 
 /**

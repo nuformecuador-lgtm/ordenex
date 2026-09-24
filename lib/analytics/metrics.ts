@@ -324,7 +324,7 @@ const CATALOGO = [
     // `etiquetas-visibles` exige que digan lo mismo). Antes, «Sin gestionar».
     etiqueta: "Novedad interna",
     descripcion:
-      "ORDENES sin gestionar HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus novedad_interna (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
+      "ORDENES en Novedad interna HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus novedad_interna (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",

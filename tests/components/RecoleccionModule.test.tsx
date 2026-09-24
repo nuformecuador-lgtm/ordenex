@@ -780,7 +780,7 @@ describe("RecoleccionModule — bloqueado por cierres sin resolver (R9/R23 -> 27
 // a que la bodega central ya haya recibido el paquete (R26, probado en el service).
 // ---------------------------------------------------------------------------------------
 describe("RecoleccionModule — «Recolectadas hoy» (R24/R28/R30/R31)", () => {
-  const lista = () => screen.getByRole("region", { name: "Recolectadas hoy" });
+  const lista = () => screen.getByRole("region", { name: "Recogidos en tienda hoy" });
 
   it("R24/R28: pinta la MISMA card de la orden, con la hora de la recolección", () => {
     renderModule({

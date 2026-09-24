@@ -650,7 +650,7 @@ describe("Feature 131 (R21) — las dos metricas `declarada` se pintan", () => {
       expect(consultadas).toContain("incidentes");
       expect(consultadas).toContain("novedad_interna");
     });
-    expect(region("Órdenes sin gestionar")).toBeInTheDocument();
+    expect(region("Órdenes en Novedad interna")).toBeInTheDocument();
     expect(region("Resultado de las gestiones")).toBeInTheDocument();
   });
 });

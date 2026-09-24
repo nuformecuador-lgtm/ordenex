@@ -1129,7 +1129,7 @@ export function OrdenesListado({
       ? estadosDisponibles.find((s) => s.id === estadosMarcados[0])?.value
       : undefined;
 
-  // FICHA 367: el conjunto de columnas SIEMPRE incluye "Reprogramada para" (antes solo
+  // FICHA 367: el conjunto de columnas SIEMPRE incluye "Reprogramado para" (antes solo
   // se montaba filtrando por el único estado `reprogramada`; sin filtro, con varios
   // estados marcados, o en cuanto el cron de liberación sacaba la orden de ese estado,
   // la fecha desaparecía del listado para siempre). No se añade la columna a

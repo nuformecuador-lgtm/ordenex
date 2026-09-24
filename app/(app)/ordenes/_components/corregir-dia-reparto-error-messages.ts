@@ -103,7 +103,7 @@ export function corregirDiaRepartoConflictoMensaje(motivo: string): string {
     return "Esta orden fue eliminada. Actualiza la lista y quítala de la selección.";
   }
   if (motivo === MSG_SIN_MENSAJERO) {
-    return "Esta orden no tiene mensajero asignado. Primero asígnale uno: el día de reparto sólo se corrige sobre órdenes ya asignadas.";
+    return "Esta orden no tiene mensajero asignado. Primero asígnale uno: el día de reparto sólo se corrige sobre órdenes que ya tienen mensajero.";
   }
   if (motivo === MSG_SIN_DIA) {
     return "Esta orden no tiene día de reparto, así que no hay ninguno que corregir. Quítala de la selección.";

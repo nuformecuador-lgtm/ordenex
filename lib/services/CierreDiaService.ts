@@ -72,7 +72,10 @@ const ROL_AUTORIZADO = "mensajero";
 const ESTADOS_PENDIENTES = ["mensajero_recogiendo_en_bodega", "en_reparto"];
 
 // Mensajes accionables del gate/precondicion (R10/R11) y del ruteo (R12/R16).
-const MSG_PENDIENTES = "Tenes ordenes sin gestionar; gestionalas antes de cerrar."; // R10
+// FICHA 455 (2026-09-24): sin «sin gestionar», que es el nombre retirado de `novedad_interna`; el
+// aviso habla de paquetes aun en reparto sin gestion, no de ese estado.
+const MSG_PENDIENTES =
+  "Tenés paquetes en reparto que todavía no gestionaste; gestionalos antes de cerrar."; // R10
 const MSG_VACIO = "No tenes gestiones pendientes de cierre."; // R11
 // FEATURE 271: este motivo YA NO ES «ya tienes un cierre» (el segundo cierre se permite, R13).
 // Queda para la UNICA carrera que sigue existiendo: la re-solicitud encontro el cierre movido entre

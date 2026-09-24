@@ -289,7 +289,7 @@ describe("ficha 425 — la sección existe, va aparte y tiene la forma aprobada 
     expect(s.contains(pestanas)).toBe(false);
     expect(within(s).queryAllByRole("tab")).toHaveLength(0);
     // Tampoco se mete en la sección de la 264: con su lista vacía, esa ni existe.
-    expect(screen.queryByRole("region", { name: "Órdenes sin gestionar" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Pasaron a Novedad interna" })).toBeNull();
   });
 
   it("los DOS conteos van etiquetados con lo que hace cada uno: gestiones «paga», rechazos «revisar»", () => {

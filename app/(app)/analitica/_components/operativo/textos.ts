@@ -213,7 +213,7 @@ export function avisoRecorte(mostradas: number, recibidas: number): string {
 
 /** R35 de la 126 — `sin_gestionar` es DEL DIA (universo B2), no acumulada. */
 export const TEXTO_NOTA_SIN_GESTIONAR =
-  "Cuenta las ordenes sin gestionar de cada dia, no un acumulado que arrastre dias anteriores.";
+  "Cuenta las órdenes en Novedad interna de cada día, no un acumulado que arrastre días anteriores.";
 
 /* -------------------------------------------------------------------------- */
 /* Vacio y control de actualizacion                                            */

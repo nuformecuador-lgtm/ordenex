@@ -32,6 +32,7 @@ import type { IWalletIndemnizacionFeedService } from "@/lib/interfaces/services/
 import type { ICajaCodFeedService } from "@/lib/interfaces/services/ICajaCodFeedService";
 import { CajaCodFeedService } from "@/lib/services/CajaCodFeedService";
 import type { CierreEstado } from "@/lib/types/cierre";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import type {
   CierreRechazoDeTienda,
   IngresoOrdenexDTO,
@@ -86,8 +87,12 @@ import {
  * fila la va a leer un admin en el detalle de un cierre y va a sostener un cobro
  * (`cobroRechazado`, 56). `tests/unit/guards/tope-intentos-pii.guardia.test.ts` lo comprueba.
  */
+// FICHA 455 (2026-09-24): nombra los dos estados con su nombre vigente, leido de la fuente (antes
+// «rechazada … sin gestionar», dos nombres retirados). Solo afecta a las filas NUEVAS: las ya
+// escritas dicen lo que dijeron.
 export const MOTIVO_RECHAZO_TOPE_INTENTOS =
-  "rechazada al aprobar el cierre: sin gestionar y sin intentos de entrega disponibles";
+  `${nombreDeEstado("devolucion_a_origen_por_rechazo")} al aprobar el cierre: estaba en ` +
+  `${nombreDeEstado("novedad_interna")} y sin intentos de entrega disponibles`;
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
 // FICHA 398: `computeTotales` recalcula los CUATRO totales del recaudo (la MISMA funcion que los

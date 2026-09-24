@@ -116,6 +116,11 @@ describe("155/R41 · 455/R11 — un value fuera del catalogo del build degrada a
     expect(screen.getByText(LABEL_RETIRADA_MARCADA)).toBeInTheDocument();
     expect(screen.getByText(ORDER_STATUS_LABELS.en_preparacion)).toBeInTheDocument();
     // Y el motivo de la migracion es visible: la orden no cambio de estado sin explicacion.
-    expect(screen.getByText(new RegExp(`migracion 155`))).toBeInTheDocument();
+    // FICHA 455 (2026-09-24, recorrido F10): se PRESENTA sin el codigo crudo, con el formato de R11
+    // (`motivo-historial.ts`); antes se pintaba «migracion 155: retiro de <codigo>» tal cual.
+    expect(
+      screen.getByText("Motivo: Migración: retiro de En fulfillment (estado retirado)"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(`migracion 155`))).toBeNull();
   });
 });

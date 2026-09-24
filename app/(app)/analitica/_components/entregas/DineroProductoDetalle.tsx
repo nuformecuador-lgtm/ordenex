@@ -97,7 +97,8 @@ export const DETALLE_DINERO_TEXTOS = {
      * en él antes de corregirlo.
      */
     retorno: "Flete por rechazo",
-    retornoPista: "Flete por rechazo + IVA de las rechazadas. Fuera del reparto",
+    // FICHA 455 (2026-09-24): el grupo por su nombre vigente (antes «las rechazadas»).
+    retornoPista: `Flete por rechazo + IVA de las órdenes en ${etiquetaDeDesenlace("devolucion_a_origen_por_rechazo")}. Fuera del reparto`,
     /**
      * FICHA 449 — EL SERVICIO DE BODEGA, y se llama «Fulfillment» PORQUE YA SE LLAMA ASÍ.
      *
