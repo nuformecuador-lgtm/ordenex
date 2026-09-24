@@ -5425,11 +5425,11 @@
       "title": "el estado real se pone al aprobar el cierre; la gestion se ve al instante",
       "description": "La gestion del mensajero se publica al momento como evento pendiente de confirmar y el estado de la orden solo cambia al aprobar el cierre.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "alta",
       "depends_on": null,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-23. Se construye sobre dev y sale a prod JUNTO CON SF-001, y solo cuando el humano lo ordene. Recorrido en navegador de todos los roles (maestro, admin, adminTienda, adminSatelite, mensajero) y del rastreo publico. || PASO 0 ANTES DEL SPEC: medir que reacciona hoy al cambio de estado al gestionar (recaudo, wallet, cobros, plazo de la tienda, webhooks, notificaciones, analitica, rutas, mapa, listados) y cuantas ordenes vivas hay en prod en devolucion_por_confirmar y ayuda_tienda. || Se ELIMINAN devolucion_por_confirmar y ayuda_tienda (la ayuda es un evento del dia sobre una orden En reparto). API: gestion_registrada al gestionar, estado_cambiado al aprobar; la correccion del cierre queda visible como evento. Toca los cierres de SF-001 (431). || SPEC APROBADO por el humano el 2026-09-23 (65 R, 23 de no-regresion). Arranca por la Fase 0 (caracterizacion + mutaciones); sin Fase 0 completa no se toca codigo.",
+      "status_note": "HECHA 2026-09-24, en dev por PR #819 (merge f4b3ebed). NO desplegada: sale con SF-001 cuando el humano lo ordene. Contraste en prod: dinero 0 diferencias (8 controles, 165 cierres). Revision APROBADA; gate completo verde (2131 archivos). || ANTES DE DESPLEGAR: re-correr el backfill M3 tras subir y confirmar 0 ordenes en los estados retirados (T5.4); re-medir la poblacion legada (371 en prod el 2026-09-23); avisar a integradores del contrato de eventos. Detalle en progress/review_454.md y progress/contraste_454.md.",
       "branch": "feature/454-estado-al-aprobar-cierre"
     },
     {
@@ -5437,11 +5437,12 @@
       "title": "un solo nombre por estado en toda la app",
       "description": "Cada estado de orden se llama igual en pantallas, rastreo, WhatsApp, API, webhooks, descargas y analitica.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "alta",
       "depends_on": 454,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-23. Se construye sobre dev y sale a prod JUNTO CON SF-001, y solo cuando el humano lo ordene. Recorrido en navegador de todos los roles (maestro, admin, adminTienda, adminSatelite, mensajero) y del rastreo publico. || Cambian nombre Y codigo (el humano acepta romper integraciones): por_recoger->Mensajero recogiendo en la bodega, entregada->Entregado, reprogramada->Reprogramado, devuelta->Novedad, rechazada->Devolucion a origen por rechazo, sin_gestionar->Novedad interna, por_devolver->Por devolver a bodega central. devuelta_a_tienda sigue Devuelta a tienda. || Mueren los nombres paralelos (hitos del rastreo, chips del mensajero, Asignada del chat, buckets de monitoreo, textos de novedades, donuts con value crudo). Incluye datos guardados con codigos (vistas de filtro, webhooks), manual de integradores, OpenAPI, Postman y SF-001. Inventario en el chat del 2026-09-23."
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-23. Se construye sobre dev y sale a prod JUNTO CON SF-001, y solo cuando el humano lo ordene. Recorrido en navegador de todos los roles (maestro, admin, adminTienda, adminSatelite, mensajero) y del rastreo publico. || Cambian nombre Y codigo (el humano acepta romper integraciones): por_recoger->Mensajero recogiendo en la bodega, entregada->Entregado, reprogramada->Reprogramado, devuelta->Novedad, rechazada->Devolucion a origen por rechazo, sin_gestionar->Novedad interna, por_devolver->Por devolver a bodega central. devuelta_a_tienda sigue Devuelta a tienda. || Mueren los nombres paralelos (hitos del rastreo, chips del mensajero, Asignada del chat, buckets de monitoreo, textos de novedades, donuts con value crudo). Incluye datos guardados con codigos (vistas de filtro, webhooks), manual de integradores, OpenAPI, Postman y SF-001. Inventario en el chat del 2026-09-23.",
+      "branch": "feature/455-un-nombre-por-estado"
     },
     {
       "id": 456,
