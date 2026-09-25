@@ -199,6 +199,19 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
   "LiquidacionAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "LiquidacionReparto.mensajero": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
   "LiquidacionReparto.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // ⭑ FICHA 459 — el pago por cuenta de una tienda y el saldo inicial o aporte. La tienda de un
+  // pago por cuenta la valida `PagoPorCuentaTiendaService` (R36): rol `adminTienda` y activa, asi
+  // que la cuenta dedicada de una key (rol `apiKey`) no puede serlo. Las FK son `Restrict`.
+  "PagoPorCuentaTienda.tienda": {
+    categoria: "no_alcanzable",
+    motivo:
+      "R36 de la 459: el servicio exige que la tienda sea `adminTienda` y este activa; una cuenta " +
+      "dedicada de API key tiene rol `apiKey` y nunca pasa esa validacion.",
+  },
+  "PagoPorCuentaTienda.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "PagoPorCuentaTiendaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "AporteCapital.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "AporteCapitalAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "GastoFijoCobro.decisor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "RechazoTiendaCobro.decisor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "ApiKey.createdBy": {

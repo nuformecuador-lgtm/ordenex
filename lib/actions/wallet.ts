@@ -1,6 +1,7 @@
 "use server";
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
 import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
@@ -89,7 +90,8 @@ function toWalletActionError(
 function buildService(): IWalletService {
   const prisma = getPrismaClient();
   const repo = new WalletMovimientoRepository(prisma);
-  return new WalletService(repo, prisma);
+  // Ficha 459 (R14/R21): el lector REAL del saldo inicial vigente (`aporte_capital`).
+  return new WalletService(repo, prisma, new AporteCapitalRepository(prisma));
 }
 
 /**

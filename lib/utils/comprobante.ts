@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import {
   WALLET_COMPROBANTE_EXTENSION,
   WALLET_COMPROBANTE_MIME,
@@ -68,7 +66,7 @@ export type DocumentoConComprobante = keyof typeof PREFIJO_COMPROBANTE;
 export function rutaDeComprobante(
   documento: DocumentoConComprobante,
   mime: string,
-  generarId: () => string = randomUUID,
+  generarId: () => string = () => globalThis.crypto.randomUUID(),
 ): string {
   if (!esMimeAdmitido(mime)) {
     throw new Error(`comprobante: tipo no admitido «${mime}»; validar antes de nombrar el objeto`);

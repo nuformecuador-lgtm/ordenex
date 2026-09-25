@@ -330,6 +330,37 @@ const CENSO: EntradaCenso[] = [
     forma: "recibe_tx",
     mutacion: /tx\.usuario\.findUnique\(/,
   },
+  // ⭑ FICHA 459 (R53/R78) — el pago por cuenta de una tienda y el saldo inicial o aporte. UN TIPO
+  // POR METODO, forma `recibe_tx` (el servicio abre la transaccion y el repositorio escribe el
+  // documento y su historial en ella). La mutacion exigida es la escritura DEL DOCUMENTO.
+  {
+    tipos: ["pago_por_cuenta_tienda_registrado"],
+    archivo: "lib/repositories/PagoPorCuentaTiendaRepository.ts",
+    metodo: "crear",
+    forma: "recibe_tx",
+    mutacion: /tx\.pagoPorCuentaTienda\.create\(/,
+  },
+  {
+    tipos: ["pago_por_cuenta_tienda_anulado"],
+    archivo: "lib/repositories/PagoPorCuentaTiendaRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.pagoPorCuentaTiendaAnulacion\.create\(/,
+  },
+  {
+    tipos: ["aporte_capital_registrado"],
+    archivo: "lib/repositories/AporteCapitalRepository.ts",
+    metodo: "crear",
+    forma: "recibe_tx",
+    mutacion: /tx\.aporteCapital\.create\(/,
+  },
+  {
+    tipos: ["aporte_capital_anulado"],
+    archivo: "lib/repositories/AporteCapitalRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.aporteCapitalAnulacion\.create\(/,
+  },
   {
     // ⭑ Q2 (`usuario_fulfillment_cambiado`) comparte punto de escritura con el rol y la zona: es
     // el MISMO formulario, y las N filas salen con el MISMO `lote_id`.
@@ -875,7 +906,8 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     // (`cobro_tienda_registrado`); 50 desde la 380 (`zona_pago_mensajero_cambiado`); 49 desde la
     // 376 (`zona_central_cambiada`); 48 desde la 375 (`nodo_geografico_renombrado`); 47 desde la
     // 374 (los dos `nodo_geografico_*` de activacion); 45 desde la 373.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(55);
+    // 59 desde la ficha 459 (los cuatro del pago por cuenta y del saldo inicial o aporte).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(59);
   });
 });
 

@@ -69,7 +69,11 @@ function filas(tx: ReturnType<typeof txDoble>, n = 0): Record<string, unknown>[]
 // =============================================================================================
 
 describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhaustivos", () => {
-  it("son 55 tipos, 21 entidades y 3 categorias, sin repetidos", () => {
+  it("son 59 tipos, 23 entidades y 3 categorias, sin repetidos", () => {
+    // 59 desde la ficha 459: los CUATRO del pago por cuenta de una tienda y del saldo inicial o
+    // aporte (registrado y anulado de cada uno; uno por metodo, la guardia del censo mide POR
+    // METODO). 23 entidades desde la 459: `pago_por_cuenta_tienda` y `aporte_capital`, 1:1 con
+    // sus tablas.
     // 55 desde la ficha 431, que añade DOS de golpe (`cierre_bodega_conciliado` y
     // `cierre_bodega_conciliacion_revertida`): son dos y no uno porque la guardia del censo de
     // historial mide POR METODO, asi que un solo tipo permitiria juntar las dos escrituras en un
@@ -82,10 +86,10 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // 20 lo fue desde la 374 (`provincia`, `canton` y `distrito`, la PRIMERA ampliacion), que
     // llevaba 17 desde la 362. Ni la 375, ni la 376, ni la 380 lo amplian: `zona` ya estaba entre
     // los 17 originales (la usa `zona_borrada`).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(55);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(55);
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(21);
-    expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(21);
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(59);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(59);
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23);
+    expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(23);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
   });
 
@@ -241,7 +245,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     ).toBe(false);
     // La 375 NO amplia el enum de entidades: los tres niveles ya entraron con la 374. (El total es
     // 21 desde la 381, que si lo amplio con `wallet_tienda_movimiento`.)
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(21);
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23); // 23 desde la ficha 459
   });
 
   it("⭑ FICHA 376: `zona_central_cambiada` es DINERO, y su entidad `zona` ya existia", () => {
@@ -267,7 +271,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // La 376 NO amplia el enum de entidades: `zona` esta ahi desde los 17 originales de la 362.
     // (El total es 21 desde la 381, que si lo amplio con `wallet_tienda_movimiento`.)
     expect(HISTORIAL_ACCION_ENTIDADES).toContain("zona");
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(21);
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23); // 23 desde la ficha 459
   });
 
   it("⭑ FICHA 380: `zona_pago_mensajero_cambiado` es DINERO, y NO se reutilizo ningun `tarifa_*`", () => {
@@ -305,7 +309,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // La 380 NO amplia el enum de entidades: `zona` esta ahi desde los 17 originales de la 362.
     // (El total es 21 desde la 381, que si lo amplio con `wallet_tienda_movimiento`.)
     expect(HISTORIAL_ACCION_ENTIDADES).toContain("zona");
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(21);
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23); // 23 desde la ficha 459
   });
 
   it("⭑ FICHA 429 (R22): `zona_sinpe_cambiado` es DINERO, y no se reutilizo ninguna accion de zona", () => {
@@ -341,7 +345,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(HISTORIAL_ACCION_TIPOS).not.toContain("zona_sinpe_confirmado");
     // La 429 NO amplia el enum de entidades: `zona` esta ahi desde los 17 originales de la 362.
     expect(HISTORIAL_ACCION_ENTIDADES).toContain("zona");
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(21);
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23); // 23 desde la ficha 459
   });
 
   it("⭑ FICHA 381: `cobro_tienda_registrado` es DINERO, con entidad NUEVA y sin reusar la caja", () => {
@@ -381,7 +385,9 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(HISTORIAL_ACCION_TIPOS).not.toContain("abono_tienda_registrado");
   });
 
-  it("el reparto por categoria es el del Anexo A: 30 dinero, 10 desaparicion, 12 permisos", () => {
+  it("el reparto por categoria es el del Anexo A: 37 dinero, 10 desaparicion, 12 permisos", () => {
+    // 37 y no 33 desde la ficha 459: los cuatro del pago por cuenta y del saldo inicial o aporte
+    // sacan o meten dinero en la caja.
     // Numeros DUROS: mover un tipo de categoria es una decision, y tiene que pasar por aqui.
     // 26 y no 25 desde la ficha 366: `orden_zona_reconciliada` entra en DINERO.
     // 7 y no 6 desde la ficha 371: `gestion_fecha_reprogramacion_corregida` entra en DESAPARICION.
@@ -406,7 +412,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // hacen asiento —la 431 no escribe en ningun libro (su R14)—, pero declaran que ₡X de efectivo
     // llego o dejo de haber llegado a la central y mueven el saldo con el que se persigue. Ninguna
     // de las otras dos categorias lo describe.
-    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(33);
+    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(37);
     expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(10);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
   });

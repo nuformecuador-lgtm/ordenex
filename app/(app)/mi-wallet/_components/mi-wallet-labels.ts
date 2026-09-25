@@ -94,6 +94,9 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
   // `/wallet/tiendas` (que reexporta este mismo diccionario), y las dos descargas salen de aqui:
   // un solo texto para las cuatro superficies.
   cobro_manual: "Cobro de Ordenex",
+  // Ficha 459 (design §5): textos exactos del spec.
+  pago_por_cuenta: "Pago por cuenta de la tienda",
+  pago_por_cuenta_anulado: "Pago por cuenta anulado",
 };
 
 /** Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 43). */

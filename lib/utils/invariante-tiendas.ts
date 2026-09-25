@@ -40,6 +40,8 @@ export const TIPO_POR_CATEGORIA_TIENDA: Record<
   pago_tienda: "debito",
   ajuste_debito: "debito",
   cobro_manual: "debito",
+  pago_por_cuenta: "debito",
+  pago_por_cuenta_anulado: "credito",
 };
 
 /** Marca de los conceptos de la tienda que NO tienen asiento en la caja. */
@@ -67,4 +69,8 @@ export const CONTRAPARTIDA_EN_CAJA: Record<
   cobro_manual: SIN_CONTRAPARTIDA,
   // Sin productor en el arbol (solo lo nombran tipos, etiquetas y metricas).
   ajuste_debito: SIN_CONTRAPARTIDA,
+  // Ficha 459 (R29/R46): el pago por cuenta sale de la caja en la MISMA transaccion en que se
+  // debita a la tienda, y su anulacion vuelve a los dos libros a la vez.
+  pago_por_cuenta: "egreso_pago_por_cuenta_tienda",
+  pago_por_cuenta_anulado: "ingreso_reverso_pago_por_cuenta_tienda",
 };

@@ -121,7 +121,7 @@ const writeClient = {} as WalletTxClient;
 describe("WalletService.listarMovimientos (R19/R20)", () => {
   it("R19: rol no autorizado -> forbidden, sin tocar el repo", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const r = await svc.listarMovimientos({ page: 1, pageSize: 20 }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.listar).not.toHaveBeenCalled();
@@ -129,7 +129,7 @@ describe("WalletService.listarMovimientos (R19/R20)", () => {
 
   it("feature 94: admin -> ok (paridad con maestro)", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const r = await svc.listarMovimientos({ page: 1, pageSize: 20 }, ADMIN);
     expect(r.status).toBe("ok");
     expect(repo.listar).toHaveBeenCalled();
@@ -137,7 +137,7 @@ describe("WalletService.listarMovimientos (R19/R20)", () => {
 
   it("R20: maestro -> ok; pasa filtros al repo; DTO con monto STRING", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const desde = new Date("2026-07-01T00:00:00.000Z");
     const r = await svc.listarMovimientos(
       { page: 2, pageSize: 10, tipo: "ingreso", categoria: "ingreso_flete", desde },
@@ -166,7 +166,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
     // de la caja para tirarlas a la basura. Se miden los CINCO metodos, no solo el que usa
     // este camino: ninguno puede haberse rozado.
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, OTRO);
 
@@ -186,7 +186,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
   it("459/R14/R15: estado «flujo» y `flujoDesde` = el dia del primer movimiento, leido SIN filtros", async () => {
     const repo = buildRepo();
     repo.primerDiaDeLaCaja = vi.fn(async () => "2026-08-25");
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.verResumenCaja({ page: 1, pageSize: 20, tipo: "ingreso" }, MAESTRO);
 
@@ -199,7 +199,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
 
   it("459/R15: con el libro vacio, `flujoDesde` es null", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
     if (r.status !== "ok") throw new Error("esperado ok");
     expect(r.resumen.flujoDesde).toBeNull();
@@ -207,7 +207,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
 
   it("feature 94: admin -> ok (paridad con maestro)", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, ADMIN);
     expect(r.status).toBe("ok");
     expect(repo.agregarPorCategoriaYTipo).toHaveBeenCalled();
@@ -215,7 +215,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
 
   it("R1/R4/R5: maestro -> las DOS cifras, distintas, derivadas del conjunto agregado", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
 
@@ -253,7 +253,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
 
   it("R64: TODOS los importes cruzan como STRING — cero `number` en el DTO", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
     if (r.status !== "ok") throw new Error("esperado ok");
 
@@ -278,7 +278,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
     // construccion de filtros en vez de reusar `construirFiltros`, los dos objetos dejarian de
     // ser iguales y la cabecera podria dejar de cuadrar con su propio listado.
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const desde = new Date("2026-07-01T00:00:00.000Z");
     const hasta = new Date("2026-07-31T00:00:00.000Z");
     const input = {
@@ -312,7 +312,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
   });
 
   it("[P7]: sin filtros `periodoFiltrado` es false; con CUALQUIERA de los cuatro, true", async () => {
-    const svc = () => new WalletService(buildRepo(), writeClient);
+    const svc = () => new WalletService(buildRepo(), writeClient, SIN_SALDO_INICIAL_459);
     const bandera = async (extra: Record<string, unknown>) => {
       const r = await svc().verResumenCaja({ page: 1, pageSize: 20, ...extra }, MAESTRO);
       if (r.status !== "ok") throw new Error("esperado ok");
@@ -333,7 +333,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
   it("[P7]: el servidor NO pinta texto — el DTO lleva el HECHO, no el rotulo", async () => {
     // R60/R58 son de la pantalla (T G.1). Aqui lo unico que se comprueba es que el servidor no
     // se mete a redactar: ningun campo del DTO es una frase.
-    const svc = new WalletService(buildRepo(), writeClient);
+    const svc = new WalletService(buildRepo(), writeClient, SIN_SALDO_INICIAL_459);
     const r = await svc.verResumenCaja(
       { page: 1, pageSize: 20, tipo: "ingreso" },
       MAESTRO,
@@ -377,7 +377,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
   it("libro vacio -> las dos cifras en 0.00 y signo `cero` (nunca `null` ni cadena vacia)", async () => {
     const repo = buildRepo();
     (repo.agregarPorCategoriaYTipo as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
     if (r.status !== "ok") throw new Error("esperado ok");
@@ -403,7 +403,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
         { categoria: "ingreso_flete", tipo: "ingreso", total: "9999.00" },
         { categoria: "egreso_sueldo", tipo: "egreso", total: "4444.00" },
       ] satisfies AgregadoCajaRow[]);
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
     if (r.status !== "ok") throw new Error("esperado ok");
@@ -424,7 +424,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
 
   it("R30: `forbidden` no viaja con composición", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, OTRO);
 
@@ -439,7 +439,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
   });
 
   it("R23/R26: la composición cruza la frontera con TODOS sus importes como STRING", async () => {
-    const svc = new WalletService(buildRepo(), writeClient);
+    const svc = new WalletService(buildRepo(), writeClient, SIN_SALDO_INICIAL_459);
     const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
     if (r.status !== "ok") throw new Error("esperado ok");
 
@@ -471,7 +471,7 @@ const DETALLE_BASE = { fila: "egreso_pago_mensajero" as const, page: 1, pageSize
 describe("WalletService.listarMovimientosDeFila (R18/R20/R33/R38/R39/R40)", () => {
   it("R38/R39: un rol sin acceso total recibe `forbidden`, sin movimientos y SIN tocar el repo", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.listarMovimientosDeFila(DETALLE_BASE, OTRO);
 
@@ -480,7 +480,7 @@ describe("WalletService.listarMovimientosDeFila (R18/R20/R33/R38/R39/R40)", () =
     // R39: el guardia va ANTES de la base. Cero invocaciones, no "una que devolvio nada".
     expect(repo.listar).not.toHaveBeenCalled();
     // Control de no-vacuidad del `not`: con un rol autorizado, el MISMO camino SI la llama.
-    await new WalletService(repo, writeClient).listarMovimientosDeFila(DETALLE_BASE, MAESTRO);
+    await new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459).listarMovimientosDeFila(DETALLE_BASE, MAESTRO);
     expect(repo.listar).toHaveBeenCalledTimes(1);
   });
 
@@ -494,11 +494,11 @@ describe("WalletService.listarMovimientosDeFila (R18/R20/R33/R38/R39/R40)", () =
     const medidos: Record<string, [string, string]> = {};
     for (const rol of roles) {
       const actor: Actor = { usuarioId: `u-${rol}`, rol };
-      const detalle = await new WalletService(buildRepo(), writeClient).listarMovimientosDeFila(
+      const detalle = await new WalletService(buildRepo(), writeClient, SIN_SALDO_INICIAL_459).listarMovimientosDeFila(
         DETALLE_BASE,
         actor,
       );
-      const listado = await new WalletService(buildRepo(), writeClient).listarMovimientos(
+      const listado = await new WalletService(buildRepo(), writeClient, SIN_SALDO_INICIAL_459).listarMovimientos(
         { page: 1, pageSize: 20 },
         actor,
       );
@@ -517,7 +517,7 @@ describe("WalletService.listarMovimientosDeFila (R18/R20/R33/R38/R39/R40)", () =
 
   it("R18: el conjunto de la fila lo resuelve el SERVIDOR y viaja a la CONSULTA", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     await svc.listarMovimientosDeFila(DETALLE_BASE, MAESTRO);
     await svc.listarMovimientosDeFila({ ...DETALLE_BASE, fila: "otros_egresos" }, MAESTRO);
@@ -540,7 +540,7 @@ describe("WalletService.listarMovimientosDeFila (R18/R20/R33/R38/R39/R40)", () =
 
   it("R20: los filtros del detalle son los MISMOS del listado, resueltos por el mismo metodo", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const desde = new Date("2026-08-01T00:00:00.000Z");
     const hasta = new Date("2026-08-31T00:00:00.000Z");
 
@@ -563,7 +563,7 @@ describe("WalletService.listarMovimientosDeFila (R18/R20/R33/R38/R39/R40)", () =
 
   it("R33: la interseccion con el filtro de categoria vigente viaja al `WHERE`, tambien vacia", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     // (a) el filtro coincide con la fila: la interseccion es esa categoria.
     await svc.listarMovimientosDeFila(
@@ -591,7 +591,7 @@ describe("WalletService.listarMovimientosDeFila (R18/R20/R33/R38/R39/R40)", () =
       movimientos: [mov({ categoria: "egreso_pago_mensajero", tipo: "egreso", monto: "227300.00" })],
       total: 47,
     });
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.listarMovimientosDeFila(DETALLE_BASE, MAESTRO);
     if (r.status !== "ok") throw new Error("esperado ok");
@@ -609,7 +609,7 @@ describe("WalletService.listarMovimientosDeFila (R18/R20/R33/R38/R39/R40)", () =
 describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
   it("R19: rol no autorizado -> forbidden, sin crear nada", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const r = await svc.registrarMovimientoManual(
       { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
       OTRO,
@@ -621,7 +621,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
 
   it("feature 94: admin -> crea manual (paridad con maestro)", async () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const r = await svc.registrarMovimientoManual(
       { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
       ADMIN,
@@ -638,7 +638,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
       movimientos: [mov({ id: "w-manual", tipo: "egreso", categoria: "egreso_ajuste", monto: "50.00", origenTipo: "manual", origenId: null, descripcion: "correccion", registradoPor: "u-maestro" })],
       total: 1,
     });
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     const r = await svc.registrarMovimientoManual(
       { tipo: "egreso", categoria: "egreso_ajuste", monto: "50.00", descripcion: "correccion" },
       MAESTRO,
@@ -659,7 +659,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
 
   it("R3: el servicio NO expone update ni delete (solo listar/verResumenCaja/registrarManual)", () => {
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
     expect((svc as unknown as Record<string, unknown>).actualizar).toBeUndefined();
     expect((svc as unknown as Record<string, unknown>).eliminar).toBeUndefined();
     expect((svc as unknown as Record<string, unknown>).update).toBeUndefined();
@@ -716,7 +716,7 @@ describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/
   it("R23: con la fecha de HOY, la clave fechaMovimiento NO viaja (manda el DEFAULT de la columna)", async () => {
     conRelojEnAhora();
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.registrarMovimientoManual(ajuste(HOY_CR), MAESTRO);
 
@@ -731,7 +731,7 @@ describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/
   it("sin fecha, tampoco viaja — el camino de siempre no cambia ni un byte", async () => {
     conRelojEnAhora();
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     await svc.registrarMovimientoManual(ajuste(), MAESTRO);
 
@@ -741,7 +741,7 @@ describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/
   it("R22: con la fecha de AYER, viaja el instante en que ese dia EMPIEZA en Costa Rica (06:00Z)", async () => {
     conRelojEnAhora();
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.registrarMovimientoManual(ajuste(AYER_CR), MAESTRO);
 
@@ -773,7 +773,7 @@ describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/
       ],
       total: 1,
     });
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     const r = await svc.registrarMovimientoManual(ajuste(AYER_CR), MAESTRO);
 
@@ -793,7 +793,7 @@ describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/
   it("un solo INSERT: la fila lleva su id dentro, no se parte el createMany en dos", async () => {
     conRelojEnAhora();
     const repo = buildRepo();
-    const svc = new WalletService(repo, writeClient);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459);
 
     await svc.registrarMovimientoManual(ajuste(AYER_CR), MAESTRO);
 
@@ -803,3 +803,6 @@ describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/
     expect(repo.crearMovimientos).not.toHaveBeenCalled();
   });
 });
+
+// Ficha 459 (R14): el lector del estado de la caja; estos casos no registran saldo inicial.
+const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };

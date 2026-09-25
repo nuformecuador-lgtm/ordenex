@@ -67,6 +67,11 @@ export const CATEGORIA_LABEL: Record<WalletMovimientoCategoria, string> = {
   // obliga a bautizar cada concepto nuevo en vez de dejarlo caer con su nombre técnico.
   ingreso_cod_recaudado: "Contra-entrega cobrado",
   ingreso_reverso_pago_tienda: "Pago a tienda anulado",
+  // Ficha 459 (design §5): textos exactos del spec.
+  egreso_pago_por_cuenta_tienda: "Pago por cuenta de una tienda",
+  ingreso_reverso_pago_por_cuenta_tienda: "Pago por cuenta anulado",
+  ingreso_aporte_capital: "Saldo inicial o aporte de capital",
+  egreso_reverso_aporte_capital: "Saldo inicial o aporte anulado",
 };
 
 // ── Feature 173 (T G.1/T G.2, design §8) — las DOS cifras de la caja ──
@@ -216,6 +221,10 @@ export const ORIGEN_LABEL: Record<WalletOrigenTipo, string> = {
   // reverso — la FILA DEL PODIO del dia congelado. Misma forma que sus hermanos: nombra la
   // ENTIDAD que origina el movimiento.
   ranking_snapshot_fila: "Premio del ranking",
+  // Ficha 459 (design §5): textos exactos del spec.
+  pago_por_cuenta_tienda: "Pago por cuenta de tienda",
+  aporte_capital: "Saldo inicial o aporte",
+  cobro_manual_reclasificado: "Cobro reclasificado como pago por cuenta",
 };
 
 /** Opciones del `Select` de tipo (con opción "todos" = value ""). */

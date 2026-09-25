@@ -86,6 +86,12 @@ const TIPO_LEGITIMO_POR_CATEGORIA: Record<WalletMovimientoCategoria, WalletMovim
   egreso_gasto_fijo: "egreso",
   egreso_gasto_variable: "egreso",
   egreso_indemnizacion: "egreso",
+  // Ficha 459: los cuatro conceptos nuevos. El CHECK que los admite es el de la migracion
+  // `20260925120200`; lo prueba `caja-459-migration.test.ts`.
+  egreso_pago_por_cuenta_tienda: "egreso",
+  ingreso_reverso_pago_por_cuenta_tienda: "ingreso",
+  ingreso_aporte_capital: "ingreso",
+  egreso_reverso_aporte_capital: "egreso",
 };
 
 const COMBINACIONES_LEGITIMAS = (

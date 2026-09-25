@@ -647,6 +647,9 @@ const CATALOGO = [
         // emite. Va AL FINAL y sin reordenar las ocho para que el diff se lea de un vistazo.
         // Sin ella la lista es homogenea de prefijo y el neto seria `-bruto` siempre.
         "ingreso_ajuste",
+        // FICHA 459 (P13): el pago por cuenta de una tienda es dinero que SALE de la caja, como el
+        // pago a tienda. Su reverso NO entra (decision de la 457 para los reversos de terceros).
+        "egreso_pago_por_cuenta_tienda",
       ],
     },
   },
@@ -695,6 +698,12 @@ const CATALOGO = [
         "egreso_gasto_fijo",
         "egreso_gasto_variable",
         "egreso_indemnizacion",
+        // FICHA 459: los cuatro conceptos nuevos de la caja (pago por cuenta y capital, con sus
+        // anulaciones). La caja entera, ahora 21.
+        "egreso_pago_por_cuenta_tienda",
+        "ingreso_reverso_pago_por_cuenta_tienda",
+        "ingreso_aporte_capital",
+        "egreso_reverso_aporte_capital",
       ],
     },
   },
@@ -762,6 +771,9 @@ const CATALOGO = [
         // `Record` totales sobre la categoria—. Sin esta linea el catalogo describiria una metrica
         // que suma una categoria que no nombra.
         "cobro_manual",
+        // FICHA 459: el pago por cuenta de la tienda y su anulacion (mismo motivo: `string[]`).
+        "pago_por_cuenta",
+        "pago_por_cuenta_anulado",
       ],
     },
   },

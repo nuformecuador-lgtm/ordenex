@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
 import { CierreDelDiaRepository } from "@/lib/repositories/CierreDelDiaRepository";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
@@ -253,7 +254,7 @@ export function montarServicios459(tx: TxDeTest) {
       (fn) => c.$transaction((t) => fn(t as never)),
     ),
     egresos: new WalletEgresoService(cajaRepo, c),
-    wallet: new WalletService(cajaRepo, c),
+    wallet: new WalletService(cajaRepo, c, new AporteCapitalRepository(c)),
     walletTienda: new WalletTiendaService(tiendaRepo),
     walletMensajero: new WalletMensajeroService(mensajeroRepo),
     runTx,

@@ -80,6 +80,13 @@ export const NATURALEZA_POR_CATEGORIA: Record<WalletMovimientoCategoria, Natural
   ingreso_cod_recaudado: "terceros",
   egreso_pago_tienda: "terceros",
   ingreso_reverso_pago_tienda: "terceros",
+  // Ficha 459 (design §5): el pago por cuenta de una tienda es dinero DE LA TIENDA que sale de la
+  // caja hacia un tercero (baja «De las tiendas», no la ganancia); su anulacion lo devuelve.
+  egreso_pago_por_cuenta_tienda: "terceros",
+  ingreso_reverso_pago_por_cuenta_tienda: "terceros",
+  // CAPITAL (P1): el saldo inicial o aporte, y su anulacion. Dinero de Ordenex que NO es ganancia.
+  ingreso_aporte_capital: "capital",
+  egreso_reverso_aporte_capital: "capital",
 };
 
 /**
@@ -120,6 +127,10 @@ export const LIQUIDEZ_POR_CATEGORIA: Record<WalletMovimientoCategoria, LiquidezM
   egreso_gasto_fijo: "efectivo",
   egreso_gasto_variable: "efectivo",
   egreso_indemnizacion: "efectivo",
+  egreso_pago_por_cuenta_tienda: "efectivo",
+  ingreso_reverso_pago_por_cuenta_tienda: "efectivo",
+  ingreso_aporte_capital: "efectivo",
+  egreso_reverso_aporte_capital: "efectivo",
 };
 
 /**

@@ -90,7 +90,7 @@ function soloFiltros(params: object): Record<string, unknown> {
 }
 
 function servicio(repo: IWalletMovimientoRepository) {
-  return new WalletService(repo, {} as WalletTxClient);
+  return new WalletService(repo, {} as WalletTxClient, SIN_SALDO_INICIAL_459);
 }
 
 function input(extra: Record<string, unknown> = {}) {
@@ -240,3 +240,6 @@ describe("WalletService.listarMovimientosCompleto — libro de caja sin paginaci
     expect(excedido).not.toHaveProperty("items");
   });
 });
+
+// Ficha 459 (R14): el lector del estado de la caja; estos casos no registran saldo inicial.
+const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };

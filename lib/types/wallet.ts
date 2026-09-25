@@ -55,6 +55,12 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   // (lib/utils/caja-tesoreria.ts), que es un `Record` TOTAL sobre este union.
   "ingreso_cod_recaudado", // R11: entra al aprobar el cierre del dia
   "ingreso_reverso_pago_tienda", // R24/R26: vuelve al anular un pago a tienda (NUNCA ingreso_ajuste)
+  // Ficha 459 (design §4.1/§5): pago por cuenta de una tienda (terceros) y su anulacion; saldo
+  // inicial o aporte de capital (capital) y su anulacion.
+  "egreso_pago_por_cuenta_tienda",
+  "ingreso_reverso_pago_por_cuenta_tienda",
+  "ingreso_aporte_capital",
+  "egreso_reverso_aporte_capital",
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -87,6 +93,11 @@ export const WALLET_ORIGEN_TIPO_SEED = [
   // etiquetado como `cierre_dia` ademas de devolver basura CHOCARIA con el
   // `egreso_pago_mensajero` que el feed del cierre ya escribio.
   "ranking_snapshot_fila",
+  // Ficha 459 (design §4.1): el documento del pago por cuenta, el del saldo inicial o aporte, y el
+  // cobro de un costo reclasificado como pago por cuenta (origen_id = id de la fila del cobro).
+  "pago_por_cuenta_tienda",
+  "aporte_capital",
+  "cobro_manual_reclasificado",
 ] as const satisfies readonly PrismaWalletOrigenTipo[];
 
 export type WalletOrigenTipo = (typeof WALLET_ORIGEN_TIPO_SEED)[number];

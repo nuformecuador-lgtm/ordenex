@@ -28,6 +28,7 @@ import {
   derivarComposicionGanancia,
 } from "@/lib/utils/caja-tesoreria";
 import { instanteDelMovimientoManual } from "@/lib/utils/fecha-movimiento-manual";
+import type { LectorSaldoInicial } from "@/lib/interfaces/services/IWalletService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Roles autorizados (R19/R65): acceso total (maestro/admin, dueños de la caja central).
@@ -57,6 +58,13 @@ export class WalletService implements IWalletService {
     // Cliente de escritura para el movimiento manual (fuera de una tx de cierre): el
     // repo acepta cualquier WalletTxClient; aqui inyectamos el PrismaClient completo.
     private readonly writeClient: WalletTxClient,
+    /**
+     * Ficha 459 (R14/R21) — el lector de «hay un saldo inicial vigente». SIN valor por defecto a
+     * proposito: un composition root que se olvidara de pasarlo dejaria la caja en «flujo» para
+     * siempre aunque alguien registrara un saldo inicial (memoria «el composition root que no
+     * inyecta»). Si falta, no compila.
+     */
+    private readonly saldoInicial: LectorSaldoInicial,
   ) {}
 
   /**
@@ -84,13 +92,9 @@ export class WalletService implements IWalletService {
     };
   }
 
-  /**
-   * Ficha 459 (R14) — ¿hay un saldo inicial vigente?
-   * TODO(459-B): la tabla `aporte_capital` llega con el bloque B; hasta entonces no puede haber
-   * ninguno. La guardia de T B.12 prohibe dejar este TODO.
-   */
+  /** Ficha 459 (R14) — ¿hay un saldo inicial vigente? Lo lee el repositorio de `aporte_capital`. */
   private async haySaldoInicialVigente(): Promise<boolean> {
-    return false;
+    return this.saldoInicial.haySaldoInicialVigente();
   }
 
   async listarMovimientos(

@@ -137,8 +137,12 @@ describe("R16 · la caja principal agrega solo lo que la metrica declara y solo 
       "egreso_gasto_variable",
       "egreso_indemnizacion",
       "ingreso_ajuste",
+      // FICHA 459 (P13): el pago por cuenta de una tienda sale de la caja.
+      "egreso_pago_por_cuenta_tienda",
     ]);
-    expect(where.categoria.in).toHaveLength(9);
+    expect(where.categoria.in).toHaveLength(10);
+    // FICHA 459: tampoco el reverso del pago por cuenta.
+    expect(where.categoria.in).not.toContain("ingreso_reverso_pago_por_cuenta_tienda");
     // Y lo que NO lleva: meter el reverso del pago a tienda cambiaria lo que la cifra significa.
     expect(where.categoria.in).not.toContain("ingreso_reverso_pago_tienda");
     expect(where.categoria.in).not.toContain("ingreso_cod_recaudado");

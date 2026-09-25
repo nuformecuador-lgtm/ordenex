@@ -72,6 +72,14 @@ export type RegistrarMovimientoManualServiceResult =
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
+/**
+ * Ficha 459 (R14) — lo unico que el resumen de la caja necesita saber del capital: si hay un saldo
+ * inicial vigente. Lo implementa `AporteCapitalRepository`.
+ */
+export interface LectorSaldoInicial {
+  haySaldoInicialVigente(): Promise<boolean>;
+}
+
 export interface IWalletService {
   /** R19/R20: solo maestro; lista el libro paginado con filtros. Forbidden sin exponer datos. */
   listarMovimientos(input: ListarMovimientosInput, actor: Actor): Promise<ListarMovimientosServiceResult>;
