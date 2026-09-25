@@ -26,7 +26,11 @@ import { avisosDiariosConfig } from "@/lib/config/avisos-diarios";
 import {
   notificarDevolucionesRepresadasReal,
   notificarNovedadesSinGestionarReal,
+  notificarReprogramadasEsperanCierreReal,
 } from "@/lib/notificaciones/notificadores";
+// FICHA 462: el conteo UNICO de las reprogramadas retenidas, con el MISMO ensamblaje que la campana,
+// la marca de `/cierres-admin` y la franja de `/ordenes` (R7).
+import { buildReprogramadasRetenidasService } from "@/lib/services/reprogramadas-retenidas-composicion";
 
 export interface AvisosDiariosDeps {
   /** Secreto esperado (inyectable en tests). Por defecto, el `CRON_SECRET` del entorno. */
@@ -52,6 +56,11 @@ function buildService(): IAvisosDiariosService {
       new OrdenDiaRepartoCambioRepository(prisma),
       new OrdenTraspasoRepository(prisma),
     ),
+    // ⚠️ FICHA 462 (T2.7, R7/R19) — EL CONTEO UNICO DE LAS REPROGRAMADAS RETENIDAS. Es una
+    // dependencia REQUERIDA del servicio (sin ella no compila), y se construye con el MISMO
+    // ensamblaje que usan la campana, la marca de `/cierres-admin` y la franja de `/ordenes`: las
+    // cuatro superficies leen la misma cifra o el aviso queda desacreditado el primer dia.
+    buildReprogramadasRetenidasService(prisma),
     // R53: el umbral entra por configuracion, con su medicion al lado. No es un literal del
     // servicio.
     avisosDiariosConfig.DIAS_REPRESAMIENTO,
@@ -67,6 +76,12 @@ function buildService(): IAvisosDiariosService {
     // USO EFECTIVO (fuente sin imports ni comentarios) y no sobre el fichero entero.
     notificarNovedadesSinGestionarReal,
     notificarDevolucionesRepresadasReal,
+    // ⚠️ FICHA 462 (T2.7, R19) — EL TERCER NOTIFICADOR, y esta linea ES el requisito, no el import
+    // de arriba. Borrar este argumento dejando el import intacto reproduce el fallo del corte
+    // («dos de siete notificadores muertos»): el aviso no saldria JAMAS con la suite en verde. La
+    // guardia de `notificacion-notificadores-reales.test.ts` afirma sobre el USO EFECTIVO
+    // (mutacion 8 del design => ROJO).
+    notificarReprogramadasEsperanCierreReal,
   );
 }
 
@@ -110,6 +125,11 @@ export async function handleAvisosDiarios(
       ordenesRepresadas: resumen.ordenesRepresadas,
       zonasConRepresadas: resumen.zonasConRepresadas,
       avisosRepresadasEmitidos: resumen.avisosRepresadasEmitidos,
+      // FICHA 462 (R52): los tres conteos del tercer agregado, campo a campo. Ni ids ni fechas de
+      // orden: cuantas retenidas, cuantos ambitos y cuantos avisos.
+      reprogramadasRetenidas: resumen.reprogramadasRetenidas,
+      ambitosConRetenidas: resumen.ambitosConRetenidas,
+      avisosRetenidasEmitidos: resumen.avisosRetenidasEmitidos,
       fallos: resumen.fallos,
     };
   });
