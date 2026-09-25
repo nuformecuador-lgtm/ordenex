@@ -87,18 +87,45 @@ export const CATEGORIA_LABEL: Record<WalletMovimientoCategoria, string> = {
  * hecho de que haya filtros lo dice el SERVIDOR (`CajaResumenDTO.periodoFiltrado`), no una
  * deduccion del cliente sobre el estado de los `Select`.
  */
+//
+// ── Ficha 459 (design §3.1–§3.3, R15–R26) — la cifra principal cambia de NOMBRE según el estado ──
+//
+// El servidor decide el estado (`CajaResumenDTO.estado`, R14): «saldo» solo si una persona
+// registró un saldo inicial vigente; «flujo» en cualquier otro caso. El NUMERO no cambia con el
+// estado; cambia como se llama y lo que la tarjeta explica. Mientras sea «flujo», las palabras
+// «Dinero en caja» no pueden aparecer en ningun rotulo, pista, aviso ni nombre accesible (R16):
+// la app no sabe con cuanto dinero empezo Ordenex y no lo inventa (HF4, R27).
+//
+// Textos LITERALES de design §3.3. La pista y el aviso viejos de la 173 (la cifra «incluido el
+// dinero de las tiendas» y el «de las tiendas es MÁS que lo que se les debe») se retiran: desde
+// esta ficha «De las tiendas» SI es lo que se les debe (R23, R24), y una guardia vigila que no
+// vuelvan (`tests/unit/guards/caja-textos-459.guardia.test.ts`).
 export const CAJA_RESUMEN_LABEL = {
+  /** R15 — estado «flujo», sin filtros. */
+  flujo: "Flujo de dinero registrado",
+  /** R15 — desde que dia cuenta y que NO es el saldo del banco. `dia` ya viene legible. */
+  flujoPista: (dia: string) =>
+    `Lo que entró menos lo que salió desde el ${dia}. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex.`,
+  /** El libro de la caja esta vacio (`flujoDesde` null): no hay «desde» que decir. */
+  flujoVacio: "Todavía no hay movimientos registrados.",
+  /** R18 — estado «saldo», sin filtros. */
   enCaja: "Dinero en caja",
+  enCajaPista:
+    "El saldo inicial registrado más todo lo que entró menos todo lo que salió desde entonces, incluido el dinero de las tiendas.",
+  /** R20 — con filtros, en cualquiera de los dos estados. */
   enCajaPeriodo: "Movimiento neto del periodo",
-  enCajaPista: "Todo lo que entró y salió, incluido el dinero de las tiendas",
   entradas: "Entró",
   salidas: "Salió",
   ganancia: "Ganancia de Ordenex",
   gananciaPista: "Lo que Ordenex gana menos lo que gasta",
   ingresosPropios: "Ingresos de Ordenex",
   egresosPropios: "Gastos de Ordenex",
-  deTerceros: "Contra-entrega cobrado y aún no entregado a las tiendas",
+  /** R23 — desde esta ficha «De las tiendas» ES lo que Ordenex les debe. */
+  deTerceros: "Lo que Ordenex les debe a las tiendas",
   deTercerosEnlace: "Ver la deuda de cada tienda",
+  /** R25 — el capital de Ordenex, cifra propia junto a la ganancia. */
+  capital: "Saldo inicial y aportes",
+  capitalPista: "Dinero de Ordenex que no es ganancia.",
   // Feature 200 (tanda 1) — el TERCER tile de la cabecera. No es dinero: es cuántos registros
   // hay en el conjunto que se está mirando, y por eso se pinta en color neutro y sin insignia
   // de signo. La pista no nombra el control que recorta el conjunto: dice lo que la persona
@@ -107,28 +134,88 @@ export const CAJA_RESUMEN_LABEL = {
   movimientosPista: "Registros del periodo que estás viendo",
 } as const;
 
+/** R17 — estado «flujo», sin filtros y la cifra principal negativa. */
+export const CAJA_RESUMEN_AVISO_FLUJO_NEGATIVO =
+  "Sale negativo porque parte de los pagos se hicieron con dinero que Ordenex ya tenía antes de usar la app, y ese dinero no está registrado aquí.";
+
+/** R19 — estado «saldo», sin filtros y la cifra principal negativa. */
+export const CAJA_RESUMEN_AVISO_SALDO_NEGATIVO =
+  "El dinero en caja no puede ser negativo. Revisá el saldo inicial y los pagos registrados.";
+
+/** R23 — «De las tiendas» negativo: son las tiendas las que le deben a Ordenex, y cuánto. */
+export function CAJA_RESUMEN_TIENDAS_DEBEN(monto: string): string {
+  return `Las tiendas le deben a Ordenex ${monto}.`;
+}
+
+/**
+ * R23/R24 — la explicacion de «De las tiendas». Sustituye al aviso de la 173 que decia que la
+ * cifra era MAYOR que la deuda: con la derivacion de esta ficha ya no lo es.
+ */
+export const CAJA_RESUMEN_AVISO_TERCEROS =
+  "Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión y el impuesto. Los cobros de un costo a una tienda bajan su saldo sin pasar por la caja. El detalle de cada tienda está en Wallet → Tiendas.";
+
+/** El dia del «desde» en palabras y con año: «25 de agosto de 2026» (design §3.1). */
+function diaLegibleConAnio(fecha: string): string {
+  return `${fechaLegible(fecha)} de ${fecha.slice(0, 4)}`;
+}
+
+/** Lo unico que el rotulo necesita saber del resumen: el hecho de los filtros y el estado. */
+type EstadoDelRotulo = Pick<CajaResumenDTO, "periodoFiltrado" | "estado">;
+
+/**
+ * R15/R18/R20 — el NOMBRE de la cifra principal. UNA sola funcion para la tarjeta de `/wallet` y
+ * para los KPIs de la analitica (T A.9): la misma cifra con dos nombres en dos pantallas se lee
+ * como dos cifras. Los dos hechos los da el SERVIDOR; aqui solo se elige la palabra.
+ */
+export function rotuloCifraPrincipal(resumen: EstadoDelRotulo): string {
+  if (resumen.periodoFiltrado) return CAJA_RESUMEN_LABEL.enCajaPeriodo;
+  return resumen.estado === "saldo" ? CAJA_RESUMEN_LABEL.enCaja : CAJA_RESUMEN_LABEL.flujo;
+}
+
+/**
+ * R15/R18 — la pista bajo la cifra principal, o `null` con filtros puestos: entonces lo que
+ * explica la cifra es `CAJA_RESUMEN_AVISO_PERIODO`, porque ni «desde el primer dia» ni «el saldo
+ * inicial mas…» describen un periodo recortado.
+ */
+export function pistaCifraPrincipal(
+  resumen: EstadoDelRotulo & Pick<CajaResumenDTO, "flujoDesde">,
+): string | null {
+  if (resumen.periodoFiltrado) return null;
+  if (resumen.estado === "saldo") return CAJA_RESUMEN_LABEL.enCajaPista;
+  return resumen.flujoDesde === null
+    ? CAJA_RESUMEN_LABEL.flujoVacio
+    : CAJA_RESUMEN_LABEL.flujoPista(diaLegibleConAnio(resumen.flujoDesde));
+}
+
+/**
+ * R17/R19 — la linea que explica una cifra principal negativa, o `null` si no toca. Solo sin
+ * filtros: con un periodo elegido, un neto negativo es solo que salio mas de lo que entro. El
+ * signo lo da el SERVIDOR (`signoEnCaja`); aqui no se compara ningun importe.
+ */
+export function avisoCifraNegativa(
+  resumen: EstadoDelRotulo & Pick<CajaResumenDTO, "signoEnCaja">,
+): string | null {
+  if (resumen.periodoFiltrado || resumen.signoEnCaja !== "negativo") return null;
+  return resumen.estado === "saldo"
+    ? CAJA_RESUMEN_AVISO_SALDO_NEGATIVO
+    : CAJA_RESUMEN_AVISO_FLUJO_NEGATIVO;
+}
+
 /** Pantalla donde SI vive la deuda con cada tienda, derivada del ledger por tienda (R35). */
 export const CAJA_TIENDAS_HREF = "/wallet/tiendas";
 
 /**
- * R60 — en que se diferencian las dos cifras, en espanol llano y SIN siglas. Se compone con
- * los dos rotulos reales para que no puedan desalinearse.
+ * R60 de la 173, reescrita por la 459 (design §3.3) — en que se diferencian las dos cifras. Se
+ * compone con el rotulo VIGENTE de la cifra principal, asi que en estado «flujo» tampoco aqui
+ * aparece «Dinero en caja» (R16).
  */
-export const CAJA_RESUMEN_NOTA_DIFERENCIA =
-  `«${CAJA_RESUMEN_LABEL.enCaja}» incluye el contra-entrega que se cobró a nombre de las ` +
-  `tiendas, que no es de Ordenex y hay que entregarlo. «${CAJA_RESUMEN_LABEL.ganancia}» no lo ` +
-  `incluye: es solo lo que Ordenex gana menos lo que gasta.`;
-
-/**
- * R34 / `[P6]` — la advertencia OBLIGATORIA de la tercera linea. Esa cifra es MAYOR que la
- * deuda con las tiendas, porque de ese dinero Ordenex todavia descuenta el flete, la comision
- * y el impuesto. Decir «lo que se les debe» aqui seria inventar una segunda respuesta a una
- * pregunta que ya tiene la suya en `/wallet/tiendas`.
- */
-export const CAJA_RESUMEN_AVISO_TERCEROS =
-  "No es lo que se les debe a las tiendas: es más, porque de este dinero Ordenex todavía " +
-  "descuenta el flete, la comisión y el impuesto. La deuda exacta de cada tienda está en " +
-  "Wallet → Tiendas.";
+export function CAJA_RESUMEN_NOTA_DIFERENCIA(rotulo: string): string {
+  return (
+    `«${rotulo}» cuenta todo el dinero, también el que es de las tiendas. ` +
+    `«${CAJA_RESUMEN_LABEL.ganancia}» es solo lo que Ordenex gana menos lo que gasta: no incluye ` +
+    `el dinero de las tiendas ni el saldo inicial o los aportes.`
+  );
+}
 
 /** `[P7]` — por que la cifra grande cambia de nombre cuando hay filtros puestos. */
 export const CAJA_RESUMEN_AVISO_PERIODO =
@@ -159,24 +246,28 @@ export const CAJA_COMPOSICION_LABEL = {
  * pantalla en vez de caer en un `default` mudo. `null` en `dos_bolsillos` NO es un hueco: es
  * el caso normal, donde los dos bloques se explican solos con su importe y su pista.
  */
+//
+// Ficha 459 (design §3.4, R26) — los tres mensajes, reescritos con el significado nuevo: «De las
+// tiendas» es lo que se les DEBE (R5) y «De Ordenex» es ganancia MAS aportes (R11). La barra y
+// estos mensajes solo se pintan en estado «saldo» (R22).
 export const CAJA_COMPOSICION_MENSAJE: Record<ModoComposicionCaja, string | null> = {
   dos_bolsillos: null,
-  // R16: con todas sus letras. Es el aviso mas importante de la pantalla.
+  // R16 de la 231: con todas sus letras. Es el aviso mas importante de la pantalla.
   solo_tiendas:
-    "Ordenex gastó más de lo que ganó, así que hay dinero de las tiendas cubriendo ese " +
-    "saldo. Lo que se ve en la caja no alcanza para entregarles todo lo suyo.",
-  // R17 (D4): el espejo — se entrego a las tiendas mas contra-entrega del que se cobro.
+    "Lo de Ordenex (ganancia más aportes) está en negativo, así que hay dinero de las tiendas cubriendo ese saldo. Lo que hay en la caja no alcanza para entregarles todo lo suyo.",
+  // R17 de la 231 (D4): el espejo — «De las tiendas» negativo.
   solo_ordenex:
-    "Se entregó a las tiendas más contra-entrega del que se cobró en este periodo, así que " +
-    "todo lo que queda en la caja es de Ordenex.",
-  // R18: nada que repartir. Ni se enuncia porcentaje ni se pinta segmento alguno.
-  sin_reparto: "No hay nada que repartir: no queda dinero de las tiendas ni ganancia de Ordenex.",
+    "Las tiendas le deben a Ordenex, así que todo lo que hay en la caja es de Ordenex y además hay dinero por cobrarles.",
+  // R18 de la 231: nada que repartir. Ni se enuncia porcentaje ni se pinta segmento alguno.
+  sin_reparto:
+    "No hay nada que repartir: ni Ordenex ni las tiendas tienen dinero a favor en la caja.",
 };
 
 /**
- * R13 — el nombre accesible de la barra: las DOS porciones, cada una con su rotulo y su
- * importe. Se compone a partir de las etiquetas de arriba y de los STRING del servidor;
- * money-safe, porque `money` solo da formato y nunca convierte el monto a numero.
+ * R13 de la 231 — el nombre accesible de la barra: las DOS porciones, cada una con su rotulo y
+ * su importe. Ficha 459 (design §3.4): el bolsillo de Ordenex es «De Ordenex» (ganancia y
+ * aportes), no la ganancia a secas. La barra solo se monta en estado «saldo», asi que «dinero en
+ * caja» es cierto donde aparece (R16).
  *
  * NO enuncia el porcentaje a proposito (R20): fuera de `dos_bolsillos` no existe reparto que
  * enunciar, y un nombre accesible que dependiera del modo diria cosas distintas segun el dia.
@@ -185,7 +276,7 @@ export function composicionCajaNombreAccesible(resumen: CajaResumenDTO): string 
   return (
     `${CAJA_COMPOSICION_LABEL.barra}. ` +
     `${CAJA_COMPOSICION_LABEL.tiendas}: ${money(resumen.deTerceros)}. ` +
-    `${CAJA_COMPOSICION_LABEL.ordenex}: ${money(resumen.ganancia)}.`
+    `${CAJA_COMPOSICION_LABEL.ordenex}: ${money(resumen.deOrdenex)} (ganancia y aportes).`
   );
 }
 
@@ -226,6 +317,64 @@ export const ORIGEN_LABEL: Record<WalletOrigenTipo, string> = {
   aporte_capital: "Saldo inicial o aporte",
   cobro_manual_reclasificado: "Cobro reclasificado como pago por cuenta",
 };
+
+// ── Ficha 459 (design §9.4, R66/R67) — las acciones del libro sobre un DOCUMENTO ──
+//
+// Solo la fila ORIGINAL de un pago por cuenta o de un saldo inicial o aporte lleva documento
+// (`WalletMovimientoDTO.documento`, resuelto en el servidor). Los contra-asientos y las salidas
+// de los cobros reclasificados llegan con `documento: null` y no ofrecen nada (R66). Ningun texto
+// nombra un identificador interno (R100): el documento se nombra por lo que la persona ve en la
+// fila (el concepto, la fecha y el importe).
+
+/** Que tipo de documento es, en palabras de la fila (para el titulo del dialogo de anulacion). */
+export const DOCUMENTO_CAJA_NOMBRE: Record<
+  NonNullable<WalletMovimientoDTO["documento"]>["tipo"],
+  string
+> = {
+  pago_por_cuenta_tienda: "el pago por cuenta de una tienda",
+  aporte_capital: "el saldo inicial o aporte de capital",
+};
+
+export const DOCUMENTO_CAJA_ACCION = {
+  anular: "Anular…",
+  anulado: "Anulado",
+  verComprobante: "Ver comprobante",
+  /** Nombre accesible de «Anular…», con la fila dentro: una tabla con N botones iguales no identifica nada. */
+  anularNombre: (concepto: string, fecha: string, monto: string) =>
+    `Anular ${concepto} del ${fecha} por ${monto}`,
+  verComprobanteNombre: (concepto: string, fecha: string) =>
+    `Ver comprobante de ${concepto} del ${fecha}`,
+} as const;
+
+export const ANULAR_DOCUMENTO_CAJA_TEXTO = {
+  titulo: (tipo: string) => `Anular ${tipo}`,
+  /** R47/R74: la anulacion no borra nada; escribe el movimiento contrario, fechado hoy. */
+  descripcion: (monto: string) =>
+    `Se registrará hoy un movimiento contrario por ${monto}. El registro original, su comprobante y su historial quedan intactos: no se borra nada.`,
+  motivo: "Motivo de la anulación",
+  motivoAyuda: "Obligatorio. Queda guardado junto a la anulación.",
+  motivoVacio: "Escribí el motivo de la anulación.",
+  confirmar: "Anular",
+  cancelar: "Cancelar",
+} as const;
+
+export const ANULAR_DOCUMENTO_CAJA_RESPUESTA = {
+  ok: "Anulado. Se registró el movimiento contrario.",
+  yaAnulado: "Ya estaba anulado; no se registró nada más.",
+  noEncontrado: "No se encontró ese registro.",
+  forbidden: "No tenés permiso para anular este registro.",
+  unauthenticated: "Tu sesión expiró. Iniciá sesión de nuevo.",
+  validacion: "No se pudo anular: revisá el motivo.",
+  fallo: "No se pudo anular ahora. Probá de nuevo.",
+} as const;
+
+export const VER_COMPROBANTE_RESPUESTA = {
+  sinComprobante: "Este registro no tiene comprobante.",
+  noEncontrado: "No se encontró el comprobante.",
+  forbidden: "No tenés permiso para ver este comprobante.",
+  unauthenticated: "Tu sesión expiró. Iniciá sesión de nuevo.",
+  fallo: "No se pudo abrir el comprobante ahora. Probá de nuevo.",
+} as const;
 
 /** Opciones del `Select` de tipo (con opción "todos" = value ""). */
 export const TIPO_OPTIONS = [

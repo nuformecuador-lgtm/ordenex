@@ -4,7 +4,7 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 
 import { CajaResumenCard } from "@/app/(app)/wallet/_components/CajaResumenCard";
 import {
-  CATEGORIA_LABEL,
+  CAJA_COMPOSICION_MENSAJE,
   CAJA_RESUMEN_LABEL,
 } from "@/app/(app)/wallet/_components/wallet-labels";
 import type { CajaResumenDTO } from "@/lib/types/wallet";
@@ -39,13 +39,17 @@ const RESUMEN: CajaResumenDTO = {
   // Feature 231 (R9/R10): 10 000 / 12 000 x 100 = 83.333… -> "83.33".
   porcentajeTiendas: "83.33",
   modoComposicion: "dos_bolsillos",
-  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0.
   capital: "0.00",
   signoCapital: "cero",
   deOrdenex: "2000.00",
   signoDeTerceros: "positivo",
   deTercerosAbsoluto: "10000.00",
-  estado: "flujo",
+  // Ficha 459 (T A.8) — las suites de la 173/231 de este archivo hablan de «Dinero en caja», y
+  // ese rótulo SOLO existe con un saldo inicial vigente (R18). Por eso el conjunto base va en
+  // estado «saldo», a conciencia (listado en `progress/impl_459_frontend.md`); el estado
+  // «flujo» —el de producción hoy— tiene su propia suite al final.
+  estado: "saldo",
   flujoDesde: "2026-08-25",
 };
 
@@ -223,9 +227,10 @@ describe("CajaResumenCard — la nota de la diferencia (R60)", () => {
     const texto = diferencia?.textContent ?? "";
     expect(texto).toContain(`«${CAJA_RESUMEN_LABEL.enCaja}»`);
     expect(texto).toContain(`«${CAJA_RESUMEN_LABEL.ganancia}»`);
-    // Dice lo que las diferencia, no que se diferencian: el contra-entrega está en una y no
-    // en la otra.
-    expect(texto.toLowerCase()).toContain("contra-entrega");
+    // Dice lo que las diferencia, no que se diferencian: el dinero de las tiendas está en una y
+    // no en la otra. Ficha 459 (design §3.3): el texto nuevo lo dice así y añade el capital.
+    expect(texto.toLowerCase()).toContain("también el que es de las tiendas");
+    expect(texto.toLowerCase()).toContain("el saldo inicial o los aportes");
   });
 
   it("R60: en español llano — sin siglas y sin jerga de contador", () => {
@@ -256,21 +261,25 @@ describe("CajaResumenCard — la nota de la diferencia (R60)", () => {
   });
 });
 
-describe("CajaResumenCard — la tercera línea y su advertencia (R34 / [P6])", () => {
-  it("R34: muestra el dinero de las tiendas y AVISA de que no es lo que se les debe", () => {
+// Ficha 459 (T A.8, R23/R24) — los tres casos de R34 de la 173 se REESCRIBEN: desde esta ficha
+// «De las tiendas» YA ES lo que Ordenex les debe (la derivación descuenta flete, comisión e
+// impuesto), así que la advertencia «no es lo que se les debe: es más» pasó a ser FALSA y R24
+// prohíbe decirla. Lo que se afirma ahora es su sustituto.
+describe("CajaResumenCard — «De las tiendas» (R34 de la 173 → R23/R24 de la 459)", () => {
+  it("R23: rotula la cifra como lo que Ordenex les debe y explica que son los saldos netos", () => {
     pintar();
 
     const tercera = screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.deTerceros });
     expect(within(tercera).getByText("₡10.000")).toBeInTheDocument();
+    expect(CAJA_RESUMEN_LABEL.deTerceros).toBe("Lo que Ordenex les debe a las tiendas");
 
-    const aviso = within(tercera).getByRole("note");
-    const texto = aviso.textContent ?? "";
-    // Lo que la advertencia tiene que transmitir, y el porqué: esa cifra es MAYOR que la
-    // deuda real, porque de ese dinero Ordenex todavía descuenta sus cobros.
-    expect(texto).toMatch(/no es lo que se les debe/i);
-    expect(texto.toLowerCase()).toContain("flete");
-    expect(texto.toLowerCase()).toContain("comisión");
-    expect(texto).toMatch(/es más/i);
+    const texto = within(tercera).getByRole("note").textContent ?? "";
+    expect(texto).toBe(
+      "Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión y el impuesto. Los cobros de un costo a una tienda bajan su saldo sin pasar por la caja. El detalle de cada tienda está en Wallet → Tiendas.",
+    );
+    // R24: ni «es más» ni «no es lo que se les debe».
+    expect(texto).not.toMatch(/es más/i);
+    expect(texto).not.toMatch(/no es lo que se les debe/i);
   });
 
   it("R34: y lleva al sitio donde la deuda de verdad SÍ está", () => {
@@ -283,30 +292,32 @@ describe("CajaResumenCard — la tercera línea y su advertencia (R34 / [P6])", 
     expect((enlace.textContent ?? "").toLowerCase()).toContain("deuda");
   });
 
-  it("R34: la tercera línea NO se presenta como la deuda con las tiendas", () => {
-    pintar();
-
+  it("R23: si es negativo, dice en palabras que las tiendas le deben a Ordenex, y cuánto", () => {
+    // El ABSOLUTO lo manda el servidor (`deTercerosAbsoluto`): el navegador no le quita el signo
+    // a nada (R28). Los dos importes se pintan: la cifra con su signo y la frase sin él.
+    pintar({
+      deTerceros: "-4780583.97",
+      signoDeTerceros: "negativo",
+      deTercerosAbsoluto: "4780583.97",
+    });
     const tercera = screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.deTerceros });
-    // El rótulo dice lo que la cifra ES —cobrado y no entregado—, no lo que NO es.
-    const rotulo = CAJA_RESUMEN_LABEL.deTerceros.toLowerCase();
-    expect(rotulo).toContain("cobrado");
-    expect(rotulo).not.toMatch(/se (les )?debe/);
-    expect(rotulo).not.toContain("deuda");
-    // Y la única mención a la deuda dentro del bloque es la que la manda a otra pantalla.
-    const menciones = (within(tercera).getByRole("note").textContent ?? "").match(/deuda/gi);
-    expect(menciones ?? []).toHaveLength(1);
+    expect(within(tercera).getByText("-₡4.780.583,97")).toBeInTheDocument();
+    expect(
+      within(tercera).getByText("Las tiendas le deben a Ordenex ₡4.780.583,97."),
+    ).toBeInTheDocument();
+    cleanup();
+
+    // Con la cifra positiva la frase no existe.
+    pintar();
+    expect(screen.queryByText(/Las tiendas le deben a Ordenex/)).toBeNull();
   });
 
-  it("R61 (parte tarjeta): nombra ese dinero con las MISMAS palabras que el libro", () => {
-    // La categoría nueva se llama «Contra-entrega cobrado» en el listado, en el filtro y en
-    // la descarga; si la tarjeta lo llamara de otra forma, nadie ataría una cosa con la otra.
-    expect(CAJA_RESUMEN_LABEL.deTerceros).toContain(
-      CATEGORIA_LABEL.ingreso_cod_recaudado,
-    );
+  it("la única mención a la deuda del bloque es el enlace a la otra pantalla", () => {
     pintar();
-    expect(
-      screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.deTerceros }),
-    ).toBeInTheDocument();
+    const tercera = screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.deTerceros });
+    const menciones = (within(tercera).getByRole("note").textContent ?? "").match(/deuda/gi);
+    expect(menciones ?? []).toHaveLength(0);
+    expect(within(tercera).getByRole("link").textContent ?? "").toMatch(/deuda/);
   });
 });
 
@@ -376,6 +387,10 @@ describe("CajaResumenCard — money-safe en el navegador (R64)", () => {
       salidas: "1000.10",
       enCaja: "12345677901.89",
       deTerceros: "0.10",
+      // Ficha 459: el capital se pinta también; en este caso no puede ser `0.00`, porque la
+      // última línea afirma que ningún importe de la tarjeta se lee «₡0».
+      capital: "5.00",
+      signoCapital: "positivo",
     });
 
     expect(screen.getByText("₡12.345.678.901,99")).toBeInTheDocument();
@@ -399,5 +414,178 @@ describe("CajaResumenCard — money-safe en el navegador (R64)", () => {
     expect(fuente).not.toMatch(/from\s+"@prisma\/client"|from\s+"decimal\.js"/);
     // Y no deriva ninguna de las dos cifras: eso es del servidor (R64), no de la pantalla.
     expect(fuente).not.toMatch(/derivarCaja|derivarBalance/);
+  });
+});
+
+// ═══ Ficha 459 (T A.8, design §3.1–§3.4) — la tarjeta dice lo que la app sabe ═══════════════
+
+/** Todo el texto y todos los nombres accesibles de lo pintado, en minúsculas. */
+function textoYNombresAccesibles(container: HTMLElement): string {
+  const nombres = [...container.querySelectorAll("[aria-label], [title], [alt]")].map((n) =>
+    [n.getAttribute("aria-label"), n.getAttribute("title"), n.getAttribute("alt")].join(" "),
+  );
+  return `${container.textContent ?? ""} ${nombres.join(" ")}`.toLowerCase();
+}
+
+const FLUJO: Partial<CajaResumenDTO> = { estado: "flujo", flujoDesde: "2026-08-25" };
+
+describe("Ficha 459 — estado «flujo»: sin saldo inicial (R15/R16/R17/R22)", () => {
+  it("R15: la cifra se llama «Flujo de dinero registrado», dice desde cuándo y que no es el banco", () => {
+    pintar(FLUJO);
+
+    const region = screen.getByRole("region", { name: "Flujo de dinero registrado" });
+    expect(within(region).getByText("₡12.000")).toBeInTheDocument();
+    expect(
+      within(region).getByText(
+        "Lo que entró menos lo que salió desde el 25 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("R16: «Dinero en caja» no aparece en ningún texto ni nombre accesible de la tarjeta", () => {
+    const { container } = pintar(FLUJO);
+    expect(textoYNombresAccesibles(container)).not.toContain("dinero en caja");
+
+    // Contraprueba: el detector SÍ lo encuentra cuando está (estado «saldo»).
+    cleanup();
+    const saldo = pintar({ estado: "saldo" });
+    expect(textoYNombresAccesibles(saldo.container)).toContain("dinero en caja");
+  });
+
+  it("R16: tampoco con la cifra negativa, ni con «De las tiendas» negativo", () => {
+    const { container } = pintar({
+      ...FLUJO,
+      enCaja: "-9186220.50",
+      signoEnCaja: "negativo",
+      deTerceros: "-4780583.97",
+      signoDeTerceros: "negativo",
+      deTercerosAbsoluto: "4780583.97",
+      modoComposicion: "solo_ordenex",
+    });
+    expect(textoYNombresAccesibles(container)).not.toContain("dinero en caja");
+  });
+
+  it("R17: negativa y sin filtros, una línea explica que falta el dinero previo a la app", () => {
+    pintar({ ...FLUJO, enCaja: "-9186220.50", signoEnCaja: "negativo" });
+    const region = screen.getByRole("region", { name: "Flujo de dinero registrado" });
+    expect(within(region).getByText("-₡9.186.220,50")).toBeInTheDocument();
+    expect(
+      within(region).getByText(
+        "Sale negativo porque parte de los pagos se hicieron con dinero que Ordenex ya tenía antes de usar la app, y ese dinero no está registrado aquí.",
+      ),
+    ).toBeInTheDocument();
+    cleanup();
+
+    // Positiva: no hay línea.
+    pintar(FLUJO);
+    expect(screen.queryByText(/Sale negativo porque/)).toBeNull();
+  });
+
+  it("R22: en «flujo» no se pinta la barra ni ninguno de sus mensajes", () => {
+    for (const modo of ["dos_bolsillos", "solo_tiendas", "solo_ordenex", "sin_reparto"] as const) {
+      const { container } = pintar({ ...FLUJO, modoComposicion: modo });
+      expect(screen.queryByRole("img"), `${modo}: barra pintada en flujo`).toBeNull();
+      for (const mensaje of Object.values(CAJA_COMPOSICION_MENSAJE)) {
+        if (mensaje !== null) expect(container.textContent ?? "").not.toContain(mensaje);
+      }
+      // Y el bloque de Ordenex no se tiñe por un modo que no se enseña.
+      const ordenex = container.querySelector<HTMLElement>("[data-bolsillo='ordenex']");
+      expect(ordenex?.dataset.superficie).toBe("neutra");
+      cleanup();
+    }
+  });
+
+  it("con el libro vacío (`flujoDesde` null) la pista dice que todavía no hay movimientos", () => {
+    pintar({ estado: "flujo", flujoDesde: null, enCaja: "0.00", signoEnCaja: "cero" });
+    const region = screen.getByRole("region", { name: "Flujo de dinero registrado" });
+    expect(within(region).getByText("Todavía no hay movimientos registrados.")).toBeInTheDocument();
+  });
+});
+
+describe("Ficha 459 — estado «saldo»: con un saldo inicial vigente (R18/R19/R22)", () => {
+  it("R18: la cifra se llama «Dinero en caja» y explica el saldo inicial", () => {
+    pintar({ estado: "saldo" });
+    const region = screen.getByRole("region", { name: "Dinero en caja" });
+    expect(
+      within(region).getByText(
+        "El saldo inicial registrado más todo lo que entró menos todo lo que salió desde entonces, incluido el dinero de las tiendas.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("R19: negativa y sin filtros, avisa que no puede serlo", () => {
+    pintar({ estado: "saldo", enCaja: "-100.00", signoEnCaja: "negativo" });
+    const region = screen.getByRole("region", { name: "Dinero en caja" });
+    const aviso = within(region).getByText(
+      "El dinero en caja no puede ser negativo. Revisá el saldo inicial y los pagos registrados.",
+    );
+    // Es una alarma (no puede pasar), no una explicación: tono de peligro.
+    expect(aviso.className).toContain("text-danger-strong");
+    expect(screen.queryByText(/Sale negativo porque/)).toBeNull();
+  });
+
+  it("R22: en «saldo» se pintan la barra y sus mensajes", () => {
+    pintar({ estado: "saldo", modoComposicion: "solo_tiendas" });
+    expect(screen.getByRole("img")).toBeInTheDocument();
+    expect(screen.getByText(CAJA_COMPOSICION_MENSAJE.solo_tiendas as string)).toBeInTheDocument();
+  });
+});
+
+describe("Ficha 459 — con filtros, en los dos estados (R20)", () => {
+  it("R20: «Movimiento neto del periodo» en «flujo» y en «saldo», sin líneas de negativo", () => {
+    for (const estado of ["flujo", "saldo"] as const) {
+      const { container } = pintar({
+        estado,
+        periodoFiltrado: true,
+        enCaja: "-50.00",
+        signoEnCaja: "negativo",
+      });
+      expect(
+        screen.getByRole("region", { name: "Movimiento neto del periodo" }),
+        estado,
+      ).toBeInTheDocument();
+      expect(container.querySelector("[data-aviso='negativo']"), estado).toBeNull();
+      // Ni la pista del flujo ni la del saldo: describen el libro entero, no un periodo.
+      expect(container.textContent ?? "").not.toContain("desde el 25 de agosto");
+      expect(container.textContent ?? "").not.toContain("El saldo inicial registrado más");
+      cleanup();
+    }
+  });
+
+  it("R20 + R22: con filtros, la barra sigue la regla del estado", () => {
+    pintar({ estado: "flujo", periodoFiltrado: true });
+    expect(screen.queryByRole("img")).toBeNull();
+    cleanup();
+    pintar({ estado: "saldo", periodoFiltrado: true });
+    expect(screen.getByRole("img")).toBeInTheDocument();
+  });
+});
+
+describe("Ficha 459 — el capital de Ordenex junto a la ganancia (R25)", () => {
+  it("R25: región propia «Saldo inicial y aportes», con su cifra y su pista, y la ganancia igual", () => {
+    pintar({ ...FLUJO, capital: "250000.33", signoCapital: "positivo" });
+    const capital = screen.getByRole("region", { name: "Saldo inicial y aportes" });
+    expect(within(capital).getByText("₡250.000,33")).toBeInTheDocument();
+    expect(within(capital).getByText("Dinero de Ordenex que no es ganancia.")).toBeInTheDocument();
+    // La ganancia conserva rótulo y valor, y su región no contiene el capital.
+    const ganancia = screen.getByRole("region", { name: "Ganancia de Ordenex" });
+    expect(within(ganancia).getByText("₡2.000")).toBeInTheDocument();
+    expect(within(ganancia).queryByText("₡250.000,33")).toBeNull();
+    // El capital va DENTRO del bolsillo de Ordenex.
+    expect(capital.closest("[data-bolsillo='ordenex']")).not.toBeNull();
+  });
+});
+
+describe("Ficha 459 — la nota de la diferencia usa el rótulo vigente (design §3.3)", () => {
+  it("en «flujo» nombra «Flujo de dinero registrado»; en «saldo», «Dinero en caja»", () => {
+    pintar(FLUJO);
+    expect(
+      screen.getByText(
+        "«Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes.",
+      ),
+    ).toBeInTheDocument();
+    cleanup();
+    pintar({ estado: "saldo" });
+    expect(screen.getByText(/^«Dinero en caja» cuenta todo el dinero/)).toBeInTheDocument();
   });
 });

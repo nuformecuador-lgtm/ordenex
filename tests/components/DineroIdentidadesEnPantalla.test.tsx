@@ -272,13 +272,21 @@ describe("ficha 359 · A — el teorema: lo pintado se puede volver a leer", () 
 afterEach(cleanup);
 
 /**
- * La tarjeta «Dinero en caja»: SIETE importes con TRES identidades entre ellos, y
- * la peor de las trece por densidad. Las cifras llevan céntimos a propósito y se
- * derivan con `Prisma.Decimal`, igual que el servicio.
+ * La tarjeta de la caja: OCHO importes con TRES identidades entre ellos, y la peor
+ * de las trece por densidad. Las cifras llevan céntimos a propósito y se derivan con
+ * `Prisma.Decimal`, igual que el servicio.
  *
- *   entradas − salidas = enCaja
- *   deTerceros + ganancia = enCaja
+ *   entradas − salidas = cifra principal
+ *   deTerceros + ganancia + capital = cifra principal     ← ficha 459 (R7, design §3.2)
  *   ingresosPropios − egresosPropios = ganancia
+ *
+ * FICHA 459 (T A.8) — la segunda identidad era «terceros + ganancia = en caja». Desde
+ * la 459 la cifra principal tiene TRES sumandos: el capital de Ordenex (saldo inicial y
+ * aportes) es dinero de Ordenex que no es ganancia (R6/R7). El conjunto lleva un capital
+ * DISTINTO de cero y con céntimos: con capital 0 la identidad vieja y la nueva serían la
+ * misma y el caso no distinguiría nada. Es el contrato, reescrito a conciencia.
+ *
+ *   10000.00 − 1000.33 = 8999.67 (terceros) ; 8999.67 + 2415.92 + 1000.33 = 12415.92
  */
 const CAJA_CON_CENTIMOS: CajaResumenDTO = {
   entradas: "15416.47",
@@ -289,26 +297,35 @@ const CAJA_CON_CENTIMOS: CajaResumenDTO = {
   egresosPropios: "3000.55",
   ganancia: "2415.92",
   signoGanancia: "positivo",
-  deTerceros: "10000.00",
+  deTerceros: "8999.67",
   periodoFiltrado: false,
-  porcentajeTiendas: "80.54",
+  porcentajeTiendas: "72.49",
   modoComposicion: "dos_bolsillos",
-  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
-  capital: "0.00",
-  signoCapital: "cero",
-  deOrdenex: "2415.92",
+  capital: "1000.33",
+  signoCapital: "positivo",
+  deOrdenex: "3416.25",
   signoDeTerceros: "positivo",
-  deTercerosAbsoluto: "10000.00",
+  deTercerosAbsoluto: "8999.67",
+  // Estado «flujo»: el de producción hoy. La identidad no depende del estado (R7).
   estado: "flujo",
   flujoDesde: "2026-08-25",
 };
 
-describe("ficha 359 · B1 — «Dinero en caja»: las tres identidades de la tarjeta", () => {
+/** El rótulo de la cifra principal en el estado del conjunto (literal: design §3.3). */
+const ROTULO_PRINCIPAL = "Flujo de dinero registrado";
+
+describe("ficha 359 · B1 — la tarjeta de la caja: las tres identidades (459: tres sumandos)", () => {
   it("el conjunto de prueba es coherente ANTES de pintarlo (según el servidor)", () => {
     // Si el doble no cuadrara, la pantalla podría estar rota y este test verde.
     const c = (k: keyof CajaResumenDTO) => new Prisma.Decimal(CAJA_CON_CENTIMOS[k] as string);
     expect(c("entradas").sub(c("salidas")).toFixed(2)).toBe(CAJA_CON_CENTIMOS.enCaja);
-    expect(c("deTerceros").add(c("ganancia")).toFixed(2)).toBe(CAJA_CON_CENTIMOS.enCaja);
+    expect(c("deTerceros").add(c("ganancia")).add(c("capital")).toFixed(2)).toBe(
+      CAJA_CON_CENTIMOS.enCaja,
+    );
+    expect(c("ganancia").add(c("capital")).toFixed(2)).toBe(CAJA_CON_CENTIMOS.deOrdenex);
+    // Capital con céntimos y distinto de cero: con 0 la identidad de dos sumandos también
+    // cerraría y el caso no probaría la de tres.
+    expect(CAJA_CON_CENTIMOS.capital).not.toBe("0.00");
     expect(c("ingresosPropios").sub(c("egresosPropios")).toFixed(2)).toBe(
       CAJA_CON_CENTIMOS.ganancia,
     );
@@ -319,11 +336,13 @@ describe("ficha 359 · B1 — «Dinero en caja»: las tres identidades de la tar
   it("las tres cuentas cierran con las CADENAS que se leen en la tarjeta", () => {
     render(<CajaResumenCard resumen={CAJA_CON_CENTIMOS} />);
 
-    const enCaja = leerImporte(
-      screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.enCaja }),
-    );
+    const enCaja = leerImporte(screen.getByRole("region", { name: ROTULO_PRINCIPAL }));
     const ganancia = leerImporte(
       screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.ganancia }),
+    );
+    // Ficha 459 (R25): el capital es su propia región, dentro del bolsillo de Ordenex.
+    const capital = leerImporte(
+      screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.capital }),
     );
     const texto = document.body.textContent ?? "";
 
@@ -340,15 +359,15 @@ describe("ficha 359 · B1 — «Dinero en caja»: las tres identidades de la tar
 
     // Identidad 1 — entradas − salidas = en caja.
     laCuentaCierra([enCaja, salidas], entradas, "caja: entradas − salidas");
-    // Identidad 2 — los dos bolsillos suman la caja.
-    laCuentaCierra([terceros, ganancia], enCaja, "caja: terceros + ganancia");
+    // Identidad 2 — ficha 459 (R7): terceros + ganancia + capital = cifra principal.
+    laCuentaCierra([terceros, ganancia, capital], enCaja, "caja: terceros + ganancia + capital");
     // Identidad 3 — el bolsillo de Ordenex, por dentro.
     laCuentaCierra([ganancia, egresos], ingresos, "caja: ingresos − egresos");
   });
 
   it("y las cifras que se leen son las del servidor, no una versión redondeada", () => {
     render(<CajaResumenCard resumen={CAJA_CON_CENTIMOS} />);
-    const enCaja = leerImporte(screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.enCaja }));
+    const enCaja = leerImporte(screen.getByRole("region", { name: ROTULO_PRINCIPAL }));
     expect(centimosPintados(enCaja)).toBe(centimosDelServidor(CAJA_CON_CENTIMOS.enCaja));
     // El síntoma concreto: la tarjeta ya no pinta `₡12.416` por `12415.92`.
     expect(enCaja).not.toBe(money("12416"));
