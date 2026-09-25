@@ -5506,11 +5506,12 @@
       "title": "Ordenex le cobra a una tienda: es ganancia, y cada movimiento dice quien le paga a quien",
       "description": "El cobro a una tienda suma a la ganancia con su linea en la caja, y los conceptos de la wallet se nombran desde Ordenex diciendo quien le paga a quien.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "alta",
       "depends_on": 459,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-25, tras probar en preview: un cobro de 42.000 bajo el saldo de la tienda y no dejo nada en la caja. Error de diseno de la P3 de la 459. Nombres aprobados: Ordenex le cobra a una tienda / Ordenex paga un gasto de una tienda / Ordenex le paga a una tienda / Una tienda le paga a Ordenex / Sueldo / Gasto de Ordenex / Aporte de dinero a la caja / Correccion de caja (suma|resta). Entra en la release completa junto con SF-001, 454-456, 459 y 460 (el humano: el despliegue debe ser completo y sin que falte nada)."
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-25, tras probar en preview: un cobro de 42.000 bajo el saldo de la tienda y no dejo nada en la caja. Error de diseno de la P3 de la 459. Nombres aprobados: Ordenex le cobra a una tienda / Ordenex paga un gasto de una tienda / Ordenex le paga a una tienda / Una tienda le paga a Ordenex / Sueldo / Gasto de Ordenex / Aporte de dinero a la caja / Correccion de caja (suma|resta). Entra en la release completa junto con SF-001, 454-456, 459 y 460 (el humano: el despliegue debe ser completo y sin que falte nada). || Spec escrito (65 R) y aprobado por el alcance del humano; incluye ademas: entrada del CHANGELOG de la analitica del 2026-09-04 y alinear las 4 descriptions del yaml con openapi-spec.ts (hallazgos del manual de la API).",
+      "branch": "feature/461-cobro-y-nombres"
     }
   ]
 }
