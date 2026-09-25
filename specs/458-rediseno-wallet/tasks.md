@@ -1,224 +1,299 @@
-# 458 — Tareas
+# 458 — Tareas (reescritas el 2026-09-25)
 
-Organizadas por ficha hija (`design.md` §9). Cada hija: rama propia desde `dev`, worktree con
-`checkout --detach <SHA de dev>` + comprobación de merge-base como primer paso, spec breve derivado
-de este (los R que cubre) antes de tocar código, `progress/impl_458-<hija>.md` con el mapa R → test,
-revisión y entrada en `progress/history.md`. `[P]` = paralelizable con la anterior dentro de la
-misma hija. Nada se da por hecho sin su gate (`./init.sh --rapido`, o completo donde se indica).
+Organizadas por ficha hija (`design.md` §9): **458-A → 458-B → 458-C → (458-D ∥ 458-E)**, con 458-A y
+458-B en paralelo si hay capacidad (zonas distintas). Ninguna hija arranca hasta que la **461 y la 457
+estén en `dev`**. Cada hija: rama propia, worktree con `git checkout --detach <SHA de dev que dé el
+leader>` + comprobación del merge-base como primer paso, spec breve derivado de este (los R que cubre)
+antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, revisión y entrada en
+`progress/history.md`. `[P]` = paralelizable con la anterior dentro de la misma hija. Implementan
+`backend_dev` (458-B y la parte de servidor de las demás) y `frontend_dev` (pantallas), en ese orden.
 
 ## Reglas que valen para TODAS las hijas
 
-- **Antes y después:** la fotografía de 458-0 (`wallet-caracterizacion-458.test.ts`) corre en
-  verde al empezar y al terminar cada hija, sin tocar sus literales. Si una hija necesita cambiar
-  un literal, se para y se pregunta: es dinero.
+- **Confirmar la 461 al abrir** (`design.md` §0.2): la primera tarea de cada hija lee en `dev` los
+  símbolos que esta ficha da por hechos y anota en el informe lo que difiere. Si un molde no existe o
+  tiene otra forma, cambia la tarea (se anota), no el requisito.
+- **Antes y después:** `caja-caracterizacion-459.test.ts` (y, desde 458-B, `wallet-caracterizacion-
+  458.test.ts`) corren en verde al empezar y al terminar cada hija, sin tocar sus literales salvo el
+  bloque «a propósito» de 458-B. Si una hija necesita cambiar otro literal, se para y se pregunta: es
+  dinero.
 - **No en paralelo:** gate y mutaciones nunca a la vez sobre el mismo árbol.
-- **Test que se retira:** si se borra o reescribe un componente, sus tests se listan en el informe
-  con el R que los sustituye; ninguno desaparece sin reemplazo.
-- **Log del gate:** `INIT_EXIT=$?` escrito dentro del log, sin `tail` en tubería; se miran los
-  `skipped` de `tests/integration/db` (sin `.env` se saltan y el gate dice «OK»).
-- **Commit por tarea** (`feat(458-x): …`), y verificar el blob commiteado antes de dar la hija por
-  cerrada.
+- **Test que se retira o reescribe:** se lista en el informe con el R que lo sustituye. Ninguno
+  desaparece sin reemplazo (lección «el test que vive dentro de lo que borras»).
+- **Log del gate:** `INIT_EXIT=$?` dentro del log, sin `tail` en tubería; mirar los `skipped` de
+  `tests/integration/db` (sin `.env` se saltan y el gate dice «OK»).
+- **Commit por tarea** (`feat(458-x): …`, `test(458-x): …`, `docs(458-x): …`) y verificar el blob
+  commiteado antes de dar la hija por cerrada. **No escribir `feature_list.json`** desde el worktree.
+  **No commitear el informe sin pedirlo** (y pedirlo).
+- **Nombres:** todo rótulo nuevo sigue la regla de la 461 §7 (desde Ordenex, quién le paga a quién,
+  sin siglas); ninguno es un nombre retirado ni reservado.
+- **Ayuda y asistente dentro de cada hija:** `docs/ayuda/**` de las pantallas que toca (frontmatter
+  `actualizado` y `fuentes`), `tests/unit/asistente/contexto-458.test.ts` con un bloque por hija y
+  cuatro preguntas reales al asistente en local anotadas en el informe.
+- **Recorrido por rol** de `design.md` §10 al cerrar cada hija (los pasos que aplican), capturas y
+  números en `progress/recorrido_458-<hija>/`.
 
 ---
 
-## 458-0 — Caracterización (backend, sin código de producción)
+## 458-A — Detalles y guardias sobre las pantallas actuales (fullstack) · depende de 461 y 457 en `dev`
 
-- [ ] **T0.1** Constructor del escenario de §8.1 en `tests/integration/db/_fixtures/wallet-458.ts`
-  (cierre con COD/flete/comisión/IVA/pago al mensajero; rechazo con cobro aprobado; pago a tienda y
-  su anulación; reparto a mensajero y anulación de un pago; cobro de un costo; sueldo y su reverso;
-  gasto variable; ajustes; cobro de gasto fijo aprobado; premio y su anulación; consolidación de
-  bodega parcial). *Hecho:* siembra dos veces seguidas sin error ni duplicados.
-- [ ] **T0.2** `wallet-caracterizacion-458.test.ts`: afirma como literales `CajaResumenDTO`,
-  `ComposicionGananciaDTO`, `DesgloseEgresosDTO`, saldo y desglose de cada tienda, cuenta por pagar
-  de cada mensajero y pendiente de la bodega; un caso con nombre propio fija que `enCaja` incluye el
-  flete (§1.8). *Hecho:* verde contra el SHA de `dev` anotado en el informe; `skipped = 0`.
-  Depende de T0.1.
-- [ ] **T0.3** Mutaciones (≥ 10, lista en `design.md` §8.2), una a una: aplicar → correr solo T0.2
-  → rojo con el nombre del caso → revertir → verde. *Hecho:* `progress/impl_458-0.md` con, por
-  mutación, comando, salida roja y `git diff --stat` vacío al final; ninguna mutación superviviente
-  sin explicar. Depende de T0.2.
-- [ ] **T0.4** [P] (lo hace el LEADER, no el agente) Medición del doble conteo en producción por el
-  MCP de Supabase en solo lectura (§8.3) y cruce con `progress/medicion_457.md`. *Hecho:*
-  `progress/hallazgo_458_doble_conteo.md` con la consulta, el número y la frase para el humano (P10,
-  P15).
-- [ ] **T0.5** Gate rápido + commit. *Hecho:* `INIT_EXIT=0` en el log.
+- [ ] **TA.0** Confirmar en `dev`: `ORIGEN_LABEL`/`ORIGEN_TIENDA_LABEL`/`ORIGEN_PAGO_LABEL` con los
+  textos de la 461 §7.3 y la 457; si la 461 dejó `cargosHint` de `/wallet/tiendas` con los cobros
+  (R90 anterior) y el estado real de C1.1/C1.2/C3.1/C4.1 (`design.md` §1.1). *Hecho:* nota en
+  `progress/impl_458-A.md` con lo que sigue vivo. Fotografía 459 verde sobre el SHA anotado.
+- [ ] **TA.1** `lib/utils/etiqueta-cuenta.ts`: UNA función de etiqueta de tienda/mensajero/bodega,
+  usada por avisos, historial, tablas, origen y «A quién» de la wallet (sustituye a `etiquetaDePersona`
+  donde la wallet la usa y a `nombre` a secas). *Hecho:* `etiqueta-cuenta.test.ts`; guardia de fuente
+  que prohíbe otra composición del nombre en `app/(app)/wallet/**` y `app/(app)/mi-wallet/**` (R33).
+- [ ] **TA.2** [P] `OrigenLegibleService` en LOTE (`design.md` §3.3): una consulta por tipo presente;
+  los tres mapas de origen pasan a `Record<WalletOrigenTipo, …>` totales y los DTO a
+  `origenTipo: WalletOrigenTipo`; fuera `origenLabel` con `??`; enlace por rol (`hrefDetalleCierre`,
+  estado de cuenta, orden por guía, plantillas). *Hecho:* `wallet-origen-legible.test.ts` (un caso por
+  origen, incluido `gestion_orden` en el libro de la tienda), test de número de consultas,
+  `wallet-origen-enlace.test.tsx` (con y sin acceso), guardia `wallet-origen-total` + contraprueba
+  (R5–R9, R94).
+- [ ] **TA.3** [P] `FiltrosWalletService.conceptosConMovimientos` (repo `groupBy` con `_count`, sin el
+  propio filtro de concepto) + action; los 3 filtros (`WalletFiltros`, `MiWalletFiltros`,
+  `DesgloseMovimientosTienda`) lo consumen con el diccionario de su superficie y conservan el elegido
+  en 0; fuera `CATEGORIA_OPTIONS`/`CATEGORIA_TIENDA_OPTIONS` del SEED y los comentarios T5. *Hecho:*
+  `tests/integration/db/wallet-conceptos-con-movimientos.test.ts` (periodo, cuenta; `egreso_gasto` y
+  `ajuste_debito` ausentes sin filas), tests de los tres filtros, guardia `wallet-conceptos-sin-seed`
+  + contraprueba (R13–R15, R95).
+- [ ] **TA.4** `FiltrosWalletService.cierresDeLaCuenta` (tienda con nombre de mensajero; mensajero) con
+  tope y `hayMas`; borde `cierreId: z.string().uuid()` en `wallet-tienda.ts:177` y
+  `wallet-mensajero.ts:157`, `WHERE` siempre con la cuenta; `SelectorBuscable` mínimo
+  (`components/shared/SelectorBuscable.tsx`: popover + input, vacío/cargando/error, foco opaco,
+  teclado) en `DesgloseMovimientosTienda` y `DesglosePagosMensajero`; fuera los `<Input>`, sus
+  placeholders y la ayuda que pide pegar la dirección; `/mi-wallet` conserva su selector. *Hecho:*
+  `tests/integration/db/wallet-cierres-selector.test.ts` (cierre ajeno → 0 filas; mutación que quita la
+  cuenta del `WHERE` → rojo), tests de las dos pantallas, `SelectorBuscable.test.tsx`, guardia
+  `wallet-sin-campo-id` + contraprueba (R2, R10–R12, R93). Depende de TA.1.
+- [ ] **TA.5** [P] `EnlaceCierre`/`CIERRE_ENLACE` sin uuid en el nombre accesible (se nombra por día CR
+  y mensajero, con `etiquetaDeCuenta`); guardia de render `wallet-sin-uuid` sobre todas las superficies
+  con fixtures uuid. *Hecho:* guardia verde; contraprueba con el `EnlaceCierre` de hoy roja (R1, R96,
+  R99). Depende de TA.1.
+- [ ] **TA.6** [P] `listarMovimientosTiendaSchema` `.strict()` (m1); `WalletEgresoService.ts:123` sin
+  caída al `id` (texto legible); comentarios T1–T6 y subtítulo T9 de `design.md` §1.4; guardia
+  `wallet-textos-458` + contraprueba; ampliar `nombres-wallet-461.guardia` a `components/shared/
+  {estado-cuenta,wallet}/**` (aún vacías: control de no-vacuidad ajustado a «≥ 0 archivos hoy, falla si
+  aparece un retirado»). *Hecho:* tests verdes; `tests/unit/types/wallet-tienda-schemas.test.ts` rojo
+  con `tiendaId` ajeno (R4, R36, R97, R101).
+- [ ] **TA.7** [P] `/analitica`: el panel mensual rotula la cifra de caja con `rotuloCifraPrincipal({
+  periodoFiltrado: true, estado })` → «Movimiento neto del periodo». *Hecho:*
+  `tests/unit/analitica/panel-mensual-rotulo.test.ts` (R62).
+- [ ] **TA.8** Ayuda y asistente: `docs/ayuda/oficina/wallet-tiendas.md`, `wallet-mensajeros.md`,
+  `tienda/mi-wallet.md` (filtros por selector, orígenes con nombre y enlace, conceptos con cuenta);
+  `contexto-458.test.ts` bloque A; cuatro preguntas reales. *Hecho:* frases literales por rol en el
+  test; respuestas anotadas (R102, R103).
+- [ ] **TA.9** Recorrido pasos 1, 8, 12 y accesibilidad de §10 sobre las pantallas actuales;
+  fotografía 459 verde; gate rápido; revisión. *Hecho:* `progress/recorrido_458-A/` con números;
+  `INIT_EXIT=0`; `progress/impl_458-A.md` con la tabla R→test y los tests reescritos (R104).
 
-## 458-1b — Pago por cuenta de una tienda (fullstack, urgente) · depende de 458-0
+## 458-B — Cimientos (backend, migración) · depende de 461 y 457 en `dev` · [P] con 458-A
 
-- [ ] **T1b.1** Leer cómo recrean su enum los `down.sql` de la 381 (tienda) y de la 173 (caja).
-  *Hecho:* nota en el informe con la forma elegida para el `down.sql` nuevo.
-- [ ] **T1b.2** Migración `<ts>_pago_por_cuenta_tienda`: `egreso_pago_por_cuenta_tienda` y
-  `pago_por_cuenta`, CHECK `tipo ↔ categoria` de los dos libros recreados; `down.sql` con la lista
-  vigente completa menos el valor nuevo y fallo explícito si hay filas con él. *Hecho:*
-  `prisma migrate deploy` y `db:rollback` en local verdes; test de migración (molde
-  `wallet-tienda-cobro-migration.test.ts`); `tests/integration/db` sin `skipped`. Depende de T1b.1.
-- [ ] **T1b.3** Migración `<ts>_wallet_anotacion_idempotencia` (§2.1, §2.7), RLS sin policies,
-  `down.sql`. *Hecho:* igual que T1b.2. [P] con T1b.2 en redacción; se aplican en orden.
-- [ ] **T1b.4** `Record` totales: `NATURALEZA_POR_CATEGORIA` (terceros), `CATEGORIA_LABEL`,
-  `CATEGORIA_TIENDA_LABEL`, `CUBETA_POR_CATEGORIA` («pagado»), `FUENTE_TIENDA`; revisar
-  `lib/analytics/metrics.ts`. *Hecho:* typecheck verde; `caja-composicion-exhaustiva`,
-  `metrics-caja-naturaleza` y la fotografía de 458-0 en verde sin tocar literales.
-- [ ] **T1b.5** `PagoPorCuentaTiendaService` + repositorio + interfaz + `registrarPagoPorCuentaTiendaAction`
-  (zod `.strict()`: `tiendaId` uuid, `beneficiario` no vacío, `monto` STRING, `motivo`,
-  `referencia?`, `fecha?`, `clave`); las dos filas + anotación + clave en UNA transacción; sin tope
-  (P14). *Hecho:* unit del servicio (roles, borde, enrutado) y
-  `tests/integration/db/pago-por-cuenta-tienda.test.ts` (dos libros, efecto en `derivarCaja`:
-  caja −monto, de las tiendas −monto, ganancia igual; reintento con la misma clave = una sola vez)
-  — cubre R93, R48.
-- [ ] **T1b.6** Diálogo ACTUAL: sexto concepto en `wallet-conceptos-manuales.ts` con destino propio,
-  campo «A quién se le pagó», frase «Sale dinero de la caja…» y la del cobro «No sale dinero…».
-  *Hecho:* `wallet-registrar-movimiento-dialog.test.tsx` y `wallet-conceptos-manuales.test.ts`
-  ampliados; el payload del cobro no gana claves (R37 de la 381 intacto).
-- [ ] **T1b.7** [P] `/mi-wallet` y `/wallet/tiendas`: la fila `pago_por_cuenta` se lee «Pago que
-  Ordenex hizo por tu cuenta a <beneficiario>» (tienda) / «Pago por cuenta de la tienda a
-  <beneficiario>» (acceso total), leyendo el beneficiario por el enlace de §2.6. *Hecho:* test de
-  R95 en `mi-wallet-page.test.tsx`; ninguna fila de este tipo dice «Cobro de Ordenex».
-- [ ] **T1b.8** Gate COMPLETO (hay migración), recorrido paso 5b sin «Así queda», revisión.
-  *Hecho:* `INIT_EXIT=0`; capturas en `progress/recorrido_458-1b/`; paso de release anotado
-  (migrar preview y prod).
+- [ ] **TB.0** Confirmar en `dev`: cómo anula la 461 la corrección de caja (tabla, servicio, action,
+  tipo de historial) → decidir D13 (reutilizar o crear `wallet_movimiento_anulacion`); nombres reales
+  de `cobro_tienda_anulacion`, `DocumentoCajaDTO.tipo`, `LectoresDocumentosCaja`; timestamps de las
+  migraciones de la 461 y la 457 en `origin/dev`; qué pieza usa la 461 en el borde de periodo (T1).
+  *Hecho:* nota en `progress/impl_458-B.md` con la decisión de D13 y los timestamps elegidos.
+- [ ] **TB.1** Fase 0 (`design.md` §8): correr `caja-caracterizacion-459` y `caja-invariante-tiendas`
+  verdes (`skipped = 0`); escribir `tests/integration/db/wallet-caracterizacion-458.test.ts` (saldos,
+  cuentas por pagar, pendientes, saldo corrido con dos filas del mismo instante, saldo inicial,
+  totales netos) con literales a mano; mutaciones medibles HOY (1, 2, 12 de §8.2 sobre la lectura
+  actual; control positivo: quitar `emitirEgresoDePagoPorCuenta`). *Hecho:* `progress/fase0_458-B.md`
+  con comando, salida roja con nombre de caso, número de tests ≠ 0 y `git diff --stat` vacío (R84,
+  R85, R88).
+- [ ] **TB.2** Migración 1 `…_wallet_458_enums` + `down.sql` dinámico (función de la 459 renombrada
+  `_458`); `schema.prisma`: los enums. *Hecho:* `migrate deploy` y `db:rollback` locales limpios; con
+  una fila que use un valor nuevo el rollback falla sin borrar (R92). Depende de TB.0.
+- [ ] **TB.3** Migración 2 `…_wallet_458_tablas` + `down.sql` (`design.md` §2.2): `wallet_anotacion`,
+  `wallet_movimiento_anulacion` (si D13), `rechazo_tienda_cobro_anulacion`, `wallet_comprobante` (CHECK
+  XOR, UNIQUE por destino), los dos CHECK tipo↔categoría ampliados, RLS; modelos y relaciones en
+  `schema.prisma`; `prisma generate` sin drift. *Hecho:* `tests/integration/db/wallet-458-migration.
+  test.ts` (enums valor a valor, CHECK rechazan pares invertidos, RLS activa, `down` con filas falla
+  sin borrar, sin filas vuelve al estado previo; `TIPO_POR_CATEGORIA_TIENDA` = CHECK) (R92).
+  Depende de TB.2.
+- [ ] **TB.4** [P] `Record` totales de `design.md` §2.3 (`NATURALEZA`, `LIQUIDEZ`, `CONTRAPARTIDA`,
+  `TIPO_POR_CATEGORIA_TIENDA`, `CUBETA`, `FUENTE_*`, seeds, `metrics.ts`, etiquetas en los tres
+  diccionarios, `ESCRIBEN_EN_LA_TIENDA`); literales de las guardias reescritos a mano y anotados.
+  *Hecho:* typecheck verde; `caja-clasificacion-459`, `caja-composicion-exhaustiva`,
+  `metrics-caja-naturaleza`, `caja-derivaciones` (cuatro llamadas) verdes; mutaciones 4 y 5 → rojo
+  (R85, R91). Depende de TB.2.
+- [ ] **TB.5** [P] Orden estable: `listarPorTienda` y `listarPorMensajero` con `orderBy [fecha,
+  createdAt, id]`. *Hecho:* test de paginación con 14 filas del mismo instante / páginas de 4 (0
+  duplicadas, 0 faltantes) (R23).
+- [ ] **TB.6** `EstadoCuentaRepository` (ventana `$queryRaw`, `numeric → text`) y `EstadoCuentaService`
+  (tienda, mensajero, bodega por UNION sobre `cierre_bodega`; saldo inicial; totales netos; frase de
+  quién debe a quién; `CHIP_POR_MOVIMIENTO` total por libro); borde con fechas `YYYY-MM-DD` y la pieza
+  de periodo de la 461. *Hecho:* `saldos-corridos.test.ts` y `estado-cuenta-saldo-corrido.test.ts`
+  (bordes 23:30/00:30 CR; R21 con chip; R22 con y sin anulaciones, igual a `derivarSaldoTienda`, a la
+  cuenta por pagar y a `saldoDe`); guardia `estado-cuenta-chips-total` + contraprueba; mutaciones 1,
+  2, 9, 12 → rojo (R16, R20–R25, R98). Depende de TB.5.
+- [ ] **TB.7** [P] Resolutores «A quién» y «Registró» (`design.md` §3.4) en lote. *Hecho:*
+  `tests/integration/db/libro-caja-a-quien.test.ts` (una fila por origen; nombres, nunca ids; «—» sin
+  anotación; «Automático · …») (R56, R57).
+- [ ] **TB.8** Estado de anulación derivado (`design.md` §3.6): `LectoresDocumentosCaja` gana
+  `egresos`, `indemnizaciones`, `rechazos`; `tipoDeDocumentoOriginal` gana los tres tipos; el libro de
+  la tienda y el del mensajero ganan `documento` en sus filas originales; «motivo no registrado» para
+  reversos sin constancia. *Hecho:* `libro-caja-documentos-459.test.ts` ampliado (reverso en otra
+  página → «anulado»; ninguna comparación en cliente); mutaciones 10 y 11 → rojo (R71, R72).
+  Depende de TB.3.
+- [ ] **TB.9** Anulación uniforme (`design.md` §4.2): `reversarEgreso` gana motivo y constancia (misma
+  transacción, mismo instante inyectado) y deja de caer al uuid; anulación de la indemnización;
+  `RechazoTiendaCobroService.anular` + `RechazoTiendaCobroAnulacionRepository` + puerto de caja con
+  los dos reversos + créditos espejo condicionados a los débitos existentes + historial;
+  `anularMovimientoAction` que enruta por destino a las actions existentes (172, 293, 459, 461, 457) o
+  a las nuevas. *Hecho:* `wallet-anulacion-service.test.ts`, `rechazo-tienda-cobro-anulacion.test.ts`
+  (rol antes de leer; monto del original; `ya_anulado`; `no_encontrado`; sin débitos de tienda no
+  escribe créditos), `tests/integration/db/wallet-anulacion-458.test.ts` (por las actions; R68 con
+  `derivarCaja` sobre filas reales; R73: `estado` sigue `aprobado` y la cola no lo ofrece),
+  `wallet-anulacion-concurrencia.test.ts`; `caja-invariante-tiendas` con los pasos «anulación del cobro
+  por rechazo» e «indemnización anulada» a 0,00; mutaciones 6, 7, 8 → rojo (R63–R69, R73, R91).
+  Depende de TB.3, TB.4, TB.8.
+- [ ] **TB.10** [P] Comprobante lateral (`design.md` §4.1): `PREFIJO_COMPROBANTE` +3;
+  `WalletComprobanteService` (registrar en la misma transacción, adjuntar después, ver con URL firmada
+  tras comprobar alcance; limpieza del objeto si falla) y `adjuntarComprobanteAction`,
+  `verComprobanteAction`; alcance de la tienda en `/mi-wallet` (sus filas, `no_encontrado` sin
+  distinguir ajeno de inexistente). *Hecho:* `wallet-comprobante-service.test.ts` (tipo, tamaño,
+  fallo de subida no registra, fallo de registro borra, UNIQUE impide el segundo) y
+  `tests/integration/db/wallet-comprobante-alcance.test.ts` (R74–R80). Depende de TB.3.
+- [ ] **TB.11** Bordes de sueldo, gasto de Ordenex y corrección: `contraparteNombre` (obligatorio en
+  los dos primeros, D5), `referencia?`, `comprobante?` (`FormData`), anotación en la misma
+  transacción; pago a tienda/mensajero y cobro ganan `comprobante?`; los `.strict()` se conservan.
+  *Hecho:* tests de actions y servicios existentes verdes + casos nuevos; sin los campos nuevos el
+  comportamiento es byte a byte el de hoy (R42, R43, R50, R51). Depende de TB.10.
+- [ ] **TB.12** «Así queda» (`design.md` §4.4): `EFECTO_POR_TIPO` (misma tabla que el enrutado),
+  `lib/utils/efecto-movimiento.ts` puro sobre `derivarCaja`, `previsualizarMovimientoAction` (acceso
+  total antes de leer). *Hecho:* `efecto-movimiento.test.ts` (un caso por concepto, incluidos «no
+  cambia», la línea de capital del aporte, `saldoEnContra`, `superaDisponible`), test de action por
+  rol; mutación 9 → rojo; `caja-derivaciones.guardia` verde (R44–R47, R82).
+- [ ] **TB.13** [P] «Cómo quedó» (`design.md` §3.7) en `EstadoCuentaService`/`WalletService`.
+  *Hecho:* test contra la base: tras el último movimiento coincide con el resumen sin filtros (R58,
+  parte servidor).
+- [ ] **TB.14** Comentarios T2–T4 de `design.md` §1.4 en `schema.prisma` y `lib/types/`. *Hecho:* diff
+  solo de comentarios en esos archivos (R101).
+- [ ] **TB.15** Repetir la fase 0 con el árbol final (las 12 mutaciones de §8.2 rojas; fotografías
+  verdes salvo el bloque «a propósito»); gate COMPLETO; revisión backend. *Hecho:* `INIT_EXIT=0`;
+  anexo en `progress/fase0_458-B.md`; `progress/impl_458-B.md` con la tabla R→test; nota de release
+  «migrar preview y prod; correr Q458-1 antes y Q458-3 después» (R84–R92).
 
-## 458-1 — Cimientos (backend) · depende de 458-0 y 458-1b
+## 458-C — Registrar un movimiento y panel «Ver» (fullstack) · depende de 458-A, 458-B y 457 en `dev`
 
-- [ ] **T1.1** Migración `<ts>_wallet_comprobante_anulacion` (§2.2, §2.3) con CHECK XOR, UNIQUE,
-  RLS y `down.sql`. *Hecho:* deploy + rollback locales; test de migración; `skipped = 0`.
-- [ ] **T1.2** [P] `lib/config/wallet-comprobante.ts` (bucket, tipos, tamaño, TTL) + `BUCKETS`.
-  *Hecho:* test de config; nota de release «crear `wallet-comprobantes` privado en local, preview y
-  prod ANTES de desplegar» en el informe.
-- [ ] **T1.3** [P] `rangoDelPeriodoCR` y formateador de fecha CR en `lib/utils/`. *Hecho:*
-  `wallet-fecha-cr.test.ts` con bordes 23:30 y 00:30 CR (R16).
-- [ ] **T1.4** [P] `OrigenLegibleService` en lote (§3.3), mapas `Record<WalletOrigenTipo,…>` y DTO
-  con `origenTipo: WalletOrigenTipo`. *Hecho:* test por origen; test de número de consultas (una
-  por tipo presente); caso `gestion_orden` en el libro de la tienda (R5–R9).
-- [ ] **T1.5** [P] Resolutor «A quién» / «Registró» (§3.4). *Hecho:*
-  `tests/integration/db/libro-caja-a-quien.test.ts` con una fila por origen; nombres, nunca ids.
-- [ ] **T1.6** [P] `conceptosConMovimientos` (repo + servicio + action). *Hecho:*
-  `tests/integration/db/wallet-conceptos-con-movimientos.test.ts` contra la base: periodo, cuenta,
-  sin el propio filtro de concepto; `egreso_gasto`/`ajuste_debito` ausentes sin filas (R13, R14).
-- [ ] **T1.7** [P] `cierresDeLaCuenta` (tienda con nombre de mensajero, mensajero) y borde
-  `cierreId: uuid` con el `WHERE` siempre acotado a la cuenta. *Hecho:*
-  `tests/integration/db/wallet-cierres-selector.test.ts`: un cierre de otra cuenta devuelve cero
-  filas (R11, R12), y una mutación que quita la cuenta del `WHERE` pone el test rojo.
-- [ ] **T1.8** Saldo corrido en repositorio (ventana, §3.2), `EstadoCuentaService` (tienda,
-  mensajero, bodega por UNION), `CHIP_POR_MOVIMIENTO` total, totales netos (P3) y comprobación de
-  R22. *Hecho:* `saldos-corridos.test.ts` y `estado-cuenta-saldo-corrido.test.ts` contra la base
-  (orden estable R23, corrido de la cuenta completa con chip R21, R22 con y sin anulaciones);
-  guardia de totalidad del chip. Depende de T1.3.
-- [ ] **T1.9** Anulación uniforme (§4.3): servicio + `anularMovimientoAction`; `reversarEgreso`
-  escribe motivo y deja de caer al id (C4.3, R4); contra-asiento del pago por cuenta (R96); lectura
-  de reversos anteriores como «motivo no registrado» (R66). *Hecho:*
-  `wallet-anulacion-service.test.ts` (R58–R64, R96) y
-  `tests/integration/db/wallet-anulacion-concurrencia.test.ts` (dos anulaciones simultáneas = un
-  contra-asiento); tras anular, la fotografía vuelve a sus literales (R63). Depende de T1.1.
-- [ ] **T1.10** Comprobantes (§4.1): registrar con `FormData`, adjuntar después, ver con URL firmada
-  tras comprobar alcance; limpieza del objeto si la transacción falla. *Hecho:*
-  `wallet-comprobante-service.test.ts` (tipo, tamaño, fallo de subida no registra, fallo de registro
-  borra, UNIQUE impide el segundo) y `tests/integration/db/wallet-comprobante-alcance.test.ts`
-  (tienda ve lo suyo y nada más, R70–R73). Depende de T1.1, T1.2.
-- [ ] **T1.11** «Así queda» (§4.4): `EFECTO_POR_TIPO` (misma tabla que el enrutado),
-  `efecto-movimiento.ts` puro sobre `derivarCaja`, `previsualizarMovimientoAction`. *Hecho:*
-  `efecto-movimiento.test.ts` (un caso por tipo, incluido «no cambia», R42–R43, R97) y
-  `caja-derivaciones.guardia` verde.
-- [ ] **T1.12** Bordes existentes de sueldo, gasto variable y ajustes: `contraparteNombre`
-  (obligatorio en sueldo y gasto variable, P5), `referencia?`, `clave?`, comprobante; anotación en
-  la misma transacción. *Hecho:* tests de actions y servicios existentes verdes + casos nuevos; sin
-  `clave` el comportamiento es byte a byte el de hoy.
-- [ ] **T1.13** [P] Comentarios T1–T4 de §1.6 en `db/schema.prisma` y `lib/types/`. *Hecho:* diff
-  solo de comentarios en esos archivos.
-- [ ] **T1.14** Fotografía antes/después, gate COMPLETO, revisión. *Hecho:* `INIT_EXIT=0`; literales
-  de 458-0 intactos.
+- [ ] **TC.0** Confirmar en `dev`: nombres finales de las actions de la 457 (`registrarAbonoTiendaAction`,
+  `anularAbonoTiendaAction`, `obtenerComprobanteAbonoAction`) y sus textos reservados; el test de la 461
+  que fija «siete conceptos» (se reescribe aquí con la lista nueva como contrato y se lista con R37).
+  *Hecho:* nota en `progress/impl_458-C.md`.
+- [ ] **TC.1** `components/shared/wallet/RegistrarMovimientoDialog`: catálogo `Record` total por
+  concepto en los tres grupos de la 461 (+ pago a tienda, pago a mensajero, «Una tienda le paga a
+  Ordenex») + enlace a plantillas; campos por concepto; frase de efecto (siete de la 461 byte a byte;
+  tres nuevas); `fraseDelLibro` para los diez; payload/`FormData` solo con sus claves; clave al
+  abrir; preselección de cuenta y concepto; buscador de cuenta (`SelectorBuscable`) que no ofrece
+  tiendas inactivas donde el camino no las admite; «a quién» obligatorio en sueldo y gasto.
+  *Hecho:* `wallet-registrar-movimiento-dialog.test.tsx` reescrito (R37–R43, R48, R49, R51, R52);
+  `wallet-conceptos-manuales.test.ts` ampliado; los tests de la 334/381/459/461 que se retiran,
+  listados con su sustituto.
+- [ ] **TC.2** «Así queda» en el diálogo: pide la previsualización con retardo, estados cargando y
+  error sin cifras, «no cambia» por línea, aviso de saldo en contra, tope del pago decidido por el
+  servidor. *Hecho:* tests de R44–R47; barrido money-safe sin `Number(`/`parseFloat(` en la carpeta
+  (R90).
+- [ ] **TC.3** [P] Campo de comprobante en el formulario (tipo y tamaño avisados antes de enviar con
+  `problemaDeComprobante`; el servidor decide) y «Adjuntar comprobante» en el panel para filas sin
+  él. *Hecho:* `wallet-comprobante-campo.test.tsx` (R74–R76, R79, R80).
+- [ ] **TC.4** `components/shared/wallet/DetalleMovimientoPanel` (Sheet: quién, por qué, cómo,
+  comprobante con rótulo legible, registró, estado de anulación, «Cómo quedó», «Anular…» /
+  «Anulado», texto del cobro por rechazo R100) + `AnularMovimientoDialog` (molde `AnularPagoDialog`;
+  «Ya estaba anulado»; `no_anulable` legible). *Hecho:* `DetalleMovimientoPanel.test.tsx`,
+  `AnularMovimientoDialog.test.tsx` (R58, R63–R67, R71, R100).
+- [ ] **TC.5** Sustituir `RegistrarMovimientoCajaDialog` en `/wallet` y enchufar «Ver» + panel en el
+  libro ACTUAL (`WalletLedger`: la columna de acciones pasa a «Ver»; fuera «Reversar» y su `Modal`;
+  `DocumentoCajaAcciones` absorbido por el panel). *Hecho:* `wallet-page.test.tsx` verde; el efecto de
+  cada concepto en la fotografía idéntico (R50); tests retirados listados.
+- [ ] **TC.6** Ayuda y asistente: `docs/ayuda/oficina/wallet-caja.md` (registrar un movimiento: diez
+  conceptos, «Así queda», comprobante; «Ver» y «Anular…» uniformes); `contexto-458.test.ts` bloque C;
+  cuatro preguntas reales. *Hecho:* frases literales por rol; respuestas anotadas (R102, R103).
+- [ ] **TC.7** Recorrido pasos 2, 3, 5, 6, 7 de §10 + adminTienda/mensajero con las actions →
+  `forbidden`; fotografías verdes; gate rápido; revisión. *Hecho:* `progress/recorrido_458-C/`;
+  `INIT_EXIT=0`; `progress/impl_458-C.md` (R104).
 
-## 458-2 — Detalles y guardias, sobre las pantallas ACTUALES (fullstack) · depende de 458-0 (+ lecturas T1.4, T1.6, T1.7)
+## 458-D — Estados de cuenta y «Mi wallet» (fullstack) · depende de 458-C · [P] con 458-E
 
-- [ ] **T2.0** Si 458-1 no ha entregado T1.4/T1.6/T1.7, traerlas aquí (misma interfaz) y dejar a
-  458-1 reutilizarlas. *Hecho:* decisión anotada en el informe; ninguna lectura duplicada.
-- [ ] **T2.1** Clase 1: selector de cierre con búsqueda (`SelectorBuscable` mínimo o `Select` si la
-  lista es corta) en el desglose de tienda y de mensajero; fuera el campo de texto, su ayuda y
-  `DESGLOSE_TIENDA_FILTRO_LABEL.cierrePlaceholder`; guardia `wallet-sin-campo-id` con contraprueba.
-  *Hecho:* tests de las dos pantallas (R10–R11) + guardia verde; contraprueba con la fuente de hoy
-  roja (R85, R89).
-- [ ] **T2.2** Clase 2: origen legible (con enlace según rol) en las 6 superficies (2 tablas de
-  tienda, 1 de mensajero, libro de caja, detalle de fila de la composición y sus descargas);
-  guardia `wallet-origen-total`. *Hecho:* `wallet-origen-legible.test.ts`,
-  `wallet-origen-enlace.test.tsx`; guardia + contraprueba (R5–R8, R86).
-- [ ] **T2.3** Clase 3: los 3 filtros de concepto desde `conceptosConMovimientos`, con cuenta y
-  conservando el elegido en 0 (R15); fuera los comentarios T5; guardia `wallet-conceptos-sin-seed`.
-  *Hecho:* tests de los tres filtros; guardia + contraprueba (R13–R15, R87).
-- [ ] **T2.4** Clase 4: `EnlaceCierre` sin uuid en su nombre accesible (se nombra por día y
-  mensajero); guardia de render `wallet-sin-uuid` sobre todas las superficies. *Hecho:* guardia
-  verde; contraprueba con el `EnlaceCierre` de hoy roja (R1, R2, R88, R89).
-- [ ] **T2.5** [P] R90 (pista de «Cargos» con cobros) y R92 (T5–T8 de §1.6); guardia
-  `wallet-textos-458`. *Hecho:* guardia + contraprueba.
-- [ ] **T2.6** [P] D6: tras pagar o anular en `/wallet/tiendas`, invalidar por predicado el desglose
-  de ESA tienda (cualquier página y filtros) y la página de saldos donde está su fila. *Hecho:*
-  `WalletRefrescoDirigido.test.tsx`: la fila muestra el saldo nuevo y el botón «Registrar pago» se
-  deshabilita tras pagar todo; no se relee ninguna otra tienda (R29).
-- [ ] **T2.7** Recorrido pasos 1, 6, 7, 10 sobre las pantallas actuales + gate rápido + revisión.
-  *Hecho:* tabla con números en `progress/recorrido_458-2/`; `INIT_EXIT=0`.
+- [ ] **TD.1** `components/shared/estado-cuenta/` (tarjetas con frase, tabla extracto con saldo
+  inicial arriba y orden ascendente, chips por tipo de cuenta, periodo, anulados tachados con motivo,
+  «Ver» → panel de 458-C, despliegue de órdenes en las filas de cierre). *Hecho:* `EstadoCuenta.test.tsx`,
+  `EstadoCuentaAnulados.test.tsx` (R18–R25, R72).
+- [ ] **TD.2** [P] `/wallet/tiendas/[tiendaId]` (`notFound` por rol y cuenta) + el listado enlaza y deja
+  de desplegar; acciones «La tienda le paga a Ordenex» (solo con saldo en contra), «Ordenex le cobra a
+  la tienda», «Ordenex le paga a la tienda» (deshabilitado con motivo sin saldo a favor) abriendo el
+  diálogo de 458-C preseleccionado. *Hecho:* `EstadoCuentaAcciones.test.tsx`,
+  `wallet-tiendas-estado-page.test.tsx` (R17, R26–R28, R40, R81). Depende de TD.1.
+- [ ] **TD.3** [P] `/wallet/mensajeros/[mensajeroId]`: estado de cuenta, «Ordenex le paga al
+  mensajero» (reparto con previsualización) y «Anular…» de sus pagos con `anularPagoAction` /
+  `anularRepartoAction`; `/cierres-admin` sigue igual. *Hecho:* `EstadoCuentaMensajeroAnular.test.tsx`,
+  `wallet-mensajeros-estado-page.test.tsx`, test existente de `PagoMensajeroSeccion` verde (R29, R70).
+- [ ] **TD.4** [P] `/wallet/satelites/[zonaId]`: estado de cuenta Declarado/Recibido + conciliación
+  (`ConciliacionAcciones`, `MarcarRecibidoDialog`) con sus textos. *Hecho:* `EstadoCuentaSatelite.test.tsx`
+  + tests de la 431 verdes (R31).
+- [ ] **TD.5** `/mi-wallet` como estado de cuenta en solo lectura (lecturas 461 §7.5 y 457), selector
+  de cierre actual, comprobantes de sus filas por `verComprobanteAction`/las actions de la 459 y la
+  457; sin actions de escritura. *Hecho:* `mi-wallet-page.test.tsx` ampliado (R34–R36, R78);
+  `mi-wallet-335.guardia` verde.
+- [ ] **TD.6** [P] Descarga del estado de cuenta con saldo corrido y fila de saldo inicial. *Hecho:*
+  test de columnas; `columnas-sensibles.guardia` verde (R3, R32).
+- [ ] **TD.7** Refresco dirigido tras registrar/anular desde el estado de cuenta (claves SWR de ESA
+  cuenta; el listado revalida al montar). *Hecho:* `WalletRefrescoDirigido.test.tsx` (R30, R48).
+- [ ] **TD.8** Retirar `DesgloseMovimientosTienda`, `DesglosePagosMensajero`,
+  `DesgloseConsolidacionesSatelite`, `PagoTiendaAcciones` (la acción vive en el estado de cuenta) y
+  sus labels/columnas de descarga; cada test retirado listado con su R sustituto. *Hecho:* lista en el
+  informe; ninguna guardia pierde archivos sin que su control de no-vacuidad lo diga.
+- [ ] **TD.9** Ayuda y asistente: `docs/ayuda/oficina/wallet-tiendas.md`, `wallet-mensajeros.md`,
+  `wallet-satelites.md`, `tienda/mi-wallet.md` (estado de cuenta, saldo corrido, chips, acciones,
+  anulados, comprobante); `contexto-458.test.ts` bloque D; cuatro preguntas reales (una desde la
+  tienda). *Hecho:* frases literales por rol (R102, R103).
+- [ ] **TD.10** Recorrido pasos 4–6, 8–11 de §10 + adminTienda + mensajero/adminSatelite sin acceso;
+  fotografías verdes; gate rápido; revisión. *Hecho:* `progress/recorrido_458-D/`; `INIT_EXIT=0`;
+  `progress/impl_458-D.md` (R104).
 
-## 458-3 — Registro y detalle (fullstack) · depende de 458-1, 458-1b; la entrada «pago recibido» de 457
+## 458-E — Libro de caja (fullstack) · depende de 458-C · [P] con 458-D
 
-- [ ] **T3.1** `components/shared/SelectorBuscable` (popover + input): vacío, cargando, error, foco
-  opaco, teclado. *Hecho:* test de componente y de accesibilidad básica.
-- [ ] **T3.2** `components/shared/wallet/RegistrarMovimientoDialog`: catálogo `Record` total por
-  tipo en tres grupos + enlace a plantillas; campos por tipo; payload solo con sus claves; `clave`
-  al abrir; preselección de cuenta y tipo. *Hecho:*
-  `wallet-registrar-movimiento-dialog.test.tsx` reescrito (R35–R41, R46, R48, R94); los tests de
-  la 334/381 que se retiran, listados con su sustituto.
-- [ ] **T3.3** «Así queda» en el diálogo: pide la previsualización con retardo, estados cargando y
-  error sin cifras (R44), frases «no cambia», aviso de saldo en contra (R97). *Hecho:* tests de
-  R42–R44, R97; barrido money-safe sin `Number(`/`parseFloat(` en la carpeta.
-- [ ] **T3.4** [P] Comprobante en el formulario (tipo y tamaño avisados antes de enviar; el servidor
-  decide). *Hecho:* tests de R67–R68.
-- [ ] **T3.5** `DetalleMovimientoPanel` (Sheet) + `AnularMovimientoDialog` (motivo obligatorio,
-  «ya estaba anulado»). *Hecho:* tests de R54 (contenido), R58–R61.
-- [ ] **T3.6** Sustituir `RegistrarMovimientoCajaDialog` en `/wallet`. *Hecho:*
-  `wallet-page.test.tsx` verde; el efecto de cada tipo en la fotografía idéntico (R47).
-- [ ] **T3.7** Entrada «Pago recibido de una tienda» enchufada a la action de la 457. *Bloqueada
-  hasta que la 457 esté en `dev`.* *Hecho:* test de enrutado y de «Así queda» del tipo.
-- [ ] **T3.8** Recorrido pasos 2, 3, 5, 5b + gate rápido + revisión.
+- [ ] **TE.1** Columnas Fecha · Movimiento y motivo · A quién · Monto (dirección + dueño) · Registró ·
+  Ver; `wallet-ledger-descarga-columnas.ts` en paralelo; la aserción de `WalletDescarga.test.tsx`
+  reescrita en el MISMO commit como contrato nuevo. *Hecho:* `WalletLedger458.test.tsx` (R55–R57);
+  descarga sin ids (R3).
+- [ ] **TE.2** Filtros Todo/Entra/Sale (`SegmentedToggle`), «A quién» (`SelectorBuscable` con
+  búsqueda por tienda, mensajero o nombre libre), concepto con cuenta (458-A) y periodo; tarjetas del
+  conjunto filtrado. *Hecho:* `wallet-page.test.tsx` ampliado (R53, R54, R59).
+- [ ] **TE.3** Panel «Ver» + anular + «Cómo quedó» desde el libro; refresco del libro, tarjetas,
+  composición y desglose tras registrar/anular. *Hecho:* tests de R58, R60.
+- [ ] **TE.4** [P] Colas de gasto fijo y de rechazo (el cobro anulado se ve «Anulado» en su detalle y
+  no se vuelve a ofrecer), composición y plantillas sin cambios de comportamiento. *Hecho:* sus tests
+  existentes verdes sin modificarlos + un caso para el cobro anulado (R61, R73, R83, R87).
+- [ ] **TE.5** Subtítulo de `/wallet` sin «dinero en caja» en estado «flujo» (`wallet-textos-458`).
+  *Hecho:* guardia verde (R101).
+- [ ] **TE.6** Ayuda y asistente: `docs/ayuda/oficina/wallet-caja.md` (libro: A quién, Registró, Ver,
+  filtros); `contexto-458.test.ts` bloque E; cuatro preguntas reales. *Hecho:* frases literales por
+  rol (R102, R103).
+- [ ] **TE.7** Recorrido COMPLETO por rol (§10, los doce pasos y los cuatro roles) con la tabla
+  maqueta vs app; fotografías verdes; gate rápido; revisión final de la 458. *Hecho:*
+  `progress/recorrido_458-E/` con números; `INIT_EXIT=0`; todas las R de `requirements.md` con su test
+  en algún `progress/impl_458-*.md` (R104).
 
-## 458-4 — Estados de cuenta (fullstack) · depende de 458-3 y 457
+## Dependencias
 
-- [ ] **T4.1** `components/shared/estado-cuenta/` (tarjetas con frase, tabla extracto con saldo
-  inicial, chips, periodo, anulados tachados con motivo, «Ver»). *Hecho:* `EstadoCuenta.test.tsx`
-  y `EstadoCuentaAnulados.test.tsx` (R18–R25, R66).
-- [ ] **T4.2** [P] `/wallet/tiendas/[tienda]` + el listado enlaza; acciones «Registrar pago
-  recibido», «Cobrar un costo», «Pagar a la tienda» (deshabilitado con motivo). *Hecho:*
-  `EstadoCuentaAcciones.test.tsx` (R26–R28, R38); `notFound` para rol sin acceso o tienda
-  inexistente (R74).
-- [ ] **T4.3** [P] `/wallet/mensajeros/[mensajero]`: estado de cuenta, pago (reparto) y anulación de
-  pagos desde la wallet. *Hecho:* tests de R65; `/cierres-admin` sigue anulando (test existente).
-- [ ] **T4.4** [P] `/wallet/satelites/[bodega]`: estado de cuenta + conciliación. *Hecho:*
-  `EstadoCuentaSatelite.test.tsx` + tests de la 431 verdes (R30).
-- [ ] **T4.5** `/mi-wallet` como estado de cuenta en solo lectura, desde el lado de la tienda, con
-  comprobantes. *Hecho:* `mi-wallet-page.test.tsx` ampliado (R32–R34, R71, R95);
-  `mi-wallet-335.guardia` verde (sin actions de escritura).
-- [ ] **T4.6** Descarga del estado de cuenta con saldo corrido. *Hecho:* test de columnas;
-  `columnas-sensibles.guardia` verde (R31, R3).
-- [ ] **T4.7** Refresco dirigido tras registrar/anular desde el estado de cuenta. *Hecho:*
-  `WalletRefrescoDirigido.test.tsx` ampliado (R29, R45).
-- [ ] **T4.8** Recorrido pasos 4–10 + adminTienda + mensajero sin acceso; gate rápido; revisión.
+```
+458-A: TA.0 → TA.1 → TA.4 ; TA.2 [P], TA.3 [P], TA.5 [P] (tras TA.1), TA.6 [P], TA.7 [P] ; TA.8 → TA.9
+458-B: TB.0 → TB.1 → TB.2 → TB.3 → TB.8 → TB.9 ; TB.4 [P] tras TB.2 ; TB.5 [P] → TB.6 ; TB.7 [P] ;
+       TB.10 [P] tras TB.3 → TB.11 ; TB.12 ; TB.13 [P] ; TB.14 [P] ; → TB.15
+458-C: TC.0 → TC.1 → TC.2 ; TC.3 [P] ; TC.4 ; TC.5 tras TC.1 y TC.4 ; TC.6 → TC.7
+458-D: TD.1 → TD.2 [P], TD.3 [P], TD.4 [P] ; TD.5 ; TD.6 [P] ; TD.7 ; TD.8 ; TD.9 → TD.10
+458-E: TE.1 → TE.2 → TE.3 ; TE.4 [P] ; TE.5 [P] ; TE.6 → TE.7
+Entre hijas: (461, 457 en dev) → 458-A ∥ 458-B → 458-C → 458-D ∥ 458-E
+```
 
-## 458-5 — Libro de caja (fullstack) · depende de 458-3 · [P] con 458-4
+## Lo que hace el LEADER, no el agente
 
-- [ ] **T5.1** Columnas Fecha · Movimiento y motivo · A quién · Monto · Registró · Ver, y la
-  aserción de `WalletDescarga.test.tsx` reescrita en el MISMO commit. *Hecho:* tests de R51–R53;
-  descarga sin ids.
-- [ ] **T5.2** Filtros Todo/Entra/Sale, «A quién», concepto con cuenta y periodo CR; tarjetas del
-  conjunto filtrado. *Hecho:* `wallet-page.test.tsx` ampliado (R49, R50, R55, R16).
-- [ ] **T5.3** Panel «Ver» + anular + «Cómo quedó»; refresco del libro, tarjetas, composición y
-  desglose. *Hecho:* tests de R54, R56.
-- [ ] **T5.4** [P] Colas de gasto fijo y de rechazo, composición y plantillas sin cambios. *Hecho:*
-  sus tests existentes verdes sin modificarlos (R57, R76, R80, R81).
-- [ ] **T5.5** Recorrido COMPLETO por rol (`design.md` §10) con la tabla maqueta vs app; gate
-  completo; revisión final de la 458. *Hecho:* `progress/recorrido_458-5/` con números;
-  `INIT_EXIT=0`; todas las R de `requirements.md` con su test en algún `progress/impl_458-*.md`.
-
----
-
-## Fuera de estas hijas (decisión del humano pendiente)
-
-- **P15 — los 203 cobros históricos de Nuform.** Si el humano elige A o B, se abre una ficha
-  propia con su spec (lista de filas revisada, suma de control antes y después, medición en
-  producción en solo lectura antes de desplegar). No va en ninguna hija de la 458.
-- **P10 — doble conteo.** Si se decide corregirlo, ficha propia de dinero.
+- Antes de 458-B: Q458-1 y Q458-2 de `design.md` §14 en producción (solo lectura) y anotar en
+  `progress/contraste_458.md`; comprobar que ninguna migración pendiente de `dev` toca los enums ni
+  las tablas de la wallet; pasar al agente de la 457 el acople D9 (su R62).
+- Tras desplegar la release: Q458-3 (R7/R8 = 0,00; cifra idéntica) y C5 de la 459 (mensajeros)
+  idéntico; errores de runtime en la hora siguiente = 0. «Después» en `progress/contraste_458.md`.
+- Anotar en la 461 (R39 superado por R37) y en la 459 (§14 aplicado) sin reescribir la historia.
