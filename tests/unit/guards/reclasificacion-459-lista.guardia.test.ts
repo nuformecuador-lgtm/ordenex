@@ -62,8 +62,9 @@ function control(sql: string): { n: string; suma: string; tienda: string } {
 
 /** Suma exacta en centimos (BigInt): nunca `number` para dinero. */
 function suma(filas: Fila[]): string {
-  const c = filas.reduce((a, f) => a + BigInt(f.monto.replace(".", "")), 0n);
-  return `${c / 100n}.${String(c % 100n).padStart(2, "0")}`;
+  const cien = BigInt(100);
+  const c = filas.reduce((a, f) => a + BigInt(f.monto.replace(".", "")), BigInt(0));
+  return `${c / cien}.${String(c % cien).padStart(2, "0")}`;
 }
 
 /** La comparacion entera: `null` si cuadra, o la primera diferencia en palabras. */
