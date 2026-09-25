@@ -134,7 +134,8 @@ describe("459/B.11 — registrar un saldo inicial o aporte", () => {
       status: "validation_error",
       fieldErrors: {
         fecha: [
-          "El saldo inicial no puede ser posterior al 2026-08-25, el primer dia con movimientos en la caja.",
+          // Literal (recorrido F2): «día» con tilde y la fecha como la escribe la tarjeta.
+          "El saldo inicial no puede ser posterior al 25 de agosto de 2026, el primer día con movimientos en la caja.",
         ],
       },
     });

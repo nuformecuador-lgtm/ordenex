@@ -209,12 +209,17 @@ describeSiHayBase("459/T B.12 — saldo inicial o aporte de capital por la actio
       expect(primer, "la base de pruebas necesita movimientos de caja anteriores a hoy").not.toBeNull();
       expect(primer! < hoy).toBe(true);
       const r = await registrarAporteCapitalAction(entrada({ clase: "saldo_inicial", fecha: hoy }), deps(p.maestro));
-      expect(r).toEqual({
-        status: "validation_error",
-        fieldErrors: {
-          fecha: [`El saldo inicial no puede ser posterior al ${primer}, el primer dia con movimientos en la caja.`],
-        },
-      });
+      // El texto literal lo fija el test unitario del servicio; aqui, su FORMA con el dia real de
+      // la base: en palabras, con año y con tilde (recorrido F2), nunca el ISO.
+      const [anio, , dia] = primer!.split("-");
+      expect(r.status).toBe("validation_error");
+      const mensaje = r.status === "validation_error" ? r.fieldErrors.fecha?.[0] : undefined;
+      expect(mensaje).toMatch(
+        new RegExp(
+          `^El saldo inicial no puede ser posterior al ${Number(dia)} de [a-z]+ de ${anio}, el primer día con movimientos en la caja\\.$`,
+        ),
+      );
+      expect(mensaje).not.toContain(primer!);
       expect(await huella(p)).toEqual({ aportes: 0, caja: 0, historial: 0, tienda: 0 });
     });
   }, 120_000);

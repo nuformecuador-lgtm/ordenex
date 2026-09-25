@@ -29,6 +29,7 @@ import type {
 } from "@/lib/types/aporte-capital";
 import { problemaDeComprobante, rutaDeComprobante } from "@/lib/utils/comprobante";
 import { medianocheUtcDelDia } from "@/lib/utils/descripcion-pago";
+import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
 import { esFechaCalendarioValida, fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { instanteDelMovimientoManual } from "@/lib/utils/fecha-movimiento-manual";
 
@@ -115,7 +116,9 @@ export class AporteCapitalService implements IAporteCapitalService {
       if (primerDia !== null && input.fecha > primerDia) {
         return errorDeCampo(
           "fecha",
-          `El saldo inicial no puede ser posterior al ${primerDia}, el primer dia con movimientos en la caja.`,
+          // Recorrido F2: el dia en palabras y con año, como lo escribe la tarjeta de la caja
+          // («11 de agosto de 2026»), no el ISO.
+          `El saldo inicial no puede ser posterior al ${fechaLegible(primerDia)} de ${primerDia.slice(0, 4)}, el primer día con movimientos en la caja.`,
         );
       }
     }
