@@ -1,233 +1,274 @@
 # Ficha 457 — tareas
 
-Orden: **Fase 0 → migraciones → tipos → repos/puerto → servicio → acciones → lectores → guardias
-→ gate → recorrido**. `[P]` = paralelizable con sus hermanas del mismo bloque (sin archivos en
-común). Un commit por tarea (`feat(457): …`, `test(457): …`). La ficha toca migraciones y
-`db/schema.prisma`: **el gate es `./init.sh` COMPLETO**, no `--rapido`.
+> **Reescrito el 2026-09-25.** Orden: **Fase 0 → 1 (base) → 2 (tipos y clasificación) → 3 (repo, puerto,
+> descripciones, comprobante) → 4 (servicio) → 5 (actions) → 6 (UI) → 7 (ayuda y asistente) → 8 (guardias e
+> historial) → 9 (cierre)**. `[P]` = paralelizable con sus hermanas del mismo bloque (sin archivos en común).
+> Un commit por tarea (`feat(457): …`, `test(457): …`, `docs(457): …`); verificar el blob commiteado antes
+> de dar un bloque por cerrado. Implementan `backend_dev` (0–5, 8) y `frontend_dev` (6, 7), en ese orden.
 
-Primer paso del worktree: `git checkout --detach <SHA de dev que dé el leader>` y comprobar el
-merge-base (el worktree de agente nace de `dev`, no de la rama en curso).
+## Reglas para todas las tareas
 
----
-
-## FASE 0 — Caracterizar lo que NO puede cambiar (antes de tocar una línea)
-
-Objetivo: dejar fijado, con tests que **se ponen rojos ante una mutación**, el comportamiento actual
-de cinco piezas. Resultado a `progress/fase0_457.md`: por cada pieza, el test que la fija, la
-mutación aplicada (diff de una línea), la salida ROJA con el nombre del test, y la vuelta a verde.
-
-**Regla de la autocomprobación (el arnés de mutaciones ya mintió dos veces):** cada mutación se
-aplica con Edit, se comprueba con `git diff` que el archivo cambió, se corre SOLO el test afectado,
-se copia al informe el nombre del test rojo y el número de tests ejecutados (≠ 0), y se revierte con
-`git checkout -- <archivo>`. Una mutación «superviviente» sin tests ejecutados no vale.
-Nada de gate en paralelo con mutaciones (el gate leería el árbol mutado).
-
-- [ ] **T0.1** [P] **Saldo derivado de la tienda.** Test dorado sobre un libro con TODAS las categorías
-  actuales (`derivarSaldoTienda` y `derivarDesgloseTienda`, cabecera = saldo). Mutaciones: cambiar la
-  cubeta de `cobro_manual` a `aFavor`; invertir el signo de `debito` en `derivarSaldoTienda`.
-  *Hecho:* las dos mutaciones rojas y documentadas.
-- [ ] **T0.2** [P] **Composición de la caja.** Test dorado sobre las 17 categorías de hoy:
-  `derivarCaja` (enCaja, ganancia, deTerceros, porcentaje, modo), `derivarComposicionGanancia` y
-  `derivarFinanzasDiarias`, con las cifras escritas como LITERALES (no calculadas por la misma
-  función). Mutaciones: `ingreso_reverso_pago_tienda` → `propio`; `egreso_pago_tienda` → `propio`.
-  *Hecho:* rojas y documentadas (R65).
-- [ ] **T0.3** [P] **Pago a tienda y su anulación.** Localizar los tests vivos
-  (`caja-cadena-pago-anulacion.test.ts`, `liquidacion-anulacion.test.ts`, integración
-  `liquidacion-idempotencia`) y comprobar que matan: quitar `emitirEgresoDePago` de
-  `registrarPagoTienda`; cambiar `ajuste_credito` por `ajuste_debito` en `escribirContraasiento`;
-  quitar el `bloquearBeneficiario` de `registrarPagoTienda` (este último con el test de Postgres real;
-  si ninguno lo mata, escribir uno de dos transacciones). *Hecho:* tres rojas (R63).
-- [ ] **T0.4** [P] **Cobro manual (381).** `cobro-tienda-service.test.ts` + `wallet-tienda-cobro.test.ts`.
-  Mutaciones: categoría `cobro_manual` → `ajuste_debito`; quitar `registrarCobroEnHistorial`.
-  *Hecho:* dos rojas (R64).
-- [ ] **T0.5** [P] **El dinero de los cierres.** Tests de `WalletTiendaFeedService`,
-  `CajaCodFeedService` y del feed de caja del cierre. Mutaciones: `CajaCodFeedService` sin el filtro
-  `tipo: "credito"`; el feed de tienda sin `cod_recaudado`. *Hecho:* rojas (R67).
-- [ ] **T0.6** **Lectores de «pagado a la tienda».** Test que fije que `sumarVigentesPorTienda`,
-  `listarPorTienda` y el backfill de la 173 leen SOLO `liquidacion_pago` (servirá para R68 cuando
-  exista `abono_tienda`). *Hecho:* test verde hoy y rojo con una mutación del `where`.
-- [ ] **T0.7** **Medición en producción** (la corre el leader con las consultas M1-M7 de
-  `design.md §14`) → `progress/medicion_457.md`. *Hecho:* M3 y M4 copiados literalmente; M5 dice si el
-  bucket existe; M1 confirma el saldo de Nuform. **Bloquea T1.x** (los `down.sql` dependen de M3).
-
-*Dependencias:* T0.1-T0.6 en paralelo entre sí; T0.7 en paralelo con todas (lo hace el leader).
+- **Punto de partida:** `dev` CON la 461 mergeada. Primer paso del worktree: `git checkout --detach <SHA
+  de dev que dé el leader>` y comprobar el merge-base (el worktree de agente nace de `dev`, no de la rama
+  en curso). Si la 461 no está en `dev`, se para: escribir esta ficha sobre `dev` sin la 461 deja dos CHECK
+  y dos `down` que se pisan.
+- **Gate:** la ficha toca migraciones, `db/schema.prisma` y `lib/types/`: **`./init.sh` COMPLETO**, con
+  `INIT_EXIT=$?` escrito dentro del log, sin `tail` en tubería, mirando que `tests/integration/db` no tenga
+  archivos saltados (sin `.env` se saltan y el gate dice «OK»). **Gate y mutaciones nunca a la vez.**
+- **Base propia:** clon `CREATE DATABASE ordenex_457 TEMPLATE ordenex` + `prisma migrate deploy`; `.env`
+  del worktree apuntando al clon (copiado sin imprimirlo; borrado al terminar).
+- **La fotografía** (`caja-caracterizacion-459.test.ts`) corre verde al empezar y al terminar cada bloque
+  **sin tocar sus literales**. Si hiciera falta cambiar uno, se para y se pregunta: es dinero.
+- **Test que se reescribe:** se lista en `progress/impl_457.md` con el requisito que lo sustituye (los de
+  `design.md` §12). Ninguno desaparece sin reemplazo.
+- **Migraciones a mano** (P3006); ninguna aplicada se edita; timestamps posteriores al último de
+  `origin/dev` el día de escribirlas. **No escribir `feature_list.json`** desde el worktree. **No commitear**
+  el informe sin pedirlo.
 
 ---
 
-## FASE 1 — Base de datos
+## FASE 0 — Caracterizar lo que NO puede cambiar (sin código de producción) · `backend_dev`
 
-- [ ] **T1.1** Medir `pg_enum` y los dos CHECK en la base LOCAL (mismas consultas M3/M4) y compararlos
-  con producción. *Hecho:* coinciden, o la diferencia queda escrita y explicada.
-- [ ] **T1.2** Migración 1 `…_abono_tienda_enums` (+ `down.sql`) — 4 categorías + origen. *Hecho:*
-  `prisma migrate deploy` local limpio; `down.sql` recrea cada enum con la lista de T1.1, con aviso
-  de «foto del día», precondición ruidosa y los índices/CHECK que nombran cada tipo (molde
-  `20260827120000_premio_ranking_devengo/down.sql` para `wallet_origen_tipo`).
-- [ ] **T1.3** Migración 2 `…_historial_accion_abono_tienda` (+ `down.sql`). *Hecho:* idem.
-- [ ] **T1.4** Migración 3 `…_abono_tienda` (+ `down.sql`): dos tablas, FKs RESTRICT, índices, CHECK
-  (monto, motivo no vacío, comprobante par), RLS, y los dos CHECK tipo↔categoría ampliados.
-  *Hecho:* aplicada en local; `down` primero en el rollback.
-- [ ] **T1.5** `db/schema.prisma`: modelos, relaciones inversas en `Usuario`, valores de enum;
-  `prisma generate`. *Hecho:* sin drift entre migraciones y datamodel (procedimiento de la 381).
-- [ ] **T1.6** `tests/integration/db/abono-tienda-migration.test.ts`: listas de enum valor a valor y en
-  orden contra el estado reconstruido con las migraciones reales previas; CHECK rechaza los pares
-  invertidos (23514); RLS activa; la tabla tiene exactamente 2 índices únicos; rollback con un abono
-  presente falla sin borrar; rollback sin abonos vuelve al estado previo. *Hecho:* verde y
-  comprobado con una mutación (quitar un valor de una lista de `down`) (R69, R70).
+- [ ] **T0.1** Correr `tests/integration/db/caja-caracterizacion-459.test.ts` y
+  `caja-invariante-tiendas.test.ts` sobre el SHA de partida: verdes, `skipped = 0`. Anotar en
+  `progress/fase0_457.md` los literales de HOY (cifra, entradas, salidas, ganancia, `deTerceros`, capital,
+  saldos y desgloses de las tiendas del escenario, filas por libro) y el SHA. *Hecho:* la nota existe. (R77)
+- [ ] **T0.2** Mutaciones de control (a)–(e) de `design.md` §13 con autocomprobación (diff de UNA línea,
+  `git diff` ≠ 0, solo los tests nombrados, rojo con el nombre del caso y número de tests ≠ 0, `git
+  checkout`, `git diff --stat` vacío). *Hecho:* informe en `progress/fase0_457.md`; ninguna superviviente
+  sin explicar. (R70–R73, R77)
+- [ ] **T0.3** [P] **(LEADER, no el agente)** Medición en producción por el MCP de Supabase, solo lectura:
+  M1–M8 de `design.md` §14 → `progress/contraste_457.md` (ANTES). *Hecho:* M3 y M4 copiados literalmente
+  (deciden las listas de T1.2/T1.3); M5 dice si el bucket existe; M1 confirma el saldo de Nuform; M8 con
+  `diferencia_r7 = diferencia_r8 = 0,00`. **Bloquea T1.x.** (R78)
+- [ ] **T0.4** Medir en la base LOCAL (clon) M3 y M4 y compararlos con producción y con `design.md` §3.3.
+  *Hecho:* coinciden con las listas de la 461, o la diferencia queda escrita y explicada. (R75)
 
-*Dependencias:* T0.7 → T1.1 → T1.2 → T1.3 → T1.4 → T1.5 → T1.6.
+*Dependencias:* T0.1 → T0.2; T0.3 (leader) en paralelo; T0.4 tras T0.3.
 
 ---
 
-## FASE 2 — Tipos y clasificaciones (el compilador guía)
+## FASE 1 — Base de datos · `backend_dev`
+
+- [ ] **T1.1** Mirar `origin/dev` y fijar los dos timestamps (posteriores al último). *Hecho:* anotados en
+  `progress/impl_457.md`.
+- [ ] **T1.2** Migración 1 `…_abono_tienda_457_enums` (+ `down.sql`): ocho `ADD VALUE IF NOT EXISTS` sobre
+  los cinco tipos; `down` = `pg_temp.quitar_valores_de_enum_457` (la función de
+  `20260926120000_cobro_tienda_461_enums/down.sql:39-150` copiada byte a byte salvo el sufijo), aplicada a
+  los cinco tipos. *Hecho:* `prisma migrate deploy` y `db:rollback` locales limpios; con una fila que use
+  un valor nuevo, el rollback falla sin borrar. (R75)
+- [ ] **T1.3** Migración 2 `…_abono_tienda_457_tablas_y_checks` (+ `down.sql`): `abono_tienda`,
+  `abono_tienda_anulacion` (DDL de `prisma migrate diff`), índices, FKs RESTRICT, CHECK del documento (monto
+  > 0, motivo no vacío, par del comprobante), RLS, los dos CHECK tipo↔categoría AMPLIADOS (`design.md` §3.3,
+  partiendo de lo medido en T0.4); `down` con RAISE si hay filas, CHECK a las listas de la 461, `DROP
+  TABLE`. *Hecho:* aplicada en local; up→down→up limpio. Depende de T1.2. (R75, R76)
+- [ ] **T1.4** `db/schema.prisma`: enums, modelos `AbonoTienda`/`AbonoTiendaAnulacion`, relaciones e
+  inversas en `Usuario`; `prisma generate`. *Hecho:* sin drift (procedimiento de la 381).
+- [ ] **T1.5** `tests/integration/db/abono-tienda-457-migration.test.ts` (molde `cobro-tienda-461-migration`):
+  enums valor a valor contra el estado previo reconstruido; CHECK rechazan los pares invertidos (23514);
+  RLS activa en las dos tablas; exactamente dos índices únicos en `abono_tienda`; la función del `down` es
+  la de la 461 salvo sufijo; `down` con un abono presente falla sin borrar; sin abonos vuelve al estado
+  previo; `TIPO_POR_CATEGORIA_TIENDA` coincide con el CHECK. *Hecho:* verde y rojo con una mutación
+  (mutación 14 de §13). (R75, R76)
+- [ ] **T1.6** Censos de migraciones POSTERIORES (`grep 20260926120500 tests/`): +2 carpetas;
+  `caja-tesoreria-migration` 23→25. *Hecho:* todos verdes.
+
+*Dependencias:* T0.3/T0.4 → T1.1 → T1.2 → T1.3 → T1.4 → T1.5 → T1.6.
+
+---
+
+## FASE 2 — Tipos y clasificación (el compilador guía) · `backend_dev`
 
 - [ ] **T2.1** SEEDs: `WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED`, `WALLET_MOVIMIENTO_CATEGORIA_SEED`,
-  `WALLET_ORIGEN_TIPO_SEED`, `HISTORIAL_ACCION_TIPOS`, `HISTORIAL_ACCION_ENTIDADES`. *Hecho:* typecheck
-  rojo exactamente en los `Record` de `design.md §4`.
-- [ ] **T2.2** [P] `CUBETA_POR_CATEGORIA`, `NATURALEZA_POR_CATEGORIA`, `FUENTE_CAJA`, `FUENTE_TIENDA`
-  según la tabla de `design.md §4`. *Hecho:* typecheck verde en `lib/`; `caja-composicion-exhaustiva`
-  y `desglose-tienda.test.ts` verdes con casos nuevos (R18, R36, R52).
-- [ ] **T2.3** [P] Rótulos: `CATEGORIA_LABEL`, `ORIGEN_LABEL`, `CATEGORIA_TIENDA_LABEL`,
-  **`ORIGEN_TIENDA_LABEL`** (no lo exige el compilador), hints y avisos de las dos cabeceras,
-  `ACCION_LABELS`, `CATEGORIA_POR_ACCION`, `ENTIDAD_LABELS`, constructor de etiqueta `abono_tienda`.
-  *Hecho:* tests de labels con los textos LITERALES de `design.md §4/§8`; test que recorre
-  `WALLET_ORIGEN_TIPO_SEED` y exige clave en `ORIGEN_TIENDA_LABEL` para todo origen que pueda
-  escribirse en el libro de tienda (R46-R53, R59).
-- [ ] **T2.4** [P] `lib/analytics/metrics.ts`: `dinero_en_caja` y `cuenta_por_pagar_tienda` +2 cada
-  una. *Hecho:* `metrics-caja-naturaleza.guardia.test.ts` verde; si exige tocar `egresos`, parar y
-  consultar (R55).
-- [ ] **T2.5** Schemas zod del borde (`lib/types/abono-tienda.ts`) y DTOs de `design.md §7`,
-  reutilizando `montoLiquidacionSchema`, `fechaPagoSchema`, `exigirReferenciaEnPagoElectronico` y
-  `LIQUIDACION_REFERENCIA_MAX`; `.strict()` en todos. *Hecho:*
-  `tests/unit/types/abono-tienda-schema.test.ts` (R4-R9, R12, R31, R32, R40).
+  `WALLET_ORIGEN_TIPO_SEED`, `DocumentoCajaDTO.tipo`, `HISTORIAL_ACCION_TIPOS`, `HISTORIAL_ACCION_ENTIDADES`
+  (+ `CATEGORIA_POR_ACCION`, `ACCION_LABELS`, `ENTIDAD_LABELS`, etiqueta de entidad). *Hecho:* typecheck
+  rojo exactamente en los `Record` totales de `design.md` §4.2, que las tareas siguientes ponen en verde.
+- [ ] **T2.2** [P] `NATURALEZA_POR_CATEGORIA` (+2 `terceros`), `LIQUIDEZ_POR_CATEGORIA` (+2 `efectivo`),
+  `TIPO_POR_CATEGORIA_TIENDA`, `CONTRAPARTIDA_EN_CAJA` (las dos parejas), `CUBETA_POR_CATEGORIA`
+  (`aFavor`/`cargos`), `FUENTE_CAJA`, `FUENTE_TIENDA`. *Hecho:* `tests/unit/utils/caja-derivacion-457.test.ts`
+  verde (±M en Entró/Salió/cifra/terceros; ganancia y capital fijos; identidad R7 sobre 500 subconjuntos
+  con semilla fija); `caja-clasificacion-459.guardia` verde con sus literales intactos y +2 contrapruebas;
+  `desglose-tienda.test.ts`, `aporte-por-orden.test.ts`, `caja-tesoreria.test.ts`, `finanzas-diario.test.ts`
+  (+1 caso) verdes. Mutaciones 2, 3 y 4 de §13 → rojo. (R19, R24, R39, R49)
+- [ ] **T2.3** [P] `lib/analytics/metrics.ts`: `dinero_en_caja` (+2, descripción), `cuenta_por_pagar_tienda`
+  (+2); `ganancia_ordenex` y `egresos` NO. *Hecho:* `metrics-caja-naturaleza.guardia` con 7/25/9 y
+  `ganancia_ordenex` en 16, `egresos` en 10. (R52)
+- [ ] **T2.4** [P] `lib/utils/comprobante.ts`: `PREFIJO_COMPROBANTE.abono_tienda = "abonos-tienda"`.
+  *Hecho:* test de `rutaDeComprobante("abono_tienda", …)` con la carpeta y sin ids. (R27)
+- [ ] **T2.5** `lib/types/abono-tienda.ts`: schemas de `design.md` §7 (`.strict()`, referencia en
+  SINPE/transferencia, `claveIdempotenciaSchema`, `fechaPagoSchema`, `comprobanteSchema` reutilizado),
+  DTO y resultados. *Hecho:* `tests/unit/types/abono-tienda-schema.test.ts` (R4–R9, R12, R13, R34, R35).
 
-*Dependencias:* T1.5 → T2.1 → {T2.2, T2.3, T2.4} → T2.5.
-
----
-
-## FASE 3 — Repositorio, puerto, comprobante
-
-- [ ] **T3.1** [P] `IAbonoTiendaRepository` + `AbonoTiendaRepository`: `crear` (documento +
-  `abono_tienda_registrado`), `anular` (fila + `abono_tienda_anulado`), `obtenerPorClave`,
-  `obtenerPorId`, `listarPorTienda` (anulados incluidos, orden `fecha_pago desc, created_at desc`).
-  P2002 → resultado, no excepción. *Hecho:* integración en Postgres real que mata una mutación del
-  `WHERE tienda_id` de `listarPorTienda` (R38, R39, R44) y censo de historial actualizado (R56-R58).
-- [ ] **T3.2** [P] `ICajaAbonoTiendaFeedService` + `CajaAbonoTiendaFeedService` (literales dentro).
-  *Hecho:* test que afirma la lista EXACTA de categorías que nombra (`ingreso_abono_tienda`,
-  `egreso_reverso_abono_tienda`) y que usa `origenTipo: "abono_tienda"`.
-- [ ] **T3.3** [P] Comprobante: `lib/config/wallet-comprobante.ts` (bucket, MIME, 4 MB, TTL por env),
-  entrada en `BUCKETS`, validación pura compartida borde/servicio, ruta aleatoria.
-  *Hecho:* `abono-tienda-comprobante.test.ts` parcial (R23, R24).
-- [ ] **T3.4** [P] `lib/utils/descripcion-abono.ts` (libro, caja, anulación). *Hecho:*
-  `descripcion-abono.test.ts`: con/sin referencia, nombre de tienda en caja, sin uuid (regex) (R20).
-
-*Dependencias:* T2.5 → {T3.1, T3.2, T3.3, T3.4}.
+*Dependencias:* T1.4 → T2.1 → {T2.2, T2.3, T2.4} → T2.5.
 
 ---
 
-## FASE 4 — Servicio
+## FASE 3 — Repositorio, puerto, descripciones · `backend_dev`
 
-- [ ] **T4.1** `AbonoTiendaService.registrar` en el orden de `design.md §5.1`. *Hecho:*
-  `abono-tienda-service.test.ts`: rol antes de leer; tienda inexistente/no tienda; tienda inactiva
-  admitida; `sin_deuda`; `excede` con la deuda; candado ANTES de leer el saldo (orden de llamadas);
-  las 4 escrituras con el mismo `montoStr`; `ya_registrado`; saldo resultante; compensación del
-  archivo en cada desenlace no-ok (R2, R10, R11, R13-R17, R22, R25-R27, R61).
-- [ ] **T4.2** `AbonoTiendaService.anular`. *Hecho:* `abono-tienda-anulacion.test.ts`: monto del
-  documento, fecha del día CR (reloj inyectado), débito `abono_tienda_anulado` + egreso de terceros,
-  `ya_anulado`, `no_encontrado`, `forbidden` antes de leer, comprobante intacto (R28-R36).
-- [ ] **T4.3** `AbonoTiendaService.listar*` y `obtenerComprobante`. *Hecho:* alcance por rol; tienda
-  ajena = inexistente; `sin_comprobante` (R38-R45).
+- [ ] **T3.1** [P] `IAbonoTiendaRepository` + `AbonoTiendaRepository` (`crear` con historial
+  `abono_tienda_registrado`, `anular` con `abono_tienda_anulado`, `obtenerPorClave`, `obtenerPorId`,
+  `estadoDeDocumentos`); P2002 → resultado. *Hecho:* integración en Postgres real que mata una mutación
+  del `WHERE` de `obtenerPorId`; guardia del censo del historial con las dos entradas `recibe_tx`. (R61–R63)
+- [ ] **T3.2** [P] `ICajaAbonoTiendaFeedService` + `CajaAbonoTiendaFeedService` (literales dentro; molde
+  `CajaPagoPorCuentaFeedService`). *Hecho:* test de lista EXACTA de categorías (`ingreso_abono_tienda`,
+  `egreso_reverso_abono_tienda`) y origen `abono_tienda`; las guardias de la 173 sobre
+  `CajaPagoTiendaFeedService` intactas. (R17, R31)
+- [ ] **T3.3** [P] `lib/utils/descripcion-abono.ts` (tienda, caja, anulación). *Hecho:*
+  `descripcion-abono.test.ts`: con/sin referencia, nombre de tienda en caja, prefijo de anulación, sin
+  forma de uuid. (R21)
+
+*Dependencias:* T2.5 → {T3.1, T3.2, T3.3}.
+
+---
+
+## FASE 4 — Servicio · `backend_dev`
+
+- [ ] **T4.1** `AbonoTiendaService.registrar` en el orden de `design.md` §5.1 (fechas de §5.1.6). *Hecho:*
+  `tests/unit/services/abono-tienda-service.test.ts`: rol antes de leer; tienda inexistente/no tienda; tienda
+  inactiva admitida; `sin_deuda`; `excede` con la deuda; candado ANTES de leer el saldo (orden de llamadas);
+  las cuatro escrituras con el MISMO `montoStr` y el MISMO instante (inicio del día CR de `fechaPago`);
+  `ya_registrado` con el saldo de la tienda del original; compensación del archivo en cada desenlace no-ok.
+  Mutaciones 1, 5 (unitaria: orden) y 6 → rojo. (R2, R10, R11, R14–R18, R20, R25, R28–R30, R66)
+- [ ] **T4.2** `AbonoTiendaService.anular`. *Hecho:* `abono-tienda-anulacion.test.ts`: monto del documento
+  (la petición trae `monto: "1.00"` y se ignora); instante = inicio del día CR de la anulación (reloj
+  inyectado) para los dos contra-asientos; débito `abono_tienda_anulado` + egreso terceros; `ya_anulado`;
+  `no_encontrado`; `forbidden` antes de leer; comprobante intacto. Mutaciones 7 y 8 → rojo. (R31–R40)
+- [ ] **T4.3** [P] `AbonoTiendaService.obtenerComprobante`. *Hecho:* `abono-tienda-comprobante.test.ts`:
+  acceso total; tienda dueña; tienda ajena = inexistente; `sin_comprobante`; TTL de la config; formatos y
+  tamaño del comprobante compartido. (R26, R42–R44)
 
 *Dependencias:* Fase 3 → T4.1 → T4.2; T4.3 [P] con T4.2.
 
 ---
 
-## FASE 5 — Server Actions (`lib/actions/abono-tienda.ts`)
+## FASE 5 — Server Actions e integración · `backend_dev`
 
-- [ ] **T5.1** Las cinco acciones de `design.md §7`, con `buildService()` que inyecta el puerto de caja
-  REAL y el storage del bucket nuevo. *Hecho:* `abono-tienda-action.test.ts` (sesión, validación,
-  lectura del `File` del `FormData`, lista EXACTA de exportaciones = R37) y
-  `tests/integration/db/abono-tienda.test.ts` que pasa POR LA ACCIÓN y encuentra en Postgres las
-  filas de documento, libro de tienda, caja e historial (R1, R16-R21; el composition root que no
-  inyecta).
-- [ ] **T5.2** Concurrencia: `abono-tienda-concurrencia.test.ts` con dos transacciones reales
-  (abono ∥ abono sobre la misma deuda: la segunda ve el saldo nuevo; abono ∥ pago a tienda:
-  serializan). *Hecho:* verde y rojo si se quita el candado (R15, R35).
+- [ ] **T5.1** `lib/actions/abono-tienda.ts`: las tres acciones de `design.md` §7 con `buildService()` que
+  inyecta el puerto de caja REAL, `LiquidacionPagoRepository` (candado), storage y URL firmada del bucket
+  compartido. *Hecho:* `tests/unit/actions/abono-tienda-action.test.ts` (sesión antes del schema; validación;
+  lectura del `File` del `FormData`; lista EXACTA de exportaciones = tres, R40) y
+  `tests/integration/db/abono-tienda-457.test.ts` que pasa POR LA ACTION y encuentra en Postgres el
+  documento, el crédito, el ingreso y el historial con el mismo string y el mismo instante; tras anular, la
+  constancia, el débito, el egreso y su historial; R19/R39 medidos con `derivarCaja` sobre filas reales; R22
+  (cero filas ajenas); R74 (`sumarVigentesPorTienda`, `listarPagosDeTienda`, el backfill de la 173 y las
+  consultas de las migraciones de datos de la 459/461 no lo ven). (R1, R17–R23, R31, R74)
+- [ ] **T5.2** [P] `tests/integration/db/abono-tienda-457-concurrencia.test.ts`: abono ∥ abono sobre la misma
+  deuda (la segunda ve el saldo nuevo → `excede`/`sin_deuda`); abono ∥ pago a tienda y abono ∥ pago de un
+  gasto (serializan por la misma fila); dos anulaciones → una. *Hecho:* verde y rojo sin el candado
+  (mutación 5). (R16, R36, R38)
+- [ ] **T5.3** `WalletService`: `tipoDeDocumentoOriginal` con la rama del abono; `LectoresDocumentosCaja.abonos`;
+  composition root en `lib/actions/wallet.ts` inyecta `AbonoTiendaRepository`. *Hecho:* `wallet-service.test.ts`
+  (+ dobles de los 8 archivos con `LectoresDocumentosCaja`); integración por `listarMovimientosAction`:
+  `documento.tipo === "abono_tienda"` en la original, `null` en el reverso. Mutación 10 → rojo. (R41)
+- [ ] **T5.4** `caja-invariante-tiendas.test.ts`: +2 pasos («la tienda B le paga a Ordenex» sobre saldo en
+  contra sembrado con un cobro; «su anulación»), R7 y R8 al céntimo tras cada paso, comprueba que hay filas.
+  *Hecho:* verde; mutación 1 → rojo. (R23)
+- [ ] **T5.5** Fotografía verde sin tocar literales; typecheck y lint verdes; gate completo; revisión
+  backend. *Hecho:* `INIT_EXIT=0`; `progress/impl_457.md` con la tabla R→test del backend y la lista de
+  tests reescritos.
 
-*Dependencias:* Fase 4 → T5.1 → T5.2.
-
----
-
-## FASE 6 — Lo que D3 protegía y el historial
-
-- [ ] **T6.1** Reescribir `catalogo-y-choke-point.test.ts:379-381` según `design.md §10` (comentario
-  de la reapertura, `toContain`) y actualizar los conteos duros (33→35 dinero, 21→22 entidades).
-  *Hecho:* verde; con el tipo quitado del catálogo, rojo.
-- [ ] **T6.2** `tests/unit/guards/abono-tienda-alcance.guardia.test.ts`: censo de productores de
-  créditos del libro de tienda, puerto de caja obligatorio y llamado en el mismo método, diálogo sin
-  destino que acredite a una tienda. *Hecho:* tres mutaciones rojas (añadir un `categoria:
-  "abono_tienda"` en otro servicio; quitar la llamada a la caja; añadir un concepto al diálogo)
-  (R60, R62).
-- [ ] **T6.3** Integración: Σ `abono_tienda` del libro = Σ `ingreso_abono_tienda` de la caja por
-  `origen_id`, tras registrar y tras anular (Σ anulado = Σ reverso). *Hecho:* verde; comprueba que
-  hay filas (nada de `if (!filas) return`) (R60).
-- [ ] **T6.4** No regresión R68: con un abono presente, `sumarVigentesPorTienda`, `listarPagosDeTienda`
-  y el backfill de la 173 no lo ven. *Hecho:* verde sobre Postgres real.
-
-*Dependencias:* Fase 5 → {T6.1, T6.2, T6.3, T6.4} [P].
+*Dependencias:* Fase 4 → T5.1 → {T5.2, T5.3} → T5.4 → T5.5.
 
 ---
 
-## FASE 7 — Cierre
+## FASE 6 — La UI mínima · `frontend_dev` (depende de la Fase 5)
 
-- [ ] **T7.1** Repetir la Fase 0 con el árbol final: las mismas mutaciones siguen rojas y los tests
-  dorados siguen verdes SIN cambiar sus literales (R63-R67). *Hecho:* anexo en `progress/fase0_457.md`.
-- [ ] **T7.2** `./init.sh` COMPLETO con `INIT_EXIT=$?` escrito dentro del log, sin `tail`, y
-  revisando los `skipped` (sin `.env` se salta `integration/db`). *Hecho:* verde y 0 archivos de
-  integración saltados.
-- [ ] **T7.3** `progress/impl_457.md` con la tabla R→test de `design.md §15` y rutas finales.
-- [ ] **T7.4** Recorrido por rol (guion de abajo) en local con Playwright o a mano, con capturas y
-  cifras en `progress/recorrido_457.md`. *Hecho:* cada paso con su resultado esperado comprobado.
-- [ ] **T7.5** Operaciones (fuera del código, antes de desplegar): crear el bucket privado
-  `wallet-comprobantes` en producción y en preview (Q5), y declarar que esta ficha NO sale a `prod`
-  sin la pantalla de la 458 (Q1). *Hecho:* anotado en la ficha y en `progress/current.md`.
+- [ ] **T6.1** Rótulos: `CATEGORIA_LABEL` (+2), `ORIGEN_LABEL` (+1), `DOCUMENTO_CAJA_NOMBRE` (+1),
+  `CATEGORIA_TIENDA_LABEL` (+2), `CATEGORIA_MI_WALLET_LABEL` (+2), **`ORIGEN_TIENDA_LABEL` (+1: no lo exige
+  el compilador)**, pistas de las dos cabeceras (`design.md` §2). *Hecho:* `wallet-labels.test.ts`,
+  `desglose-tienda-labels.test.ts`, `mi-wallet-labels.test.ts` (dos diccionarios distintos en los dos
+  conceptos; `ESCRIBEN_EN_LA_TIENDA` + `abono_tienda`), descargas de los tres libros con los literales
+  nuevos y sin uuids. Mutación 11 → rojo. (R45–R48, R50)
+- [ ] **T6.2** `nombres-wallet-461.guardia.test.ts`: reservados → `NOMBRES_TOMADOS_457` con el caso «cada
+  uno es el valor de exactamente su clave»; contrapruebas con un reservado ficticio; retirados intactos.
+  *Hecho:* verde; con un tomado en otra clave → rojo. (R53)
+- [ ] **T6.3** `wallet-conceptos-manuales.ts`: octavo concepto (`design.md` §8.1/§8.2), rama de destino,
+  `libroDelConcepto`, `nombreEnElLibroDeLaTienda`, `cabeceraDelConcepto`, `FRASE_DEL_EFECTO`. *Hecho:*
+  `wallet-conceptos-manuales.test.ts` (ocho nombres, tres grupos, `entra` con tres, frase y cabecera
+  literales; el gasto fijo sigue fuera). (R54, R55, R67)
+- [ ] **T6.4** `RegistrarMovimientoCajaDialog.tsx`: `esAbono`, `pideMetodo`, campos, fecha sin ventana,
+  `formDataAbono()`, respuestas (`sin_deuda`/`excede` bajo su campo con el importe del servidor;
+  `ya_registrado` como éxito; `comprobante_no_guardado`), textos `TEXTO_ABONO`, props `conceptoInicial`,
+  `tiendaFija`, `etiquetaBoton`. Medir si `listarSaldosTiendas` incluye tiendas inactivas (L2) y anotarlo.
+  *Hecho:* `wallet-registrar-movimiento-dialog.test.tsx`: payload exacto del abono; los otros seis payloads
+  byte a byte; con `tiendaFija` el selector queda deshabilitado y no se pide el catálogo; un solo toast en
+  `ya_registrado`. Mutación 9 → rojo. Depende de T6.3. (R56–R58)
+- [ ] **T6.5** [P] `DocumentoCajaAcciones.tsx`: rama `abono_tienda` (anular + comprobante). *Hecho:*
+  `tests/components/WalletLedgerAcciones457.test.tsx`: «Anular…» y «Ver comprobante» solo en la original
+  vigente; «Anulado»; nada en el reverso; `anularAbonoTiendaAction({ abonoId, motivo })` SIN monto; rótulos
+  y dueño literales en tabla y descarga; refresco tras anular. Depende de T6.1. (R41, R48, R60)
+- [ ] **T6.6** `PagoTiendaAcciones.tsx`: botón «Registrar pago de la tienda a Ordenex» solo con
+  `signo === "negativo"`, que monta el diálogo con `conceptoInicial`/`tiendaFija` y `onRegistrado =
+  refrescarEstaTienda`. *Hecho:* `tests/components/PagoTiendaAccionesAbono457.test.tsx` (sin botón con
+  saldo cero o a favor; props; tras registrar se releen desglose, comprobantes y tabla de saldos);
+  `wallet-tiendas-pago.test.tsx` intacto. Mutación 13 → rojo. Depende de T6.4. (R59)
+- [ ] **T6.7** [P] Historial: la pantalla filtra y muestra los dos tipos. *Hecho:*
+  `tests/components/HistorialAccionesAbonoTienda457.test.tsx`. (R64)
+- [ ] **T6.8** Fotografía verde, gate completo, revisión frontend. *Hecho:* `INIT_EXIT=0`;
+  `progress/impl_457_frontend.md` con la tabla R→test y la lista de tests reescritos.
+
+*Dependencias:* T6.1 → T6.2 ; T6.3 → T6.4 → T6.6 ; T6.5 [P] tras T6.1 ; T6.7 [P] ; → T6.8.
 
 ---
 
-## Guion de recorrido por rol (T7.4)
+## FASE 7 — La ayuda y el asistente · `frontend_dev` (depende de la Fase 6)
 
-Preparación local: `prisma migrate deploy`; una tienda de prueba con saldo en contra (un cobro
-manual de 10.000,00 desde «Registrar movimiento» la deja en -10.000,00). Como aún no hay pantalla de
-registro (Q1), el registro se hace con un script de un solo uso en el scratchpad que llama a la
-Server Action con la sesión de un maestro (no se commitea), o —si ya existe— con la pantalla de la
-458. Un solo dev server (no levantar otro si un agente tiene el suyo).
+- [ ] **T7.1** `docs/ayuda/oficina/wallet-caja.md`, `oficina/wallet-tiendas.md`, `tienda/mi-wallet.md`
+  según `design.md` §11 (frases literales, frontmatter `actualizado` y `fuentes`). *Hecho:*
+  `tests/unit/asistente/contexto-457.test.ts` verde por rol (maestro/admin: caja y tiendas; adminTienda:
+  mi wallet; mensajero/adminSatelite/adminTienda: sin la caja); `contexto-461.test.ts:78` reescrito (el
+  grupo con tres conceptos), listado; `nombres-wallet-461.guardia` sobre `docs/ayuda/**` en verde; guardias
+  `ayuda-*` y `asistente-*` verdes. (R68, R69)
+- [ ] **T7.2** Cuatro preguntas reales al asistente en local (`design.md` §11) con el mismo
+  `instruccionesDelSistema(rol)` + `contextoPara(docs, rol)` que arma `/api/asistente`. *Hecho:* respuestas
+  correctas y con los nombres nuevos anotadas en `progress/impl_457_frontend.md`.
 
-**Maestro**
-1. Registrar un pago recibido de 4.000,00, SINPE, referencia «123456», motivo «Abono a fletes de
-   septiembre», fecha de ayer, con un PDF de comprobante. → `ok`, saldo -6.000,00.
-2. `/wallet`: fila «Pago recibido de tienda», dueño «Tienda», origen «Pago de tienda · <Tienda> ·
-   Abono a fletes de septiembre · SINPE · 123456», fecha de ayer. «Ganancia de Ordenex» igual que
-   antes del paso 1; «Dinero en caja» y «De las tiendas» +4.000,00. Filtro por concepto ofrece
-   «Pago recibido de tienda». Descarga: mismos textos, sin uuids.
-3. `/wallet/tiendas` → desglose de la tienda: fila «Pago de la tienda a Ordenex», «A favor» +4.000,00,
-   saldo -6.000,00 = saldo de la tabla. La fila no se despliega. Descarga sin uuids.
-4. Repetir el paso 1 con la MISMA clave → `ya_registrado`, sin filas nuevas, el PDF duplicado no queda
-   en el bucket.
-5. Intentar 7.000,00 → `excede`, deuda 6.000,00. Registrar 6.000,00 → saldo 0,00. Intentar otro →
-   `sin_deuda`.
-6. `/historial-de-acciones`: dos filas «Registró un pago recibido de una tienda», con el nombre de la
-   tienda y el importe, SIN el motivo; filtro por ese tipo funciona.
-7. Anular el de 4.000,00 con motivo «Referencia equivocada». → saldo -4.000,00; en `/wallet` aparece
-   «Pago recibido de tienda anulado» (egreso, dueño Tienda) fechado HOY; ganancia sin cambio; en el
-   desglose «Pago de la tienda anulado» en «Cargos». Segundo intento → `ya_anulado`.
+---
 
-**Admin** — repetir 1, 2 y 7 sobre otra tienda: mismas respuestas (paridad maestro/admin).
+## FASE 8 — Guardias de alcance y lo que D3 protegía · `backend_dev` (puede ir en paralelo con 6–7)
 
-**adminTienda (la tienda del recorrido)**
-8. `/mi-wallet`: ve «Pago de la tienda a Ordenex» con su motivo y método, y «Pago de la tienda
-   anulado»; las aclaraciones de «A tu favor» y «Cargos de Ordenex» nombran los pagos y sus
-   anulaciones; el saldo cuadra con el de `/wallet/tiendas`. Descarga sin uuids.
-9. Lista de sus pagos recibidos y enlace del comprobante: abre el PDF (enlace temporal). Pedir el
-   comprobante de un pago de OTRA tienda → «no encontrado». Pedir su lista con un `tiendaId` →
-   `validation_error`. Intentar registrar o anular → `forbidden`.
+- [ ] **T8.1** `catalogo-y-choke-point.test.ts`: conteos 63/41/24; `not.toContain("abono_tienda_registrado")`
+  → `toContain` con el comentario de la reapertura (2026-09-24, ficha 457). *Hecho:* verde; con el tipo
+  quitado del catálogo, rojo. (R61–R64)
+- [ ] **T8.2** `tests/unit/guards/abono-tienda-alcance.guardia.test.ts` (`design.md` §12): censo de
+  productores de `abono_tienda` (solo el servicio), puerto de caja obligatorio y llamado en el mismo
+  método, un solo concepto del diálogo que acredite a una tienda. *Hecho:* tres mutaciones rojas (un
+  segundo productor; quitar la llamada a la caja; un concepto más con `categoriaTienda` de crédito) y
+  control de no-vacuidad. Mutación 12 → rojo. (R65, R67)
+- [ ] **T8.3** Integración: Σ `abono_tienda` del libro = Σ `ingreso_abono_tienda` de la caja por
+  `origen_id`, tras registrar y tras anular (Σ anulado = Σ reverso); comprueba que hay filas. *Hecho:*
+  verde. (R65)
 
-**Mensajero** — cualquiera de las cinco acciones → `forbidden`.
+---
+
+## FASE 9 — Cierre
+
+- [ ] **T9.1** Repetir la fase 0 con el árbol final: las 14 mutaciones de `design.md` §13 rojas y la
+  fotografía verde sin tocar sus literales. *Hecho:* anexo en `progress/fase0_457.md`. (R77)
+- [ ] **T9.2** `progress/impl_457.md`: tabla R1–R79 → test con rutas reales (R77–R79 con su evidencia en
+  `progress/`); lista completa de tests reescritos con su R.
+- [ ] **T9.3** Recorrido por rol de `design.md` §17 (maestro, admin, adminTienda, mensajero) en local
+  sembrado, un solo dev server, con Playwright ad hoc. *Hecho:* `progress/recorrido_457.md` + capturas con
+  números en `progress/recorrido_457/`. (R79)
+- [ ] **T9.4** `./init.sh` COMPLETO con `INIT_EXIT=$?` dentro del log, sin `tail`, 0 saltados en
+  `integration/db`. *Hecho:* verde.
+- [ ] **T9.5** **(LEADER)** Antes de desplegar: confirmar el bucket `wallet-comprobantes` en preview y prod
+  (M5); tras desplegar, M3/M4/M6/M8 y RLS de `design.md` §14 «después» en `progress/contraste_457.md`;
+  errores de runtime en la hora siguiente = 0. Tras el primer pago real de Nuform: M1 y M8. (R78)
+- [ ] **T9.6** **(LEADER)** Anotar en el spec de la 458 los acoples de `design.md` §15 (nombres, D6, D7, D9)
+  y la entrada en `progress/history.md`.
+
+## Dependencias
+
+```
+0:  T0.1 → T0.2 ; T0.3 (leader) ∥ ; T0.4 tras T0.3
+1:  T0.3/T0.4 → T1.1 → T1.2 → T1.3 → T1.4 → T1.5 → T1.6
+2:  T1.4 → T2.1 → T2.2 [P], T2.3 [P], T2.4 [P] → T2.5
+3:  T2.5 → T3.1 [P], T3.2 [P], T3.3 [P]
+4:  Fase 3 → T4.1 → T4.2 ; T4.3 [P] con T4.2
+5:  Fase 4 → T5.1 → T5.2 [P], T5.3 → T5.4 → T5.5
+6:  Fase 5 → T6.1 → T6.2 ; T6.3 → T6.4 → T6.6 ; T6.5 [P] tras T6.1 ; T6.7 [P] ; → T6.8
+7:  Fase 6 → T7.1 → T7.2
+8:  Fase 5 → T8.1, T8.2, T8.3 [P] (en paralelo con 6–7)
+9:  T9.1 → T9.2 → T9.3 → T9.4 ; T9.5 y T9.6 (leader) tras el despliegue
+```
