@@ -53,6 +53,7 @@ function montar(opts: {
   crear?: IAporteCapitalRepository["crear"];
   anular?: IAporteCapitalRepository["anular"];
   documento?: AporteCapitalRegistro | null;
+  porClave?: AporteCapitalRegistro | null;
 } = {}) {
   const orden: string[] = [];
   const repo: IAporteCapitalRepository = {
@@ -71,7 +72,7 @@ function montar(opts: {
         }),
     ),
     anular: vi.fn(opts.anular ?? (async () => ({ status: "anulado" as const }))),
-    obtenerPorClave: vi.fn(async () => registro()),
+    obtenerPorClave: vi.fn(async () => (opts.porClave === undefined ? registro() : opts.porClave)),
     obtenerPorId: vi.fn(async () => (opts.documento === undefined ? registro() : opts.documento)),
     estadoDeDocumentos: vi.fn(async () => []),
   };
@@ -144,10 +145,19 @@ describe("459/B.11 — registrar un saldo inicial o aporte", () => {
   });
 
   it("R70: saldo inicial: candado ANTES de mirar si ya hay uno; con uno vigente -> ya_hay_saldo_inicial sin escribir", async () => {
-    const m = montar({ hayVigente: true });
+    const m = montar({ hayVigente: true, porClave: null });
     const r = await m.svc.registrar(entrada({ clase: "saldo_inicial", fecha: "2026-08-20" }), null, MAESTRO);
     expect(r).toEqual({ status: "ya_hay_saldo_inicial" });
     expect(m.orden).toEqual(["candado", "hay?"]);
+    expect(m.repo.crear).not.toHaveBeenCalled();
+    expect(m.caja.emitirIngresoDeCapital).not.toHaveBeenCalled();
+  });
+
+  it("R73 antes que R70: doble envio del MISMO saldo inicial -> ya_registrado con el original, no «ya hay uno»", async () => {
+    const original = registro({ id: "si-1", clase: "saldo_inicial", monto: "900.00" });
+    const m = montar({ hayVigente: true, porClave: original });
+    const r = await m.svc.registrar(entrada({ clase: "saldo_inicial", fecha: "2026-08-20" }), null, MAESTRO);
+    expect(r).toEqual({ status: "ya_registrado", aporte: expect.objectContaining({ id: "si-1", monto: "900.00" }) });
     expect(m.repo.crear).not.toHaveBeenCalled();
     expect(m.caja.emitirIngresoDeCapital).not.toHaveBeenCalled();
   });

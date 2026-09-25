@@ -173,7 +173,13 @@ export class AporteCapitalService implements IAporteCapitalService {
       exito = true;
       return { status: "ok", aporte: aAporteCapitalDTO(aporte) };
     } catch (error) {
-      if (error instanceof YaHaySaldoInicialError) return { status: "ya_hay_saldo_inicial" };
+      if (error instanceof YaHaySaldoInicialError) {
+        // R73 antes que R70: si el saldo inicial vigente es ESTE mismo registro (doble envio con la
+        // misma clave), la respuesta es el original, no «ya hay uno».
+        const mismo = await this.aporteRepo.obtenerPorClave(input.claveIdempotencia);
+        if (mismo !== null) return { status: "ya_registrado", aporte: aAporteCapitalDTO(mismo) };
+        return { status: "ya_hay_saldo_inicial" };
+      }
       if (error instanceof ClaveRepetidaError) {
         const original = await this.aporteRepo.obtenerPorClave(input.claveIdempotencia);
         if (original === null) {

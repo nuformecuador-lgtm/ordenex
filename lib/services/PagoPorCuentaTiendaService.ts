@@ -158,10 +158,14 @@ export class PagoPorCuentaTiendaService implements IPagoPorCuentaTiendaService {
     }
 
     const id = randomUUID();
-    // R35/ficha 334: con «hoy» manda el DEFAULT de la columna; con un dia anterior, su inicio CR.
-    // La MISMA fecha para el cargo y para la salida.
-    const fechaMovimiento = instanteDelMovimientoManual(input.fecha, this.ahora());
-    const fechaPago = medianocheUtcDelDia(input.fecha ?? fechaCalendarioCR(this.ahora()));
+    // R29/R35: el MISMO instante para el cargo y para la salida. Con un dia anterior, su inicio CR
+    // (ficha 334). Con «hoy», el reloj del servicio y NO el DEFAULT de la columna: design §6.1
+    // suponia que el `DEFAULT now()` daba el mismo valor a las dos filas de la transaccion, pero
+    // Prisma rellena `@default(now())` en el CLIENTE, fila a fila — medido contra Postgres: 4 ms de
+    // diferencia entre el cargo y la salida (`pago-por-cuenta-tienda.test.ts`).
+    const ahora = this.ahora();
+    const fechaMovimiento = instanteDelMovimientoManual(input.fecha, ahora) ?? ahora;
+    const fechaPago = medianocheUtcDelDia(input.fecha ?? fechaCalendarioCR(ahora));
     const datosDescripcion = {
       beneficiario: input.beneficiario,
       motivo: input.motivo,
@@ -199,7 +203,7 @@ export class PagoPorCuentaTiendaService implements IPagoPorCuentaTiendaService {
             origenId: id,
             descripcion: descripcionPagoPorCuentaEnTienda(datosDescripcion),
             registradoPor: actor.usuarioId,
-            ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
+            fechaMovimiento,
           },
         ]);
         await this.caja.emitirEgresoDePagoPorCuenta(tx, {
@@ -207,7 +211,7 @@ export class PagoPorCuentaTiendaService implements IPagoPorCuentaTiendaService {
           monto: montoStr,
           descripcion: descripcionPagoPorCuentaEnCaja(creado.pago.tiendaNombre, datosDescripcion),
           registradoPor: actor.usuarioId,
-          ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
+          fechaMovimiento,
         });
         return creado.pago;
       });

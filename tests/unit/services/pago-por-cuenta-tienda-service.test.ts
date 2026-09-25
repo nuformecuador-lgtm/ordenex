@@ -200,16 +200,17 @@ describe("459/B.10 — registrar un pago por cuenta", () => {
     });
   });
 
-  it("R29: las escrituras llevan el MISMO monto de escala 2 y el mismo instante (hoy: el DEFAULT)", async () => {
+  it("R29: las escrituras llevan el MISMO monto de escala 2 y el mismo instante (hoy: el reloj del servicio)", async () => {
     const m = montar();
     await m.svc.registrar(entrada({ monto: "10000.5" }), null, MAESTRO);
     const doc = vi.mocked(m.pagoRepo.crear).mock.calls[0][1];
     const tienda = m.tiendaRepo.crearMovimientos.mock.calls[0][1][0];
     const caja = vi.mocked(m.caja.emitirEgresoDePagoPorCuenta).mock.calls[0][1];
     expect([doc.monto, tienda.monto, caja.monto]).toEqual(["10000.50", "10000.50", "10000.50"]);
-    // Hoy: ninguna de las dos filas trae fecha -> la pone la base, en la MISMA transaccion.
-    expect(tienda.fechaMovimiento).toBeUndefined();
-    expect(caja.fechaMovimiento).toBeUndefined();
+    // Hoy: las dos filas llevan EL MISMO instante explicito. No el DEFAULT de la columna: Prisma lo
+    // rellena en el cliente fila a fila y el cargo y la salida quedaban a milisegundos (medido).
+    expect(tienda.fechaMovimiento).toEqual(AHORA);
+    expect(caja.fechaMovimiento).toEqual(AHORA);
     expect(doc.fechaPago.toISOString()).toBe("2026-09-24T00:00:00.000Z");
     // Y el origen de las dos es el DOCUMENTO.
     expect(tienda.origenTipo).toBe("pago_por_cuenta_tienda");
