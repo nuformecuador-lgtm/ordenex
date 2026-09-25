@@ -176,7 +176,7 @@ R38–R50, R52–R54, R56–R58, R65 son del frontend (bloques C y D).
 - up→down→up de las 6 migraciones en el clon: `scratchpad/rollback_all6.log` (tras los 6 `down`: sin tablas,
   columnas ni valores de la 461, CHECK de la 459 con 21 valores, 6 asientos de mensajero a 00:00Z; tras el
   `deploy`: todo de vuelta, 23 valores, 6 asientos a 06:00Z).
-- `pnpm test` completo: ver el gate (§7).
+- `pnpm test` completo: dentro del gate (§7): 2 217 archivos · 31 291 tests · 26 skipped (componentes de analítica), 0 en `integration/db`.
 
 ## 6. Anexo — mutaciones (R59/R75; design §14.2 backend 1–10 y 14 + R66–R74)
 
@@ -218,8 +218,32 @@ en `progress/fase0_461.md`.
 
 ## 7. Gate
 
-PENDIENTE_GATE
+Comando: `./init.sh > progress/gate_461_backend.log 2>&1; echo "INIT_EXIT=$?" >> progress/gate_461_backend.log`
+(gate COMPLETO, sin `tail`, contra `ordenex_461` con las 222 migraciones aplicadas).
+
+- **1.ª corrida** (`5ff78c6c^`, guardada en `scratchpad/gate_461_backend_1.log`): `INIT_EXIT=1` — 20 rojos en 11
+  archivos, TODOS consecuencia de esta ficha y ninguno del dinero: seis censos `POSTERIORES` del historial sin
+  los dos tipos nuevos, `caja-459-migration` (a) con la cola del enum, `orden-traspaso-migration` sin las seis
+  migraciones declaradas, el schema del cobro de la 381 sin la clave (R66) y los dos tests del desglose de la
+  tienda con instantes ISO en vez de días (R72). Corregidos en `5ff78c6c`.
+- **2.ª corrida** (`5ff78c6c`), la que vale:
+
+```
+ Test Files  2217 passed (2217)
+      Tests  31291 passed | 26 skipped (31317)
+   Duration  808.73s
+== init OK ==
+INIT_EXIT=0
+```
+
+Los 26 `skipped` son los de siempre en `tests/components/AnaliticaPage.test.tsx` (17) y
+`AnaliticaShell.test.tsx` (9); **0 skipped en `tests/integration/db`** (389 líneas de esa carpeta en el log,
+todas `✓`).
 
 ## 8. Veredicto
 
-PENDIENTE_VEREDICTO
+Backend de la 461 (bloques 0, A y B) + D2/D3/T1/T2 de la auditoría **terminado y verde**: typecheck 0, lint 0
+errores, gate completo `INIT_EXIT=0` (31 291 tests, 0 skipped en integración), 23 mutaciones en rojo, seis
+migraciones con up→down→up probado en el clon. Rama `feature/461-backend` pusheada. Queda para el frontend
+(C y D): renombrar/rehacer las entradas de Record y el diálogo que este backend tocó por compilación y por el
+contrato de R66, y los fallos de pantalla P1/P3.
