@@ -18,6 +18,7 @@ import {
   type LecturaCaja459,
 } from "./_fixtures/caja-459";
 import { CLAVE_CANDADO_459 } from "./_fixtures/escrituras-459";
+import { upCon } from "./_fixtures/reclasificacion-459-sql";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // ⭑ FICHA 459 / T B.14 — LA INVARIANTE CON TODO (R7, R8, R89; y R21, R39, R48, R72, R75).
@@ -62,6 +63,14 @@ interface Medida {
   pasos: Paso[];
   estados: Record<string, string>;
   respuestas: Record<string, string>;
+  /** La salida que escribio la migracion REAL, comparada con su cobro. */
+  reclasificada: {
+    salidas: number;
+    mismoMonto: boolean;
+    mismoInstante: boolean;
+    categoria: string;
+    descripcion: string | null;
+  } | null;
 }
 
 const suma = (xs: string[]) => xs.reduce((a, x) => a.add(new Prisma.Decimal(x)), new Prisma.Decimal(0)).toFixed(2);
@@ -103,6 +112,7 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
     const pasos: Paso[] = [];
     const estados: Record<string, string> = {};
     const respuestas: Record<string, string> = {};
+    let reclasificada: Medida["reclasificada"] = null;
 
     const foto = async (nombre: string) => {
       const lectura = await leerCajaEntera(s, esc.maestro);
@@ -185,10 +195,10 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
     ).status;
     await foto("anulacion del aporte");
 
-    // 6 — el cobro de un costo de la tienda B, RECLASIFICADO: la fila que escribe la migracion de
-    // T C.4 (misma forma: egreso de terceros, origen `cobro_manual_reclasificado`, el mismo monto y
-    // el mismo instante que el cobro, vinculada a el). El libro de la tienda NO cambia.
-    await reclasificar(tx, esc);
+    // 6 — el cobro de un costo de la tienda B, RECLASIFICADO por el SQL REAL de la migracion de
+    // T C.4 (revision m1: antes era un insert de Prisma escrito a mano, y una migracion que no
+    // escribia nada lo dejaba verde). El libro de la tienda NO cambia.
+    reclasificada = await reclasificar(tx, esc);
     await foto("cobro reclasificado");
 
     // 7 — anular el saldo inicial: la caja vuelve a «flujo» (R21).
@@ -199,7 +209,7 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
     }
     await foto("anulacion del saldo inicial");
 
-    return { antes, pasos, estados, respuestas };
+    return { antes, pasos, estados, respuestas, reclasificada };
   }
 
   /** Σ de los cobros de un costo de las tiendas del escenario que no tienen su salida reclasificada. */
@@ -219,22 +229,31 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
     return suma(cobros.filter((c) => !reclasificados.has(c.id)).map((c) => c.monto.toFixed(2)));
   }
 
-  async function reclasificar(tx: TxDeTest, esc: Escenario459): Promise<void> {
+  /**
+   * Ejecuta el `migration.sql` REAL (`db/migrations/20260925120300_reclasificar_cobros_459`) con la
+   * lista y el control sustituidos por el cobro de la tienda B del escenario —los 203 ids aprobados
+   * no existen en una base de test—, dentro de la transaccion revertida de este archivo. Si la
+   * migracion lanza, el test cae entero: no hay SAVEPOINT que lo trague.
+   */
+  async function reclasificar(tx: TxDeTest, esc: Escenario459): Promise<NonNullable<Medida["reclasificada"]>> {
     const cobro = await tx.walletTiendaMovimiento.findFirstOrThrow({
       where: { tiendaId: esc.tiendaB, categoria: "cobro_manual" },
     });
-    await tx.walletMovimiento.create({
-      data: {
-        tipo: "egreso",
-        categoria: "egreso_pago_por_cuenta_tienda",
-        monto: cobro.monto,
-        origenTipo: "cobro_manual_reclasificado",
-        origenId: cobro.id,
-        descripcion: "Tienda B · cobro reclasificado",
-        registradoPor: cobro.registradoPor,
-        fechaMovimiento: cobro.fechaMovimiento,
-      },
+    const monto = cobro.monto.toFixed(2);
+    await tx.$executeRawUnsafe(
+      upCon([{ id: cobro.id, monto }], { n: 1, suma: monto, tienda: esc.tiendaB }),
+    );
+    const salidas = await tx.walletMovimiento.findMany({
+      where: { origenTipo: "cobro_manual_reclasificado", origenId: cobro.id },
     });
+    const [s] = salidas;
+    return {
+      salidas: salidas.length,
+      mismoMonto: s !== undefined && s.monto.toFixed(2) === monto,
+      mismoInstante: s !== undefined && s.fechaMovimiento.getTime() === cobro.fechaMovimiento.getTime(),
+      categoria: s?.categoria ?? "",
+      descripcion: s?.descripcion ?? null,
+    };
   }
 
   const delta = (p: Paso, f: (l: LecturaCaja459) => string) => menos(f(p.lectura), f(m().antes));
@@ -258,6 +277,18 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
       ["cobro reclasificado", 1],
       ["anulacion del saldo inicial", 1],
     ]);
+  });
+
+  it("revision m1: la salida del cobro reclasificado la escribio el SQL REAL de la migracion", () => {
+    expect(m().reclasificada).toMatchObject({
+      salidas: 1,
+      mismoMonto: true,
+      mismoInstante: true,
+      categoria: "egreso_pago_por_cuenta_tienda",
+    });
+    // La descripcion la compone la migracion («Nombre Apellido · descripcion del cobro»): un insert
+    // escrito a mano en el test no la produciria.
+    expect(m().reclasificada?.descripcion).toMatch(/ · /);
   });
 
   it("R7: cifra principal = ganancia + «De las tiendas» + capital, tras CADA paso (libro entero y diferencia)", () => {

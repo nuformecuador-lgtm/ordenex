@@ -1,6 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
@@ -11,6 +9,13 @@ import { WalletService } from "@/lib/services/WalletService";
 
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest, type TxDeTest } from "./_postgres-real";
 import { enTransaccionRevertida459 } from "./_fixtures/caja-459";
+import {
+  UP_RECLASIFICACION_459 as UP,
+  downCon,
+  sumaDe,
+  upCon,
+  type Aprobado,
+} from "./_fixtures/reclasificacion-459-sql";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 459 / T C.5 — la migracion de RECLASIFICACION, ejecutada de verdad contra Postgres.
@@ -24,44 +29,6 @@ import { enTransaccionRevertida459 } from "./_fixtures/caja-459";
 // excepcion la ejecutan dentro de un SAVEPOINT, y luego se comprueba que no quedo NADA escrito.
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
-
-const DIR = join(process.cwd(), "db/migrations/20260925120300_reclasificar_cobros_459");
-const UP = readFileSync(join(DIR, "migration.sql"), "utf8").replace(/\r\n/g, "\n");
-const DOWN = readFileSync(join(DIR, "down.sql"), "utf8").replace(/\r\n/g, "\n");
-
-interface Aprobado {
-  id: string;
-  monto: string;
-}
-
-function sustituir(texto: string, inicio: string, fin: string, nuevo: string): string {
-  const i = texto.indexOf(inicio);
-  const f = texto.indexOf(fin);
-  if (i < 0 || f < i) throw new Error(`faltan las marcas ${inicio} / ${fin}`);
-  return texto.slice(0, i + inicio.length) + "\n" + nuevo + "\n  " + texto.slice(f);
-}
-
-function upCon(lista: Aprobado[], control: { n: number; suma: string; tienda: string }): string {
-  const valores = lista.map((a, i) => `    ('${a.id}', ${a.monto})${i === lista.length - 1 ? "" : ","}`).join("\n");
-  const constantes = [
-    `  n_esperados CONSTANT integer := ${control.n};`,
-    `  suma_esperada CONSTANT numeric(14,2) := ${control.suma};`,
-    `  tienda_aprobada CONSTANT text := '${control.tienda}';`,
-  ].join("\n");
-  return sustituir(
-    sustituir(UP, "-- LISTA-INICIO", "-- LISTA-FIN", valores),
-    "-- CONTROL-INICIO",
-    "-- CONTROL-FIN",
-    constantes,
-  );
-}
-
-function downCon(lista: Aprobado[]): string {
-  return sustituir(DOWN, "-- LISTA-INICIO", "-- LISTA-FIN", lista.map((a) => `    '${a.id}'`).join(",\n"));
-}
-
-const sumaDe = (xs: Aprobado[]) =>
-  xs.reduce((a, x) => a.add(new Prisma.Decimal(x.monto)), new Prisma.Decimal(0)).toFixed(2);
 
 /** Ejecuta `sql` en un SAVEPOINT: devuelve el mensaje de la excepcion, o null si no la hubo. */
 async function intentar(tx: TxDeTest, sql: string): Promise<string | null> {
