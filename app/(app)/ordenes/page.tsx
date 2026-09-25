@@ -9,9 +9,17 @@ import { resolverAlcanceBorradoOrden } from "@/lib/services/alcance-borrado-orde
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import { fechaCalendarioCR, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
+// FICHA 462 (T3.5, S4) — la franja de reprogramados retenidos: la lectura (Server Action de solo
+// lectura, acotada al ámbito central), su DTO y el bloque que la pinta. Las tres líneas de import,
+// `resolverRetenidasCentral` y las dos líneas del render son TODO lo que esta ficha pone en la página
+// (R39: bloque removible).
+import { resumenReprogramadasRetenidasCentral } from "@/lib/actions/reprogramadas-retenidas";
+import type { ResumenRetenidas } from "@/lib/interfaces/services/IReprogramadasRetenidasService";
+import { defaultLogger } from "@/lib/errors";
 
 import { OrdenesModule } from "./_components/OrdenesModule";
 import { OrdenesListado } from "./_components/OrdenesListado";
+import { FranjaReprogramadasRetenidas } from "./_components/FranjaReprogramadasRetenidas";
 import { EXCLUDE_POR_ROL } from "./exclude-por-rol";
 
 /**
@@ -44,6 +52,26 @@ async function resolverCatalogoFiltros(): Promise<CatalogoFiltrosOrdenesDTO | nu
   } catch {
     // El service propaga el error de la DB a propósito: el fallback lo decide la
     // página, y es "listado sin filtros nuevos", no una página rota.
+    return null;
+  }
+}
+
+/**
+ * FICHA 462 (R37): el resumen de reprogramados retenidos del ámbito central, o `null` si no se
+ * pudo leer. NUNCA lanza: la franja es un aviso, y una lectura que falla no puede tumbar el listado.
+ * El fallo se REGISTRA con su causa (no se traga en silencio: memoria «los fallos mudos son la
+ * familia»). `forbidden`/`unauthenticated` también dan `null` sin registrar nada: no son fallos.
+ */
+async function resolverRetenidasCentral(): Promise<ResumenRetenidas | null> {
+  try {
+    const r = await resumenReprogramadasRetenidasCentral();
+    return r.status === "ok" ? r.resumen : null;
+  } catch (err) {
+    defaultLogger.logError(
+      new Error("ordenes/page: la franja de reprogramados retenidos no se pudo leer; la página sigue sin ella", {
+        cause: err,
+      }),
+    );
     return null;
   }
 }
@@ -171,8 +199,16 @@ export default async function OrdenesPage() {
     manana: mananaCalendarioCR(),
   };
 
+  // FICHA 462 (T3.5, R32/R36): la franja de reprogramados retenidos se lee SOLO para acceso total
+  // (`maestro`/`admin`), que es quien puede aprobar los cierres del ámbito central. Para el
+  // `adminTienda` no se ejecuta ni una consulta (R36). MUTACIÓN OBLIGATORIA (design §8.2-13): quitar
+  // `esAccesoTotal` de aquí pone rojo el test de la página («adminTienda no dispara la lectura»).
+  const retenidasCentral = rol && esAccesoTotal(rol) ? await resolverRetenidasCentral() : null;
+
   return (
     <AppPage title="Órdenes" description="Listado y gestión de órdenes">
+      {/* FICHA 462 (S4): ANTES del listado. Con `null` o 0 retenidas no pinta nada (R35/R37). */}
+      <FranjaReprogramadasRetenidas resumen={retenidasCentral} />
       {usaFiltroEstado ? (
         <OrdenesListado
           exclude={EXCLUDE_POR_ROL[rol as string] ?? ["pendiente"]}

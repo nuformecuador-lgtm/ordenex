@@ -1245,7 +1245,7 @@ export async function emitirDevolucionesRepresadas(
   );
 }
 // ---------------------------------------------------------------------------
-// FICHA 462 §3.2 — «REPROGRAMADO PARA HOY: N ÓRDENES ESPERAN LA APROBACIÓN DE SU CIERRE». AGREGADO,
+// FICHA 462 §3.2 — «REPROGRAMADO PARA HOY: N PAQUETES ESPERAN LA APROBACIÓN DE SU CIERRE». AGREGADO,
 // POR AMBITO, UNA VEZ AL DÍA (07:00 CR).
 // ---------------------------------------------------------------------------
 
@@ -1261,10 +1261,15 @@ export type AmbitoReprogramadasRetenidas =
  * el dia (rechazado → solicitado) y un texto persistido mentiria (requirements, decision 6)—.
  * Nombra la MARCA que la persona vera en `/cierres-admin` para que sepa que buscar.
  * TUTEO («Revisa», «apruébalos»), como los avisos de cierres a bodega.
+ *
+ * FASE 3 (decision del leader, 2026-09-25; prevalece sobre el literal de requirements/R17): se habla
+ * del PAQUETE en masculino («los visitó», «Retiene paquetes reprogramados para hoy»), igual que la
+ * marca y la franja. El plural femenino del estado retirado («reprogramadas», 455 §0.3) NO aparece:
+ * la guardia `nombres-estado-retirados` lo vigila sin excepcion para esta ficha.
  */
 export const TEXTO_REPROGRAMADAS_ESPERAN_CIERRE =
-  "No se pueden asignar hasta que se apruebe el cierre del mensajero que las visitó. " +
-  "Revisa los cierres marcados «Retiene reprogramadas de hoy» y apruébalos antes de asignar.";
+  "No se pueden asignar hasta que se apruebe el cierre del mensajero que los visitó. " +
+  "Revisa los cierres marcados «Retiene paquetes reprogramados para hoy» y apruébalos antes de asignar.";
 
 /** Lo MINIMO que el aviso necesita: un ambito y un dia CR. Sin PII (R52). */
 export interface ReprogramadasEsperanCierreContexto {

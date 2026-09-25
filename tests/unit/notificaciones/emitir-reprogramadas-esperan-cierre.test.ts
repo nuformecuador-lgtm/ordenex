@@ -137,9 +137,11 @@ describe("462/R17/R52 — el texto persistido es llano, sin numero y sin PII", (
 
     await emitirReprogramadasEsperanCierre(repo, { ambito: { tipo: "central" }, diaCR: DIA });
 
+    // FASE 3 (2026-09-25, decision del leader): del PAQUETE en masculino; sin el plural femenino
+    // retirado «reprogramadas» (455 §0.3). Literal a mano.
     expect(repo.creadas[0].descripcion).toBe(
-      "No se pueden asignar hasta que se apruebe el cierre del mensajero que las visitó. " +
-        "Revisa los cierres marcados «Retiene reprogramadas de hoy» y apruébalos antes de asignar.",
+      "No se pueden asignar hasta que se apruebe el cierre del mensajero que los visitó. " +
+        "Revisa los cierres marcados «Retiene paquetes reprogramados para hoy» y apruébalos antes de asignar.",
     );
   });
 
@@ -152,7 +154,9 @@ describe("462/R17/R52 — el texto persistido es llano, sin numero y sin PII", (
     // que lo nombrara mentiria (requirements, decision 6).
     expect(texto).not.toMatch(/solicitado|vencido|rechazado/i);
     // Nombra la MARCA que la persona vera en `/cierres-admin`, para que sepa que buscar.
-    expect(texto).toContain("«Retiene reprogramadas de hoy»");
+    expect(texto).toContain("«Retiene paquetes reprogramados para hoy»");
+    // 455 §0.3: el plural femenino del estado retirado no vuelve como texto visible.
+    expect(texto).not.toMatch(/reprogramadas/i);
   });
 });
 

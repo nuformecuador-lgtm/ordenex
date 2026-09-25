@@ -229,13 +229,15 @@ describe("los avisos AGREGADOS son exactamente cuatro, y llevan compositor de ti
     const accion = accionDeAviso("reprogramadas_esperan_cierre", "admin");
     if (accion.clase !== "accionable" || !accion.titulo) throw new Error("sin compositor");
 
-    expect(accion.titulo(1)).toBe("Reprogramado para hoy: 1 orden espera la aprobación de su cierre");
-    expect(accion.titulo(4)).toBe("Reprogramado para hoy: 4 órdenes esperan la aprobación de su cierre");
-    expect(accion.titulo(12)).toBe("Reprogramado para hoy: 12 órdenes esperan la aprobación de su cierre");
+    // FASE 3 (2026-09-25, decision del leader): se cuenta el PAQUETE («1 paquete espera» / «N paquetes
+    // esperan»), la misma palabra que la marca y la franja. Literales a mano.
+    expect(accion.titulo(1)).toBe("Reprogramado para hoy: 1 paquete espera la aprobación de su cierre");
+    expect(accion.titulo(4)).toBe("Reprogramado para hoy: 4 paquetes esperan la aprobación de su cierre");
+    expect(accion.titulo(12)).toBe("Reprogramado para hoy: 12 paquetes esperan la aprobación de su cierre");
     // Los tres roles comparten el titulo: es el mismo hecho, acotado por la cifra que cada uno pide.
     const satelite = accionDeAviso("reprogramadas_esperan_cierre", "adminSatelite");
     if (satelite.clase !== "accionable" || !satelite.titulo) throw new Error("sin compositor");
-    expect(satelite.titulo(1)).toBe("Reprogramado para hoy: 1 orden espera la aprobación de su cierre");
+    expect(satelite.titulo(1)).toBe("Reprogramado para hoy: 1 paquete espera la aprobación de su cierre");
   });
 
   it("componen titulo con la cifra, en singular y en plural — literales a mano", () => {

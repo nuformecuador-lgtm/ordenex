@@ -903,9 +903,10 @@ describe("413/R41 - una consulta para quien tiene el aviso vivo, NINGUNA para qu
 // ---------------------------------------------------------------------------------------------
 
 describe("462/R15 — `reprogramadas_esperan_cierre` se apaga y se enciende SOLO, sin escribir nada", () => {
+  // FASE 3 (2026-09-25, decision del leader): del PAQUETE en masculino, sin «reprogramadas».
   const TEXTO =
-    "No se pueden asignar hasta que se apruebe el cierre del mensajero que las visitó. " +
-    "Revisa los cierres marcados «Retiene reprogramadas de hoy» y apruébalos antes de asignar.";
+    "No se pueden asignar hasta que se apruebe el cierre del mensajero que los visitó. " +
+    "Revisa los cierres marcados «Retiene paquetes reprogramados para hoy» y apruébalos antes de asignar.";
 
   function filaRetenidas(id = "agg-ret"): FilaFake {
     return fila(id, {
@@ -937,7 +938,7 @@ describe("462/R15 — `reprogramadas_esperan_cierre` se apaga y se enciende SOLO
     expect(encendida.porHacer).toBe(1);
     expect(repo.crear).not.toHaveBeenCalled(); // R11: la fila del dia ya existe
     // Literales ESCRITOS A MANO (R13/R16/R17).
-    expect(encendida.items[0].titulo).toBe("Reprogramado para hoy: 4 órdenes esperan la aprobación de su cierre");
+    expect(encendida.items[0].titulo).toBe("Reprogramado para hoy: 4 paquetes esperan la aprobación de su cierre");
     expect(encendida.items[0].detalle).toBe(TEXTO);
     expect(encendida.items[0].atajo).toEqual({ href: "/cierres-admin", etiqueta: "Revisar cierres" });
     expect(encendida.items[0].accionable).toBe(true);

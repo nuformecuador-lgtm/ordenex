@@ -47,7 +47,9 @@ export interface ReprogramadasRetenidasDeps {
  *
  * SOLO LECTURA (R8): `resumen` es una lectura y su guardia lo vigila; esta accion no escribe nada.
  *
- * @sin-superficie FICHA 462 (T2.10, backend primero): la monta `app/(app)/ordenes/page.tsx` en la Fase 3 (frontend_dev, T3.5) como bloque independiente `FranjaReprogramadasRetenidas`. Esta anotacion CADUCA en ese commit y la guardia exigira quitarla.
+ * SUPERFICIE: la monta `app/(app)/ordenes/page.tsx` (Fase 3, T3.5) y la pinta el bloque
+ * independiente `FranjaReprogramadasRetenidas` (R39). La anotacion `@sin-superficie` de la Fase 2
+ * caduco en ese commit y se retiro.
  */
 export async function resumenReprogramadasRetenidasCentral(
   deps: ReprogramadasRetenidasDeps = {},

@@ -440,11 +440,15 @@ function tituloRepartoManana(n: number): string {
  * persona lee en `/ordenes` y en la ficha de la orden. Mutacion obligatoria del design (§8.2-14):
  * cambiarlo por «reprogramadas» sin el nombre visible pone rojo el test literal.
  *
+ * FASE 3 (decision del leader, 2026-09-25; prevalece sobre requirements/R13): se cuenta el PAQUETE
+ * («1 paquete espera» / «N paquetes esperan»), en masculino, igual que la marca de `/cierres-admin` y
+ * la franja de `/ordenes`. Las cuatro superficies hablan del mismo sujeto con la misma palabra.
+ *
  * TUTEO («su cierre»), como el resto de los avisos de cierres a bodega («Aprueba el mas antiguo»).
  */
 function tituloReprogramadasEsperanCierre(n: number): string {
   const resultado = NOMBRE_ESTADO.reprogramado;
   return n === 1
-    ? `${resultado} para hoy: 1 orden espera la aprobación de su cierre`
-    : `${resultado} para hoy: ${n} órdenes esperan la aprobación de su cierre`;
+    ? `${resultado} para hoy: 1 paquete espera la aprobación de su cierre`
+    : `${resultado} para hoy: ${n} paquetes esperan la aprobación de su cierre`;
 }

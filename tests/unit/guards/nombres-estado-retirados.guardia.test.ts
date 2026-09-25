@@ -119,22 +119,12 @@ const EXCEPCIONES: Record<string, { textos: readonly string[]; motivo: string }>
       "`NOTA_AYUDA_SOLICITADA`: la nota de la ayuda de la 454 (evento, no estado), texto fijado por " +
       "design §2.1 y la 456; §0.3 lo retira solo como nombre de estado",
   },
-  // ⚠️ FICHA 462 (backend, 2026-09-25) — EXCEPCION DECLARADA, ELEVADA AL LEADER, NO RESUELTA AQUI.
-  // `TEXTO_REPROGRAMADAS_ESPERAN_CIERRE` es el literal NORMATIVO de requirements 462/R17 (el detalle
-  // persistido del aviso) y cita la MARCA de la pantalla de cierres («Retiene reprogramadas de hoy»,
-  // 462/R27), no el nombre de un estado: la orden retenida esta en `reprogramado` (Forma A) o en
-  // `en_reparto` (Forma B, 454). El detector no distingue una marca de un estado, y ademas los textos
-  // de la Fase 3 de esa ficha (R27 «Retiene N reprogramadas de hoy», R32 «Hay N reprogramadas de
-  // hoy…») chocan con esta misma guardia. Dos specs aprobados por el humano se contradicen; la
-  // decision —reformular los literales de la 462 con `NOMBRE_ESTADO.reprogramado` («ordenes con
-  // Reprogramado para hoy») o mantenerlos— es del leader/humano. Si se reformulan, esta excepcion se
-  // RETIRA (la guardia lo exige sola: «cada excepcion sigue haciendo falta»).
-  "lib/notificaciones/emitir.ts": {
-    textos: ["reprogramadas"],
-    motivo:
-      "`TEXTO_REPROGRAMADAS_ESPERAN_CIERRE` (462/R17): cita la marca «Retiene reprogramadas de hoy» de " +
-      "/cierres-admin (462/R27), no un estado; conflicto 462 vs 455 §0.3 elevado al leader el 2026-09-25",
-  },
+  // FICHA 462 (2026-09-25): la Fase 2 (backend) declaro aqui una excepcion para
+  // `lib/notificaciones/emitir.ts` («reprogramadas» en el literal de 462/R17) y la elevo al leader. El
+  // leader decidio REFORMULAR los literales de la ficha —se habla del PAQUETE en masculino, con el
+  // nombre vigente «Reprogramado» de la 455— en las cuatro superficies (campana, push, marca de
+  // `/cierres-admin`, franja de `/ordenes`), asi que la excepcion se RETIRO en la Fase 3 y esta
+  // guardia vigila la 462 sin excepcion alguna.
 };
 
 /**
