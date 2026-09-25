@@ -485,8 +485,11 @@ describe("el refresco dirigido apunta a claves que EXISTEN", () => {
   it.each([
     ["wallet-mensajeros:premios", RUTA_PANEL],
     [
+      // Ficha 461 (auditoría P1): la clave de la tabla de cuentas por pagar vive en un módulo puro
+      // compartido, para que el desglose la refresque tras un pago sin importar la tabla. El dueño
+      // del literal es ese módulo; que la tabla lo use se afirma en el caso de abajo.
       "wallet-mensajeros:cuentas",
-      "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
+      "app/(app)/wallet/mensajeros/_components/cuentas-por-pagar-clave.ts",
     ],
     [
       "wallet-mensajeros:desglose",
@@ -499,6 +502,17 @@ describe("el refresco dirigido apunta a claves que EXISTEN", () => {
   ])("«%s» la usa como clave %s, y el panel la refresca", (prefijo, duenio) => {
     expect(codigoSinComentarios(duenio)).toContain(`"${prefijo}"`);
     expect(codigoSinComentarios(RUTA_PANEL)).toContain(`"${prefijo}"`);
+  });
+
+  it("la tabla de cuentas por pagar toma su clave del módulo compartido, y solo de ahí (461/P1)", () => {
+    // Sin esto, el caso de arriba quedaría verde con la clave definida en el módulo y la tabla
+    // usando otra escrita a mano: el panel refrescaría un prefijo que ninguna lectura usa.
+    const tabla = codigoSinComentarios(
+      "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
+    );
+    expect(tabla).toMatch(/import \{ claveCuentasPorPagar \} from "\.\/cuentas-por-pagar-clave"/);
+    expect(tabla).toMatch(/useSWR\(\s*claveCuentasPorPagar\(page, pageSize, aplicada\)/);
+    expect(tabla).not.toContain('"wallet-mensajeros:cuentas"');
   });
 });
 

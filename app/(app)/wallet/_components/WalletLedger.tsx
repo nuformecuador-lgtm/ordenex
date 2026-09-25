@@ -46,10 +46,12 @@ import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 // reversa». Desde esta ficha la fila dice «Reversado» —como «Anulado» en los documentos— cuando el
 // libro sabe que el egreso tiene su reverso. Cómo lo sabe, y su LÍMITE declarado:
 //
-//  - por el propio libro: el reverso de un egreso es un `ingreso_ajuste` de origen `gasto` cuyo
-//    `origenId` es el egreso (lo escribe solo `WalletEgresoService.reversarEgreso`, y el índice
+//  - por el propio libro: el reverso de un egreso es el único INGRESO de origen `gasto`, y su
+//    `origenId` es el egreso (lo escribe solo `WalletEgresoService.reversarEgreso`; medido en el
+//    árbol el 2026-09-25: los otros tres escritores con origen `gasto` son egresos; y el índice
 //    único de la base garantiza uno por egreso). Si ese reverso está en la página que se está
-//    viendo, el original se marca;
+//    viendo, el original se marca. No se mira la categoría a propósito: el libro no deduce nada
+//    de ella en el cliente (R36 de la 231), y tipo + origen ya lo identifican;
 //  - por esta sesión: el egreso que se acaba de reversar (respuesta `ok` o `already_reversed`) se
 //    marca aunque el libro se relea con otros filtros.
 //
@@ -60,12 +62,7 @@ import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 /** El reverso de un egreso administrativo, tal como lo escribe el servicio de la 45 (R13/R16). */
 function esReversoDeUnEgreso(m: WalletMovimientoDTO): m is WalletMovimientoDTO & { origenId: string } {
-  return (
-    m.tipo === "ingreso" &&
-    m.categoria === "ingreso_ajuste" &&
-    m.origenTipo === "gasto" &&
-    m.origenId !== null
-  );
+  return m.tipo === "ingreso" && m.origenTipo === "gasto" && m.origenId !== null;
 }
 
 /**

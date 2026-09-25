@@ -181,8 +181,9 @@ describe("P1 — la fila de la tabla de saldos se refresca al PAGAR desde el des
     // La tabla de saldos VUELVE a leerse (la corrección) y su fila cambia a ₡5.000…
     await waitFor(() => expect(listarSaldosPaginaMock.mock.calls.length).toBeGreaterThan(lecturasAntes));
     await waitFor(() => expect(saldoEnLaTabla("Tienda Norte")).toBe("₡5.000"));
-    // …y la cabecera del desglose dice lo MISMO: una sola cifra para el mismo dinero.
-    await waitFor(() => expect(within(region).getAllByText("₡5.000").length).toBeGreaterThan(0));
+    // …y la cabecera del desglose dice lo MISMO: una sola cifra para el mismo dinero. (Se busca la
+    // celda por su texto, en singular: un conteo se cumpliría también a media carga.)
+    await waitFor(() => expect(within(region).getByText("₡5.000")).toBeInTheDocument());
     // La otra tienda no se toca.
     expect(saldoEnLaTabla("Tienda Este")).toBe("₡5.000");
   }, 20000);
