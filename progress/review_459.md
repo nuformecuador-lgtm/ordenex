@@ -1,11 +1,12 @@
 # Revisión independiente — Ficha 459 «La caja muestra el dinero real»
 
-- Revisado: origin/feature/459-frontend @ 66549de6 (contiene backend fa2624fb + frontend). merge-base con dev = 6280fdbb; dev (6973d3ca) solo lleva un commit de docs por delante.
+- **Veredicto final: APROBADO** (re-revisión sobre origin/feature/459-fix @ 4d9dba3a, sección final).
+- Revisado primero: origin/feature/459-frontend @ 66549de6 (contiene backend fa2624fb + frontend). merge-base con dev = 6280fdbb; dev (6973d3ca) solo lleva un commit de docs por delante.
 - Entorno propio: pnpm install --frozen-lockfile (sin junction) + prisma generate; base CLON ordenex_459_rev (CREATE DATABASE ... TEMPLATE ordenex_459), prisma migrate status: «ordenex_459_rev at localhost:5432, 216 migrations, up to date». Borrado al terminar.
 - Búsqueda: MCP codebase-memory (R-job-singularis-projects-ordenex) para los consumidores de derivarCaja (trace_path); índice rancio (no ve lo de esta rama), así que todo se confirmó en el archivo real con grep.
 - NO se corrió ./init.sh completo (lo hace el leader). Sí: typecheck, lint, 466 archivos de la ficha y 692 archivos de componentes/guardias.
 
-## Veredicto: RECHAZADO
+## Veredicto de la primera revisión (66549de6): RECHAZADO — ver «Re-revisión» al final: APROBADO sobre 4d9dba3a
 
 El dinero está bien: la derivación, la migración de reclasificación y los caminos de escritura resisten todas las mutaciones que les hice. Se rechaza por dos motivos concretos y baratos de arreglar: (1) R77 y parte de R45 no tienen un test que los verifique (dos mutaciones sobreviven con toda la suite verde) y (2) el checkpoint de tareas: tasks.md tiene las 60 tareas en «[ ]» y faltan las evidencias de varias de ellas.
 
@@ -128,3 +129,69 @@ El diff 268277c5..HEAD de caja-caracterizacion-459.test.ts toca SOLO el describe
 
 1. B1: los asserts de R45/R77 descritos arriba, con M-R5 y M-R6 en rojo, anotados en impl_459_frontend.md.
 2. B2: marcar en tasks.md lo hecho y dejar explícito, con dueño, lo que es del leader: recorrido por rol, contraste_459.md, aprobacion.md/candidatos.csv, anexo de la fase 0.
+
+---
+
+## Re-revisión — origin/feature/459-fix @ 4d9dba3a (2026-09-25)
+
+Entorno: checkout --detach 4d9dba3a (incluye review/459 y el recorrido); clon nuevo ordenex_459_rev desde ordenex_459 (migrate status al día, 216 migraciones), borrado al terminar. Gate completo NO repetido: progress/gate_459_fix.log dice «Test Files 2200 passed (2200) · Tests 31112 passed | 26 skipped» e INIT_EXIT=0. Corrí yo los archivos cambiados más tests/components, tests/unit/guards y tests/unit/descarga: 594 archivos, 8133 verdes, 26 skipped (los preexistentes de AnaliticaPage/AnaliticaShell), 0 rojos.
+
+### Veredicto: APROBADO
+
+Los dos bloqueantes están cerrados y medidos con mutación. Lo que queda es del leader al desplegar (contraste después de A, B y C, y el bucket) y tres menores sin riesgo de dinero.
+
+### Checklist
+
+| Punto | Resultado |
+| --- | --- |
+| B1 — M-R5a (dueño «Ordenex (capital)» → «Ordenex») | **ROJO**: 4 casos de WalletLedgerAcciones459 (tabla y descarga del saldo inicial y de su anulación) |
+| B1 — M-R5b (origen «Saldo inicial o aporte» → «Aporte») | **ROJO**: los mismos 4 casos |
+| B1 — M-R6 (origen «Pago por cuenta de tienda» → valor crudo) | **ROJO**: 4 casos (tabla y descarga del pago por cuenta y de su anulación) |
+| B1 — literales | Escritos a mano en el test, no leídos de DUENO_LABEL/ORIGEN_LABEL; también el filtro por concepto con los 4 conceptos nuevos |
+| B2 — tasks.md | 38 [x] + 6 [ ] con dueño y motivo, todas del LEADER o del HUMANO (T0.4, T C.1, T C.2, T C.3, T Z.3, T Z.4). Criterio correcto |
+| B2 — tabla R→test | Todas las rutas de tests/ citadas en impl_459.md e impl_459_frontend.md existen |
+| B2 — anexo T Z.1 | Presente: las 15 mutaciones de la fase 0 repetidas sobre el árbol final, mismo número de rojos que en la fase 0 y M11 equivalente con la misma explicación. El test de la fotografía y su fixture no cambian desde 077207de (diff vacío) |
+| B2 — evidencias del leader | En origin/dev (6a196010, ancestro de dev): contraste_459.md (ANTES con R7/R8 en 0,00 y C2 sin filas; DESPUÉS pendiente del despliegue), candidatos.csv (203 ids = los de la lista aprobada, diff vacío), aprobacion.md (aprobación global, tres filas marcadas incluidas, servicios tecnológicos declarados abiertos). Producción: C0 0 filas, C7 primer día 2026-08-28 con 1288 movimientos (dato del coordinador, no lo medí) |
+| Recorrido por rol | progress/recorrido_459.md: 40/45 OK. Los 5 fallos son F1 (x3) y F2 (x2), ya corregidos abajo |
+| F1 — fechaDiaMovimientoCR + guardia | OK (detalle abajo) |
+| F2 — mensaje con tilde y fecha legible | OK: «…posterior al 25 de agosto de 2026, el primer día con movimientos en la caja.» Literal en el test unitario; en integración, la forma con el día real y que NO contenga el ISO |
+| m1 — la invariante ejecuta el migration.sql real | OK: el fixture reclasificacion-459-sql.ts lee migration.sql/down.sql y sustituye solo LISTA y CONTROL. Repetí M-R4 («AND false» en el JOIN del INSERT): ahora caja-invariante-tiendas da **ROJO** (6 casos, incluidos R7, R8 y «la salida la escribió el SQL REAL») |
+| m3 — /analitica con rotuloCifraPrincipal | OK con reserva (ver n1) |
+| R17 de wallet-tienda-cobro (381), cambiado a diferencia | **No se debilitó** (detalle abajo) |
+
+### F1 — el día de Costa Rica
+
+- fechaDiaMovimientoCR (lib/utils/fecha-dia-iso.ts): delega en fechaCalendarioCR; devuelve tal cual la medianoche UTC exacta (convención @db.Date de la 172) y lo que no es un instante (la sonda de la guardia de datos sensibles).
+- La guardia wallet-fecha-cr-459 barre app/(app)/wallet/** y app/(app)/mi-wallet/** sin comentarios, con contraprueba y un mínimo de archivos revisados (más de 50).
+- Mutación propia 1: fechaDiaMovimientoCR siempre recorta en UTC (esMedianocheUtc forzado a verdadero) → **ROJO**: 6 de 10 en WalletFechaCostaRica459 (función, libro de la caja y su descarga y el nombre accesible de «Anular…», desglose de /wallet/tiendas, /mi-wallet, descarga de mensajeros).
+- Mutación propia 2: volver a recortar con slice(0, 10) la fecha de ultimaRecibida en saldos-satelites-descarga-columnas.ts → **ROJO** en la guardia, que nombra el archivo y la línea.
+- Revertidas las dos; árbol limpio.
+
+### R17 de la 381 — el test cambiado de otra ficha
+
+El cambio (fbb52aad) solo cambia toBe(0) por toBe(cobrosAntes), con el recuento tomado DENTRO de la misma transacción revertida y antes de los tres intentos. Las tres aserciones de validation_error siguen intactas. Lo que protege la aserción del recuento es «rechazar SIN escribir». Mutación propia: en CobroTiendaService, la comprobación de tienda inactiva se mueve DESPUÉS de la transacción (escribe y luego responde validation_error, con lo que las aserciones de estado siguen pasando). Resultado, sobre el clon que trae 2 cobros commiteados: **ROJO** — «expected 3 to be 2», justo en la aserción cambiada. Revertida; árbol limpio. Medir por diferencia lo hace más fuerte en una base compartida, no más débil.
+
+### Mutaciones de la re-revisión
+
+| # | Mutación | Resultado |
+| --- | --- | --- |
+| M-R5a | DUENO_LABEL.capital → «Ordenex» | ROJO (4) |
+| M-R5b | ORIGEN_LABEL.aporte_capital → «Aporte» | ROJO (4) |
+| M-R6 | ORIGEN_LABEL.pago_por_cuenta_tienda → crudo | ROJO (4) |
+| M-R4 bis | migración sin débito, contra caja-invariante-tiendas | ROJO (6) |
+| M-F1a | fechaDiaMovimientoCR recorta en UTC | ROJO (6) |
+| M-F1b | un slice(0, 10) de vuelta en una descarga de satélites | ROJO (guardia) |
+| M-381 | cobro a tienda inactiva escribe antes de rechazar | ROJO (R17, 3 en vez de 2) |
+
+Nota: en la primera corrida de M-R5a también cayó columnas-asercion-de-orden.guardia (autocomprobación). No es de la mutación: con la misma mutación y menos carga pasa, y en la corrida limpia de 594 archivos está verde. Es el modo «timeout bajo carga» ya conocido.
+
+### Menores (no bloquean)
+
+- **n1** — /analitica nombra el panel dinero_en_caja con rotuloCifraPrincipal sobre el resumen SIN filtros, pero el panel muestra el RANGO por defecto (FILTRO_FINANCIERO_POR_DEFECTO = rango «mes»). Hoy (estado «flujo») dice «Flujo de dinero registrado» sobre el neto del mes, cuando la tarjeta define el flujo «desde el primer día». Y el día que haya un saldo inicial diría «Dinero en caja» sobre un neto mensual, lo que R20 prohíbe con filtros. Lo coherente sería «Movimiento neto del periodo» (rotuloCifraPrincipal con periodoFiltrado verdadero). El número es correcto: solo es el nombre.
+- **n2** — fechaDiaMovimientoCR trata toda medianoche UTC exacta como una fecha @db.Date. Un movimiento real registrado a las 18:00:00.000 CR en punto saldría con el día siguiente. Improbable (precisión de milisegundo) y documentado.
+- **n3** — La guardia F1 caza los recortes slice/substring(0, 10) y fechaDiaISO sobre un campo de fecha, no otras formas de recortar (split por «T», format). Hoy no hay ninguna en /wallet ni en /mi-wallet. Y el recorrido en navegador no se repitió tras F1/F2: la cobertura es la de los tests de componente.
+- Siguen vigentes de la primera revisión: m4 (rango de fechas del spec), m6, m7.
+
+### Pendiente del leader antes de producción (no es del implementer)
+
+Crear el bucket privado wallet-comprobantes en preview y en prod antes de B. Rellenar contraste_459.md DESPUÉS de A, B y C con R7/R8 en 0,00 y C2 sin filas (R91; T Z.3). T Z.4. El merge a dev traerá los archivos del leader de 6a196010 junto a esta rama.
