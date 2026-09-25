@@ -247,3 +247,45 @@ errores, gate completo `INIT_EXIT=0` (31 291 tests, 0 skipped en integración), 
 migraciones con up→down→up probado en el clon. Rama `feature/461-backend` pusheada. Queda para el frontend
 (C y D): renombrar/rehacer las entradas de Record y el diálogo que este backend tocó por compilación y por el
 contrato de R66, y los fallos de pantalla P1/P3.
+
+## 9. Cierre Z (2026-09-25, rama `feature/461-cierre`, `backend_dev`)
+
+- **Entorno:** worktree propio nacido de `dev` → `git switch -c feature/461-cierre origin/feature/461-final`
+  (`72f1fd7b`: frontend `3319dceb` + `progress/review_461.md`). `pnpm install --frozen-lockfile` propio (sin
+  junction, 24,5 s), `prisma generate` propio. Base: clon **`ordenex_461z`** (`CREATE DATABASE ordenex_461z
+  TEMPLATE ordenex`, la base compartida que ya lleva `dev` hasta la 462) + `prisma migrate deploy` de las seis de
+  la 461; `.env` propio apuntando al clon (copiado sin imprimirlo; borrado al terminar). Sin `psql` en el PATH:
+  el clon se creó con `prisma db execute --file` contra la base `postgres` (datasource comprobado con
+  `migrate status` antes de ejecutar), y las lecturas de control con dos scripts de un solo uso en `.vitest/`
+  (gitignorado) sobre `PrismaPg`.
+- **Merge de `origin/dev` (`b37553db`, la 462) → `cbf32718`.** Un conflicto,
+  `tests/integration/db/orden-traspaso-migration.test.ts`: se conservan las dos listas en orden de timestamp
+  (primero `20260925130000_notificacion_evento_reprogramadas_esperan_cierre`, después las seis `20260926…`).
+  `db/schema.prisma` (la 462 añade dos valores a `NotificacionEvento`/`NotificacionEntidadTipo`; la 461 sus
+  enums, modelos y relaciones) y `tests/integration/db/_fixtures/caja-459.ts` (la 462 pasa `sinRetenidas()`
+  como 7.º argumento; la 461 cablea `CajaCobroTiendaFeedService` y los dos repositorios de anulación) se
+  auto-mergearon con los dos lados. Verificación del merge antes de commitear: `pnpm run typecheck`
+  **TSC_EXIT=0** (0 errores) y 9 archivos de integración contra el clon (`orden-traspaso-migration`, los tres de
+  `462/`, `caja-caracterizacion-459`, `caja-invariante-tiendas`, `cobro-tienda-461`, `caja-459-migration`,
+  `454/gestion-pendiente-sql-real`): **103/103 verdes, 0 skipped**.
+- **Orden real de aplicación en el clon** (`_prisma_migrations` por `finished_at`): `20260925120300_reclasificar_cobros_459`
+  (índice 215) → `20260925130000_…462` (216, ya en la plantilla) → `20260926120000_cobro_tienda_461_enums` …
+  `20260926120500_wallet_461_fechas_cr_pagos` (217–222, aplicadas aquí). `prisma migrate status`: «223
+  migrations found · Database schema is up to date!».
+- **T B.1, la mitad medible desde aquí.** Migraciones que `dev` añadió entre el spec (`f415f4bb`) y el merge:
+  **una**, la de la 462: dos `ALTER TYPE … ADD VALUE IF NOT EXISTS` sobre `notificacion_evento` y
+  `notificacion_entidad_tipo`. No toca los cuatro enums de la wallet y el historial, ni los dos CHECK
+  tipo↔categoría, ni las tablas de la wallet. C461-3 (design §13) en el clon tras el merge:
+  `historial_accion_tipo` **61** (con `cobro_tienda_anulado`, `wallet_movimiento_manual_anulado`),
+  `wallet_movimiento_categoria` **23** (`ingreso_cobro_tienda`, `egreso_reverso_cobro_tienda`),
+  `wallet_origen_tipo` **13** (`cobro_tienda`, `cobro_tienda_completado`), `wallet_tienda_movimiento_categoria`
+  **14** (`cobro_tienda_anulado`); `relrowsecurity = t` en `cobro_tienda_anulacion` y `ajuste_caja_anulacion`;
+  `clave_idempotencia` en `wallet_movimiento` y `wallet_tienda_movimiento`. Coincide con lo que midió el
+  reviewer (`review_461.md` §4.2: 61/23/13/14). La re-medición de C461-3 **en producción** es del leader y no
+  consta en `progress/contraste_461.md` (que sí tiene C461-0 = 203 / 25.769.034,50 y T2 = 0 filas): T B.1
+  sigue `[ ]` en `tasks.md` por eso.
+- **Hallazgos de la revisión cerrados aquí:** H1 (`specs/461-*/tasks.md`: 34 tareas `[x]` con su evidencia;
+  abiertas T B.1, T Z.3, T Z.4 y T Z.5), H7 (`progress/gate_461_frontend.log` commiteado, `INIT_EXIT=0`),
+  H4 (nota en `docs/release.md`, «Pendiente para la PRÓXIMA release»: `db:rollback` revierte siempre el
+  último directorio; deshacer varias es a mano). H8 es este merge.
+- **Gate final:** ver el apartado siguiente.
