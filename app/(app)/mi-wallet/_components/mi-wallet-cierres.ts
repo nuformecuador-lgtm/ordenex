@@ -1,4 +1,5 @@
-import { fechaDiaISO } from "@/lib/utils/fecha-dia-iso";
+import { horaCostaRica } from "@/app/(app)/analitica/_components/operativo/textos";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 import type { SelectOption } from "@/components/ui/select";
 import type { CierreTiendaOpcionDTO } from "@/lib/types/wallet-tienda";
 
@@ -43,18 +44,18 @@ function contarMovimientos(n: number): string {
 /**
  * El dia del cierre, en el MISMO formato que pinta la columna «Fecha» de la tabla.
  *
- * `fechaDiaISO` es la misma funcion que ya usa la descarga, y produce el mismo dia que
- * `DesgloseTiendaLedger` (que hace `slice(0, 10)`). ⚠️ Trampa horaria deliberada: los dos son
- * el dia UTC. Usar aqui un formateador de calendario local haria que la opcion dijera un dia y
- * las filas de al lado otro.
+ * Ficha 459 (recorrido F1): `fechaDiaMovimientoCR` es la misma funcion que usan la columna
+ * «Fecha» de `DesgloseTiendaLedger` y la descarga, y las tres dan el dia de COSTA RICA (antes
+ * las tres daban el dia UTC y un cierre de las 22:00 salia fechado al dia siguiente). Usar aqui
+ * otra funcion haria que la opcion dijera un dia y las filas de al lado otro.
  */
 function diaDe(cierre: CierreTiendaOpcionDTO): string {
-  return fechaDiaISO(cierre.fecha);
+  return fechaDiaMovimientoCR(cierre.fecha);
 }
 
-/** `14:30` del ISO, SIN parsear a `Date`: el instante viaja como texto y no se reinterpreta. */
+/** `08:30`: la hora de pared de Costa Rica, coherente con el dia de `diaDe`. */
 function horaDe(cierre: CierreTiendaOpcionDTO): string {
-  return cierre.fecha.slice(11, 16);
+  return horaCostaRica(cierre.fecha);
 }
 
 /**

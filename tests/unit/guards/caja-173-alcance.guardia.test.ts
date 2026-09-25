@@ -231,6 +231,11 @@ const CATALOGOS_PREEXISTENTES = [
   "lib/types/wallet.ts",
   "lib/analytics/metrics.ts",
   "lib/utils/aporte-por-orden.ts",
+  // FICHA 459 (T A.5): la tabla de la invariante R8. Nombra `ingreso_cod_recaudado` e
+  // `ingreso_reverso_pago_tienda` para declarar que son la CONTRAPARTIDA en la caja del credito
+  // `cod_recaudado` y del `ajuste_credito` de la tienda. Es un `Record` TOTAL de dos columnas
+  // (tipo y pareja), sin aritmetica: no calcula dinero, lo clasifica.
+  "lib/utils/invariante-tiendas.ts",
 ];
 
 /**

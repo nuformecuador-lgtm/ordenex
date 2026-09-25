@@ -18,6 +18,12 @@ import type {
   WalletOrigenTipo,
 } from "@/lib/types/wallet";
 import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
+import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+
+/** Ficha 459 — las categorias de capital, DERIVADAS de la clasificacion (nunca una lista a mano). */
+const CATEGORIAS_DE_CAPITAL: readonly WalletMovimientoCategoria[] =
+  WALLET_MOVIMIENTO_CATEGORIA_SEED.filter((c) => NATURALEZA_POR_CATEGORIA[c] === "capital");
 
 // Cliente Prisma acotado a lo que este repo necesita (patron CierresAdminRepository).
 // FICHA 362 (R9): los TRES movimientos que nacen de una DECISION humana —el ajuste manual de
@@ -57,6 +63,10 @@ function toDTO(r: MovimientoRow): WalletMovimientoDTO {
     registradoPor: r.registradoPor,
     fechaMovimiento: r.fechaMovimiento.toISOString(),
     dueno: NATURALEZA_POR_CATEGORIA[r.categoria],
+    // Ficha 459 (design §7.3): el repositorio no conoce los documentos. Lo resuelve EN LOTE
+    // `WalletService.listarMovimientos` para la pagina que se pinta; en cualquier otro camino
+    // (descarga, detalle de una fila) la fila no ofrece acciones y el campo queda en `null`.
+    documento: null,
   };
 }
 
@@ -239,6 +249,24 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       where: { origenTipo, origenId, categoria },
     });
     return row === null || row === undefined ? null : toDTO(row);
+  }
+
+  /**
+   * Ficha 459 (design §2.5, R15/R71) — el dia CR del primer movimiento de la caja, o `null`.
+   *
+   * `MIN(fecha_movimiento)` sobre el indice `wallet_movimiento_fecha_movimiento_idx`, y el dia se
+   * resuelve con `fechaCalendarioCR` (la convencion CR del repo, UTC−6). Con `excluirCapital`, el
+   * `WHERE` deja fuera las categorias que `NATURALEZA_POR_CATEGORIA` declara `capital`.
+   */
+  async primerDiaDeLaCaja(opciones: { excluirCapital?: boolean } = {}): Promise<string | null> {
+    const where: Prisma.WalletMovimientoWhereInput =
+      opciones.excluirCapital === true ? { categoria: { notIn: [...CATEGORIAS_DE_CAPITAL] } } : {};
+    const agregado = await this.prisma.walletMovimiento.aggregate({
+      where,
+      _min: { fechaMovimiento: true },
+    });
+    const primero = agregado._min.fechaMovimiento;
+    return primero === null ? null : fechaCalendarioCR(primero);
   }
 
   /** Feature 45 (R11): SUM(monto) por categoria administrativa, con los mismos filtros. STRING. */

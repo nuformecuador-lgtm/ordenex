@@ -14,6 +14,12 @@ export const BUCKETS = {
   MENSAJERO_DOCS: "mensajero-docs",
   /** PDF consolidado de etiquetas por lote de carga API (feature 112). */
   ETIQUETAS_GUIA: "etiquetas-guia",
+  /**
+   * Comprobantes de los movimientos de la caja (ficha 459: pago por cuenta de una tienda, saldo
+   * inicial o aporte; la 457 lo reutiliza). El nombre efectivo lo resuelve
+   * `lib/config/wallet-comprobante.ts` (sobreescribible por entorno). Se crea a mano, PRIVADO.
+   */
+  WALLET_COMPROBANTES: "wallet-comprobantes",
 } as const;
 
 /** Union de los nombres validos de bucket. */

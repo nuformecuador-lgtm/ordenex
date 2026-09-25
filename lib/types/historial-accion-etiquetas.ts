@@ -105,6 +105,13 @@ export interface FuentesEtiqueta {
    * resuelve el nombre no puede TUMBAR el cobro. `unir` lo convierte en «(sin identificar)».
    */
   wallet_tienda_movimiento: { tiendaNombre: string | null };
+  /**
+   * FICHA 459 (R53) — el pago por cuenta se etiqueta por el NOMBRE de la tienda y nada mas: ni el
+   * beneficiario, ni el motivo, ni la referencia (texto libre tecleado por una persona).
+   */
+  pago_por_cuenta_tienda: { tiendaNombre: string | null };
+  /** FICHA 459 (R78) — el saldo inicial o aporte se etiqueta por su CLASE. Nunca el motivo. */
+  aporte_capital: { clase: "saldo_inicial" | "aporte" };
   orden_incidente: FuenteEnvio;
   /**
    * El cobro de gasto fijo se etiqueta por su CONCEPTO y su PERIODO («Alquiler bodega · 2026-09»).
@@ -201,6 +208,10 @@ const CONSTRUCTORES: {
   wallet_movimiento: (f) => limpiar(f?.categoria),
   // FICHA 381: el nombre de la TIENDA a la que se le cobro, y nada mas. Nunca la `descripcion`.
   wallet_tienda_movimiento: (f) => unir(f?.tiendaNombre),
+  // FICHA 459: el nombre de la tienda; y la clase del aporte. Nunca texto libre.
+  pago_por_cuenta_tienda: (f) => unir(f?.tiendaNombre),
+  aporte_capital: (f) =>
+    f?.clase === "saldo_inicial" ? "Saldo inicial" : f?.clase === "aporte" ? "Aporte de capital" : limpiar(null),
   orden_incidente: etiquetaDeEnvio,
   gasto_fijo_cobro: (f) => unir(f?.concepto, f?.periodo),
   rechazo_tienda_cobro: etiquetaDeEnvio,

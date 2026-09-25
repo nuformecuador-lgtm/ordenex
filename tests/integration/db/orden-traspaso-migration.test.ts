@@ -152,6 +152,14 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       "20260924120000_order_status_nombre_unico",
       "20260924120100_gestion_resultado_nombre_unico",
       "20260924120200_order_status_retiro_huerfanos",
+      // Ficha 459 (2026-09-25): los valores de enum de la caja, de la tienda y de origen; los del
+      // historial; las cuatro tablas del pago por cuenta y del saldo inicial o aporte (con los dos
+      // CHECK de los libros ampliados); y la reclasificacion de los 203 cobros (solo INSERT en
+      // `wallet_movimiento`). Ninguna toca `orden_traspaso_mensajero`.
+      "20260925120000_caja_459_enums",
+      "20260925120100_historial_accion_459",
+      "20260925120200_pago_por_cuenta_y_capital",
+      "20260925120300_reclasificar_cobros_459",
     ]);
   });
 });

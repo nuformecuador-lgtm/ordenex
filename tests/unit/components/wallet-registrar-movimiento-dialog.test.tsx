@@ -46,6 +46,9 @@ const registrarEgresoMock = vi.fn();
 const registrarManualMock = vi.fn();
 const registrarCobroMock = vi.fn();
 const listarTiendasMock = vi.fn();
+// FICHA 459 (T B.15) — las dos actions nuevas del diálogo.
+const registrarPagoPorCuentaMock = vi.fn();
+const registrarAporteMock = vi.fn();
 
 vi.mock("@/lib/actions/wallet-egresos", () => ({
   registrarEgresoAdministrativoAction: (...a: unknown[]) => registrarEgresoMock(...a),
@@ -58,6 +61,12 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
 }));
 vi.mock("@/lib/actions/usuarios-por-rol", () => ({
   listarAdminTiendas: (...a: unknown[]) => listarTiendasMock(...a),
+}));
+vi.mock("@/lib/actions/pago-por-cuenta-tienda", () => ({
+  registrarPagoPorCuentaTiendaAction: (...a: unknown[]) => registrarPagoPorCuentaMock(...a),
+}));
+vi.mock("@/lib/actions/aporte-capital", () => ({
+  registrarAporteCapitalAction: (...a: unknown[]) => registrarAporteMock(...a),
 }));
 
 const refreshMock = vi.fn();
@@ -191,12 +200,27 @@ const COBRO_OK_NEGATIVO = {
   },
 };
 
+/** FICHA 459 — el `ok` del pago por cuenta: la tienda queda EN CONTRA (saldo y signo del servidor). */
+const PAGO_POR_CUENTA_OK_NEGATIVO = {
+  status: "ok",
+  pago: { id: "p1", tiendaNombre: "Tienda Norte", monto: "10000.00" },
+  saldo: { creditos: "0.00", debitos: "10000.00", saldo: "-10000.00", signo: "negativo" },
+};
+
+/** FICHA 459 — el `ok` del saldo inicial o aporte. */
+const APORTE_OK = {
+  status: "ok",
+  aporte: { id: "a1", clase: "saldo_inicial", monto: "2500000.50" },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   registrarEgresoMock.mockResolvedValue({ status: "ok", movimiento: { id: "m1" } });
   registrarManualMock.mockResolvedValue({ status: "ok", movimiento: { id: "m1" } });
   registrarCobroMock.mockResolvedValue(COBRO_OK_NEGATIVO);
   listarTiendasMock.mockResolvedValue({ status: "ok", usuarios: TIENDAS });
+  registrarPagoPorCuentaMock.mockResolvedValue(PAGO_POR_CUENTA_OK_NEGATIVO);
+  registrarAporteMock.mockResolvedValue(APORTE_OK);
 });
 
 afterEach(() => {
@@ -207,23 +231,29 @@ afterEach(() => {
 // R3 / R11 — qué se puede elegir (y qué NO)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("RegistrarMovimientoCajaDialog — el selector ofrece los cinco conceptos (R3 / 381-R1)", () => {
-  it("ofrece gasto variable, sueldo, los dos ajustes y el cobro a una tienda, y nada más", async () => {
+describe("RegistrarMovimientoCajaDialog — el selector ofrece los siete conceptos (R3 / 381-R1 / 459-R59)", () => {
+  // FICHA 459 (T B.15) — REESCRITO: de cinco a siete conceptos, reordenados en los tres grupos
+  // de R59 (listado en `progress/impl_459_frontend.md`). La igualdad sigue siendo exacta.
+  it("ofrece los siete conceptos en sus tres grupos, y nada más", async () => {
     const { user, dialog } = await abrirDialogo();
 
     await user.click(within(dialog).getByRole("combobox", { name: "Concepto del movimiento" }));
     const lista = await screen.findByRole("listbox");
     const opciones = within(lista).getAllByRole("option");
 
-    // ⭑ FICHA 381 (R1): el quinto entra AL FINAL, y los cuatro de la 334 conservan su texto y su
-    // orden (R11). La igualdad sigue siendo exacta: un sexto concepto colado la rompe.
     expect(opciones.map((o) => o.textContent?.trim())).toEqual([
       "Gasto variable",
       "Sueldo",
-      "Ajuste que suma dinero",
+      "Pago por cuenta de una tienda",
       "Ajuste que resta dinero",
+      "Saldo inicial o aporte de capital",
+      "Ajuste que suma dinero",
       "Cobrar un costo a una tienda",
     ]);
+    // R59: los tres encabezados, visibles en la lista.
+    for (const grupo of ["Sale dinero de la caja", "Entra dinero a la caja", "No mueve la caja"]) {
+      expect(within(lista).getByText(grupo)).toBeInTheDocument();
+    }
   }, 15000);
 
   // MIGRADO de `wallet-registrar-egreso-dialog.test.tsx` (feature 45, R19/R22a).
@@ -265,7 +295,7 @@ describe("RegistrarMovimientoCajaDialog — el selector ofrece los cinco concept
     expect(combos).toHaveLength(1);
     await user.click(within(dialog).getByRole("combobox", { name: "Concepto del movimiento" }));
     const lista = await screen.findByRole("listbox");
-    expect(within(lista).getAllByRole("option")).toHaveLength(5);
+    expect(within(lista).getAllByRole("option")).toHaveLength(7); // FICHA 459: siete conceptos
     for (const nombre of ["Diaria", "Semanal", "Quincenal", "Mensual", "Personalizada"]) {
       expect(within(lista).queryByRole("option", { name: nombre })).not.toBeInTheDocument();
     }
@@ -944,5 +974,320 @@ describe("381 — cuando el servidor rechaza el cobro (R10)", () => {
     expect(within(dialog).getByLabelText("Monto")).toHaveAttribute("aria-invalid", "true");
     // Y la tienda NO se marca: cada motivo va bajo el campo que lo produce.
     expect(within(dialog).getByLabelText(COMBO_TIENDA)).not.toHaveAttribute("aria-invalid");
+  }, 20000);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ⭑ FICHA 459 (T B.15, design §9) — pago por cuenta de una tienda y saldo inicial o aporte
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COMBO_TIENDA_PAGO = "Tienda por la que se paga";
+
+/** Las claves de un `FormData`, ordenadas: el contrato de R61 es el CONJUNTO exacto. */
+function clavesDe(fd: FormData): string[] {
+  return [...new Set(fd.keys())].sort();
+}
+
+async function elegirPagoPorCuenta(
+  user: ReturnType<typeof userEvent.setup>,
+  dialog: HTMLElement,
+): Promise<void> {
+  await elegirConcepto(user, dialog, "Pago por cuenta de una tienda");
+  const combo = await within(dialog).findByRole("combobox", { name: COMBO_TIENDA_PAGO });
+  await waitFor(() => expect(combo).not.toBeDisabled());
+}
+
+describe("⭑ FICHA 459 — la frase del efecto (R60)", () => {
+  it("sigue al concepto, y pago por cuenta y cobro de un costo dicen cosas opuestas de la caja", async () => {
+    const { user, dialog } = await abrirDialogo();
+
+    expect(
+      within(dialog).getByText("Sale dinero de la caja y baja la ganancia de Ordenex."),
+    ).toBeInTheDocument();
+
+    await elegirConcepto(user, dialog, "Pago por cuenta de una tienda");
+    expect(
+      within(dialog).getByText(
+        "Sale dinero de la caja: Ordenex le paga a otro en nombre de la tienda y se lo descuenta de su saldo. La ganancia de Ordenex no cambia.",
+      ),
+    ).toBeInTheDocument();
+
+    await elegirConcepto(user, dialog, "Cobrar un costo a una tienda");
+    expect(
+      within(dialog).getByText(
+        "No sale ni entra dinero: es un cobro de Ordenex a la tienda que baja su saldo. La caja y la ganancia no cambian.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/^Sale dinero de la caja/)).toBeNull();
+
+    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    expect(
+      within(dialog).getByText(
+        "Entra dinero de Ordenex a la caja. No es ganancia: la ganancia no cambia.",
+      ),
+    ).toBeInTheDocument();
+  }, 20000);
+
+  it("la frase del efecto describe el selector para el lector de pantalla", async () => {
+    const { dialog } = await abrirDialogo();
+    const combo = within(dialog).getByRole("combobox", { name: "Concepto del movimiento" });
+    const ids = (combo.getAttribute("aria-describedby") ?? "").split(/\s+/);
+    expect(ids).toContain("movimiento-concepto-efecto");
+    expect(document.getElementById("movimiento-concepto-efecto")?.textContent).toBe(
+      "Sale dinero de la caja y baja la ganancia de Ordenex.",
+    );
+  }, 15000);
+});
+
+describe("⭑ FICHA 459 — pago por cuenta de una tienda (R61/R62/R63)", () => {
+  it("R61/R62: pide sus campos y avisa, antes de confirmar, que el saldo puede quedar en contra", async () => {
+    const { user, dialog } = await abrirDialogo();
+    await elegirPagoPorCuenta(user, dialog);
+
+    expect(within(dialog).getByRole("combobox", { name: COMBO_TIENDA_PAGO })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/A quién se le pagó/)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Monto")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Fecha")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Motivo del pago")).toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: "Método de pago" })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Comprobante (opcional)")).toBeInTheDocument();
+    // R62 — literal (design §9.3).
+    expect(
+      within(dialog).getByText(
+        "Si la tienda no tiene saldo suficiente, su saldo queda en contra: ella le deberá ese dinero a Ordenex.",
+      ),
+    ).toBeInTheDocument();
+    // La referencia solo aparece con SINPE o transferencia.
+    expect(within(dialog).queryByLabelText(/Referencia/)).toBeNull();
+    await elegirEnSelect(user, dialog, "Método de pago", "SINPE");
+    expect(within(dialog).getByLabelText(/Referencia/)).toBeInTheDocument();
+  }, 25000);
+
+  it("R61: el FormData lleva SOLO sus claves, con el monto como STRING exacto", async () => {
+    const { user, dialog } = await abrirDialogo();
+    await elegirPagoPorCuenta(user, dialog);
+
+    await elegirEnSelect(user, dialog, COMBO_TIENDA_PAGO, "Tienda Norte");
+    await user.type(within(dialog).getByLabelText(/A quién se le pagó/), "Facebook");
+    await user.type(within(dialog).getByLabelText("Monto"), "10000.00");
+    await user.type(within(dialog).getByLabelText("Motivo del pago"), "Pauta de septiembre");
+    await elegirEnSelect(user, dialog, "Método de pago", "SINPE");
+    await user.type(within(dialog).getByLabelText(/Referencia/), "REF-123");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() => expect(registrarPagoPorCuentaMock).toHaveBeenCalledTimes(1));
+    const fd = registrarPagoPorCuentaMock.mock.calls[0][0] as FormData;
+    expect(fd).toBeInstanceOf(FormData);
+    // Sin fecha (es hoy), sin comprobante (no se eligió): ninguna clave de otro concepto.
+    expect(clavesDe(fd)).toEqual(
+      ["beneficiario", "claveIdempotencia", "metodo", "monto", "motivo", "referencia", "tiendaId"].sort(),
+    );
+    expect(fd.get("tiendaId")).toBe(TIENDAS[1].id);
+    expect(fd.get("beneficiario")).toBe("Facebook");
+    expect(fd.get("monto")).toBe("10000.00");
+    expect(fd.get("metodo")).toBe("SINPE");
+    expect(fd.get("referencia")).toBe("REF-123");
+    expect(fd.get("motivo")).toBe("Pauta de septiembre");
+    expect(String(fd.get("claveIdempotencia"))).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    // Y ninguna otra action se llamó.
+    expect(registrarCobroMock).not.toHaveBeenCalled();
+    expect(registrarManualMock).not.toHaveBeenCalled();
+    expect(registrarEgresoMock).not.toHaveBeenCalled();
+    expect(registrarAporteMock).not.toHaveBeenCalled();
+  }, 30000);
+
+  it("R63: el aviso lleva el saldo del servidor con su signo y dice que la tienda le debe a Ordenex", async () => {
+    const { user, dialog } = await abrirDialogo();
+    await elegirPagoPorCuenta(user, dialog);
+    await elegirEnSelect(user, dialog, COMBO_TIENDA_PAGO, "Tienda Norte");
+    await user.type(within(dialog).getByLabelText(/A quién se le pagó/), "Facebook");
+    await user.type(within(dialog).getByLabelText("Monto"), "10000.00");
+    await user.type(within(dialog).getByLabelText("Motivo del pago"), "Pauta");
+    await elegirEnSelect(user, dialog, "Método de pago", "Efectivo");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(successMock).toHaveBeenCalledWith(
+      "Pago registrado. El saldo de Tienda Norte queda en -₡10.000 · En contra. La tienda le debe ese dinero a Ordenex.",
+    );
+    // Con efectivo la referencia NO viaja.
+    const fd = registrarPagoPorCuentaMock.mock.calls[0][0] as FormData;
+    expect(fd.has("referencia")).toBe(false);
+  }, 30000);
+
+  it("R63: con saldo a favor NO dice que la tienda debe", async () => {
+    registrarPagoPorCuentaMock.mockResolvedValue({
+      ...PAGO_POR_CUENTA_OK_NEGATIVO,
+      saldo: { creditos: "50000.00", debitos: "10000.00", saldo: "40000.00", signo: "positivo" },
+    });
+    const { user, dialog } = await abrirDialogo();
+    await elegirPagoPorCuenta(user, dialog);
+    await elegirEnSelect(user, dialog, COMBO_TIENDA_PAGO, "Tienda Norte");
+    await user.type(within(dialog).getByLabelText(/A quién se le pagó/), "Jet Cargo");
+    await user.type(within(dialog).getByLabelText("Monto"), "10000.00");
+    await user.type(within(dialog).getByLabelText("Motivo del pago"), "Envío");
+    await elegirEnSelect(user, dialog, "Método de pago", "Efectivo");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(successMock).toHaveBeenCalledWith(
+      "Pago registrado. El saldo de Tienda Norte queda en ₡40.000 · A favor.",
+    );
+  }, 30000);
+
+  it("sin tienda, sin beneficiario, sin método o sin referencia con SINPE: no llama al servidor", async () => {
+    const { user, dialog } = await abrirDialogo();
+    await elegirPagoPorCuenta(user, dialog);
+    await user.type(within(dialog).getByLabelText("Monto"), "100.00");
+    await user.type(within(dialog).getByLabelText("Motivo del pago"), "x");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    expect(await within(dialog).findByText("Elegí la tienda por la que se paga.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Escribí a quién se le pagó.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Elegí el método de pago.")).toBeInTheDocument();
+    expect(registrarPagoPorCuentaMock).not.toHaveBeenCalled();
+
+    await elegirEnSelect(user, dialog, "Método de pago", "Transferencia");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+    expect(
+      await within(dialog).findByText("La referencia es obligatoria en SINPE y transferencia."),
+    ).toBeInTheDocument();
+    expect(registrarPagoPorCuentaMock).not.toHaveBeenCalled();
+  }, 30000);
+
+  it("R56: si el comprobante no se pudo guardar, lo dice y el diálogo sigue abierto", async () => {
+    registrarPagoPorCuentaMock.mockResolvedValue({ status: "comprobante_no_guardado" });
+    const { user, dialog } = await abrirDialogo();
+    await elegirPagoPorCuenta(user, dialog);
+    await elegirEnSelect(user, dialog, COMBO_TIENDA_PAGO, "Tienda Norte");
+    await user.type(within(dialog).getByLabelText(/A quién se le pagó/), "Facebook");
+    await user.type(within(dialog).getByLabelText("Monto"), "100.00");
+    await user.type(within(dialog).getByLabelText("Motivo del pago"), "x");
+    await elegirEnSelect(user, dialog, "Método de pago", "Efectivo");
+    const archivo = new File(["%PDF-1.4"], "recibo.pdf", { type: "application/pdf" });
+    await user.upload(within(dialog).getByLabelText("Comprobante (opcional)"), archivo);
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    expect(
+      await within(dialog).findByText(
+        "No se pudo guardar el comprobante, así que no se registró nada. Probá de nuevo.",
+      ),
+    ).toBeInTheDocument();
+    const fd = registrarPagoPorCuentaMock.mock.calls[0][0] as FormData;
+    expect((fd.get("comprobante") as File).name).toBe("recibo.pdf");
+    expect(successMock).not.toHaveBeenCalled();
+  }, 30000);
+});
+
+describe("⭑ FICHA 381/459 — el cobro de un costo no gana ni una clave (R64)", () => {
+  it("el payload del cobro sigue siendo exactamente {tiendaId, monto, descripcion}", async () => {
+    const { user, dialog } = await abrirDialogo();
+    await elegirCobroYEsperarTiendas(user, dialog);
+    await elegirEnSelect(user, dialog, COMBO_TIENDA, "Tienda Sur");
+    await user.type(within(dialog).getByLabelText("Monto"), "15000.00");
+    await user.type(within(dialog).getByLabelText("Motivo del cobro"), "Material");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() => expect(registrarCobroMock).toHaveBeenCalledTimes(1));
+    expect(registrarCobroMock.mock.calls[0][0]).toEqual({
+      tiendaId: TIENDAS[2].id,
+      monto: "15000.00",
+      descripcion: "Material",
+    });
+    expect(registrarPagoPorCuentaMock).not.toHaveBeenCalled();
+  }, 30000);
+});
+
+describe("⭑ FICHA 459 — saldo inicial o aporte de capital (R27/R68/R70)", () => {
+  it("R27: el monto arranca VACÍO, sin ejemplo, y sigue vacío al elegir la clase", async () => {
+    const { user, dialog } = await abrirDialogo();
+    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+
+    const monto = within(dialog).getByLabelText("Monto") as HTMLInputElement;
+    expect(monto.value).toBe("");
+    expect(monto.getAttribute("placeholder")).toBeNull();
+
+    await user.click(within(dialog).getByText(/^Saldo inicial — /));
+    expect(monto.value).toBe("");
+    // Y las dos clases se explican (design §9.3).
+    expect(
+      within(dialog).getByText(
+        "Saldo inicial — el dinero que Ordenex tenía al empezar a usar la app. Solo puede haber uno.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Aporte de capital — dinero de Ordenex que entra después."),
+    ).toBeInTheDocument();
+  }, 20000);
+
+  it("la fecha no tiene ventana hacia atrás (P7): sin `min`, con `max` = hoy", async () => {
+    const { user, dialog } = await abrirDialogo();
+    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    const fecha = within(dialog).getByLabelText("Fecha") as HTMLInputElement;
+    expect(fecha.getAttribute("min")).toBeNull();
+    expect(fecha.getAttribute("max")).toBe(hoyEnCostaRica());
+  }, 20000);
+
+  it("R68: el FormData lleva SOLO sus claves (con la fecha siempre) y avisa con el monto del servidor", async () => {
+    const { user, dialog } = await abrirDialogo();
+    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await user.click(within(dialog).getByText(/^Saldo inicial — /));
+    await user.type(within(dialog).getByLabelText("Monto"), "2500000.50");
+    ponerFecha(dialog, diasAntesEnCostaRica(60));
+    await user.type(within(dialog).getByLabelText("Motivo"), "Arranque");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() => expect(registrarAporteMock).toHaveBeenCalledTimes(1));
+    const fd = registrarAporteMock.mock.calls[0][0] as FormData;
+    expect(clavesDe(fd)).toEqual(["clase", "claveIdempotencia", "fecha", "monto", "motivo"]);
+    expect(fd.get("clase")).toBe("saldo_inicial");
+    expect(fd.get("monto")).toBe("2500000.50");
+    expect(fd.get("fecha")).toBe(diasAntesEnCostaRica(60));
+    expect(fd.get("motivo")).toBe("Arranque");
+    expect(successMock).toHaveBeenCalledWith("Registrado. Saldo inicial de ₡2.500.000,50.");
+    expect(registrarPagoPorCuentaMock).not.toHaveBeenCalled();
+  }, 30000);
+
+  it("sin clase no llama al servidor", async () => {
+    const { user, dialog } = await abrirDialogo();
+    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await user.type(within(dialog).getByLabelText("Monto"), "100.00");
+    await user.type(within(dialog).getByLabelText("Motivo"), "x");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+    expect(
+      await within(dialog).findByText("Elegí si es el saldo inicial o un aporte de capital."),
+    ).toBeInTheDocument();
+    expect(registrarAporteMock).not.toHaveBeenCalled();
+  }, 20000);
+
+  it("R70: si ya hay un saldo inicial, lo dice bajo la clase y no cierra", async () => {
+    registrarAporteMock.mockResolvedValue({ status: "ya_hay_saldo_inicial" });
+    const { user, dialog } = await abrirDialogo();
+    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await user.click(within(dialog).getByText(/^Saldo inicial — /));
+    await user.type(within(dialog).getByLabelText("Monto"), "100.00");
+    await user.type(within(dialog).getByLabelText("Motivo"), "x");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    expect(
+      await within(dialog).findByText(
+        "Ya hay un saldo inicial registrado y solo puede haber uno. Si hay que cambiarlo, anulá el vigente desde el libro de la caja.",
+      ),
+    ).toBeInTheDocument();
+    expect(successMock).not.toHaveBeenCalled();
+  }, 20000);
+
+  it("una fecha futura no llama al servidor", async () => {
+    const { user, dialog } = await abrirDialogo();
+    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await user.click(within(dialog).getByText(/^Aporte de capital — /));
+    await user.type(within(dialog).getByLabelText("Monto"), "100.00");
+    ponerFecha(dialog, diasDespuesEnCostaRica(1));
+    await user.type(within(dialog).getByLabelText("Motivo"), "x");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+    expect(await within(dialog).findByText("La fecha no puede ser posterior a hoy.")).toBeInTheDocument();
+    expect(registrarAporteMock).not.toHaveBeenCalled();
   }, 20000);
 });

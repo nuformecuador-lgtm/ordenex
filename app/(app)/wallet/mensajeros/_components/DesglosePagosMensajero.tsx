@@ -41,6 +41,7 @@ import {
   money,
   origenLabel,
 } from "./wallet-mensajeros-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Feature 44 (T14, R18/R21/R22) — DESGLOSE por cierre de UN mensajero para el MAESTRO. Se monta
 // al EXPANDIR la fila del mensajero y carga client-side (via SWR sobre `listarPagosDeMensajeroAction`,
@@ -152,7 +153,7 @@ const COLUMNS: Column<PagoMensajeroMovimientoDTO>[] = [
   {
     id: "fecha",
     value: DESGLOSE_COLUMNAS.fecha,
-    render: (m) => m.fechaMovimiento.slice(0, 10),
+    render: (m) => fechaDiaMovimientoCR(m.fechaMovimiento),
   },
   {
     id: "tipo",

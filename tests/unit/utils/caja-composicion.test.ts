@@ -55,7 +55,7 @@ function conjuntoCon(g: string, t: string): AgregadoCajaRow[] {
   const ingresoTerceros = terceros.add(5300);
   const egresoTerceros = new Prisma.Decimal(5300);
   return [
-    fila("ingreso_flete", ingresoPropio.toFixed(2)),
+    fila("ingreso_ajuste", ingresoPropio.toFixed(2)),
     fila("egreso_gasto", egresoPropio.toFixed(2)),
     fila("ingreso_cod_recaudado", ingresoTerceros.toFixed(2)),
     fila("egreso_pago_tienda", egresoTerceros.toFixed(2)),
@@ -64,18 +64,24 @@ function conjuntoCon(g: string, t: string): AgregadoCajaRow[] {
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // Los cuatro conjuntos con nombre. Cada uno provoca UN modo, y sus importes no se repiten.
+//
+// Ficha 459 (reescrito): el ingreso propio de estos conjuntos pasa de `ingreso_flete` a
+// `ingreso_ajuste`. Desde la 459 el flete es un CARGO a la tienda (baja «De las tiendas» y no
+// entra como efectivo); aqui se prueba el REPARTO sobre (G, T), y con un ingreso propio que es
+// efectivo los importes y los modos escritos a mano siguen siendo los mismos. El efecto de un
+// cargo se prueba en `caja-tesoreria.test.ts` y `caja-derivacion-459.test.ts`.
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
 /** R10/R19 — G = 2 000, T = 10 000, enCaja = 12 000. El caso del lienzo. */
 const DOS_BOLSILLOS: AgregadoCajaRow[] = [
-  fila("ingreso_flete", "5000.00"),
+  fila("ingreso_ajuste", "5000.00"),
   fila("egreso_gasto", "3000.00"),
   fila("ingreso_cod_recaudado", "10000.00"),
 ];
 
 /** R15 — G = −900, T = 4 500: Ordenex pierde y el dinero de las tiendas cubre el saldo. */
 const SOLO_TIENDAS: AgregadoCajaRow[] = [
-  fila("ingreso_flete", "400.00"),
+  fila("ingreso_ajuste", "400.00"),
   fila("egreso_gasto", "1300.00"),
   fila("ingreso_cod_recaudado", "7000.00"),
   fila("egreso_pago_tienda", "2500.00"),
@@ -83,7 +89,7 @@ const SOLO_TIENDAS: AgregadoCajaRow[] = [
 
 /** R17 — G = 5 600, T = −1 900: el espejo (D4), se pago a las tiendas mas de lo recaudado. */
 const SOLO_ORDENEX: AgregadoCajaRow[] = [
-  fila("ingreso_flete", "6400.00"),
+  fila("ingreso_ajuste", "6400.00"),
   fila("egreso_gasto", "800.00"),
   fila("ingreso_cod_recaudado", "1200.00"),
   fila("egreso_pago_tienda", "3100.00"),
@@ -91,7 +97,7 @@ const SOLO_ORDENEX: AgregadoCajaRow[] = [
 
 /** R18 — G = −1 500, T = −2 400: no hay nada que repartir. */
 const SIN_REPARTO: AgregadoCajaRow[] = [
-  fila("ingreso_flete", "250.00"),
+  fila("ingreso_ajuste", "250.00"),
   fila("egreso_gasto", "1750.00"),
   fila("ingreso_cod_recaudado", "900.00"),
   fila("egreso_pago_tienda", "3300.00"),
@@ -227,7 +233,7 @@ describe("derivarCaja — el modo de composicion y la proporcion (R10/R14-R19)",
     // Con HALF_UP sube a 83.34; con HALF_DOWN o truncando se quedaria en 83.33. Es la unica
     // forma de que esta asercion distinga un criterio de redondeo de otro.
     const enMedio = derivarCaja([
-      fila("ingreso_flete", "16665.00"),
+      fila("ingreso_ajuste", "16665.00"),
       fila("ingreso_cod_recaudado", "83335.00"),
     ]);
     expect(enMedio.enCaja).toBe("100000.00");
@@ -236,7 +242,7 @@ describe("derivarCaja — el modo de composicion y la proporcion (R10/R14-R19)",
 
     // Y uno periodico puro: 10 000 / 30 000 = 33.333…
     const periodico = derivarCaja([
-      fila("ingreso_flete", "20000.00"),
+      fila("ingreso_ajuste", "20000.00"),
       fila("ingreso_cod_recaudado", "10000.00"),
     ]);
     expect(periodico.porcentajeTiendas).toBe("33.33");
@@ -565,13 +571,16 @@ describe("R38 — las siete cifras y los cuatro conceptos no cambian de valor", 
       ganancia: caja.ganancia,
       deTerceros: caja.deTerceros,
     }).toEqual({
-      entradas: "24250.00", // 5 000 + 1 250 + 18 000
+      // Ficha 459 (reescrito A PROPOSITO, R2/R5): flete y comision (6 250) son CARGOS a la
+      // tienda — no entran como efectivo y bajan «De las tiendas». Ganancia, egresos e ingresos
+      // propios, sin cambio (R4/R93).
+      entradas: "18000.00", // solo el contra-entrega
       salidas: "14940.50", // 300 + 175 + 2 400 + 125,50 + 940 + 11 000
-      enCaja: "9309.50",
+      enCaja: "3059.50", // 18 000 − 14 940,50
       ingresosPropios: "6250.00", // 5 000 + 1 250
       egresosPropios: "3940.50", // todo menos el pago a la tienda
       ganancia: "2309.50",
-      deTerceros: "7000.00", // 18 000 − 11 000
+      deTerceros: "750.00", // 18 000 − 11 000 − 6 250
     });
     // Los signos tampoco se mueven, y la identidad de la 173 sigue en pie.
     expect(caja.signoEnCaja).toBe("positivo");

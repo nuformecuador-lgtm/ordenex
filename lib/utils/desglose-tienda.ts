@@ -51,6 +51,11 @@ export const CUBETA_POR_CATEGORIA: Record<WalletTiendaMovimientoCategoria, Cubet
   // Pagado a la tienda: lo ya entregado. Hoy nadie lo emite (lo hara la 172), pero se lee de
   // la categoria REAL del ledger, no se devuelve un cero fijo (R43).
   pago_tienda: "pagado",
+  // FICHA 459 (design §5, decision de la 458 §2.6): el pago POR CUENTA de la tienda es dinero
+  // entregado a la tienda a traves de un tercero -> `pagado`; su anulacion lo devuelve -> `aFavor`
+  // (como `ajuste_credito`).
+  pago_por_cuenta: "pagado",
+  pago_por_cuenta_anulado: "aFavor",
 };
 
 /**

@@ -52,6 +52,10 @@ export const WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED = [
   // DISTINGUIR un cobro de una correccion compensatoria, y esa distincion no puede apoyarse en la
   // `descripcion`, que es texto libre tecleado por una persona.
   "cobro_manual",
+  // FICHA 459 (design §4.1/§5): el pago que Ordenex hace POR CUENTA de la tienda (debito) y su
+  // anulacion (credito). Contrapartida en la caja: `egreso_pago_por_cuenta_tienda` / su reverso.
+  "pago_por_cuenta",
+  "pago_por_cuenta_anulado",
 ] as const satisfies readonly PrismaWalletTiendaMovimientoCategoria[];
 
 export type WalletTiendaMovimientoCategoria =

@@ -80,26 +80,90 @@ export const NATURALEZA_POR_CATEGORIA: Record<WalletMovimientoCategoria, Natural
   ingreso_cod_recaudado: "terceros",
   egreso_pago_tienda: "terceros",
   ingreso_reverso_pago_tienda: "terceros",
+  // Ficha 459 (design §5): el pago por cuenta de una tienda es dinero DE LA TIENDA que sale de la
+  // caja hacia un tercero (baja «De las tiendas», no la ganancia); su anulacion lo devuelve.
+  egreso_pago_por_cuenta_tienda: "terceros",
+  ingreso_reverso_pago_por_cuenta_tienda: "terceros",
+  // CAPITAL (P1): el saldo inicial o aporte, y su anulacion. Dinero de Ordenex que NO es ganancia.
+  ingreso_aporte_capital: "capital",
+  egreso_reverso_aporte_capital: "capital",
 };
 
-/** Las seis sumas que hacen falta: por tipo y, dentro de cada tipo, por naturaleza. */
+/**
+ * Ficha 459 (design §2.2, R1/R9) — si un concepto de la caja es dinero que entro o salio DE
+ * VERDAD (`efectivo`) o un CARGO A UNA TIENDA: la parte de Ordenex (flete, flete por rechazo,
+ * comision de contra-entrega y el impuesto de cada uno) que se DESCUENTA del saldo de la tienda.
+ *
+ * Un cargo no es una entrada de efectivo: es un traspaso de dinero que ya esta en la caja (el
+ * contra-entrega, que es de la tienda) al bolsillo de Ordenex; o, si la orden no tuvo
+ * contra-entrega, una deuda de la tienda que se cobra reduciendo su saldo. En los dos casos la
+ * ganancia sube, «De las tiendas» baja lo mismo y el efectivo no cambia — exactamente lo que el
+ * libro de las tiendas ya registra con su debito espejo (`MAPEO_CONCEPTO_TIENDA`).
+ *
+ * `Record` TOTAL por el mismo motivo que `NATURALEZA_POR_CATEGORIA`: un concepto nuevo de la caja
+ * no compila hasta que alguien decide si es efectivo o un cargo. La guardia
+ * `tests/unit/guards/caja-clasificacion-459.guardia.test.ts` afirma que el conjunto
+ * `cargo_a_tienda` ES `WALLET_INGRESO_CONCEPTO_SEED` y que todos son ingresos propios.
+ */
+export type LiquidezMovimiento = "efectivo" | "cargo_a_tienda";
+
+export const LIQUIDEZ_POR_CATEGORIA: Record<WalletMovimientoCategoria, LiquidezMovimiento> = {
+  // CARGOS A UNA TIENDA: los seis conceptos del feed del cierre (y del cobro por rechazo).
+  ingreso_flete: "cargo_a_tienda",
+  ingreso_flete_devolucion: "cargo_a_tienda",
+  ingreso_comision_cod: "cargo_a_tienda",
+  ingreso_iva_flete: "cargo_a_tienda",
+  ingreso_iva_flete_devolucion: "cargo_a_tienda",
+  ingreso_iva_comision_cod: "cargo_a_tienda",
+  // EFECTIVO: todo lo demas entra o sale de verdad.
+  ingreso_ajuste: "efectivo",
+  ingreso_cod_recaudado: "efectivo",
+  ingreso_reverso_pago_tienda: "efectivo",
+  egreso_pago_tienda: "efectivo",
+  egreso_pago_mensajero: "efectivo",
+  egreso_gasto: "efectivo",
+  egreso_sueldo: "efectivo",
+  egreso_ajuste: "efectivo",
+  egreso_gasto_fijo: "efectivo",
+  egreso_gasto_variable: "efectivo",
+  egreso_indemnizacion: "efectivo",
+  egreso_pago_por_cuenta_tienda: "efectivo",
+  ingreso_reverso_pago_por_cuenta_tienda: "efectivo",
+  ingreso_aporte_capital: "efectivo",
+  egreso_reverso_aporte_capital: "efectivo",
+};
+
+/**
+ * Las sumas que hacen falta, por cubeta. Ficha 459 (design §2.2): SOLO se suma; ninguna resta.
+ *
+ *  - `entradasEfectivo`: los ingresos que son dinero que entro de verdad (no los cargos).
+ *  - `cargosATiendas`: los seis conceptos de la parte de Ordenex que se DESCUENTA del saldo de la
+ *    tienda. Tambien suman a `ingresosPropios`: para la ganancia son ingresos (R4).
+ *  - propio / terceros / capital: por dueño y tipo.
+ */
 type Acumulado = {
-  entradas: Prisma.Decimal;
+  entradasEfectivo: Prisma.Decimal;
   salidas: Prisma.Decimal;
+  cargosATiendas: Prisma.Decimal;
   ingresosPropios: Prisma.Decimal;
   egresosPropios: Prisma.Decimal;
   ingresosTerceros: Prisma.Decimal;
   egresosTerceros: Prisma.Decimal;
+  ingresosCapital: Prisma.Decimal;
+  egresosCapital: Prisma.Decimal;
 };
 
 function acumular(filas: readonly AgregadoCajaRow[]): Acumulado {
   const acc: Acumulado = {
-    entradas: new Prisma.Decimal(0),
+    entradasEfectivo: new Prisma.Decimal(0),
     salidas: new Prisma.Decimal(0),
+    cargosATiendas: new Prisma.Decimal(0),
     ingresosPropios: new Prisma.Decimal(0),
     egresosPropios: new Prisma.Decimal(0),
     ingresosTerceros: new Prisma.Decimal(0),
     egresosTerceros: new Prisma.Decimal(0),
+    ingresosCapital: new Prisma.Decimal(0),
+    egresosCapital: new Prisma.Decimal(0),
   };
 
   for (const fila of filas) {
@@ -107,16 +171,20 @@ function acumular(filas: readonly AgregadoCajaRow[]): Acumulado {
     // El signo lo da el TIPO; la cubeta, la CATEGORIA. Que las dos cosas casen es lo que
     // garantiza el CHECK categoria↔tipo de la base (design §2.2).
     const esIngreso = fila.tipo === "ingreso";
-    const esPropio = NATURALEZA_POR_CATEGORIA[fila.categoria] === "propio";
+    const dueno = NATURALEZA_POR_CATEGORIA[fila.categoria];
+    const esCargo = LIQUIDEZ_POR_CATEGORIA[fila.categoria] === "cargo_a_tienda";
 
     if (esIngreso) {
-      acc.entradas = acc.entradas.add(monto);
-      if (esPropio) acc.ingresosPropios = acc.ingresosPropios.add(monto);
-      else acc.ingresosTerceros = acc.ingresosTerceros.add(monto);
+      if (esCargo) acc.cargosATiendas = acc.cargosATiendas.add(monto);
+      else acc.entradasEfectivo = acc.entradasEfectivo.add(monto);
+      if (dueno === "propio") acc.ingresosPropios = acc.ingresosPropios.add(monto);
+      else if (dueno === "terceros") acc.ingresosTerceros = acc.ingresosTerceros.add(monto);
+      else acc.ingresosCapital = acc.ingresosCapital.add(monto);
     } else {
       acc.salidas = acc.salidas.add(monto);
-      if (esPropio) acc.egresosPropios = acc.egresosPropios.add(monto);
-      else acc.egresosTerceros = acc.egresosTerceros.add(monto);
+      if (dueno === "propio") acc.egresosPropios = acc.egresosPropios.add(monto);
+      else if (dueno === "terceros") acc.egresosTerceros = acc.egresosTerceros.add(monto);
+      else acc.egresosCapital = acc.egresosCapital.add(monto);
     }
   }
 
@@ -128,7 +196,7 @@ function acumular(filas: readonly AgregadoCajaRow[]): Acumulado {
 //
 // Todo lo que sigue son SUMAS POR CUBETA y UNA DIVISION sobre importes que `derivarBalance`
 // ya derivo. Ninguna resta con signo nueva: la guardia `caja-derivaciones.guardia.test.ts`
-// exige que este modulo siga llamando a `derivarBalance` exactamente tres veces y que no
+// exige que este modulo llame a `derivarBalance` exactamente CUATRO veces (ficha 459) y que no
 // declare por su cuenta ni el signo ni la resta.
 // ═════════════════════════════════════════════════════════════════════════════════════════
 
@@ -156,6 +224,8 @@ const NADA_DE_LAS_TIENDAS = "0.00";
  */
 function derivarReparto(
   enCaja: Prisma.Decimal,
+  // Ficha 459 (R11, P2): «De Ordenex» (ganancia + capital), no solo la ganancia. Las cuatro
+  // ramas no cambian; en la 4 sigue valiendo `enCaja = O + T > 0` (identidad R7).
   ganancia: Prisma.Decimal,
   deTerceros: Prisma.Decimal,
 ): { porcentajeTiendas: string; modoComposicion: ModoComposicionCaja } {
@@ -201,19 +271,33 @@ function derivarReparto(
  */
 export function derivarCaja(
   filas: readonly AgregadoCajaRow[],
-  opciones: { periodoFiltrado?: boolean } = {},
+  opciones: {
+    periodoFiltrado?: boolean;
+    /** Ficha 459 (R14): dato de la CONSULTA (hay un saldo inicial vigente), no del dinero. */
+    haySaldoInicialVigente?: boolean;
+    /** Ficha 459 (R15): YYYY-MM-DD CR del primer movimiento de la caja; null con el libro vacio. */
+    primerDia?: string | null;
+  } = {},
 ): CajaResumenDTO {
   const acc = acumular(filas);
 
-  const caja = derivarBalance(acc.entradas, acc.salidas);
+  // Ficha 459 (design §2.2) — CUATRO restas con signo, todas de `derivarBalance`:
+  //  · la cifra principal: Entro (sin los cargos, que no son efectivo: F2) − Salio (R2/R3);
+  //  · la ganancia, IDENTICA a la de antes: los cargos siguen siendo ingresos propios (R4);
+  //  · «De las tiendas»: los cargos entran como SALIDA del bolsillo de las tiendas — es el
+  //    traspaso de su contra-entrega (o de su deuda) al de Ordenex (R5);
+  //  · el capital de Ordenex (R6).
+  // Identidad R7, por construccion: G + T + C = (ingP + ingT + ingC − cargos) − (egP + egT + egC).
+  const caja = derivarBalance(acc.entradasEfectivo, acc.salidas);
   const propio = derivarBalance(acc.ingresosPropios, acc.egresosPropios);
-  const terceros = derivarBalance(acc.ingresosTerceros, acc.egresosTerceros);
+  const terceros = derivarBalance(acc.ingresosTerceros, acc.egresosTerceros.add(acc.cargosATiendas));
+  const capital = derivarBalance(acc.ingresosCapital, acc.egresosCapital);
 
-  const reparto = derivarReparto(
-    new Prisma.Decimal(caja.balance),
-    new Prisma.Decimal(propio.balance),
-    new Prisma.Decimal(terceros.balance),
-  );
+  // «De Ordenex» (R11, P2) = ganancia + capital. Una SUMA, no una resta.
+  const deOrdenex = new Prisma.Decimal(propio.balance).add(new Prisma.Decimal(capital.balance));
+  const deTerceros = new Prisma.Decimal(terceros.balance);
+
+  const reparto = derivarReparto(new Prisma.Decimal(caja.balance), deOrdenex, deTerceros);
 
   return {
     entradas: caja.ingresos,
@@ -228,6 +312,13 @@ export function derivarCaja(
     periodoFiltrado: opciones.periodoFiltrado ?? false,
     porcentajeTiendas: reparto.porcentajeTiendas,
     modoComposicion: reparto.modoComposicion,
+    capital: capital.balance,
+    signoCapital: capital.signo,
+    deOrdenex: montoEscala2(deOrdenex),
+    signoDeTerceros: terceros.signo,
+    deTercerosAbsoluto: montoEscala2(deTerceros.abs()),
+    estado: opciones.haySaldoInicialVigente === true ? "saldo" : "flujo",
+    flujoDesde: opciones.primerDia ?? null,
   };
 }
 

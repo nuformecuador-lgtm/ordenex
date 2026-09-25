@@ -16,7 +16,7 @@
  */
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
-import { fechaDiaISO } from "@/lib/utils/fecha-dia-iso";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 import { CATEGORIA_PAGO_LABEL, DESGLOSE_COLUMNAS, ORIGEN_PAGO_LABEL, TIPO_PAGO_LABEL } from "./wallet-mensajeros-labels";
 
@@ -47,7 +47,7 @@ export function filaDescargaDesgloseMensajero(
   movimiento: PagoMensajeroMovimientoDTO,
 ): DescargaFila {
   return {
-    fecha: fechaDiaISO(movimiento.fechaMovimiento),
+    fecha: fechaDiaMovimientoCR(movimiento.fechaMovimiento),
     tipo: TIPO_PAGO_LABEL[movimiento.tipo] ?? movimiento.tipo,
     concepto: CATEGORIA_PAGO_LABEL[movimiento.categoria] ?? movimiento.categoria,
     monto: movimiento.monto, // STRING tal cual (money-safe)

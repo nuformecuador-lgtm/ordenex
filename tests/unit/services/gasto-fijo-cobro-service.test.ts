@@ -66,6 +66,7 @@ function movimiento(overrides: Partial<WalletMovimientoDTO> = {}): WalletMovimie
     registradoPor: MAESTRO.usuarioId,
     fechaMovimiento: "2026-08-29T18:00:00.000Z",
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
     ...overrides,
   };
 }
@@ -96,6 +97,7 @@ function buildMovRepo(
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
     obtenerPorOrigen: vi.fn().mockResolvedValue(movimiento()),
+    primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: este camino no lo usa
     crearMovimientoRegistrado: vi.fn().mockResolvedValue(1), // ficha 362
 
     ...overrides,

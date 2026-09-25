@@ -144,7 +144,7 @@ describeSiHayBase("ficha 343 — el detalle de una fila contra Postgres (R18/R19
     await enTransaccionRevertida(prisma, async (tx) => {
       await exigirVentanaVacia(tx);
       const { porCategoria } = await sembrar(tx);
-      const svc = new WalletService(repoDe(tx), tx as unknown as PrismaClient);
+      const svc = new WalletService(repoDe(tx), tx as unknown as PrismaClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
 
       const r = await svc.listarMovimientosDeFila(
         { fila: "egreso_pago_mensajero", page: 1, pageSize: 10, ...FILTROS },
@@ -176,7 +176,7 @@ describeSiHayBase("ficha 343 — el detalle de una fila contra Postgres (R18/R19
     await enTransaccionRevertida(prisma, async (tx) => {
       await exigirVentanaVacia(tx);
       const { porCategoria } = await sembrar(tx);
-      const svc = new WalletService(repoDe(tx), tx as unknown as PrismaClient);
+      const svc = new WalletService(repoDe(tx), tx as unknown as PrismaClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
 
       const r = await svc.listarMovimientosDeFila(
         { fila: "otros_egresos", page: 1, pageSize: 10, ...FILTROS },
@@ -208,7 +208,7 @@ describeSiHayBase("ficha 343 — el detalle de una fila contra Postgres (R18/R19
     await enTransaccionRevertida(prisma, async (tx) => {
       await exigirVentanaVacia(tx);
       const repo = repoDe(tx);
-      const svc = new WalletService(repo, tx as unknown as PrismaClient);
+      const svc = new WalletService(repo, tx as unknown as PrismaClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
 
       // `pageSize + 3` movimientos de UNA categoria, con importes distintos.
       const pageSize = 2;
@@ -255,7 +255,7 @@ describeSiHayBase("ficha 343 — el detalle de una fila contra Postgres (R18/R19
     await enTransaccionRevertida(prisma, async (tx) => {
       await exigirVentanaVacia(tx);
       const repo = repoDe(tx);
-      const svc = new WalletService(repo, tx as unknown as PrismaClient);
+      const svc = new WalletService(repo, tx as unknown as PrismaClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
       const { porCategoria } = await sembrar(tx);
 
       // Un pago a mensajero FUERA de la ventana: mismo concepto, otro periodo.
@@ -341,7 +341,7 @@ describeSiHayBase("ficha 343 — el detalle de una fila contra Postgres (R18/R19
     await enTransaccionRevertida(prisma, async (tx) => {
       await exigirVentanaVacia(tx);
       await sembrar(tx);
-      const svc = new WalletService(repoDe(tx), tx as unknown as PrismaClient);
+      const svc = new WalletService(repoDe(tx), tx as unknown as PrismaClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
 
       // El importe de la fila sale del MISMO camino que la tarjeta: una lectura agregada, con
       // los MISMOS filtros. La suma del detalle se hace aqui, con `Prisma.Decimal`: ni la app
@@ -442,3 +442,11 @@ describeSiHayBase("ficha 343 — el detalle de una fila contra Postgres (R18/R19
     });
   });
 });
+
+// Ficha 459 (R14): el lector del estado de la caja; estos casos no registran saldo inicial.
+const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };
+// Ficha 459 (design §7.3): ningun documento; el libro sin acciones. Lista vacia -> sin consulta.
+const SIN_DOCUMENTOS_459 = {
+  pagosPorCuenta: { estadoDeDocumentos: async () => [] },
+  aportes: { estadoDeDocumentos: async () => [] },
+};

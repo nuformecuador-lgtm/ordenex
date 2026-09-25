@@ -216,7 +216,7 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
     await enTransaccionRevertida(prisma, async (tx) => {
       const actor = await actorDeLaBase(tx);
       const repo = repoDe(tx);
-      const svc = new WalletService(repo, tx as unknown as PrismaClient);
+      const svc = new WalletService(repo, tx as unknown as PrismaClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
 
       // El rango se cierra sobre UN SOLO instante (`gte` y `lte` iguales): son exactamente las
       // filas que comparten `fecha_movimiento`, que es donde vive el empate.
@@ -272,3 +272,11 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
     });
   });
 });
+
+// Ficha 459 (R14): el lector del estado de la caja; estos casos no registran saldo inicial.
+const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };
+// Ficha 459 (design §7.3): ningun documento; el libro sin acciones. Lista vacia -> sin consulta.
+const SIN_DOCUMENTOS_459 = {
+  pagosPorCuenta: { estadoDeDocumentos: async () => [] },
+  aportes: { estadoDeDocumentos: async () => [] },
+};

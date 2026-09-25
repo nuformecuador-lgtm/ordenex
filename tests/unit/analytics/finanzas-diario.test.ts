@@ -33,7 +33,8 @@ describe("La derivación del dinero por día", () => {
     expect(dias).toEqual([
       {
         fecha: "2026-08-15",
-        ingresos: "1000.00",
+        // Ficha 459 (R13, reescrito): solo el EFECTIVO; el flete (100) es un cargo a la tienda.
+        ingresos: "900.00",
         egresos: "540.00",
         ganancia: "60.00", // 100 propios − 40 propios: el COD y el pago a tienda no entran
         pagoMensajeros: "0.00",
@@ -112,9 +113,25 @@ describe("La derivación del dinero por día", () => {
   });
 
   // Money-safe: con `number`, sumar cien veces 0.10 no da 10.00.
+  it("459/R13: un dia solo con cargos a la tienda no tiene ingresos de efectivo, pero SI ganancia", () => {
+    const [dia] = derivarFinanzasDiarias([
+      fila("2026-08-18", "ingreso_flete", "ingreso", "2500.00"),
+      fila("2026-08-18", "ingreso_iva_flete", "ingreso", "325.00"),
+    ]);
+    expect(dia).toEqual({
+      fecha: "2026-08-18",
+      ingresos: "0.00",
+      egresos: "0.00",
+      ganancia: "2825.00",
+      pagoMensajeros: "0.00",
+      pagoTiendas: "0.00",
+    });
+  });
+
   it("suma con decimales exactos", () => {
     const filas = Array.from({ length: 100 }, () =>
-      fila("2026-08-16", "ingreso_flete", "ingreso", "0.10"),
+      // Ficha 459: con un ingreso EFECTIVO (el flete ya no suma a los ingresos del dia).
+      fila("2026-08-16", "ingreso_ajuste", "ingreso", "0.10"),
     );
 
     expect(derivarFinanzasDiarias(filas)[0]?.ingresos).toBe("10.00");

@@ -17,6 +17,7 @@ import type { NaturalezaMovimiento, WalletMovimientoDTO } from "@/lib/types/wall
 import { cn } from "@/lib/utils";
 
 import { DetalleMovimientoCierre } from "./DetalleMovimientoCierre";
+import { DocumentoCajaAcciones } from "./DocumentoCajaAcciones";
 import { DETALLE_MOVIMIENTO_NOMBRE } from "./detalle-movimiento-labels";
 import { COLUMNAS_DESCARGA_WALLET_CAJA } from "./wallet-ledger-descarga-columnas";
 import {
@@ -27,6 +28,7 @@ import {
   esEgresoAdministrativo,
   money,
 } from "./wallet-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Feature 42 (T12, R18/R21) — libro de movimientos (tabla, más reciente primero: el
 // backend ya lo devuelve ordenado). Datos por props desde el módulo. Money-safe: la
@@ -96,6 +98,8 @@ const DUENO_PUNTO: Record<NaturalezaMovimiento, string> = {
   // de composicion de la tarjeta reparte la caja: es el mismo reparto, fila a fila.
   propio: "bg-muted-foreground",
   terceros: "bg-warning",
+  // Ficha 459 (design §5): capital de Ordenex (saldo inicial y aportes), token semantico existente.
+  capital: "bg-info",
 };
 
 function DuenoCelda({ dueno }: { dueno: NaturalezaMovimiento }) {
@@ -135,6 +139,11 @@ export interface WalletLedgerProps {
   /** Callback tras reversar con éxito (para que el módulo recargue libro + cifras + desglose). */
   onReversado?: () => void;
   /**
+   * Ficha 459 (R65) — tras anular un pago por cuenta o un saldo inicial o aporte: el módulo relee
+   * libro, tarjeta y composición sin recargar la página.
+   */
+  onDocumentoAnulado?: () => void;
+  /**
    * Feature 170 (T C.4, design §5) — obtiene las filas del libro COMPLETO para la descarga.
    *
    * Es un CALLBACK, no unos filtros: esta tabla pinta la página que le llega por props y no
@@ -152,6 +161,7 @@ export function WalletLedger({
   movimientos,
   isLoading = false,
   onReversado,
+  onDocumentoAnulado,
   obtenerFilasDescarga,
 }: WalletLedgerProps) {
   const router = useRouter();
@@ -230,7 +240,7 @@ export function WalletLedger({
         id: "fecha",
         value: "Fecha",
         minWidth: "7rem",
-        render: (m) => m.fechaMovimiento.slice(0, 10),
+        render: (m) => fechaDiaMovimientoCR(m.fechaMovimiento),
       },
       {
         id: "tipo",
@@ -272,20 +282,34 @@ export function WalletLedger({
         value: "Acciones",
         minWidth: "7rem",
         // R22c/R32: la reversa se ofrece SOLO en egresos administrativos (incluye los del cron).
-        render: (m) =>
-          esEgresoAdministrativo(m) ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setObjetivo(m)}
-            >
-              Reversar
-            </Button>
-          ) : null,
+        //
+        // Ficha 459 (R66/R67): «Anular…», «Anulado» y «Ver comprobante» SOLO en la fila original
+        // de un documento. Lo decide el SERVIDOR con `documento`: los contra-asientos y las
+        // salidas de los cobros reclasificados llegan con `null` y aqui no se pinta nada.
+        render: (m) => {
+          if (esEgresoAdministrativo(m)) {
+            return (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setObjetivo(m)}
+              >
+                Reversar
+              </Button>
+            );
+          }
+          const documento = m.documento;
+          return documento === null ? null : (
+            <DocumentoCajaAcciones
+              movimiento={{ ...m, documento }}
+              onAnulado={onDocumentoAnulado}
+            />
+          );
+        },
       },
     ],
-    [],
+    [onDocumentoAnulado],
   );
 
   return (
@@ -315,7 +339,7 @@ export function WalletLedger({
             <DetalleMovimientoCierre
               movimientoId={m.id}
               concepto={CATEGORIA_LABEL[m.categoria]}
-              fecha={m.fechaMovimiento.slice(0, 10)}
+              fecha={fechaDiaMovimientoCR(m.fechaMovimiento)}
             />
           ) : null
         }
@@ -325,7 +349,7 @@ export function WalletLedger({
         expandAriaLabel={(m) =>
           DETALLE_MOVIMIENTO_NOMBRE.abrir(
             CATEGORIA_LABEL[m.categoria],
-            m.fechaMovimiento.slice(0, 10),
+            fechaDiaMovimientoCR(m.fechaMovimiento),
           )
         }
         // Feature 170 (T C.4, R1/R9/R13): el control aparece solo si el módulo bajó el

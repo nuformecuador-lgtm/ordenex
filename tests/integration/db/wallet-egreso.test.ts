@@ -74,7 +74,9 @@ describe("egreso administrativo en el libro (R8/R14/R15/R16)", () => {
     const store = makeWalletStore();
     const repo = repoFor(store);
     await repo.crearMovimientos(tx(store), [
-      { tipo: "ingreso", categoria: "ingreso_flete", monto: "1000.00", origenTipo: "cierre_dia", origenId: "c1" },
+      // Ficha 459 (R1/R3): la entrada es EFECTIVO. Antes era `ingreso_flete`, que desde la 459 es
+      // un cargo a la tienda (no entra dinero) y ya no suma a «Entro»; el contra-entrega si.
+      { tipo: "ingreso", categoria: "ingreso_cod_recaudado", monto: "1000.00", origenTipo: "cierre_dia", origenId: "c1" },
       { tipo: "egreso", categoria: "egreso_gasto_variable", monto: "300.00", origenTipo: "gasto", origenId: null, descripcion: "Papeleria", registradoPor: "u-maestro" },
     ]);
     // Feature 173 (T D.1): el agregado ya no viene por `tipo` sino por (categoria, tipo), y

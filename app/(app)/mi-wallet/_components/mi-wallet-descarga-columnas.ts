@@ -13,7 +13,7 @@
  */
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
-import { fechaDiaISO } from "@/lib/utils/fecha-dia-iso";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 import { CATEGORIA_TIENDA_LABEL, ORIGEN_TIENDA_LABEL, TIPO_TIENDA_LABEL } from "./mi-wallet-labels";
 
@@ -39,7 +39,7 @@ function origen(movimiento: WalletTiendaMovimientoDTO): string {
  */
 export function filaDescargaMiWallet(movimiento: WalletTiendaMovimientoDTO): DescargaFila {
   return {
-    fecha: fechaDiaISO(movimiento.fechaMovimiento),
+    fecha: fechaDiaMovimientoCR(movimiento.fechaMovimiento),
     tipo: TIPO_TIENDA_LABEL[movimiento.tipo] ?? movimiento.tipo,
     concepto: CATEGORIA_TIENDA_LABEL[movimiento.categoria] ?? movimiento.categoria,
     monto: movimiento.monto, // STRING tal cual (money-safe)

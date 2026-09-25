@@ -647,6 +647,9 @@ const CATALOGO = [
         // emite. Va AL FINAL y sin reordenar las ocho para que el diff se lea de un vistazo.
         // Sin ella la lista es homogenea de prefijo y el neto seria `-bruto` siempre.
         "ingreso_ajuste",
+        // FICHA 459 (P13): el pago por cuenta de una tienda es dinero que SALE de la caja, como el
+        // pago a tienda. Su reverso NO entra (decision de la 457 para los reversos de terceros).
+        "egreso_pago_por_cuenta_tienda",
       ],
     },
   },
@@ -666,7 +669,7 @@ const CATALOGO = [
     id: "dinero_en_caja",
     etiqueta: "Dinero en caja",
     descripcion:
-      "TESORERIA: todo lo que entro menos todo lo que salio de la caja principal, sin distinguir de quien es el dinero — incluye el contra-entrega cobrado a nombre de las tiendas y aun no entregado. NO es lo que Ordenex gano (eso es ganancia_ordenex) ni lo que les debe a las tiendas (es MAYOR: de ese dinero Ordenex aun descuenta flete, comision e IVA). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "TESORERIA: el flujo de dinero registrado de la caja principal — el dinero que entro de verdad menos todo lo que salio, sin distinguir de quien es: incluye el contra-entrega cobrado a nombre de las tiendas, los reversos y los ajustes. NO suma aparte el flete, la comision ni sus impuestos: son la parte de Ordenex que se descuenta del contra-entrega de la tienda (o una deuda de la tienda), no dinero que entre a la caja. Es la misma cifra principal de la tarjeta de la caja; solo es el saldo real si hay un saldo inicial registrado. NO es lo que Ordenex gano (eso es ganancia_ordenex). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -695,6 +698,12 @@ const CATALOGO = [
         "egreso_gasto_fijo",
         "egreso_gasto_variable",
         "egreso_indemnizacion",
+        // FICHA 459: los cuatro conceptos nuevos de la caja (pago por cuenta y capital, con sus
+        // anulaciones). La caja entera, ahora 21.
+        "egreso_pago_por_cuenta_tienda",
+        "ingreso_reverso_pago_por_cuenta_tienda",
+        "ingreso_aporte_capital",
+        "egreso_reverso_aporte_capital",
       ],
     },
   },
@@ -762,6 +771,9 @@ const CATALOGO = [
         // `Record` totales sobre la categoria—. Sin esta linea el catalogo describiria una metrica
         // que suma una categoria que no nombra.
         "cobro_manual",
+        // FICHA 459: el pago por cuenta de la tienda y su anulacion (mismo motivo: `string[]`).
+        "pago_por_cuenta",
+        "pago_por_cuenta_anulado",
       ],
     },
   },

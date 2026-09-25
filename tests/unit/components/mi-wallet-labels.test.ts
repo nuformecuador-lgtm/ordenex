@@ -4,7 +4,11 @@ import {
   CATEGORIA_TIENDA_LABEL,
   DESGLOSE_MI_WALLET_AVISO,
   DESGLOSE_MI_WALLET_LABEL,
+  ORIGEN_TIENDA_LABEL,
+  origenLabel,
 } from "@/app/(app)/mi-wallet/_components/mi-wallet-labels";
+import { DESGLOSE_TIENDA_LABEL } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-labels";
+import { WALLET_ORIGEN_TIPO_SEED, type WalletOrigenTipo } from "@/lib/types/wallet";
 
 // ⭑ FICHA 381 (T I.3, R37) — LA ACLARACIÓN DEL IMPORTE DE «CARGOS» EN LA WALLET DE LA TIENDA.
 //
@@ -53,10 +57,17 @@ describe("⭑ FICHA 381 (R37) — la aclaración de «Cargos de Ordenex» nombra
 describe("FICHA 381 — lo que NO cambia de la cabecera de /mi-wallet (R11 en espíritu)", () => {
   it("los tres rótulos y sus otras dos aclaraciones siguen byte a byte", () => {
     expect(DESGLOSE_MI_WALLET_LABEL.aFavor).toBe("A tu favor");
-    expect(DESGLOSE_MI_WALLET_LABEL.aFavorHint).toBe("COD recaudado y ajustes");
+    // FICHA 459 (T B.17, design §5) — las dos aclaraciones se REESCRIBEN a conciencia: el pago
+    // por cuenta cae en «Ya pagado» y su anulación en «A tu favor», y la pista tiene que
+    // nombrarlos. Siguen siendo literales (listado en `progress/impl_459_frontend.md`).
+    expect(DESGLOSE_MI_WALLET_LABEL.aFavorHint).toBe(
+      "COD recaudado, ajustes y pagos por cuenta anulados",
+    );
     expect(DESGLOSE_MI_WALLET_LABEL.cargos).toBe("Cargos de Ordenex");
     expect(DESGLOSE_MI_WALLET_LABEL.pagado).toBe("Ya pagado");
-    expect(DESGLOSE_MI_WALLET_LABEL.pagadoHint).toBe("Lo que Ordenex ya te entregó");
+    expect(DESGLOSE_MI_WALLET_LABEL.pagadoHint).toBe(
+      "Lo que Ordenex ya te entregó o pagó por tu cuenta",
+    );
     expect(DESGLOSE_MI_WALLET_LABEL.saldo).toBe("Saldo a favor");
   });
 
@@ -83,5 +94,70 @@ describe("FICHA 381 — lo que NO cambia de la cabecera de /mi-wallet (R11 en es
     // ha colado dentro.
     expect(DESGLOSE_MI_WALLET_AVISO).toMatch(/anularon/);
     expect(DESGLOSE_MI_WALLET_AVISO).not.toContain(DESGLOSE_MI_WALLET_LABEL.cargosHint);
+  });
+});
+
+// ─── FICHA 459 (T B.6 / T B.17, R44) — el pago por cuenta en el libro de la TIENDA ───
+
+/**
+ * Los orígenes que ESCRIBEN en el libro de la tienda (`wallet_tienda_movimiento`), medidos en el
+ * código el 2026-09-24: el cierre (`WalletTiendaFeedService`), el pago a tienda y su anulación
+ * (`LiquidacionService`), el cobro de un costo (`CobroTiendaService`, origen `manual`), el cobro
+ * por rechazo (`RechazoTiendaCobroService`, `gestion_orden`) y el pago por cuenta y su anulación
+ * (`PagoPorCuentaTiendaService`). El resto NO escribe ahí. Las dos listas juntas cubren el SEED:
+ * un origen nuevo obliga a decidir en cuál cae.
+ */
+const ESCRIBEN_EN_LA_TIENDA: readonly WalletOrigenTipo[] = [
+  "cierre_dia",
+  "pago_tienda",
+  "manual",
+  "gestion_orden",
+  "pago_por_cuenta_tienda",
+];
+const NO_ESCRIBEN_EN_LA_TIENDA: readonly WalletOrigenTipo[] = [
+  "pago_mensajero",
+  "gasto",
+  "orden_incidente",
+  "ranking_snapshot_fila",
+  "aporte_capital",
+  "cobro_manual_reclasificado",
+];
+
+describe("FICHA 459 — ORIGEN_TIENDA_LABEL cubre cada origen que escribe en el libro de la tienda", () => {
+  it("las dos listas cubren el SEED de orígenes, sin solaparse", () => {
+    expect([...ESCRIBEN_EN_LA_TIENDA, ...NO_ESCRIBEN_EN_LA_TIENDA].sort()).toEqual(
+      [...WALLET_ORIGEN_TIPO_SEED].sort(),
+    );
+  });
+
+  it("cada origen que escribe en la tienda tiene rótulo legible (el compilador no lo obliga)", () => {
+    for (const origen of ESCRIBEN_EN_LA_TIENDA) {
+      const rotulo = ORIGEN_TIENDA_LABEL[origen];
+      expect(rotulo, `sin rótulo: ${origen}`).toBeTruthy();
+      expect(origenLabel(origen)).not.toBe(origen);
+      expect(rotulo).not.toMatch(/_/);
+    }
+  });
+
+  it("el pago por cuenta se lee con el texto del diseño, y NO como «Cobro de Ordenex»", () => {
+    // Literales (design §5): el origen y los dos conceptos de la tienda.
+    expect(ORIGEN_TIENDA_LABEL.pago_por_cuenta_tienda).toBe("Pago por cuenta de tienda");
+    expect(CATEGORIA_TIENDA_LABEL.pago_por_cuenta).toBe("Pago por cuenta de la tienda");
+    expect(CATEGORIA_TIENDA_LABEL.pago_por_cuenta_anulado).toBe("Pago por cuenta anulado");
+    // R44: un nombre PROPIO, distinto del cobro de un costo y de cualquier otro concepto.
+    const otros = Object.entries(CATEGORIA_TIENDA_LABEL)
+      .filter(([c]) => c !== "pago_por_cuenta")
+      .map(([, rotulo]) => rotulo);
+    expect(otros).not.toContain(CATEGORIA_TIENDA_LABEL.pago_por_cuenta);
+    expect(CATEGORIA_TIENDA_LABEL.pago_por_cuenta).not.toBe(CATEGORIA_TIENDA_LABEL.cobro_manual);
+  });
+
+  it("las pistas de /wallet/tiendas nombran el pago por cuenta y su anulación", () => {
+    expect(DESGLOSE_TIENDA_LABEL.aFavorHint).toBe(
+      "COD recaudado, ajustes y pagos por cuenta anulados",
+    );
+    expect(DESGLOSE_TIENDA_LABEL.pagadoHint).toBe(
+      "Lo ya entregado a la tienda o pagado por su cuenta",
+    );
   });
 });

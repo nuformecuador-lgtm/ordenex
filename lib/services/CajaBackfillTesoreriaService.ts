@@ -358,6 +358,11 @@ export class RecolectorDeFilasDeCaja implements IWalletMovimientoRepository {
   crearMovimientoRegistrado(): Promise<number> {
     throw new ErrorDeRecolector("crearMovimientoRegistrado");
   }
+
+  /** Ficha 459: septimo metodo que LANZA — este recolector no tiene libro que leer. */
+  primerDiaDeLaCaja(): Promise<string | null> {
+    throw new ErrorDeRecolector("primerDiaDeLaCaja");
+  }
 }
 
 class ErrorDeRecolector extends Error {

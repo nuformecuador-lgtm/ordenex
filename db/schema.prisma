@@ -149,6 +149,11 @@ model Usuario {
   liquidacionAnulacionesRealizadas    LiquidacionAnulacion[]             @relation("LiquidacionAnulacionActor") // feature 172/R73: anulaciones de pago que este usuario realizo
   liquidacionRepartosComoMensajero    LiquidacionReparto[]               @relation("LiquidacionRepartoMensajero") // feature 205/R29: repartos (un importe troceado entre sus cierres) recibidos por ESTE mensajero
   liquidacionRepartosRegistrados      LiquidacionReparto[]               @relation("LiquidacionRepartoRegistrador") // feature 205/R29: repartos que este usuario (maestro/admin) registro
+  pagosPorCuentaComoTienda            PagoPorCuentaTienda[]              @relation("PagoPorCuentaTiendaTienda") // ficha 459/R30: pagos que Ordenex hizo POR CUENTA de ESTA tienda
+  pagosPorCuentaRegistrados           PagoPorCuentaTienda[]              @relation("PagoPorCuentaTiendaRegistrador") // ficha 459/R30: pagos por cuenta que este usuario registro
+  pagosPorCuentaAnulados              PagoPorCuentaTiendaAnulacion[]     @relation("PagoPorCuentaTiendaAnulacionActor") // ficha 459/R46: anulaciones de pago por cuenta que este usuario hizo
+  aportesCapitalRegistrados           AporteCapital[]                    @relation("AporteCapitalRegistrador") // ficha 459/R68: saldos iniciales y aportes que este usuario registro
+  aportesCapitalAnulados              AporteCapitalAnulacion[]           @relation("AporteCapitalAnulacionActor") // ficha 459/R74: anulaciones de saldo inicial o aporte
   rankingSnapshotFilas                RankingSnapshotFila[]              @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
   ordenNotasEscritas                  OrdenNota[]                        @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   postulacionesRecursoAtendidas       PostulacionRecurso[]               @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
@@ -1424,10 +1429,10 @@ model CierreDia {
   // `false` exactamente los que no se pueden reconstruir (`estado` fuera de los tres abiertos).
   sinGestionRegistrado Boolean @default(true) @map("sin_gestion_registrado")
 
-  mensajero          Usuario            @relation("CierreMensajero", fields: [mensajeroId], references: [id])
-  destinoZona        Zona               @relation(fields: [destinoZonaId], references: [id])
-  resueltoPorUsuario Usuario?           @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
-  cierreBodega       CierreBodega?      @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
+  mensajero          Usuario               @relation("CierreMensajero", fields: [mensajeroId], references: [id])
+  destinoZona        Zona                  @relation(fields: [destinoZonaId], references: [id])
+  resueltoPorUsuario Usuario?              @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
+  cierreBodega       CierreBodega?         @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
   gestiones          GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
   detalle            CierreDetail[] // feature 69/R1: snapshot congelado por orden de este cierre
   sinGestion         CierreSinGestion[] // feature 264/R1: las ordenes que el corte barrio a `sin_gestionar` al crear este cierre
@@ -1668,6 +1673,12 @@ enum WalletMovimientoCategoria {
   // (lib/utils/caja-tesoreria.ts), no una columna: la clasificacion es de la CATEGORIA.
   ingreso_cod_recaudado // R11: el contra-entrega recaudado ENTRA al aprobar el cierre del dia
   ingreso_reverso_pago_tienda // R24: la anulacion de un pago a tienda DEVUELVE el dinero a la caja
+  // Ficha 459 (design §4.1/§5): pago por cuenta de una tienda (terceros) y saldo inicial o aporte
+  // de capital (capital). Migracion `20260925120000_caja_459_enums`.
+  egreso_pago_por_cuenta_tienda // Ordenex paga a un tercero en nombre de la tienda: sale de la caja
+  ingreso_reverso_pago_por_cuenta_tienda // la anulacion de ese pago devuelve el dinero a la caja
+  ingreso_aporte_capital // saldo inicial o aporte: dinero de Ordenex que NO es ganancia
+  egreso_reverso_aporte_capital // la anulacion de un saldo inicial o aporte
 
   @@map("wallet_movimiento_categoria")
 }
@@ -1690,6 +1701,11 @@ enum WalletOrigenTipo {
   // mandaria el egreso del premio a `ON CONFLICT DO NOTHING`: dinero fuera de la caja sin
   // registro y sin error. Se usa SOLO en las dos filas de la caja del premio.
   ranking_snapshot_fila
+  // Ficha 459 (design §4.1): el documento del pago por cuenta, el del saldo inicial o aporte, y el
+  // cobro de un costo reclasificado como pago por cuenta (origen_id = id de la fila del cobro).
+  pago_por_cuenta_tienda
+  aporte_capital
+  cobro_manual_reclasificado
 
   @@map("wallet_origen_tipo")
 }
@@ -1769,6 +1785,10 @@ enum WalletTiendaMovimientoCategoria {
   /// `ajuste_debito` se queda INTACTO y sin productores, reservado a su proposito original.
   /// Conflacionar filas bajo un mismo valor es irreversible; añadir el valor cuesta una migracion.
   cobro_manual
+  /// Ficha 459 (design §4.1/§5): pago por cuenta de la tienda (debito) y su anulacion (credito).
+  /// Su contrapartida en la caja es `egreso_pago_por_cuenta_tienda` / su reverso (invariante R8).
+  pago_por_cuenta
+  pago_por_cuenta_anulado
 
   @@map("wallet_tienda_movimiento_categoria")
 }
@@ -2011,6 +2031,95 @@ model LiquidacionReparto {
 
   @@index([mensajeroId, createdAt(sort: Desc)]) // auditar los repartos de un mensajero, del mas reciente al mas viejo
   @@map("liquidacion_reparto")
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 459 (design §4.3) — el PAGO POR CUENTA de una tienda y el SALDO INICIAL o APORTE DE
+// CAPITAL. Documentos INMUTABLES (sin updatedAt ni deletedAt, molde `liquidacion_pago`); la
+// anulacion es un documento aparte con `UNIQUE` sobre el original (molde `liquidacion_anulacion`)
+// y «anulado» se DERIVA de que exista. Migracion `20260925120200_pago_por_cuenta_y_capital`.
+//
+// ⚠️ SOLO DOS RESTRICCIONES UNICAS por documento (PK y `clave_idempotencia`), POR ESCRITO: el
+// repositorio trata un P2002 sin pista como choque de la clave (mismo razonamiento que
+// `liquidacion_pago`). Un `UNIQUE` nuevo aqui haria que un choque ajeno se leyera como
+// «ya registrado». Los CHECK (monto > 0, beneficiario y motivo no vacios, comprobante en par,
+// clase) van a mano en la migracion. RLS habilitada SIN policies (solo service role), R99.
+// ════════════════════════════════════════════════════════════════════════════════════════════
+
+/// Ficha 459 (R29/R30) — dinero que Ordenex SACA de la caja para pagarle a un tercero (su
+/// proveedor, su publicidad, su personal) en nombre de una tienda. Baja la caja y el saldo de la
+/// tienda, no la ganancia.
+model PagoPorCuentaTienda {
+  id                     String          @id @default(uuid())
+  claveIdempotencia      String          @unique @map("clave_idempotencia") // la genera el dialogo al abrirse (R41)
+  tiendaId               String          @map("tienda_id") // FK -> usuario (rol adminTienda)
+  beneficiario           String // nombre libre (H2); CHECK no vacio y <= 120
+  monto                  Decimal         @db.Decimal(12, 2) // > 0 (CHECK)
+  metodo                 MetodoPagoValue // enum EXISTENTE de la feature 36
+  referencia             String? // obligatoria si metodo != efectivo (en el borde, como la 172)
+  motivo                 String // CHECK no vacio; tope 200 en el borde
+  fechaPago              DateTime        @map("fecha_pago") @db.Date
+  comprobantePath        String?         @map("comprobante_path") // bucket privado; NUNCA sale en un DTO (R58)
+  comprobanteContentType String?         @map("comprobante_content_type") // CHECK: los dos NULL o los dos NOT NULL
+  registradoPor          String          @map("registrado_por") // FK -> usuario (actor)
+  createdAt              DateTime        @default(now()) @map("created_at")
+
+  anulacion   PagoPorCuentaTiendaAnulacion? // 0 o 1: su existencia ES el estado «anulado»
+  tienda      Usuario                       @relation("PagoPorCuentaTiendaTienda", fields: [tiendaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  registrador Usuario                       @relation("PagoPorCuentaTiendaRegistrador", fields: [registradoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([tiendaId, fechaPago])
+  @@map("pago_por_cuenta_tienda")
+}
+
+/// Ficha 459 (R46/R50) — la anulacion de un pago por cuenta. `pago_id` UNIQUE: se anula UNA vez.
+model PagoPorCuentaTiendaAnulacion {
+  id         String   @id @default(uuid())
+  pagoId     String   @unique @map("pago_id")
+  motivo     String // CHECK no vacio
+  anuladoPor String   @map("anulado_por")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  pago     PagoPorCuentaTienda @relation(fields: [pagoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  anulador Usuario             @relation("PagoPorCuentaTiendaAnulacionActor", fields: [anuladoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@map("pago_por_cuenta_tienda_anulacion")
+}
+
+/// Ficha 459 (R68, P1) — un SALDO INICIAL o un APORTE DE CAPITAL: dinero de Ordenex que entra a la
+/// caja y NO es ganancia. `clase` es texto con CHECK (`saldo_inicial` | `aporte`) y no un enum,
+/// para que su `down` sea un `DROP TABLE`. «Un solo saldo inicial vigente» (R70) no cabe en un
+/// indice (la anulacion vive en otra tabla): lo garantiza el servicio con un advisory lock.
+model AporteCapital {
+  id                     String   @id @default(uuid())
+  claveIdempotencia      String   @unique @map("clave_idempotencia")
+  clase                  String // CHECK clase IN ('saldo_inicial','aporte')
+  monto                  Decimal  @db.Decimal(12, 2) // > 0 (CHECK)
+  motivo                 String // CHECK no vacio
+  fecha                  DateTime @db.Date
+  comprobantePath        String?  @map("comprobante_path")
+  comprobanteContentType String?  @map("comprobante_content_type")
+  registradoPor          String   @map("registrado_por")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  anulacion   AporteCapitalAnulacion?
+  registrador Usuario                 @relation("AporteCapitalRegistrador", fields: [registradoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@map("aporte_capital")
+}
+
+/// Ficha 459 (R74) — la anulacion de un saldo inicial o aporte. `aporte_id` UNIQUE.
+model AporteCapitalAnulacion {
+  id         String   @id @default(uuid())
+  aporteId   String   @unique @map("aporte_id")
+  motivo     String // CHECK no vacio
+  anuladoPor String   @map("anulado_por")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  aporte   AporteCapital @relation(fields: [aporteId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  anulador Usuario       @relation("AporteCapitalAnulacionActor", fields: [anuladoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@map("aporte_capital_anulacion")
 }
 
 // Feature 84: unidad de la periodicidad de una plantilla de gasto fijo. Con `periodicidadCantidad`
@@ -3759,6 +3868,12 @@ enum HistorialAccionTipo {
   /// `inactiva`, porque una key `activa` no es eliminable) y `valor_nuevo` va en NULL: ya no hay
   /// estado al que apuntar.
   api_key_eliminada
+  /// FICHA 459 (design §4.2, R53/R78): las cuatro acciones que mueven dinero del pago por cuenta
+  /// de una tienda y del saldo inicial o aporte de capital. Sin texto libre en la fila.
+  pago_por_cuenta_tienda_registrado
+  pago_por_cuenta_tienda_anulado
+  aporte_capital_registrado
+  aporte_capital_anulado
 
   @@map("historial_accion_tipo")
 }
@@ -3796,6 +3911,9 @@ enum HistorialAccionEntidad {
   /// la cuenta dejaria la fila sin poder señalar QUE asiento se escribio — que es justo para lo que
   /// sirve el indice `[entidad_tipo, entidad_id]`.
   wallet_tienda_movimiento
+  /// FICHA 459 (design §4.2): los dos documentos nuevos, 1:1 con sus tablas.
+  pago_por_cuenta_tienda
+  aporte_capital
 
   @@map("historial_accion_entidad")
 }

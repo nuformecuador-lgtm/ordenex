@@ -401,6 +401,10 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       const mensajero = await sembrarCuenta(tx, "mensajero", ROL_MENSAJERO);
       const inactiva = await sembrarCuenta(tx, "inactiva", ROL_ADMIN_TIENDA, "inactivo");
       const servicio = servicioReal(tx);
+      // Por DIFERENCIA: la base local es compartida y puede traer cobros ya commiteados (el
+      // recorrido de la 459 dejo dos en `ordenex_459`). Lo que se afirma es que ESTE caso no
+      // escribe ninguno.
+      const cobrosAntes = await tx.walletTiendaMovimiento.count({ where: { categoria: "cobro_manual" } });
 
       const porRol = await servicio.registrarCobro(
         { tiendaId: mensajero, monto: "100.00", descripcion: "x" },
@@ -430,7 +434,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       });
 
       // Ni una fila, para ninguna de las tres.
-      expect(await tx.walletTiendaMovimiento.count({ where: { categoria: "cobro_manual" } })).toBe(0);
+      expect(await tx.walletTiendaMovimiento.count({ where: { categoria: "cobro_manual" } })).toBe(cobrosAntes);
     });
   }, 120_000);
 

@@ -141,6 +141,7 @@ const MOVIMIENTOS_OK = {
         registradoPor: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
         dueno: "propio" as const, // feature 231 (R31): el flete es dinero de Ordenex
+        documento: null, // ficha 459 (design §7.3): fila sin documento
       },
       // Feature 173 (R62): un movimiento de una de las categorías NUEVAS viaja por el mismo
       // camino, con la misma forma y sin ningún campo de más.
@@ -155,6 +156,7 @@ const MOVIMIENTOS_OK = {
         registradoPor: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
         dueno: "terceros" as const, // feature 231 (R31): el contra-entrega es de las tiendas
+        documento: null, // ficha 459 (design §7.3): fila sin documento
       },
     ],
     total: 2,
@@ -184,6 +186,14 @@ const RESUMEN_OK = {
     // Feature 231 (R9/R10): 10 000 / 11 500 x 100 = 86.9565… -> "86.96".
     porcentajeTiendas: "86.96",
     modoComposicion: "dos_bolsillos" as const,
+    // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+    capital: "0.00",
+    signoCapital: "cero" as const,
+    deOrdenex: "1500.00",
+    signoDeTerceros: "positivo" as const,
+    deTercerosAbsoluto: "10000.00",
+    estado: "flujo" as const,
+    flujoDesde: "2026-08-25",
   },
   // Feature 231 (design §2.4): la composición viaja HERMANA del resumen, no anidada dentro —
   // por eso el barrido de STRING sobre `props.resumen` sigue afirmando lo mismo que hoy.
@@ -361,9 +371,24 @@ describe("WalletPage — pre-fetch del maestro (R18/R21)", () => {
     // STRING. Se barre el objeto completo, no tres campos elegidos a mano: cualquier importe
     // que alguien añada mañana como `number` cae aquí. `periodoFiltrado` es el único
     // no-STRING y no es dinero.
+    //
+    // Ficha 459 (design §2.6, T A.8) — la excepción se AMPLÍA a conciencia, y solo a dos campos
+    // que no son dinero: `estado` (una de dos palabras, R14) y `flujoDesde` (un día `YYYY-MM-DD`
+    // o `null` con el libro vacío). Cada uno se afirma con SU forma exacta, no se salta: un
+    // importe que alguien colara ahí como `number` seguiría cayendo.
     for (const [clave, valor] of Object.entries(props.resumen)) {
       if (clave === "periodoFiltrado") {
         expect(typeof valor).toBe("boolean");
+        continue;
+      }
+      if (clave === "estado") {
+        expect(["flujo", "saldo"]).toContain(valor);
+        continue;
+      }
+      if (clave === "flujoDesde") {
+        expect(valor === null || /^\d{4}-\d{2}-\d{2}$/.test(String(valor)), "resumen.flujoDesde").toBe(
+          true,
+        );
         continue;
       }
       expect(typeof valor, `resumen.${clave}`).toBe("string");

@@ -81,6 +81,14 @@ const RESUMEN: CajaResumenDTO = {
   periodoFiltrado: false,
   porcentajeTiendas: "77.74",
   modoComposicion: "dos_bolsillos",
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  capital: "0.00",
+  signoCapital: "cero",
+  deOrdenex: "3519.00",
+  signoDeTerceros: "positivo",
+  deTercerosAbsoluto: "12290.25",
+  estado: "flujo",
+  flujoDesde: "2026-08-25",
 };
 
 /** Nombres accesibles de los controles que abren cada fila (R24). */
@@ -107,6 +115,7 @@ function movimiento(over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDT
     registradoPor: null,
     fechaMovimiento: "2026-08-14T10:00:00.000Z",
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
     ...over,
   };
 }

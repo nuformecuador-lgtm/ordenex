@@ -45,7 +45,11 @@ function mov(over: Partial<WalletMovimientoDTO> & { id: string }): WalletMovimie
     ...over,
   };
   // Feature 231 (R31): `dueno` sale de la MISMA clasificacion que usa el repositorio.
-  return { ...base, dueno: over.dueno ?? NATURALEZA_POR_CATEGORIA[base.categoria] };
+  return {
+    ...base,
+    dueno: over.dueno ?? NATURALEZA_POR_CATEGORIA[base.categoria],
+    documento: over.documento ?? null, // ficha 459 (design §7.3)
+  };
 }
 
 /** Repositorio en memoria: aplica los filtros, ordena por fecha desc y recorta. */
@@ -90,7 +94,7 @@ function soloFiltros(params: object): Record<string, unknown> {
 }
 
 function servicio(repo: IWalletMovimientoRepository) {
-  return new WalletService(repo, {} as WalletTxClient);
+  return new WalletService(repo, {} as WalletTxClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
 }
 
 function input(extra: Record<string, unknown> = {}) {
@@ -240,3 +244,11 @@ describe("WalletService.listarMovimientosCompleto — libro de caja sin paginaci
     expect(excedido).not.toHaveProperty("items");
   });
 });
+
+// Ficha 459 (R14): el lector del estado de la caja; estos casos no registran saldo inicial.
+const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };
+// Ficha 459 (design §7.3): ningun documento; el libro sin acciones. Lista vacia -> sin consulta.
+const SIN_DOCUMENTOS_459 = {
+  pagosPorCuenta: { estadoDeDocumentos: async () => [] },
+  aportes: { estadoDeDocumentos: async () => [] },
+};

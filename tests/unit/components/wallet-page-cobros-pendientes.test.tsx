@@ -121,6 +121,14 @@ const RESUMEN_OK = {
     periodoFiltrado: false,
     porcentajeTiendas: "0.00",
     modoComposicion: "sin_reparto" as const,
+    // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+    capital: "0.00",
+    signoCapital: "cero" as const,
+    deOrdenex: "0.00",
+    signoDeTerceros: "cero" as const,
+    deTercerosAbsoluto: "0.00",
+    estado: "flujo" as const,
+    flujoDesde: "2026-08-25",
   },
   composicion: {
     ingresos: {

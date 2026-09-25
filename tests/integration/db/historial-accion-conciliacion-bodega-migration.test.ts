@@ -367,7 +367,15 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("431/T1 (b) — el down recrea la lista PREV
     //
     // ⚠️ CADA FICHA QUE AMPLIE EL ENUM DESPUES DE ESTA ENTRA AQUI, en orden de migracion. Es lo que
     // convierte la comparacion en una cadena verificable en vez de en algo que caduca en silencio.
-    const POSTERIORES: string[] = [];
+    const POSTERIORES: string[] = [
+      // ficha 459 (2026-09-25): el pago por cuenta de una tienda y el saldo inicial o aporte de
+      // capital, registrar y anular cada uno (la guardia del censo mide por metodo). Su archivo:
+      // `caja-459-migration.test.ts`.
+      "pago_por_cuenta_tienda_registrado",
+      "pago_por_cuenta_tienda_anulado",
+      "aporte_capital_registrado",
+      "aporte_capital_anulado",
+    ];
     const catalogoPrevio = HISTORIAL_ACCION_TIPOS.filter(
       (t) => !VALORES_NUEVOS.includes(t as (typeof VALORES_NUEVOS)[number]) &&
         !POSTERIORES.includes(t),

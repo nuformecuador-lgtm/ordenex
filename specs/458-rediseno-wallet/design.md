@@ -752,3 +752,15 @@ el comprobante de otra tienda (pidiendo su destino a mano) → rechazado.
 - **Tests ajenos que fijan columnas del libro** (`WalletDescarga.test.tsx`): se reescriben en el
   mismo commit, afirmando la lista nueva; borrar un componente borra su test: cada test retirado se
   lista en el informe de la hija con el requisito que lo sustituye.
+
+## ACOPLES CON LA 459 (obligatorio, añadido por el leader el 2026-09-25)
+
+La 459 («la caja muestra el dinero real») ya está en `dev` y cambia piezas que esta ficha supone. Antes de
+implementar, lee **`specs/459-la-caja-muestra-el-dinero-real/design.md` §14**, que lista uno por uno los
+acoples de esta ficha, y aplícalos. Lo esencial:
+- La caja se deriva con la fórmula de la 459 (cargos a tiendas fuera de «Entró»; tres dueños: propio, terceros
+  y capital; invariantes R7/R8). Toda cifra, dorado o «Así queda» se calcula sobre ella.
+- Los catálogos crecieron (caja 21 categorías; historial +4 tipos y +2 entidades): las mediciones M3/M4 y los
+  `down.sql` que se escribieron antes de la 459 están RANCIOS; se re-miden. El `down` de enums lee `pg_enum`.
+- El comprobante (config, `BUCKETS`, utilidades y el bucket `wallet-comprobantes`) ya existe: se reutiliza.
+- «Pago por cuenta de una tienda» y «Saldo inicial / aporte» ya existen, con documento y anulación propios.

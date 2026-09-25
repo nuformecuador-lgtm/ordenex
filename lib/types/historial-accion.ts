@@ -171,6 +171,15 @@ export const HISTORIAL_ACCION_TIPOS = [
   // La fila lleva `monto` (el importe cobrado) y se etiqueta por el NOMBRE DE LA TIENDA. La
   // `descripcion` del cobro NO entra (R43): es texto libre tecleado por una persona.
   "cobro_tienda_registrado", // wallet-tienda.registrarCobroTiendaAction -> WalletTiendaMovimientoRepository.registrarCobroEnHistorial
+  // ⭑ FICHA 459 (R53/R78) — el PAGO POR CUENTA de una tienda y el SALDO INICIAL o APORTE DE
+  // CAPITAL, registrados y anulados. Los cuatro «mueve dinero»: el pago por cuenta saca dinero de
+  // la caja y baja el saldo de la tienda; el aporte mete dinero de Ordenex en la caja. UN TIPO POR
+  // METODO (la guardia del censo mide por metodo). La fila lleva el importe y, en el pago por
+  // cuenta, el NOMBRE de la tienda; NUNCA el motivo, la referencia ni el beneficiario (texto libre).
+  "pago_por_cuenta_tienda_registrado", // PagoPorCuentaTiendaRepository.crear
+  "pago_por_cuenta_tienda_anulado", // PagoPorCuentaTiendaRepository.anular
+  "aporte_capital_registrado", // AporteCapitalRepository.crear
+  "aporte_capital_anulado", // AporteCapitalRepository.anular
   // ⭑ FICHA 398 — UN MAESTRO/ADMIN CORRIGIO EL RESULTADO de una gestion que ya estaba dentro de un
   // cierre ABIERTO: `entregada -> rechazada`. Entra en DINERO y no admite discusion — la fila
   // documenta que del cierre SALIO un cobro que nadie recaudo (baja `total_general` y el balde de
@@ -333,6 +342,9 @@ export const HISTORIAL_ACCION_ENTIDADES = [
   "canton",
   "distrito",
   "wallet_tienda_movimiento",
+  // ⭑ FICHA 459 — los dos documentos nuevos, 1:1 con sus tablas (criterio de la 381/457).
+  "pago_por_cuenta_tienda",
+  "aporte_capital",
 ] as const satisfies readonly PrismaHistorialAccionEntidad[];
 
 export type HistorialAccionEntidad = (typeof HISTORIAL_ACCION_ENTIDADES)[number];
@@ -391,6 +403,11 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   // FICHA 381 (R41): un cobro manual BAJA el disponible de una tienda. No hay lectura mas directa
   // de «mueve dinero», y R17 exige exactamente una categoria por tipo.
   cobro_tienda_registrado: "mueve_dinero",
+  // FICHA 459 (R53/R78): pago por cuenta y saldo inicial o aporte — dinero que sale o entra.
+  pago_por_cuenta_tienda_registrado: "mueve_dinero",
+  pago_por_cuenta_tienda_anulado: "mueve_dinero",
+  aporte_capital_registrado: "mueve_dinero",
+  aporte_capital_anulado: "mueve_dinero",
   // FICHA 398: la correccion saca del cierre un cobro que nadie recaudo y pone en cero el pago
   // de esa gestion al mensajero. No hay lectura mas directa de «mueve dinero», y R17 exige
   // exactamente una categoria por tipo.
@@ -458,6 +475,10 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   zona_pago_mensajero_cambiado: "Cambió el pago al mensajero de una zona",
   zona_sinpe_cambiado: "Cambió el SINPE de una bodega",
   cobro_tienda_registrado: "Cobró un costo a una tienda",
+  pago_por_cuenta_tienda_registrado: "Pagó por cuenta de una tienda",
+  pago_por_cuenta_tienda_anulado: "Anuló un pago por cuenta de una tienda",
+  aporte_capital_registrado: "Registró un saldo inicial o aporte de capital",
+  aporte_capital_anulado: "Anuló un saldo inicial o aporte de capital",
   cierre_dia_gestion_corregida: "Corrigió el resultado de una gestión",
   cierre_bodega_conciliado: "Marcó recibida una consolidación de bodega",
   cierre_bodega_conciliacion_revertida: "Revirtió la conciliación de una consolidación de bodega",
@@ -515,6 +536,8 @@ export const ENTIDAD_LABELS: Record<HistorialAccionEntidad, string> = {
   canton: "Cantón",
   distrito: "Distrito",
   wallet_tienda_movimiento: "Movimiento de tienda",
+  pago_por_cuenta_tienda: "Pago por cuenta de tienda",
+  aporte_capital: "Saldo inicial o aporte",
 };
 
 /** Los tipos de UNA categoria. Es la traduccion `categoria -> accion IN (…)` del borde (R17). */

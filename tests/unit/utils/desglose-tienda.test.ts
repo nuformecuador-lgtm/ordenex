@@ -30,7 +30,12 @@ function fila(
 }
 
 /** El `tipo` con el que el SISTEMA emite cada categoria (design §2.1). */
-const CREDITO_SEED: readonly WalletTiendaMovimientoCategoria[] = ["cod_recaudado", "ajuste_credito"];
+// Ficha 459: + `pago_por_cuenta_anulado`, el tercer credito (la anulacion devuelve el dinero).
+const CREDITO_SEED: readonly WalletTiendaMovimientoCategoria[] = [
+  "cod_recaudado",
+  "ajuste_credito",
+  "pago_por_cuenta_anulado",
+];
 
 function tipoEmitido(categoria: WalletTiendaMovimientoCategoria): WalletTiendaMovimientoTipo {
   return CREDITO_SEED.includes(categoria) ? "credito" : "debito";
@@ -71,11 +76,13 @@ describe("CUBETA_POR_CATEGORIA — clasificacion exhaustiva (R8/R9)", () => {
     }
   });
 
-  it("R43: `pago_tienda` es la UNICA categoria de la cubeta `pagado`", () => {
+  it("R43: `pago_tienda` y el pago POR CUENTA (ficha 459) son las UNICAS de la cubeta `pagado`", () => {
     const enPagado = WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.filter(
       (c) => CUBETA_POR_CATEGORIA[c] === "pagado",
     );
-    expect(enPagado).toEqual(["pago_tienda"]);
+    // Ficha 459 (design §5, decision de la 458 §2.6): el pago por cuenta es dinero entregado a la
+    // tienda a traves de un tercero.
+    expect(enPagado).toEqual(["pago_tienda", "pago_por_cuenta"]);
   });
 
   it("R7/R8: las tres cubetas estan pobladas (ninguna nace vacia)", () => {

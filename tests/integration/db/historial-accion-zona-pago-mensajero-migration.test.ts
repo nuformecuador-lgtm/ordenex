@@ -391,6 +391,13 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (b) — el down recrea la lista PREV
       // `historial-accion-conciliacion-bodega-migration.test.ts`.
       "cierre_bodega_conciliado",
       "cierre_bodega_conciliacion_revertida",
+      // ficha 459 (2026-09-25): el pago por cuenta de una tienda y el saldo inicial o aporte de
+      // capital, registrar y anular cada uno (la guardia del censo mide por metodo). Su archivo:
+      // `caja-459-migration.test.ts`.
+      "pago_por_cuenta_tienda_registrado",
+      "pago_por_cuenta_tienda_anulado",
+      "aporte_capital_registrado",
+      "aporte_capital_anulado",
     ];
     const catalogoPrevio = HISTORIAL_ACCION_TIPOS.filter(
       (t) => t !== VALOR_NUEVO && !POSTERIORES.includes(t),

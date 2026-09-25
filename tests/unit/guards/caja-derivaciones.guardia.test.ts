@@ -119,13 +119,15 @@ describe("R9 — `derivarBalance` conserva firma y salida", () => {
 });
 
 describe("R9 — `derivarCaja` REUSA la resta con signo, no la duplica", () => {
-  it("R9: importa `derivarBalance` y lo llama una vez por cada cifra (tres)", () => {
+  it("R9: importa `derivarBalance` y lo llama una vez por cada cifra (cuatro, ficha 459)", () => {
     const fuente = codigoSinComentarios(FUENTE_CAJA);
     expect(fuente).toMatch(
       /import\s*\{\s*derivarBalance\s*\}\s*from\s*"@\/lib\/utils\/wallet-balance"/,
     );
     const llamadas = [...fuente.matchAll(/derivarBalance\s*\(/g)].length;
-    expect(llamadas).toBe(3); // enCaja, ganancia y la tercera linea de terceros
+    // Ficha 459 (design §2.2): de tres a CUATRO — cifra principal, ganancia, «De las tiendas» y
+    // capital. La propiedad protegida es «no hay restas propias»; la cuenta es su sintoma.
+    expect(llamadas).toBe(4);
   });
 
   it("R9: no reimplementa el calculo del signo (ni un literal positivo/negativo/cero en el codigo)", () => {

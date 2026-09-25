@@ -1,5 +1,6 @@
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { SaldoSateliteDTO } from "@/lib/types/conciliacion-satelites";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 /**
  * ⭑ FICHA 431 (T23, R29) — columnas de EXPORT de los saldos de bodegas satélite.
@@ -48,7 +49,7 @@ export function filaDescargaSaldoSatelite(saldo: SaldoSateliteDTO): DescargaFila
     totalConsolidado: saldo.totalConsolidado,
     recibido: saldo.totalRecibido,
     sinConciliar: saldo.consolidacionesSinConciliar,
-    masAntigua: saldo.fechaDeLaMasAntigua === null ? "" : saldo.fechaDeLaMasAntigua.slice(0, 10),
+    masAntigua: saldo.fechaDeLaMasAntigua === null ? "" : fechaDiaMovimientoCR(saldo.fechaDeLaMasAntigua),
     // La ÚLTIMA que llegó, en dos columnas: cuándo y cuánto. Son las dos mitades de la celda que
     // la pantalla pinta en una, y van separadas porque una hoja de cálculo ordena por fecha y
     // suma importes — no sabe hacer ninguna de las dos cosas con «16 sep · ₡ 485.000».
@@ -56,7 +57,7 @@ export function filaDescargaSaldoSatelite(saldo: SaldoSateliteDTO): DescargaFila
     // ⚠️ `ultimaRecibidaMonto` es el de ESA consolidación, no el acumulado: `recibido` (arriba)
     // ya lleva la suma histórica, y tener las dos cifras con el mismo nombre en el mismo archivo
     // es lo que hace que nadie se fíe de ninguna.
-    ultimaRecibidaEl: saldo.ultimaRecibida === null ? "" : saldo.ultimaRecibida.fecha.slice(0, 10),
+    ultimaRecibidaEl: saldo.ultimaRecibida === null ? "" : fechaDiaMovimientoCR(saldo.ultimaRecibida.fecha),
     ultimaRecibidaMonto: saldo.ultimaRecibida === null ? "" : saldo.ultimaRecibida.monto,
   };
 }

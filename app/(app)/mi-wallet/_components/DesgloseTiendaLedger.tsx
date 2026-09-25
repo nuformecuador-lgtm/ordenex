@@ -12,6 +12,7 @@ import { DetalleMiMovimientoCierre } from "./DetalleMiMovimientoCierre";
 import { DETALLE_MI_MOVIMIENTO_NOMBRE } from "./detalle-mi-movimiento-labels";
 import { COLUMNAS_DESCARGA_MI_WALLET } from "./mi-wallet-descarga-columnas";
 import { CATEGORIA_TIENDA_LABEL, TIPO_TIENDA_LABEL, money, origenLabel } from "./mi-wallet-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Feature 43 (T15, R18/R21) — DESGLOSE del ledger por cierre/concepto (tabla, mas reciente
 // primero: el backend ya lo devuelve ordenado). Datos por props desde el modulo. Money-safe:
@@ -37,7 +38,7 @@ const COLUMNS: Column<WalletTiendaMovimientoDTO>[] = [
   {
     id: "fecha",
     value: "Fecha",
-    render: (m) => m.fechaMovimiento.slice(0, 10),
+    render: (m) => fechaDiaMovimientoCR(m.fechaMovimiento),
   },
   {
     id: "tipo",
@@ -119,7 +120,7 @@ export function DesgloseTiendaLedger({
             <DetalleMiMovimientoCierre
               movimientoId={m.id}
               concepto={CATEGORIA_TIENDA_LABEL[m.categoria]}
-              fecha={m.fechaMovimiento.slice(0, 10)}
+              fecha={fechaDiaMovimientoCR(m.fechaMovimiento)}
             />
           ) : null
         }
@@ -128,7 +129,7 @@ export function DesgloseTiendaLedger({
         expandAriaLabel={(m) =>
           DETALLE_MI_MOVIMIENTO_NOMBRE.abrir(
             CATEGORIA_TIENDA_LABEL[m.categoria],
-            m.fechaMovimiento.slice(0, 10),
+            fechaDiaMovimientoCR(m.fechaMovimiento),
           )
         }
         // Feature 170 (T C.4, R1/R9/R13/R14): el archivo es el ledger de la tienda del

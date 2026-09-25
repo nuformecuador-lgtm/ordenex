@@ -2,6 +2,7 @@ import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { ConsolidacionSateliteDTO } from "@/lib/types/conciliacion-satelites";
 
 import { ESTADO_CONCILIACION_LABEL, estadoConciliacionDe } from "./satelites-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 /**
  * ⭑ FICHA 431 (T23, R29) — columnas de EXPORT del desglose de consolidaciones de UNA bodega.
@@ -40,7 +41,7 @@ export const COLUMNAS_DESCARGA_CONSOLIDACIONES_SATELITE: DescargaColumna[] = [
 
 export function filaDescargaConsolidacionSatelite(c: ConsolidacionSateliteDTO): DescargaFila {
   return {
-    consolidada: c.solicitadoAt.slice(0, 10),
+    consolidada: fechaDiaMovimientoCR(c.solicitadoAt),
     // «Declarado» es el EFECTIVO: es lo que viaja en el bulto y contra lo que se cuenta al
     // recibir. El general va más a la derecha, como contexto (decisión Q2).
     declarado: c.totales.efectivo,
@@ -49,7 +50,7 @@ export function filaDescargaConsolidacionSatelite(c: ConsolidacionSateliteDTO): 
     faltaPorRecibir: c.faltaPorRecibir,
     estado: ESTADO_CONCILIACION_LABEL[estadoConciliacionDe(c)],
     conciliadoPor: c.conciliadoPorNombre ?? "",
-    conciliadoEl: c.conciliadoAt === null ? "" : c.conciliadoAt.slice(0, 10),
+    conciliadoEl: c.conciliadoAt === null ? "" : fechaDiaMovimientoCR(c.conciliadoAt),
     totalGeneral: c.totales.general,
     simpe: c.totales.simpe,
     transferencia: c.totales.transferencia,

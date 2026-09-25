@@ -116,10 +116,10 @@ const LIBRO_COMPLETO: AgregadoCajaRow[] = WALLET_MOVIMIENTO_CATEGORIA_SEED.map((
 }));
 
 describe("R32 — la clasificacion por naturaleza cubre el SEED entero (runtime)", () => {
-  it("CONTROL DE NO-VACUIDAD: el catalogo tiene categorias, y de las DOS naturalezas", () => {
+  it("CONTROL DE NO-VACUIDAD: el catalogo tiene categorias, y de las TRES naturalezas (ficha 459)", () => {
     expect(WALLET_MOVIMIENTO_CATEGORIA_SEED.length).toBeGreaterThan(10);
     const naturalezas = WALLET_MOVIMIENTO_CATEGORIA_SEED.map((c) => NATURALEZA_POR_CATEGORIA[c]);
-    expect(new Set(naturalezas)).toEqual(new Set(["propio", "terceros"]));
+    expect(new Set(naturalezas)).toEqual(new Set(["propio", "terceros", "capital"]));
   });
 
   it("R32: toda categoria del catalogo tiene una naturaleza declarada, sin huecos", () => {

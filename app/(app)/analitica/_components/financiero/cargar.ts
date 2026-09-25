@@ -29,6 +29,11 @@
 // correspondencia de la 127 compara contra el catalogo.
 
 import { consultarMetricaFinanciera } from "@/lib/actions/analitica-financiera";
+import { verResumenCajaAction } from "@/lib/actions/wallet";
+import {
+  CAJA_RESUMEN_LABEL,
+  rotuloCifraPrincipal,
+} from "@/app/(app)/wallet/_components/wallet-labels";
 import {
   IDS_FINANCIERAS_SERVIDAS,
   type RespuestaFinanciera,
@@ -97,5 +102,42 @@ export async function cargarTableroFinanciero(): Promise<readonly PanelFinancier
     ),
   );
 
-  return Promise.all(pendientes);
+  const [paneles, rotuloCaja] = await Promise.all([Promise.all(pendientes), rotuloDeLaCaja()]);
+  // Diccionario por CLAVE de metrica (censo (f) de `tablero-financiero.guardia`: buscar un texto
+  // por clave no ramifica QUE se pinta). Solo cambia el NOMBRE; ni una cifra.
+  const rotulos: Readonly<Record<string, string>> = { dinero_en_caja: rotuloCaja };
+  return paneles.map((panel) => conRotulo(panel, rotulos));
+}
+
+/**
+ * Ficha 459 (revision, m3) — el NOMBRE de la cifra de la caja en `/analitica`.
+ *
+ * El catalogo la llama «Dinero en caja», y mientras nadie haya registrado un saldo inicial esa
+ * cifra es el flujo registrado, no el dinero que hay (R16, HF4). El nombre sale de la MISMA
+ * funcion que la tarjeta de `/wallet` (`rotuloCifraPrincipal`), con el estado que decide el
+ * servidor (`verResumenCajaAction`, sin filtros: el estado de la caja HOY). Si esa lectura no
+ * responde `ok` (o se cae), el estado no se conoce y se dice el de «flujo», igual que los KPIs
+ * de `cargar-kpis.ts`: «Dinero en caja» nunca se afirma sin saberlo. No se silencia ningun dato:
+ * la cifra del panel sigue llegando entera de su metrica.
+ */
+async function rotuloDeLaCaja(): Promise<string> {
+  try {
+    const respuesta = await verResumenCajaAction({});
+    return respuesta.status === "ok"
+      ? rotuloCifraPrincipal(respuesta.resumen)
+      : CAJA_RESUMEN_LABEL.flujo;
+  } catch {
+    return CAJA_RESUMEN_LABEL.flujo;
+  }
+}
+
+/** El panel con su nombre de pantalla, si el diccionario tiene uno para su metrica. */
+function conRotulo(
+  panel: PanelFinanciero,
+  rotulos: Readonly<Record<string, string>>,
+): PanelFinanciero {
+  if (panel.estado !== "ok") return panel;
+  const rotulo = rotulos[panel.datos.metricaId];
+  if (rotulo === undefined) return panel;
+  return { ...panel, datos: { ...panel.datos, etiqueta: rotulo } };
 }

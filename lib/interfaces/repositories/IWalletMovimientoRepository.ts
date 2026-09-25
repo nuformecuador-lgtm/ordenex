@@ -187,4 +187,13 @@ export interface IWalletMovimientoRepository {
     origenId: string,
     categoria: WalletMovimientoCategoria,
   ): Promise<WalletMovimientoDTO | null>;
+  /**
+   * Ficha 459 (design §2.5, R15/R71) — el dia, en Costa Rica, del PRIMER movimiento de la caja
+   * (`MIN(fecha_movimiento)`), como `YYYY-MM-DD`; `null` con el libro vacio. SIN filtros: es el
+   * «desde» del flujo registrado, no una cifra del periodo.
+   *
+   * `excluirCapital`: sin los conceptos de capital (saldo inicial y aportes). Lo usa el saldo
+   * inicial (R71): su fecha no puede ser posterior al primer movimiento que NO es de capital.
+   */
+  primerDiaDeLaCaja(opciones?: { excluirCapital?: boolean }): Promise<string | null>;
 }

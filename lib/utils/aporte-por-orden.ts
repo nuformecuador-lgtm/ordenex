@@ -73,6 +73,11 @@ export const FUENTE_CAJA: Record<WalletMovimientoCategoria, FuenteDeAporte> = {
   egreso_sueldo: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   egreso_pago_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   ingreso_reverso_pago_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 459 (design §5): los cuatro conceptos nuevos no nacen de un cierre.
+  egreso_pago_por_cuenta_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  ingreso_reverso_pago_por_cuenta_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  ingreso_aporte_capital: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  egreso_reverso_aporte_capital: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
 };
 
 /**
@@ -105,6 +110,9 @@ export const FUENTE_TIENDA: Record<WalletTiendaMovimientoCategoria, FuenteDeApor
   // FICHA 381: un cobro manual lo decide una PERSONA, no lo reparte ningun cierre. Abrir su detalle
   // responde «no nace de un cierre» en vez de irse a buscar un cierre que no existe.
   cobro_manual: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 459 (design §5): el pago por cuenta y su anulacion los decide una persona.
+  pago_por_cuenta: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  pago_por_cuenta_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
 };
 
 /**

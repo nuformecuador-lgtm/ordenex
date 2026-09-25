@@ -139,6 +139,7 @@ function movimientoCaja(i: number): WalletMovimientoDTO {
     registradoPor: null,
     fechaMovimiento: `2026-07-${String(10 + i).padStart(2, "0")}T14:00:00.000Z`,
     dueno: "propio", // feature 231 (R31): el flete es dinero de Ordenex
+    documento: null, // ficha 459 (design §7.3): fila sin documento
   };
 }
 
@@ -194,6 +195,14 @@ const RESUMEN = {
   // Feature 231 (R9/R10): sin dinero de terceros la porcion de las tiendas es 0.
   porcentajeTiendas: "0.00",
   modoComposicion: "dos_bolsillos" as const,
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  capital: "0.00",
+  signoCapital: "cero" as const,
+  deOrdenex: "1.00",
+  signoDeTerceros: "cero" as const,
+  deTercerosAbsoluto: "0.00",
+  estado: "flujo" as const,
+  flujoDesde: "2026-08-25",
 };
 // Feature 231 (T6.3): el módulo monta ahora la tarjeta de la ganancia, que recibe la
 // composición hermana del resumen. Este archivo mide la DESCARGA y el FILTRO, no esa tarjeta;
@@ -559,6 +568,7 @@ function movimientoNuevo(
     registradoPor: null,
     fechaMovimiento: `2026-08-0${i}T14:00:00.000Z`,
     dueno: "terceros", // feature 231 (R31): los dos conceptos de la 173 son de las tiendas
+    documento: null, // ficha 459 (design §7.3): fila sin documento
   };
 }
 

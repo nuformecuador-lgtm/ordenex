@@ -55,6 +55,12 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   // (lib/utils/caja-tesoreria.ts), que es un `Record` TOTAL sobre este union.
   "ingreso_cod_recaudado", // R11: entra al aprobar el cierre del dia
   "ingreso_reverso_pago_tienda", // R24/R26: vuelve al anular un pago a tienda (NUNCA ingreso_ajuste)
+  // Ficha 459 (design §4.1/§5): pago por cuenta de una tienda (terceros) y su anulacion; saldo
+  // inicial o aporte de capital (capital) y su anulacion.
+  "egreso_pago_por_cuenta_tienda",
+  "ingreso_reverso_pago_por_cuenta_tienda",
+  "ingreso_aporte_capital",
+  "egreso_reverso_aporte_capital",
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -87,6 +93,11 @@ export const WALLET_ORIGEN_TIPO_SEED = [
   // etiquetado como `cierre_dia` ademas de devolver basura CHOCARIA con el
   // `egreso_pago_mensajero` que el feed del cierre ya escribio.
   "ranking_snapshot_fila",
+  // Ficha 459 (design §4.1): el documento del pago por cuenta, el del saldo inicial o aporte, y el
+  // cobro de un costo reclasificado como pago por cuenta (origen_id = id de la fila del cobro).
+  "pago_por_cuenta_tienda",
+  "aporte_capital",
+  "cobro_manual_reclasificado",
 ] as const satisfies readonly PrismaWalletOrigenTipo[];
 
 export type WalletOrigenTipo = (typeof WALLET_ORIGEN_TIPO_SEED)[number];
@@ -210,7 +221,11 @@ export type ComposicionFilaId = (typeof COMPOSICION_FILA_SEED)[number];
  * obligaria a `lib/types/` a importar de `lib/utils/`, invirtiendo la direccion de la
  * dependencia. La clasificacion en si (`NATURALEZA_POR_CATEGORIA`) NO se mueve.
  */
-export type NaturalezaMovimiento = "propio" | "terceros";
+//
+// Ficha 459 (design §2.2, P1): tercer dueño, `capital` — el saldo inicial y los aportes de capital.
+// Es dinero de Ordenex que NO es ganancia: suma a la cifra principal y a «De Ordenex», nunca a la
+// ganancia ni a «De las tiendas».
+export type NaturalezaMovimiento = "propio" | "terceros" | "capital";
 
 // ── Contratos I/O (frontera Server Action -> cliente). Montos SIEMPRE STRING (R4/R25) ──
 
@@ -230,6 +245,23 @@ export type WalletMovimientoDTO = {
    * tabla y la descarga no pueden decir cosas distintas.
    */
   dueno: NaturalezaMovimiento;
+  /**
+   * Ficha 459 (design §7.3, R66/R67) — el DOCUMENTO detras de la fila, resuelto EN LOTE por
+   * `WalletService` y SOLO para las filas ORIGINALES de un pago por cuenta de una tienda o de un
+   * saldo inicial o aporte. Los contra-asientos, las salidas de los cobros reclasificados y
+   * cualquier otra fila llevan `null`, y por eso el libro no les ofrece acciones (R66).
+   *
+   * El id del documento NO viaja aqui: ya es el `origenId` de la fila y nunca se pinta (R100).
+   * Las descargas no incluyen este campo (R58).
+   */
+  documento: DocumentoCajaDTO | null;
+};
+
+/** Ficha 459 (design §7.3) — el estado del documento de una fila original del libro de la caja. */
+export type DocumentoCajaDTO = {
+  tipo: "pago_por_cuenta_tienda" | "aporte_capital";
+  anulado: boolean;
+  tieneComprobante: boolean;
 };
 
 export type WalletBalanceSigno = "positivo" | "negativo" | "cero";
@@ -265,8 +297,10 @@ export interface AgregadoCajaRow {
 //  - `enCaja`   = entradas - salidas, sin distinguir de quien es el dinero (R4).
 //  - `ganancia` = ingresos propios - egresos propios (R5). Es, numero por numero, lo que hoy
 //                 se rotula «Balance general»: no cambia de valor, cambia de nombre.
-//  - `deTerceros` [P6] = la diferencia entre ambas. NO es la deuda con las tiendas (R34): es
-//                 MAYOR, porque de ese dinero Ordenex aun descuenta flete, comision e IVA.
+//  - `deTerceros` [P6] = «De las tiendas». Ficha 459 (R5/R8): desde esta ficha SI es lo que
+//                 Ordenex les debe a las tiendas — ya descontados flete, comision e IVA (los
+//                 cargos a la tienda) —, salvo los cobros de un costo que no pasan por la caja.
+//  - `entradas` (ficha 459, R2): solo el EFECTIVO; los cargos a la tienda no entran aparte.
 export type CajaResumenDTO = {
   entradas: string;
   salidas: string;
@@ -295,7 +329,23 @@ export type CajaResumenDTO = {
    * comparando los DOS importes derivados; la pantalla no compara nada.
    */
   modoComposicion: ModoComposicionCaja;
+  // ── Ficha 459 (design §2.6) — todo STRING salvo el estado ──
+  /** R6 — saldos iniciales y aportes vigentes, menos sus anulaciones. */
+  capital: string;
+  signoCapital: WalletBalanceSigno;
+  /** R11 — ganancia + capital: el bolsillo de Ordenex de la barra. */
+  deOrdenex: string;
+  signoDeTerceros: WalletBalanceSigno;
+  /** |deTerceros|, para «Las tiendas le deben ₡X» sin aritmetica en el navegador (R23, R28). */
+  deTercerosAbsoluto: string;
+  /** R14 — «saldo» si hay un saldo inicial vigente; «flujo» en cualquier otro caso. */
+  estado: EstadoCaja;
+  /** R15 — YYYY-MM-DD (Costa Rica) del primer movimiento de la caja; null con el libro vacio. */
+  flujoDesde: string | null;
 };
+
+/** Ficha 459 (R14) — el estado de la caja lo decide el servidor. */
+export type EstadoCaja = "flujo" | "saldo";
 
 // Feature 231 (design §3.1) — los CUATRO estados posibles del reparto de la caja. Seed
 // primero para que la pantalla pueda montar un `Record` TOTAL sobre ellos (design §4.2): un

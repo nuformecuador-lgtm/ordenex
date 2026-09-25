@@ -86,11 +86,33 @@ const TIPO_LEGITIMO_POR_CATEGORIA: Record<WalletMovimientoCategoria, WalletMovim
   egreso_gasto_fijo: "egreso",
   egreso_gasto_variable: "egreso",
   egreso_indemnizacion: "egreso",
+  // Ficha 459: los cuatro conceptos nuevos. El CHECK que los admite es el de la migracion
+  // `20260925120200`; lo prueba `caja-459-migration.test.ts`.
+  egreso_pago_por_cuenta_tienda: "egreso",
+  ingreso_reverso_pago_por_cuenta_tienda: "ingreso",
+  ingreso_aporte_capital: "ingreso",
+  egreso_reverso_aporte_capital: "egreso",
 };
 
 const COMBINACIONES_LEGITIMAS = (
   Object.entries(TIPO_LEGITIMO_POR_CATEGORIA) as [WalletMovimientoCategoria, WalletMovimientoTipo][]
 ).map(([categoria, tipo]) => ({ categoria, tipo }));
+
+/**
+ * Ficha 459 (2026-09-25) — los cuatro valores que el enum gano DESPUES de esta migracion. El `.sql`
+ * de la 173 es una FOTO punto-en-el-tiempo y no se reescribe: los casos que leen ESE texto restan
+ * estos valores (igualdad exacta, no inclusion: un valor que nadie clasifique ni aqui ni en el CHECK
+ * sigue poniendo rojo). Los casos que leen el MOTOR de hoy los cuentan: el CHECK vigente es el de la
+ * migracion `20260925120200_pago_por_cuenta_y_capital`.
+ */
+const AGREGADAS_459: readonly string[] = [
+  "egreso_pago_por_cuenta_tienda",
+  "ingreso_reverso_pago_por_cuenta_tienda",
+  "ingreso_aporte_capital",
+  "egreso_reverso_aporte_capital",
+];
+const COMBINACIONES_DE_LA_173 = COMBINACIONES_LEGITIMAS.filter((c) => !AGREGADAS_459.includes(c.categoria));
+const SEED_DE_LA_173 = WALLET_MOVIMIENTO_CATEGORIA_SEED.filter((c) => !AGREGADAS_459.includes(c));
 
 /** El tipo CONTRARIO: la mitad negativa del ejercicio (17 filas incoherentes). */
 function tipoInvertido(tipo: WalletMovimientoTipo): WalletMovimientoTipo {
@@ -111,7 +133,7 @@ describe("el SEED tipado incluye los dos valores nuevos (R49)", () => {
     for (const valor of VALORES_NUEVOS) {
       expect(WALLET_MOVIMIENTO_CATEGORIA_SEED).toContain(valor);
     }
-    expect(WALLET_MOVIMIENTO_CATEGORIA_SEED).toHaveLength(17);
+    expect(SEED_DE_LA_173).toHaveLength(17);
     for (const previa of [
       "ingreso_flete",
       "ingreso_flete_devolucion",
@@ -186,7 +208,7 @@ describe("UP — T A.2: el CHECK categoria↔tipo de la caja (R45/R46, estatico)
   });
 
   it("R45: la rama `ingreso` lista EXACTAMENTE las categorias de ingreso del catalogo", () => {
-    const declaradas = COMBINACIONES_LEGITIMAS.filter((c) => c.tipo === "ingreso").map(
+    const declaradas = COMBINACIONES_DE_LA_173.filter((c) => c.tipo === "ingreso").map(
       (c) => c.categoria,
     );
     expect(ramaDelCheck(upSql, "ingreso").sort()).toEqual([...declaradas].sort());
@@ -194,7 +216,7 @@ describe("UP — T A.2: el CHECK categoria↔tipo de la caja (R45/R46, estatico)
   });
 
   it("R45: la rama `egreso` lista EXACTAMENTE las categorias de egreso del catalogo", () => {
-    const declaradas = COMBINACIONES_LEGITIMAS.filter((c) => c.tipo === "egreso").map(
+    const declaradas = COMBINACIONES_DE_LA_173.filter((c) => c.tipo === "egreso").map(
       (c) => c.categoria,
     );
     expect(ramaDelCheck(upSql, "egreso").sort()).toEqual([...declaradas].sort());
@@ -217,7 +239,7 @@ describe("UP — T A.2: el CHECK categoria↔tipo de la caja (R45/R46, estatico)
     const todas = [...ingreso, ...egreso];
     // Cobertura TOTAL contra el SEED vivo: si manana el enum gana un valor y nadie toca este
     // CHECK, esta aserción se pone roja ANTES de que la primera fila se cuele.
-    expect([...todas].sort()).toEqual([...WALLET_MOVIMIENTO_CATEGORIA_SEED].sort());
+    expect([...todas].sort()).toEqual([...SEED_DE_LA_173].sort());
     expect(new Set(todas).size).toBe(todas.length); // ninguna en las dos ramas a la vez
     expect(ingreso.filter((c) => egreso.includes(c))).toEqual([]);
   });
@@ -247,9 +269,7 @@ describe("DOWN — recrea el enum sin los dos valores nuevos (R49)", () => {
     // El que cuadra con el SEED VIGENTE menos los dos valores que esta migracion anade es ESTE
     // (los `down.sql` previos listan 12 y 14: son su estado punto-en-el-tiempo, R50).
     expect(valores).toEqual(
-      WALLET_MOVIMIENTO_CATEGORIA_SEED.filter(
-        (c) => !(VALORES_NUEVOS as readonly string[]).includes(c),
-      ),
+      SEED_DE_LA_173.filter((c) => !(VALORES_NUEVOS as readonly string[]).includes(c)),
     );
   });
 
@@ -512,7 +532,8 @@ describeSiHayBase("T A.2 — el CHECK categoria↔tipo, contra Postgres (R45/R46
       });
     });
 
-    expect(resultado).toHaveLength(17);
+    // 17 de la 173 + 4 de la 459: el CHECK de HOY (migracion 20260925120200).
+    expect(resultado).toHaveLength(21);
     expect(
       resultado.map((f) => `${f.tipo}/${f.categoria}`).sort(),
     ).toEqual(COMBINACIONES_LEGITIMAS.map((c) => `${c.tipo}/${c.categoria}`).sort());
@@ -542,7 +563,8 @@ describeSiHayBase("T A.2 — el CHECK categoria↔tipo, contra Postgres (R45/R46
       ),
     ];
     expect(nombradasEnElCheck.sort()).toEqual([...etiquetasDelEnum].sort());
-    expect(nombradasEnElCheck).toHaveLength(17);
+    // 17 de la 173 + 4 de la 459: el CHECK de HOY (migracion 20260925120200).
+    expect(nombradasEnElCheck).toHaveLength(21);
     // Enumera, no niega: en la definicion que devuelve el motor no hay negacion alguna.
     expect(check.def).not.toMatch(/<>|NOT IN|!=/i);
   });

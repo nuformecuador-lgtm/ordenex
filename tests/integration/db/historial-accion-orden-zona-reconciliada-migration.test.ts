@@ -116,6 +116,13 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
       // `historial-accion-conciliacion-bodega-migration.test.ts`.
       "cierre_bodega_conciliado",
       "cierre_bodega_conciliacion_revertida",
+      // ficha 459 (2026-09-25): el pago por cuenta de una tienda y el saldo inicial o aporte de
+      // capital, registrar y anular cada uno (la guardia del censo mide por metodo). Su archivo:
+      // `caja-459-migration.test.ts`.
+      "pago_por_cuenta_tienda_registrado",
+      "pago_por_cuenta_tienda_anulado",
+      "aporte_capital_registrado",
+      "aporte_capital_anulado",
     ];
     expect([...HISTORIAL_ACCION_TIPOS].sort()).toEqual(
       [...previos, VALOR_NUEVO, ...POSTERIORES].sort(),

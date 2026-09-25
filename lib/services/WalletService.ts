@@ -18,7 +18,9 @@ import type {
   ListarMovimientosDeFilaInput,
   ListarMovimientosInput,
   RegistrarMovimientoManualInput,
+  DocumentoCajaDTO,
   WalletMovimientoCategoria,
+  WalletMovimientoDTO,
   WalletMovimientoTipo,
 } from "@/lib/types/wallet";
 import { descargaConfig } from "@/lib/config/descarga";
@@ -28,6 +30,10 @@ import {
   derivarComposicionGanancia,
 } from "@/lib/utils/caja-tesoreria";
 import { instanteDelMovimientoManual } from "@/lib/utils/fecha-movimiento-manual";
+import type {
+  LectorSaldoInicial,
+  LectoresDocumentosCaja,
+} from "@/lib/interfaces/services/IWalletService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Roles autorizados (R19/R65): acceso total (maestro/admin, dueños de la caja central).
@@ -46,6 +52,21 @@ function hayFiltros(filtros: BalanceFiltros): boolean {
 }
 
 /**
+ * Ficha 459 (design §7.3) — ¿es esta fila la ORIGINAL de un documento? Categoria Y origen, los
+ * dos: la salida de un cobro reclasificado comparte categoria con el pago por cuenta pero su
+ * origen es el cobro, y los contra-asientos comparten origen pero no categoria.
+ */
+function tipoDeDocumentoOriginal(m: WalletMovimientoDTO): DocumentoCajaDTO["tipo"] | null {
+  if (m.categoria === "egreso_pago_por_cuenta_tienda" && m.origenTipo === "pago_por_cuenta_tienda") {
+    return "pago_por_cuenta_tienda";
+  }
+  if (m.categoria === "ingreso_aporte_capital" && m.origenTipo === "aporte_capital") {
+    return "aporte_capital";
+  }
+  return null;
+}
+
+/**
  * Feature 42 — logica de negocio de la wallet (libro + balance + manual). No conoce HTTP
  * ni Prisma directamente: recibe el repo por inyeccion. Guardia de rol maestro (R19).
  * INMUTABILIDAD (R3): NO expone update/delete; una correccion es un movimiento manual de
@@ -57,7 +78,61 @@ export class WalletService implements IWalletService {
     // Cliente de escritura para el movimiento manual (fuera de una tx de cierre): el
     // repo acepta cualquier WalletTxClient; aqui inyectamos el PrismaClient completo.
     private readonly writeClient: WalletTxClient,
+    /**
+     * Ficha 459 (R14/R21) — el lector de «hay un saldo inicial vigente». SIN valor por defecto a
+     * proposito: un composition root que se olvidara de pasarlo dejaria la caja en «flujo» para
+     * siempre aunque alguien registrara un saldo inicial (memoria «el composition root que no
+     * inyecta»). Si falta, no compila.
+     */
+    private readonly saldoInicial: LectorSaldoInicial,
+    /**
+     * Ficha 459 (design §7.3, R66/R67) — los lectores del estado de los documentos del libro.
+     * Tambien SIN valor por defecto y por la misma razon: sin ellos ninguna fila ofreceria
+     * «Anular…» ni «Ver comprobante», y ningun test de servicio lo notaria.
+     */
+    private readonly documentos: LectoresDocumentosCaja,
   ) {}
+
+  /**
+   * Ficha 459 (design §7.3) — el documento de cada fila ORIGINAL de la pagina, EN LOTE: una
+   * consulta por tipo de documento PRESENTE (ninguna si la pagina no tiene filas de ese tipo).
+   *
+   * Solo cuentan como originales la salida del pago por cuenta con SU origen y la entrada del
+   * saldo inicial o aporte con el suyo. Los contra-asientos (otra categoria, mismo origen) y las
+   * salidas de los cobros reclasificados (misma categoria, origen `cobro_manual_reclasificado`)
+   * se quedan en `null`: sobre ellas no hay nada que anular (R66).
+   */
+  private async conDocumentos(
+    movimientos: WalletMovimientoDTO[],
+  ): Promise<WalletMovimientoDTO[]> {
+    const idsDe = (tipo: DocumentoCajaDTO["tipo"]) =>
+      movimientos
+        .filter((m) => tipoDeDocumentoOriginal(m) === tipo && m.origenId !== null)
+        .map((m) => m.origenId as string);
+    const idsPagos = idsDe("pago_por_cuenta_tienda");
+    const idsAportes = idsDe("aporte_capital");
+
+    const [pagos, aportes] = await Promise.all([
+      idsPagos.length > 0 ? this.documentos.pagosPorCuenta.estadoDeDocumentos(idsPagos) : [],
+      idsAportes.length > 0 ? this.documentos.aportes.estadoDeDocumentos(idsAportes) : [],
+    ]);
+    const estado = {
+      pago_por_cuenta_tienda: new Map(pagos.map((e) => [e.id, e])),
+      aporte_capital: new Map(aportes.map((e) => [e.id, e])),
+    };
+
+    return movimientos.map((m) => {
+      const tipo = tipoDeDocumentoOriginal(m);
+      const e = tipo === null || m.origenId === null ? undefined : estado[tipo].get(m.origenId);
+      // Una fila original cuyo documento no aparece (no deberia pasar: la FK es del mismo
+      // servicio) no ofrece acciones: mejor ningun boton que uno que responda «no encontrado».
+      if (tipo === null || e === undefined) return { ...m, documento: null };
+      return {
+        ...m,
+        documento: { tipo, anulado: e.anulado, tieneComprobante: e.tieneComprobante },
+      };
+    });
+  }
 
   /**
    * Feature 170 (T C.1, design §2.1) — los filtros del libro, en UN solo sitio.
@@ -84,6 +159,11 @@ export class WalletService implements IWalletService {
     };
   }
 
+  /** Ficha 459 (R14) — ¿hay un saldo inicial vigente? Lo lee el repositorio de `aporte_capital`. */
+  private async haySaldoInicialVigente(): Promise<boolean> {
+    return this.saldoInicial.haySaldoInicialVigente();
+  }
+
   async listarMovimientos(
     input: ListarMovimientosInput,
     actor: Actor,
@@ -97,7 +177,12 @@ export class WalletService implements IWalletService {
     });
     return {
       status: "ok",
-      data: { movimientos, total, page: input.page, pageSize: input.pageSize },
+      data: {
+        movimientos: await this.conDocumentos(movimientos),
+        total,
+        page: input.page,
+        pageSize: input.pageSize,
+      },
     };
   }
 
@@ -173,9 +258,18 @@ export class WalletService implements IWalletService {
 
     const filtros = this.construirFiltros(input);
     const filas = await this.repo.agregarPorCategoriaYTipo(filtros);
+    // Ficha 459 (design §2.5, R14/R15) — dos datos de la CONSULTA, leidos SIN filtros: si hay un
+    // saldo inicial vigente (decide el estado de la caja) y el dia del primer movimiento (el
+    // «desde» del flujo registrado). El numero no cambia con ellos; cambia el rotulo.
+    const haySaldoInicialVigente = await this.haySaldoInicialVigente();
+    const primerDia = await this.repo.primerDiaDeLaCaja();
     return {
       status: "ok",
-      resumen: derivarCaja(filas, { periodoFiltrado: hayFiltros(filtros) }),
+      resumen: derivarCaja(filas, {
+        periodoFiltrado: hayFiltros(filtros),
+        haySaldoInicialVigente,
+        primerDia,
+      }),
       composicion: derivarComposicionGanancia(filas),
     };
   }

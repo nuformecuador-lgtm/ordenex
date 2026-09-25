@@ -9,8 +9,11 @@ import { composicionCajaNombreAccesible } from "./wallet-labels";
 //
 // Que es: la cifra grande de «Dinero en caja» partida en las DOS porciones que la componen,
 // la de las TIENDAS y la de ORDENEX. No hay una tercera porcion ni un residuo escondido: la
-// identidad `enCaja = ganancia + deTerceros` la deriva el servidor y esta comprobada en
-// `lib/utils/caja-tesoreria.ts`.
+// identidad `enCaja = deTerceros + deOrdenex` (ficha 459: «De Ordenex» = ganancia + capital) la
+// deriva el servidor y esta comprobada en `lib/utils/caja-tesoreria.ts`.
+//
+// Ficha 459 (R22): la tarjeta SOLO la monta en estado «saldo». Sin un saldo inicial vigente la
+// app no sabe cuanto dinero hay, y repartir «el dinero en caja» seria repartir una cifra que no es.
 //
 // Que NO es, y por que importa:
 //

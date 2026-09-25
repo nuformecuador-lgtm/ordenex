@@ -461,6 +461,21 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 > vacía al ejecutarla. Si esta sección tiene entradas, **la release no está terminada** aunque el
 > despliegue esté verde.
 
+### De la 459 — la caja con el dinero real (DINERO: bloqueante)
+
+1. **Antes de desplegar:** crear el bucket PRIVADO `wallet-comprobantes` en preview y en producción (hoy no
+   existe en ninguno; `progress/medicion_457.md` M5). Sin él, todo registro con comprobante se rechaza.
+2. **Tras desplegar, en este orden y sin saltar (R91):** contraste C0–C2, C5 y C7 de
+   `specs/459-la-caja-muestra-el-dinero-real/design.md` §11 por el MCP, en solo lectura, después de cada
+   bloque (A: la fórmula; B: los tipos y tablas; C: la reclasificación de los 203). Se anota en
+   `progress/contraste_459.md`. **Cualquier diferencia distinta de 0,00, o C2 con filas, detiene la release.**
+3. **Esperado tras C:** la cifra principal −9.186.220,50 («Flujo de dinero registrado»); «De las tiendas»
+   = Σ saldos (−4.780.583,97 en la línea base); ganancia sin cambio; 203 filas y 25.769.034,50 reclasificados.
+   Producción se mueve cada día: vale la IGUALDAD, no los números exactos.
+4. La migración de reclasificación solo actúa en la base donde existen esos ids (producción). En preview no
+   escribe nada: es lo esperado.
+5. Errores de runtime en la hora siguiente al despliegue: 0 (memoria «diagnosticar prod con los logs de Vercel»).
+
 ### De la 450 — la advertencia de `pg` en los logs de Vercel
 
 > **Esta entrada NO bloquea el `done` de la 450** (decisión 2 del humano, 2026-09-21). La prueba de

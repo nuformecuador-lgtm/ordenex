@@ -32,7 +32,11 @@ function mov(overrides: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO 
     ...overrides,
   };
   // Feature 231 (R31): `dueno` sale de la MISMA clasificacion que usa el repositorio.
-  return { ...base, dueno: overrides.dueno ?? NATURALEZA_POR_CATEGORIA[base.categoria] };
+  return {
+    ...base,
+    dueno: overrides.dueno ?? NATURALEZA_POR_CATEGORIA[base.categoria],
+    documento: overrides.documento ?? null, // ficha 459 (design §7.3)
+  };
 }
 
 /**
@@ -85,6 +89,7 @@ function buildRepo(overrides: Partial<IWalletMovimientoRepository> = {}): IWalle
         indemnizacion: "0.00", // feature 158/R32
       }),
     obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
+    primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: este camino no lo usa
     // FICHA 362: el escritor de los DOS movimientos del egreso administrativo (registro y
     // reverso). Abre su propia transaccion y escribe ademas la fila de auditoria. El doble
     // guarda la fila igual que su hermano, porque el servicio RELEE POR ID lo que acaba de
