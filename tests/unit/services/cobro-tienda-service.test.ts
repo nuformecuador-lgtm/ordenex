@@ -576,3 +576,44 @@ describe("461/B.7 — anti-vacuidad del montaje", () => {
     await expect(m.servicio.registrarCobro(entrada(), ACTOR_MAESTRO)).rejects.toThrow(/no se pudo releer/);
   });
 });
+
+// ─── FICHA 461 (R66/R68, auditoria D2) — la clave de idempotencia del cobro ───
+
+describe("461/R66/R68 — la clave de idempotencia del cobro", () => {
+  it("la clave del cliente viaja al debito; `origen_id` sigue NULL", async () => {
+    const m = montaje();
+    await m.servicio.registrarCobro(entrada(), ACTOR_MAESTRO);
+    const [, filas] = m.tiendaRepo.crearMovimientos.mock.calls[0] as unknown as [unknown, Array<Record<string, unknown>>];
+    expect(filas[0]).toMatchObject({ claveIdempotencia: CLAVE_461, origenId: null, categoria: "cobro_manual" });
+  });
+
+  it("R68: si el debito NO se inserto (count 0: la clave ya tenia su cobro), la transaccion sale ANTES del historial y de la caja, y se responde `ya_registrado` con el cobro releido por clave", async () => {
+    const m = montaje();
+    const original = {
+      id: "cobro-original",
+      tiendaId: TIENDA,
+      tipo: "debito" as const,
+      categoria: "cobro_manual" as const,
+      monto: "1500.00",
+      origenTipo: "manual" as const,
+      origenId: null,
+      descripcion: "Reposicion de etiquetas",
+      fechaMovimiento: "2026-09-25T15:30:45.123Z",
+    };
+    m.tiendaRepo.crearMovimientos.mockResolvedValueOnce(0 as never);
+    m.tiendaRepo.obtenerCobroPorClave.mockResolvedValueOnce(original as never);
+    const r = await m.servicio.registrarCobro(entrada(), ACTOR_MAESTRO);
+    expect(r).toMatchObject({ status: "ya_registrado", cobro: original });
+    expect(m.tiendaRepo.obtenerCobroPorClave).toHaveBeenCalledWith(CLAVE_461);
+    expect(m.tiendaRepo.registrarCobroEnHistorial).not.toHaveBeenCalled();
+    expect(m.caja.emitirCargoDeCobro).not.toHaveBeenCalled();
+    expect(m.tiendaRepo.obtenerPorIdDeTienda).not.toHaveBeenCalled();
+  });
+
+  it("count 0 sin cobro que releer es un error con contexto, no una fila inventada", async () => {
+    const m = montaje();
+    m.tiendaRepo.crearMovimientos.mockResolvedValueOnce(0 as never);
+    m.tiendaRepo.obtenerCobroPorClave.mockResolvedValueOnce(null as never);
+    await expect(m.servicio.registrarCobro(entrada(), ACTOR_MAESTRO)).rejects.toThrow(/clave de idempotencia repetida/);
+  });
+});

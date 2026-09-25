@@ -956,3 +956,50 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     expect(docs.cobros.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 461
   });
 });
+
+// ─── FICHA 461 (R66/R68, auditoria D2) — la clave de idempotencia de la correccion de caja ───
+
+describe("WalletService.registrarMovimientoManual — la clave de idempotencia (461/R66/R68)", () => {
+  it("la clave del cliente viaja a la fila que se inserta", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
+    const clave = randomUUID();
+    const r = await svc.registrarMovimientoManual(
+      { claveIdempotencia: clave, tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      MAESTRO,
+    );
+    expect(r.status).toBe("ok");
+    const arg = vi.mocked(repo.crearMovimientoRegistrado).mock.calls[0][0];
+    expect(arg.claveIdempotencia).toBe(clave);
+    expect(arg.origenId).toBeNull(); // la idempotencia la da la CLAVE, no el origen
+  });
+
+  it("R68: si el repositorio no inserto (count 0: la clave ya tenia su fila), responde `ya_registrado` con la fila releida POR CLAVE y no relee por id", async () => {
+    const original = mov({ id: "w-original", categoria: "ingreso_ajuste", monto: "50.00", origenTipo: "manual", origenId: null });
+    const repo = buildRepo();
+    repo.crearMovimientoRegistrado = vi.fn(async () => 0);
+    repo.obtenerPorClave = vi.fn(async () => original);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
+    const clave = randomUUID();
+    const r = await svc.registrarMovimientoManual(
+      { claveIdempotencia: clave, tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      MAESTRO,
+    );
+    expect(r).toEqual({ status: "ya_registrado", movimiento: original });
+    expect(repo.obtenerPorClave).toHaveBeenCalledWith(clave);
+    expect(repo.obtenerPorId).not.toHaveBeenCalled();
+  });
+
+  it("count 0 sin fila que releer es un error con contexto, no una fila inventada", async () => {
+    const repo = buildRepo();
+    repo.crearMovimientoRegistrado = vi.fn(async () => 0);
+    repo.obtenerPorClave = vi.fn(async () => null);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
+    await expect(
+      svc.registrarMovimientoManual(
+        { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+        MAESTRO,
+      ),
+    ).rejects.toThrow(/clave de idempotencia repetida/);
+  });
+});

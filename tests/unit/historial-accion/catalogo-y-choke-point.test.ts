@@ -436,6 +436,11 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(ACCION_LABELS.pago_por_cuenta_tienda_anulado).toBe("Anuló el pago de un gasto de una tienda");
     expect(ACCION_LABELS.aporte_capital_registrado).toBe("Registró un aporte de dinero a la caja");
     expect(ACCION_LABELS.aporte_capital_anulado).toBe("Anuló un aporte de dinero a la caja");
+    // Ficha 461 (R69, auditoria D3): la anulacion de una correccion de caja, «correccion» y no «ajuste».
+    expect(HISTORIAL_ACCION_TIPOS).toContain("wallet_movimiento_manual_anulado");
+    expect(CATEGORIA_POR_ACCION.wallet_movimiento_manual_anulado).toBe("mueve_dinero");
+    expect(ACCION_LABELS.wallet_movimiento_manual_anulado).toBe("Anuló una corrección de caja");
+    expect(ACCION_LABELS.wallet_movimiento_manual_anulado).not.toBe(ACCION_LABELS.wallet_movimiento_manual_registrado);
     expect(ENTIDAD_LABELS.pago_por_cuenta_tienda).toBe("Pago de un gasto de una tienda");
     expect(ENTIDAD_LABELS.aporte_capital).toBe("Aporte de dinero a la caja");
     expect(ENTIDAD_LABELS.wallet_tienda_movimiento).toBe("Movimiento de tienda");

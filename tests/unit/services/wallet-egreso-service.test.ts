@@ -466,3 +466,35 @@ describe("WalletEgresoService.registrarEgreso — la fecha elegida (R22/R23/R28)
     expect(Object.values(TIPO_EGRESO_MANUAL_A_CATEGORIA)).not.toContain("egreso_gasto_fijo");
   });
 });
+
+// ─── FICHA 461 (R66/R68, auditoria D2) — la clave de idempotencia del sueldo y del gasto ───
+
+describe("WalletEgresoService.registrarEgreso — la clave de idempotencia (461/R66/R68)", () => {
+  it("la clave del cliente viaja a la fila que se inserta; `origen_id` sigue NULL", async () => {
+    const repo = buildRepo();
+    const svc = new WalletEgresoService(repo, writeClient);
+    const clave = randomUUID();
+    const r = await svc.registrarEgreso({ claveIdempotencia: clave, tipoEgreso: "sueldo", monto: "500000.00", descripcion: "Quincena" }, MAESTRO);
+    expect(r.status).toBe("ok");
+    expect(crearMovCall(repo)).toMatchObject({ claveIdempotencia: clave, origenId: null, categoria: "egreso_sueldo" });
+  });
+
+  it("R68: count 0 (la clave ya tenia su fila) -> `ya_registrado` con el egreso releido POR CLAVE; no se relee por id", async () => {
+    const original = mov({ id: "eg-original", categoria: "egreso_sueldo" });
+    const repo = buildRepo({ crearMovimientoRegistrado: vi.fn(async () => 0), obtenerPorClave: vi.fn(async () => original) });
+    const svc = new WalletEgresoService(repo, writeClient);
+    const clave = randomUUID();
+    const r = await svc.registrarEgreso({ claveIdempotencia: clave, tipoEgreso: "sueldo", monto: "500000.00", descripcion: "Quincena" }, MAESTRO);
+    expect(r).toEqual({ status: "ya_registrado", movimiento: original });
+    expect(repo.obtenerPorClave).toHaveBeenCalledWith(clave);
+    expect(repo.obtenerPorId).not.toHaveBeenCalled();
+  });
+
+  it("count 0 sin fila que releer es un error con contexto", async () => {
+    const repo = buildRepo({ crearMovimientoRegistrado: vi.fn(async () => 0), obtenerPorClave: vi.fn(async () => null) });
+    const svc = new WalletEgresoService(repo, writeClient);
+    await expect(
+      svc.registrarEgreso({ claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "1.00", descripcion: "x" }, MAESTRO),
+    ).rejects.toThrow(/clave de idempotencia repetida/);
+  });
+});
