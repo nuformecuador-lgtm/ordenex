@@ -59,7 +59,7 @@ separado (design §15): A no lleva migración; B sí; C solo existe cuando haya 
   `progress/fase0_459.md` con, por mutación, el diff de una línea, el comando, la salida roja con el
   nombre del caso y el número de tests ejecutados (≠ 0), y `git diff --stat` vacío al final. Ninguna
   superviviente sin explicar. Depende de T0.2.
-- [ ] **T0.4** [P] **(LEADER, no el agente)** Contraste de línea base en producción por el MCP de
+- [x] **T0.4** [P] **(LEADER, no el agente)** Contraste de línea base en producción por el MCP de
   Supabase, solo lectura: C0–C7 de design §11. *Hecho:* `progress/contraste_459.md` con las salidas
   literales; `diferencia_r8` y `diferencia_r7` en 0,00 y C2 sin filas. Si no, se para antes del
   bloque A.
@@ -191,14 +191,14 @@ separado (design §15): A no lleva migración; B sí; C solo existe cuando haya 
 
 ## BLOQUE C — Reclasificación de los 203 · depende de B y de la aprobación del humano
 
-- [ ] **T C.1** (LEADER) Correr C3 y C4 en producción y volcar `progress/reclasificacion_459/candidatos.csv`
+- [x] **T C.1** (LEADER) Correr C3 y C4 en producción y volcar `progress/reclasificacion_459/candidatos.csv`
   con las sumas de control (se esperan 203 / 25.769.034,50). *Hecho:* archivo commiteado y sumas
   anotadas.
-- [ ] **T C.2** (HUMANO) Revisión fila a fila: «pago por cuenta» o «cobro de un costo» para cada una,
+- [x] **T C.2** (HUMANO) Revisión fila a fila: «pago por cuenta» o «cobro de un costo» para cada una,
   con decisión explícita en «COMPRA 40 LEMME BURN», «ABONO TARJETA NUFORM CARLOS CASTILLO» y
   «FACEBOOK IVA». *Hecho:* `progress/reclasificacion_459/lista_aprobada.csv` y `aprobacion.md` (quién,
   cuándo, filas, suma). **Nada de lo que sigue empieza sin esto.** (R88)
-- [ ] **T C.3** (LEADER) C1-bis con la lista: cifras esperadas «después». *Hecho:* en
+- [x] **T C.3** (LEADER) C1-bis con la lista: cifras esperadas «después». *Hecho:* en
   `progress/contraste_459.md`.
 - [x] **T C.4** Migración `<ts>_reclasificar_cobros_459` (plantilla de design §10.2, lista entre
   marcas) + `down.sql`; guardia `reclasificacion-459-lista.guardia.test.ts` (lista = CSV aprobado: ids,

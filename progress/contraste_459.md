@@ -28,3 +28,11 @@ Esperado: igual que A; C0 sin categorías sin clasificar; bucket `wallet-comprob
 ## DESPUÉS DE C (reclasificación de los 203) — pendiente del despliegue
 Esperado: cifra nueva −9.186.220,50; de las tiendas −4.780.583,97 = Σ saldos; R8 0,00; ganancia sin cambio;
 C4 con 203 filas y 25.769.034,50 reclasificados.
+
+### Salidas de la línea base que completan T0.4 (2026-09-25)
+- C0 (conceptos sin clasificar): **0 filas**.
+- C6 (catálogos y CHECK): los de M3/M4 de `progress/medicion_457.md`; el bucket `wallet-comprobantes` **no existe** todavía.
+- C7 (primer día de la caja, hora de Costa Rica): **2026-08-28**, 1.288 movimientos.
+- C3/C4 (candidatos): 203 filas, 25.769.034,50 → `progress/reclasificacion_459/candidatos.csv` (T C.1).
+- T C.2: aprobación del humano en `progress/reclasificacion_459/aprobacion.md`.
+- T C.3 (esperado después de C): arriba, en «DESPUÉS DE C».
