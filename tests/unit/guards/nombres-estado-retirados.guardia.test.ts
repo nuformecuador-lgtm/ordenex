@@ -119,6 +119,12 @@ const EXCEPCIONES: Record<string, { textos: readonly string[]; motivo: string }>
       "`NOTA_AYUDA_SOLICITADA`: la nota de la ayuda de la 454 (evento, no estado), texto fijado por " +
       "design §2.1 y la 456; §0.3 lo retira solo como nombre de estado",
   },
+  // FICHA 462 (2026-09-25): la Fase 2 (backend) declaro aqui una excepcion para
+  // `lib/notificaciones/emitir.ts` («reprogramadas» en el literal de 462/R17) y la elevo al leader. El
+  // leader decidio REFORMULAR los literales de la ficha —se habla del PAQUETE en masculino, con el
+  // nombre vigente «Reprogramado» de la 455— en las cuatro superficies (campana, push, marca de
+  // `/cierres-admin`, franja de `/ordenes`), asi que la excepcion se RETIRO en la Fase 3 y esta
+  // guardia vigila la 462 sin excepcion alguna.
 };
 
 /**

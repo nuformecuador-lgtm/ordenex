@@ -11,6 +11,7 @@ import { CATALOGO_AVISOS } from "@/lib/notificaciones/catalogo-avisos";
 import type { IAvisoAgregadoRepository } from "@/lib/interfaces/repositories/IAvisoAgregadoRepository";
 import type { IRepartoMananaRepository } from "@/lib/interfaces/repositories/IRepartoMananaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { AmbitoRetenidas } from "@/lib/interfaces/services/IReprogramadasRetenidasService";
 
 // FICHA 409 (T5.2, R57) — LA CIFRA VIVA SE PIDE ACOTADA AL AMBITO DEL ACTOR.
 //
@@ -541,5 +542,113 @@ describe("413/R43 - la cifra viva NO consulta cierres, y es una DECISION", () =>
 
     expect(reparto.contarReservadasParaOtroDia).toHaveBeenCalledTimes(1);
     expect(reparto.resumenPorMensajero).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// FICHA 462 (T2.8, design §3.5) — la CUARTA rama: la cifra viva de las REPROGRAMADAS RETENIDAS.
+// ---------------------------------------------------------------------------------------------
+
+/** Doble del conteo de retenidas: devuelve `porAmbito` segun el ambito pedido y registra la llamada. */
+function retenidasEspia(porAmbito: { central?: number; zona?: number } = { central: 4, zona: 1 }) {
+  return {
+    contar: vi.fn(async (_hoyCR: Date, ambito: AmbitoRetenidas) =>
+      ambito.tipo === "central" ? (porAmbito.central ?? 0) : (porAmbito.zona ?? 0),
+    ),
+  };
+}
+
+function servicioConRetenidas(
+  retenidas: ReturnType<typeof retenidasEspia>,
+  ahora: Date = AHORA,
+  repo: IAvisoAgregadoRepository = repoEspia(),
+) {
+  return new VigenciaAvisoAgregadoService(repo, 3, () => ahora, undefined, retenidas);
+}
+
+describe("462/R6/R14 — el ambito sale del ACTOR: central para maestro/admin, la zona para el satelite", () => {
+  it("⭑ maestro y admin piden el ambito CENTRAL — y NO el total del sistema (mutacion 6 => ROJO)", async () => {
+    for (const actor of [MAESTRO, ADMIN]) {
+      const retenidas = retenidasEspia({ central: 3, zona: 9 });
+      const cifra = await servicioConRetenidas(retenidas).cifra("reprogramadas_esperan_cierre", actor);
+      expect(cifra).toBe(3);
+      expect(retenidas.contar).toHaveBeenCalledTimes(1);
+      expect(retenidas.contar.mock.calls[0][1]).toEqual({ tipo: "central" });
+    }
+  });
+
+  it("⭑ el adminSatelite pide SU zona, y solo la suya", async () => {
+    const retenidas = retenidasEspia({ central: 9, zona: 2 });
+    const cifra = await servicioConRetenidas(retenidas).cifra("reprogramadas_esperan_cierre", SATELITE);
+    expect(cifra).toBe(2);
+    expect(retenidas.contar.mock.calls[0][1]).toEqual({ tipo: "zona", zonaId: ZONA });
+  });
+
+  it("⭑ la cota es `startOfDayCR(now)` (medianoche UTC de la fecha CR), no `inicioDelDiaCREnUtc`", async () => {
+    const retenidas = retenidasEspia();
+    // 07:00 CR del 11/09 = 13:00Z: la fecha CR es el 11.
+    await servicioConRetenidas(retenidas, new Date("2026-09-11T13:00:00.000Z")).cifra("reprogramadas_esperan_cierre", ADMIN);
+    expect(retenidas.contar.mock.calls[0][0].toISOString()).toBe("2026-09-11T00:00:00.000Z");
+    // 23:50 CR del 11 (= 05:50Z del 12): sigue siendo el 11. A las 00:01 CR del 12, avanza.
+    const antes = retenidasEspia();
+    const despues = retenidasEspia();
+    await servicioConRetenidas(antes, new Date("2026-09-12T05:50:00.000Z")).cifra("reprogramadas_esperan_cierre", ADMIN);
+    await servicioConRetenidas(despues, new Date("2026-09-12T06:01:00.000Z")).cifra("reprogramadas_esperan_cierre", ADMIN);
+    expect(antes.contar.mock.calls[0][0].toISOString()).toBe("2026-09-11T00:00:00.000Z");
+    expect(despues.contar.mock.calls[0][0].toISOString()).toBe("2026-09-12T00:00:00.000Z");
+  });
+});
+
+describe("462/R14 — si el ambito del actor no existe, se FALLA; no se inventa uno ni se devuelve 0", () => {
+  it("⭑ adminSatelite SIN zona util (ausente, null, «»): LANZA sin consultar (mutacion 9: devolver 0 => ROJO)", async () => {
+    for (const zonaId of [undefined, null, ""] as const) {
+      const retenidas = retenidasEspia();
+      const actor: Actor = { usuarioId: "sat-x", rol: "adminSatelite", ...(zonaId === undefined ? {} : { zonaId }) };
+      await expect(servicioConRetenidas(retenidas).cifra("reprogramadas_esperan_cierre", actor)).rejects.toThrow(
+        /se acota por zona y el adminSatelite no tiene zona asignada/,
+      );
+      expect(retenidas.contar).not.toHaveBeenCalled();
+    }
+  });
+
+  it("⭑ un rol fuera de la lista blanca (adminTienda, mensajero, apiKey): LANZA nombrando el rol, sin consultar", async () => {
+    for (const rol of ["adminTienda", "mensajero", "apiKey"] as const) {
+      const retenidas = retenidasEspia();
+      const actor: Actor = { usuarioId: `u-${rol}`, rol, zonaId: ZONA };
+      await expect(servicioConRetenidas(retenidas).cifra("reprogramadas_esperan_cierre", actor)).rejects.toThrow(
+        new RegExp(`no define ambito para el rol "${rol}"`),
+      );
+      expect(retenidas.contar).not.toHaveBeenCalled();
+    }
+  });
+
+  it("⭑ la lista blanca de ESTE evento decide por INCLUSION sobre los SEIS roles del enum", async () => {
+    const conAmbito = new Set(["maestro", "admin", "adminSatelite"]);
+    for (const rol of Object.values(RolValue)) {
+      const retenidas = retenidasEspia();
+      const actor: Actor = { usuarioId: `u-${rol}`, rol, zonaId: ZONA };
+      const intento = servicioConRetenidas(retenidas).cifra("reprogramadas_esperan_cierre", actor);
+      if (conAmbito.has(rol)) await expect(intento).resolves.toBeGreaterThanOrEqual(0);
+      else await expect(intento).rejects.toThrow(/no define ambito/);
+    }
+    // Y coincide con los destinatarios del catalogo: dos fuentes independientes que dicen lo mismo.
+    expect([...CATALOGO_AVISOS.reprogramadas_esperan_cierre.destinatarios].sort()).toEqual([...conAmbito].sort());
+  });
+
+  it("⭑ si NADIE inyecto el servicio de retenidas, LANZA en vez de devolver un numero", async () => {
+    // La familia «el composition root que no inyecta»: un `buildService` que se olvidara del
+    // servicio dejaria el aviso sin numero para todos, en silencio.
+    const sinCablear = new VigenciaAvisoAgregadoService(repoEspia(), 3, () => AHORA);
+    await expect(sinCablear.cifra("reprogramadas_esperan_cierre", ADMIN)).rejects.toThrow(
+      /necesita el servicio de retenidas y nadie lo inyecto/,
+    );
+  });
+
+  it("y los otros tres agregados siguen resolviendo igual con el servicio de retenidas inyectado (R50)", async () => {
+    const repo = repoEspia();
+    const servicio = new VigenciaAvisoAgregadoService(repo, 3, () => AHORA, repartoEspia(6), retenidasEspia());
+    expect(await servicio.cifra("novedades_sin_gestionar", TIENDA)).toBe(5);
+    expect(await servicio.cifra("devoluciones_represadas", MAESTRO)).toBe(7);
+    expect(await servicio.cifra("reparto_manana", MENSAJERO)).toBe(6);
   });
 });

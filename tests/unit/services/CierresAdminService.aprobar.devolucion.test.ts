@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import type {
   ICierresAdminRepository,
 } from "@/lib/interfaces/repositories/ICierresAdminRepository";
@@ -92,7 +93,7 @@ function newService(estatusIds: Record<string, string | null> = ESTATUS_IDS) {
     sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
       Object.fromEntries(ids.map((id) => [id, "0.00"])),
     ),
-  });
+  }, sinRetenidas()); // FICHA 462: 7.o argumento requerido; este archivo no mide la marca
   return { service, repo, ordenRepo };
 }
 

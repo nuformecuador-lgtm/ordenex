@@ -62,6 +62,13 @@ import {
   estadoConciliacionDe,
   hayFaltantePorRecibir,
 } from "./cierre-labels";
+// FICHA 462 (T3.3, S3, R27) — la marca «Retiene N paquetes reprogramados para hoy». Se monta en
+// ESTE archivo, y en dos sitios, porque aquí viven las tres superficies que enseñan un cierre: el
+// comprobante compacto (`CierreFacturaResumen`, que comparten la COLA y el HISTÓRICO) y la cabecera
+// del comprobante detallado (`CierreFacturaDetalle`). Un `rechazado` retiene igual que un
+// `solicitado` (R28/R41), y el histórico es el único sitio donde se ve: por eso la marca va en el
+// comprobante y no en cada listado.
+import { RetieneReprogramadasBadge } from "./RetieneReprogramadasBadge";
 
 import {
   money,
@@ -698,6 +705,10 @@ export function CierreFacturaResumen({
               cierresPorReenviar={bloqueo.cierresPorReenviar}
             />
           ) : null}
+          {/* FICHA 462 (R27): cuántos paquetes reprogramados para hoy retiene ESTE cierre. La
+              cifra llega del servidor (una lectura por página, R26); con 0 o ausente no se pinta
+              nada. Ninguna acción, orden ni descarga cambia por esta marca (R29/R31). */}
+          <RetieneReprogramadasBadge cuantas={cierre.reprogramadasRetenidasHoy} />
         </>
       }
       acciones={acciones}
@@ -1224,6 +1235,12 @@ export interface CierreFacturaCabecera {
   motivoRechazo: string | null;
   /** Solo en la vista de admin: de quién es el cierre. */
   mensajeroNombre?: string;
+  /**
+   * FICHA 462 (R27): cuántos paquetes reprogramados para hoy retiene este cierre. Solo lo trae la
+   * vista de admin (`CierreAdminResumen`); el `CierrePasadoDTO` del mensajero no lo tiene y la
+   * cabecera no pinta nada. Aditivo y opcional por eso mismo.
+   */
+  reprogramadasRetenidasHoy?: number;
 }
 
 /**
@@ -2317,6 +2334,9 @@ export function CierreFacturaDetalle({
               {FACTURA_TITULO}
             </span>
             <EstadoCierreBadge estado={cierre.estado} />
+            {/* FICHA 462 (R27): la marca de retención también en la cabecera del detalle, junto al
+                estado, para que quien va a APROBAR vea qué desbloquea. Misma cifra que la fila. */}
+            <RetieneReprogramadasBadge cuantas={cierre.reprogramadasRetenidasHoy} />
           </span>
           <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
             <Warehouse size={15} aria-hidden="true" />

@@ -147,13 +147,24 @@ export function sqlUltimaGestionPendienteDeOrden(ordenId: string): Prisma.Sql {
  * `en_reparto` y la gestion con las condiciones 1-3—, para los LISTADOS: se une con
  * `LEFT JOIN LATERAL (...) ON TRUE` a una consulta que ya recorre la pagina, y asi la pagina entera
  * cuesta UNA consulta, no una por fila. La compone `senalesGestionDe` (`ayuda-abierta.ts`).
+ *
+ * FICHA 462 (T1.1, design §1.2, 2026-09-25) — la proyeccion GANA TRES COLUMNAS, y el `WHERE` no
+ * cambia ni una letra: `"gestion_id"`, `"cierre_id"` y `"fecha_reprogramacion"`. Las necesita la
+ * Forma B de las reprogramadas retenidas (`ReprogramadaRetenidaRepository.findRetenidasEnReparto`):
+ * una orden `en_reparto` cuya gestion pendiente MAS RECIENTE es un `reprogramado` con fecha vencida
+ * esta retenida por el cierre de ESA gestion. Ampliar aqui —y no reescribir el predicado alli— es lo
+ * que mantiene UNA sola definicion de «pendiente» (la guardia `gestion-pendiente-unica-fuente`
+ * prohibe lo contrario). Los consumidores previos leen columnas por nombre, asi que no los toca;
+ * lo mide `tests/integration/db/454/gestion-pendiente-sql-real.test.ts`.
  */
 export function sqlUltimaGestionPendienteLateral(orden: {
   id: Prisma.Sql;
   estatusId: Prisma.Sql;
 }): Prisma.Sql {
   return Prisma.sql`
-    SELECT "gp"."resultado"::text AS "resultado", "gp"."created_at" AS "registrada_at"
+    SELECT "gp"."resultado"::text AS "resultado", "gp"."created_at" AS "registrada_at",
+           "gp"."id" AS "gestion_id", "gp"."cierre_id" AS "cierre_id",
+           "gp"."fecha_reprogramacion" AS "fecha_reprogramacion"
       FROM "gestion_orden" "gp"
       LEFT JOIN "cierre_dia" "gpc" ON "gpc"."id" = "gp"."cierre_id"
      WHERE "gp"."orden_id" = ${orden.id}

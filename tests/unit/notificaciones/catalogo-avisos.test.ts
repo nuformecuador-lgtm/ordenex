@@ -186,18 +186,58 @@ describe("R4 — `geocodificacion_caida` es EL UNICO accionable sin atajo", () =
   });
 });
 
-describe("los avisos AGREGADOS son exactamente dos, y llevan compositor de titulo", () => {
+describe("los avisos AGREGADOS son exactamente cuatro, y llevan compositor de titulo", () => {
   it("`esEventoAgregado` los reconoce y no reconoce a los demas", () => {
+    // NOTA FECHADA (2026-09-25, ficha 462): eran tres; el cuarto es el aviso de las reprogramadas
+    // retenidas, con cifra viva acotada al ambito del actor (central / zona).
     expect(EVENTOS_AGREGADOS).toEqual([
       "novedades_sin_gestionar",
       "devoluciones_represadas",
       "reparto_manana", // ficha 413
+      "reprogramadas_esperan_cierre", // ficha 462
     ]);
     expect(esEventoAgregado("novedades_sin_gestionar")).toBe(true);
     expect(esEventoAgregado("devoluciones_represadas")).toBe(true);
     expect(esEventoAgregado("reparto_manana")).toBe(true); // ficha 413
+    expect(esEventoAgregado("reprogramadas_esperan_cierre")).toBe(true); // ficha 462
     expect(esEventoAgregado("orden_rechazada")).toBe(false);
     expect(esEventoAgregado("gasto_fijo_cobro_pendiente")).toBe(false);
+  });
+
+  it("⭑ 462/R13/R16: `reprogramadas_esperan_cierre` es accionable para los TRES roles, con el MISMO atajo y sin parametro", () => {
+    // Sin `porRol`: los tres van a donde se APRUEBA. Destino y etiqueta escritos A MANO.
+    for (const rol of ["maestro", "admin", "adminSatelite"] as const) {
+      const accion = accionDeAviso("reprogramadas_esperan_cierre", rol);
+      expect(accion.clase).toBe("accionable");
+      if (accion.clase !== "accionable") throw new Error("no accionable");
+      expect(accion.atajo).toEqual({ href: "/cierres-admin", etiqueta: "Revisar cierres" });
+      expect(accion.atajo?.href).not.toContain("?");
+      expect(typeof accion.titulo).toBe("function");
+    }
+    expect(CATALOGO_AVISOS.reprogramadas_esperan_cierre.destinatarios).toEqual([
+      "maestro",
+      "admin",
+      "adminSatelite",
+    ]);
+    expect(CATALOGO_AVISOS.reprogramadas_esperan_cierre.porRol).toBeUndefined();
+  });
+
+  it("⭑ 462/R13: el titulo nombra el resultado por su nombre VISIBLE, con singular y plural — literales a mano", () => {
+    // ⚠️ ESCRITOS A MANO, nunca contra `tituloReprogramadasEsperanCierre` ni contra `NOMBRE_ESTADO`:
+    // comparar un texto contra la fuente que lo genera esta SIEMPRE VERDE. MUTACION OBLIGATORIA
+    // (design §8.2-14): «reprogramadas» sin el nombre visible => ROJO aqui.
+    const accion = accionDeAviso("reprogramadas_esperan_cierre", "admin");
+    if (accion.clase !== "accionable" || !accion.titulo) throw new Error("sin compositor");
+
+    // FASE 3 (2026-09-25, decision del leader): se cuenta el PAQUETE («1 paquete espera» / «N paquetes
+    // esperan»), la misma palabra que la marca y la franja. Literales a mano.
+    expect(accion.titulo(1)).toBe("Reprogramado para hoy: 1 paquete espera la aprobación de su cierre");
+    expect(accion.titulo(4)).toBe("Reprogramado para hoy: 4 paquetes esperan la aprobación de su cierre");
+    expect(accion.titulo(12)).toBe("Reprogramado para hoy: 12 paquetes esperan la aprobación de su cierre");
+    // Los tres roles comparten el titulo: es el mismo hecho, acotado por la cifra que cada uno pide.
+    const satelite = accionDeAviso("reprogramadas_esperan_cierre", "adminSatelite");
+    if (satelite.clase !== "accionable" || !satelite.titulo) throw new Error("sin compositor");
+    expect(satelite.titulo(1)).toBe("Reprogramado para hoy: 1 paquete espera la aprobación de su cierre");
   });
 
   it("componen titulo con la cifra, en singular y en plural — literales a mano", () => {

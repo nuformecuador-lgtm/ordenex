@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import { descargaConfig } from "@/lib/config/descarga";
 import type {
   Alcance,
@@ -141,6 +142,7 @@ function newService(repo: ReturnType<typeof fakeRepo>) {
     } as never,
     // Feature 293 (T2.3): lectura de premios; este caso no los ejercita.
     { sumarPremiosVivosPorCierre: vi.fn(async () => ({})) },
+    sinRetenidas(), // FICHA 462: 7.o argumento requerido; este archivo no mide la marca
   );
   return { service, createSignedUrls };
 }

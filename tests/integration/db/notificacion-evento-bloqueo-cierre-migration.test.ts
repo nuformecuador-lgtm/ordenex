@@ -236,6 +236,7 @@ describeSiHayBase("271 / §3.2 — la base aplicada, y el DOWN ejercitado de ver
       // POSTERIOR a la de la 413 y tambien a las DOS de la 410.
       "traspaso_ordenes_recibido",
       "traspaso_ordenes_cedido",
+      "reprogramadas_esperan_cierre", // ficha 462 (2026-09-25): el cuarto agregado
     ]);
   });
 

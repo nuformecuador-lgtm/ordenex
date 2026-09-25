@@ -100,8 +100,11 @@
   día, cada uno DEBE recibir su aviso con su propia cifra: ningún ámbito DEBE quedar silenciado por otro.
 - **R13** — El título del aviso DEBE componerse en cada lectura con la cifra viva acotada al alcance del
   actor, con singular y plural explícitos y nombrando el resultado por su nombre visible de la 455:
-  «Reprogramado para hoy: 1 orden espera la aprobación de su cierre» /
-  «Reprogramado para hoy: N órdenes esperan la aprobación de su cierre».
+  «Reprogramado para hoy: 1 paquete espera la aprobación de su cierre» /
+  «Reprogramado para hoy: N paquetes esperan la aprobación de su cierre».
+  > Literal vigente desde la decisión del leader del 2026-09-25 (`progress/impl_462_frontend.md` §Decisión): se
+  > habla del PAQUETE en masculino; el plural femenino del estado retirado («reprogramadas», 455 §0.3) no aparece
+  > en ningún texto visible. Sustituye a «1 orden espera» / «N órdenes esperan». Test: `catalogo-avisos.test.ts`.
 - **R14** — La cifra viva DEBE resolverse por el actor que consulta: `maestro`/`admin` → ámbito central;
   `adminSatelite` con zona → su zona. SI el actor es un `adminSatelite` sin zona útil, o cualquier otro
   rol, ENTONCES la resolución DEBE fallar con causa (nunca devolver 0) y el aviso DEBE mostrarse sin
@@ -113,8 +116,11 @@
   «Revisar cierres» a `/cierres-admin`, ruta que los tres roles ven en su menú.
 - **R17** — El texto persistido del aviso (el detalle) DEBE ser en lenguaje llano, sin número, sin
   identificadores internos, sin guía, remisión, nombre de destinatario, dirección, teléfono ni monto:
-  «No se pueden asignar hasta que se apruebe el cierre del mensajero que las visitó. Revisa los cierres
-  marcados «Retiene reprogramadas de hoy» y apruébalos antes de asignar.»
+  «No se pueden asignar hasta que se apruebe el cierre del mensajero que los visitó. Revisa los cierres
+  marcados «Retiene paquetes reprogramados para hoy» y apruébalos antes de asignar.»
+  > Literal vigente desde el 2026-09-25 (misma decisión que R13): «los visitó» y «Retiene paquetes reprogramados
+  > para hoy» sustituyen a «las visitó» y «Retiene reprogramadas de hoy». Es `TEXTO_REPROGRAMADAS_ESPERAN_CIERRE`
+  > (`lib/notificaciones/emitir.ts`); test: `emitir-reprogramadas-esperan-cierre.test.ts`.
 - **R18** — SI la emisión para un ámbito falla, ENTONCES el sistema DEBE registrar el fallo con su causa
   y DEBE seguir emitiendo para los demás ámbitos y los otros dos avisos agregados de la corrida; la
   corrida NO DEBE terminar en error por un aviso.
@@ -145,8 +151,12 @@
   fila DEBE traer resuelto en el servidor cuántas reprogramadas de hoy retiene ese cierre, con una sola
   consulta por página (nunca una por fila).
 - **R27** — MIENTRAS un cierre retenga una o más reprogramadas de hoy, su comprobante en la lista y la
-  cabecera de su detalle DEBEN mostrar la marca «Retiene 1 reprogramada de hoy» /
-  «Retiene N reprogramadas de hoy»; con 0 NO DEBEN mostrar nada de esta ficha.
+  cabecera de su detalle DEBEN mostrar la marca «Retiene 1 paquete reprogramado para hoy» /
+  «Retiene N paquetes reprogramados para hoy»; con 0 NO DEBEN mostrar nada de esta ficha.
+  > Literal vigente desde el 2026-09-25 (misma decisión que R13); sustituye a «Retiene 1 reprogramada de hoy» /
+  > «Retiene N reprogramadas de hoy». La nota de la marca (`title` y nombre accesible) es «N paquete(s)
+  > reprogramado(s) para hoy no se puede(n) asignar hasta que se apruebe este cierre.» Tests:
+  > `retiene-reprogramadas-labels.test.ts`, `RetieneReprogramadasBadge.test.tsx`.
 - **R28** — La marca DEBE aparecer en cierres `solicitado`, `vencido` y `rechazado` que retengan; un
   cierre `aprobado` NO DEBE llevarla nunca.
 - **R29** — La marca NO DEBE cambiar ninguna acción existente de la pantalla (aprobar, rechazar,
@@ -159,17 +169,24 @@
 
 - **R32** — CUANDO un actor de acceso total (`maestro`/`admin`) abra `/ordenes` y en el ámbito central
   haya al menos una retenida, el sistema DEBE mostrar al principio de la página, antes del listado, una
-  franja con el texto «Hay 1 reprogramada de hoy que no puedes asignar todavía: falta 1 cierre por
-  aprobar.» / «Hay N reprogramadas de hoy que no puedes asignar todavía: faltan M cierres por aprobar.»
-  y un enlace «Revisar cierres» a `/cierres-admin`.
+  franja con el texto «Hay 1 paquete reprogramado para hoy que todavía no puedes asignar: falta 1 cierre
+  por aprobar.» / «Hay N paquetes reprogramados para hoy que todavía no puedes asignar: faltan M cierres
+  por aprobar.» y un enlace «Revisar cierres» a `/cierres-admin`.
+  > Literal vigente desde el 2026-09-25 (misma decisión que R13); sustituye a «Hay N reprogramadas de hoy que no
+  > puedes asignar todavía: …». Test: `FranjaReprogramadasRetenidas.test.tsx` (las frases a mano).
 - **R33** — La franja DEBE listar los cierres que retienen, uno por línea, con el nombre del mensajero,
   la fecha de la jornada en palabras (o «cierre del día» si no hay jornada fiable), el estado en palabras
   («Solicitado», «Vencido», «Rechazado») y cuántas retiene; cada línea DEBE enlazar al detalle de ese
   cierre (`/cierres-admin?cierre=<id>`), con el identificador solo en la dirección, nunca en el texto.
-- **R34** — SI hay retenidas sin cierre enviado, ENTONCES la franja DEBE añadir «K de ellas son de
-  mensajeros que todavía no enviaron su cierre.», esas K NO DEBEN contarse en M y no DEBEN llevar enlace
-  de detalle; SI todas están sin cierre (M = 0), ENTONCES el texto principal DEBE decir «Hay N
-  reprogramadas de hoy que no puedes asignar todavía: sus mensajeros todavía no enviaron el cierre.»
+- **R34** — SI hay retenidas sin cierre enviado, ENTONCES la franja DEBE añadir «1 de ellos es de un
+  mensajero que todavía no envió su cierre.» / «K de ellos son de mensajeros que todavía no enviaron su
+  cierre.», esas K NO DEBEN contarse en M y no DEBEN llevar enlace de detalle; SI todas están sin cierre
+  (M = 0), ENTONCES el texto principal DEBE decir «Hay N paquetes reprogramados para hoy que todavía no
+  puedes asignar: sus mensajeros todavía no enviaron el cierre.» (con un solo mensajero: «…: su mensajero
+  todavía no envió el cierre.»).
+  > Literal vigente desde el 2026-09-25 (misma decisión que R13); «de ellos» concuerda con «paquetes» y
+  > sustituye a «K de ellas son de…» y a «Hay N reprogramadas de hoy que no puedes asignar todavía: …». Test:
+  > `FranjaReprogramadasRetenidas.test.tsx`.
 - **R35** — SI no hay retenidas en el ámbito central, ENTONCES la franja NO DEBE renderizarse.
 - **R36** — El `adminTienda` NO DEBE ver la franja ni recibir el aviso ni el push; `mensajero` y
   `adminSatelite` no llegan a `/ordenes` y no DEBEN ganar acceso por esta ficha.

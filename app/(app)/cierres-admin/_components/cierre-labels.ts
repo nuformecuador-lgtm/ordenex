@@ -672,3 +672,35 @@ export function estadoConciliacionDe(marca: {
   if (!marca.conciliado) return "pendiente";
   return hayFaltantePorRecibir(marca.faltaPorRecibir) ? "incompleto" : "recibido";
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 462 (T3.1, S3, R27) — LA MARCA «RETIENE N PAQUETES REPROGRAMADOS PARA HOY».
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//
+// Un cierre sin aprobar RETIENE las órdenes que su mensajero reprogramó para hoy: la regla 276 no
+// las deja volver a bodega —ni asignarse— hasta que se apruebe. La marca dice CUÁNTAS, con singular
+// y plural explícitos, y la nota (`title`/nombre accesible) dice QUÉ pasa mientras tanto.
+//
+// ── EL VOCABULARIO, decidido por el leader el 2026-09-25 (prevalece sobre requirements/R27)
+// Se habla del PAQUETE en masculino («paquetes reprogramados para hoy»), con el nombre vigente del
+// estado de la 455 («Reprogramado») como adjetivo. El plural femenino «reprogramadas» —el nombre
+// RETIRADO del estado viejo— no aparece en ningún texto visible, y la guardia
+// `nombres-estado-retirados` lo vigila sin excepción alguna para esta ficha.
+//
+// La cifra NUNCA se calcula aquí: llega del conteo único (`CierreAdminResumen.reprogramadasRetenidasHoy`,
+// `IReprogramadasRetenidasService.contarPorCierre`), el mismo que alimenta la campana y la franja de
+// `/ordenes` (R7). Los literales se afirman A MANO en su test, nunca contra esta función.
+
+/** El texto visible de la marca. `n >= 1`; con 0 la marca no se pinta (R27). */
+export function retieneReprogramadas(n: number): string {
+  return n === 1
+    ? "Retiene 1 paquete reprogramado para hoy"
+    : `Retiene ${n} paquetes reprogramados para hoy`;
+}
+
+/** La nota de la marca (`title` y parte del nombre accesible): qué pasa mientras el cierre no se apruebe. */
+export function notaRetieneReprogramadas(n: number): string {
+  return n === 1
+    ? "1 paquete reprogramado para hoy no se puede asignar hasta que se apruebe este cierre."
+    : `${n} paquetes reprogramados para hoy no se pueden asignar hasta que se apruebe este cierre.`;
+}

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import type {
   CierreAdminResumenRow,
   ICierresAdminRepository,
@@ -142,6 +143,7 @@ function newService(
     signedUrls,
     liquidacion,
     premios,
+    sinRetenidas(), // FICHA 462: 7.o argumento requerido; la marca se mide en su propia suite
   );
   return { service, liquidacion, premios };
 }
@@ -366,6 +368,7 @@ describe("R26 — los tres listados traen el campo, con UNA sola consulta cada u
       signedUrls,
       liquidacion,
       fakePremios(),
+      sinRetenidas(), // FICHA 462: 7.o argumento requerido
     );
 
     const r = await service.listarCierresAdmin({ usuarioId: "sat", rol: "adminSatelite" });

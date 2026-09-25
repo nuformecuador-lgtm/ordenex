@@ -45,6 +45,7 @@ describe("findOrdenesLiberables (R10/R11)", () => {
       {
         id: "o1",
         zonaId: "z1",
+        mensajeroAsignadoId: "m1", // FICHA 462 (T1.2): el cuarto hecho proyectado
         gestiones: [
           {
             fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z"),
@@ -60,6 +61,10 @@ describe("findOrdenesLiberables (R10/R11)", () => {
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ deletedAt: null, estatus: { value: "reprogramado" } });
+    // FICHA 462 (T1.2): el `select` PIDE el mensajero asignado (grupo «sin cierre enviado», R5)
+    // y NO lo mete en el `where`: es una proyeccion aditiva, no una regla nueva.
+    expect(arg.select.mensajeroAsignadoId).toBe(true);
+    expect(arg.where).not.toHaveProperty("mensajeroAsignadoId");
     // gestion vigente = la reprogramada mas reciente.
     expect(arg.select.gestiones).toMatchObject({
       where: { resultado: "reprogramado" },
@@ -87,6 +92,7 @@ describe("findOrdenesLiberables (R10/R11)", () => {
         gestionCierreId: "c1",
         gestionCierreEstado: "aprobado",
         gestionEsVisitaReal: true,
+        mensajeroAsignadoId: "m1", // FICHA 462 (T1.2)
       },
     ]);
   });
@@ -99,6 +105,7 @@ describe("findOrdenesLiberables (R10/R11)", () => {
       {
         id: "o1",
         zonaId: "z1",
+        mensajeroAsignadoId: null,
         gestiones: [
           {
             fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z"),
@@ -158,6 +165,7 @@ describe("findOrdenesLiberablesDeCierre (ficha 315)", () => {
     return {
       id: "o1",
       zonaId: "z1",
+      mensajeroAsignadoId: "m1", // FICHA 462 (T1.2)
       gestiones: [
         {
           fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z"),
@@ -244,6 +252,7 @@ describe("findOrdenesLiberablesDeCierre (ficha 315)", () => {
         gestionCierreId: CIERRE,
         gestionCierreEstado: "aprobado",
         gestionEsVisitaReal: true,
+        mensajeroAsignadoId: "m1", // FICHA 462 (T1.2)
       },
     ]);
   });

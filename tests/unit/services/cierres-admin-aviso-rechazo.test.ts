@@ -16,6 +16,7 @@ import type {
 import { liberarAlAprobarCierreNoOp } from "@/lib/services/liberacion-al-aprobar-cierre";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 import { bloqueoDe } from "@/tests/fixtures/bloqueo-cierre";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 
 /**
  * FEATURE 271 (T6.6, R42) + **FICHA 412 (T5.2, R1/R3/R4/R5/R17)** — QUÉ AVISA UN RECHAZO.
@@ -174,7 +175,7 @@ function newService(
       traza.push("notificarRechazo");
     }) as CierreRechazadoNotificador);
   const service = opts.sinNotificador
-    ? new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, liquidacionRepo, premiosRepo)
+    ? new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, liquidacionRepo, premiosRepo, sinRetenidas())
     : new CierresAdminService(
         repo,
         zonaRepo,
@@ -182,6 +183,7 @@ function newService(
         signedUrls,
         liquidacionRepo,
         premiosRepo,
+        sinRetenidas(), // FICHA 462: 7.o argumento requerido; este caso no mide la marca
         notificar,
         liberarAlAprobarCierreNoOp,
         notificarRechazo,

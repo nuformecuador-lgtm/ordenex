@@ -27,6 +27,7 @@ import { VigenciaAvisoAgregadoService } from "@/lib/services/VigenciaAvisoAgrega
 import { AvisoAgregadoRepository } from "@/lib/repositories/AvisoAgregadoRepository";
 import { RepartoMananaRepository } from "@/lib/repositories/RepartoMananaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { buildReprogramadasRetenidasService } from "@/lib/services/reprogramadas-retenidas-composicion";
 import { avisosDiariosConfig } from "@/lib/config/avisos-diarios";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -66,6 +67,11 @@ function buildService(): INotificacionService {
       // MUDO — la familia «el composition root que no inyecta», que en este arbol ya dejo dos
       // notificadores muertos con la suite entera en verde.
       new RepartoMananaRepository(prisma),
+      // ⚠️ FICHA 462 (T2.8, R7/R14) — LA CIFRA VIVA DE LAS REPROGRAMADAS RETENIDAS, Y ESTA LINEA ES
+      // EL REQUISITO. Sin ella el resolutor lanza para `reprogramadas_esperan_cierre` y el aviso se
+      // muestra SIN numero (R14): nada visible se rompe, y por eso el fallo seria MUDO. Es el MISMO
+      // ensamblaje que usan el cron, la marca de `/cierres-admin` y la franja de `/ordenes` (R7).
+      buildReprogramadasRetenidasService(prisma),
     ),
   );
 }

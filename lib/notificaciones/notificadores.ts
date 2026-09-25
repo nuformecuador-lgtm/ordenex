@@ -42,6 +42,7 @@ import {
   emitirPostulacionPendiente,
   emitirPostulacionRecursoPendiente,
   emitirRepartoManana,
+  emitirReprogramadasEsperanCierre,
   emitirTraspasoCedido,
   emitirTraspasoRecibido,
   emitirWebhookSuscripcionPausada,
@@ -58,6 +59,7 @@ import {
   type PostulacionContexto,
   type PostulacionRecursoContexto,
   type RepartoMananaContexto,
+  type ReprogramadasEsperanCierreContexto,
   type TraspasoOrdenesContexto,
   type WebhookSuscripcionPausadaContexto,
 } from "@/lib/notificaciones/emitir";
@@ -145,6 +147,14 @@ export type TraspasoRecibidoNotificador = (ctx: TraspasoOrdenesContexto) => Prom
  * que nada se pusiera rojo -- el aviso al origen quedaria emitido con el evento del destino.
  */
 export type TraspasoCedidoNotificador = (ctx: TraspasoOrdenesContexto) => Promise<void>;
+/**
+ * FICHA 462 (R9/R18/R19). Firma del notificador de «reprogramadas de hoy que esperan la aprobacion
+ * de un cierre». Lo usa el CRON `avisos-diarios`, a las 07:00 CR, UNA VEZ POR AMBITO (central o
+ * zona) Y POR DIA. Es el TERCER agregado de esa corrida.
+ */
+export type ReprogramadasEsperanCierreNotificador = (
+  ctx: ReprogramadasEsperanCierreContexto,
+) => Promise<void>;
 
 /**
  * DEFAULT de los tres services: no hace nada. Un service construido sin cablear su notificador
@@ -166,7 +176,8 @@ export const notificadorNoOp: PostulacionNotificador &
   DevolucionesRepresadasNotificador &
   RepartoMananaNotificador &
   TraspasoRecibidoNotificador &
-  TraspasoCedidoNotificador = async () => {};
+  TraspasoCedidoNotificador &
+  ReprogramadasEsperanCierreNotificador = async () => {};
 
 /**
  * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
@@ -606,3 +617,38 @@ export const notificarTraspasoRecibidoReal: TraspasoRecibidoNotificador = async 
 
 export const notificarTraspasoCedidoReal: TraspasoCedidoNotificador = async (ctx) =>
   notificarTraspasoCedidoCon(repoReal())(ctx);
+
+/**
+ * FICHA 462 (T2.5, R9/R18) — emite «reprogramadas de hoy que esperan la aprobacion de su cierre»
+ * contra `repo`, absorbiendo su fallo.
+ *
+ * BEST-EFFORT Y POR AMBITO, y aqui el motivo no es comodidad: lo llama el CRON `avisos-diarios`,
+ * que recorre TODOS los ambitos con retenidas (el central y cada zona) y corre a las 07:00 CR sin
+ * nadie mirando. Envolver CADA emision es lo que impide que una zona que falle se lleve por delante
+ * al central ni a las demas, ni a los otros dos agregados de la corrida (R18). LA CORRIDA MANDA, EL
+ * AVISO ES CORTESIA.
+ *
+ * Y no es un `catch` vacio (`docs/conventions.md`): `emitirBestEffort` deja el fallo REGISTRADO
+ * con el nombre de la operacion y su causa.
+ *
+ * R52: ni el nombre de la operacion ni el contexto llevan PII — el contexto es un ambito y una fecha.
+ */
+export function notificarReprogramadasEsperanCierreCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): ReprogramadasEsperanCierreNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "reprogramadas_esperan_cierre",
+      () => emitirReprogramadasEsperanCierre(repo, ctx),
+      logger,
+    );
+  };
+}
+
+// FICHA 462 (T2.5): resuelve su repositorio por `repoReal()` como sus dieciseis hermanos, asi que
+// hereda el cableado UNICO del canal de push (410 §6) sin hacer nada especial. NO construye
+// `new NotificacionRepository(...)` por su cuenta: eso pondria roja la guardia de 410/R51.
+export const notificarReprogramadasEsperanCierreReal: ReprogramadasEsperanCierreNotificador = async (
+  ctx,
+) => notificarReprogramadasEsperanCierreCon(repoReal())(ctx);
