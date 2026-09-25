@@ -486,7 +486,13 @@ describe("R33 — el refresco es DIRIGIDO a la tienda que se pagó", () => {
     expect(registrarPagoMock.mock.calls[0][0]).toMatchObject({ tiendaId: "t2" });
   });
 
-  it("no se recarga la página: la tabla de saldos no se vuelve a pedir por el pago", async () => {
+  // FICHA 461 — auditoría de la wallet P1 (REESCRITO, listado en `progress/impl_461_frontend.md`):
+  // este caso afirmaba que la tabla de saldos NO se volvía a pedir por el pago, y eso era el fallo
+  // medido en el clon (la fila decía ₡137.670,10 y la cabecera del desglose ₡136.670,10 hasta
+  // recargar). Lo que R33 protege —no releer los desgloses de las OTRAS tiendas— sigue afirmado en
+  // el caso de arriba; la tabla de saldos, en cambio, es la fila de la que cuelga este desglose y SÍ
+  // se relee: UNA lectura más (la página visible), no una por tienda, y sin `router.refresh()`.
+  it("no se recarga la página: la tabla de saldos se relee UNA vez por el pago, sin recargar la ruta", async () => {
     renderTabla([NORTE]);
     const region = await desplegar("Tienda Norte");
     await waitFor(() => expect(lecturasDe("t1")).toBe(1));
@@ -496,7 +502,9 @@ describe("R33 — el refresco es DIRIGIDO a la tienda que se pagó", () => {
     confirmarPago(dialogo);
     await waitFor(() => expect(lecturasDe("t1")).toBe(2));
 
-    expect(listarSaldosPaginaMock.mock.calls.length).toBe(saldosAntes);
+    await waitFor(() => expect(listarSaldosPaginaMock.mock.calls.length).toBe(saldosAntes + 1));
+    // Y la lectura es la de la PÁGINA VISIBLE de la tabla, con su paginación: no un conjunto entero.
+    expect(listarSaldosPaginaMock.mock.calls.at(-1)?.[0]).toMatchObject({ page: 1 });
   });
 });
 
@@ -715,8 +723,10 @@ describe("T F.5 — la anulación pide el pago y el motivo, y refresca SOLO su t
     expect(listarPagosMock.mock.calls.filter(([i]) => i.tiendaId === "t2").length).toBe(
       pagosEsteAntes,
     );
-    // Tampoco se recarga la tabla de saldos.
-    expect(listarSaldosPaginaMock.mock.calls.length).toBe(1);
+    // FICHA 461 (auditoría P1, REESCRITO): la tabla de saldos SÍ se relee —una vez, la página
+    // visible— porque anular mueve el saldo agregado que vive en la fila de arriba. Antes este caso
+    // afirmaba lo contrario, y eso dejaba dos cifras distintas del mismo dinero en pantalla.
+    await waitFor(() => expect(listarSaldosPaginaMock.mock.calls.length).toBe(2));
   });
 
   it("R74: tras anular, el comprobante sigue entero y marcado en la lista", async () => {

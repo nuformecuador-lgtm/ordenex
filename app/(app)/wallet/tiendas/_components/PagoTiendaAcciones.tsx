@@ -24,6 +24,7 @@ import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
 
 import { claveDesgloseTienda } from "./DesgloseMovimientosTienda";
 import { DESGLOSE_TIENDA_LABEL } from "./desglose-tienda-labels";
+import { esClaveSaldosTiendas } from "./saldos-tiendas-clave";
 
 // Feature 172 (T D.3, design §10.1) — el CABLEADO del pago a una tienda. Se monta en el hueco
 // `acciones` que la 171 dejó preparado en la cabecera del desglose (R45 de aquella), así que
@@ -133,11 +134,20 @@ export function PagoTiendaAcciones({
     return registrarPagoTiendaAction({ ...campos, tiendaId });
   }
 
-  /** R33 — las dos claves de ESTA tienda, ninguna más. Vale igual al pagar y al anular. */
+  /**
+   * R33 — las dos claves de ESTA tienda, ninguna más de las demás tiendas. Vale igual al pagar y al
+   * anular.
+   *
+   * Ficha 461 (auditoría P1): y la TABLA DE SALDOS, que es la fila de la que cuelga este desglose.
+   * Pagar o anular mueve el saldo agregado de la tienda, y esa cifra vive en la fila de arriba: sin
+   * releerla, la tabla y la cabecera del desglose enseñaban dos importes distintos del mismo dinero
+   * hasta recargar la página. Es UNA lectura más (la página visible de saldos), no una por tienda.
+   */
   async function refrescarEstaTienda() {
     await Promise.all([
       mutate(claveDesgloseTienda(tiendaId)),
       mutate(clavePagosDeTienda(tiendaId)),
+      mutate(esClaveSaldosTiendas),
     ]);
   }
 

@@ -18,6 +18,7 @@ import { money } from "../../../mi-wallet/_components/mi-wallet-labels";
 import { DesgloseMovimientosTienda } from "./DesgloseMovimientosTienda";
 import { PagoTiendaAcciones } from "./PagoTiendaAcciones";
 import { DESGLOSE_TIENDA_NOMBRE } from "./desglose-tienda-labels";
+import { claveSaldosTiendas } from "./saldos-tiendas-clave";
 import {
   COLUMNAS_DESCARGA_SALDOS_TIENDAS,
   filaDescargaSaldoTienda,
@@ -126,8 +127,10 @@ export function SaldosTiendasTable({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialData.pageSize);
 
+  // Ficha 461 (auditoría P1): la clave sale del módulo compartido para que el bloque de pago del
+  // desglose pueda refrescar ESTA tabla tras pagar o anular, sin importar este archivo.
   const { data, error } = useSWR(
-    ["wallet-tiendas:saldos", page, pageSize],
+    claveSaldosTiendas(page, pageSize),
     () => leerPagina(page, pageSize),
     {
       fallbackData:

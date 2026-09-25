@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 
 import { DesglosePagosMensajero } from "./DesglosePagosMensajero";
+import { claveCuentasPorPagar } from "./cuentas-por-pagar-clave";
 import {
   COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR,
   filaDescargaCuentaPorPagar,
@@ -178,8 +179,10 @@ export function CuentasPorPagarTable({ initialData }: CuentasPorPagarTableProps)
     setPage(1);
   }
 
+  // Ficha 461 (auditoría P1): la clave sale del módulo compartido para que el desglose pueda
+  // refrescar ESTA tabla tras registrar un pago, sin importar este archivo.
   const { data, error } = useSWR(
-    ["wallet-mensajeros:cuentas", page, pageSize, aplicada],
+    claveCuentasPorPagar(page, pageSize, aplicada),
     () => leerPagina(page, pageSize, aplicada),
     {
       // Lo que el Server Component ya resolvió: página 1, sin búsqueda, tamaño de origen.
