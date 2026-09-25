@@ -149,6 +149,8 @@ export async function limpiar459(prisma: PrismaClient, p: Personas459 | null): P
   await prisma.walletTiendaMovimiento.deleteMany({
     where: { OR: [{ tiendaId: { in: usuarios } }, { registradoPor: { in: usuarios } }] },
   });
+  // Los pagos de Ordenex a una tienda que siembran los tests de concurrencia (T B.13).
+  await prisma.liquidacionPago.deleteMany({ where: { tiendaId: { in: usuarios } } });
   await prisma.pagoPorCuentaTienda.deleteMany({ where: { id: { in: pagos.map((x) => x.id) } } });
   await prisma.aporteCapital.deleteMany({ where: { id: { in: aportes.map((x) => x.id) } } });
   await prisma.usuario.deleteMany({ where: { id: { in: usuarios } } });
