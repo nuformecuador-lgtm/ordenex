@@ -142,4 +142,20 @@ Crear el bucket PRIVADO `wallet-comprobantes` en local, preview y prod (T B.7). 
 
 ## Verificacion (salida real)
 
-Se completa con el gate completo al final (ver abajo).
+Gate COMPLETO `./init.sh` contra `ordenex_459`, sobre `599e3bcb`. Log: `progress/gate_459_backend.log`
+(sin `tail`, `INIT_EXIT` dentro).
+
+- Primera corrida (sobre `117016b8`): `INIT_EXIT=1`, 13 archivos / 21 tests rojos, TODOS propios de esta rama:
+  censos historicos de enum y de carpetas de migracion que no declaraban los valores de la 459 (historial x6,
+  `caja-tesoreria-migration`, `liquidacion-migration`, `orden-incidente`, `orden-traspaso`, `premio-ranking`,
+  `wallet-tienda-cobro`) y `wallet-egreso` (usaba `ingreso_flete` como entrada: desde R1 es un cargo). Arreglados
+  en `599e3bcb` restando/declarando los posteriores (los `.sql` viejos no se tocan); ningun literal de contrato
+  cambiado.
+- `pnpm run typecheck`: `✓ typecheck paso`
+- `pnpm run lint`: `✖ 217 problems (0 errors, 217 warnings)` (preexistentes)
+- `pnpm test`: `Test Files  2195 passed (2195)` · `Tests  31011 passed | 26 skipped (31037)`
+- `✓ DATABASE_URL resuelta: los 276 archivos de tests contra Postgres SI se ejecutan`; los 26 skipped son
+  `AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (9), preexistentes: **0 skipped en `tests/integration/db`**.
+- `== init OK ==` · `INIT_EXIT=0`
+
+**Veredicto:** backend de A, B y C hecho y verde (gate completo), con sus mutaciones muertas salvo un equivalente explicado; lo que queda es UI (A.7–A.9, B.6 `ORIGEN_TIENDA_LABEL`, B.15–B.17, C.6 acciones) y lo del leader.
