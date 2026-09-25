@@ -144,7 +144,7 @@ export type NotificacionEvento =
   // `bodega_central`, que es lo que ven en `/cierres-admin`); `adminSatelite` ACOTADO a su zona.
   //
   // ⚠️ EL NUMERO NO SE PERSISTE (409/R57): el titulo lo compone el catalogo con la CIFRA VIVA en
-  // cada lectura («Reprogramado para hoy: N ordenes esperan la aprobacion de su cierre»), y con 0 el
+  // cada lectura («Reprogramado para hoy: N paquetes esperan la aprobacion de su cierre»), y con 0 el
   // aviso se apaga solo (R15) — al aprobar el cierre, la Forma A deja de cumplir «cierre no aprobado»
   // aunque el timbre 315 falle, y la Forma B deja de existir porque la aprobacion aplica la gestion.
   // El texto persistido (`descripcion`) es llano y SIN PII: ni guia, ni mensajero, ni monto (R17).
