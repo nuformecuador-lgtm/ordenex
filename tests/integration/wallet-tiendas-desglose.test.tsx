@@ -461,8 +461,8 @@ describe("R15/R16/R20/R21 — la lista de movimientos", () => {
     });
     await within(tabla).findByText("2026-07-12");
 
-    expect(within(tabla).getByText("COD recaudado")).toBeInTheDocument();
-    expect(within(tabla).getByText("IVA de la comisión")).toBeInTheDocument();
+    expect(within(tabla).getByText("Contra-entrega cobrado a los clientes de la tienda")).toBeInTheDocument();
+    expect(within(tabla).getByText("IVA de la comisión cobrado a la tienda")).toBeInTheDocument();
     // Nunca el valor interno del enum.
     expect(within(tabla).queryByText("iva_comision_cod")).not.toBeInTheDocument();
     // Origen compuesto: etiqueta · descripción, igual que en el archivo.
@@ -714,10 +714,10 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     const listbox = await screen.findByRole("listbox");
     // Está hoy, sin que nadie la haya escrito a mano: la lista se puebla del catálogo.
     expect(
-      within(listbox).getByRole("option", { name: "Pago a la tienda" }),
+      within(listbox).getByRole("option", { name: "Ordenex le paga a la tienda" }),
     ).toBeInTheDocument();
     expect(
-      within(listbox).getByRole("option", { name: "IVA de la comisión" }),
+      within(listbox).getByRole("option", { name: "IVA de la comisión cobrado a la tienda" }),
     ).toBeInTheDocument();
   });
 });

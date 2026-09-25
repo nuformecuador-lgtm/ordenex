@@ -143,7 +143,7 @@ describe("SaldoTiendaCard — la aclaración de cargos nombra los cobros (381/R3
 
     expect(screen.getByText(DESGLOSE_MI_WALLET_LABEL.cargos)).toBeInTheDocument();
     // El literal, no la constante: lo que se mide es lo que la tienda LEE.
-    expect(screen.getByText("Fletes, comisión, IVA y cobros de Ordenex")).toBeInTheDocument();
+    expect(screen.getByText("Fletes, comisión, IVA y lo que Ordenex te cobró")).toBeInTheDocument();
   });
 });
 

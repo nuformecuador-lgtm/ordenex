@@ -7,10 +7,9 @@ import type { CierreTiendaOpcionDTO } from "@/lib/types/wallet-tienda";
  * FICHA 335 (design §4.3) — el catalogo de cierres del libro de ESTA tienda, tal como lo
  * necesita el selector del filtro. Modulo PURO: sin React, sin dinero, sin estado.
  *
- * ⛔ POR QUE NO VIVE EN `mi-wallet-labels.ts`: ese modulo lo REEXPORTA ENTERO
- * `app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts`. Meter aqui las opciones del
- * selector se las regalaria a una pantalla que no las usa, y ampliaria un precedente
- * (`CATEGORIA_TIENDA_OPTIONS` ya viaja en esa lista) que conviene no ampliar.
+ * ⛔ POR QUE NO VIVE EN `mi-wallet-labels.ts`: de ese modulo REEXPORTA varias piezas
+ * `app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts` (tipo, origen, `money`). Meter
+ * aqui las opciones del selector se las regalaria a una pantalla que no las usa.
  */
 
 /**
@@ -32,7 +31,7 @@ export interface CierresDeLaTienda {
 /**
  * La opcion de partida: no filtrar por cierre (R25). Su `value` es la cadena vacia, que es lo
  * que `buildInput` omite del input de la action — el mismo criterio que las otras tres claves
- * del filtro. Precedente en esta misma pantalla: `CATEGORIA_TIENDA_OPTIONS[0]`.
+ * del filtro. Precedente en esta misma pantalla: `CATEGORIA_MI_WALLET_OPTIONS[0]`.
  */
 export const CIERRE_TODOS_OPTION: SelectOption = { value: "", label: "Todos los cierres" };
 

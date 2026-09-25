@@ -6,7 +6,9 @@ import type {
 import { TIPO_EGRESO_MANUAL_A_CATEGORIA } from "@/lib/types/wallet";
 import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
 
-import { CATEGORIA_TIENDA_LABEL } from "../../mi-wallet/_components/mi-wallet-labels";
+// Ficha 461 (R46, P4): el diálogo promete el nombre DESDE ORDENEX del libro de la tienda, que es el
+// que la oficina lee en `/wallet/tiendas`; la tienda lo lee desde su lado en `/mi-wallet`.
+import { CATEGORIA_TIENDA_LABEL } from "../tiendas/_components/desglose-tienda-labels";
 import {
   CATEGORIA_LABEL,
   DESCRIPCION_EGRESO_LABEL,

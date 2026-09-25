@@ -527,12 +527,12 @@ describe("R51/R53 — lo que se ve en el desglose después de pagar", () => {
     const tablaMovs = await screen.findByRole("table", {
       name: "Movimientos del desglose de Tienda Norte",
     });
-    await within(tablaMovs).findByText("Pago a la tienda");
-    const fila = within(tablaMovs).getAllByText("Pago a la tienda")[0].closest("tr")!;
+    await within(tablaMovs).findByText("Ordenex le paga a la tienda");
+    const fila = within(tablaMovs).getAllByText("Ordenex le paga a la tienda")[0].closest("tr")!;
     expect(within(fila).getByText("Débito")).toBeInTheDocument();
     expect(within(fila).getByText("₡4.000")).toBeInTheDocument();
     // No se confunde con un cargo de Ordenex: son conceptos distintos del mismo libro.
-    expect(within(fila).queryByText("COD recaudado")).not.toBeInTheDocument();
+    expect(within(fila).queryByText("Contra-entrega cobrado a los clientes de la tienda")).not.toBeInTheDocument();
   });
 
   it("el diálogo propone el saldo a favor de ESA tienda como monto (R30)", async () => {

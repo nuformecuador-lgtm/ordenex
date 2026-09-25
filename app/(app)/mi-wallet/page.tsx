@@ -73,7 +73,7 @@ export default async function MiWalletPage() {
   return (
     <AppPage
       title="Mi wallet"
-      description="Tu saldo a favor: COD recaudado menos los descuentos de Ordenex, con el desglose por cierre y concepto"
+      description="Tu saldo a favor: lo cobrado a tus clientes en contra-entrega menos los descuentos de Ordenex, con el desglose por cierre y concepto"
     >
       <MiWalletModule
         movimientos={movimientosResult.data.movimientos}

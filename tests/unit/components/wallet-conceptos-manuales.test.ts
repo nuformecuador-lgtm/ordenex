@@ -14,7 +14,7 @@ import {
   type ConceptoManual,
 } from "@/app/(app)/wallet/_components/wallet-conceptos-manuales";
 import { CATEGORIA_LABEL } from "@/app/(app)/wallet/_components/wallet-labels";
-import { CATEGORIA_TIENDA_LABEL } from "@/app/(app)/mi-wallet/_components/mi-wallet-labels";
+import { CATEGORIA_TIENDA_LABEL } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-labels";
 import {
   WALLET_MOVIMIENTO_CATEGORIA_SEED,
   type WalletMovimientoCategoria,

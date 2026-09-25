@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 
-import { CATEGORIA_TIENDA_OPTIONS } from "./mi-wallet-labels";
+// Ficha 461 (R44): las opciones del filtro llevan la lectura DESDE LA TIENDA, la misma de la tabla.
+import { CATEGORIA_MI_WALLET_OPTIONS } from "./mi-wallet-labels";
 import { opcionesDeCierre, type CierresDeLaTienda } from "./mi-wallet-cierres";
 
 // Feature 43 (T15, R22) — filtros del desglose: cierre, concepto (poblado desde el SEED) y
@@ -133,7 +134,7 @@ export function MiWalletFiltros({
         aria-label="Filtrar por concepto"
         value={draft.categoria}
         onValueChange={(v) => set("categoria", v)}
-        options={CATEGORIA_TIENDA_OPTIONS}
+        options={CATEGORIA_MI_WALLET_OPTIONS}
         placeholder="Todos los conceptos"
         disabled={disabled}
         className="h-9 w-full sm:w-56"

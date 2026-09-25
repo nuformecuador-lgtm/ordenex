@@ -38,22 +38,23 @@ export { money } from "@/lib/config/moneda";
  * pero uno es lo que te cobraron y el otro lo que ya te entregaron. Plegados en un solo
  * importe, la tienda veria el dinero que recibio contado como un cargo mas.
  */
+//
+// Ficha 461 (HD3, design §7.5, R45) — las tres pistas se leen DESDE LA TIENDA («lo que Ordenex te
+// cobró», «lo que Ordenex te devolvió al anular») y nombran el cobro y su anulación con la MISMA
+// palabra con la que se rotula su fila en esta pantalla (`CATEGORIA_MI_WALLET_LABEL`): «Ordenex te
+// cobró» / «Ordenex anuló un cobro y te lo devolvió». Sin la sigla «COD» (P9).
 export const DESGLOSE_MI_WALLET_LABEL = {
   aFavor: "A tu favor",
-  // Ficha 459 (T B.17, design §5): nombra tambien el pago por cuenta ANULADO, que vuelve a tu
-  // favor (cubeta `aFavor`).
-  aFavorHint: "COD recaudado, ajustes y pagos por cuenta anulados",
+  aFavorHint: "Lo cobrado a tus clientes, las correcciones a tu favor y lo que Ordenex te devolvió al anular",
   cargos: "Cargos de Ordenex",
-  // FICHA 381 (R37) — la enumeración deja de ser solo de conceptos AUTOMÁTICOS. Desde esta
-  // ficha, dentro de este importe puede haber un cobro decidido por una persona, y la tienda
-  // tiene que poder relacionarlo con la fila que va a leer en su libro: allí ese concepto se
-  // rotula «Cobro de Ordenex», y por eso aquí se nombra con esa misma palabra en plural. Sin
-  // esto, la aclaración diría que el importe son fletes, comisión e IVA cuando ya no lo es.
-  cargosHint: "Fletes, comisión, IVA y cobros de Ordenex",
+  // FICHA 381 (R37) — la enumeración no es solo de conceptos AUTOMÁTICOS: dentro de este importe
+  // puede haber un cobro decidido por una persona, y la tienda tiene que poder relacionarlo con la
+  // fila que va a leer en su libro («Ordenex te cobró»).
+  cargosHint: "Fletes, comisión, IVA y lo que Ordenex te cobró",
   pagado: "Ya pagado",
-  // Ficha 459 (T B.17, design §5): el pago por cuenta cae en `pagado` (dinero entregado a la
-  // tienda a traves de un tercero, decision de la 458 §2.6), y la pista lo nombra.
-  pagadoHint: "Lo que Ordenex ya te entregó o pagó por tu cuenta",
+  // Ficha 459 (T B.17, design §5): el pago de un gasto de la tienda cae en `pagado` (dinero
+  // entregado a la tienda a traves de un tercero, decision de la 458 §2.6), y la pista lo nombra.
+  pagadoHint: "Lo que Ordenex te pagó o pagó por ti",
   saldo: "Saldo a favor",
 } as const;
 
@@ -81,29 +82,39 @@ export const TIPO_TIENDA_LABEL: Record<WalletTiendaMovimientoTipo, string> = {
   debito: "Débito",
 };
 
-/** Etiqueta legible de cada categoria (concepto) del ledger por tienda. */
-export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, string> = {
-  cod_recaudado: "COD recaudado",
-  flete: "Flete",
-  flete_devolucion: "Flete por rechazo",
-  comision_cod: "Comisión COD",
-  iva_flete: "IVA del flete",
-  iva_flete_devolucion: "IVA del flete por rechazo",
-  iva_comision_cod: "IVA de la comisión",
-  pago_tienda: "Pago a la tienda",
-  ajuste_credito: "Ajuste (crédito)",
-  ajuste_debito: "Ajuste (débito)",
-  // FICHA 381 (R33/R34) — el cobro manual, con un nombre que DICE que es un cobro y que es
-  // DISTINTO del de `ajuste_debito`. Lo lee la tienda en `/mi-wallet` y el administrador en
-  // `/wallet/tiendas` (que reexporta este mismo diccionario), y las dos descargas salen de aqui:
-  // un solo texto para las cuatro superficies.
-  cobro_manual: "Cobro de Ordenex",
-  // Ficha 459 (design §5): textos exactos del spec.
-  pago_por_cuenta: "Pago por cuenta de la tienda",
-  pago_por_cuenta_anulado: "Pago por cuenta anulado",
-  // Ficha 461 (design §7.5): la lectura DESDE LA TIENDA, texto exacto del spec. La entrada la exige
-  // el compilador (`Record` total); el bloque C (frontend) parte este diccionario en dos (P4).
+/**
+ * Ficha 461 (HD3, design §7.5, R44; P4) — LA LECTURA DESDE LA TIENDA de cada concepto de su libro.
+ *
+ * Es el MISMO libro que ve la oficina en `/wallet/tiendas`, pero leido desde el otro lado: la
+ * tienda lee «Ordenex te cobró» donde la oficina lee «Ordenex le cobra a la tienda». Por eso son
+ * DOS diccionarios y no uno (design §9, alternativa A8 descartada): un solo texto neutro no puede
+ * decir las dos cosas a la vez. Los dos son `Record` totales sobre el mismo enum, y un test exige
+ * que difieran en todo concepto en el que una de las dos partes actua sobre la otra (R44).
+ *
+ * El de la oficina vive en `app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts`
+ * (`CATEGORIA_TIENDA_LABEL`) y es el que el dialogo «Registrar movimiento» promete (R46).
+ *
+ * Segunda persona, sin siglas («contra-entrega», no «COD»; P9) y sin jerga («corrección», no
+ * «ajuste»). Lo lee la tienda en la tabla, en el filtro por concepto y en su descarga (R44): las
+ * tres superficies salen de aqui.
+ */
+export const CATEGORIA_MI_WALLET_LABEL: Record<WalletTiendaMovimientoCategoria, string> = {
+  cod_recaudado: "Cobrado a tus clientes en contra-entrega",
+  flete: "Ordenex te cobró el flete",
+  flete_devolucion: "Ordenex te cobró el flete por rechazo",
+  comision_cod: "Ordenex te cobró la comisión de contra-entrega",
+  iva_flete: "Ordenex te cobró el IVA del flete",
+  iva_flete_devolucion: "Ordenex te cobró el IVA del flete por rechazo",
+  iva_comision_cod: "Ordenex te cobró el IVA de la comisión",
+  // FICHA 381 (R33/R34): el cobro decidido por una persona, DISTINTO de una correccion.
+  cobro_manual: "Ordenex te cobró",
   cobro_tienda_anulado: "Ordenex anuló un cobro y te lo devolvió",
+  pago_tienda: "Ordenex te pagó",
+  // P5: el beneficiario («A Facebook…») vive en la descripcion, que la columna de origen añade.
+  pago_por_cuenta: "Ordenex pagó un gasto por ti",
+  pago_por_cuenta_anulado: "Ordenex anuló un pago hecho por ti",
+  ajuste_credito: "Corrección a tu favor",
+  ajuste_debito: "Corrección en tu contra",
 };
 
 /**
@@ -113,18 +124,17 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
  * Por eso un test recorre `WALLET_ORIGEN_TIPO_SEED` y exige rotulo aqui para cada origen que
  * escribe en el libro de la tienda (`tests/unit/components/mi-wallet-labels.test.ts`).
  *
- * Ficha 459 (T B.6/T B.17, design §5): + `pago_por_cuenta_tienda`, con el texto del diseño; y
- * `gestion_orden`, que ya escribia en este libro (el cobro por rechazo de la 337) y se leia
- * crudo. Se rotula con el MISMO texto que el libro de la caja (`ORIGEN_LABEL.gestion_orden`).
+ * Ficha 461 (design §7.3): los MISMOS textos que `ORIGEN_LABEL` en el libro de la caja para los
+ * origenes que comparten («Registrado a mano», «Pago de Ordenex a una tienda», «Pago de un gasto de
+ * una tienda»); y + `cobro_tienda`, el credito de la anulacion de un cobro. Los lee tambien la
+ * oficina en `/wallet/tiendas` (que reexporta este objeto).
  */
 export const ORIGEN_TIENDA_LABEL: Record<string, string> = {
   cierre_dia: "Cierre del día",
-  pago_tienda: "Pago a la tienda",
-  manual: "Manual",
+  pago_tienda: "Pago de Ordenex a una tienda",
+  manual: "Registrado a mano",
   gestion_orden: "Gestión de orden",
-  pago_por_cuenta_tienda: "Pago por cuenta de tienda",
-  // Ficha 461 (design §7.3): el credito de la anulacion de un cobro escribe en la tienda con este
-  // origen. Texto exacto del spec; lo exige `mi-wallet-labels.test.ts` (el compilador no).
+  pago_por_cuenta_tienda: "Pago de un gasto de una tienda",
   cobro_tienda: "Cobro de Ordenex a una tienda",
 };
 
@@ -133,11 +143,14 @@ export function origenLabel(origenTipo: string): string {
   return ORIGEN_TIENDA_LABEL[origenTipo] ?? origenTipo;
 }
 
-/** Opciones del `Select` de concepto, pobladas desde el SEED (con opcion "todos"). */
-export const CATEGORIA_TIENDA_OPTIONS = [
+/**
+ * Opciones del `Select` de concepto de `/mi-wallet`, pobladas desde el SEED (con opcion "todos") y
+ * rotuladas con la lectura desde la tienda (R44).
+ */
+export const CATEGORIA_MI_WALLET_OPTIONS = [
   { value: "", label: "Todos los conceptos" },
   ...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({
     value: categoria,
-    label: CATEGORIA_TIENDA_LABEL[categoria],
+    label: CATEGORIA_MI_WALLET_LABEL[categoria],
   })),
 ];

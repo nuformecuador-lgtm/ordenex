@@ -195,7 +195,7 @@ describe("459/F1 — /wallet/tiendas: el desglose de una tienda y su descarga", 
     listarDesgloseMock.mockResolvedValue({ status: "ok", data: respuesta });
     envolver(<DesgloseMovimientosTienda resumen={resumen} id="desglose-tania" />);
 
-    const celda = await screen.findByText("Manual · Cobro de la noche");
+    const celda = await screen.findByText("Registrado a mano · Cobro de la noche");
     const fila = celda.closest("tr");
     expect(fila).not.toBeNull();
     expect(within(fila!).getByText(DIA_CR)).toBeInTheDocument();
@@ -208,7 +208,7 @@ describe("459/F1 — /wallet/tiendas: el desglose de una tienda y su descarga", 
 describe("459/F1 — /mi-wallet: el libro de la tienda y su descarga", () => {
   it("la tabla y la descarga dicen el 24", () => {
     envolver(<DesgloseTiendaLedger movimientos={[CARGO_TIENDA]} />);
-    const fila = screen.getByText("Manual · Cobro de la noche").closest("tr");
+    const fila = screen.getByText("Registrado a mano · Cobro de la noche").closest("tr");
     expect(fila).not.toBeNull();
     expect(within(fila!).getByText(DIA_CR)).toBeInTheDocument();
     expect(document.body.textContent ?? "").not.toContain(DIA_UTC);
