@@ -201,3 +201,44 @@ escenario que lo distinga. Se sustituye por la variante **M11b** (quitar `origen
 mismo `WHERE`), que SI muere: la caja pasa a sumar el contra-entrega de TODOS los cierres.
 
 `git diff --stat` al terminar las 15: vacio (el arnes imprime `git diff --stat final: «»`).
+
+## Anexo T Z.1 — la fase 0 repetida con el ÁRBOL FINAL (2026-09-24, `feature/459-fix` @ `c6e6fa3d`)
+
+Árbol final = backend + frontend + revisión + recorrido + las correcciones de la revisión (B1, F1, F2,
+m1, m3). Base: el clon `ordenex_459` (`prisma migrate status`: `localhost:5432`, 216 migraciones, al
+día). Mismo arnés (texto único, `git diff --numstat` no vacío, `numTotalTests > 0`, `git checkout` y
+`git diff --stat` vacío tras cada una; arranca con el árbol limpio), las MISMAS 15 mutaciones y el
+mismo comando (solo `tests/integration/db/caja-caracterizacion-459.test.ts`). Un solo cambio en el
+arnés: el texto de M11b ahora incluye la línea siguiente (`origenId: cierreId,` + `categoria:
+"cod_recaudado",`), porque desde el bloque B `origenId: cierreId,` aparece dos veces en
+`CajaCodFeedService.ts` (el `WHERE` y la fila que se escribe) y el arnés abortaba por ambigüedad. Se
+muta la MISMA línea del `WHERE` que en la fase 0.
+
+**Fotografía sin mutar: verde** — `caja-caracterizacion-459` + `caja-invariante-tiendas`: `Tests 20
+passed (20)`, 0 skipped. Sus literales no se tocaron (el único bloque cambiado sigue siendo el de T A.3).
+
+| # | Tests ejecutados | Rojos | Veredicto | Igual que en la fase 0 |
+| --- | --- | --- | --- | --- |
+| M01 | 14 | 1 | ROJO | sí (1) |
+| M02 | 14 | 2 | ROJO | sí (2) |
+| M03 | 14 | 3 | ROJO | sí (3) |
+| M04 | 14 | 3 | ROJO | sí (3) |
+| M05 | 14 | 14 | ROJO | sí (14) |
+| M06 | 14 | 4 | ROJO | sí (4) |
+| M07 | 14 | 14 | ROJO | sí (14) |
+| M08 | 14 | 14 | ROJO | sí (14) |
+| M09 | 14 | 2 | ROJO | sí (2) |
+| M10 | 14 | 5 | ROJO | sí (5) |
+| M11 | 14 | 0 | VERDE — equivalente | sí (misma explicación: el CHECK solo admite `cod_recaudado` con `credito`) |
+| M11b | 14 | 3 | ROJO | sí (3) |
+| M12 | 14 | 14 | ROJO | sí (14) |
+| M13 | 14 | 1 | ROJO | sí (1) |
+| M14 | 14 | 1 | ROJO | sí (1) |
+
+Los casos rojos son los mismos que en la tabla de arriba, con UN nombre que cambió por T A.3: el caso
+«Entro», «Dinero en caja» y «De terceros» de hoy» se llama ahora «Entro», la cifra principal, «De las
+tiendas», capital y «De Ordenex»» (es el bloque «a propósito»). Causas idénticas (M05 «repartoMensajero
+respondio sin_saldo», M07 el CHECK de `wallet_tienda_movimiento`, M08 «no se pudo releer tras
+aprobar», M12 «pagoTiendaA respondio sin_saldo», y las `AssertionError` de los literales).
+
+`git diff --stat` al terminar: vacío (el arnés imprime `git diff --stat final: «»`).

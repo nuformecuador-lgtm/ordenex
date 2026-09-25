@@ -171,3 +171,76 @@ Gate COMPLETO `./init.sh` contra `ordenex_459`, sobre `599e3bcb`. Log: `progress
 - Conclusión: compatible. El down de la 459 lee `pg_enum` (P12), así que no depende de si SF-001 salió antes o después.
   Si la 459 sale SOLA por la vía de ramificar de prod, sus migraciones de historial deben aplicarse sobre un catálogo
   sin los valores de SF-001: los `ADD VALUE` son aditivos y no dependen de posición, así que también vale.
+
+## Correcciones tras la revisión RECHAZADA y el recorrido (`feature/459-fix`, 2026-09-24)
+
+Rama desde `66549de6` + `origin/review/459` + `origin/feature/459-recorrido`. `pnpm install` propio,
+`prisma generate`, base `ordenex_459` (`migrate status`: 216, al día). MCP `codebase-memory` primero
+(el índice no ve esta rama: todo confirmado en el archivo real).
+
+| Hallazgo | Arreglo | Test |
+| --- | --- | --- |
+| B1 (R45/R77) | asserts LITERALES de concepto, origen y dueño de saldo inicial, su anulación, pago por cuenta y su anulación, en tabla y descarga; el filtro ofrece los 4 conceptos con su nombre | `tests/components/WalletLedgerAcciones459.test.tsx` |
+| B2 | `tasks.md` marcado, con dueño y evidencia de lo que falta; anexo T Z.1 en `impl_459_fase0.md`; tabla R → test abajo | — |
+| F1 (fecha UTC) | `fechaDiaMovimientoCR` en `lib/utils/fecha-dia-iso.ts` (delega en `fechaCalendarioCR`; la medianoche UTC exacta de la liquidación conserva su día; la sonda de descargas pasa tal cual). Aplicado a TODO `/wallet/**` y `/mi-wallet/**`: libro de caja, «Anular…» y su diálogo, detalle de composición, desgloses de tienda y mensajero, detalle de cierre, reparto, satélites, selector de cierres de `/mi-wallet` (día y hora CR) y las descargas | `tests/components/WalletFechaCostaRica459.test.tsx` (22:00 CR → su día en tres tablas, nombre accesible y cuatro descargas; 00:00Z conserva el día), guardia `tests/unit/guards/wallet-fecha-cr-459.guardia.test.ts` (prohíbe `.slice(0, 10)` y `fechaDiaISO(<fecha>)` en `/wallet` y `/mi-wallet`, con contraprueba), `tests/unit/components/mi-wallet-cierres-opciones.test.ts` |
+| F2 (R71) | «…posterior al 11 de agosto de 2026, el primer día con movimientos en la caja.» (`fechaLegible` + año, como la tarjeta) | literal en `tests/unit/services/aporte-capital-service.test.ts`; forma con el día real en `tests/integration/db/aporte-capital.test.ts` |
+| m3 (/analitica) | `cargar.ts` nombra el panel de `dinero_en_caja` con `rotuloCifraPrincipal` y el estado de `verResumenCajaAction({})`; sin estado conocido, «Flujo de dinero registrado» | `tests/unit/analytics/tablero-financiero-cargar.test.ts` |
+| m1 (invariante) | la reclasificación del paso 6 ejecuta el `migration.sql` REAL (lista y control sustituidos por el cobro sembrado; fixture compartida `tests/integration/db/_fixtures/reclasificacion-459-sql.ts`) | `tests/integration/db/caja-invariante-tiendas.test.ts` |
+
+Por qué `fechaDiaMovimientoCR` y no `fechaCalendarioCR` a secas: el libro mezcla dos convenciones.
+Los movimientos registrados llevan su instante real, pero los pagos y anulaciones de la liquidación (y
+su backfill) guardan `medianocheUtcDelDia(fecha)` = el día CR a 00:00Z; pasarlos por −6 h los pintaría
+el día ANTERIOR. La función no reimplementa el desfase: solo decide qué valor pasarle a `fechaCalendarioCR`.
+
+Mutaciones (mismo arnés; cada una en su archivo, revertida, árbol limpio al final):
+
+| # | Mutación | Tests | Resultado |
+| --- | --- | --- | --- |
+| M-R5a | dueño capital «Ordenex (capital)» → «Ordenex» | `WalletLedgerAcciones459` | ROJO 4/22 |
+| M-R5b | origen «Saldo inicial o aporte» → «Aporte» | ídem | ROJO 4/22 |
+| M-R6 | origen «Pago por cuenta de tienda» → `pago_por_cuenta_tienda` | ídem | ROJO 4/22 |
+| B1-c/d/e | concepto del saldo inicial / del pago por cuenta; dueño «Tienda» → «Tiendas» | ídem | ROJO 4, 6, 6 |
+| F1-a…h | `.slice(0, 10)` de vuelta en: libro, descarga del libro, «Anular…», desglose de tienda y su descarga, `/mi-wallet` y su descarga, descarga del mensajero | `WalletFechaCostaRica459` | ROJO (8/8 mutaciones) |
+| F1-i | sin la regla de la medianoche UTC | ídem | ROJO 3/8 |
+| F1-j | `fechaDiaISO` en vez de `fechaCalendarioCR` | ídem | ROJO 6/8 |
+| F1-guardia | un `.slice(0, 10)` en satélites | guardia `wallet-fecha-cr-459` | ROJO 1/2 |
+| F2-a / F2-b | «dia» sin tilde / la fecha en ISO | `aporte-capital-service` | ROJO / ROJO |
+| m3-a/b/c | sin rótulo / siempre «Dinero en caja» / «Dinero en caja» si el estado no se conoce | `tablero-financiero-cargar` | ROJO 3, 1, 1 |
+| M-R4 | la migración no escribe (`JOIN … AND false`) | `caja-invariante-tiendas` | ROJO 6/6 (antes quedaba VERDE) |
+
+## T Z.2 — R → test (rutas reales, árbol final)
+
+| R | Test |
+| --- | --- |
+| R1, R9, R90 | `tests/unit/guards/caja-clasificacion-459.guardia.test.ts`, `tests/integration/db/caja-clasificacion-459.test.ts` |
+| R2–R6, R10, R11 | `tests/unit/utils/caja-derivacion-459.test.ts`, `tests/unit/utils/caja-tesoreria.test.ts`, `tests/unit/guards/caja-derivaciones.guardia.test.ts` |
+| R7 | `tests/unit/utils/caja-derivacion-459.test.ts` (500 conjuntos), `tests/integration/db/caja-invariante-tiendas.test.ts`; en pantalla `tests/components/DineroIdentidadesEnPantalla.test.tsx` |
+| R8, R89 | `tests/integration/db/caja-invariante-tiendas.test.ts` (con el SQL real de la reclasificación) |
+| R12 | `tests/unit/services/analitica-financiera-service.test.ts`, `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts`; su nombre en `/analitica`: `tests/unit/analytics/tablero-financiero-cargar.test.ts` |
+| R13 | `tests/unit/analytics/finanzas-diario.test.ts` |
+| R14, R21 | `tests/unit/services/wallet-service.test.ts`, `tests/integration/db/caja-estado-459.test.ts`, `tests/integration/db/aporte-capital.test.ts`, `tests/integration/db/caja-invariante-tiendas.test.ts` |
+| R15, R17–R20, R22, R23, R25, R26 | `tests/components/CajaResumenCard.test.tsx`, `tests/components/CajaComposicionBarra.test.tsx`; KPIs `tests/unit/analytics/kpis-financieros.test.ts` |
+| R16, R24 | `tests/unit/guards/caja-textos-459.guardia.test.ts`, `tests/components/CajaResumenCard.test.tsx` |
+| R27 | `tests/unit/guards/caja-textos-459.guardia.test.ts`, `tests/unit/services/aporte-capital-service.test.ts`, `tests/unit/actions/pago-por-cuenta-y-capital-actions.test.ts`, `tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx` |
+| R28 | `tests/integration/wallet-page.test.tsx` |
+| R29, R39, R40, R46–R48, R97 | `tests/integration/db/pago-por-cuenta-tienda.test.ts` |
+| R30–R38, R41, R49, R51 | `tests/unit/services/pago-por-cuenta-tienda-service.test.ts`, `tests/unit/types/pago-por-cuenta-tienda-schema.test.ts` |
+| R42, R50, R70 | `tests/integration/db/pago-por-cuenta-tienda-concurrencia.test.ts` |
+| R43 | `tests/unit/utils/descripcion-pago-por-cuenta.test.ts` |
+| R44 | `tests/integration/mi-wallet-page.test.tsx`, `tests/unit/components/mi-wallet-labels.test.ts` |
+| R45, R77 | `tests/components/WalletLedgerAcciones459.test.tsx` (literales en tabla y descarga; M-R5/M-R6 rojas) |
+| R52 | `tests/unit/actions/pago-por-cuenta-y-capital-actions.test.ts` (lista exacta de exportaciones) |
+| R53, R78 | `tests/unit/historial-accion/catalogo-y-choke-point.test.ts`, `tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts`, `tests/integration/db/aporte-capital.test.ts` |
+| R54–R58 | `tests/unit/services/wallet-comprobante.test.ts`, `tests/unit/services/pago-por-cuenta-tienda-service.test.ts`, `tests/unit/types/pago-por-cuenta-tienda-schema.test.ts` |
+| R59–R64 | `tests/unit/components/wallet-conceptos-manuales.test.ts`, `tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx` |
+| R65–R67 | `tests/components/WalletLedgerAcciones459.test.tsx`, `tests/unit/services/wallet-service.test.ts`, `tests/integration/db/libro-caja-documentos-459.test.ts` |
+| R68, R69, R71–R76 | `tests/unit/services/aporte-capital-service.test.ts`, `tests/integration/db/aporte-capital.test.ts` |
+| R79 | LEADER: `progress/reclasificacion_459/` — FALTA `candidatos.csv` (T C.1) |
+| R80, R88 | `tests/unit/guards/reclasificacion-459-lista.guardia.test.ts` |
+| R81–R86 | `tests/integration/db/reclasificacion-459-migration.test.ts` |
+| R87 | `tests/components/WalletLedgerAcciones459.test.tsx` (libro y descarga), `tests/integration/db/reclasificacion-459-migration.test.ts` (libro de la tienda intacto) |
+| R91 | LEADER: FALTA `progress/contraste_459.md` (T0.4/T Z.3) |
+| R92–R96 | `tests/integration/db/caja-caracterizacion-459.test.ts` + `progress/impl_459_fase0.md` (con su anexo T Z.1) |
+| R98, R99 | `tests/integration/db/caja-459-migration.test.ts` |
+| R100 | `tests/components/WalletLedgerAcciones459.test.tsx`, `tests/integration/mi-wallet-page.test.tsx`, `tests/unit/services/pago-por-cuenta-tienda-service.test.ts`, `tests/unit/utils/descripcion-pago-por-cuenta.test.ts` |
+| Recorrido F1 / F2 | `tests/components/WalletFechaCostaRica459.test.tsx`, `tests/unit/guards/wallet-fecha-cr-459.guardia.test.ts` / `tests/unit/services/aporte-capital-service.test.ts` |

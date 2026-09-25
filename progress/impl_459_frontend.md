@@ -212,3 +212,7 @@ Gate COMPLETO `./init.sh` contra `ordenex_459`, sobre `7a42d69e` (sin `tail`, `I
 
 **Veredicto:** frontend de A.7–A.9, B.6 (`ORIGEN_TIENDA_LABEL`), B.15–B.17 y C.6 hecho, con 11 mutaciones
 rojas y el gate completo en verde; pendiente del leader: recorrido por rol (design §16) y release.
+
+## Revisión B1 (R45/R77) — corregido en `feature/459-fix`
+
+`tests/components/WalletLedgerAcciones459.test.tsx` afirma ahora LITERALES (concepto, origen legible y dueño «Ordenex (capital)» / «Tienda») de saldo inicial, su anulación, pago por cuenta y su anulación, en la tabla y en `filaDescargaMovimientoCaja`, y los 4 conceptos del filtro. M-R5a, M-R5b y M-R6 del revisor: ROJO 4/22 cada una (detalle y resto de mutaciones en `progress/impl_459.md`, sección «Correcciones tras la revisión»).
