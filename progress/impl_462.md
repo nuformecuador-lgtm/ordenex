@@ -267,3 +267,16 @@ conserva sus bocetos de código con el literal viejo; el desvío ya está anotad
 
 T0.1–T0.3, T1.1–T1.7, T2.1–T2.11, T3.1–T3.6 y T4.1–T4.4 marcadas `[x]` con la evidencia (bitácora y sección); T4.3
 cerrada con este H2. T5.x quedan abiertas (release).
+
+### Gate completo (`./init.sh`, contra `ordenex_462`, sin `tail`, `INIT_EXIT` dentro del log)
+
+`progress/gate_462_final.log` (no se commitea, como los demás gates): **`INIT_EXIT=0`** — `== init OK ==`.
+`✓ typecheck paso`, `✓ lint paso`, `Test Files 2215 passed (2215)`, `Tests 31302 passed | 26 skipped (31328)` (los
+26, `AnaliticaPage`/`AnaliticaShell`, previos), `✓ tests: sin rojos nuevos`, **0 `skipped` en `tests/integration/db`**;
+los 3 archivos de `db/462` (25 + 13 + 3) y los 2 unitarios tocados (17 + 13) ✓. Duración 857 s. Árbol de la ficha en
+`5bc0c7c0` (+ este commit de bitácora).
+
+### Veredicto del cierre
+
+H2 aplicado y medido (10 → 7 por sondeo, cifras idénticas, dos mutaciones en rojo), H4 documentado y medido, H3 y H1
+en el spec; gate completo en verde. H5 y H6 quedan para el leader y la release.
