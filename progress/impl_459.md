@@ -159,3 +159,15 @@ Gate COMPLETO `./init.sh` contra `ordenex_459`, sobre `599e3bcb`. Log: `progress
 - `== init OK ==` · `INIT_EXIT=0`
 
 **Veredicto:** backend de A, B y C hecho y verde (gate completo), con sus mutaciones muertas salvo un equivalente explicado; lo que queda es UI (A.7–A.9, B.6 `ORIGEN_TIENDA_LABEL`, B.15–B.17, C.6 acciones) y lo del leader.
+
+## T B.1 (LEADER, 2026-09-24) — catálogos de producción y migraciones pendientes
+- C6 en producción = M3/M4 de `progress/medicion_457.md` (sin cambios desde entonces): `wallet_movimiento_categoria`
+  17 valores, `wallet_tienda_movimiento_categoria` 11, `wallet_origen_tipo` 8, `historial_accion_tipo` 52,
+  `historial_accion_entidad` 21; los dos CHECK tipo↔categoría tal como se citan ahí; bucket `wallet-comprobantes`
+  NO existe (se crea antes de desplegar B).
+- Migraciones de `dev` que faltan en `prod` y tocan esos catálogos, además de las propias de la 459:
+  `20260918120000_historial_accion_zona_sinpe` y `20260919120000_historial_accion_conciliacion_bodega` (SF-001,
+  añaden valores a `historial_accion_tipo`/`_entidad`). Ninguna toca los tres enums de la wallet ni los CHECK.
+- Conclusión: compatible. El down de la 459 lee `pg_enum` (P12), así que no depende de si SF-001 salió antes o después.
+  Si la 459 sale SOLA por la vía de ramificar de prod, sus migraciones de historial deben aplicarse sobre un catálogo
+  sin los valores de SF-001: los `ADD VALUE` son aditivos y no dependen de posición, así que también vale.
