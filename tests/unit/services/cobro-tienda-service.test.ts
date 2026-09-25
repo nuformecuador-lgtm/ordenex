@@ -498,12 +498,14 @@ describe("461/B.8 (R10–R13) — la anulacion: constancia, credito y reverso en
   });
 
   it("⭑ R13 (mutacion 7 de design §14.2): el monto de los DOS contra-asientos es el DEL COBRO", async () => {
-    // El cobro leido vale 1 500,00; la peticion no trae monto (y el borde lo prohibe). Sustituirlo
-    // por cualquier otro —la mutacion 7— deja este caso en rojo.
+    // El cobro leido vale 2 500,50. La peticion trae a proposito un `monto` que el borde prohibe
+    // (`.strict()`): si el servicio lo leyera —la mutacion 7, medida el 2026-09-25: con una peticion
+    // sin `monto`, `input.monto ?? cobro.monto` era un mutante EQUIVALENTE y sobrevivia—, los
+    // contra-asientos saldrian por 1,00 y este caso caeria en rojo.
     const m = montaje({
       cobro: { id: COBRO_ID, tiendaId: TIENDA, tiendaNombre: "Tienda Uno", monto: "2500.50", descripcion: "Publicidad", fechaMovimiento: "2026-09-20T06:00:00.000Z" },
     });
-    await m.servicio.anular(ANULACION, ACTOR_MAESTRO);
+    await m.servicio.anular({ ...ANULACION, monto: "1.00" } as never, ACTOR_MAESTRO);
     expect(filaEscrita(m).monto).toBe("2500.50");
     expect(reversoEscrito(m).monto).toBe("2500.50");
     expect(reversoEscrito(m).cobroId).toBe(COBRO_ID);
