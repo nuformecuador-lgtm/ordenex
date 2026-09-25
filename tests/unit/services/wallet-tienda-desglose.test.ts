@@ -450,9 +450,9 @@ describe("WalletTiendaService.listarMovimientosDeTienda — importes (R11/R12)",
 
   it("R12: la cabecera se agrega con los MISMOS filtros que el listado", async () => {
     const { repo, listarPorTienda, agregarDesglosePorTienda } = repoEnMemoria(LEDGER);
-    const desde = new Date("2026-07-11T00:00:00.000Z");
+    // Ficha 461 (R72): el borde recibe el DIA y lo traduce; lo que se compara es lo que sale de el.
     await servicio(repo).listarMovimientosDeTienda(
-      input({ cierreId: "c1", categoria: "flete", desde }),
+      input({ cierreId: "c1", categoria: "flete", desde: "2026-07-11" }),
       MAESTRO,
     );
 

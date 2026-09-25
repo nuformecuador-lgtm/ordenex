@@ -86,13 +86,15 @@ describeSiHayBase("459/B.5 — las migraciones de la 459 contra Postgres", () =>
     const entidades = await etiquetasDeEnum(prisma, "historial_accion_entidad");
     expect([...tipos].sort()).toEqual([...HISTORIAL_ACCION_TIPOS].sort());
     expect([...entidades].sort()).toEqual([...HISTORIAL_ACCION_ENTIDADES].sort());
-    expect(tipos.slice(-5, -1)).toEqual([
+    // Ficha 461: DOS tipos detras de los de la 459 (`cobro_tienda_anulado` y, con la auditoria D3,
+    // `wallet_movimiento_manual_anulado`).
+    expect(tipos.slice(-6, -2)).toEqual([
       "pago_por_cuenta_tienda_registrado",
       "pago_por_cuenta_tienda_anulado",
       "aporte_capital_registrado",
       "aporte_capital_anulado",
     ]);
-    expect(tipos.slice(-1)).toEqual(["cobro_tienda_anulado"]);
+    expect(tipos.slice(-2)).toEqual(["cobro_tienda_anulado", "wallet_movimiento_manual_anulado"]);
     expect(entidades.slice(-2)).toEqual(["pago_por_cuenta_tienda", "aporte_capital"]);
   });
 

@@ -375,6 +375,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("431/T1 (b) — el down recrea la lista PREV
       "pago_por_cuenta_tienda_anulado",
       "aporte_capital_registrado",
       "aporte_capital_anulado",
+      // Ficha 461 (2026-09-25): la anulacion del cobro de Ordenex a una tienda (migracion 1 de la
+      // 461) y la anulacion de una correccion de caja (migracion 4, auditoria D3).
+      "cobro_tienda_anulado",
+      "wallet_movimiento_manual_anulado",
     ];
     const catalogoPrevio = HISTORIAL_ACCION_TIPOS.filter(
       (t) => !VALORES_NUEVOS.includes(t as (typeof VALORES_NUEVOS)[number]) &&
