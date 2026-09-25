@@ -1,0 +1,45 @@
+{
+  "pasos": [
+    {
+      "id": "login_mensajero",
+      "email": "mensajero.qa@ordenex.test",
+      "via": "directo"
+    },
+    {
+      "id": "mensajero__wallet",
+      "http": 404,
+      "titulo": "No encontramos esta página",
+      "url": "http://localhost:3461/wallet"
+    },
+    {
+      "id": "mensajero__wallet_tiendas",
+      "http": 404,
+      "titulo": "No encontramos esta página",
+      "url": "http://localhost:3461/wallet/tiendas"
+    },
+    {
+      "id": "mensajero__mi_wallet",
+      "http": 404,
+      "titulo": "No encontramos esta página",
+      "url": "http://localhost:3461/mi-wallet"
+    },
+    {
+      "id": "mensajero_menu",
+      "http": 200,
+      "menu": "Entregas | Reparto | Recoger en bodega | Recolección | Ranking | Cierre del día | Ayuda"
+    },
+    {
+      "id": "mensajero_actions",
+      "anular": {
+        "http": 200,
+        "status": "forbidden",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"forbidden\"}\n"
+      },
+      "registrar": {
+        "http": 200,
+        "status": "forbidden",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"forbidden\"}\n"
+      }
+    }
+  ]
+}
