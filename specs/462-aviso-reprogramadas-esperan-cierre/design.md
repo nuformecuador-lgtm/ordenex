@@ -582,7 +582,11 @@ la consola SQL (MCP de Supabase) o se corre con `psql`. **Corre sobre el esquema
 -- Las familias de visita real se copian de `ORIGEN_TIPOS_VISITA_REAL` (`lib/types/orden-historial.ts`)
 -- al correr; hoy: 'gestion', 'gestion_tienda_ayuda' (verificar la lista antes de pegar).
 WITH params AS (
-  SELECT ((now() AT TIME ZONE 'UTC') AT TIME ZONE 'America/Costa_Rica')::date AS hoy_cr
+  -- Corregido el 2026-09-25 (cierre de la 461): `now()` es `timestamptz`, y la forma doble
+  -- `((now() AT TIME ZONE 'UTC') AT TIME ZONE 'America/Costa_Rica')::date` daba MAÑANA de 18:00 a
+  -- 06:00 UTC con sesion UTC. Ver el comentario en `scripts/medir-462-retenidas.sql`, que es el
+  -- archivo que manda; esta copia se mantiene igual a el.
+  SELECT (now() AT TIME ZONE 'America/Costa_Rica')::date AS hoy_cr
 ),
 -- Forma A: orden en `reprogramado`, gestion reprogramada VIGENTE (mas reciente, no anulada),
 -- nacida de visita real, con cierre no aprobado.
