@@ -30,7 +30,7 @@ import { SWRConfig } from "swr";
 // El monto se mide como STRING exacto en todos los envíos (R15): ni `Number(` ni `parseFloat` en
 // ningún punto del camino.
 
-// ⭑ FICHA 381 (T H.2/H.3/H.4) — el QUINTO concepto: «Cobrar un costo a una tienda». Cubre
+// ⭑ FICHA 381 (T H.2/H.3/H.4) — el QUINTO concepto: «Ordenex le cobra a una tienda». Cubre
 // R1–R11. Lo que se mide aquí, y por qué cada cosa:
 //
 //  - **R2/R3** el campo de la tienda es CONDICIONAL, y con los otros cuatro conceptos el payload
@@ -174,7 +174,7 @@ async function elegirCobroYEsperarTiendas(
   user: ReturnType<typeof userEvent.setup>,
   dialog: HTMLElement,
 ): Promise<HTMLElement> {
-  await elegirConcepto(user, dialog, "Cobrar un costo a una tienda");
+  await elegirConcepto(user, dialog, "Ordenex le cobra a una tienda");
   const combo = await within(dialog).findByRole("combobox", { name: COMBO_TIENDA });
   await waitFor(() => expect(combo).not.toBeDisabled());
   return combo;
@@ -246,16 +246,16 @@ describe("RegistrarMovimientoCajaDialog — el selector ofrece los siete concept
     const opciones = within(lista).getAllByRole("option");
 
     expect(opciones.map((o) => o.textContent?.trim())).toEqual([
-      "Gasto variable",
+      "Gasto de Ordenex",
       "Sueldo",
-      "Pago por cuenta de una tienda",
-      "Ajuste que resta dinero",
-      "Saldo inicial o aporte de capital",
-      "Ajuste que suma dinero",
-      "Cobrar un costo a una tienda",
+      "Ordenex paga un gasto de una tienda",
+      "Corrección de caja (resta)",
+      "Aporte de dinero a la caja",
+      "Corrección de caja (suma)",
+      "Ordenex le cobra a una tienda",
     ]);
     // R59: los tres encabezados, visibles en la lista.
-    for (const grupo of ["Sale dinero de la caja", "Entra dinero a la caja", "No mueve la caja"]) {
+    for (const grupo of ["Sale dinero de Ordenex", "Llega dinero a la caja", "Se descuenta del saldo de una tienda"]) {
       expect(within(lista).getByText(grupo)).toBeInTheDocument();
     }
   }, 15000);
@@ -266,7 +266,7 @@ describe("RegistrarMovimientoCajaDialog — el selector ofrece los siete concept
 
     await user.click(within(dialog).getByRole("combobox", { name: "Concepto del movimiento" }));
     const lista = await screen.findByRole("listbox");
-    expect(within(lista).getByRole("option", { name: "Gasto variable" })).toBeInTheDocument();
+    expect(within(lista).getByRole("option", { name: "Gasto de Ordenex" })).toBeInTheDocument();
     expect(within(lista).getByRole("option", { name: "Sueldo" })).toBeInTheDocument();
     // "Gasto fijo" NO se ofrece a mano: lo emite el cron.
     expect(within(lista).queryByRole("option", { name: "Gasto fijo" })).not.toBeInTheDocument();
@@ -311,17 +311,17 @@ describe("RegistrarMovimientoCajaDialog — dice con qué nombre saldrá en el l
     const { user, dialog } = await abrirDialogo();
 
     expect(
-      within(dialog).getByText("Se registra en el libro como «Gasto variable»."),
+      within(dialog).getByText("Se registra en el libro como «Gasto de Ordenex»."),
     ).toBeInTheDocument();
 
-    await elegirConcepto(user, dialog, "Ajuste que suma dinero");
+    await elegirConcepto(user, dialog, "Corrección de caja (suma)");
     expect(
-      within(dialog).getByText("Se registra en el libro como «Ajuste (ingreso)»."),
+      within(dialog).getByText("Se registra en el libro como «Corrección de caja (suma)»."),
     ).toBeInTheDocument();
 
-    await elegirConcepto(user, dialog, "Ajuste que resta dinero");
+    await elegirConcepto(user, dialog, "Corrección de caja (resta)");
     expect(
-      within(dialog).getByText("Se registra en el libro como «Ajuste (egreso)»."),
+      within(dialog).getByText("Se registra en el libro como «Corrección de caja (resta)»."),
     ).toBeInTheDocument();
   }, 15000);
 });
@@ -375,9 +375,9 @@ describe("RegistrarMovimientoCajaDialog — el enrutado por concepto (R5/R6/R7/R
   it("ajuste que suma: envía tipo=ingreso y categoria=ingreso_ajuste (R7)", async () => {
     const { user, dialog } = await abrirDialogo();
 
-    await elegirConcepto(user, dialog, "Ajuste que suma dinero");
+    await elegirConcepto(user, dialog, "Corrección de caja (suma)");
     await user.type(within(dialog).getByLabelText("Monto"), "40.00");
-    await user.type(within(dialog).getByLabelText("Motivo del ajuste"), "Sobrante de caja");
+    await user.type(within(dialog).getByLabelText("Motivo de la corrección"), "Sobrante de caja");
     await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
 
     expect(registrarManualMock).toHaveBeenCalledTimes(1);
@@ -394,9 +394,9 @@ describe("RegistrarMovimientoCajaDialog — el enrutado por concepto (R5/R6/R7/R
   it("ajuste que resta: envía tipo=egreso y categoria=egreso_ajuste (R8)", async () => {
     const { user, dialog } = await abrirDialogo();
 
-    await elegirConcepto(user, dialog, "Ajuste que resta dinero");
+    await elegirConcepto(user, dialog, "Corrección de caja (resta)");
     await user.type(within(dialog).getByLabelText("Monto"), "12.75");
-    await user.type(within(dialog).getByLabelText("Motivo del ajuste"), "Faltante de caja");
+    await user.type(within(dialog).getByLabelText("Motivo de la corrección"), "Faltante de caja");
     await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
 
     expect(registrarManualMock).toHaveBeenCalledTimes(1);
@@ -597,9 +597,9 @@ describe("RegistrarMovimientoCajaDialog — los cuatro campos se alcanzan por su
 
     // La etiqueta de la descripción sigue al concepto, así que el nombre accesible del cuarto
     // campo cambia con él (R9) y nunca se queda hablando del concepto anterior.
-    await elegirConcepto(user, dialog, "Ajuste que resta dinero");
+    await elegirConcepto(user, dialog, "Corrección de caja (resta)");
     expect(within(dialog).queryByLabelText("Concepto del gasto")).not.toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Motivo del ajuste")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Motivo de la corrección")).toBeInTheDocument();
   }, 15000);
 });
 
@@ -624,10 +624,10 @@ describe("381 — el campo de la tienda es CONDICIONAL (R2/R3)", () => {
     const { user, dialog } = await abrirDialogo();
 
     for (const nombre of [
-      "Gasto variable",
+      "Gasto de Ordenex",
       "Sueldo",
-      "Ajuste que suma dinero",
-      "Ajuste que resta dinero",
+      "Corrección de caja (suma)",
+      "Corrección de caja (resta)",
     ]) {
       await elegirConcepto(user, dialog, nombre);
       expect(
@@ -649,10 +649,10 @@ describe("381 — el campo de la tienda es CONDICIONAL (R2/R3)", () => {
     // Se elige el cobro, se elige una tienda de verdad… y luego se cambia de idea.
     await elegirCobroYEsperarTiendas(user, dialog);
     await elegirEnSelect(user, dialog, COMBO_TIENDA, "Tienda Sur");
-    await elegirConcepto(user, dialog, "Ajuste que resta dinero");
+    await elegirConcepto(user, dialog, "Corrección de caja (resta)");
 
     await user.type(within(dialog).getByLabelText("Monto"), "12.75");
-    await user.type(within(dialog).getByLabelText("Motivo del ajuste"), "Faltante de caja");
+    await user.type(within(dialog).getByLabelText("Motivo de la corrección"), "Faltante de caja");
     await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
 
     expect(registrarCobroMock).not.toHaveBeenCalled();
@@ -666,32 +666,46 @@ describe("381 — el campo de la tienda es CONDICIONAL (R2/R3)", () => {
   }, 20000);
 });
 
-describe("381 — el diálogo dice a qué LIBRO va el cobro y con qué nombre (R4)", () => {
-  it("la línea de ayuda y el título nombran el libro de la tienda, no la caja", async () => {
+describe("381/461 — el diálogo dice a qué LIBROS va el cobro y con qué nombre en cada uno (R4/R46)", () => {
+  it("la línea de ayuda nombra la caja Y el libro de la tienda; el título es el concepto", async () => {
     const { user, dialog } = await abrirDialogo();
 
-    // Arranque: los textos de la ficha 334, byte a byte (R11).
+    // Arranque: la cabecera de la ficha 334, byte a byte (R11).
     expect(
-      within(dialog).getByText("Se registra en el libro como «Gasto variable»."),
+      within(dialog).getByText("Se registra en el libro como «Gasto de Ordenex»."),
     ).toBeInTheDocument();
     expect(within(dialog).getByText("Registrar movimiento en la caja")).toBeInTheDocument();
 
     await elegirCobroYEsperarTiendas(user, dialog);
 
-    // «Cobro de Ordenex» es exactamente el rótulo con el que la tienda lo va a leer en su
-    // propia wallet: el diálogo no promete un nombre distinto del que el libro usa.
+    // FICHA 461 (HD1, R46): el cobro escribe en los DOS libros, y cada nombre es exactamente el que
+    // pinta su libro («Ordenex le cobra a una tienda» en la caja; «Ordenex le cobra a la tienda» en
+    // `/wallet/tiendas`). Literales, no derivados: la derivación estaría siempre verde.
     expect(
-      within(dialog).getByText("Se registra en el libro de la tienda como «Cobro de Ordenex»."),
+      within(dialog).getByText(
+        "Se registra en la caja como «Ordenex le cobra a una tienda» y en el libro de la tienda como «Ordenex le cobra a la tienda».",
+      ),
     ).toBeInTheDocument();
-    // Y la cabecera deja de decir «en la caja», que para este concepto sería falso. Se busca por
-    // ROL: el mismo texto aparece también dentro del selector (es el concepto elegido), y lo que
-    // se mide aquí es el TÍTULO del diálogo.
+    // La cabecera es el CONCEPTO. Se busca por ROL: el mismo texto aparece también dentro del
+    // selector (es el concepto elegido), y lo que se mide aquí es el TÍTULO del diálogo.
     expect(
-      within(dialog).getByRole("heading", { name: "Cobrar un costo a una tienda" }),
+      within(dialog).getByRole("heading", { name: "Ordenex le cobra a una tienda" }),
     ).toBeInTheDocument();
     expect(
       within(dialog).queryByText("Registrar movimiento en la caja"),
     ).not.toBeInTheDocument();
+    // Y dice que se anula desde el libro de la caja, no que «no se puede deshacer» (HD1/R19).
+    expect(
+      within(dialog).getByText(
+        "Elegí la tienda, el monto y la fecha. El cobro se descuenta de lo que Ordenex le debe a esa tienda y no se edita: si hay un error, se anula desde el libro de la caja con un motivo.",
+      ),
+    ).toBeInTheDocument();
+    // La pista del campo de la tienda dice que es ganancia y que no llega dinero nuevo (design §8).
+    expect(
+      within(dialog).getByText(
+        "El cobro se descuenta del saldo a favor de la tienda y pasa a ser ganancia de Ordenex. Si la tienda no tiene saldo, queda en contra y se cobra cuando la gestión le vuelva a generar dinero a favor.",
+      ),
+    ).toBeInTheDocument();
   }, 15000);
 });
 
@@ -736,7 +750,7 @@ describe("381 — el catálogo caído bloquea el COBRO y solo el cobro (R6)", ()
     async (_caso, preparar) => {
       preparar();
       const { user, dialog } = await abrirDialogo();
-      await elegirConcepto(user, dialog, "Cobrar un costo a una tienda");
+      await elegirConcepto(user, dialog, "Ordenex le cobra a una tienda");
 
       // (a) SE DICE. La degradación es RUIDOSA: al revés que la de `GenerarApiKeyForm`, aquí la
       // tienda es obligatoria y un desplegable vacío sin explicación dejaría a alguien pulsando
@@ -750,10 +764,10 @@ describe("381 — el catálogo caído bloquea el COBRO y solo el cobro (R6)", ()
 
       // (c) …y los otros cuatro conceptos SIGUEN registrándose. Sin esta tercera parte, un
       // diálogo que se bloqueara entero pasaría las dos primeras.
-      await elegirConcepto(user, dialog, "Ajuste que suma dinero");
+      await elegirConcepto(user, dialog, "Corrección de caja (suma)");
       expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
       await user.type(within(dialog).getByLabelText("Monto"), "40.00");
-      await user.type(within(dialog).getByLabelText("Motivo del ajuste"), "Sobrante de caja");
+      await user.type(within(dialog).getByLabelText("Motivo de la corrección"), "Sobrante de caja");
       await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
 
       expect(registrarManualMock).toHaveBeenCalledTimes(1);
@@ -827,10 +841,63 @@ describe("381 — el payload del cobro lleva SOLO lo que decide el usuario (R2/R
     expect(typeof payload.monto).toBe("string");
     // R21: sin tocar la fecha, la clave NO viaja y manda el instante del registro.
     expect("fecha" in payload).toBe(false);
-    // Y no se toca ninguna de las dos actions de la CAJA (R24: el cobro no la mueve).
+    // Y no se toca ninguna de las dos actions manuales de la CAJA: la línea de caja del cobro la
+    // escribe el SERVICIO en la misma transacción (461-HD1), no un segundo envío del cliente.
     expect(registrarEgresoMock).not.toHaveBeenCalled();
     expect(registrarManualMock).not.toHaveBeenCalled();
   }, 20000);
+
+  // ⭑ FICHA 461 (R66/R68) — el doble envío del cobro: el servidor responde `ya_registrado` con el
+  // cobro original, y el diálogo lo trata como ÉXITO, sin un segundo aviso de error.
+  it("`ya_registrado` se anuncia como registrado, cierra y relee: ni un toast de error (R68)", async () => {
+    registrarCobroMock.mockResolvedValue({ ...COBRO_OK_NEGATIVO, status: "ya_registrado" });
+    const onRegistrado = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Envoltura>
+        <RegistrarMovimientoCajaDialog onRegistrado={onRegistrado} />
+      </Envoltura>,
+    );
+    await user.click(screen.getByRole("button", { name: "Registrar movimiento" }));
+    const dialog = await screen.findByRole("dialog");
+    await elegirCobroYEsperarTiendas(user, dialog);
+    await elegirEnSelect(user, dialog, COMBO_TIENDA, "Tienda Sur");
+    await user.type(within(dialog).getByLabelText("Monto"), "15000.00");
+    await user.type(within(dialog).getByLabelText("Motivo del cobro"), "Reintento");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(successMock.mock.calls[0][0]).toBe(
+      "Cobro registrado. El saldo de Tienda Sur queda en -₡15.000 · En contra. La tienda le debe ese dinero a Ordenex.",
+    );
+    expect(errorMock).not.toHaveBeenCalled();
+    expect(onRegistrado).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    // Y la clave viajó: es lo que permite al servidor reconocer el segundo envío (R66).
+    expect(String((registrarCobroMock.mock.calls[0][0] as { claveIdempotencia: string }).claveIdempotencia)).toMatch(UUID_461);
+  }, 20000);
+
+  it("`ya_registrado` en un gasto de Ordenex y en una corrección también es éxito sin toast de error (R68)", async () => {
+    registrarEgresoMock.mockResolvedValue({ status: "ya_registrado", movimiento: { id: "m1" } });
+    registrarManualMock.mockResolvedValue({ status: "ya_registrado", movimiento: { id: "m2" } });
+    const { user, dialog } = await abrirDialogo();
+
+    await user.type(within(dialog).getByLabelText("Monto"), "10.00");
+    await user.type(within(dialog).getByLabelText("Concepto del gasto"), "Café");
+    await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
+    await waitFor(() => expect(successMock).toHaveBeenCalledWith("Movimiento registrado correctamente."));
+    expect(errorMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Registrar movimiento" }));
+    const dialog2 = await screen.findByRole("dialog");
+    await elegirConcepto(user, dialog2, "Corrección de caja (suma)");
+    await user.type(within(dialog2).getByLabelText("Monto"), "40.00");
+    await user.type(within(dialog2).getByLabelText("Motivo de la corrección"), "Sobrante");
+    await user.click(within(dialog2).getByRole("button", { name: "Registrar" }));
+    await waitFor(() => expect(successMock).toHaveBeenCalledTimes(2));
+    expect(errorMock).not.toHaveBeenCalled();
+  }, 30000);
 
   it("si se elige un día anterior, la fecha viaja tal cual como texto YYYY-MM-DD", async () => {
     const { user, dialog } = await abrirDialogo();
@@ -906,7 +973,7 @@ describe("381 — cuando el cobro sale bien (R9/R27)", () => {
     // ⚠️ EL NEGATIVO ES LO PEDIDO. El saldo llega del servidor como el STRING `-15000.00` y se
     // pinta tal cual: con su signo, sin valor absoluto y sin recortarlo a cero. Y la marca
     // legible («En contra») es la MISMA que usan las dos pantallas de saldo.
-    expect(aviso).toBe("Cobro registrado. El saldo de Tienda Sur queda en -₡15.000 · En contra.");
+    expect(aviso).toBe("Cobro registrado. El saldo de Tienda Sur queda en -₡15.000 · En contra. La tienda le debe ese dinero a Ordenex.");
     expect(aviso).toContain("-₡15.000");
     expect(aviso).not.toMatch(/insuficiente|no alcanza|sin saldo/i);
 
@@ -1004,38 +1071,40 @@ async function elegirPagoPorCuenta(
   user: ReturnType<typeof userEvent.setup>,
   dialog: HTMLElement,
 ): Promise<void> {
-  await elegirConcepto(user, dialog, "Pago por cuenta de una tienda");
+  await elegirConcepto(user, dialog, "Ordenex paga un gasto de una tienda");
   const combo = await within(dialog).findByRole("combobox", { name: COMBO_TIENDA_PAGO });
   await waitFor(() => expect(combo).not.toBeDisabled());
 }
 
 describe("⭑ FICHA 459 — la frase del efecto (R60)", () => {
-  it("sigue al concepto, y pago por cuenta y cobro de un costo dicen cosas opuestas de la caja", async () => {
+  // FICHA 461 (R41, design §7.6): las siete frases son las de la 461, una línea cada una; la del
+  // cobro dice que NO llega dinero nuevo, que se toma del saldo a favor y que es ganancia de Ordenex.
+  it("sigue al concepto: el pago de un gasto dice que SALE dinero y el cobro que NO llega dinero nuevo", async () => {
     const { user, dialog } = await abrirDialogo();
 
     expect(
-      within(dialog).getByText("Sale dinero de la caja y baja la ganancia de Ordenex."),
+      within(dialog).getByText("Sale dinero de Ordenex y baja su ganancia."),
     ).toBeInTheDocument();
 
-    await elegirConcepto(user, dialog, "Pago por cuenta de una tienda");
+    await elegirConcepto(user, dialog, "Ordenex paga un gasto de una tienda");
     expect(
       within(dialog).getByText(
-        "Sale dinero de la caja: Ordenex le paga a otro en nombre de la tienda y se lo descuenta de su saldo. La ganancia de Ordenex no cambia.",
+        "Sale dinero de Ordenex hacia un tercero (Facebook, Jet Cargo…) y se descuenta del saldo de la tienda; la ganancia no cambia.",
       ),
     ).toBeInTheDocument();
 
-    await elegirConcepto(user, dialog, "Cobrar un costo a una tienda");
+    await elegirConcepto(user, dialog, "Ordenex le cobra a una tienda");
     expect(
       within(dialog).getByText(
-        "No sale ni entra dinero: es un cobro de Ordenex a la tienda que baja su saldo. La caja y la ganancia no cambian.",
+        "No llega dinero nuevo: se descuenta del saldo a favor de la tienda y pasa a ser ganancia de Ordenex; si la tienda no tiene saldo, queda en contra.",
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).queryByText(/^Sale dinero de la caja/)).toBeNull();
+    expect(within(dialog).queryByText(/^Sale dinero de Ordenex/)).toBeNull();
 
-    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await elegirConcepto(user, dialog, "Aporte de dinero a la caja");
     expect(
       within(dialog).getByText(
-        "Entra dinero de Ordenex a la caja. No es ganancia: la ganancia no cambia.",
+        "Llega dinero de Ordenex a la caja; no es ganancia, la ganancia no cambia.",
       ),
     ).toBeInTheDocument();
   }, 20000);
@@ -1046,7 +1115,7 @@ describe("⭑ FICHA 459 — la frase del efecto (R60)", () => {
     const ids = (combo.getAttribute("aria-describedby") ?? "").split(/\s+/);
     expect(ids).toContain("movimiento-concepto-efecto");
     expect(document.getElementById("movimiento-concepto-efecto")?.textContent).toBe(
-      "Sale dinero de la caja y baja la ganancia de Ordenex.",
+      "Sale dinero de Ordenex y baja su ganancia.",
     );
   }, 15000);
 });
@@ -1216,7 +1285,7 @@ describe("⭑ FICHA 381/459 — el cobro de un costo no gana ni una clave (R64)"
 describe("⭑ FICHA 459 — saldo inicial o aporte de capital (R27/R68/R70)", () => {
   it("R27: el monto arranca VACÍO, sin ejemplo, y sigue vacío al elegir la clase", async () => {
     const { user, dialog } = await abrirDialogo();
-    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await elegirConcepto(user, dialog, "Aporte de dinero a la caja");
 
     const monto = within(dialog).getByLabelText("Monto") as HTMLInputElement;
     expect(monto.value).toBe("");
@@ -1237,7 +1306,7 @@ describe("⭑ FICHA 459 — saldo inicial o aporte de capital (R27/R68/R70)", ()
 
   it("la fecha no tiene ventana hacia atrás (P7): sin `min`, con `max` = hoy", async () => {
     const { user, dialog } = await abrirDialogo();
-    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await elegirConcepto(user, dialog, "Aporte de dinero a la caja");
     const fecha = within(dialog).getByLabelText("Fecha") as HTMLInputElement;
     expect(fecha.getAttribute("min")).toBeNull();
     expect(fecha.getAttribute("max")).toBe(hoyEnCostaRica());
@@ -1245,7 +1314,7 @@ describe("⭑ FICHA 459 — saldo inicial o aporte de capital (R27/R68/R70)", ()
 
   it("R68: el FormData lleva SOLO sus claves (con la fecha siempre) y avisa con el monto del servidor", async () => {
     const { user, dialog } = await abrirDialogo();
-    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await elegirConcepto(user, dialog, "Aporte de dinero a la caja");
     await user.click(within(dialog).getByText(/^Saldo inicial — /));
     await user.type(within(dialog).getByLabelText("Monto"), "2500000.50");
     ponerFecha(dialog, diasAntesEnCostaRica(60));
@@ -1265,7 +1334,7 @@ describe("⭑ FICHA 459 — saldo inicial o aporte de capital (R27/R68/R70)", ()
 
   it("sin clase no llama al servidor", async () => {
     const { user, dialog } = await abrirDialogo();
-    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await elegirConcepto(user, dialog, "Aporte de dinero a la caja");
     await user.type(within(dialog).getByLabelText("Monto"), "100.00");
     await user.type(within(dialog).getByLabelText("Motivo"), "x");
     await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
@@ -1278,7 +1347,7 @@ describe("⭑ FICHA 459 — saldo inicial o aporte de capital (R27/R68/R70)", ()
   it("R70: si ya hay un saldo inicial, lo dice bajo la clase y no cierra", async () => {
     registrarAporteMock.mockResolvedValue({ status: "ya_hay_saldo_inicial" });
     const { user, dialog } = await abrirDialogo();
-    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await elegirConcepto(user, dialog, "Aporte de dinero a la caja");
     await user.click(within(dialog).getByText(/^Saldo inicial — /));
     await user.type(within(dialog).getByLabelText("Monto"), "100.00");
     await user.type(within(dialog).getByLabelText("Motivo"), "x");
@@ -1294,7 +1363,7 @@ describe("⭑ FICHA 459 — saldo inicial o aporte de capital (R27/R68/R70)", ()
 
   it("una fecha futura no llama al servidor", async () => {
     const { user, dialog } = await abrirDialogo();
-    await elegirConcepto(user, dialog, "Saldo inicial o aporte de capital");
+    await elegirConcepto(user, dialog, "Aporte de dinero a la caja");
     await user.click(within(dialog).getByText(/^Aporte de capital — /));
     await user.type(within(dialog).getByLabelText("Monto"), "100.00");
     ponerFecha(dialog, diasDespuesEnCostaRica(1));

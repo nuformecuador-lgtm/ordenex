@@ -321,8 +321,8 @@ export const DUENO_LABEL: Record<NaturalezaMovimiento, string> = {
  * Etiqueta legible del origen de un movimiento.
  *
  * Ficha 461 (design §7.3, R42): los origenes tambien se dicen desde Ordenex y diciendo quien le paga a
- * quien («Pago de Ordenex a una tienda»); «Manual» y «Gasto» a secas quedan retirados porque no dicen
- * que fue una PERSONA quien lo registro. `ORIGEN_TIENDA_LABEL` (el libro de la tienda) usa los MISMOS
+ * quien («Pago de Ordenex a una tienda»); los rotulos de una sola palabra de antes quedan retirados
+ * porque no decian que fue una PERSONA quien lo registro. `ORIGEN_TIENDA_LABEL` (el libro de la tienda) usa los MISMOS
  * textos para los origenes que comparte. `Record` total: un origen nuevo no compila sin su nombre.
  */
 export const ORIGEN_LABEL: Record<WalletOrigenTipo, string> = {
@@ -446,7 +446,7 @@ export const CATEGORIA_OPTIONS = [
 // emite el cron, no el formulario manual (R2/R19).
 //
 // Ficha 461 (design §7.1): «Gasto de Ordenex», el mismo nombre que el concepto del dialogo y que
-// `CATEGORIA_LABEL.egreso_gasto_variable`; «Gasto variable» queda retirado.
+// `CATEGORIA_LABEL.egreso_gasto_variable`; el nombre de la 45 queda retirado (design §7.9).
 export const TIPO_EGRESO_MANUAL_LABEL: Record<TipoEgresoManual, string> = {
   gasto_variable: "Gasto de Ordenex",
   sueldo: "Sueldo",
