@@ -1245,6 +1245,82 @@ export async function emitirDevolucionesRepresadas(
   );
 }
 // ---------------------------------------------------------------------------
+// FICHA 462 §3.2 — «REPROGRAMADO PARA HOY: N ÓRDENES ESPERAN LA APROBACIÓN DE SU CIERRE». AGREGADO,
+// POR AMBITO, UNA VEZ AL DÍA (07:00 CR).
+// ---------------------------------------------------------------------------
+
+/** El AMBITO de una retenida: la administracion CENTRAL o la zona de un satelite. Nunca «global». */
+export type AmbitoReprogramadasRetenidas =
+  | { readonly tipo: "central" }
+  | { readonly tipo: "zona"; readonly zonaId: string };
+
+/**
+ * FICHA 462 (R17) — el DETALLE persistido del aviso. LLANO, SIN NUMERO Y SIN PII: ni cifra (vive en
+ * el titulo, con la cifra viva), ni identificador interno, ni guia, ni remision, ni destinatario, ni
+ * direccion, ni telefono, ni monto, ni nombre de mensajero, ni estado del cierre —que cambia durante
+ * el dia (rechazado → solicitado) y un texto persistido mentiria (requirements, decision 6)—.
+ * Nombra la MARCA que la persona vera en `/cierres-admin` para que sepa que buscar.
+ * TUTEO («Revisa», «apruébalos»), como los avisos de cierres a bodega.
+ */
+export const TEXTO_REPROGRAMADAS_ESPERAN_CIERRE =
+  "No se pueden asignar hasta que se apruebe el cierre del mensajero que las visitó. " +
+  "Revisa los cierres marcados «Retiene reprogramadas de hoy» y apruébalos antes de asignar.";
+
+/** Lo MINIMO que el aviso necesita: un ambito y un dia CR. Sin PII (R52). */
+export interface ReprogramadasEsperanCierreContexto {
+  /** Central (maestro + admin) o una zona (su `adminSatelite`). VA DENTRO DE LA ENTIDAD. */
+  ambito: AmbitoReprogramadasRetenidas;
+  /** `YYYY-MM-DD` del dia calendario CR de la corrida (`fechaCalendarioCR`). ES la otra mitad de la entidad. */
+  diaCR: string;
+}
+
+/**
+ * R9/R11/R12 — UNA fila `warning` por rol destinatario del ambito:
+ *   · ambito CENTRAL -> `maestro` y `admin`, sin acotar por zona;
+ *   · ambito ZONA    -> `adminSatelite` ACOTADO a esa zona.
+ * Jamas una fila por orden ni una por cierre (R9).
+ *
+ * `warning` y no `alert`: es una cola de trabajo atascada (como `devoluciones_represadas`), no un
+ * servicio caido.
+ *
+ * ⚠️ EL AMBITO VA DENTRO DEL `entidad_id` (`${ambito}:${diaCR}`), y sin el LAS ZONAS SE PISAN ENTRE
+ * SI: la clave de dedupe no incluye `zona_id`, asi que la primera zona del recorrido se llevaria el
+ * aviso y las demas quedarian mudas (R12, mutacion 7 del design, medida contra Postgres en
+ * `tests/integration/db/462/aviso-reprogramadas-dedupe.test.ts`). El literal es `"central"` y no
+ * `"global"`: maestro y admin cuentan el ambito central, no el total del sistema (R6).
+ *
+ * Que `destinatario_rol` este DENTRO de la clave de dedupe es lo que hace que `maestro` y `admin`
+ * se dedupliquen de forma INDEPENDIENTE: que uno lea el suyo no suprime el del otro.
+ *
+ * SIN NUMERO PERSISTIDO (409/R57): el titulo lo compone el catalogo con la cifra viva. SIN ANEXO:
+ * no hay dato adicional que enseñar sin romper R17.
+ */
+export async function emitirReprogramadasEsperanCierre(
+  repo: INotificacionRepository,
+  ctx: ReprogramadasEsperanCierreContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  const destinatarios: NotificacionDestinatario[] =
+    ctx.ambito.tipo === "central"
+      ? [...ROLES_ADMINISTRACION]
+      : [{ tipo: "rol", rol: "adminSatelite", zonaId: ctx.ambito.zonaId }];
+  const ambito = ctx.ambito.tipo === "central" ? "central" : ctx.ambito.zonaId;
+  return emitirFilas(
+    repo,
+    destinatarios.map((destinatario) => ({
+      tipo: "warning" as const,
+      evento: "reprogramadas_esperan_cierre" as const,
+      descripcion: TEXTO_REPROGRAMADAS_ESPERAN_CIERRE,
+      anexo: null,
+      entidadTipo: "reprogramadas_esperan_cierre_dia" as const,
+      entidadId: `${ambito}:${ctx.diaCR}`,
+      destinatario,
+    })),
+    tx,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // FICHA 413 §8.2 — «TENÉS N ÓRDENES PARA MAÑANA». AGREGADO, AL MENSAJERO, UNA VEZ POR TARDE.
 //
 // ⚠️ LA ENTIDAD DE ESTE AVISO ES **EL DÍA ANUNCIADO** (`entidad_id = 'YYYY-MM-DD'`), Y ESA ES LA

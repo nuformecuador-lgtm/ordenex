@@ -56,6 +56,9 @@
 // `devoluciones_represadas`.
 import type { RolValue } from "@prisma/client";
 import type { NotificacionEvento } from "@/lib/types/notificacion";
+// FICHA 462 (R13): el nombre VISIBLE del resultado, el de la 455. Modulo puro (ya lo importa
+// `emitir.ts`); aqui solo se lee `NOMBRE_ESTADO.reprogramado`.
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
 /** A donde lleva el boton de un aviso, y como se llama ese boton. */
 export interface AtajoDeAviso {
@@ -111,6 +114,11 @@ export const EVENTOS_AGREGADOS = [
   // cifra cae a 0 y el aviso desaparece del panel y del distintivo (R21). Eso es exactamente lo
   // que permite que su titulo diga «mañana» sin mentir nunca.
   "reparto_manana",
+  // FICHA 462 — el CUARTO. Su cifra viva es «cuantas reprogramadas de hoy siguen retenidas por un
+  // cierre sin aprobar», acotada al AMBITO del actor (maestro/admin -> central; adminSatelite -> su
+  // zona). Se apaga solo cuando se aprueban los cierres que retienen (R15/R40): no hay nada que
+  // apagar a mano.
+  "reprogramadas_esperan_cierre",
 ] as const satisfies readonly NotificacionEvento[];
 
 export type EventoAgregado = (typeof EVENTOS_AGREGADOS)[number];
@@ -348,6 +356,28 @@ export const CATALOGO_AVISOS: Record<NotificacionEvento, EntradaCatalogo> = {
     porDefecto: { clase: "informativa" },
     destinatarios: ["mensajero"],
   },
+  // 18 — FICHA 462 (R9/R13/R16). AGREGADO (el cuarto) y ACCIONABLE por las tres condiciones
+  // normativas, sin analogia: (a) pide una accion —aprobar el cierre que retiene—; (b) tiene
+  // consecuencia si no se hace —las reprogramadas de HOY no se pueden asignar y el paquete no sale,
+  // el caso real de la ficha espero ~20 h—; (c) quien lo recibe puede resolverla —es exactamente
+  // quien aprueba cierres—.
+  //
+  // CON ATAJO, por el criterio §2.1bis: `/cierres-admin` no es un mirador, es DONDE EJECUTA la
+  // aprobacion. SIN `porRol`: los tres roles van al mismo sitio y los tres lo ven en `SIDEBAR_ITEMS`
+  // (`menu-visibility.ts`). SIN parametro de consulta: la guardia `atajo-aviso-ruta-visible` no
+  // necesita lista blanca nueva. Misma etiqueta que `mensajero_bloqueado_por_cierres` para la bodega:
+  // dos avisos sobre cierres, un solo sitio al que ir.
+  //
+  // El titulo lleva la CIFRA VIVA acotada al ambito del actor (R13/R14) y nombra el resultado por su
+  // nombre visible de la 455 («Reprogramado»), nunca por el codigo.
+  reprogramadas_esperan_cierre: {
+    porDefecto: {
+      clase: "accionable",
+      atajo: { href: "/cierres-admin", etiqueta: "Revisar cierres" },
+      titulo: tituloReprogramadasEsperanCierre,
+    },
+    destinatarios: ["maestro", "admin", "adminSatelite"],
+  },
 };
 
 /**
@@ -399,4 +429,22 @@ function tituloDevolucionesRepresadas(n: number): string {
  */
 function tituloRepartoManana(n: number): string {
   return n === 1 ? "Tenés 1 orden para mañana" : `Tenés ${n} órdenes para mañana`;
+}
+
+/**
+ * FICHA 462 (R13) — titulo del aviso de reprogramadas retenidas, con la cifra VIVA acotada al
+ * ambito del actor. Singular y plural EXPLICITOS, como sus tres hermanos.
+ *
+ * Nombra el resultado por su NOMBRE VISIBLE de la 455 (`NOMBRE_ESTADO.reprogramado`, «Reprogramado»)
+ * y no por el codigo `reprogramado` ni por «reprogramadas» a secas: es el mismo vocabulario que la
+ * persona lee en `/ordenes` y en la ficha de la orden. Mutacion obligatoria del design (§8.2-14):
+ * cambiarlo por «reprogramadas» sin el nombre visible pone rojo el test literal.
+ *
+ * TUTEO («su cierre»), como el resto de los avisos de cierres a bodega («Aprueba el mas antiguo»).
+ */
+function tituloReprogramadasEsperanCierre(n: number): string {
+  const resultado = NOMBRE_ESTADO.reprogramado;
+  return n === 1
+    ? `${resultado} para hoy: 1 orden espera la aprobación de su cierre`
+    : `${resultado} para hoy: ${n} órdenes esperan la aprobación de su cierre`;
 }
