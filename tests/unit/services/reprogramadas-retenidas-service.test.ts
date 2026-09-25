@@ -79,11 +79,18 @@ function montar(opts: {
   const retenidas: IReprogramadaRetenidaRepository & {
     findRetenidasEnReparto: ReturnType<typeof vi.fn>;
     findCierresQueRetienen: ReturnType<typeof vi.fn>;
+    findDestinoDeCierres: ReturnType<typeof vi.fn>;
     findMensajeros: ReturnType<typeof vi.fn>;
   } = {
     findRetenidasEnReparto: vi.fn(async () => opts.b ?? []),
     findCierresQueRetienen: vi.fn(async (ids: readonly string[]) =>
       (opts.cierres ?? []).filter((c) => ids.includes(c.cierreId)),
+    ),
+    // El camino ligero (462/H2): los MISMOS cierres, solo estado y destino.
+    findDestinoDeCierres: vi.fn(async (ids: readonly string[]) =>
+      (opts.cierres ?? [])
+        .filter((c) => ids.includes(c.cierreId))
+        .map(({ cierreId, estado, destinoTipo, destinoZonaId }) => ({ cierreId, estado, destinoTipo, destinoZonaId })),
     ),
     findMensajeros: vi.fn(async (ids: readonly string[]) =>
       (opts.mensajeros ?? []).filter((m) => ids.includes(m.id)),
@@ -173,7 +180,7 @@ describe("462/R5 — atribucion: al cierre de la gestion vigente, o al grupo «s
     expect(retenidas.findMensajeros).not.toHaveBeenCalled();
   });
 
-  it("un cierre que se APROBO entre las dos lecturas (carrera) deja de retener en el acto (R28/R40)", async () => {
+  it("un cierre que se APROBO entre las dos lecturas (carrera) deja de retener en el acto (R28/R40), en `resumen` Y en `contar`", async () => {
     const { service } = montar({
       a: [filaA({ id: "o-1" })],
       cierres: [cierre({ estado: "aprobado" })],
@@ -184,12 +191,15 @@ describe("462/R5 — atribucion: al cierre de la gestion vigente, o al grupo «s
     expect(r.total).toBe(0);
     expect(r.cierres).toEqual([]);
     expect(r.porForma).toEqual({ reprogramado: 0, enReparto: 0 });
+    // 462/H2: el camino ligero aplica LA MISMA puerta (mutacion: contar el aprobado en `contar` => ROJO).
+    expect(await service.contar(HOY, { tipo: "central" })).toBe(0);
   });
 
-  it("una gestion que apunta a un cierre inexistente (dato imposible) FALLA con causa, sin contar a ojo", async () => {
+  it("una gestion que apunta a un cierre inexistente (dato imposible) FALLA con causa, sin contar a ojo (los dos caminos)", async () => {
     const { service } = montar({ a: [filaA({ gestionCierreId: "c-fantasma" })], cierres: [] });
 
     await expect(service.resumen(HOY)).rejects.toThrow(/cierre que la base no devuelve/);
+    await expect(service.contar(HOY, { tipo: "central" })).rejects.toThrow(/cierre que la base no devuelve/);
   });
 });
 
@@ -221,6 +231,37 @@ describe("462/R6/R44 — el ambito: por el destino PERSISTIDO del cierre; sin ci
     expect(await service.contar(HOY, { tipo: "zona", zonaId: OTRA_ZONA })).toBe(0);
     // Y el total del sistema es la suma de los ambitos, ni mas ni menos.
     expect((await service.resumen(HOY)).total).toBe(5);
+  });
+
+  it("⭑ R7 (462/H2): `contar(a)` ES `recortarPorAmbito(resumen, a).total` para los tres ambitos", async () => {
+    const { service } = montarDosAmbitos();
+    const resumen = await service.resumen(HOY);
+
+    for (const ambito of [{ tipo: "central" }, { tipo: "zona", zonaId: ZONA_SAT }, { tipo: "zona", zonaId: OTRA_ZONA }] as const) {
+      expect(await service.contar(HOY, ambito), JSON.stringify(ambito)).toBe(recortarPorAmbito(resumen, ambito).total);
+    }
+  });
+
+  it("462/H2: `contar` va por el camino LIGERO — destinos de cierre sin relaciones, sin nombres de mensajero; la zona central solo si hay «sin cierre»", async () => {
+    const conSinCierre = montarDosAmbitos();
+    await conSinCierre.service.contar(HOY, { tipo: "central" });
+
+    expect(conSinCierre.retenidas.findDestinoDeCierres).toHaveBeenCalledTimes(1);
+    expect(conSinCierre.retenidas.findDestinoDeCierres).toHaveBeenCalledWith(["c-sol", "c-sat"]);
+    expect(conSinCierre.retenidas.findCierresQueRetienen).not.toHaveBeenCalled();
+    expect(conSinCierre.retenidas.findMensajeros).not.toHaveBeenCalled();
+    expect(conSinCierre.zona.findCentralZonaId).toHaveBeenCalledTimes(1);
+
+    // Sin retenidas «sin cierre», tampoco la zona central: A (1 llamada al repo) + B (1) + destinos (1).
+    const soloCierres = montar({ a: [filaA()], b: [filaB()], cierres: [cierre()] });
+    await soloCierres.service.contar(HOY, { tipo: "central" });
+
+    expect(soloCierres.zona.findCentralZonaId).not.toHaveBeenCalled();
+    expect(soloCierres.retenidas.findMensajeros).not.toHaveBeenCalled();
+    expect(soloCierres.retenidas.findCierresQueRetienen).not.toHaveBeenCalled();
+    expect(soloCierres.liberacion.findOrdenesLiberables).toHaveBeenCalledTimes(1);
+    expect(soloCierres.retenidas.findRetenidasEnReparto).toHaveBeenCalledTimes(1);
+    expect(soloCierres.retenidas.findDestinoDeCierres).toHaveBeenCalledTimes(1);
   });
 
   it("`recortarPorAmbito` es puro y su `total` es la suma de lo que queda, nunca el global", () => {

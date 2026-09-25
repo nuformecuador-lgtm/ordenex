@@ -1,11 +1,12 @@
 import type { ILiberacionReprogramadaRepository } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
 import type {
   CierreParaRetenidas,
+  DestinoDeCierre,
   IReprogramadaRetenidaRepository,
 } from "@/lib/interfaces/repositories/IReprogramadaRetenidaRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import {
-  recortarPorAmbito,
+  mismoAmbito,
   type AmbitoRetenidas,
   type CierreQueRetiene,
   type IReprogramadasRetenidasService,
@@ -43,9 +44,15 @@ type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
  * borde, igual que los tres disparadores de la liberacion), y los repositorios entran por
  * constructor. SOLO LECTURA (R8): este archivo no escribe nada, y una guardia lo afirma.
  *
- * COSTE por `resumen`: A = 1 `findMany` + la carga agrupada de Prisma; B = 1 `$queryRaw`; cierres =
- * 1 `findMany`; mensajeros sin cierre = 0 o 1; zona central = 0 o 1. Ninguna por fila (R51).
- * `contar` y `contarPorCierre` derivan de `resumen` en memoria: una llamada, las mismas consultas.
+ * COSTE, medido con `log: query` sobre la siembra de `review_462.md` §3 (2026-09-25):
+ *   · `resumen` / `contarPorCierre`: A = `findMany` + 3 relaciones que Prisma carga aparte (4);
+ *     B = 1 `$queryRaw`; cierres = 1 + 2 relaciones (3); zona central 0/1; mensajeros 0/1 -> 10.
+ *   · `contar` (462/H2): las MISMAS A y B (5) + destinos de cierre SIN relaciones (1) + zona central
+ *     0/1 -> 6 o 7. Es lo que la campana paga por sondeo y por admin; no carga nombres ni jornadas
+ *     que no muestra. Ninguna consulta por fila (R51).
+ * La REGLA (que retiene, a que cierre o mensajero se atribuye, en que ambito cae) es UNA funcion
+ * (`ambitoDeRetenida`) para los dos caminos: `contar(a)` y `recortarPorAmbito(resumen(), a).total`
+ * coinciden por construccion, y el test de R7 lo mide contra Postgres.
  */
 export class ReprogramadasRetenidasService implements IReprogramadasRetenidasService {
   constructor(
@@ -58,35 +65,34 @@ export class ReprogramadasRetenidasService implements IReprogramadasRetenidasSer
     const filas = await this.retenidas(hoyCR);
 
     // Los cierres, EN LOTE: una consulta para todos los ids distintos.
-    const cierreIds = [...new Set(filas.map((f) => f.cierreId).filter((c): c is string => c !== null))];
-    const cierres = new Map(
-      (await this.retenidasRepo.findCierresQueRetienen(cierreIds)).map((c) => [c.cierreId, c]),
-    );
+    const cierres = indexarPorCierre(await this.retenidasRepo.findCierresQueRetienen(cierreIdsDe(filas)));
+    // La zona central se resuelve UNA vez, y solo si hay retenidas sin cierre.
+    const centralZonaId = await this.zonaCentralSiHaceFalta(filas);
 
     // Agrupar por cierre. Un cierre que se APROBO entre la lectura de las candidatas y esta (carrera
     // de segundos) deja de retener en el acto: sus filas se descartan, no se atribuyen (R28/R40).
     const porCierre = new Map<string, { cierre: CierreParaRetenidas; cuantas: number }>();
-    const sinCierre: RetenidaRow[] = [];
+    const sinCierre: Array<{ fila: RetenidaRow; ambito: AmbitoRetenidas }> = [];
+    // `porForma` se cuenta sobre lo ATRIBUIDO, asi `reprogramado + enReparto === total` siempre,
+    // tambien cuando la carrera de la aprobacion descarto alguna fila.
+    const porForma = { reprogramado: 0, enReparto: 0 };
     for (const fila of filas) {
+      const ambito = ambitoDeRetenida(fila, cierres, centralZonaId);
+      if (ambito === null) continue;
+      if (fila.forma === "reprogramado") porForma.reprogramado += 1;
+      else porForma.enReparto += 1;
       if (fila.cierreId === null) {
-        sinCierre.push(fila);
+        sinCierre.push({ fila, ambito });
         continue;
       }
-      const cierre = cierres.get(fila.cierreId);
-      if (cierre === undefined) {
-        // Dato imposible (FK): la gestion apunta a un cierre que no existe. Se falla con causa y
-        // sin identificadores (R52), nunca se cuenta «a ojo».
-        // Sin la palabra del estado en plural: la guardia de la 455 la lee como texto visible.
-        throw new Error("retenidas (462): una gestion apunta a un cierre que la base no devuelve");
-      }
-      if (cierre.estado === CIERRE_APROBADO) continue;
+      // `ambitoDeRetenida` ya lanzo si el cierre no existe y devolvio `null` si esta aprobado.
+      const cierre = cierres.get(fila.cierreId) as CierreParaRetenidas;
       const grupo = porCierre.get(fila.cierreId) ?? { cierre, cuantas: 0 };
       grupo.cuantas += 1;
       porCierre.set(fila.cierreId, grupo);
     }
 
     // El grupo «sin cierre enviado», por mensajero asignado, con ambito por la zona de la ORDEN.
-    // La zona central se resuelve UNA vez, y solo si hace falta.
     const gruposSinCierre = await this.agruparSinCierre(sinCierre);
 
     const listaCierres: CierreQueRetiene[] = [...porCierre.values()].map(({ cierre, cuantas }) => ({
@@ -109,14 +115,28 @@ export class ReprogramadasRetenidasService implements IReprogramadasRetenidasSer
     return {
       diaCR: fechaRepartoComoTexto(hoyCR),
       total,
-      porForma: recontarPorForma(filas, porCierre, sinCierre),
+      porForma,
       cierres: listaCierres,
       sinCierre: gruposSinCierre,
     };
   }
 
+  /**
+   * 462/H2 — EL CAMINO LIGERO. Mismas candidatas (A y B), misma atribucion y mismo ambito que
+   * `resumen` —la misma `ambitoDeRetenida`—, pero de cada cierre se pide SOLO estado y destino:
+   * la cifra no muestra nombres ni jornadas, asi que no los carga (ahorra `usuario` x2 y
+   * `gestion_orden` x1 por sondeo). Sin `resumen` en medio: no se construye una lista para tirarla.
+   */
   async contar(hoyCR: Date, ambito: AmbitoRetenidas): Promise<number> {
-    return recortarPorAmbito(await this.resumen(hoyCR), ambito).total;
+    const filas = await this.retenidas(hoyCR);
+    const destinos = indexarPorCierre(await this.retenidasRepo.findDestinoDeCierres(cierreIdsDe(filas)));
+    const centralZonaId = await this.zonaCentralSiHaceFalta(filas);
+    let total = 0;
+    for (const fila of filas) {
+      const ambitoFila = ambitoDeRetenida(fila, destinos, centralZonaId);
+      if (ambitoFila !== null && mismoAmbito(ambitoFila, ambito)) total += 1;
+    }
+    return total;
   }
 
   async contarPorCierre(hoyCR: Date, cierreIds: readonly string[]): Promise<Map<string, number>> {
@@ -160,27 +180,31 @@ export class ReprogramadasRetenidasService implements IReprogramadasRetenidasSer
     return [...formaA, ...formaB];
   }
 
-  /** Grupo «sin cierre enviado» por mensajero; ambito por la zona de la orden (decision 8). */
-  private async agruparSinCierre(filas: RetenidaRow[]): Promise<MensajeroSinCierre[]> {
+  /** La zona central, UNA consulta y solo si hay retenidas sin cierre (su ambito sale de la orden). */
+  private async zonaCentralSiHaceFalta(filas: readonly RetenidaRow[]): Promise<string | null> {
+    if (!filas.some((f) => f.cierreId === null)) return null;
+    return this.zonaRepo.findCentralZonaId();
+  }
+
+  /** Grupo «sin cierre enviado» por mensajero; el ambito ya viene resuelto por la zona de la orden (decision 8). */
+  private async agruparSinCierre(
+    filas: ReadonlyArray<{ fila: RetenidaRow; ambito: AmbitoRetenidas }>,
+  ): Promise<MensajeroSinCierre[]> {
     if (filas.length === 0) return [];
-    const centralZonaId = await this.zonaRepo.findCentralZonaId();
     const mensajeroIds = [
-      ...new Set(filas.map((f) => f.mensajeroAsignadoId).filter((m): m is string => m !== null)),
+      ...new Set(filas.map(({ fila }) => fila.mensajeroAsignadoId).filter((m): m is string => m !== null)),
     ];
     const nombres = new Map(
       (await this.retenidasRepo.findMensajeros(mensajeroIds)).map((m) => [m.id, m.nombre]),
     );
     // Clave de grupo: mensajero + ambito (un mensajero con ordenes en dos zonas son dos grupos).
     const grupos = new Map<string, MensajeroSinCierre>();
-    for (const f of filas) {
-      const { destinoTipo, destinoZonaId } = resolverDestinoCierre(f.zonaId, centralZonaId);
-      const ambito: AmbitoRetenidas =
-        destinoTipo === "bodega_central" ? { tipo: "central" } : { tipo: "zona", zonaId: destinoZonaId };
-      const clave = `${f.mensajeroAsignadoId ?? ""}|${claveAmbito(ambito)}`;
+    for (const { fila, ambito } of filas) {
+      const clave = `${fila.mensajeroAsignadoId ?? ""}|${claveAmbito(ambito)}`;
       const grupo = grupos.get(clave) ?? {
-        mensajeroId: f.mensajeroAsignadoId,
+        mensajeroId: fila.mensajeroAsignadoId,
         mensajeroNombre:
-          f.mensajeroAsignadoId === null ? null : (nombres.get(f.mensajeroAsignadoId) ?? null),
+          fila.mensajeroAsignadoId === null ? null : (nombres.get(fila.mensajeroAsignadoId) ?? null),
         ambito,
         cuantas: 0,
       };
@@ -193,8 +217,42 @@ export class ReprogramadasRetenidasService implements IReprogramadasRetenidasSer
   }
 }
 
+/**
+ * LA REGLA DE ATRIBUCION Y AMBITO, una sola vez para `resumen` y `contar` (R5/R6/R7):
+ *   · sin cierre -> la bodega a la que volvera la ORDEN (`resolverDestinoCierre`, decision 8);
+ *   · con cierre `aprobado` -> `null`: dejo de retener (carrera de segundos entre lecturas, R28/R40);
+ *   · con cierre en cualquier otro estado -> el destino PERSISTIDO del cierre;
+ *   · con un cierre que la base no devuelve (dato imposible, FK) -> LANZA con causa y sin ids (R52).
+ */
+function ambitoDeRetenida(
+  fila: RetenidaRow,
+  destinos: ReadonlyMap<string, DestinoDeCierre>,
+  centralZonaId: string | null,
+): AmbitoRetenidas | null {
+  if (fila.cierreId === null) {
+    const { destinoTipo, destinoZonaId } = resolverDestinoCierre(fila.zonaId, centralZonaId);
+    return destinoTipo === "bodega_central" ? { tipo: "central" } : { tipo: "zona", zonaId: destinoZonaId };
+  }
+  const cierre = destinos.get(fila.cierreId);
+  if (cierre === undefined) {
+    // Sin la palabra del estado en plural: la guardia de la 455 la lee como texto visible.
+    throw new Error("retenidas (462): una gestion apunta a un cierre que la base no devuelve");
+  }
+  if (cierre.estado === CIERRE_APROBADO) return null;
+  return ambitoDelCierre(cierre);
+}
+
+/** Los ids de cierre DISTINTOS de las filas (sin los `null` del grupo «sin cierre»). */
+function cierreIdsDe(filas: readonly RetenidaRow[]): string[] {
+  return [...new Set(filas.map((f) => f.cierreId).filter((c): c is string => c !== null))];
+}
+
+function indexarPorCierre<T extends DestinoDeCierre>(cierres: readonly T[]): Map<string, T> {
+  return new Map(cierres.map((c) => [c.cierreId, c]));
+}
+
 /** Ambito por el destino PERSISTIDO del cierre: el mismo eje que `CierresAdminService.resolveAlcance`. */
-function ambitoDelCierre(c: CierreParaRetenidas): AmbitoRetenidas {
+function ambitoDelCierre(c: DestinoDeCierre): AmbitoRetenidas {
   return c.destinoTipo === "bodega_central"
     ? { tipo: "central" }
     : { tipo: "zona", zonaId: c.destinoZonaId };
@@ -221,25 +279,4 @@ function compararCierres(a: CierreQueRetiene, b: CierreQueRetiene): number {
     return a.jornadaCR < b.jornadaCR ? -1 : 1;
   }
   return a.mensajeroNombre.localeCompare(b.mensajeroNombre);
-}
-
-/**
- * `porForma` recontado sobre lo ATRIBUIDO: las filas cuyo cierre esta en `porCierre` (no aprobado)
- * mas las sin cierre. Asi `porForma.reprogramado + porForma.enReparto === total` siempre, tambien
- * cuando la carrera de la aprobacion descarto alguna fila.
- */
-function recontarPorForma(
-  filas: RetenidaRow[],
-  porCierre: Map<string, unknown>,
-  sinCierre: RetenidaRow[],
-): { reprogramado: number; enReparto: number } {
-  const sinCierreSet = new Set(sinCierre);
-  const porForma = { reprogramado: 0, enReparto: 0 };
-  for (const f of filas) {
-    const atribuida = f.cierreId === null ? sinCierreSet.has(f) : porCierre.has(f.cierreId);
-    if (!atribuida) continue;
-    if (f.forma === "reprogramado") porForma.reprogramado += 1;
-    else porForma.enReparto += 1;
-  }
-  return porForma;
 }

@@ -65,7 +65,12 @@ export interface ResumenRetenidas {
 export interface IReprogramadasRetenidasService {
   /** El conjunto ENTERO, agrupado. Base de las otras dos. Solo lectura. */
   resumen(hoyCR: Date): Promise<ResumenRetenidas>;
-  /** Cifra viva acotada a un ambito (campana, R14). Deriva de `resumen` en memoria. */
+  /**
+   * Cifra viva acotada a un ambito (campana y push, R14). Aplica LA MISMA regla de atribucion y
+   * ambito que `resumen` (misma funcion, no una copia), pero por el camino LIGERO: no carga nombres
+   * de mensajero ni fechas de gestiones (462/H2, 10 -> 7 consultas por sondeo). Invariante que el
+   * test de R7 mide contra Postgres: `contar(a) === recortarPorAmbito(await resumen(), a).total`.
+   */
   contar(hoyCR: Date, ambito: AmbitoRetenidas): Promise<number>;
   /**
    * Marca por cierre (S3): `Map<cierreId, cuantas>` SOLO para los ids pedidos; los que no retienen
@@ -81,9 +86,9 @@ export function mismoAmbito(a: AmbitoRetenidas, b: AmbitoRetenidas): boolean {
 }
 
 /**
- * Helper PURO: recorta un resumen a un ambito. Lo usan la franja de `/ordenes` (solo el central),
- * `contar` y los tests. El `total` del recorte es la suma de lo que queda: nunca el total global,
- * que es el numero de OTRA bodega (R6/R44).
+ * Helper PURO: recorta un resumen a un ambito. Lo usan la franja de `/ordenes` (solo el central) y
+ * los tests (R7: `contar(a)` tiene que dar este `total`). El `total` del recorte es la suma de lo que
+ * queda: nunca el total global, que es el numero de OTRA bodega (R6/R44).
  */
 export function recortarPorAmbito(r: ResumenRetenidas, ambito: AmbitoRetenidas): ResumenRetenidas {
   const cierres = r.cierres.filter((c) => mismoAmbito(c.ambito, ambito));

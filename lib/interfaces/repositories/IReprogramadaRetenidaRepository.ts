@@ -26,15 +26,26 @@ export interface RetenidaEnRepartoRow {
 }
 
 /**
- * Lo que el servicio necesita de UN cierre que retiene: su estado y destino PERSISTIDOS (el eje del
- * alcance, `CierresAdminService.resolveAlcance`), su mensajero con nombre (para la franja) y las
- * fechas con las que `derivarJornada` (271) resuelve la jornada EN LOTE, sin consulta por fila.
+ * Lo MINIMO de un cierre para ATRIBUIR y ACOTAR una retenida: su estado (un `aprobado` no retiene)
+ * y su destino PERSISTIDOS (el eje del alcance, `CierresAdminService.resolveAlcance`). Sin
+ * relaciones: es lo unico que la CIFRA (`contar`, campana y push) necesita saber de un cierre.
+ *
+ * 462/H2 (2026-09-25): existe para que el sondeo de la campana no cargue nombres de mensajero ni
+ * fechas de gestiones que no va a mostrar (medido: 10 -> 7 consultas por sondeo).
  */
-export interface CierreParaRetenidas {
+export interface DestinoDeCierre {
   cierreId: string;
   estado: CierreEstado;
   destinoTipo: CierreDestinoTipo;
   destinoZonaId: string;
+}
+
+/**
+ * Lo que la LISTA (franja, marca) necesita de UN cierre que retiene: lo de `DestinoDeCierre` mas su
+ * mensajero con nombre (para la franja) y las fechas con las que `derivarJornada` (271) resuelve la
+ * jornada EN LOTE, sin consulta por fila.
+ */
+export interface CierreParaRetenidas extends DestinoDeCierre {
   mensajeroId: string;
   mensajeroNombre: string;
   createdAt: Date;
@@ -54,6 +65,12 @@ export interface IReprogramadaRetenidaRepository {
    * para todos los ids (nunca una por cierre). Con `[]` devuelve `[]` sin consultar.
    */
   findCierresQueRetienen(cierreIds: readonly string[]): Promise<CierreParaRetenidas[]>;
+  /**
+   * Los MISMOS cierres, pero solo estado y destino (sin mensajero ni gestiones): UNA consulta sin
+   * relaciones, para la cifra de `contar`. Con `[]` devuelve `[]` sin consultar. Tiene que devolver
+   * exactamente los ids que `findCierresQueRetienen` devolveria (misma tabla, mismo `where`).
+   */
+  findDestinoDeCierres(cierreIds: readonly string[]): Promise<DestinoDeCierre[]>;
   /**
    * Nombres de los mensajeros del grupo «sin cierre enviado». UNA consulta para todos los ids. Con
    * `[]` devuelve `[]` sin consultar.

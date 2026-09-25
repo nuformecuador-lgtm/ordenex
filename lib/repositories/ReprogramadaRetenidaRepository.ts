@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type {
   CierreParaRetenidas,
+  DestinoDeCierre,
   IReprogramadaRetenidaRepository,
   RetenidaEnRepartoRow,
 } from "@/lib/interfaces/repositories/IReprogramadaRetenidaRepository";
@@ -113,6 +114,25 @@ export class ReprogramadaRetenidaRepository implements IReprogramadaRetenidaRepo
       mensajeroNombre: c.mensajero.nombre,
       createdAt: c.createdAt,
       gestionesCreatedAt: c.gestiones.map((g) => g.createdAt),
+    }));
+  }
+
+  /**
+   * 462/H2 — el mismo `where` que `findCierresQueRetienen`, SIN relaciones: una sola consulta a
+   * `cierre_dia`. Prisma parte cada relacion del `select` en una consulta aparte (medido: la
+   * version completa cuesta 3), y la cifra de la campana no muestra nombres ni jornadas.
+   */
+  async findDestinoDeCierres(cierreIds: readonly string[]): Promise<DestinoDeCierre[]> {
+    if (cierreIds.length === 0) return [];
+    const filas = await this.prisma.cierreDia.findMany({
+      where: { id: { in: [...cierreIds] } },
+      select: { id: true, estado: true, destinoTipo: true, destinoZonaId: true },
+    });
+    return filas.map((c) => ({
+      cierreId: c.id,
+      estado: c.estado as CierreEstado,
+      destinoTipo: c.destinoTipo as CierreDestinoTipo,
+      destinoZonaId: c.destinoZonaId,
     }));
   }
 
