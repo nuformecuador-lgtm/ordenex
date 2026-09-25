@@ -18,7 +18,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 // transaccion con una clave propia y lo sostiene mientras corre el cuerpo del test: los archivos
 // de la 459 que escriben se serializan entre si, sin frenar a nadie mas.
 
-const CLAVE_CANDADO_459 = 459_0001;
+export const CLAVE_CANDADO_459 = 459_0001;
 
 export async function conCandado459<T>(prisma: PrismaClient, cuerpo: () => Promise<T>): Promise<T> {
   let soltar: () => void = () => undefined;

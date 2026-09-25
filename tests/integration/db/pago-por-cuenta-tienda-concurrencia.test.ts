@@ -47,8 +47,12 @@ import {
 //   · R42 — pago por cuenta PAUSADO con 8 000 escritos ∥ pago de Ordenex a la misma tienda por
 //     8 000 sobre un saldo de 10 000. Con el candado compartido, el pago a tienda ESPERA, y al
 //     entrar ve el saldo ya rebajado (2 000) → `excede`. Sin el candado, lee 10 000 → `ok`, y la
-//     tienda queda en −6 000: las dos se evaluaron sobre el mismo saldo. Mutacion: quitar el
-//     `bloquearBeneficiario` de `PagoPorCuentaTiendaService.registrar` → rojo.
+//     tienda queda en −6 000: las dos se evaluaron sobre el mismo saldo.
+//     MUTACIONES MEDIDAS (2026-09-24): quitar el candado del PAGO A TIENDA → rojo. Quitar el del
+//     PAGO POR CUENTA → sigue verde, y es un mutante EQUIVALENTE hoy: el pago por cuenta escribe
+//     antes de leer nada, y sus INSERT con FK a `usuario` toman `FOR KEY SHARE` sobre la fila de la
+//     tienda, que choca con el `FOR UPDATE` del otro lado. Su candado es defensa en profundidad
+//     (design §6.1); si un dia lee el saldo antes de escribir, es el que lo protege.
 //   · R70 — dos saldos iniciales a la vez. Una BARRERA retiene a cada uno al mirar si ya hay uno
 //     hasta que llegue el otro (o 1,5 s). Con el candado, el segundo no llega a mirar: espera al
 //     primero, y ve el suyo → `ya_hay_saldo_inicial`. Sin el candado, los dos miran «no hay»,

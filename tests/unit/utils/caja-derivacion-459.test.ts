@@ -85,6 +85,66 @@ describe("459/A.2 — la caja de produccion (M6) con la formula nueva, sin recla
   });
 });
 
+describe("459/B.14 — columna 3 de design §2.4: + los 203 cobros reclasificados (25 769 034,50)", () => {
+  // La reclasificacion (T C.4) escribe UNA salida de terceros por cobro, por su mismo monto.
+  const r = derivarCaja([...M6, fila("egreso_pago_por_cuenta_tienda", "25769034.50")]);
+
+  it("R3: Entro no cambia; Salio 12 476 410,00 + 25 769 034,50 = 38 245 444,50; cifra −9 186 220,50", () => {
+    expect(r.entradas).toBe("29059224.00");
+    expect(r.salidas).toBe("38245444.50");
+    expect(r.enCaja).toBe("-9186220.50");
+    expect(r.signoEnCaja).toBe("negativo");
+  });
+
+  it("R4: la ganancia sigue en −4 405 636,53 (un pago por cuenta NO es un gasto de Ordenex)", () => {
+    expect(r.ganancia).toBe("-4405636.53");
+    expect(r.egresosPropios).toBe("12476410.00");
+  });
+
+  it("R5/R8: «De las tiendas» = 20 988 450,53 − 25 769 034,50 = −4 780 583,97 = Σ saldos medida en M6", () => {
+    expect(r.deTerceros).toBe("-4780583.97");
+    expect(r.signoDeTerceros).toBe("negativo");
+    expect(r.deTercerosAbsoluto).toBe("4780583.97");
+  });
+
+  it("R7: −4 405 636,53 − 4 780 583,97 + 0 = −9 186 220,50; y la barra, sin reparto", () => {
+    expect(new Prisma.Decimal(r.ganancia).add(r.deTerceros).add(r.capital).toFixed(2)).toBe(r.enCaja);
+    expect(r.modoComposicion).toBe("sin_reparto");
+  });
+});
+
+describe("459/B.14 — columna 4 de design §2.4: + un saldo inicial S (simbolico) y su anulacion", () => {
+  // S NO se estima (HF4, R27): 1 000 000,00 es un numero de prueba, no una propuesta.
+  const base = [...M6, fila("egreso_pago_por_cuenta_tienda", "25769034.50")];
+
+  it("R6/R7: capital = S, cifra principal = S − 9 186 220,50, ganancia y «De las tiendas» intactas", () => {
+    const r = derivarCaja([...base, fila("ingreso_aporte_capital", "1000000.00")], {
+      haySaldoInicialVigente: true,
+    });
+    expect(r.capital).toBe("1000000.00");
+    expect(r.enCaja).toBe("-8186220.50");
+    expect(r.ganancia).toBe("-4405636.53");
+    expect(r.deTerceros).toBe("-4780583.97");
+    expect(r.deOrdenex).toBe("-3405636.53");
+    expect(r.estado).toBe("saldo");
+  });
+
+  it("R74/R75: la anulacion lo devuelve todo a la columna 3", () => {
+    const r = derivarCaja([
+      ...base,
+      fila("ingreso_aporte_capital", "1000000.00"),
+      fila("egreso_reverso_aporte_capital", "1000000.00"),
+    ]);
+    expect([r.capital, r.enCaja, r.ganancia, r.deTerceros, r.estado]).toEqual([
+      "0.00",
+      "-9186220.50",
+      "-4405636.53",
+      "-4780583.97",
+      "flujo",
+    ]);
+  });
+});
+
 describe("459/A.2 — R7 sobre subconjuntos al azar (semilla fija)", () => {
   /** mulberry32: PRNG determinista, para que un rojo se pueda reproducir. */
   function prng(semilla: number): () => number {

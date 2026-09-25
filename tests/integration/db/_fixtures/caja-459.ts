@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
+import type { AporteCapitalTxRunner } from "@/lib/interfaces/services/IAporteCapitalService";
+import type { PagoPorCuentaTxRunner } from "@/lib/interfaces/services/IPagoPorCuentaTiendaService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
 import { CierreDelDiaRepository } from "@/lib/repositories/CierreDelDiaRepository";
@@ -11,6 +14,7 @@ import { GastoFijoCobroRepository } from "@/lib/repositories/GastoFijoCobroRepos
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
 import { LiquidacionRepartoRepository } from "@/lib/repositories/LiquidacionRepartoRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { PagoPorCuentaTiendaRepository } from "@/lib/repositories/PagoPorCuentaTiendaRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { RankingSnapshotRepository } from "@/lib/repositories/RankingSnapshotRepository";
 import { RechazoTiendaCobroRepository } from "@/lib/repositories/RechazoTiendaCobroRepository";
@@ -20,6 +24,9 @@ import { UserRepository } from "@/lib/repositories/UserRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
+import { AporteCapitalService } from "@/lib/services/AporteCapitalService";
+import { CajaAporteCapitalFeedService } from "@/lib/services/CajaAporteCapitalFeedService";
+import { CajaPagoPorCuentaFeedService } from "@/lib/services/CajaPagoPorCuentaFeedService";
 import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { CajaPremioRankingFeedService } from "@/lib/services/CajaPremioRankingFeedService";
 import { CierreDiaService } from "@/lib/services/CierreDiaService";
@@ -27,6 +34,7 @@ import { CierresAdminService } from "@/lib/services/CierresAdminService";
 import { CobroTiendaService } from "@/lib/services/CobroTiendaService";
 import { GastoFijoCobroService } from "@/lib/services/GastoFijoCobroService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
+import { PagoPorCuentaTiendaService } from "@/lib/services/PagoPorCuentaTiendaService";
 import { PremioRankingDevengoService } from "@/lib/services/PremioRankingDevengoService";
 import { RechazoTiendaCobroService } from "@/lib/services/RechazoTiendaCobroService";
 import { WalletEgresoService } from "@/lib/services/WalletEgresoService";
@@ -73,6 +81,14 @@ import { clienteConSavepoint, serializarEscriturasReales, type TxDeTest } from "
 const URLS_NO_USADAS: ISignedUrlProvider = {
   createSignedUrl: async (ruta: string) => ruta,
   createSignedUrls: async (rutas: string[]) => Object.fromEntries(rutas.map((r) => [r, r])),
+};
+
+/** Los comprobantes no se ejercen en el escenario (ficha 459): subir uno aqui es un error del test. */
+const STORAGE_NO_USADO: IFileStorage = {
+  upload: async () => {
+    throw new Error("el escenario 459 no sube comprobantes");
+  },
+  remove: async () => undefined,
 };
 
 /** Los estatus de orden que el escenario usa. */
@@ -255,6 +271,27 @@ export function montarServicios459(tx: TxDeTest) {
     ),
     egresos: new WalletEgresoService(cajaRepo, c),
     wallet: new WalletService(cajaRepo, c, new AporteCapitalRepository(c)),
+    // Ficha 459 (T B.14) — los dos escritores nuevos, cableados como su `buildService()`.
+    pagoPorCuenta: new PagoPorCuentaTiendaService(
+      new PagoPorCuentaTiendaRepository(c),
+      tiendaRepo,
+      new LiquidacionPagoRepository(c),
+      new UserRepository(c),
+      new CajaPagoPorCuentaFeedService(cajaRepo),
+      STORAGE_NO_USADO,
+      URLS_NO_USADAS,
+      ((fn: (t: never) => Promise<unknown>) =>
+        c.$transaction((t) => fn(t as never))) as unknown as PagoPorCuentaTxRunner,
+    ),
+    aporteCapital: new AporteCapitalService(
+      new AporteCapitalRepository(c),
+      new CajaAporteCapitalFeedService(cajaRepo),
+      cajaRepo,
+      STORAGE_NO_USADO,
+      URLS_NO_USADAS,
+      ((fn: (t: never) => Promise<unknown>) =>
+        c.$transaction((t) => fn(t as never))) as unknown as AporteCapitalTxRunner,
+    ),
     walletTienda: new WalletTiendaService(tiendaRepo),
     walletMensajero: new WalletMensajeroService(mensajeroRepo),
     runTx,
