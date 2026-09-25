@@ -23,11 +23,34 @@ export type WalletTiendaTxClient = Pick<PrismaClient, "walletTiendaMovimiento">;
  * `appendAccion` y `resolverActorCongelado` aceptan, y —lo que importa— NO expone `$transaction`.
  * Quien reciba esto no puede abrir la suya, asi que la atomicidad de R25/R42 es del TIPO, no de la
  * disciplina de quien escriba el proximo metodo.
+ *
+ * FICHA 461 (design §5.1/§6): gana `walletMovimiento` —la CAJA, donde el cobro escribe su cargo y su
+ * anulacion el reverso (HD1)— y `cobroTiendaAnulacion` —la constancia de la anulacion—. Las tres
+ * escrituras del cobro (debito, historial, cargo) y las cuatro de la anulacion (constancia, historial,
+ * credito, reverso) viajan por ESTE cliente, en una sola transaccion.
  */
 export type CobroTiendaTxClient = Pick<
   Prisma.TransactionClient,
-  "walletTiendaMovimiento" | "historialAccion" | "usuario"
+  "walletTiendaMovimiento" | "historialAccion" | "usuario" | "walletMovimiento" | "cobroTiendaAnulacion"
 >;
+
+/**
+ * FICHA 461 (design §5.1/§5.3) — lo que el servicio necesita de un COBRO para anularlo: la tienda
+ * (para el credito y el saldo), su nombre (para la descripcion en la caja), el monto (R13: el de los
+ * contra-asientos se lee DEL COBRO, nunca de la peticion) y la descripcion original.
+ *
+ * Solo lo devuelve `obtenerCobroPorId` para filas `debito/cobro_manual`: cualquier otra fila del
+ * libro —un flete, un pago, una anulacion— responde `null` (R16).
+ */
+export interface CobroTiendaRegistro {
+  id: string;
+  tiendaId: string;
+  /** Nombre y primer apellido de la tienda (`etiquetaDePersona`), como lo compone la caja. */
+  tiendaNombre: string;
+  monto: string; // STRING escala 2
+  descripcion: string | null;
+  fechaMovimiento: string; // ISO
+}
 
 /**
  * FICHA 381 — lo que `registrarCobroEnHistorial` necesita, y ni un delegado mas: la tabla del
@@ -246,4 +269,22 @@ export interface IWalletTiendaMovimientoRepository {
     tx: WalletTiendaHistorialTxClient,
     input: RegistrarCobroEnHistorialInput,
   ): Promise<void>;
+  /**
+   * FICHA 461 (R7) — el nombre de una tienda tal como lo compone la caja (nombre y primer apellido,
+   * `etiquetaDePersona`), leido DENTRO de la transaccion del cobro para describir su linea de caja
+   * («{Tienda} · {descripcion}») sin ningun id en el texto. Misma composicion que la migracion de datos
+   * (`concat_ws(' ', nombre, primer_apellido)`), asi que una linea completada y una del servicio se
+   * leen igual. Sin nombre resoluble devuelve `""` (la descripcion queda sola).
+   */
+  nombreDeTienda(tx: WalletTiendaHistorialTxClient, tiendaId: string): Promise<string>;
+  /**
+   * FICHA 461 (design §5.3, R13/R16) — UN cobro de Ordenex a una tienda por su id: SOLO filas
+   * `debito`/`cobro_manual`, con el `WHERE` en la base (no se lee la fila para descartarla despues).
+   * Cualquier otra fila del libro responde `null`, igual que un id inexistente: para el servicio las
+   * dos cosas son «no se encontro un cobro».
+   *
+   * SIN acotar por tienda A PROPOSITO, al reves que `obtenerPorIdDeTienda`: quien anula es el acceso
+   * total, que ve todas las tiendas, y la tienda del cobro es justo lo que hay que averiguar.
+   */
+  obtenerCobroPorId(id: string): Promise<CobroTiendaRegistro | null>;
 }

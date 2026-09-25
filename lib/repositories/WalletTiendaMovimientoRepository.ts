@@ -1,8 +1,9 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
-import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
+import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
 import type {
   CierreDeTiendaAgregadoRow,
+  CobroTiendaRegistro,
   CrearMovimientoTiendaInput,
   DesgloseTiendaAgregadoRow,
   IWalletTiendaMovimientoRepository,
@@ -366,5 +367,46 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
         ...actor,
       },
     ]);
+  }
+
+  /**
+   * FICHA 461 (R7) — el nombre de la tienda para la linea de caja del cobro, compuesto como lo compone
+   * el resto de la caja y la migracion de datos (nombre + primer apellido, `etiquetaDePersona`).
+   * Se lee DENTRO de la transaccion del cobro, con el `tx` que recibe.
+   */
+  async nombreDeTienda(tx: WalletTiendaHistorialTxClient, tiendaId: string): Promise<string> {
+    const tienda = await tx.usuario.findUnique({
+      where: { id: tiendaId },
+      select: { nombre: true, primerApellido: true },
+    });
+    return etiquetaDePersona(tienda);
+  }
+
+  /**
+   * FICHA 461 (design §5.3, R13/R16) — un cobro de Ordenex a una tienda por su id. El `WHERE` lleva
+   * las TRES claves: el id, el tipo `debito` y la categoria `cobro_manual`. Un flete, un pago o una
+   * anulacion con ese id no salen de la base: para quien llama, no existe un cobro con ese id.
+   */
+  async obtenerCobroPorId(id: string): Promise<CobroTiendaRegistro | null> {
+    const fila = await this.prisma.walletTiendaMovimiento.findFirst({
+      where: { id, tipo: "debito", categoria: "cobro_manual" },
+      select: {
+        id: true,
+        tiendaId: true,
+        monto: true,
+        descripcion: true,
+        fechaMovimiento: true,
+        tienda: { select: { nombre: true, primerApellido: true } },
+      },
+    });
+    if (fila === null) return null;
+    return {
+      id: fila.id,
+      tiendaId: fila.tiendaId,
+      tiendaNombre: etiquetaDePersona(fila.tienda),
+      monto: fila.monto.toFixed(2), // Decimal -> STRING escala 2 (money-safe)
+      descripcion: fila.descripcion,
+      fechaMovimiento: fila.fechaMovimiento.toISOString(),
+    };
   }
 }

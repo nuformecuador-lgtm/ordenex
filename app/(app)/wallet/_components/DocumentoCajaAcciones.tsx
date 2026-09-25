@@ -16,6 +16,7 @@ import {
   anularPagoPorCuentaTiendaAction,
   obtenerComprobantePagoPorCuentaAction,
 } from "@/lib/actions/pago-por-cuenta-tienda";
+import { anularCobroTiendaAction } from "@/lib/actions/wallet-tienda";
 import type { ObtenerComprobanteResult } from "@/lib/types/pago-por-cuenta-tienda";
 import type { DocumentoCajaDTO, WalletMovimientoDTO } from "@/lib/types/wallet";
 
@@ -67,6 +68,14 @@ const ACCIONES: Record<
   aporte_capital: {
     anular: (aporteId, motivo) => anularAporteCapitalAction({ aporteId, motivo }),
     comprobante: (aporteId) => obtenerComprobanteAporteCapitalAction({ aporteId }),
+  },
+  // Ficha 461 (design §9, R20): la rama la exige el compilador (`Record` total). `anular` llama a la
+  // action real; `comprobante` nunca se ofrece (`tieneComprobante` es siempre `false` en un cobro),
+  // asi que responde «sin comprobante» sin viajar al servidor. El aviso `no_anulable` y el resto de
+  // la superficie los completa el bloque C (frontend).
+  cobro_tienda: {
+    anular: (cobroId, motivo) => anularCobroTiendaAction({ cobroId, motivo }),
+    comprobante: async () => ({ status: "sin_comprobante" as const }),
   },
 };
 

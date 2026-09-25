@@ -101,6 +101,9 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
   // Ficha 459 (design §5): textos exactos del spec.
   pago_por_cuenta: "Pago por cuenta de la tienda",
   pago_por_cuenta_anulado: "Pago por cuenta anulado",
+  // Ficha 461 (design §7.5): la lectura DESDE LA TIENDA, texto exacto del spec. La entrada la exige
+  // el compilador (`Record` total); el bloque C (frontend) parte este diccionario en dos (P4).
+  cobro_tienda_anulado: "Ordenex anuló un cobro y te lo devolvió",
 };
 
 /**
@@ -120,6 +123,9 @@ export const ORIGEN_TIENDA_LABEL: Record<string, string> = {
   manual: "Manual",
   gestion_orden: "Gestión de orden",
   pago_por_cuenta_tienda: "Pago por cuenta de tienda",
+  // Ficha 461 (design §7.3): el credito de la anulacion de un cobro escribe en la tienda con este
+  // origen. Texto exacto del spec; lo exige `mi-wallet-labels.test.ts` (el compilador no).
+  cobro_tienda: "Cobro de Ordenex a una tienda",
 };
 
 /** Origen legible con fallback al valor crudo si no hay etiqueta conocida. */

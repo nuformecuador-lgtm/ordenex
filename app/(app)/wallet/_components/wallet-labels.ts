@@ -72,6 +72,10 @@ export const CATEGORIA_LABEL: Record<WalletMovimientoCategoria, string> = {
   ingreso_reverso_pago_por_cuenta_tienda: "Pago por cuenta anulado",
   ingreso_aporte_capital: "Saldo inicial o aporte de capital",
   egreso_reverso_aporte_capital: "Saldo inicial o aporte anulado",
+  // Ficha 461 (design §7.2): textos exactos del spec. Las DOS entradas las exige el compilador
+  // (`Record` total); el resto del diccionario lo renombra el bloque C (frontend).
+  ingreso_cobro_tienda: "Ordenex le cobra a una tienda",
+  egreso_reverso_cobro_tienda: "Cobro a una tienda anulado",
 };
 
 // ── Feature 173 (T G.1/T G.2, design §8) — las DOS cifras de la caja ──
@@ -316,6 +320,10 @@ export const ORIGEN_LABEL: Record<WalletOrigenTipo, string> = {
   pago_por_cuenta_tienda: "Pago por cuenta de tienda",
   aporte_capital: "Saldo inicial o aporte",
   cobro_manual_reclasificado: "Cobro reclasificado como pago por cuenta",
+  // Ficha 461 (design §7.3): textos exactos del spec. Las DOS entradas las exige el compilador
+  // (`Record` total); el resto del diccionario lo renombra el bloque C (frontend).
+  cobro_tienda: "Cobro de Ordenex a una tienda",
+  cobro_tienda_completado: "Cobro de Ordenex a una tienda (línea de caja completada al corregir)",
 };
 
 // ── Ficha 459 (design §9.4, R66/R67) — las acciones del libro sobre un DOCUMENTO ──
@@ -333,6 +341,8 @@ export const DOCUMENTO_CAJA_NOMBRE: Record<
 > = {
   pago_por_cuenta_tienda: "el pago por cuenta de una tienda",
   aporte_capital: "el saldo inicial o aporte de capital",
+  // Ficha 461 (design §9): texto exacto del spec. La entrada la exige el compilador (`Record` total).
+  cobro_tienda: "el cobro de Ordenex a una tienda",
 };
 
 export const DOCUMENTO_CAJA_ACCION = {

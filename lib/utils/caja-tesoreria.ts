@@ -87,6 +87,10 @@ export const NATURALEZA_POR_CATEGORIA: Record<WalletMovimientoCategoria, Natural
   // CAPITAL (P1): el saldo inicial o aporte, y su anulacion. Dinero de Ordenex que NO es ganancia.
   ingreso_aporte_capital: "capital",
   egreso_reverso_aporte_capital: "capital",
+  // Ficha 461 (design §2.1, HD1): el cobro de Ordenex a una tienda ES ganancia de Ordenex (se toma
+  // del saldo que le guardaba a la tienda), y su anulacion la devuelve. Los dos PROPIOS.
+  ingreso_cobro_tienda: "propio",
+  egreso_reverso_cobro_tienda: "propio",
 };
 
 /**
@@ -103,7 +107,12 @@ export const NATURALEZA_POR_CATEGORIA: Record<WalletMovimientoCategoria, Natural
  * `Record` TOTAL por el mismo motivo que `NATURALEZA_POR_CATEGORIA`: un concepto nuevo de la caja
  * no compila hasta que alguien decide si es efectivo o un cargo. La guardia
  * `tests/unit/guards/caja-clasificacion-459.guardia.test.ts` afirma que el conjunto
- * `cargo_a_tienda` ES `WALLET_INGRESO_CONCEPTO_SEED` y que todos son ingresos propios.
+ * `cargo_a_tienda` son los seis del feed MAS el cobro de Ordenex a una tienda y su reverso, todos
+ * propios, y que el signo de su efecto en «De las tiendas» lo da el prefijo.
+ *
+ * Ficha 461 (design §2.2, P1): la liquidez «cargo» vale TAMBIEN para egresos. Un egreso «cargo» es
+ * el REVERSO de un cargo (la anulacion de un cobro de Ordenex a una tienda): no saca dinero de la
+ * caja —no suma a «Salio»—, baja la ganancia y SUBE «De las tiendas» (le devuelve el saldo).
  */
 export type LiquidezMovimiento = "efectivo" | "cargo_a_tienda";
 
@@ -115,6 +124,10 @@ export const LIQUIDEZ_POR_CATEGORIA: Record<WalletMovimientoCategoria, LiquidezM
   ingreso_iva_flete: "cargo_a_tienda",
   ingreso_iva_flete_devolucion: "cargo_a_tienda",
   ingreso_iva_comision_cod: "cargo_a_tienda",
+  // Ficha 461 (HD1): el cobro de Ordenex a una tienda es el SEPTIMO cargo —igual que un flete, se
+  // toma del saldo de la tienda y no entra dinero nuevo— y su anulacion es el REVERSO de un cargo.
+  ingreso_cobro_tienda: "cargo_a_tienda",
+  egreso_reverso_cobro_tienda: "cargo_a_tienda",
   // EFECTIVO: todo lo demas entra o sale de verdad.
   ingreso_ajuste: "efectivo",
   ingreso_cod_recaudado: "efectivo",
@@ -137,14 +150,19 @@ export const LIQUIDEZ_POR_CATEGORIA: Record<WalletMovimientoCategoria, LiquidezM
  * Las sumas que hacen falta, por cubeta. Ficha 459 (design §2.2): SOLO se suma; ninguna resta.
  *
  *  - `entradasEfectivo`: los ingresos que son dinero que entro de verdad (no los cargos).
- *  - `cargosATiendas`: los seis conceptos de la parte de Ordenex que se DESCUENTA del saldo de la
- *    tienda. Tambien suman a `ingresosPropios`: para la ganancia son ingresos (R4).
+ *  - `cargosATiendas`: los conceptos de la parte de Ordenex que se DESCUENTA del saldo de la
+ *    tienda (los seis del feed y, desde la 461, el cobro de Ordenex a una tienda). Tambien suman a
+ *    `ingresosPropios`: para la ganancia son ingresos (R4).
+ *  - `reversosDeCargos` (ficha 461, design §2.2): los egresos con liquidez «cargo» —la anulacion de
+ *    un cobro—. NO suman a `salidas` (no sale dinero, R22): le devuelven saldo a la tienda, asi que
+ *    entran en «De las tiendas» como un ingreso (R23). Tambien suman a `egresosPropios`.
  *  - propio / terceros / capital: por dueño y tipo.
  */
 type Acumulado = {
   entradasEfectivo: Prisma.Decimal;
   salidas: Prisma.Decimal;
   cargosATiendas: Prisma.Decimal;
+  reversosDeCargos: Prisma.Decimal;
   ingresosPropios: Prisma.Decimal;
   egresosPropios: Prisma.Decimal;
   ingresosTerceros: Prisma.Decimal;
@@ -158,6 +176,7 @@ function acumular(filas: readonly AgregadoCajaRow[]): Acumulado {
     entradasEfectivo: new Prisma.Decimal(0),
     salidas: new Prisma.Decimal(0),
     cargosATiendas: new Prisma.Decimal(0),
+    reversosDeCargos: new Prisma.Decimal(0),
     ingresosPropios: new Prisma.Decimal(0),
     egresosPropios: new Prisma.Decimal(0),
     ingresosTerceros: new Prisma.Decimal(0),
@@ -181,7 +200,9 @@ function acumular(filas: readonly AgregadoCajaRow[]): Acumulado {
       else if (dueno === "terceros") acc.ingresosTerceros = acc.ingresosTerceros.add(monto);
       else acc.ingresosCapital = acc.ingresosCapital.add(monto);
     } else {
-      acc.salidas = acc.salidas.add(monto);
+      // Ficha 461 (R22): un egreso «cargo» es el reverso de un cargo: no es dinero que salga.
+      if (esCargo) acc.reversosDeCargos = acc.reversosDeCargos.add(monto);
+      else acc.salidas = acc.salidas.add(monto);
       if (dueno === "propio") acc.egresosPropios = acc.egresosPropios.add(monto);
       else if (dueno === "terceros") acc.egresosTerceros = acc.egresosTerceros.add(monto);
       else acc.egresosCapital = acc.egresosCapital.add(monto);
@@ -282,15 +303,22 @@ export function derivarCaja(
   const acc = acumular(filas);
 
   // Ficha 459 (design §2.2) — CUATRO restas con signo, todas de `derivarBalance`:
-  //  · la cifra principal: Entro (sin los cargos, que no son efectivo: F2) − Salio (R2/R3);
+  //  · la cifra principal: Entro (sin los cargos, que no son efectivo: F2) − Salio (sin los
+  //    reversos de cargos, que tampoco lo son: ficha 461, R22);
   //  · la ganancia, IDENTICA a la de antes: los cargos siguen siendo ingresos propios (R4);
   //  · «De las tiendas»: los cargos entran como SALIDA del bolsillo de las tiendas — es el
-  //    traspaso de su contra-entrega (o de su deuda) al de Ordenex (R5);
+  //    traspaso de su contra-entrega (o de su deuda) al de Ordenex (R5)— y los REVERSOS de cargos
+  //    como ENTRADA en ese bolsillo: la anulacion de un cobro le devuelve el saldo (461, R23);
   //  · el capital de Ordenex (R6).
-  // Identidad R7, por construccion: G + T + C = (ingP + ingT + ingC − cargos) − (egP + egT + egC).
+  // Identidad R7, por construccion (461, design §2.2): G + T + C
+  //   = (ingP − egP) + (ingT + rev − egT − cargos) + (ingC − egC)
+  //   = (ingP + ingT + ingC − cargos) − (egP + egT + egC − rev) = Entro − Salio.
   const caja = derivarBalance(acc.entradasEfectivo, acc.salidas);
   const propio = derivarBalance(acc.ingresosPropios, acc.egresosPropios);
-  const terceros = derivarBalance(acc.ingresosTerceros, acc.egresosTerceros.add(acc.cargosATiendas));
+  const terceros = derivarBalance(
+    acc.ingresosTerceros.add(acc.reversosDeCargos),
+    acc.egresosTerceros.add(acc.cargosATiendas),
+  );
   const capital = derivarBalance(acc.ingresosCapital, acc.egresosCapital);
 
   // «De Ordenex» (R11, P2) = ganancia + capital. Una SUMA, no una resta.

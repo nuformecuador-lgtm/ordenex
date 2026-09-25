@@ -65,6 +65,10 @@ export const COMPOSICION_DETALLE_ERROR =
 export const EGRESO_NOMBRADO_LABEL: Record<WalletEgresoNombrado, string> = {
   egreso_pago_mensajero: "Pagos a mensajeros",
   egreso_ajuste: "Ajustes (egreso)",
+  // Ficha 461 (design §4/§7.2): la fila de la anulacion de un cobro de Ordenex a una tienda, en la
+  // MISMA voz plural que sus vecinas. La entrada la exige el compilador (`Record` total); el texto
+  // singular del libro es «Cobro a una tienda anulado» (§7.2) y el bloque C (frontend) lo confirma.
+  egreso_reverso_cobro_tienda: "Cobros a una tienda anulados",
 };
 
 /**

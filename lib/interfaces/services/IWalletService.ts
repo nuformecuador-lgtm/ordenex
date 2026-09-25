@@ -96,6 +96,12 @@ export interface EstadoDocumentoCaja {
 export interface LectoresDocumentosCaja {
   pagosPorCuenta: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
   aportes: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 461 (design §5.4, R20/R37) — el estado de los cobros de Ordenex a una tienda cuya linea de
+   * caja esta en la pagina (propia o completada). Lo implementa `CobroTiendaAnulacionRepository`.
+   * Tambien SIN valor por defecto: sin el, ninguna linea de cobro ofreceria «Anular…».
+   */
+  cobros: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
 }
 
 export interface IWalletService {

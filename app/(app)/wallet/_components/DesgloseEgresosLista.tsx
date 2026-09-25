@@ -123,6 +123,9 @@ const FILAS: {
 const NOMBRADO_ICONO: Record<WalletEgresoNombrado, LucideIcon> = {
   egreso_pago_mensajero: Bike,
   egreso_ajuste: Scale,
+  // Ficha 461 (design §4): la anulacion de un cobro de Ordenex a una tienda, tercer egreso nombrado.
+  // La entrada la exige el compilador (`Record` total); el bloque C (frontend) decide el icono final.
+  egreso_reverso_cobro_tienda: Receipt,
 };
 
 export interface DesgloseEgresosListaProps {

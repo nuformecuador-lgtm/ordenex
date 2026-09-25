@@ -61,6 +61,11 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   "ingreso_reverso_pago_por_cuenta_tienda",
   "ingreso_aporte_capital",
   "egreso_reverso_aporte_capital",
+  // Ficha 461 (design §2.1, HD1): el cobro de Ordenex a una tienda es un CARGO como los fletes
+  // (propio, liquidez «cargo»: sube la ganancia, baja «De las tiendas», no toca «Entro») y su
+  // anulacion es el REVERSO de ese cargo (egreso propio «cargo», que no suma a «Salio»).
+  "ingreso_cobro_tienda",
+  "egreso_reverso_cobro_tienda",
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -98,6 +103,12 @@ export const WALLET_ORIGEN_TIPO_SEED = [
   "pago_por_cuenta_tienda",
   "aporte_capital",
   "cobro_manual_reclasificado",
+  // Ficha 461 (design §3.1, P2): `cobro_tienda` = lo que escribe el SERVICIO al cobrar y al anular
+  // (origen_id = id del debito del cobro); `cobro_tienda_completado` = las lineas de caja que la
+  // migracion de datos añade a los cobros previos sin linea. Dos origenes para que el `down` de esa
+  // migracion borre EXACTAMENTE lo suyo.
+  "cobro_tienda",
+  "cobro_tienda_completado",
 ] as const satisfies readonly PrismaWalletOrigenTipo[];
 
 export type WalletOrigenTipo = (typeof WALLET_ORIGEN_TIPO_SEED)[number];
@@ -130,9 +141,15 @@ export type WalletIngresoConcepto = (typeof WALLET_INGRESO_CONCEPTO_SEED)[number
 // declara `propio` con tipo ingreso— la comprueba en RUNTIME
 // `tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts` (R23/R32): un `satisfies`
 // no puede afirmarlo, porque la naturaleza es un VALOR y no un tipo.
+//
+// Ficha 461 (design §4, R27): + `ingreso_cobro_tienda`, el OCTAVO ingreso propio. La guardia de
+// composicion exige que este seed sea EXACTAMENTE los ingresos propios, y el cobro lo es (HD1).
+// `WALLET_INGRESO_CONCEPTO_SEED` NO cambia: son los seis del feed del cierre y
+// `MAPEO_CONCEPTO_TIENDA` depende de el.
 export const WALLET_INGRESO_PROPIO_SEED = [
   ...WALLET_INGRESO_CONCEPTO_SEED,
   "ingreso_ajuste",
+  "ingreso_cobro_tienda",
 ] as const satisfies readonly WalletMovimientoCategoria[];
 
 export type WalletIngresoPropio = (typeof WALLET_INGRESO_PROPIO_SEED)[number];
@@ -161,9 +178,13 @@ export type WalletEgresoDesglosado = (typeof WALLET_EGRESO_DESGLOSADO_SEED)[numb
  * movimiento» le PROMETE al usuario que ese gasto se llamara «Ajuste (egreso)»: sin fila
  * propia, la tarjeta rompe esa promesa.
  */
+//
+// Ficha 461 (design §4, R27): + `egreso_reverso_cobro_tienda`, el TERCER egreso nombrado. La
+// anulacion de un cobro baja la ganancia y tiene que verse con su nombre, no dentro de «Otros».
 export const WALLET_EGRESO_NOMBRADO_SEED = [
   "egreso_pago_mensajero",
   "egreso_ajuste",
+  "egreso_reverso_cobro_tienda",
 ] as const satisfies readonly WalletMovimientoCategoria[];
 
 export type WalletEgresoNombrado = (typeof WALLET_EGRESO_NOMBRADO_SEED)[number];
@@ -257,9 +278,16 @@ export type WalletMovimientoDTO = {
   documento: DocumentoCajaDTO | null;
 };
 
-/** Ficha 459 (design §7.3) — el estado del documento de una fila original del libro de la caja. */
+/**
+ * Ficha 459 (design §7.3) — el estado del documento de una fila original del libro de la caja.
+ *
+ * Ficha 461 (design §5.4, R20/R37): + `cobro_tienda`, la linea de caja de un cobro de Ordenex a una
+ * tienda, sea propia (origen `cobro_tienda`) o completada por la migracion de datos
+ * (`cobro_tienda_completado`). Su `tieneComprobante` es siempre `false` (un cobro no lleva
+ * comprobante). El reverso del cobro y las salidas reclasificadas siguen con `documento: null`.
+ */
 export type DocumentoCajaDTO = {
-  tipo: "pago_por_cuenta_tienda" | "aporte_capital";
+  tipo: "pago_por_cuenta_tienda" | "aporte_capital" | "cobro_tienda";
   anulado: boolean;
   tieneComprobante: boolean;
 };

@@ -56,6 +56,9 @@ export const WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED = [
   // anulacion (credito). Contrapartida en la caja: `egreso_pago_por_cuenta_tienda` / su reverso.
   "pago_por_cuenta",
   "pago_por_cuenta_anulado",
+  // FICHA 461 (design §2.1, HD1): la ANULACION de un cobro de Ordenex a la tienda (credito). Le
+  // devuelve el monto del cobro; su contrapartida en la caja es `egreso_reverso_cobro_tienda`.
+  "cobro_tienda_anulado",
 ] as const satisfies readonly PrismaWalletTiendaMovimientoCategoria[];
 
 export type WalletTiendaMovimientoCategoria =
@@ -339,3 +342,38 @@ export const registrarCobroTiendaSchema = z
   .strict();
 
 export type RegistrarCobroTiendaInput = z.infer<typeof registrarCobroTiendaSchema>;
+
+// ── FICHA 461 — ANULAR UN COBRO de Ordenex a una tienda (R10–R19) ──
+
+/**
+ * FICHA 461 (R13/R14) — el BORDE de la anulacion: el cobro y un motivo. SIN monto, y `.strict()`
+ * lo hace cumplir (R13): el monto de los dos contra-asientos se lee DEL COBRO en el servidor, y una
+ * peticion que traiga `monto` —o cualquier otra clave no prevista— muere aqui con `validation_error`
+ * sin escribir nada. El motivo se recorta y no puede quedar vacio (R14). Molde:
+ * `anularPagoPorCuentaTiendaSchema`.
+ */
+export const anularCobroTiendaSchema = z
+  .object({
+    cobroId: z.string().uuid(),
+    motivo: z.string().trim().min(1, "El motivo de la anulacion es obligatorio."),
+  })
+  .strict();
+
+export type AnularCobroTiendaInput = z.infer<typeof anularCobroTiendaSchema>;
+
+/** R17 — por que un cobro no se puede anular por esta via. */
+export type MotivoNoAnulable = "reclasificado" | "sin_linea_de_caja";
+
+/**
+ * FICHA 461 (design §6) — el contrato COMPLETO que ve la pantalla. `unauthenticated` y
+ * `validation_error` los decide el borde; el resto, el dominio. `ok` devuelve el saldo de la tienda
+ * DESPUES de la anulacion, con su signo (STRING, R52). Ninguna rama de error viaja con importes.
+ */
+export type AnularCobroTiendaResult =
+  | { status: "ok"; saldo: SaldoTiendaDTO }
+  | { status: "ya_anulado" }
+  | { status: "no_encontrado" }
+  | { status: "no_anulable"; motivo: MotivoNoAnulable }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };

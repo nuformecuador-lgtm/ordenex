@@ -56,6 +56,9 @@ export const CUBETA_POR_CATEGORIA: Record<WalletTiendaMovimientoCategoria, Cubet
   // (como `ajuste_credito`).
   pago_por_cuenta: "pagado",
   pago_por_cuenta_anulado: "aFavor",
+  // FICHA 461 (design §4): la anulacion de un cobro de Ordenex le DEVUELVE el monto a la tienda ->
+  // `aFavor`, como `ajuste_credito` y `pago_por_cuenta_anulado`. El cobro sigue en `cargos`.
+  cobro_tienda_anulado: "aFavor",
 };
 
 /**

@@ -55,6 +55,12 @@ function hayFiltros(filtros: BalanceFiltros): boolean {
  * Ficha 459 (design §7.3) — ¿es esta fila la ORIGINAL de un documento? Categoria Y origen, los
  * dos: la salida de un cobro reclasificado comparte categoria con el pago por cuenta pero su
  * origen es el cobro, y los contra-asientos comparten origen pero no categoria.
+ *
+ * Ficha 461 (design §5.4, R20/R37): la linea de caja de un cobro de Ordenex a una tienda es
+ * original con CUALQUIERA de sus dos origenes —`cobro_tienda` (la escribio el servicio) o
+ * `cobro_tienda_completado` (la añadio la migracion de datos)—: las dos se anulan igual. El reverso
+ * (`egreso_reverso_cobro_tienda`, mismo origen) NO es original. Mutacion 14 de design §14.2: sin el
+ * origen `cobro_tienda_completado` aqui, las lineas completadas perderian su «Anular…».
  */
 function tipoDeDocumentoOriginal(m: WalletMovimientoDTO): DocumentoCajaDTO["tipo"] | null {
   if (m.categoria === "egreso_pago_por_cuenta_tienda" && m.origenTipo === "pago_por_cuenta_tienda") {
@@ -62,6 +68,12 @@ function tipoDeDocumentoOriginal(m: WalletMovimientoDTO): DocumentoCajaDTO["tipo
   }
   if (m.categoria === "ingreso_aporte_capital" && m.origenTipo === "aporte_capital") {
     return "aporte_capital";
+  }
+  if (
+    m.categoria === "ingreso_cobro_tienda" &&
+    (m.origenTipo === "cobro_tienda" || m.origenTipo === "cobro_tienda_completado")
+  ) {
+    return "cobro_tienda";
   }
   return null;
 }
@@ -111,14 +123,17 @@ export class WalletService implements IWalletService {
         .map((m) => m.origenId as string);
     const idsPagos = idsDe("pago_por_cuenta_tienda");
     const idsAportes = idsDe("aporte_capital");
+    const idsCobros = idsDe("cobro_tienda");
 
-    const [pagos, aportes] = await Promise.all([
+    const [pagos, aportes, cobros] = await Promise.all([
       idsPagos.length > 0 ? this.documentos.pagosPorCuenta.estadoDeDocumentos(idsPagos) : [],
       idsAportes.length > 0 ? this.documentos.aportes.estadoDeDocumentos(idsAportes) : [],
+      idsCobros.length > 0 ? this.documentos.cobros.estadoDeDocumentos(idsCobros) : [],
     ]);
     const estado = {
       pago_por_cuenta_tienda: new Map(pagos.map((e) => [e.id, e])),
       aporte_capital: new Map(aportes.map((e) => [e.id, e])),
+      cobro_tienda: new Map(cobros.map((e) => [e.id, e])),
     };
 
     return movimientos.map((m) => {

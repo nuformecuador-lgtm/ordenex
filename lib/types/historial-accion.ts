@@ -180,6 +180,12 @@ export const HISTORIAL_ACCION_TIPOS = [
   "pago_por_cuenta_tienda_anulado", // PagoPorCuentaTiendaRepository.anular
   "aporte_capital_registrado", // AporteCapitalRepository.crear
   "aporte_capital_anulado", // AporteCapitalRepository.anular
+  // ⭑ FICHA 461 (R55) — alguien ANULO un cobro de Ordenex a una tienda. «Mueve dinero» en el sentido
+  // mas directo: le devuelve a la tienda el monto del cobro (credito) y baja la ganancia (reverso del
+  // cargo en la caja). TIPO PROPIO y metodo propio (la guardia del censo mide POR METODO). La fila
+  // lleva el importe y el NOMBRE de la tienda; NUNCA el motivo de la anulacion (texto libre, R5 de la
+  // 362). Entidad: `wallet_tienda_movimiento` (el debito del cobro), sin entidad nueva.
+  "cobro_tienda_anulado", // CobroTiendaAnulacionRepository.anular
   // ⭑ FICHA 398 — UN MAESTRO/ADMIN CORRIGIO EL RESULTADO de una gestion que ya estaba dentro de un
   // cierre ABIERTO: `entregada -> rechazada`. Entra en DINERO y no admite discusion — la fila
   // documenta que del cierre SALIO un cobro que nadie recaudo (baja `total_general` y el balde de
@@ -408,6 +414,8 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   pago_por_cuenta_tienda_anulado: "mueve_dinero",
   aporte_capital_registrado: "mueve_dinero",
   aporte_capital_anulado: "mueve_dinero",
+  // FICHA 461 (R55): anular un cobro le devuelve dinero a la tienda y baja la ganancia.
+  cobro_tienda_anulado: "mueve_dinero",
   // FICHA 398: la correccion saca del cierre un cobro que nadie recaudo y pone en cero el pago
   // de esa gestion al mensajero. No hay lectura mas directa de «mueve dinero», y R17 exige
   // exactamente una categoria por tipo.
@@ -474,11 +482,14 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   zona_central_cambiada: "Cambió la marca de zona central",
   zona_pago_mensajero_cambiado: "Cambió el pago al mensajero de una zona",
   zona_sinpe_cambiado: "Cambió el SINPE de una bodega",
-  cobro_tienda_registrado: "Cobró un costo a una tienda",
-  pago_por_cuenta_tienda_registrado: "Pagó por cuenta de una tienda",
-  pago_por_cuenta_tienda_anulado: "Anuló un pago por cuenta de una tienda",
-  aporte_capital_registrado: "Registró un saldo inicial o aporte de capital",
-  aporte_capital_anulado: "Anuló un saldo inicial o aporte de capital",
+  // Ficha 461 (design §7.7, HD3/P15): los seis textos que esta ficha toca, desde Ordenex y diciendo
+  // quien le paga a quien; verbo en pasado con la persona como sujeto, como el resto del catalogo.
+  cobro_tienda_registrado: "Le cobró a una tienda",
+  cobro_tienda_anulado: "Anuló un cobro a una tienda",
+  pago_por_cuenta_tienda_registrado: "Pagó un gasto de una tienda",
+  pago_por_cuenta_tienda_anulado: "Anuló el pago de un gasto de una tienda",
+  aporte_capital_registrado: "Registró un aporte de dinero a la caja",
+  aporte_capital_anulado: "Anuló un aporte de dinero a la caja",
   cierre_dia_gestion_corregida: "Corrigió el resultado de una gestión",
   cierre_bodega_conciliado: "Marcó recibida una consolidación de bodega",
   cierre_bodega_conciliacion_revertida: "Revirtió la conciliación de una consolidación de bodega",
@@ -536,8 +547,9 @@ export const ENTIDAD_LABELS: Record<HistorialAccionEntidad, string> = {
   canton: "Cantón",
   distrito: "Distrito",
   wallet_tienda_movimiento: "Movimiento de tienda",
-  pago_por_cuenta_tienda: "Pago por cuenta de tienda",
-  aporte_capital: "Saldo inicial o aporte",
+  // Ficha 461 (design §7.7): las dos etiquetas de entidad con el nombre nuevo.
+  pago_por_cuenta_tienda: "Pago de un gasto de una tienda",
+  aporte_capital: "Aporte de dinero a la caja",
 };
 
 /** Los tipos de UNA categoria. Es la traduccion `categoria -> accion IN (…)` del borde (R17). */

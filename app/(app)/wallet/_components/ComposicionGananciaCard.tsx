@@ -102,6 +102,10 @@ const INGRESO_ICONO: Record<WalletIngresoPropio, LucideIcon> = {
   ingreso_iva_flete_devolucion: Percent,
   ingreso_iva_comision_cod: Percent,
   ingreso_ajuste: Scale,
+  // Ficha 461 (design §4): el cobro de Ordenex a una tienda, octavo ingreso propio. La entrada la
+  // exige el compilador (`Record` total); el icono es el mismo que el de la comision (dinero que
+  // Ordenex le cobra a la tienda). El bloque C (frontend) decide si lo cambia.
+  ingreso_cobro_tienda: HandCoins,
 };
 
 /** Insignia del signo de la ganancia. Las mismas variantes semánticas que la tarjeta de la caja. */
