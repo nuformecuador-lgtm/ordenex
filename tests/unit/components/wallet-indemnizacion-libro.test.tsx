@@ -66,7 +66,7 @@ describe("R31 — el concepto tiene etiqueta legible en el libro", () => {
     );
 
     const tabla = screen.getByRole("table", { name: "Libro de movimientos" });
-    expect(within(tabla).getByText("Indemnización por incidente")).toBeInTheDocument();
+    expect(within(tabla).getByText("Indemnización que Ordenex paga por un incidente")).toBeInTheDocument();
     expect(tabla.textContent).not.toMatch(/egreso_indemnizacion/);
   });
 
@@ -108,7 +108,7 @@ describe("R31 — el concepto es una opción del filtro por categoría", () => {
 
     expect(await screen.findByRole("listbox")).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: "Indemnización por incidente" }),
+      screen.getByRole("option", { name: "Indemnización que Ordenex paga por un incidente" }),
     ).toBeInTheDocument();
   });
 
@@ -129,7 +129,7 @@ describe("R31 — el concepto es una opción del filtro por categoría", () => {
       // Nunca el slug crudo como texto visible.
       expect(label).not.toBe(value);
     }
-    expect(CATEGORIA_LABEL.egreso_indemnizacion).toBe("Indemnización por incidente");
+    expect(CATEGORIA_LABEL.egreso_indemnizacion).toBe("Indemnización que Ordenex paga por un incidente");
   });
 
   it("elegir la indemnización y aplicar emite ese filtro tal cual", async () => {
@@ -139,7 +139,7 @@ describe("R31 — el concepto es una opción del filtro por categoría", () => {
 
     await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
     await user.click(
-      await screen.findByRole("option", { name: "Indemnización por incidente" }),
+      await screen.findByRole("option", { name: "Indemnización que Ordenex paga por un incidente" }),
     );
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
 

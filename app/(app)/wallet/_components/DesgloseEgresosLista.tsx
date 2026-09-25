@@ -7,6 +7,7 @@ import {
   Receipt,
   Scale,
   ShieldAlert,
+  Undo2,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -91,17 +92,26 @@ const OTROS_EGRESOS_LABEL = "Otros gastos de Ordenex";
  * Filas del desglose: etiqueta i18n-ready + el monto STRING que le corresponde + su icono + el
  * TOKEN con el que el servidor sabe que movimientos la componen.
  */
+//
+// Ficha 461 (HD3, design §7): los rotulos en la voz plural de la columna y con los nombres desde
+// Ordenex del libro («Gasto de Ordenex» → «Gastos de Ordenex»); «Gastos variables» queda retirado
+// con su singular. «Sueldos» e «Indemnizaciones» no cambian: ya decian lo que son.
 const FILAS: {
   key: keyof Omit<DesgloseEgresosDTO, "total">;
   fila: ComposicionFilaId;
   label: string;
   icono: LucideIcon;
 }[] = [
-  { key: "gastoFijo", fila: "egreso_gasto_fijo", label: "Gastos fijos", icono: CalendarClock },
+  {
+    key: "gastoFijo",
+    fila: "egreso_gasto_fijo",
+    label: "Gastos fijos de Ordenex",
+    icono: CalendarClock,
+  },
   {
     key: "gastoVariable",
     fila: "egreso_gasto_variable",
-    label: "Gastos variables",
+    label: "Gastos de Ordenex",
     icono: Receipt,
   },
   { key: "sueldo", fila: "egreso_sueldo", label: "Sueldos", icono: Users },
@@ -123,9 +133,10 @@ const FILAS: {
 const NOMBRADO_ICONO: Record<WalletEgresoNombrado, LucideIcon> = {
   egreso_pago_mensajero: Bike,
   egreso_ajuste: Scale,
-  // Ficha 461 (design §4): la anulacion de un cobro de Ordenex a una tienda, tercer egreso nombrado.
-  // La entrada la exige el compilador (`Record` total); el bloque C (frontend) decide el icono final.
-  egreso_reverso_cobro_tienda: Receipt,
+  // Ficha 461 (design §4, R27): la anulacion de un cobro de Ordenex a una tienda, tercer egreso
+  // nombrado. `Undo2` —una flecha que vuelve— porque es eso: el cobro que se DESHACE y vuelve al
+  // saldo de la tienda. Es decoracion (`aria-hidden`); el rotulo ya lo dice.
+  egreso_reverso_cobro_tienda: Undo2,
 };
 
 export interface DesgloseEgresosListaProps {

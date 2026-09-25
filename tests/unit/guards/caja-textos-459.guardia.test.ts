@@ -44,6 +44,10 @@ const TEXTOS_RETIRADOS: readonly string[] = [
   "Todo lo que entró menos todo lo que salió, incluido el dinero de las tiendas",
   // El rótulo viejo de «De las tiendas»: el contra-entrega BRUTO.
   "Contra-entrega cobrado y aún no entregado a las tiendas",
+  // Ficha 461 (HD1/HD2, R50): el cobro de Ordenex a una tienda SÍ pasa por la caja desde esa ficha
+  // (es un cargo que sube la ganancia y baja «De las tiendas»). La frase de la 459 que decía lo
+  // contrario en `CAJA_RESUMEN_AVISO_TERCEROS` queda retirada.
+  "bajan su saldo sin pasar por la caja",
 ];
 
 /** Qué fragmentos retirados aparecen en un texto. */
@@ -75,6 +79,12 @@ export const CAJA_RESUMEN_AVISO_TERCEROS =
   "Wallet → Tiendas.";
 `;
 
+/** La fuente de la 459 (`wallet-labels.ts` en `e33abeee`): la frase que la 461 retira (R50). */
+const FUENTE_DE_LA_459 = `
+export const CAJA_RESUMEN_AVISO_TERCEROS =
+  "Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión y el impuesto. Los cobros de un costo a una tienda bajan su saldo sin pasar por la caja. El detalle de cada tienda está en Wallet → Tiendas.";
+`;
+
 describe("guardia 459 — R24: los textos retirados no vuelven", () => {
   const archivos = [
     ...archivosDe(path.join(RAIZ, "app", "(app)", "wallet")),
@@ -97,6 +107,10 @@ describe("guardia 459 — R24: los textos retirados no vuelven", () => {
 
   it("CONTRAPRUEBA: la fuente de antes de la ficha la pone roja", () => {
     expect(retiradosEn(FUENTE_DE_ANTES).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("CONTRAPRUEBA 461: la fuente de la 459 («sin pasar por la caja») también la pone roja", () => {
+    expect(retiradosEn(FUENTE_DE_LA_459)).toEqual(["bajan su saldo sin pasar por la caja"]);
   });
 });
 

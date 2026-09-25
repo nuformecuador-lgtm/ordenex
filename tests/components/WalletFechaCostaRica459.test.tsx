@@ -155,7 +155,7 @@ describe("459/F1 — /wallet: el libro de la caja y su descarga", () => {
     expect(within(fila).queryByText(DIA_UTC)).toBeNull();
     expect(
       screen.getByRole("button", {
-        name: "Anular Pago por cuenta de una tienda del 2026-09-24 por ₡10.000",
+        name: "Anular Ordenex paga un gasto de una tienda del 2026-09-24 por ₡10.000",
       }),
     ).toBeInTheDocument();
     // El pago de la liquidación sigue en SU día.

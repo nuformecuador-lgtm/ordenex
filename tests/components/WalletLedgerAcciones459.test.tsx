@@ -181,12 +181,12 @@ describe("FICHA 459 — qué filas ofrecen acciones (R66/R67)", () => {
     render(<WalletLedger movimientos={TODAS} />);
     expect(
       screen.getByRole("button", {
-        name: "Anular Pago por cuenta de una tienda del 2026-09-20 por ₡10.000",
+        name: "Anular Ordenex paga un gasto de una tienda del 2026-09-20 por ₡10.000",
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
-        name: "Anular Saldo inicial o aporte de capital del 2026-08-25 por ₡2.500.000,50",
+        name: "Anular Aporte de dinero a la caja del 2026-08-25 por ₡2.500.000,50",
       }),
     ).toBeInTheDocument();
   });
@@ -204,7 +204,7 @@ describe("FICHA 459 — anular desde el libro (R46/R49/R65/R74)", () => {
     );
     const dialog = await screen.findByRole("dialog");
     expect(
-      within(dialog).getByText("Anular el pago por cuenta de una tienda"),
+      within(dialog).getByText("Anular el pago de un gasto de una tienda"),
     ).toBeInTheDocument();
     const confirmar = within(dialog).getByRole("button", { name: "Anular" });
     // R49 — sin motivo no se puede confirmar.
@@ -301,17 +301,17 @@ describe("FICHA 459 — el cobro reclasificado en el libro y en su descarga (T C
   it("se lee con el concepto del pago por cuenta, dueño «Tienda» y el origen legible", () => {
     render(<WalletLedger movimientos={[RECLASIFICADO]} />);
     const f = filaPorDescripcion(/pago FACEBOOK/);
-    expect(within(f).getByText("Pago por cuenta de una tienda")).toBeInTheDocument();
+    expect(within(f).getByText("Ordenex paga un gasto de una tienda")).toBeInTheDocument();
     expect(
-      within(f).getByText("Cobro reclasificado como pago por cuenta · Nuform · pago FACEBOOK"),
+      within(f).getByText("Cobro reclasificado como pago de un gasto de la tienda · Nuform · pago FACEBOOK"),
     ).toBeInTheDocument();
     expect(within(f).getByText("Tienda")).toBeInTheDocument();
   });
 
   it("la descarga lleva el MISMO origen legible, las mismas columnas y ningún id", () => {
     const f = filaDescargaMovimientoCaja(RECLASIFICADO);
-    expect(f.origen).toBe("Cobro reclasificado como pago por cuenta · Nuform · pago FACEBOOK");
-    expect(f.categoria).toBe("Pago por cuenta de una tienda");
+    expect(f.origen).toBe("Cobro reclasificado como pago de un gasto de la tienda · Nuform · pago FACEBOOK");
+    expect(f.categoria).toBe("Ordenex paga un gasto de una tienda");
     expect(f.dueno).toBe("Tienda");
     expect(Object.keys(f).sort()).toEqual(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave).sort());
   });
@@ -348,29 +348,29 @@ const ESPERADO: ReadonlyArray<{
   {
     caso: "saldo inicial",
     movimiento: SALDO_INICIAL,
-    concepto: "Saldo inicial o aporte de capital",
-    origen: "Saldo inicial o aporte · Saldo inicial · Arranque",
+    concepto: "Aporte de dinero a la caja",
+    origen: "Aporte de dinero a la caja · Saldo inicial · Arranque",
     dueno: "Ordenex (capital)",
   },
   {
     caso: "anulación del saldo inicial",
     movimiento: REVERSO_APORTE,
-    concepto: "Saldo inicial o aporte anulado",
-    origen: "Saldo inicial o aporte · Anulación · Saldo inicial · Arranque",
+    concepto: "Aporte de dinero a la caja anulado",
+    origen: "Aporte de dinero a la caja · Anulación · Saldo inicial · Arranque",
     dueno: "Ordenex (capital)",
   },
   {
     caso: "pago por cuenta",
     movimiento: PAGO_VIGENTE,
-    concepto: "Pago por cuenta de una tienda",
-    origen: "Pago por cuenta de tienda · Tienda Norte · A Facebook · Pauta · SINPE · REF-1",
+    concepto: "Ordenex paga un gasto de una tienda",
+    origen: "Pago de un gasto de una tienda · Tienda Norte · A Facebook · Pauta · SINPE · REF-1",
     dueno: "Tienda",
   },
   {
     caso: "anulación del pago por cuenta",
     movimiento: CONTRA_ASIENTO,
-    concepto: "Pago por cuenta anulado",
-    origen: "Pago por cuenta de tienda · Anulación · Tienda Sur · A Jet Cargo · Envío · Efectivo",
+    concepto: "Pago de un gasto de una tienda anulado",
+    origen: "Pago de un gasto de una tienda · Anulación · Tienda Sur · A Jet Cargo · Envío · Efectivo",
     dueno: "Tienda",
   },
 ];
@@ -395,10 +395,10 @@ describe("FICHA 459 — concepto, origen y dueño del capital y del pago por cue
 
   it("el filtro por concepto del libro ofrece los cuatro conceptos nuevos con su nombre", () => {
     const opciones = new Map(CATEGORIA_OPTIONS.map((o) => [o.value, o.label]));
-    expect(opciones.get("egreso_pago_por_cuenta_tienda")).toBe("Pago por cuenta de una tienda");
-    expect(opciones.get("ingreso_reverso_pago_por_cuenta_tienda")).toBe("Pago por cuenta anulado");
-    expect(opciones.get("ingreso_aporte_capital")).toBe("Saldo inicial o aporte de capital");
-    expect(opciones.get("egreso_reverso_aporte_capital")).toBe("Saldo inicial o aporte anulado");
+    expect(opciones.get("egreso_pago_por_cuenta_tienda")).toBe("Ordenex paga un gasto de una tienda");
+    expect(opciones.get("ingreso_reverso_pago_por_cuenta_tienda")).toBe("Pago de un gasto de una tienda anulado");
+    expect(opciones.get("ingreso_aporte_capital")).toBe("Aporte de dinero a la caja");
+    expect(opciones.get("egreso_reverso_aporte_capital")).toBe("Aporte de dinero a la caja anulado");
   });
 });
 

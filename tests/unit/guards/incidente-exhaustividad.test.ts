@@ -74,7 +74,7 @@ describe("R5 — los mapas por RESULTADO clasifican `incidente` explicitamente",
 
 describe("R5/R31 — la categoria nueva esta clasificada en la wallet", () => {
   it("R31: `CATEGORIA_LABEL` tiene etiqueta legible EN ESPANOL para la indemnizacion", () => {
-    expect(CATEGORIA_LABEL.egreso_indemnizacion).toBe("Indemnización por incidente");
+    expect(CATEGORIA_LABEL.egreso_indemnizacion).toBe("Indemnización que Ordenex paga por un incidente");
     // No es el slug crudo: la etiqueta se escribio, no se derivo del enum.
     expect(CATEGORIA_LABEL.egreso_indemnizacion).not.toBe("egreso_indemnizacion");
   });
@@ -91,7 +91,7 @@ describe("R5/R31 — la categoria nueva esta clasificada en la wallet", () => {
     const opciones = CATEGORIA_OPTIONS.map((o) => o.value);
     expect(opciones).toContain("egreso_indemnizacion");
     const opcion = CATEGORIA_OPTIONS.find((o) => o.value === "egreso_indemnizacion");
-    expect(opcion?.label).toBe("Indemnización por incidente");
+    expect(opcion?.label).toBe("Indemnización que Ordenex paga por un incidente");
   });
 
   it("R5: las etiquetas de resultado de los dos detalles clasifican `incidente`", () => {

@@ -275,7 +275,7 @@ describe("CajaResumenCard — «De las tiendas» (R34 de la 173 → R23/R24 de l
 
     const texto = within(tercera).getByRole("note").textContent ?? "";
     expect(texto).toBe(
-      "Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión y el impuesto. Los cobros de un costo a una tienda bajan su saldo sin pasar por la caja. El detalle de cada tienda está en Wallet → Tiendas.",
+      "Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas.",
     );
     // R24: ni «es más» ni «no es lo que se les debe».
     expect(texto).not.toMatch(/es más/i);
