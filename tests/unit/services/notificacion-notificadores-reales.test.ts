@@ -818,6 +818,19 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     );
   });
 
+  it("⭑⭑ 462/R7/R26: lib/actions/cierres-admin.ts PASA el conteo de retenidas con el MISMO ensamblaje que el cron", () => {
+    // La marca «Retiene N reprogramadas de hoy» sale de `contarPorCierre`, que es una dependencia
+    // OBLIGATORIA del servicio (sin ella no compila). Lo que este caso afirma no es que se pase
+    // ALGO —eso lo exige el compilador— sino que se pase EL ensamblaje unico
+    // (`buildReprogramadasRetenidasService`) y no un servicio construido a mano aqui: dos
+    // ensamblajes distintos son dos cifras que pueden divergir entre la campana y la marca (R7).
+    const uso = fuenteSinImportsNiComentarios(leer("lib", "actions", "cierres-admin.ts"));
+    expect(uso).toMatch(
+      /new CierresAdminService\([\s\S]*new PagoMensajeroMovimientoRepository\(prisma\),?[\s\S]*buildReprogramadasRetenidasService\(prisma\)[\s\S]*notificarMensajeroBloqueadoReal/,
+    );
+    expect(uso).not.toContain("new ReprogramadasRetenidasService(");
+  });
+
   // El titulo NO lleva el numero a proposito: decia «los TRES» cuando eran cinco y «los CINCO»
   // cuando ya eran seis. La lista de arriba es la fuente, y el test de debajo la contrasta contra
   // el arbol; un nombre con cuenta atrasada solo hace que el censo parezca mas pequeno de lo que es.

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import { CierresBodegaAdminService } from "@/lib/services/CierresBodegaAdminService";
 import type { ICierresAdminRepository } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { ICierresBodegaAdminRepository } from "@/lib/interfaces/repositories/ICierresBodegaAdminRepository";
@@ -261,7 +262,7 @@ async function desgloseDelDetalleDeMensajero() {
     sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
       Object.fromEntries(ids.map((id) => [id, "0.00"])),
     ),
-  });
+  }, sinRetenidas()); // FICHA 462: 7.o argumento requerido; este caso no mide la marca
 
   const r = await service.verCierreDetalle("c1", MAESTRO);
   if (r.status !== "ok") throw new Error("esperaba ok en el detalle del mensajero");

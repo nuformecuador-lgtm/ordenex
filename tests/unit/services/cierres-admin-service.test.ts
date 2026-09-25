@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import { reintentosConfig } from "@/lib/config/reintentos";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
@@ -204,6 +205,7 @@ function newService(
         Object.fromEntries(ids.map((id) => [id, "0.00"])),
       ),
     },
+    sinRetenidas(), // FICHA 462: 7.o argumento requerido; este archivo no mide la marca
   );
   return { service, repo, zonaRepo, ordenRepo, signedUrls, liquidacionRepo };
 }

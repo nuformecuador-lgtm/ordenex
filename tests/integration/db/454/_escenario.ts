@@ -30,6 +30,7 @@ import { CorteDiarioService } from "@/lib/services/CorteDiarioService";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { OrdenNotaService } from "@/lib/services/OrdenNotaService";
+import { buildReprogramadasRetenidasService } from "@/lib/services/reprogramadas-retenidas-composicion";
 import { SolicitudAyudaService } from "@/lib/services/SolicitudAyudaService";
 import { GestionDesdeAyudaService } from "@/lib/services/GestionDesdeAyudaService";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
@@ -235,6 +236,8 @@ export function montarServicios(cliente: PrismaClient) {
       URLS,
       new LiquidacionPagoRepository(cliente),
       new PagoMensajeroMovimientoRepository(cliente),
+      // FICHA 462: el conteo REAL de retenidas, sobre la misma tx (la marca de S3 con datos reales).
+      buildReprogramadasRetenidasService(cliente),
     ),
     /** El corte REAL, con la seleccion REAL recortada a los mensajeros de ESTE escenario. */
     corteDe: (mensajeros: string[]) =>

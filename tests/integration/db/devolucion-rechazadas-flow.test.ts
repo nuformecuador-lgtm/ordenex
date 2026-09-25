@@ -19,6 +19,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrderStatusValue } from "@/lib/types/order-status";
 import { filasCatalogoEstados, idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 
 // Feature 139 (T4.1, R5 + R13-R18) — RECORRIDO COMPLETO de la devolucion de RECHAZADAS, de punta a
 // punta y con los SERVICES REALES encadenados (no se re-testea cada uno por separado: eso ya lo
@@ -389,7 +390,8 @@ function makeServices(db: Db) {
       sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
         Object.fromEntries(ids.map((id) => [id, "0.00"])),
       ),
-    }),
+    },
+    sinRetenidas()), // FICHA 462: 7.o argumento requerido; este flujo no mide la marca
     envioSatelite: new EnvioDevolucionCentralService(ordenRepo),
     recepcionCentral: new RecepcionBodegaCentralService(ordenRepo),
     envioTienda: new DevolucionOrigenService(ordenRepo),

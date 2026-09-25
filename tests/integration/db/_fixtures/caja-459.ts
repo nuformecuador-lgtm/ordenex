@@ -47,6 +47,7 @@ import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService"
 import { WalletTiendaService } from "@/lib/services/WalletTiendaService";
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 
 import { clienteConSavepoint, serializarEscriturasReales, type TxDeTest } from "../_postgres-real";
 
@@ -238,6 +239,7 @@ export function montarServicios459(tx: TxDeTest) {
       URLS_NO_USADAS,
       new LiquidacionPagoRepository(c),
       mensajeroRepo,
+      sinRetenidas(), // FICHA 462: 7.o argumento requerido; la caja no mide la marca
     ),
     liquidacion: new LiquidacionService(
       new LiquidacionPagoRepository(c),

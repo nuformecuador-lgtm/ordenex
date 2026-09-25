@@ -91,6 +91,20 @@ export interface CierreAdminResumen {
    * pagina (`sumarVigentesPorCierre`), no de una consulta por fila.
    */
   pendientePagoMensajero: string | null;
+  /**
+   * FICHA 462 (S3, R26/R27/R28) — cuantas reprogramadas DE HOY retiene ESTE cierre: ordenes con
+   * resultado `reprogramado` para hoy (o antes) que no pueden volver a bodega hasta que este cierre
+   * se apruebe (regla 276; y la forma `en_reparto` con gestion pendiente de la 454).
+   *
+   * Lo rellena el SERVICIO con UNA sola lectura por pagina (`contarPorCierre`, patron
+   * `pendientePagoMensajero`), nunca una por fila. `0` = no retiene nada y la pantalla no muestra
+   * nada de esta ficha; un cierre `aprobado` es SIEMPRE `0` por construccion (ambas formas exigen
+   * cierre no aprobado). Opcional en el tipo (aditivo): los consumidores que no lo pinten siguen
+   * compilando; el servicio lo puebla en los tres caminos (cola, historico y detalle).
+   *
+   * NO entra en las descargas (R31): `cierres-admin-descarga-columnas.ts` no lo nombra.
+   */
+  reprogramadasRetenidasHoy?: number;
   solicitadoAt: string; // ISO
   resueltoAt: string | null; // ISO; null si solicitado (F1.4-e)
   motivoRechazo: string | null; // solo rechazado (F1.4-e)

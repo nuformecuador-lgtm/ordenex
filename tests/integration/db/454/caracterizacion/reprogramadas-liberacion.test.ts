@@ -7,6 +7,7 @@ import { CierresAdminService } from "@/lib/services/CierresAdminService";
 import { LiberacionReprogramadaService } from "@/lib/services/LiberacionReprogramadaService";
 import { liberarAlAprobarCierreCon } from "@/lib/services/liberacion-al-aprobar-cierre";
 import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import { HAY_BASE_DE_DATOS } from "../../_postgres-real";
 import { conEscenario, diaCR, prepararMundo, type Mundo } from "../_escenario";
 
@@ -45,6 +46,7 @@ describeSiHayBase("454/C19 — liberacion de reprogramadas (Postgres real)", () 
         { createSignedUrl: async (p: string) => p, createSignedUrls: async (ps: string[]) => Object.fromEntries(ps.map((p) => [p, p])) },
         new LiquidacionPagoRepository(e.cliente),
         new PagoMensajeroMovimientoRepository(e.cliente),
+        sinRetenidas(), // FICHA 462: 7.o argumento requerido; este caso no mide la marca
         undefined,
         liberarAlAprobarCierreCon(liberacion, () => ahora),
       );
