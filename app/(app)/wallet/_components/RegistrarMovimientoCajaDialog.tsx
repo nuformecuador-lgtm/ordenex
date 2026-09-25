@@ -422,6 +422,8 @@ export function RegistrarMovimientoCajaDialog({
 
     const elegida = fechaAEnviar();
     const comun = {
+      // Ficha 461 (R66): la misma clave por apertura, como el pago de un gasto y el aporte.
+      claveIdempotencia: clave,
       monto: monto.trim(),
       descripcion: descripcion.trim(),
       ...(elegida === undefined ? {} : { fecha: elegida }),
@@ -429,7 +431,8 @@ export function RegistrarMovimientoCajaDialog({
 
     if (destino.clase === "cobro_tienda") {
       const res = await registrarCobroTiendaAction({ tiendaId, ...comun });
-      return res.status === "ok"
+      // Ficha 461 (R68): `ya_registrado` = el doble envio devolvio el cobro original; es un exito.
+      return res.status === "ok" || res.status === "ya_registrado"
         ? {
             status: "ok",
             mensajeExito: TEXTO_COBRO_TIENDA.registrado(nombreTiendaElegida(), res.saldo),
@@ -442,7 +445,9 @@ export function RegistrarMovimientoCajaDialog({
         tipoEgreso: destino.tipoEgreso,
         ...comun,
       });
-      return res.status === "ok" ? { status: "ok", mensajeExito: MENSAJE_EXITO_CAJA } : res;
+      return res.status === "ok" || res.status === "ya_registrado"
+        ? { status: "ok", mensajeExito: MENSAJE_EXITO_CAJA }
+        : res;
     }
 
     const res = await registrarMovimientoManualAction({
@@ -450,7 +455,9 @@ export function RegistrarMovimientoCajaDialog({
       categoria: destino.categoria,
       ...comun,
     });
-    return res.status === "ok" ? { status: "ok", mensajeExito: MENSAJE_EXITO_CAJA } : res;
+    return res.status === "ok" || res.status === "ya_registrado"
+      ? { status: "ok", mensajeExito: MENSAJE_EXITO_CAJA }
+      : res;
   }
 
   async function confirmar() {

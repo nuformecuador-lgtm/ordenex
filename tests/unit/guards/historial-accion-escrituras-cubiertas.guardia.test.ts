@@ -373,6 +373,16 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.cobroTiendaAnulacion\.create\(/,
   },
   {
+    // ⭑ FICHA 461 (R69, auditoria D3) — la ANULACION de una correccion de caja. Misma forma y mismo
+    // molde que la del cobro: `recibe_tx`, metodo propio, y la mutacion exigida es la escritura de
+    // la CONSTANCIA. El contra-asiento lo escribe `AjusteCajaService` en la misma transaccion.
+    tipos: ["wallet_movimiento_manual_anulado"],
+    archivo: "lib/repositories/AjusteCajaAnulacionRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.ajusteCajaAnulacion\.create\(/,
+  },
+  {
     // ⭑ Q2 (`usuario_fulfillment_cambiado`) comparte punto de escritura con el rol y la zona: es
     // el MISMO formulario, y las N filas salen con el MISMO `lote_id`.
     tipos: ["usuario_rol_cambiado", "usuario_zona_cambiada", "usuario_fulfillment_cambiado"],
@@ -918,8 +928,9 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     // 376 (`zona_central_cambiada`); 48 desde la 375 (`nodo_geografico_renombrado`); 47 desde la
     // 374 (los dos `nodo_geografico_*` de activacion); 45 desde la 373.
     // 59 desde la ficha 459 (los cuatro del pago por cuenta y del saldo inicial o aporte).
-    // 60 desde la ficha 461 (`cobro_tienda_anulado`, con su productor propio).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(60);
+    // 60 desde la ficha 461 (`cobro_tienda_anulado`, con su productor propio); 61 con la anulacion
+    // de una correccion de caja (`wallet_movimiento_manual_anulado`, auditoria D3, tambien propio).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(61);
   });
 });
 

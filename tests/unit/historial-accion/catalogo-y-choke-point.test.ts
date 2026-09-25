@@ -69,7 +69,7 @@ function filas(tx: ReturnType<typeof txDoble>, n = 0): Record<string, unknown>[]
 // =============================================================================================
 
 describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhaustivos", () => {
-  it("son 60 tipos, 23 entidades y 3 categorias, sin repetidos", () => {
+  it("son 61 tipos, 23 entidades y 3 categorias, sin repetidos", () => {
     // 60 desde la ficha 461: `cobro_tienda_anulado` (la anulacion de un cobro de Ordenex a una
     // tienda; entidad `wallet_tienda_movimiento`, sin entidad nueva).
     // 59 desde la ficha 459: los CUATRO del pago por cuenta de una tienda y del saldo inicial o
@@ -88,8 +88,9 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // 20 lo fue desde la 374 (`provincia`, `canton` y `distrito`, la PRIMERA ampliacion), que
     // llevaba 17 desde la 362. Ni la 375, ni la 376, ni la 380 lo amplian: `zona` ya estaba entre
     // los 17 originales (la usa `zona_borrada`).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(60);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(60);
+    // 61 desde la ficha 461: `cobro_tienda_anulado` y `wallet_movimiento_manual_anulado` (auditoria D3).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(61);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(61);
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23);
     expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(23);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
@@ -418,8 +419,9 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // llego o dejo de haber llegado a la central y mueven el saldo con el que se persigue. Ninguna
     // de las otras dos categorias lo describe.
     // 38 y no 37 desde la ficha 461: `cobro_tienda_anulado` devuelve dinero a la tienda y baja la
-    // ganancia.
-    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(38);
+    // ganancia. 39 con `wallet_movimiento_manual_anulado` (auditoria D3): el contra-asiento de una
+    // correccion de caja deshace su efecto en la ganancia.
+    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(39);
     expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(10);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
   });

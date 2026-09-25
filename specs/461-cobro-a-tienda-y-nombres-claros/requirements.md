@@ -328,6 +328,72 @@ valores de esta ficha, de modo que valga igual en `prod` y en `dev`.
 **R65** — Antes de darla por hecha, el recorrido por rol de `design.md` §16 (maestro, admin, adminTienda y
 mensajero) DEBE tener sus capturas y sus números en `progress/`.
 
+### J — Hallazgos de la auditoría de la wallet (2026-09-25), añadidos por el coordinador
+
+Fuente: `progress/auditoria_wallet.md` (rama `auditoria/wallet`, commit `e0707f3a`), hallazgos D2, D3 (solo la
+corrección de caja; el cobro por rechazo y la indemnización quedan en la 458), T1 y T2. Los fallos de
+pantalla P1 y P3 son del frontend de esta misma ficha y no se listan aquí. Vocabulario: «corrección de caja»
+= `ingreso_ajuste`/`egreso_ajuste` con origen `manual` (design §7); «sueldo» y «gasto de Ordenex» =
+`egreso_sueldo`/`egreso_gasto_variable` con origen `gasto`.
+
+**R66** — El borde de los tres registros manuales de dinero —Ordenex le cobra a una tienda
+(`registrarCobroTiendaSchema`), la corrección de caja (`registrarMovimientoManualSchema`) y el sueldo o
+gasto de Ordenex (`registrarEgresoAdministrativoSchema`)— DEBE exigir `claveIdempotencia` (uuid, generado
+por el diálogo al abrirse, como el pago de un gasto de una tienda y el aporte); SI falta o no es un uuid,
+ENTONCES la respuesta DEBE ser `validation_error` sin escribir nada.
+
+**R67** — La clave DEBE guardarse en la propia fila del libro (`wallet_movimiento.clave_idempotencia`,
+`wallet_tienda_movimiento.clave_idempotencia`) bajo un índice UNIQUE; los escritores automáticos (feeds del
+cierre, migraciones de datos, contra-asientos) siguen sin clave (`NULL`) y NO DEBEN cambiar de comportamiento.
+
+**R68** — WHEN llega un segundo envío con la MISMA clave (doble clic, reintento tras un error tardío), THE
+SYSTEM SHALL no escribir ninguna fila en ningún libro ni en el historial y responder `ya_registrado` con el
+movimiento original (en el cobro: el cobro y el saldo de la tienda); dos envíos con claves DISTINTAS siguen
+siendo dos filas.
+
+**R69** — WHEN un usuario de acceso total anula una corrección de caja (`ingreso_ajuste` o `egreso_ajuste`,
+origen `manual`, sin `origen_id`) con un motivo no vacío, THE SYSTEM SHALL escribir, en UNA transacción: la
+constancia (`ajuste_caja_anulacion`: `movimiento_id` UNIQUE, motivo, quién, cuándo), el contra-asiento de
+tipo y categoría OPUESTOS por el monto DE LA CORRECCIÓN leído en el servidor (origen `manual`, `origen_id` =
+id de la corrección, descripción «Anulación · …»), fechado con el instante de la anulación, y la fila del
+historial `wallet_movimiento_manual_anulado` («Anuló una corrección de caja», mueve dinero). Nada se edita ni
+se borra; tras anular, la ganancia y la cifra principal DEBEN volver al céntimo a su valor previo y R7 DEBE
+cumplirse.
+
+**R70** — Un segundo intento sobre la misma corrección DEBE responder `ya_anulado` sin filas nuevas —también
+con dos anulaciones simultáneas: el UNIQUE es el candado—; una fila que NO sea una corrección original (su
+contra-asiento, el reverso de un egreso, un asiento automático, un id inexistente) DEBE responder
+`no_encontrado`; sin acceso total, `forbidden` antes de leer; y una petición con `monto` u otra clave no
+prevista DEBE morir en el borde (`.strict()`) con `validation_error`.
+
+**R71** — El libro de la caja DEBE marcar la corrección original con `documento: { tipo: "ajuste_caja",
+anulado, tieneComprobante: false }` y su contra-asiento con `documento: null`, para que la pantalla ofrezca
+«Anular…» donde toca y en ningún otro sitio; la tabla nueva DEBE tener RLS y su migración un `down` que
+aborte si existe alguna anulación.
+
+**R72** — WHEN se filtra por `desde`/`hasta` (`YYYY-MM-DD`) el libro de la caja, el desglose de una tienda,
+`/mi-wallet`, el desglose de un mensajero o sus descargas y saldos filtrados, THE SYSTEM SHALL tomar `desde`
+como el INICIO de ese día en Costa Rica (06:00Z) y `hasta` como el inicio del día CR SIGUIENTE, cota
+EXCLUSIVA (`<`), en los tres repositorios; un día con movimientos a las 08:00 CR y a las 22:00 CR DEBE
+devolver los dos al filtrar ese día y ninguno al filtrar el día anterior o el siguiente; una fecha con otro
+formato o inexistente DEBE ser `validation_error`.
+
+**R73** — WHEN se registra un pago a una tienda, un pago a un mensajero o un reparto con fecha `fechaPago`,
+THE SYSTEM SHALL fechar sus asientos en los libros (débito de la tienda, `liquidacion` del mensajero, egreso
+de la caja) con el inicio de ese día en Costa Rica (06:00Z), y los contra-asientos de una anulación con el
+inicio del día CR de la anulación; el documento (`liquidacion_pago.fecha_pago`) sigue siendo la fecha
+calendario. Con ello el rollup diario (`fecha_movimiento − 6 h`) DEBE contar cada asiento el día de su
+documento. El respaldo de la 173 (`CajaBackfillTesoreriaService`) DEBE seguir escribiendo lo mismo que el
+camino vivo.
+
+**R74** — Una migración de datos idempotente DEBE mover +6 h, en los tres libros, SOLO las filas con origen
+`pago_tienda` o `pago_mensajero` fechadas a medianoche UTC exacta; ejecutada dos veces, la segunda no DEBE
+mover nada; su `down` DEBE mover −6 h únicamente las de ese conjunto fechadas exactamente a las 06:00Z; ningún
+monto, origen ni categoría cambia, y el número de filas se mide en el clon antes de desplegar.
+
+**R75** — Cada uno de R66–R74 DEBE tener un test contra Postgres real y una mutación registrada en rojo y
+revertida en `progress/fase0_461.md` (anexo a design §14.2).
+
 ## Trazabilidad prevista (R → test)
 
 El detalle vive en `design.md` §17; el implementer fija las rutas finales en `progress/impl_461.md`.
@@ -357,6 +423,13 @@ El detalle vive en `design.md` §17; el implementer fija las rutas finales en `p
 | R61 | `tests/integration/db/reclasificacion-459-migration.test.ts`, `reclasificacion-459-lista.guardia.test.ts` (sin tocar) |
 | R62–R64 | `tests/integration/db/cobro-tienda-461-migration.test.ts` |
 | R65 | `progress/recorrido_461.md` + `progress/recorrido_461/` |
+| R66, R68 | `tests/integration/db/wallet-461-idempotencia-clave.test.ts`, `tests/unit/types/wallet-461-clave-schema.test.ts` |
+| R67 | `tests/integration/db/wallet-461-migration.test.ts`, `tests/integration/db/wallet-461-idempotencia-clave.test.ts` |
+| R69, R70, R71 | `tests/integration/db/ajuste-caja-anulacion-461.test.ts`, `tests/unit/services/ajuste-caja-service.test.ts`, `tests/integration/db/cobro-tienda-461-concurrencia.test.ts` (dos anulaciones a la vez), `tests/integration/db/wallet-461-migration.test.ts` |
+| R72 | `tests/unit/types/filtro-dias-cr.test.ts`, `tests/integration/db/wallet-filtro-dia-cr-461.test.ts` |
+| R73 | `tests/integration/db/liquidacion-fechas-cr-461.test.ts` |
+| R74 | `tests/integration/db/wallet-461-fechas-cr-migration.test.ts` |
+| R75 | `progress/fase0_461.md` (anexo de mutaciones) |
 
 ## Preguntas abiertas — decisión tomada y alternativa (no bloquean)
 

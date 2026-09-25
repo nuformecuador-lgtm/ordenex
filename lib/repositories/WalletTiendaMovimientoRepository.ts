@@ -51,7 +51,8 @@ function buildFiltrosWhere(f: SaldoTiendaFiltros): Prisma.WalletTiendaMovimiento
   if (f.desde !== undefined || f.hasta !== undefined) {
     where.fechaMovimiento = {
       ...(f.desde !== undefined ? { gte: f.desde } : {}),
-      ...(f.hasta !== undefined ? { lte: f.hasta } : {}),
+      // Ficha 461 (R72, auditoria T1): cota EXCLUSIVA; el borde manda el inicio del dia CR siguiente.
+      ...(f.hasta !== undefined ? { lt: f.hasta } : {}),
     };
   }
   return where;
@@ -91,6 +92,9 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
       // clave— asi que el feed del cierre sigue cayendo en el `DEFAULT CURRENT_TIMESTAMP`
       // de la columna exactamente como antes.
       ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
+      // Ficha 461 (R66/R67): la clave de idempotencia del cliente, SOLO si el llamador la trae. Con
+      // `skipDuplicates`, un choque en su indice UNIQUE deja la fila fuera y `count` en 0.
+      ...(m.claveIdempotencia !== undefined ? { claveIdempotencia: m.claveIdempotencia } : {}),
     }));
     const res = await tx.walletTiendaMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;
@@ -387,6 +391,12 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
    * las TRES claves: el id, el tipo `debito` y la categoria `cobro_manual`. Un flete, un pago o una
    * anulacion con ese id no salen de la base: para quien llama, no existe un cobro con ese id.
    */
+  /** Ficha 461 (R68): el cobro que lleva ESA clave de idempotencia (columna UNIQUE), como DTO, o null. */
+  async obtenerCobroPorClave(claveIdempotencia: string): Promise<WalletTiendaMovimientoDTO | null> {
+    const fila = await this.prisma.walletTiendaMovimiento.findUnique({ where: { claveIdempotencia } });
+    return fila === null ? null : toDTO(fila);
+  }
+
   async obtenerCobroPorId(id: string): Promise<CobroTiendaRegistro | null> {
     const fila = await this.prisma.walletTiendaMovimiento.findFirst({
       where: { id, tipo: "debito", categoria: "cobro_manual" },

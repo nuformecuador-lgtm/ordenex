@@ -36,8 +36,12 @@ const ACTOR_ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" };
 /** Un reloj FIJO: es lo que permite afirmar «el MISMO instante» y no «un instante parecido». */
 const AHORA = new Date("2026-09-25T15:30:45.123Z");
 
+/** Ficha 461 (R66): la clave que el dialogo genera al abrirse; aqui fija, para poder afirmarla. */
+const CLAVE_461 = "6b1f0d2e-7c3a-4d5b-9e8f-0a1b2c3d4e5f";
+
 function entrada(over: Partial<RegistrarCobroTiendaInput> = {}): RegistrarCobroTiendaInput {
   return {
+    claveIdempotencia: CLAVE_461,
     tiendaId: TIENDA,
     monto: "1500.00",
     descripcion: "Reposicion de etiquetas",
@@ -87,7 +91,7 @@ function montaje(over: Montaje = {}) {
   const tiendaRepo = {
     crearMovimientos: vi.fn(async () => 1),
     registrarCobroEnHistorial: vi.fn(async () => undefined),
-    nombreDeTienda: vi.fn(async () => "Tienda Uno"),
+    nombreDeTienda: vi.fn(async () => "Tienda Uno"), obtenerCobroPorClave: vi.fn(async () => null),
     obtenerPorIdDeTienda: vi.fn(async (id: string) => ({ ...filaLeida, id })),
     obtenerCobroPorId: vi.fn(async () => cobroLeido),
     agregarSaldoPorTienda: vi.fn(async () => over.saldo ?? { creditos: "5000.00", debitos: "0.00" }),

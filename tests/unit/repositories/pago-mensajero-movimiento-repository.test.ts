@@ -123,7 +123,7 @@ describe("PagoMensajeroMovimientoRepository.listarPorMensajero (R20/R22)", () =>
         { origenTipo: "cierre_dia", origenId: "c1" },
         { origenTipo: "pago_mensajero", origenId: { in: ["pago-1"] } },
       ],
-      fechaMovimiento: { gte: desde, lte: hasta },
+      fechaMovimiento: { gte: desde, lt: hasta }, // ficha 461 (R72): `hasta` EXCLUSIVO
     });
     // Los ids de pago salen de una lectura ACOTADA por el cierre, no de toda la tabla.
     expect(prisma.liquidacionPago.findMany.mock.calls[0][0]).toEqual({

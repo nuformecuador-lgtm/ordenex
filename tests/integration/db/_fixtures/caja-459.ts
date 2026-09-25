@@ -24,6 +24,7 @@ import { UserRepository } from "@/lib/repositories/UserRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
+import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnulacionRepository";
 import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import { AporteCapitalService } from "@/lib/services/AporteCapitalService";
 import { CajaAporteCapitalFeedService } from "@/lib/services/CajaAporteCapitalFeedService";
@@ -282,6 +283,7 @@ export function montarServicios459(tx: TxDeTest) {
       pagosPorCuenta: new PagoPorCuentaTiendaRepository(c),
       aportes: new AporteCapitalRepository(c),
       cobros: new CobroTiendaAnulacionRepository(c),
+      ajustes: new AjusteCajaAnulacionRepository(c),
     }),
     // Ficha 459 (T B.14) — los dos escritores nuevos, cableados como su `buildService()`.
     pagoPorCuenta: new PagoPorCuentaTiendaService(
@@ -618,7 +620,7 @@ export async function sembrarEscenario459(
     pasos,
     "cobroCostoB",
     await s.cobroTienda.registrarCobro(
-      { tiendaId: tiendaB, monto: "2500.50", descripcion: "Pago publicidad de la tienda" },
+      { claveIdempotencia: randomUUID(), tiendaId: tiendaB, monto: "2500.50", descripcion: "Pago publicidad de la tienda" },
       maestro,
     ),
   );
@@ -664,7 +666,7 @@ export async function sembrarEscenario459(
 
   // ── Egresos administrativos y ajustes ─────────────────────────────────────────────────────
   const sueldo = await s.egresos.registrarEgreso(
-    { tipoEgreso: "sueldo", monto: "45000.00", descripcion: "Sueldo quincena 459" },
+    { claveIdempotencia: randomUUID(), tipoEgreso: "sueldo", monto: "45000.00", descripcion: "Sueldo quincena 459" },
     maestro,
   );
   afirmarOk(pasos, "sueldo", sueldo);
@@ -678,7 +680,7 @@ export async function sembrarEscenario459(
     pasos,
     "gastoVariable",
     await s.egresos.registrarEgreso(
-      { tipoEgreso: "gasto_variable", monto: "12345.67", descripcion: "Cajas de carton 459" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "12345.67", descripcion: "Cajas de carton 459" },
       maestro,
     ),
   );
@@ -686,7 +688,7 @@ export async function sembrarEscenario459(
     pasos,
     "ajusteSuma",
     await s.wallet.registrarMovimientoManual(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "1000.25", descripcion: "Ajuste 459 +" },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "1000.25", descripcion: "Ajuste 459 +" },
       maestro,
     ),
   );
@@ -694,7 +696,7 @@ export async function sembrarEscenario459(
     pasos,
     "ajusteResta",
     await s.wallet.registrarMovimientoManual(
-      { tipo: "egreso", categoria: "egreso_ajuste", monto: "500.10", descripcion: "Ajuste 459 -" },
+      { claveIdempotencia: randomUUID(), tipo: "egreso", categoria: "egreso_ajuste", monto: "500.10", descripcion: "Ajuste 459 -" },
       maestro,
     ),
   );

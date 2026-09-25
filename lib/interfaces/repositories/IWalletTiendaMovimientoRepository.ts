@@ -105,10 +105,19 @@ export interface CrearMovimientoTiendaInput {
    * La prueba de que es opcional de verdad es que los tests de los dos feeds del cierre
    * siguen verdes sin editarlos.
    *
-   * Convencion de la 172: MEDIANOCHE UTC del dia de `fecha_pago` (`medianocheUtcDelDia`),
-   * no 06:00Z, para que el pago entre por los dos bordes del filtro por rango del desglose.
+   * Convencion HASTA la ficha 461: medianoche UTC del dia de `fecha_pago` (`medianocheUtcDelDia`),
+   * para que el pago entrara por los dos bordes de un filtro que comparaba contra `z.coerce.date()`.
+   * Ficha 461 (R73, auditoria T2): los filtros son dias de Costa Rica (R72) y el rollup agrupa por
+   * `fecha_movimiento − 6 h`, asi que el asiento del pago se fecha con el INICIO del dia en CR
+   * (`inicioDelDiaCREnUtc`, 06:00Z); la migracion `20260926120500` movio los previos.
    */
   fechaMovimiento?: Date;
+  /**
+   * Ficha 461 (R66/R67/R68, auditoria D2) — la clave de idempotencia del CLIENTE, SOLO en el cobro
+   * de Ordenex a la tienda (`cobro_manual`). Columna UNIQUE; con `skipDuplicates` un choque deja
+   * `count = 0` y el servicio relee por la clave (`obtenerCobroPorClave`). Opcional: ausente ⇒ NULL.
+   */
+  claveIdempotencia?: string;
 }
 
 // Filtros del listado del ledger de UNA tienda (R19/R22). `cierreId` filtra por el origen
@@ -287,4 +296,10 @@ export interface IWalletTiendaMovimientoRepository {
    * total, que ve todas las tiendas, y la tienda del cobro es justo lo que hay que averiguar.
    */
   obtenerCobroPorId(id: string): Promise<CobroTiendaRegistro | null>;
+  /**
+   * Ficha 461 (R68) — el cobro (`debito/cobro_manual`) que lleva ESA clave de idempotencia, como
+   * DTO del libro, o `null`. Es la relectura del segundo envio: `crearMovimientos` devolvio 0 porque
+   * la clave ya estaba, y el servicio responde `ya_registrado` con el cobro original.
+   */
+  obtenerCobroPorClave(claveIdempotencia: string): Promise<WalletTiendaMovimientoDTO | null>;
 }

@@ -75,7 +75,26 @@ function tipoDeDocumentoOriginal(m: WalletMovimientoDTO): DocumentoCajaDTO["tipo
   ) {
     return "cobro_tienda";
   }
+  // Ficha 461 (R71, auditoria D3): la CORRECCION de caja original —origen `manual` y SIN `origen_id`—.
+  // Su contra-asiento comparte categoria y origen pero lleva `origen_id` = la correccion: no es
+  // original y no se anula. El reverso de un egreso (`ingreso_ajuste`, origen `gasto`) tampoco.
+  if (
+    (m.categoria === "ingreso_ajuste" || m.categoria === "egreso_ajuste") &&
+    m.origenTipo === "manual" &&
+    m.origenId === null
+  ) {
+    return "ajuste_caja";
+  }
   return null;
+}
+
+/**
+ * Ficha 461 (R71) — el id del DOCUMENTO de una fila original. Para el pago de un gasto, el aporte y
+ * el cobro es el `origenId` (el documento vive en otra tabla o es el debito de la tienda); para la
+ * correccion de caja es la PROPIA fila, porque la correccion no tiene documento aparte.
+ */
+function idDeDocumento(m: WalletMovimientoDTO, tipo: DocumentoCajaDTO["tipo"]): string | null {
+  return tipo === "ajuste_caja" ? m.id : m.origenId;
 }
 
 /**
@@ -119,26 +138,31 @@ export class WalletService implements IWalletService {
   ): Promise<WalletMovimientoDTO[]> {
     const idsDe = (tipo: DocumentoCajaDTO["tipo"]) =>
       movimientos
-        .filter((m) => tipoDeDocumentoOriginal(m) === tipo && m.origenId !== null)
-        .map((m) => m.origenId as string);
+        .filter((m) => tipoDeDocumentoOriginal(m) === tipo)
+        .map((m) => idDeDocumento(m, tipo))
+        .filter((id): id is string => id !== null);
     const idsPagos = idsDe("pago_por_cuenta_tienda");
     const idsAportes = idsDe("aporte_capital");
     const idsCobros = idsDe("cobro_tienda");
+    const idsAjustes = idsDe("ajuste_caja");
 
-    const [pagos, aportes, cobros] = await Promise.all([
+    const [pagos, aportes, cobros, ajustes] = await Promise.all([
       idsPagos.length > 0 ? this.documentos.pagosPorCuenta.estadoDeDocumentos(idsPagos) : [],
       idsAportes.length > 0 ? this.documentos.aportes.estadoDeDocumentos(idsAportes) : [],
       idsCobros.length > 0 ? this.documentos.cobros.estadoDeDocumentos(idsCobros) : [],
+      idsAjustes.length > 0 ? this.documentos.ajustes.estadoDeDocumentos(idsAjustes) : [],
     ]);
     const estado = {
       pago_por_cuenta_tienda: new Map(pagos.map((e) => [e.id, e])),
       aporte_capital: new Map(aportes.map((e) => [e.id, e])),
       cobro_tienda: new Map(cobros.map((e) => [e.id, e])),
+      ajuste_caja: new Map(ajustes.map((e) => [e.id, e])),
     };
 
     return movimientos.map((m) => {
       const tipo = tipoDeDocumentoOriginal(m);
-      const e = tipo === null || m.origenId === null ? undefined : estado[tipo].get(m.origenId);
+      const idDoc = tipo === null ? null : idDeDocumento(m, tipo);
+      const e = tipo === null || idDoc === null ? undefined : estado[tipo].get(idDoc);
       // Una fila original cuyo documento no aparece (no deberia pasar: la FK es del mismo
       // servicio) no ofrece acciones: mejor ningun boton que uno que responda «no encontrado».
       if (tipo === null || e === undefined) return { ...m, documento: null };
@@ -356,20 +380,31 @@ export class WalletService implements IWalletService {
     // humana sobre el dinero de la casa, y el registro tiene que ir en la misma transaccion que
     // el asiento. `this.writeClient` ya no interviene en este camino — la transaccion la abre el
     // repositorio, que es quien conoce Prisma.
-    await this.repo.crearMovimientoRegistrado(
+    const escritas = await this.repo.crearMovimientoRegistrado(
       {
         id,
         tipo: input.tipo,
         categoria: input.categoria,
         monto: input.monto,
         origenTipo: "manual",
-        origenId: null, // fuera del indice unico parcial: los manuales no se deduplican
+        origenId: null, // fuera del indice unico parcial: la idempotencia la da la CLAVE (461/R67)
         descripcion: input.descripcion,
         registradoPor: actor.usuarioId,
         ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
+        claveIdempotencia: input.claveIdempotencia, // ficha 461 (R66/R67)
       },
       { accion: "wallet_movimiento_manual_registrado", actorUsuarioId: actor.usuarioId },
     );
+    // Ficha 461 (R68, auditoria D2): `0` = la clave YA tenia su fila (doble clic, reintento). No se
+    // escribio nada —ni asiento ni historial— y se responde con la correccion ORIGINAL, releida por
+    // la clave. Antes, dos envios iguales eran dos filas y nada lo notaba.
+    if (escritas === 0) {
+      const original = await this.repo.obtenerPorClave(input.claveIdempotencia);
+      if (original === null) {
+        throw new Error("wallet: clave de idempotencia repetida sin movimiento que releer");
+      }
+      return { status: "ya_registrado", movimiento: original };
+    }
 
     // Ficha 334 (R28): se relee POR ID, no «el mas reciente de esta categoria».
     //
@@ -379,9 +414,9 @@ export class WalletService implements IWalletService {
     // servicio afirmaria «este es el movimiento que registraste» sobre una fila ajena.
     const movimiento = await this.repo.obtenerPorId(id);
     if (movimiento === null) {
-      // Imposible por construccion (el manual lleva `origen_id NULL`, queda fuera del indice
-      // unico parcial y por tanto NUNCA se deduplica). Se propaga con contexto en vez de
-      // devolver una fila inventada: en el libro de la caja, mentir es peor que fallar.
+      // Imposible por construccion: `escritas` fue 1, asi que la fila con ESTE id existe. Se propaga
+      // con contexto en vez de devolver una fila inventada: en el libro de la caja, mentir es peor
+      // que fallar.
       throw new Error(`wallet: el movimiento manual ${id} no se pudo releer tras insertarlo`);
     }
     return { status: "ok", movimiento };

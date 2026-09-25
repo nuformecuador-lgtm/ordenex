@@ -47,6 +47,8 @@ export type CobroTiendaTxRunner = <T>(fn: (tx: CobroTiendaTxClient) => Promise<T
  */
 export type RegistrarCobroTiendaServiceResult =
   | { status: "ok"; cobro: WalletTiendaMovimientoDTO; saldo: SaldoTiendaDTO }
+  /** Ficha 461 (R68): la MISMA clave ya tenia su cobro; se devuelve ese y no se escribio nada. */
+  | { status: "ya_registrado"; cobro: WalletTiendaMovimientoDTO; saldo: SaldoTiendaDTO }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "forbidden" };
 

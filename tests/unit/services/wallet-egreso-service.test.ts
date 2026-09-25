@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { WalletEgresoService } from "@/lib/services/WalletEgresoService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -90,6 +91,7 @@ function buildRepo(overrides: Partial<IWalletMovimientoRepository> = {}): IWalle
       }),
     obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
     primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: este camino no lo usa
+    obtenerPorClave: vi.fn(async () => null), // ficha 461 (R68): la relectura por clave; este camino no la usa
     // FICHA 362: el escritor de los DOS movimientos del egreso administrativo (registro y
     // reverso). Abre su propia transaccion y escribe ademas la fila de auditoria. El doble
     // guarda la fila igual que su hermano, porque el servicio RELEE POR ID lo que acaba de
@@ -115,7 +117,7 @@ describe("WalletEgresoService.registrarEgreso (R1/R2/R3/R7/R17)", () => {
     const repo = buildRepo();
     const svc = new WalletEgresoService(repo, writeClient);
     const r = await svc.registrarEgreso(
-      { tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "x" },
       OTRO,
     );
     expect(r).toEqual({ status: "forbidden" });
@@ -126,7 +128,7 @@ describe("WalletEgresoService.registrarEgreso (R1/R2/R3/R7/R17)", () => {
     const repo = buildRepo();
     const svc = new WalletEgresoService(repo, writeClient);
     const r = await svc.registrarEgreso(
-      { tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "x" },
       ADMIN,
     );
     expect(r.status).toBe("ok");
@@ -137,7 +139,7 @@ describe("WalletEgresoService.registrarEgreso (R1/R2/R3/R7/R17)", () => {
     const repo = buildRepo();
     const svc = new WalletEgresoService(repo, writeClient);
     const r = await svc.registrarEgreso(
-      { tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria" },
       MAESTRO,
     );
     expect(r.status).toBe("ok");
@@ -161,7 +163,7 @@ describe("WalletEgresoService.registrarEgreso (R1/R2/R3/R7/R17)", () => {
     });
     const svc = new WalletEgresoService(repo, writeClient);
     const r = await svc.registrarEgreso(
-      { tipoEgreso: "sueldo", monto: "500000.00", descripcion: "Juan Perez — julio 2026" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "sueldo", monto: "500000.00", descripcion: "Juan Perez — julio 2026" },
       MAESTRO,
     );
     expect(r.status).toBe("ok");
@@ -178,7 +180,7 @@ describe("WalletEgresoService.registrarEgreso (R1/R2/R3/R7/R17)", () => {
     const repo = buildRepo();
     const svc = new WalletEgresoService(repo, writeClient);
     await svc.registrarEgreso(
-      { tipoEgreso: "gasto_variable", monto: "10.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "10.00", descripcion: "x" },
       MAESTRO,
     );
     // FICHA 362: UNA llamada, y la firma ya no admite un lote — garantia mas fuerte que contar.
@@ -375,6 +377,7 @@ describe("WalletEgresoService.registrarEgreso — la fecha elegida (R22/R23/R28)
 
   function gasto(fecha?: string) {
     return {
+      claveIdempotencia: randomUUID(),
       tipoEgreso: "gasto_variable" as const,
       monto: "1500.00",
       descripcion: "Papeleria",

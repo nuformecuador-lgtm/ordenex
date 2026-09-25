@@ -168,8 +168,10 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
     expect(entrada.pageSize).toBe(5);
     expect(entrada.tipo).toBe("egreso");
     expect(entrada.categoria).toBe("egreso_gasto");
-    expect(entrada.desde).toEqual(new Date("2026-08-01"));
-    expect(entrada.hasta).toEqual(new Date("2026-08-31"));
+    // Ficha 461 (R72): dias de Costa Rica — `desde` es el inicio del 1 de agosto en CR (06:00Z) y
+    // `hasta` el inicio del dia SIGUIENTE al 31 (cota exclusiva), no las medianoches UTC.
+    expect(entrada.desde).toEqual(new Date("2026-08-01T06:00:00.000Z"));
+    expect(entrada.hasta).toEqual(new Date("2026-09-01T06:00:00.000Z"));
   });
 
   it("R34: todo importe cruza la frontera como TEXTO, nunca como numero", async () => {

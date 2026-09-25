@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   listarMovimientosAction,
@@ -250,6 +251,7 @@ describe("el PUENTE `verBalanceAction` ya no existe (173, Tanda H)", () => {
     // frontend; quien lo cablee tiene que borrar esa anotación, y la guardia de superficie de
     // uso lo exige en los dos sentidos.
     expect(Object.keys(acciones).sort()).toEqual([
+      "anularAjusteCajaAction", // ficha 461 (R69–R71): anular una correccion de caja
       "listarMovimientosAction",
       "listarMovimientosCompletoAction",
       "listarMovimientosDeFilaAction",
@@ -265,7 +267,7 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
   it("sin sesion -> unauthenticated", async () => {
     const service = fakeService();
     const r = await registrarMovimientoManualAction(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
       { service, getActor: async () => null },
     );
     expect(r).toEqual({ status: "unauthenticated" });
@@ -276,7 +278,7 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
       registrarMovimientoManual: vi.fn(async () => ({ status: "forbidden" as const })),
     });
     const r = await registrarMovimientoManualAction(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
       { service, getActor: async () => OTRO },
     );
     expect(r).toEqual({ status: "forbidden" });
@@ -285,7 +287,7 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
   it("descripcion vacia -> validation_error (zod en el borde), sin tocar el service", async () => {
     const service = fakeService();
     const r = await registrarMovimientoManualAction(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "" },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -295,7 +297,7 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
   it("monto no positivo -> validation_error", async () => {
     const service = fakeService();
     const r = await registrarMovimientoManualAction(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "0", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "0", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -304,7 +306,7 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
   it("R15: maestro con ajuste valido -> ok, movimiento con monto STRING", async () => {
     const service = fakeService();
     const r = await registrarMovimientoManualAction(
-      { tipo: "egreso", categoria: "egreso_ajuste", monto: "50.00", descripcion: "correccion" },
+      { claveIdempotencia: randomUUID(), tipo: "egreso", categoria: "egreso_ajuste", monto: "50.00", descripcion: "correccion" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
@@ -335,6 +337,7 @@ describe("registrarMovimientoManualAction — la fecha del movimiento (R20/R21)"
 
   function ajuste(fecha: string) {
     return {
+      claveIdempotencia: randomUUID(), // ficha 461 (R66)
       tipo: "ingreso",
       categoria: "ingreso_ajuste",
       monto: "50.00",
@@ -400,7 +403,7 @@ describe("registrarMovimientoManualAction — la fecha del movimiento (R20/R21)"
     conRelojEnAhora();
     const service = fakeService();
     const r = await registrarMovimientoManualAction(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
@@ -105,6 +106,7 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
 
       const r = await svc.registrarEgreso(
         {
+          claveIdempotencia: randomUUID(),
           tipoEgreso: "gasto_variable",
           monto: MONTO_DEL_GASTO,
           descripcion: "ficha 334 — gasto de ayer",
@@ -152,6 +154,7 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
         tx as unknown as PrismaClient,
       ).registrarEgreso(
         {
+          claveIdempotencia: randomUUID(),
           tipoEgreso: "gasto_variable",
           monto: MONTO_DEL_GASTO,
           descripcion: "ficha 334 — rollup",
@@ -186,6 +189,7 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
         tx as unknown as PrismaClient,
       ).registrarEgreso(
         {
+          claveIdempotencia: randomUUID(),
           tipoEgreso: "gasto_variable",
           monto: MONTO_DEL_GASTO,
           descripcion: "ficha 334 — filtro desde",
@@ -237,6 +241,7 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
       for (const monto of ["11.00", "22.00", "33.00"]) {
         const r = await svc.registrarMovimientoManual(
           {
+            claveIdempotencia: randomUUID(),
             tipo: "egreso",
             categoria: "egreso_ajuste",
             monto,
@@ -279,5 +284,5 @@ const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };
 const SIN_DOCUMENTOS_459 = {
   pagosPorCuenta: { estadoDeDocumentos: async () => [] },
   aportes: { estadoDeDocumentos: async () => [] },
-  cobros: { estadoDeDocumentos: async () => [] }, // ficha 461: lo exige `LectoresDocumentosCaja`
+  cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] }, // ficha 461: lo exige `LectoresDocumentosCaja`
 };

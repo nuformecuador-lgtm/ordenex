@@ -17,12 +17,8 @@ import type {
 } from "@/lib/interfaces/services/ICajaBackfillTesoreriaService";
 import type { ICajaPagoTiendaFeedService } from "@/lib/interfaces/services/ICajaPagoTiendaFeedService";
 import type { AgregadoCajaRow, WalletMovimientoDTO } from "@/lib/types/wallet";
-import {
-  descripcionDeAnulacion,
-  descripcionDePago,
-  medianocheUtcDelDia,
-} from "@/lib/utils/descripcion-pago";
-import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { descripcionDeAnulacion, descripcionDePago } from "@/lib/utils/descripcion-pago";
+import { fechaCalendarioCR, inicioDelDiaCREnUtc } from "@/lib/utils/fecha-cr";
 
 /**
  * Feature 173 / T E.1 (design §6, R36-R44) — el registro RETROACTIVO de la caja en modo
@@ -205,9 +201,10 @@ export class CajaBackfillTesoreriaService implements ICajaBackfillTesoreriaServi
         monto: pago.monto.toFixed(2), // Decimal -> STRING escala 2; ni un `number` por el camino
         descripcion: descripcionDePago(pago.metodo, pago.referencia),
         registradoPor: pago.registradoPor,
-        // R41: `fecha_pago` es `@db.Date` = medianoche UTC del dia, que es EXACTAMENTE lo que
-        // el camino vivo escribe (`medianocheUtcDelDia(input.fechaPago)`).
-        fechaMovimiento: pago.fechaPago,
+        // R41: lo MISMO que escribe el camino vivo. Ficha 461 (R73, auditoria T2): el inicio del dia
+        // de pago en CR (`inicioDelDiaCREnUtc(fechaPago)`, 06:00Z); `fecha_pago` es `@db.Date`, asi
+        // que su `YYYY-MM-DD` es la fecha calendario del documento.
+        fechaMovimiento: inicioDelDiaCREnUtc(pago.fechaPago.toISOString().slice(0, 10)),
       });
       filas.push(...this.recogerComo("pago_a_tienda", pago.id, pago.fechaPago));
     }
@@ -230,9 +227,9 @@ export class CajaBackfillTesoreriaService implements ICajaBackfillTesoreriaServi
     const filas: Candidata[] = [];
     for (const anulacion of anulaciones) {
       // R41 — el DIA de la anulacion, con las MISMAS dos funciones que usa el camino vivo
-      // (`medianocheUtcDelDia(fechaCalendarioCR(...))`). Lo unico que cambia es de donde sale
-      // el instante: alli del reloj, aqui del documento.
-      const diaDeLaAnulacion = medianocheUtcDelDia(fechaCalendarioCR(anulacion.createdAt));
+      // (`inicioDelDiaCREnUtc(fechaCalendarioCR(...))`, ficha 461/R73). Lo unico que cambia es de
+      // donde sale el instante: alli del reloj, aqui del documento.
+      const diaDeLaAnulacion = inicioDelDiaCREnUtc(fechaCalendarioCR(anulacion.createdAt));
       await this.puertoEnSeco.emitirReversoDeAnulacion(this.deps.cliente, {
         pagoId: anulacion.pagoId,
         // R76 de la 172: se anula ENTERO, y el monto es el del PAGO, nunca uno recalculado.
@@ -336,6 +333,9 @@ export class RecolectorDeFilasDeCaja implements IWalletMovimientoRepository {
 
   obtenerPorId(): Promise<WalletMovimientoDTO | null> {
     throw new ErrorDeRecolector("obtenerPorId");
+  }
+  obtenerPorClave(): Promise<WalletMovimientoDTO | null> {
+    throw new ErrorDeRecolector("obtenerPorClave");
   }
 
   agregarPorCategoria(): Promise<DesgloseEgresosAgregado> {

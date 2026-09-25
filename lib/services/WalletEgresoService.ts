@@ -57,7 +57,7 @@ export class WalletEgresoService implements IWalletEgresoService {
     const fechaMovimiento = instanteDelMovimientoManual(input.fecha);
     // FICHA 362 (R6/R9) — `egreso_administrativo_registrado`, en la MISMA transaccion que el
     // asiento. La abre el repositorio: el servicio no conoce Prisma.
-    await this.repo.crearMovimientoRegistrado(
+    const escritas = await this.repo.crearMovimientoRegistrado(
       {
         id,
         tipo: "egreso",
@@ -68,18 +68,28 @@ export class WalletEgresoService implements IWalletEgresoService {
         descripcion: input.descripcion,
         registradoPor: actor.usuarioId,
         ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
+        claveIdempotencia: input.claveIdempotencia, // ficha 461 (R66/R67)
       },
       { accion: "egreso_administrativo_registrado", actorUsuarioId: actor.usuarioId },
     );
+    // Ficha 461 (R68, auditoria D2): `0` = la clave YA tenia su fila (doble clic, reintento). No se
+    // escribio nada —ni asiento ni historial— y se responde con el egreso ORIGINAL, releido por la
+    // clave. Antes, dos envios iguales eran dos sueldos o dos gastos y nada lo notaba.
+    if (escritas === 0) {
+      const original = await this.repo.obtenerPorClave(input.claveIdempotencia);
+      if (original === null) {
+        throw new Error("wallet: clave de idempotencia repetida sin egreso que releer");
+      }
+      return { status: "ya_registrado", movimiento: original };
+    }
 
     // Ficha 334 (R28): se relee POR ID, no «el mas reciente de esta categoria». Aquella
     // relectura funcionaba por ACCIDENTE (todo se fechaba con `now()`); registrado un gasto
     // variable con fecha de la semana pasada devolveria OTRO gasto variable.
     const movimiento = await this.repo.obtenerPorId(id);
     if (movimiento === null) {
-      // Imposible por construccion: el egreso manual lleva `origen_id NULL`, queda fuera del
-      // indice unico parcial y nunca se deduplica. Se propaga con contexto antes que devolver
-      // una fila ajena.
+      // Imposible por construccion: `escritas` fue 1, asi que la fila con ESTE id existe. Se propaga
+      // con contexto antes que devolver una fila ajena.
       throw new Error(`wallet: el egreso manual ${id} no se pudo releer tras insertarlo`);
     }
     return { status: "ok", movimiento };

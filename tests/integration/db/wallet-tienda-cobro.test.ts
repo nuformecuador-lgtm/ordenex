@@ -166,7 +166,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       expect(saldoAntes).toBe("10000.00"); // anti-vacuidad: la semilla existe
 
       const r = await servicioReal(tx).registrarCobro(
-        { tiendaId, monto: "1500.00", descripcion: "Reposicion de etiquetas" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "1500.00", descripcion: "Reposicion de etiquetas" },
         MAESTRO,
       );
       expect(r.status).toBe("ok");
@@ -276,7 +276,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       await sembrarSaldoAFavor(tx, tiendaId, "5000.00");
 
       const r = await servicioReal(tx).registrarCobro(
-        { tiendaId, monto: "20000.00", descripcion: "Equipo de rotulacion" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "20000.00", descripcion: "Equipo de rotulacion" },
         MAESTRO,
       );
 
@@ -301,9 +301,9 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       const tiendaId = await sembrarCuenta(tx, "doble");
       const servicio = servicioReal(tx);
 
-      await servicio.registrarCobro({ tiendaId, monto: "100.00", descripcion: "uno" }, MAESTRO);
+      await servicio.registrarCobro({ claveIdempotencia: randomUUID(), tiendaId, monto: "100.00", descripcion: "uno" }, MAESTRO);
       const segundo = await servicio.registrarCobro(
-        { tiendaId, monto: "50.00", descripcion: "dos" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "50.00", descripcion: "dos" },
         MAESTRO,
       );
 
@@ -335,7 +335,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       // LANZA. Nada mas se toca: el asiento, el `where` y el congelado del actor son los reales.
       await expect(
         servicioReal(tx, true).registrarCobro(
-          { tiendaId, monto: "1500.00", descripcion: "no debe quedar" },
+          { claveIdempotencia: randomUUID(), tiendaId, monto: "1500.00", descripcion: "no debe quedar" },
           MAESTRO,
         ),
       ).rejects.toThrow(RegistroCaido);
@@ -364,7 +364,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       await sembrarSaldoAFavor(tx, tiendaId, "10000.00");
 
       const r = await servicioReal(tx).registrarCobro(
-        { tiendaId, monto: "1500.00", descripcion: "si debe quedar" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "1500.00", descripcion: "si debe quedar" },
         MAESTRO,
       );
 
@@ -389,7 +389,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       await sembrarSaldoAFavor(tx, ajena, "10000.00");
 
       await servicioReal(tx).registrarCobro(
-        { tiendaId: cobrada, monto: "1500.00", descripcion: "solo de esta" },
+        { claveIdempotencia: randomUUID(), tiendaId: cobrada, monto: "1500.00", descripcion: "solo de esta" },
         MAESTRO,
       );
 
@@ -427,7 +427,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       const cobrosAntes = await tx.walletTiendaMovimiento.count({ where: { categoria: "cobro_manual" } });
 
       const porRol = await servicio.registrarCobro(
-        { tiendaId: mensajero, monto: "100.00", descripcion: "x" },
+        { claveIdempotencia: randomUUID(), tiendaId: mensajero, monto: "100.00", descripcion: "x" },
         MAESTRO,
       );
       expect(porRol).toEqual({
@@ -436,7 +436,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       });
 
       const porEstado = await servicio.registrarCobro(
-        { tiendaId: inactiva, monto: "100.00", descripcion: "x" },
+        { claveIdempotencia: randomUUID(), tiendaId: inactiva, monto: "100.00", descripcion: "x" },
         MAESTRO,
       );
       expect(porEstado).toEqual({
@@ -445,7 +445,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       });
 
       const inexistente = await servicio.registrarCobro(
-        { tiendaId: randomUUID(), monto: "100.00", descripcion: "x" },
+        { claveIdempotencia: randomUUID(), tiendaId: randomUUID(), monto: "100.00", descripcion: "x" },
         MAESTRO,
       );
       expect(inexistente).toEqual({
@@ -473,7 +473,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       const tiendaId = await sembrarCuenta(tx, "monto");
 
       const r = await servicioReal(tx).registrarCobro(
-        { tiendaId, monto: dado, descripcion: "importe" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: dado, descripcion: "importe" },
         MAESTRO,
       );
       expect(r.status).toBe("ok");
@@ -505,7 +505,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       const antesDeTodo = new Date(Date.now() - 60_000);
 
       const sinFecha = await servicio.registrarCobro(
-        { tiendaId, monto: "10.00", descripcion: "hoy" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "10.00", descripcion: "hoy" },
         MAESTRO,
       );
       expect(sinFecha.status).toBe("ok");
@@ -517,7 +517,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       expect(filaHoy.fechaMovimiento.getTime()).toBeGreaterThan(antesDeTodo.getTime());
 
       const conFecha = await servicio.registrarCobro(
-        { tiendaId, monto: "10.00", descripcion: "ayer", fecha: "2026-09-01" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "10.00", descripcion: "ayer", fecha: "2026-09-01" },
         MAESTRO,
       );
       expect(conFecha.status).toBe("ok");

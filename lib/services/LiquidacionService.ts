@@ -44,7 +44,7 @@ import {
   descripcionDePago,
   medianocheUtcDelDia,
 } from "@/lib/utils/descripcion-pago";
-import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { fechaCalendarioCR, inicioDelDiaCREnUtc } from "@/lib/utils/fecha-cr";
 import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
 import {
   ordenarCierresFifo,
@@ -135,8 +135,15 @@ interface PagoDeCierreEscrito {
   metodo: MetodoLiquidacion;
   referencia: string | null;
   nota: string | null;
-  /** Medianoche UTC del dia de pago (`medianocheUtcDelDia`), no el instante de registro. */
+  /** Medianoche UTC del dia de pago (`medianocheUtcDelDia`): la fecha del DOCUMENTO (`@db.Date`). */
   fechaPago: Date;
+  /**
+   * Ficha 461 (R73, auditoria T2) — el instante del ASIENTO en el libro del mensajero: el INICIO del
+   * dia de pago en Costa Rica (`inicioDelDiaCREnUtc`, 06:00Z). Distinto de `fechaPago` a proposito:
+   * a las 00:00Z el rollup diario (`fecha_movimiento − 6 h`) lo contaba el dia ANTERIOR al del
+   * documento.
+   */
+  fechaMovimiento: Date;
   registradoPor: string;
   repartoId: string | null;
 }
@@ -329,6 +336,7 @@ export class LiquidacionService implements ILiquidacionService {
           referencia: input.referencia ?? null,
           nota: input.nota ?? null,
           fechaPago: medianocheUtcDelDia(input.fechaPago),
+          fechaMovimiento: inicioDelDiaCREnUtc(input.fechaPago), // 461/R73: el asiento, al inicio del dia CR
           registradoPor: actor.usuarioId,
           // Feature 205 (T2.2/R51): este camino paga contra UN cierre desde /cierres-admin y NO
           // pertenece a ningun reparto. `null` es el dato, no una ausencia — y el comportamiento
@@ -495,6 +503,8 @@ export class LiquidacionService implements ILiquidacionService {
     const referencia = input.referencia ?? null;
     const nota = input.nota ?? null;
     const fechaPago = medianocheUtcDelDia(input.fechaPago);
+    // Ficha 461 (R73, auditoria T2): el asiento de cada imputacion, al INICIO del dia de pago en CR.
+    const fechaMovimiento = inicioDelDiaCREnUtc(input.fechaPago);
 
     try {
       return await this.runTransaction(async (tx) => {
@@ -556,6 +566,7 @@ export class LiquidacionService implements ILiquidacionService {
             referencia,
             nota,
             fechaPago,
+            fechaMovimiento,
             registradoPor: actor.usuarioId,
             repartoId: acto.reparto.id, // R28: lo que hace el grupo reconstruible
           });
@@ -669,7 +680,9 @@ export class LiquidacionService implements ILiquidacionService {
             origenId: creado.pago.id, //      …y hereda la idempotencia del indice unico parcial
             descripcion: descripcionDePago(input.metodo, input.referencia ?? null),
             registradoPor: actor.usuarioId,
-            fechaMovimiento: medianocheUtcDelDia(input.fechaPago), // R37: la fecha REAL del pago
+            // R37: la fecha REAL del pago. Ficha 461 (R73, auditoria T2): al INICIO de ese dia en CR
+            // (06:00Z), no a la medianoche UTC: el rollup lo contaba el dia anterior.
+            fechaMovimiento: inicioDelDiaCREnUtc(input.fechaPago),
           },
         ]);
 
@@ -684,7 +697,7 @@ export class LiquidacionService implements ILiquidacionService {
           monto: montoStr,
           descripcion: descripcionDePago(input.metodo, input.referencia ?? null),
           registradoPor: actor.usuarioId,
-          fechaMovimiento: medianocheUtcDelDia(input.fechaPago), // R20: la fecha REAL del pago
+          fechaMovimiento: inicioDelDiaCREnUtc(input.fechaPago), // R20 + 461/R73: la fecha REAL del pago, al inicio del dia CR
         });
 
         return {
@@ -753,7 +766,8 @@ export class LiquidacionService implements ILiquidacionService {
     // R77: el contraasiento se fecha el dia de la ANULACION, no el del pago. El precedente es
     // `reversarEgreso`, que no reabre fechas pasadas: entre el pago y su anulacion, un informe
     // por rango vera el pago aplicado, que es la semantica contable habitual.
-    const fechaAnulacion = medianocheUtcDelDia(fechaCalendarioCR(this.ahora()));
+    // Ficha 461 (R73, auditoria T2): al INICIO del dia CR de la anulacion (06:00Z), no a las 00:00Z.
+    const fechaAnulacion = inicioDelDiaCREnUtc(fechaCalendarioCR(this.ahora()));
 
     try {
       return await this.runTransaction(async (tx) => {
@@ -835,7 +849,8 @@ export class LiquidacionService implements ILiquidacionService {
     if (vigentes.length === 0) return { status: "sin_vigentes", yaEstaban: yaAnuladas };
 
     // R77: una sola fecha para todo el acto. Anular en grupo es UN acto, no N actos seguidos.
-    const fechaAnulacion = medianocheUtcDelDia(fechaCalendarioCR(this.ahora()));
+    // Ficha 461 (R73, auditoria T2): al INICIO del dia CR de la anulacion (06:00Z), no a las 00:00Z.
+    const fechaAnulacion = inicioDelDiaCREnUtc(fechaCalendarioCR(this.ahora()));
 
     // Los candados, en orden determinista y ANTES de escribir (ver cabecera). `Set` porque dos
     // imputaciones podrian compartir cierre y un candado repetido no aporta nada.
@@ -988,7 +1003,7 @@ export class LiquidacionService implements ILiquidacionService {
         origenId: creado.pago.id, //      …y hereda la idempotencia del indice unico parcial
         descripcion: descripcionDePago(pago.metodo, pago.referencia),
         registradoPor: pago.registradoPor,
-        fechaMovimiento: pago.fechaPago, // R37: la fecha REAL del pago
+        fechaMovimiento: pago.fechaMovimiento, // R37 + 461/R73: la fecha REAL del pago, al inicio del dia CR
       },
     ]);
 

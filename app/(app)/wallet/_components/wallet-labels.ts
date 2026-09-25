@@ -343,6 +343,8 @@ export const DOCUMENTO_CAJA_NOMBRE: Record<
   aporte_capital: "el saldo inicial o aporte de capital",
   // Ficha 461 (design §9): texto exacto del spec. La entrada la exige el compilador (`Record` total).
   cobro_tienda: "el cobro de Ordenex a una tienda",
+  // Ficha 461 (R71, auditoria D3; design §7: «correccion», no «ajuste»). Entrada exigida por el compilador.
+  ajuste_caja: "la corrección de caja",
 };
 
 export const DOCUMENTO_CAJA_ACCION = {

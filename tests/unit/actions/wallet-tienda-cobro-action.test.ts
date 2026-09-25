@@ -92,8 +92,17 @@ vi.mock("@/lib/db/prisma-client", () => ({
 
 const { registrarCobroTiendaAction, anularCobroTiendaAction } = await import("@/lib/actions/wallet-tienda");
 
+/** Ficha 461 (R66): la clave que el dialogo genera al abrirse; sin ella el borde responde validation_error. */
+const CLAVE_461 = "6b1f0d2e-7c3a-4d5b-9e8f-0a1b2c3d4e5f";
+
 function peticion(over: Record<string, unknown> = {}) {
-  return { tiendaId: TIENDA, monto: "1500.00", descripcion: "Reposicion de etiquetas", ...over };
+  return {
+    claveIdempotencia: CLAVE_461,
+    tiendaId: TIENDA,
+    monto: "1500.00",
+    descripcion: "Reposicion de etiquetas",
+    ...over,
+  };
 }
 
 function servicioDoble(resultado: unknown) {
@@ -129,7 +138,7 @@ describe("461/B.9 — registrar: el borde (sesion y forma)", () => {
     );
     expect(r.status).toBe("validation_error");
     if (r.status !== "validation_error") return;
-    expect(Object.keys(r.fieldErrors).sort()).toEqual(["descripcion", "monto", "tiendaId"]);
+    expect(Object.keys(r.fieldErrors).sort()).toEqual(["claveIdempotencia", "descripcion", "monto", "tiendaId"]) // 461/R66: la clave tambien es obligatoria;
     expect(r.fieldErrors.descripcion).toContain("La descripcion es obligatoria.");
     expect(registrarCobro).not.toHaveBeenCalled();
   });
@@ -165,7 +174,7 @@ describe("461/B.9 — registrar: el borde (sesion y forma)", () => {
       getActor: async () => MAESTRO,
     });
     expect(r).toEqual(OK);
-    expect(registrarCobro).toHaveBeenCalledWith({ tiendaId: TIENDA, monto: "1500.00", descripcion: "Cintas" }, MAESTRO);
+    expect(registrarCobro).toHaveBeenCalledWith({ claveIdempotencia: CLAVE_461, tiendaId: TIENDA, monto: "1500.00", descripcion: "Cintas" }, MAESTRO);
   });
 });
 

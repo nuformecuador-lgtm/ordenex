@@ -156,7 +156,7 @@ describeSiHayBase("459/C.5 — la migracion de reclasificacion contra Postgres",
     const r = await enTransaccionRevertida459(prisma, async (tx) => {
       const s = await sembrar(tx);
       // Ficha 461: `LectoresDocumentosCaja` gana `cobros` (solo cableado, exigido por el compilador; ninguna asercion de este archivo cambia, R61).
-      const wallet = new WalletService(new WalletMovimientoRepository(tx as never), tx as never, new AporteCapitalRepository(tx as never), { pagosPorCuenta: new PagoPorCuentaTiendaRepository(tx as never), aportes: new AporteCapitalRepository(tx as never), cobros: { estadoDeDocumentos: async () => [] } });
+      const wallet = new WalletService(new WalletMovimientoRepository(tx as never), tx as never, new AporteCapitalRepository(tx as never), { pagosPorCuenta: new PagoPorCuentaTiendaRepository(tx as never), aportes: new AporteCapitalRepository(tx as never), cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] } });
       const actor = { usuarioId: s.maestroId, rol: "maestro" as const };
       const leer = async () => {
         const x = await wallet.verResumenCaja({ page: 1, pageSize: 1 }, actor);

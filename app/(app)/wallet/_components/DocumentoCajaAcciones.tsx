@@ -16,6 +16,7 @@ import {
   anularPagoPorCuentaTiendaAction,
   obtenerComprobantePagoPorCuentaAction,
 } from "@/lib/actions/pago-por-cuenta-tienda";
+import { anularAjusteCajaAction } from "@/lib/actions/wallet";
 import { anularCobroTiendaAction } from "@/lib/actions/wallet-tienda";
 import type { ObtenerComprobanteResult } from "@/lib/types/pago-por-cuenta-tienda";
 import type { DocumentoCajaDTO, WalletMovimientoDTO } from "@/lib/types/wallet";
@@ -75,6 +76,12 @@ const ACCIONES: Record<
   // la superficie los completa el bloque C (frontend).
   cobro_tienda: {
     anular: (cobroId, motivo) => anularCobroTiendaAction({ cobroId, motivo }),
+    comprobante: async () => ({ status: "sin_comprobante" as const }),
+  },
+  // Ficha 461 (R71, auditoria D3): la correccion de caja original. La rama la exige el compilador
+  // (`Record` total); el id del «documento» es el de la propia fila (lo resuelve el servidor).
+  ajuste_caja: {
+    anular: (movimientoId, motivo) => anularAjusteCajaAction({ movimientoId, motivo }),
     comprobante: async () => ({ status: "sin_comprobante" as const }),
   },
 };

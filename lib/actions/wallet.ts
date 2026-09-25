@@ -1,12 +1,14 @@
 "use server";
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnulacionRepository";
 import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
 import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
 import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import { PagoPorCuentaTiendaRepository } from "@/lib/repositories/PagoPorCuentaTiendaRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { AjusteCajaService } from "@/lib/services/AjusteCajaService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { WalletService } from "@/lib/services/WalletService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -23,11 +25,14 @@ import type {
   VerDetalleMovimientoCompletoServiceResult,
   VerDetalleMovimientoServiceResult,
 } from "@/lib/interfaces/services/IDetalleMovimientoService";
+import type { IAjusteCajaService } from "@/lib/interfaces/services/IAjusteCajaService";
 import {
+  anularAjusteCajaSchema,
   listarMovimientosCompletoSchema,
   listarMovimientosDeFilaSchema,
   listarMovimientosSchema,
   registrarMovimientoManualSchema,
+  type AnularAjusteCajaResult,
   type ListarMovimientosCompletoResult,
 } from "@/lib/types/wallet";
 import {
@@ -96,11 +101,27 @@ function buildService(): IWalletService {
   const aportes = new AporteCapitalRepository(prisma);
   // Ficha 459 (design §7.3, R66/R67): los lectores REALES del estado de los documentos del libro.
   // Ficha 461 (design §5.4, R20/R37): + el de los cobros de Ordenex a una tienda.
+  // Ficha 461 (R71, auditoria D3): + el de las correcciones de caja.
   return new WalletService(repo, prisma, aportes, {
     pagosPorCuenta: new PagoPorCuentaTiendaRepository(prisma),
     aportes,
     cobros: new CobroTiendaAnulacionRepository(prisma),
+    ajustes: new AjusteCajaAnulacionRepository(prisma),
   });
+}
+
+/**
+ * Ficha 461 (R69–R71, auditoria D3) — el composition root de la ANULACION de una correccion de caja:
+ * el repositorio del libro (lee la correccion y escribe el contra-asiento), el de la anulacion
+ * (constancia + historial) y la transaccion REAL de Prisma. El servicio no construye ninguno.
+ */
+function buildAjusteCajaService(): IAjusteCajaService {
+  const prisma = getPrismaClient();
+  return new AjusteCajaService(
+    new WalletMovimientoRepository(prisma),
+    new AjusteCajaAnulacionRepository(prisma),
+    (fn) => prisma.$transaction((tx) => fn(tx as never)),
+  );
 }
 
 /**
@@ -121,6 +142,12 @@ function buildDetalleService(): IDetalleMovimientoService {
 
 export interface WalletDeps {
   service?: IWalletService;
+  getActor?: () => Promise<Actor | null>;
+}
+
+/** Ficha 461 (R69): las dependencias de la anulacion de una correccion, inyectables en test. */
+export interface AjusteCajaDeps {
+  service?: IAjusteCajaService;
   getActor?: () => Promise<Actor | null>;
 }
 
@@ -325,4 +352,24 @@ export async function registrarMovimientoManualAction(
     return { status: "validation_error", fieldErrors: t.fieldErrors };
   }
   return r;
+}
+
+/**
+ * Ficha 461 (R69–R71, auditoria D3) — ANULA una correccion de caja con motivo. Sesion ANTES del
+ * schema y del servicio; `anularAjusteCajaSchema` es `.strict()` (R70): una peticion con `monto` o
+ * con cualquier clave no prevista muere aqui con `validation_error`, sin escribir nada. Molde:
+ * `anularCobroTiendaAction`.
+ */
+export async function anularAjusteCajaAction(
+  input: unknown,
+  deps: AjusteCajaDeps = {},
+): Promise<AnularAjusteCajaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = anularAjusteCajaSchema.parse(input); // R70: ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildAjusteCajaService();
+    return service.anular(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }

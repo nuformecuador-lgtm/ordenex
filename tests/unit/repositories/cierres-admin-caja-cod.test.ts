@@ -200,7 +200,7 @@ function tiendaRepoQueEscribe(d: Doble) {
     obtenerPorIdDeTienda: vi.fn(async () => null),
     // Ficha 461: el cobro por id y el nombre de la tienda para su linea de caja. Esta suite no los ejercita.
     obtenerCobroPorId: vi.fn(async () => null),
-    nombreDeTienda: vi.fn(async () => ""),
+    nombreDeTienda: vi.fn(async () => ""), obtenerCobroPorClave: vi.fn(async () => null),
     registrarCobroEnHistorial: vi.fn(async () => undefined), // exigido por IWalletTiendaMovimientoRepository (ficha 381); no ejercitado aqui
   };
 }

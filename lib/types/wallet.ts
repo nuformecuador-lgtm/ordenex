@@ -8,6 +8,7 @@ import type {
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { composicionDetalleConfig } from "@/lib/config/composicion-detalle";
 import { walletMovimientoConfig } from "@/lib/config/wallet-movimiento";
+import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 import {
   esFechaCalendarioValida,
   fechaCalendarioCR,
@@ -287,7 +288,8 @@ export type WalletMovimientoDTO = {
  * comprobante). El reverso del cobro y las salidas reclasificadas siguen con `documento: null`.
  */
 export type DocumentoCajaDTO = {
-  tipo: "pago_por_cuenta_tienda" | "aporte_capital" | "cobro_tienda";
+  /** Ficha 461 (R71): + `ajuste_caja`, la correccion de caja original (su contra-asiento lleva `null`). */
+  tipo: "pago_por_cuenta_tienda" | "aporte_capital" | "cobro_tienda" | "ajuste_caja";
   anulado: boolean;
   tieneComprobante: boolean;
 };
@@ -466,6 +468,19 @@ export const montoPositivoSchema = z
     }
   }, "El monto debe ser mayor que 0.");
 
+/**
+ * FICHA 461 (R66, auditoria de la wallet D2) — la CLAVE DE IDEMPOTENCIA de los tres registros
+ * manuales de dinero (correccion de caja, sueldo o gasto de Ordenex, cobro de Ordenex a una tienda).
+ * La genera el dialogo al abrirse (`crypto.randomUUID()`, como en el pago de un gasto de una tienda y
+ * el aporte) y se guarda en la propia fila del libro bajo un indice UNIQUE (R67): un doble clic o un
+ * reintento tras un error tardio con la misma clave NO crea una segunda fila (R68). Medido por la
+ * auditoria: dos cobros identicos en 10 s quedaron como dos filas. OBLIGATORIA: sin ella, el borde
+ * responde `validation_error` y no se escribe nada.
+ */
+export const claveIdempotenciaSchema = z
+  .string({ message: "Falta la clave de idempotencia del registro." })
+  .uuid("La clave de idempotencia debe ser un uuid.");
+
 // ── Ficha 334 — la FECHA del movimiento manual (R19/R20/R21) ──
 
 /** La forma `YYYY-MM-DD`. Se declara una vez: la usan el regex del schema y su superRefine. */
@@ -529,6 +544,7 @@ export const registrarMovimientoManualSchema = z
     monto: montoPositivoSchema,
     descripcion: z.string().trim().min(1, "La descripcion es obligatoria."),
     fecha: fechaMovimientoSchema.optional(),
+    claveIdempotencia: claveIdempotenciaSchema, // ficha 461 (R66)
   })
   .refine(
     (v) =>
@@ -539,14 +555,48 @@ export const registrarMovimientoManualSchema = z
 
 export type RegistrarMovimientoManualInput = z.infer<typeof registrarMovimientoManualSchema>;
 
+// ── FICHA 461 (R69–R71, auditoria D3) — ANULAR una correccion de caja ──
+
+/**
+ * El BORDE de la anulacion de una correccion: la fila y un motivo. SIN monto, y `.strict()` lo hace
+ * cumplir (R70): el monto del contra-asiento se lee DE LA CORRECCION en el servidor, y una peticion
+ * que traiga `monto` —o cualquier otra clave no prevista— muere aqui con `validation_error` sin
+ * escribir nada. El motivo se recorta y no puede quedar vacio. Molde: `anularCobroTiendaSchema`.
+ */
+export const anularAjusteCajaSchema = z
+  .object({
+    movimientoId: z.string().uuid(),
+    motivo: z.string().trim().min(1, "El motivo de la anulacion es obligatorio."),
+  })
+  .strict();
+
+export type AnularAjusteCajaInput = z.infer<typeof anularAjusteCajaSchema>;
+
+/**
+ * El contrato COMPLETO que ve la pantalla. `unauthenticated` y `validation_error` los decide el
+ * borde; el resto, el dominio. `no_encontrado` cubre tambien «esa fila no es una correccion
+ * original» (su contra-asiento, el reverso de un egreso, un asiento automatico): sobre ellas no hay
+ * nada que anular por esta via. Ninguna rama viaja con importes.
+ */
+export type AnularAjusteCajaResult =
+  | { status: "ok" }
+  | { status: "ya_anulado" }
+  | { status: "no_encontrado" }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
 // Listado (R20): paginado acotado + filtros opcionales tipo/categoria/rango de fechas.
 export const listarMovimientosSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   tipo: z.enum(WALLET_MOVIMIENTO_TIPO_SEED).optional(),
   categoria: z.enum(WALLET_MOVIMIENTO_CATEGORIA_SEED).optional(),
-  desde: z.coerce.date().optional(),
-  hasta: z.coerce.date().optional(),
+  // Ficha 461 (R72, auditoria T1): dias de COSTA RICA. `desde` = inicio de ese dia (06:00Z); `hasta`
+  // = inicio del dia siguiente, cota EXCLUSIVA en el repositorio. Antes: `z.coerce.date()`, que es
+  // la medianoche UTC (18:00 CR del dia anterior) y dejaba «hoy» con 2 de 7 movimientos.
+  desde: desdeDiaCRSchema.optional(),
+  hasta: hastaDiaCRSchema.optional(),
 });
 
 export type ListarMovimientosInput = z.infer<typeof listarMovimientosSchema>;
@@ -623,6 +673,7 @@ export const registrarEgresoAdministrativoSchema = z.object({
   monto: montoPositivoSchema,
   descripcion: z.string().trim().min(1, "La descripcion es obligatoria."),
   fecha: fechaMovimientoSchema.optional(),
+  claveIdempotencia: claveIdempotenciaSchema, // ficha 461 (R66)
 });
 
 export type RegistrarEgresoAdministrativoInput = z.infer<

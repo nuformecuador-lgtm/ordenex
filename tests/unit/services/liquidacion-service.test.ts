@@ -542,13 +542,13 @@ describe("R36/R37/R38 — el movimiento que nace del pago", () => {
     expect(mov.registradoPor).toBe("u-admin");
   });
 
-  it("R37: se fecha con la fecha REAL del pago (medianoche UTC), no con la de registro", async () => {
+  it("R37: se fecha con la fecha REAL del pago (inicio del dia CR, 06:00Z — 461/R73), no con la de registro", async () => {
     const d = buildDobles({ creditos: "100000.00", debitos: "0.00" });
 
     await d.service.registrarPagoTienda(INPUT, ACTOR_ADMIN);
 
     const mov = movimientoEscrito(d.tiendaRepo);
-    expect(mov.fechaMovimiento?.toISOString()).toBe("2026-07-30T00:00:00.000Z");
+    expect(mov.fechaMovimiento?.toISOString()).toBe("2026-07-30T06:00:00.000Z");
     // Y el documento guarda esa MISMA fecha real (R9).
     const arg = (d.pagoRepo.crear as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1] as Record<string, unknown>;
     expect((arg.fechaPago as Date).toISOString()).toBe("2026-07-30T00:00:00.000Z");
@@ -659,7 +659,8 @@ describe("R39/R40/R41 — atomicidad, y donde NO se escribe", () => {
     expect(fila.origenId).toBe("pago-1"); // el id que devolvio `crear`, no una constante
     expect(fila.registradoPor).toBe("u-admin");
     expect(fila.descripcion).toBe("SINPE · 1234567");
-    expect((fila.fechaMovimiento as Date).toISOString()).toBe("2026-07-30T00:00:00.000Z");
+    // Ficha 461 (R73): el asiento de la caja, al INICIO del dia de pago en CR.
+    expect((fila.fechaMovimiento as Date).toISOString()).toBe("2026-07-30T06:00:00.000Z");
 
     // R19: la escritura va en LA MISMA transaccion — el puerto recibe el mismo objeto `tx`.
     const llamada = (d.caja.emitirEgresoDePago as unknown as { mock: { calls: unknown[][] } }).mock
@@ -1173,13 +1174,13 @@ describe("R35/R37/R38 — el movimiento que nace del pago al mensajero", () => {
     expect(mov.registradoPor).toBe("u-admin");
   });
 
-  it("R37: se fecha con la fecha REAL del pago (medianoche UTC), no con la de registro", async () => {
+  it("R37: se fecha con la fecha REAL del pago (inicio del dia CR, 06:00Z — 461/R73), no con la de registro", async () => {
     const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
 
     await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
 
     expect(movimientoDelMensajero(d.mensajeroRepo).fechaMovimiento?.toISOString()).toBe(
-      "2026-07-30T00:00:00.000Z",
+      "2026-07-30T06:00:00.000Z",
     );
     expect((documentoEscrito(d.pagoRepo).fechaPago as Date).toISOString()).toBe(
       "2026-07-30T00:00:00.000Z",

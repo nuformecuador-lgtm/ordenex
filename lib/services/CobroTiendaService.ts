@@ -55,6 +55,14 @@ class YaAnuladoError extends Error {
   }
 }
 
+/** Ficha 461 (R68): la clave del cliente ya tenia su cobro; sale de la transaccion (que revierte). */
+class ClaveRepetidaError extends Error {
+  constructor() {
+    super("cobro a tienda: clave de idempotencia repetida");
+    this.name = "ClaveRepetidaError";
+  }
+}
+
 /**
  * ═══════════════════════════════════════════════════════════════════════════════════════════════
  * FICHA 381 → 461 — ORDENEX LE COBRA A UNA TIENDA (y puede anular ese cobro).
@@ -141,52 +149,68 @@ export class CobroTiendaService implements ICobroTiendaService {
     const ahora = this.ahora();
     const fechaMovimiento = instanteDelMovimientoManual(input.fecha, ahora) ?? ahora;
 
-    await this.runTransaction(async (tx) => {
-      // El debito, igual que en la 381: categoria propia de los cobros, `origen_tipo: manual` y
-      // `origen_id: null` (fuera del indice unico parcial: dos cobros iguales son dos filas), y la
-      // descripcion que tecleo la persona, TAL CUAL (R7).
-      await this.tiendaRepo.crearMovimientos(tx, [
-        {
-          id,
+    try {
+      await this.runTransaction(async (tx) => {
+        // El debito, igual que en la 381: categoria propia de los cobros, `origen_tipo: manual` y
+        // `origen_id: null` (fuera del indice unico parcial), y la descripcion que tecleo la persona,
+        // TAL CUAL (R7). Ficha 461 (R66/R67/R68, auditoria D2): + la CLAVE del cliente, UNIQUE en la
+        // fila. Si `createMany` devuelve 0, la clave ya tenia su cobro: se sale de la transaccion
+        // ANTES del historial y de la linea de caja, y no queda ni una fila nueva.
+        const escritas = await this.tiendaRepo.crearMovimientos(tx, [
+          {
+            id,
+            tiendaId: input.tiendaId,
+            tipo: "debito",
+            categoria: "cobro_manual",
+            monto: montoStr,
+            origenTipo: "manual",
+            origenId: null,
+            descripcion: input.descripcion,
+            registradoPor: actor.usuarioId,
+            fechaMovimiento,
+            claveIdempotencia: input.claveIdempotencia,
+          },
+        ]);
+        if (escritas === 0) throw new ClaveRepetidaError();
+        // El rastro, en LA MISMA transaccion y por el MISMO importe.
+        await this.tiendaRepo.registrarCobroEnHistorial(tx, {
+          cobroId: id,
           tiendaId: input.tiendaId,
-          tipo: "debito",
-          categoria: "cobro_manual",
           monto: montoStr,
-          origenTipo: "manual",
-          origenId: null,
-          descripcion: input.descripcion,
+          actorUsuarioId: actor.usuarioId,
+        });
+        // R1/R2/R4 (HD1): la linea de caja del cobro —el CARGO—, por el MISMO monto y el MISMO
+        // instante, vinculada al debito por `(cobro_tienda, id)`, descrita con el nombre de la tienda
+        // y la descripcion, sin ningun id (R7). Sin esta linea, la ganancia no sube y R8 se rompe.
+        const tiendaNombre = await this.tiendaRepo.nombreDeTienda(tx, input.tiendaId);
+        await this.caja.emitirCargoDeCobro(tx, {
+          cobroId: id,
+          monto: montoStr,
+          descripcion: descripcionCobroEnCaja(tiendaNombre, input.descripcion),
           registradoPor: actor.usuarioId,
           fechaMovimiento,
-        },
-      ]);
-      // El rastro, en LA MISMA transaccion y por el MISMO importe.
-      await this.tiendaRepo.registrarCobroEnHistorial(tx, {
-        cobroId: id,
-        tiendaId: input.tiendaId,
-        monto: montoStr,
-        actorUsuarioId: actor.usuarioId,
+        });
       });
-      // R1/R2/R4 (HD1): la linea de caja del cobro —el CARGO—, por el MISMO monto y el MISMO instante,
-      // vinculada al debito por `(cobro_tienda, id)`, descrita con el nombre de la tienda y la
-      // descripcion, sin ningun id (R7). Sin esta linea, la ganancia no sube y R8 se rompe.
-      const tiendaNombre = await this.tiendaRepo.nombreDeTienda(tx, input.tiendaId);
-      await this.caja.emitirCargoDeCobro(tx, {
-        cobroId: id,
-        monto: montoStr,
-        descripcion: descripcionCobroEnCaja(tiendaNombre, input.descripcion),
-        registradoPor: actor.usuarioId,
-        fechaMovimiento,
-      });
-    });
+    } catch (error) {
+      if (error instanceof ClaveRepetidaError) {
+        // R68: el segundo envio responde con el cobro ORIGINAL y el saldo actual, sin escribir nada.
+        const original = await this.tiendaRepo.obtenerCobroPorClave(input.claveIdempotencia);
+        if (original === null) {
+          throw new Error("cobro-tienda: clave de idempotencia repetida sin cobro que releer");
+        }
+        return { status: "ya_registrado", cobro: original, saldo: await this.saldoDe(original.tiendaId) };
+      }
+      throw error;
+    }
 
     // Se relee POR ID Y POR TIENDA, no «el mas reciente de esta categoria»: con una fecha del pasado
     // el mas reciente seria OTRO cobro, y el servicio afirmaria «este es el que registraste» sobre
     // una fila ajena. Es la leccion escrita de la ficha 334.
     const cobro = await this.tiendaRepo.obtenerPorIdDeTienda(id, input.tiendaId);
     if (cobro === null) {
-      // Imposible por construccion (el cobro lleva `origen_id NULL`, queda fuera del indice unico
-      // parcial y por tanto NUNCA se deduplica). Se propaga con contexto en vez de devolver una fila
-      // inventada: en un libro de dinero, mentir es peor que fallar.
+      // Imposible por construccion: `createMany` devolvio 1, asi que la fila con ESTE id existe. Se
+      // propaga con contexto en vez de devolver una fila inventada: en un libro de dinero, mentir es
+      // peor que fallar.
       throw new Error(`cobro-tienda: el cobro ${id} no se pudo releer tras insertarlo`);
     }
 

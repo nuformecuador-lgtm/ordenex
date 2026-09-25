@@ -7,7 +7,8 @@ import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
 // FICHA 381: las dos piezas del borde del dinero manual, reutilizadas TAL CUAL desde el libro de la
 // caja. Ver `registrarCobroTiendaSchema` al final del archivo.
-import { fechaMovimientoSchema, montoPositivoSchema } from "@/lib/types/wallet";
+import { claveIdempotenciaSchema, fechaMovimientoSchema, montoPositivoSchema } from "@/lib/types/wallet";
+import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 
 // Feature 43 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del ledger POR
 // TIENDA, respaldada por los enums Postgres nativos (patron lib/types/wallet.ts). El
@@ -179,8 +180,9 @@ export const listarMovimientosTiendaSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   cierreId: z.string().min(1).optional(),
   categoria: z.enum(WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED).optional(),
-  desde: z.coerce.date().optional(),
-  hasta: z.coerce.date().optional(),
+  // Ficha 461 (R72, auditoria T1): dias de Costa Rica; `hasta` exclusivo en el repositorio.
+  desde: desdeDiaCRSchema.optional(),
+  hasta: hastaDiaCRSchema.optional(),
 });
 
 export type ListarMovimientosTiendaInput = z.infer<typeof listarMovimientosTiendaSchema>;
@@ -338,6 +340,7 @@ export const registrarCobroTiendaSchema = z
     monto: montoPositivoSchema, // STRING, > 0, <= 2 decimales (R14/R18)
     descripcion: z.string().trim().min(1, "La descripcion es obligatoria."), // R15
     fecha: fechaMovimientoSchema.optional(), // R16/R21
+    claveIdempotencia: claveIdempotenciaSchema, // ficha 461 (R66): un doble envio es UN cobro
   })
   .strict();
 

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { RolValue } from "@prisma/client";
 import { WalletService } from "@/lib/services/WalletService";
@@ -106,6 +107,7 @@ function buildRepo(): IWalletMovimientoRepository {
       .mockResolvedValue({ gastoFijo: "0.00", gastoVariable: "0.00", sueldo: "0.00" }),
     obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
     primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: el dia del primer movimiento
+    obtenerPorClave: vi.fn(async () => null), // ficha 461 (R68): la relectura del segundo envio; se sobrescribe donde se ejercita
     // FICHA 362: el escritor de los movimientos que nacen de una DECISION humana. Abre su PROPIA
     // transaccion y escribe ademas la fila de auditoria; los feeds automaticos —los ~34 asientos
     // que emite aprobar un cierre— siguen entrando por `crearMovimientos` y NO dejan rastro.
@@ -615,7 +617,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
     const repo = buildRepo();
     const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
     const r = await svc.registrarMovimientoManual(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
       OTRO,
     );
     expect(r).toEqual({ status: "forbidden" });
@@ -627,7 +629,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
     const repo = buildRepo();
     const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
     const r = await svc.registrarMovimientoManual(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
       ADMIN,
     );
     expect(r.status).toBe("ok");
@@ -644,7 +646,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
     });
     const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
     const r = await svc.registrarMovimientoManual(
-      { tipo: "egreso", categoria: "egreso_ajuste", monto: "50.00", descripcion: "correccion" },
+      { claveIdempotencia: randomUUID(), tipo: "egreso", categoria: "egreso_ajuste", monto: "50.00", descripcion: "correccion" },
       MAESTRO,
     );
     expect(r.status).toBe("ok");
@@ -702,6 +704,7 @@ describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/
 
   function ajuste(fecha?: string) {
     return {
+      claveIdempotencia: randomUUID(),
       tipo: "egreso" as const,
       categoria: "egreso_ajuste" as const,
       monto: "50.00",
@@ -814,7 +817,7 @@ const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };
 const SIN_DOCUMENTOS_459 = {
   pagosPorCuenta: { estadoDeDocumentos: async () => [] },
   aportes: { estadoDeDocumentos: async () => [] },
-  cobros: { estadoDeDocumentos: async () => [] }, // ficha 461
+  cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] }, // ficha 461
 };
 
 // ─── FICHA 459 (T B.16, design §7.3) — el DOCUMENTO de cada fila, resuelto en lote ───
@@ -863,6 +866,12 @@ describe("WalletService.listarMovimientos — el documento de las filas original
       cobros: {
         estadoDeDocumentos: vi.fn(async (ids: readonly string[]) =>
           ids.map((id) => ({ id, anulado: id === COBRO_COMPLETADO, tieneComprobante: false })),
+        ),
+      },
+      // Ficha 461 (R71): las correcciones de caja; en esta pagina ninguna esta anulada.
+      ajustes: {
+        estadoDeDocumentos: vi.fn(async (ids: readonly string[]) =>
+          ids.map((id) => ({ id, anulado: false, tieneComprobante: false })),
         ),
       },
     };

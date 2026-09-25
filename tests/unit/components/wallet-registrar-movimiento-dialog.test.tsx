@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// Ficha 461 (R66): los tres registros manuales viajan con la clave de idempotencia que el dialogo genera al
+// abrirse (la misma pieza que ya usaban el pago de un gasto y el aporte). Un uuid v4, no un literal fijo.
+const UUID_461 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -338,6 +342,7 @@ describe("RegistrarMovimientoCajaDialog — el enrutado por concepto (R5/R6/R7/R
 
     expect(registrarEgresoMock).toHaveBeenCalledTimes(1);
     expect(registrarEgresoMock.mock.calls[0][0]).toEqual({
+      claveIdempotencia: expect.stringMatching(UUID_461),
       tipoEgreso: "gasto_variable",
       monto: "125.50",
       descripcion: "Suministros",
@@ -360,6 +365,7 @@ describe("RegistrarMovimientoCajaDialog — el enrutado por concepto (R5/R6/R7/R
 
     expect(registrarEgresoMock).toHaveBeenCalledTimes(1);
     expect(registrarEgresoMock.mock.calls[0][0]).toEqual({
+      claveIdempotencia: expect.stringMatching(UUID_461),
       tipoEgreso: "sueldo",
       monto: "800.00",
       descripcion: "Juan Pérez — julio 2026",
@@ -376,6 +382,7 @@ describe("RegistrarMovimientoCajaDialog — el enrutado por concepto (R5/R6/R7/R
 
     expect(registrarManualMock).toHaveBeenCalledTimes(1);
     expect(registrarManualMock.mock.calls[0][0]).toEqual({
+      claveIdempotencia: expect.stringMatching(UUID_461),
       tipo: "ingreso",
       categoria: "ingreso_ajuste",
       monto: "40.00",
@@ -394,6 +401,7 @@ describe("RegistrarMovimientoCajaDialog — el enrutado por concepto (R5/R6/R7/R
 
     expect(registrarManualMock).toHaveBeenCalledTimes(1);
     expect(registrarManualMock.mock.calls[0][0]).toEqual({
+      claveIdempotencia: expect.stringMatching(UUID_461),
       tipo: "egreso",
       categoria: "egreso_ajuste",
       monto: "12.75",
@@ -447,7 +455,7 @@ describe("RegistrarMovimientoCajaDialog — la fecha del movimiento (R19/R20/R23
     await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
 
     const payload = registrarEgresoMock.mock.calls[0][0] as Record<string, unknown>;
-    expect(Object.keys(payload).sort()).toEqual(["descripcion", "monto", "tipoEgreso"]);
+    expect(Object.keys(payload).sort()).toEqual(["claveIdempotencia", "descripcion", "monto", "tipoEgreso"]);
     expect("fecha" in payload).toBe(false);
   }, 15000);
 
@@ -461,6 +469,7 @@ describe("RegistrarMovimientoCajaDialog — la fecha del movimiento (R19/R20/R23
     await user.click(within(dialog).getByRole("button", { name: "Registrar" }));
 
     expect(registrarEgresoMock.mock.calls[0][0]).toEqual({
+      claveIdempotencia: expect.stringMatching(UUID_461),
       tipoEgreso: "gasto_variable",
       monto: "55.00",
       descripcion: "Gasolina de ayer",
@@ -648,6 +657,7 @@ describe("381 — el campo de la tienda es CONDICIONAL (R2/R3)", () => {
 
     expect(registrarCobroMock).not.toHaveBeenCalled();
     expect(registrarManualMock.mock.calls[0][0]).toEqual({
+      claveIdempotencia: expect.stringMatching(UUID_461),
       tipo: "egreso",
       categoria: "egreso_ajuste",
       monto: "12.75",
@@ -808,11 +818,12 @@ describe("381 — el payload del cobro lleva SOLO lo que decide el usuario (R2/R
     // clave de más —`tipo`, `categoria`, `registradoPor`, `origenTipo`— sería un
     // `validation_error` en producción. El monto viaja como STRING, con sus dos decimales.
     expect(payload).toEqual({
+      claveIdempotencia: expect.stringMatching(UUID_461),
       tiendaId: TIENDAS[2].id,
       monto: "15000.00",
       descripcion: "Material de despacho",
     });
-    expect(Object.keys(payload).sort()).toEqual(["descripcion", "monto", "tiendaId"]);
+    expect(Object.keys(payload).sort()).toEqual(["claveIdempotencia", "descripcion", "monto", "tiendaId"]);
     expect(typeof payload.monto).toBe("string");
     // R21: sin tocar la fecha, la clave NO viaja y manda el instante del registro.
     expect("fecha" in payload).toBe(false);
@@ -834,6 +845,7 @@ describe("381 — el payload del cobro lleva SOLO lo que decide el usuario (R2/R
 
     await waitFor(() => expect(registrarCobroMock).toHaveBeenCalledTimes(1));
     expect(registrarCobroMock.mock.calls[0][0]).toEqual({
+      claveIdempotencia: expect.stringMatching(UUID_461),
       tiendaId: TIENDAS[1].id,
       monto: "0.01",
       descripcion: "Un céntimo de ayer",
@@ -1192,6 +1204,7 @@ describe("⭑ FICHA 381/459 — el cobro de un costo no gana ni una clave (R64)"
 
     await waitFor(() => expect(registrarCobroMock).toHaveBeenCalledTimes(1));
     expect(registrarCobroMock.mock.calls[0][0]).toEqual({
+      claveIdempotencia: expect.stringMatching(UUID_461),
       tiendaId: TIENDAS[2].id,
       monto: "15000.00",
       descripcion: "Material",

@@ -6,6 +6,7 @@ import type {
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import { paginaInputSchema } from "@/lib/types/pagina-input";
+import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 import { walletMensajeroConfig } from "@/lib/config/wallet-mensajero";
 
 // Feature 44 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del LIBRO del pago
@@ -156,8 +157,9 @@ export const listarPagosMensajeroSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   cierreId: z.string().min(1).optional(),
   mensajeroId: z.string().min(1).optional(),
-  desde: z.coerce.date().optional(),
-  hasta: z.coerce.date().optional(),
+  // Ficha 461 (R72, auditoria T1): dias de Costa Rica; `hasta` exclusivo en el repositorio.
+  desde: desdeDiaCRSchema.optional(),
+  hasta: hastaDiaCRSchema.optional(),
 });
 
 // Vista del MAESTRO (R18/R22): el maestro DEBE elegir un mensajero, asi que `mensajeroId` pasa a

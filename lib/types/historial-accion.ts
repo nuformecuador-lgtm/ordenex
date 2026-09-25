@@ -186,6 +186,12 @@ export const HISTORIAL_ACCION_TIPOS = [
   // lleva el importe y el NOMBRE de la tienda; NUNCA el motivo de la anulacion (texto libre, R5 de la
   // 362). Entidad: `wallet_tienda_movimiento` (el debito del cobro), sin entidad nueva.
   "cobro_tienda_anulado", // CobroTiendaAnulacionRepository.anular
+  // ⭑ FICHA 461 (R69, auditoria de la wallet D3) — alguien ANULO una CORRECCION de caja
+  // (`ingreso_ajuste`/`egreso_ajuste`). Mueve dinero: el contra-asiento deshace su efecto en la
+  // ganancia. TIPO PROPIO y metodo propio (la guardia del censo mide POR METODO). La fila lleva el
+  // importe y la CATEGORIA de la correccion; NUNCA el motivo (texto libre, R5 de la 362). Entidad:
+  // `wallet_movimiento` (la correccion original).
+  "wallet_movimiento_manual_anulado", // AjusteCajaAnulacionRepository.anular
   // ⭑ FICHA 398 — UN MAESTRO/ADMIN CORRIGIO EL RESULTADO de una gestion que ya estaba dentro de un
   // cierre ABIERTO: `entregada -> rechazada`. Entra en DINERO y no admite discusion — la fila
   // documenta que del cierre SALIO un cobro que nadie recaudo (baja `total_general` y el balde de
@@ -416,6 +422,8 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   aporte_capital_anulado: "mueve_dinero",
   // FICHA 461 (R55): anular un cobro le devuelve dinero a la tienda y baja la ganancia.
   cobro_tienda_anulado: "mueve_dinero",
+  // FICHA 461 (R69): anular una correccion de caja deshace su efecto en la ganancia.
+  wallet_movimiento_manual_anulado: "mueve_dinero",
   // FICHA 398: la correccion saca del cierre un cobro que nadie recaudo y pone en cero el pago
   // de esa gestion al mensajero. No hay lectura mas directa de «mueve dinero», y R17 exige
   // exactamente una categoria por tipo.
@@ -486,6 +494,8 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   // quien le paga a quien; verbo en pasado con la persona como sujeto, como el resto del catalogo.
   cobro_tienda_registrado: "Le cobró a una tienda",
   cobro_tienda_anulado: "Anuló un cobro a una tienda",
+  // Ficha 461 (R69, design §7: «correccion», no «ajuste»).
+  wallet_movimiento_manual_anulado: "Anuló una corrección de caja",
   pago_por_cuenta_tienda_registrado: "Pagó un gasto de una tienda",
   pago_por_cuenta_tienda_anulado: "Anuló el pago de un gasto de una tienda",
   aporte_capital_registrado: "Registró un aporte de dinero a la caja",

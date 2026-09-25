@@ -71,7 +71,12 @@ function toDTO(r: MovimientoRow): WalletMovimientoDTO {
 }
 
 // WHERE comun a listado y balance (R20): filtros opcionales tipo/categoria/rango fechas
-// sobre fecha_movimiento. `desde`/`hasta` inclusivos.
+// sobre fecha_movimiento. `desde` inclusivo, `hasta` EXCLUSIVO.
+//
+// Ficha 461 (R72, auditoria T1): `hasta` pasa de `lte` a `lt`. El borde manda el INICIO del dia CR
+// SIGUIENTE (`hastaDiaCRSchema`), asi que `<` cubre el dia entero elegido y ni un instante mas; con
+// `lte` un asiento fechado exactamente a las 06:00Z del dia siguiente entraria dos veces (en su dia y
+// en el anterior). `desde` sigue siendo `gte` sobre el inicio del dia CR.
 //
 // Ficha 339 (T3.2, design §4.4 — R33): + `categorias`, el CONJUNTO de una fila de la tarjeta de
 // la ganancia. Va en `AND` y NO sobreescribiendo `where.categoria`, para que CONVIVAN el filtro
@@ -87,7 +92,7 @@ function buildWhere(f: BalanceFiltros): Prisma.WalletMovimientoWhereInput {
   if (f.desde !== undefined || f.hasta !== undefined) {
     where.fechaMovimiento = {
       ...(f.desde !== undefined ? { gte: f.desde } : {}),
-      ...(f.hasta !== undefined ? { lte: f.hasta } : {}),
+      ...(f.hasta !== undefined ? { lt: f.hasta } : {}), // ficha 461/R72: cota EXCLUSIVA
     };
   }
   return where;
@@ -124,6 +129,9 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       // omite —en vez de mandar `undefined`— para que quien no la pasa siga cayendo en el
       // `DEFAULT CURRENT_TIMESTAMP` de la columna, exactamente como hasta hoy.
       ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
+      // Ficha 461 (R66/R67): la clave de idempotencia del cliente, SOLO si el llamador la trae. Con
+      // `skipDuplicates`, un choque en su indice UNIQUE deja la fila fuera y `count` en 0.
+      ...(m.claveIdempotencia !== undefined ? { claveIdempotencia: m.claveIdempotencia } : {}),
     }));
     const res = await tx.walletMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;
@@ -224,6 +232,12 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   /** Feature 45 (R13): lee un movimiento por id (para la reversa). null si no existe. */
   async obtenerPorId(id: string): Promise<WalletMovimientoDTO | null> {
     const row = await this.prisma.walletMovimiento.findUnique({ where: { id } });
+    return row === null ? null : toDTO(row);
+  }
+
+  /** Ficha 461 (R68): la fila que lleva ESA clave de idempotencia (columna UNIQUE), o null. */
+  async obtenerPorClave(claveIdempotencia: string): Promise<WalletMovimientoDTO | null> {
+    const row = await this.prisma.walletMovimiento.findUnique({ where: { claveIdempotencia } });
     return row === null ? null : toDTO(row);
   }
 

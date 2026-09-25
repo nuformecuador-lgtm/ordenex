@@ -109,9 +109,12 @@ const RESUELTO_CIERRE_A = new Date("2026-07-05T09:00:02.000Z");
 const RESUELTO_CIERRE_B = new Date("2026-06-10T11:22:33.000Z");
 const SOLICITADO_CIERRE_C = new Date("2026-05-02T08:00:00.000Z");
 const FECHA_PAGO_1 = new Date("2026-07-30T00:00:00.000Z");
+/** Ficha 461 (R73): el ASIENTO de ese pago va al inicio del dia en Costa Rica, no a la medianoche UTC. */
+const ASIENTO_PAGO_1 = new Date("2026-07-30T06:00:00.000Z");
 /** 2026-08-06 a las 04:00 UTC son las 22:00 del **5** en Costa Rica (UTC-6). */
 const ANULACION_1_CREADA = new Date("2026-08-06T04:00:00.000Z");
-const DIA_DE_LA_ANULACION_1 = new Date("2026-08-05T00:00:00.000Z");
+/** Ficha 461 (R73): el dia CR de la anulacion, como INSTANTE del asiento (06:00Z). */
+const DIA_DE_LA_ANULACION_1 = new Date("2026-08-05T06:00:00.000Z");
 
 function mundoBase(): Mundo {
   const dec = (v: string) => new Prisma.Decimal(v);
@@ -516,7 +519,7 @@ describe("R41 — ninguna fila se fecha con el reloj; todas con la coordenada de
     const informe = await informeDe(mundoBase(), "simular");
 
     expect(pendienteDe(informe, PAGO_1, "egreso_pago_tienda")?.movimiento.fechaMovimiento).toEqual(
-      FECHA_PAGO_1,
+      ASIENTO_PAGO_1,
     );
   });
 
@@ -797,7 +800,7 @@ describe("el backfill no reimplementa nada: reusa los emisores del camino vivo",
       monto: "15000.50",
       descripcion: "SINPE · 1234567",
       registradoPor: "u-admin",
-      fechaMovimiento: FECHA_PAGO_1,
+      fechaMovimiento: ASIENTO_PAGO_1,
     });
     const [esperada] = recolector.vaciar();
 
