@@ -574,6 +574,48 @@ Los dos artefactos del contrato quedan actualizados (`lib/api/openapi-spec.ts` y
 
 ---
 
+## 2026-09-04 — `GET /ordenes/api-key/analitica`: la serie trae el día en curso (marcado `parcial`) y vuelve `cobertura`
+
+> Entrada escrita el 2026-09-25, a posteriori: el cambio salió en `6c35439a` («el canal por API key
+> sirve lo mismo que la pantalla») sin su aviso aquí. Lo que sigue es lo que el contrato
+> (`lib/api/openapi-spec.ts`, `AnaliticaSerie`) publica desde ese día.
+
+**Qué cambia, en una frase:** cada serie de la analítica devuelve **cuatro** campos —`metrica`,
+`unidad`, `data`, `cobertura`— y `data` **incluye el día en curso**, marcado como parcial. Es
+exactamente lo que ve la pantalla de analítica.
+
+**1. `data` incluye el día de hoy.** Antes del 2026-09-04 el día en curso se omitía. Ahora viene como
+un punto más, con dos claves que **solo** trae ese punto:
+
+| Clave | Tipo | Qué dice |
+|---|---|---|
+| `parcial` | `true` | El día no está cerrado: su cifra se lee más baja que la de un día completo y **no es comparable**. Ausente en cualquier otro día (nunca llega como `false`). |
+| `corteAt` | `string` (ISO-8601) | El instante usado como cota superior del día parcial. Solo acompaña a `parcial: true`. |
+
+⚠️ **Si sumás `data` para sacar un total del periodo, descartá primero los puntos con
+`parcial: true`** y los días de `cobertura.fechasNoComparables`. Un `valor: null` sigue
+significando «no se sabe» y sigue sin sustituirse por 0.
+
+**2. `cobertura` vuelve, y siempre viene.** Dice qué días de la serie no son comparables, y por qué:
+
+| Clave | Tipo | Qué dice |
+|---|---|---|
+| `fechasNoComparables` | `string[]` (fechas) | Días del rango por debajo del horizonte del histórico: ahí un cero es falta de **datos**, no falta de operación. Normalmente vacío. |
+| `penumbra` | `string` (constante) | Limitación permanente del histórico, nunca estimada: las órdenes que ya estaban vivas cuando nació el historial y nunca volvieron a cambiar de estado no entran en ningún día. |
+
+**Quién lo nota:** quien lea `data` como una lista de días cerrados (hoy el último punto puede ser
+parcial) o quien valide la respuesta con un esquema cerrado (aparece `cobertura`, y los puntos
+pueden traer `parcial` y `corteAt`). Los tres parámetros del endpoint siguen siendo opcionales
+(entrada del 2026-08-31).
+
+**Ejemplo** de un punto parcial dentro de `data`:
+
+```json
+{ "fecha": "2026-09-04", "valor": 12, "parcial": true, "corteAt": "2026-09-04T18:40:00.000Z" }
+```
+
+---
+
 ## 2026-09-01 — El contrato retira la descripción en prosa de TODOS los endpoints (y la colección de Postman pasa a una petición por endpoint)
 
 **No cambia ni un byte de las peticiones ni de las respuestas.** Ningún path, parámetro, schema,
