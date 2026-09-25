@@ -118,6 +118,10 @@ const MIGRACIONES_NOTIFICACIONES_POSTERIORES = [
   // infra de avisos. Nada de esto es infra de la 102 - la clasificacion SLA sigue siendo derivada
   // y esta ficha no la toca.
   "_notificacion_evento_traspaso",
+  // FICHA 462 (2026-09-25): los dos valores de enum del aviso «reprogramadas de hoy que esperan la
+  // aprobacion de un cierre» (`reprogramadas_esperan_cierre` / `reprogramadas_esperan_cierre_dia`).
+  // Infra de avisos AGREGADOS; no toca la clasificacion SLA de la 102.
+  "_notificacion_evento_reprogramadas_esperan_cierre",
 ] as const;
 
 describe("Feature 102 · SIN migracion nueva (R3)", () => {

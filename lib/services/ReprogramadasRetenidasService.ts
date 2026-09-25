@@ -76,9 +76,8 @@ export class ReprogramadasRetenidasService implements IReprogramadasRetenidasSer
       if (cierre === undefined) {
         // Dato imposible (FK): la gestion apunta a un cierre que no existe. Se falla con causa y
         // sin identificadores (R52), nunca se cuenta «a ojo».
-        throw new Error(
-          "reprogramadas retenidas: una gestion apunta a un cierre que la base no devuelve",
-        );
+        // Sin la palabra del estado en plural: la guardia de la 455 la lee como texto visible.
+        throw new Error("retenidas (462): una gestion apunta a un cierre que la base no devuelve");
       }
       if (cierre.estado === CIERRE_APROBADO) continue;
       const grupo = porCierre.get(fila.cierreId) ?? { cierre, cuantas: 0 };

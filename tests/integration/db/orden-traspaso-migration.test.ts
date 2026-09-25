@@ -160,6 +160,9 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       "20260925120100_historial_accion_459",
       "20260925120200_pago_por_cuenta_y_capital",
       "20260925120300_reclasificar_cobros_459",
+      // Ficha 462 (2026-09-25): los dos valores de enum del aviso «reprogramadas de hoy que esperan la
+      // aprobacion de un cierre». Sola, aditiva, `down.sql` dinamico; no toca `orden_traspaso_mensajero`.
+      "20260925130000_notificacion_evento_reprogramadas_esperan_cierre",
     ]);
   });
 });
