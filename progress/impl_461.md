@@ -289,3 +289,60 @@ contrato de R66, y los fallos de pantalla P1/P3.
   H4 (nota en `docs/release.md`, «Pendiente para la PRÓXIMA release»: `db:rollback` revierte siempre el
   último directorio; deshacer varias es a mano). H8 es este merge.
 - **Gate final:** ver el apartado siguiente.
+
+## 10. Gate final del cierre Z (`progress/gate_461_final.log`, contra `ordenex_461z`)
+
+Comando: `./init.sh > progress/gate_461_final.log 2>&1; echo "INIT_EXIT=$?" >> progress/gate_461_final.log`
+(completo, sin `tail`, `.env` del worktree apuntando al clon). Tres corridas; las dos primeras se guardaron en el
+scratchpad de la sesión (`gate_461_final_1.log`, `gate_461_final_2.log`) y se describen aquí con su causa medida.
+
+- **1.ª corrida** (`4caa46aa`, 22:44 UTC): `INIT_EXIT=1`, **1 rojo** — `caja-caracterizacion-459 › dos siembras en
+  la misma transaccion…`: `Unique constraint failed` en `rankingSnapshotDia.create` (`_fixtures/caja-459.ts:758`)
+  desde la SEGUNDA siembra (`:500`). Causa: `diaDelPremio()` sortea una base entre 1000 días y le suma un
+  contador; dos siembras del mismo proceso chocan cuando `base_dos = base_uno − 1` (1/1000 por corrida de ese
+  caso). No es una carrera entre archivos: el clon tenía **0** filas commiteadas en `ranking_snapshot_dia` y
+  los tres consumidores del fixture van en la transacción revertida. **Aislado 3/3 verde**; verde en las
+  corridas 2 y 3. Flake propio del fixture de la 459, no de la 461; se deja dicho (bastaría separar el
+  contador de la ventana aleatoria, p. ej. `siembras459 × 1000 días`), no se toca aquí.
+- **2.ª corrida** (`4caa46aa`, 23:02 UTC): `INIT_EXIT=1`, **1 rojo distinto** —
+  `462/reprogramadas-retenidas-sql-real › R55: SUM(retenidas) = resumen.total`: `expected 16 to be 13`.
+  **Aislado 3/3 ROJO**: no era flake. Causa, medida en Postgres: el `hoy_cr` del script de producción de la 462
+  (`scripts/medir-462-retenidas.sql`) era `((now() AT TIME ZONE 'UTC') AT TIME ZONE 'America/Costa_Rica')::date`;
+  `now()` es `timestamptz`, la primera conversión lo deja sin zona y la segunda lo REINTERPRETA como hora de CR
+  (+6 h), y el `::date` se evalúa en la zona de la sesión. Con la sesión local (`America/Bogota`) a las 23:22 UTC
+  daba **2026-09-26** con CR en 2026-09-25 (se equivoca de 23:00 a 06:00 UTC); con sesión UTC (Supabase) diría
+  MAÑANA de 18:00 a 06:00 UTC, de las 12:00 CR a medianoche. El servicio usa `diaCR(0)` (correcto), y el script
+  contaba las tres siembras con fecha de MAÑANA. Por eso el gate de `dev` tras la 462 (22:05 UTC) y mi 1.ª
+  corrida (22:44) lo vieron verde y la 2.ª (23:02) rojo. **Arreglo mínimo (`384fe313` + `de80799c`):**
+  `(now() AT TIME ZONE 'America/Costa_Rica')::date` en el script y en su copia de `specs/462-*/design.md`;
+  `solicitado_cr` conserva la forma doble porque las columnas son `timestamp` sin zona en UTC (ahí SÍ es la
+  correcta; `scripts/contraste-454.sql` la usa así sobre columnas y está bien). Test nuevo
+  `tests/integration/db/462/medir-462-hoy-cr.test.ts`: evalúa la expresión REAL leída del archivo cada 30 min
+  durante 48 h bajo `UTC`, `America/Bogota` y `America/Costa_Rica` contra `diaCR` de JS, con contraprueba (la
+  forma vieja falla 48 de 96 medias horas, todas entre 18:00 y 06:00 UTC). **Mutación** (expresión vieja de
+  vuelta): 4 de 5 casos en rojo, archivo restaurado idéntico. Tras el arreglo: `medir-462-hoy-cr` 5/5 y
+  `reprogramadas-retenidas-sql-real` 25/25 (R55: 13 = 13) a las 23:2x UTC. El commit `384fe313` salió con
+  `TSC_EXIT=2` (flag `/s` de un regex, TS1501) y se corrigió en `de80799c` (`TSC_EXIT=0`).
+- **3.ª corrida** (`de80799c`, 23:32 UTC, dentro de la ventana en que la expresión vieja fallaba), la que vale:
+
+```
+ Test Files  2239 passed (2239)
+      Tests  31567 passed | 26 skipped (31593)
+   Duration  763.00s
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 2239 ejecutado(s), todos en el baseline conocido)
+== init OK ==
+INIT_EXIT=0
+```
+
+Los 26 `skipped` son los de siempre (`AnaliticaPage.test.tsx` 17, `AnaliticaShell.test.tsx` 9); **0 skipped en
+`tests/integration/db`** (379 archivos, todos `✓`; «DATABASE_URL resuelta: los 291 archivos de tests contra
+Postgres SI se ejecutan»). `caja-caracterizacion-459` (18), `reprogramadas-retenidas-sql-real` (25) y
+`medir-462-hoy-cr` (5): verdes. Limpieza: clon `ordenex_461z` borrado, `.env` del worktree borrado, scripts de
+un solo uso de `.vitest/` borrados.
+
+## 11. Veredicto del cierre Z
+
+Rama `feature/461-cierre` lista para el PR a `dev`: merge con la 462 resuelto, migraciones en el orden 459 → 462
+→ 461 comprobado en el clon, H1/H4/H7 cerrados, gate completo `INIT_EXIT=0` con 0 saltados en integración. Lleva
+además un arreglo ajeno pero bloqueante (el `hoy_cr` de la 462) en dos commits separables, y deja dichos dos
+pendientes que no son suyos: el 1/1000 de `diaDelPremio()` (459) y la re-medición de C461-3 en producción (leader).
