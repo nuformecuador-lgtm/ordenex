@@ -245,6 +245,23 @@ export type WalletMovimientoDTO = {
    * tabla y la descarga no pueden decir cosas distintas.
    */
   dueno: NaturalezaMovimiento;
+  /**
+   * Ficha 459 (design §7.3, R66/R67) — el DOCUMENTO detras de la fila, resuelto EN LOTE por
+   * `WalletService` y SOLO para las filas ORIGINALES de un pago por cuenta de una tienda o de un
+   * saldo inicial o aporte. Los contra-asientos, las salidas de los cobros reclasificados y
+   * cualquier otra fila llevan `null`, y por eso el libro no les ofrece acciones (R66).
+   *
+   * El id del documento NO viaja aqui: ya es el `origenId` de la fila y nunca se pinta (R100).
+   * Las descargas no incluyen este campo (R58).
+   */
+  documento: DocumentoCajaDTO | null;
+};
+
+/** Ficha 459 (design §7.3) — el estado del documento de una fila original del libro de la caja. */
+export type DocumentoCajaDTO = {
+  tipo: "pago_por_cuenta_tienda" | "aporte_capital";
+  anulado: boolean;
+  tieneComprobante: boolean;
 };
 
 export type WalletBalanceSigno = "positivo" | "negativo" | "cero";

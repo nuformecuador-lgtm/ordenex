@@ -80,6 +80,24 @@ export interface LectorSaldoInicial {
   haySaldoInicialVigente(): Promise<boolean>;
 }
 
+/** Ficha 459 (design §6.4) — el estado de un documento, leido EN LOTE por su repositorio. */
+export interface EstadoDocumentoCaja {
+  id: string;
+  anulado: boolean;
+  tieneComprobante: boolean;
+}
+
+/**
+ * Ficha 459 (design §7.3, R66/R67) — los dos lectores de documentos que el libro de la caja
+ * necesita para decir, por fila ORIGINAL, si se puede anular y si tiene comprobante. Cada uno lo
+ * implementa su repositorio (`PagoPorCuentaTiendaRepository`, `AporteCapitalRepository`) con UNA
+ * consulta por lote, y una lista vacia no consulta.
+ */
+export interface LectoresDocumentosCaja {
+  pagosPorCuenta: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  aportes: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+}
+
 export interface IWalletService {
   /** R19/R20: solo maestro; lista el libro paginado con filtros. Forbidden sin exponer datos. */
   listarMovimientos(input: ListarMovimientosInput, actor: Actor): Promise<ListarMovimientosServiceResult>;

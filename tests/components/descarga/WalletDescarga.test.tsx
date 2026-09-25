@@ -139,6 +139,7 @@ function movimientoCaja(i: number): WalletMovimientoDTO {
     registradoPor: null,
     fechaMovimiento: `2026-07-${String(10 + i).padStart(2, "0")}T14:00:00.000Z`,
     dueno: "propio", // feature 231 (R31): el flete es dinero de Ordenex
+    documento: null, // ficha 459 (design §7.3): fila sin documento
   };
 }
 
@@ -567,6 +568,7 @@ function movimientoNuevo(
     registradoPor: null,
     fechaMovimiento: `2026-08-0${i}T14:00:00.000Z`,
     dueno: "terceros", // feature 231 (R31): los dos conceptos de la 173 son de las tiendas
+    documento: null, // ficha 459 (design §7.3): fila sin documento
   };
 }
 

@@ -267,6 +267,9 @@ describe("listar (R20/R24)", () => {
       fechaMovimiento: "2026-07-12T10:00:00.000Z",
       // Feature 231 (R31): el dueño lo pone el SERVIDOR, en el unico punto de proyeccion.
       dueno: "propio",
+      // Ficha 459 (design §7.3): el repositorio no conoce los documentos; los resuelve en lote
+      // `WalletService.listarMovimientos`. Aqui la proyeccion los deja en `null`.
+      documento: null,
     });
     expect(typeof r.movimientos[0].monto).toBe("string");
   });

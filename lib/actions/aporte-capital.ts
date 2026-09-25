@@ -74,7 +74,6 @@ function crudoDelFormData(formData: FormData): Record<string, unknown> {
 
 /**
  * R68–R73 — registra un saldo inicial o un aporte de capital.
- * @sin-superficie FICHA 459: el dialogo «Registrar movimiento» lo monta el frontend de la ficha (bloque B, T B.15/T B.16); hasta entonces la ejercen sus tests de integracion contra Postgres. Esta anotacion CADUCA con esa pantalla.
  */
 export async function registrarAporteCapitalAction(
   formData: FormData,
@@ -98,7 +97,6 @@ export async function registrarAporteCapitalAction(
 
 /**
  * R74 — anula un saldo inicial o aporte.
- * @sin-superficie FICHA 459: el «Anular…» del libro de la caja lo monta el frontend de la ficha (bloque B, T B.15/T B.16); hasta entonces la ejercen sus tests de integracion contra Postgres. Esta anotacion CADUCA con esa pantalla.
  */
 export async function anularAporteCapitalAction(
   input: unknown,
@@ -116,7 +114,6 @@ export async function anularAporteCapitalAction(
 
 /**
  * R57 — el enlace temporal del comprobante (solo acceso total).
- * @sin-superficie FICHA 459: el «Ver comprobante» del libro de la caja lo monta el frontend de la ficha (bloque B, T B.15/T B.16); hasta entonces la ejercen sus tests de integracion contra Postgres. Esta anotacion CADUCA con esa pantalla.
  */
 export async function obtenerComprobanteAporteCapitalAction(
   input: unknown,

@@ -270,7 +270,10 @@ export function montarServicios459(tx: TxDeTest) {
       (fn) => c.$transaction((t) => fn(t as never)),
     ),
     egresos: new WalletEgresoService(cajaRepo, c),
-    wallet: new WalletService(cajaRepo, c, new AporteCapitalRepository(c)),
+    wallet: new WalletService(cajaRepo, c, new AporteCapitalRepository(c), {
+      pagosPorCuenta: new PagoPorCuentaTiendaRepository(c),
+      aportes: new AporteCapitalRepository(c),
+    }),
     // Ficha 459 (T B.14) — los dos escritores nuevos, cableados como su `buildService()`.
     pagoPorCuenta: new PagoPorCuentaTiendaService(
       new PagoPorCuentaTiendaRepository(c),

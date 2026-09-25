@@ -28,6 +28,7 @@ function mov(): WalletMovimientoDTO {
     registradoPor: "u-maestro",
     fechaMovimiento: "2026-07-13T10:00:00.000Z",
     dueno: "propio", // feature 231 (R31): un gasto variable es dinero de Ordenex
+    documento: null, // ficha 459 (design §7.3): fila sin documento
   };
 }
 

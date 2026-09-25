@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
+import { PagoPorCuentaTiendaRepository } from "@/lib/repositories/PagoPorCuentaTiendaRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletService } from "@/lib/services/WalletService";
 
@@ -187,7 +188,7 @@ describeSiHayBase("459/C.5 — la migracion de reclasificacion contra Postgres",
   it("R81/R87/R8: una salida por cobro, mismo monto y MISMO instante; el libro de la tienda intacto; «De las tiendas» baja en la suma", async () => {
     const r = await enTransaccionRevertida459(prisma, async (tx) => {
       const s = await sembrar(tx);
-      const wallet = new WalletService(new WalletMovimientoRepository(tx as never), tx as never, new AporteCapitalRepository(tx as never));
+      const wallet = new WalletService(new WalletMovimientoRepository(tx as never), tx as never, new AporteCapitalRepository(tx as never), { pagosPorCuenta: new PagoPorCuentaTiendaRepository(tx as never), aportes: new AporteCapitalRepository(tx as never) });
       const actor = { usuarioId: s.maestroId, rol: "maestro" as const };
       const leer = async () => {
         const x = await wallet.verResumenCaja({ page: 1, pageSize: 1 }, actor);

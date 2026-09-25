@@ -63,6 +63,10 @@ function toDTO(r: MovimientoRow): WalletMovimientoDTO {
     registradoPor: r.registradoPor,
     fechaMovimiento: r.fechaMovimiento.toISOString(),
     dueno: NATURALEZA_POR_CATEGORIA[r.categoria],
+    // Ficha 459 (design §7.3): el repositorio no conoce los documentos. Lo resuelve EN LOTE
+    // `WalletService.listarMovimientos` para la pagina que se pinta; en cualquier otro camino
+    // (descarga, detalle de una fila) la fila no ofrece acciones y el campo queda en `null`.
+    documento: null,
   };
 }
 

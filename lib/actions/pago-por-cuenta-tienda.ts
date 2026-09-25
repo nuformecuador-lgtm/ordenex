@@ -103,7 +103,6 @@ async function leerComprobante(
 
 /**
  * R29–R41/R54–R56 — registra un pago por cuenta de una tienda.
- * @sin-superficie FICHA 459: el dialogo «Registrar movimiento» lo monta el frontend de la ficha (bloque B, T B.15/T B.16); hasta entonces la ejercen sus tests de integracion contra Postgres. Esta anotacion CADUCA con esa pantalla.
  */
 export async function registrarPagoPorCuentaTiendaAction(
   formData: FormData,
@@ -124,7 +123,6 @@ export async function registrarPagoPorCuentaTiendaAction(
 
 /**
  * R46–R51 — anula un pago por cuenta. Sin monto: el del documento manda (R37).
- * @sin-superficie FICHA 459: el «Anular…» del libro de la caja lo monta el frontend de la ficha (bloque B, T B.15/T B.16); hasta entonces la ejercen sus tests de integracion contra Postgres. Esta anotacion CADUCA con esa pantalla.
  */
 export async function anularPagoPorCuentaTiendaAction(
   input: unknown,
@@ -142,7 +140,6 @@ export async function anularPagoPorCuentaTiendaAction(
 
 /**
  * R57 — el enlace temporal del comprobante (acceso total, o la tienda duena).
- * @sin-superficie FICHA 459: el «Ver comprobante» del libro de la caja lo monta el frontend de la ficha (bloque B, T B.15/T B.16); hasta entonces la ejercen sus tests de integracion contra Postgres. Esta anotacion CADUCA con esa pantalla.
  */
 export async function obtenerComprobantePagoPorCuentaAction(
   input: unknown,

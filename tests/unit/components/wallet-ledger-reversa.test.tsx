@@ -34,6 +34,7 @@ const EGRESO_MANUAL: WalletMovimientoDTO = {
   registradoPor: "maestro-1",
   fechaMovimiento: "2026-07-12T10:00:00.000Z",
   dueno: "propio", // feature 231 (R31)
+  documento: null, // ficha 459 (design §7.3): fila sin documento
 };
 
 // Egreso generado por el cron: origen_tipo=gasto, registrado_por=null → también reversable.
@@ -48,6 +49,7 @@ const EGRESO_CRON: WalletMovimientoDTO = {
   registradoPor: null,
   fechaMovimiento: "2026-07-01T06:00:00.000Z",
   dueno: "propio", // feature 231 (R31)
+  documento: null, // ficha 459 (design §7.3): fila sin documento
 };
 
 const INGRESO_FLETE: WalletMovimientoDTO = {
@@ -61,6 +63,7 @@ const INGRESO_FLETE: WalletMovimientoDTO = {
   registradoPor: null,
   fechaMovimiento: "2026-07-12T10:00:00.000Z",
   dueno: "propio", // feature 231 (R31)
+  documento: null, // ficha 459 (design §7.3): fila sin documento
 };
 
 // Egreso NO administrativo (pago a mensajero, origen_tipo distinto de gasto) → sin reversa.
@@ -75,6 +78,7 @@ const EGRESO_MENSAJERO: WalletMovimientoDTO = {
   registradoPor: "maestro-1",
   fechaMovimiento: "2026-07-12T10:00:00.000Z",
   dueno: "propio", // feature 231 (R31)
+  documento: null, // ficha 459 (design §7.3): fila sin documento
 };
 
 function renderLedger(ui: ReactElement) {

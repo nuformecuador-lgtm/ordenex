@@ -39,11 +39,12 @@ export { SALDO_SIGNO_LABEL } from "./saldo-tienda-signo-label";
  */
 export const DESGLOSE_TIENDA_LABEL = {
   aFavor: "A favor de la tienda",
-  aFavorHint: "COD recaudado y ajustes",
+  // Ficha 459 (T B.17): las mismas pistas que `/mi-wallet`, en tercera persona.
+  aFavorHint: "COD recaudado, ajustes y pagos por cuenta anulados",
   cargos: "Cargos de Ordenex",
   cargosHint: "Fletes, comisión e IVA",
   pagado: "Pagado a la tienda",
-  pagadoHint: "Lo ya entregado a la tienda",
+  pagadoHint: "Lo ya entregado a la tienda o pagado por su cuenta",
   saldo: "Saldo a favor",
   saldoHint: "Lo que queda tras los cargos y los pagos",
 } as const;

@@ -30,6 +30,7 @@ function mov(overrides: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO 
     registradoPor: null,
     fechaMovimiento: "2026-08-25T06:00:00.000Z",
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
     ...overrides,
   };
 }

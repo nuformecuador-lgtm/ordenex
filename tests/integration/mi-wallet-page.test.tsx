@@ -769,3 +769,113 @@ describe("MiWalletPage — el gate lee la MISMA constante que el menú (R34) [33
     });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ⭑ FICHA 459 (T B.17, R44/R100) — el pago por cuenta en `/mi-wallet` y en su descarga
+//
+// La tienda ve el cargo de un pago por cuenta con un concepto PROPIO («Pago por cuenta de la
+// tienda»), nunca como «Cobro de Ordenex», con su beneficiario, su motivo y su referencia (la
+// descripción que escribe el servidor) y un origen legible. Su anulación vuelve a su favor.
+// Ningún id en pantalla ni en el archivo. Se mide sobre el MÓDULO REAL montado por la página.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PAGO_POR_CUENTA_ID = "0b6c1f7e-7a44-4b43-9c1a-5e0f2d9a1c11";
+
+const PAGO_POR_CUENTA = movTienda({
+  id: "m-ppc",
+  tipo: "debito",
+  categoria: "pago_por_cuenta",
+  monto: "10000.00",
+  origenTipo: "pago_por_cuenta_tienda",
+  origenId: PAGO_POR_CUENTA_ID,
+  descripcion: "A Facebook · Pauta de septiembre · SINPE · REF-77",
+  fechaMovimiento: "2026-08-02T00:00:00.000Z",
+});
+const PAGO_POR_CUENTA_ANULADO = movTienda({
+  id: "m-ppc-anulado",
+  tipo: "credito",
+  categoria: "pago_por_cuenta_anulado",
+  monto: "10000.00",
+  origenTipo: "pago_por_cuenta_tienda",
+  origenId: PAGO_POR_CUENTA_ID,
+  descripcion: "Anulación · A Facebook · Pauta de septiembre · SINPE · REF-77",
+  fechaMovimiento: "2026-08-03T00:00:00.000Z",
+});
+/** Un cobro de un costo, para que la comparación con «Cobro de Ordenex» no sea vacía. */
+const COBRO_DE_UN_COSTO = movTienda({
+  id: "m-cobro",
+  tipo: "debito",
+  categoria: "cobro_manual",
+  monto: "500.00",
+  origenTipo: "manual",
+  origenId: null,
+  descripcion: "Material de despacho",
+  fechaMovimiento: "2026-08-04T00:00:00.000Z",
+});
+
+describe("⭑ FICHA 459 — el pago por cuenta en /mi-wallet (R44)", () => {
+  it("se lee «Pago por cuenta de la tienda», con su beneficiario y referencia, nunca «Cobro de Ordenex»", async () => {
+    sembrarTienda([COD, PAGO_POR_CUENTA, COBRO_DE_UN_COSTO], "10500.00");
+    await verMiWallet();
+
+    const fila = screen.getByRole("row", { name: /A Facebook · Pauta de septiembre/ });
+    expect(within(fila).getByText("Pago por cuenta de la tienda")).toBeInTheDocument();
+    expect(within(fila).queryByText("Cobro de Ordenex")).toBeNull();
+    expect(
+      within(fila).getByText(
+        "Pago por cuenta de tienda · A Facebook · Pauta de septiembre · SINPE · REF-77",
+      ),
+    ).toBeInTheDocument();
+    // El cobro de un costo sigue viéndose como hoy (R87): el contraste no es vacío.
+    const cobro = screen.getByRole("row", { name: /Material de despacho/ });
+    expect(within(cobro).getByText("Cobro de Ordenex")).toBeInTheDocument();
+    // Ningún id en pantalla.
+    expect(document.body.textContent ?? "").not.toContain(PAGO_POR_CUENTA_ID);
+  });
+
+  it("el pago por cuenta cae en «Ya pagado» y su anulación vuelve «A tu favor»; las pistas lo dicen", async () => {
+    sembrarTienda([COD, PAGO_POR_CUENTA, PAGO_POR_CUENTA_ANULADO], "10000.00");
+    await verMiWallet();
+
+    expect(importeDe("Ya pagado")).toBe("₡10.000");
+    expect(importeDe("A tu favor")).toBe("₡60.000");
+    expect(saldoEnPantalla()).toBe("₡50.000");
+    expect(screen.getByText("Lo que Ordenex ya te entregó o pagó por tu cuenta")).toBeInTheDocument();
+    expect(screen.getByText("COD recaudado, ajustes y pagos por cuenta anulados")).toBeInTheDocument();
+    const anulado = screen.getByRole("row", { name: /Anulación · A Facebook/ });
+    expect(within(anulado).getByText("Pago por cuenta anulado")).toBeInTheDocument();
+  });
+});
+
+describe("⭑ FICHA 459 — la descarga de la tienda (R44/R100)", () => {
+  it("/mi-wallet: concepto y origen legibles, sin ids", async () => {
+    const { filaDescargaMiWallet, COLUMNAS_DESCARGA_MI_WALLET } = await import(
+      "@/app/(app)/mi-wallet/_components/mi-wallet-descarga-columnas"
+    );
+    const f = filaDescargaMiWallet(PAGO_POR_CUENTA);
+    const valores = Object.values(f).join(" | ");
+    expect(valores).toContain("Pago por cuenta de la tienda");
+    expect(valores).toContain("Pago por cuenta de tienda · A Facebook");
+    expect(valores).not.toContain("Cobro de Ordenex");
+    expect(valores).not.toContain(PAGO_POR_CUENTA_ID);
+    expect(valores).not.toMatch(/pago_por_cuenta/);
+    expect(Object.keys(f).sort()).toEqual(COLUMNAS_DESCARGA_MI_WALLET.map((c) => c.clave).sort());
+  });
+
+  it("/wallet/tiendas: el mismo concepto y origen, sin ids", async () => {
+    const { filaDescargaDesgloseTienda, COLUMNAS_DESCARGA_DESGLOSE_TIENDA } = await import(
+      "@/app/(app)/wallet/tiendas/_components/desglose-tienda-descarga-columnas"
+    );
+    for (const m of [PAGO_POR_CUENTA, PAGO_POR_CUENTA_ANULADO]) {
+      const f = filaDescargaDesgloseTienda(m);
+      const valores = Object.values(f).join(" | ");
+      expect(valores).toMatch(/Pago por cuenta (de la tienda|anulado)/);
+      expect(valores).toContain("Pago por cuenta de tienda · ");
+      expect(valores).not.toContain(PAGO_POR_CUENTA_ID);
+      expect(valores).not.toMatch(/pago_por_cuenta/);
+      expect(Object.keys(f).sort()).toEqual(
+        COLUMNAS_DESCARGA_DESGLOSE_TIENDA.map((c) => c.clave).sort(),
+      );
+    }
+  });
+});

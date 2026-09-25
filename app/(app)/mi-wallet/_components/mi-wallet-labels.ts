@@ -40,7 +40,9 @@ export { money } from "@/lib/config/moneda";
  */
 export const DESGLOSE_MI_WALLET_LABEL = {
   aFavor: "A tu favor",
-  aFavorHint: "COD recaudado y ajustes",
+  // Ficha 459 (T B.17, design §5): nombra tambien el pago por cuenta ANULADO, que vuelve a tu
+  // favor (cubeta `aFavor`).
+  aFavorHint: "COD recaudado, ajustes y pagos por cuenta anulados",
   cargos: "Cargos de Ordenex",
   // FICHA 381 (R37) — la enumeración deja de ser solo de conceptos AUTOMÁTICOS. Desde esta
   // ficha, dentro de este importe puede haber un cobro decidido por una persona, y la tienda
@@ -49,7 +51,9 @@ export const DESGLOSE_MI_WALLET_LABEL = {
   // esto, la aclaración diría que el importe son fletes, comisión e IVA cuando ya no lo es.
   cargosHint: "Fletes, comisión, IVA y cobros de Ordenex",
   pagado: "Ya pagado",
-  pagadoHint: "Lo que Ordenex ya te entregó",
+  // Ficha 459 (T B.17, design §5): el pago por cuenta cae en `pagado` (dinero entregado a la
+  // tienda a traves de un tercero, decision de la 458 §2.6), y la pista lo nombra.
+  pagadoHint: "Lo que Ordenex ya te entregó o pagó por tu cuenta",
   saldo: "Saldo a favor",
 } as const;
 
@@ -99,11 +103,23 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
   pago_por_cuenta_anulado: "Pago por cuenta anulado",
 };
 
-/** Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 43). */
+/**
+ * Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 43).
+ *
+ * `Record<string, string>` con caida al valor crudo: el compilador NO avisa si falta un origen.
+ * Por eso un test recorre `WALLET_ORIGEN_TIPO_SEED` y exige rotulo aqui para cada origen que
+ * escribe en el libro de la tienda (`tests/unit/components/mi-wallet-labels.test.ts`).
+ *
+ * Ficha 459 (T B.6/T B.17, design §5): + `pago_por_cuenta_tienda`, con el texto del diseño; y
+ * `gestion_orden`, que ya escribia en este libro (el cobro por rechazo de la 337) y se leia
+ * crudo. Se rotula con el MISMO texto que el libro de la caja (`ORIGEN_LABEL.gestion_orden`).
+ */
 export const ORIGEN_TIENDA_LABEL: Record<string, string> = {
   cierre_dia: "Cierre del día",
   pago_tienda: "Pago a la tienda",
   manual: "Manual",
+  gestion_orden: "Gestión de orden",
+  pago_por_cuenta_tienda: "Pago por cuenta de tienda",
 };
 
 /** Origen legible con fallback al valor crudo si no hay etiqueta conocida. */

@@ -39,6 +39,7 @@ function mov(): WalletMovimientoDTO {
     fechaMovimiento: "2026-07-12T10:00:00.000Z",
     // Feature 231 (R31): el flete es dinero de Ordenex.
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
   };
 }
 

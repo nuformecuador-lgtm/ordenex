@@ -47,6 +47,7 @@ const INGRESO_PROPIO: WalletMovimientoDTO = {
   registradoPor: null,
   fechaMovimiento: "2026-07-12T10:00:00.000Z",
   dueno: "propio",
+  documento: null, // ficha 459 (design §7.3): fila sin documento
 };
 
 const INGRESO_DE_TERCEROS: WalletMovimientoDTO = {
@@ -60,6 +61,7 @@ const INGRESO_DE_TERCEROS: WalletMovimientoDTO = {
   registradoPor: null,
   fechaMovimiento: "2026-07-12T10:00:00.000Z",
   dueno: "terceros",
+  documento: null, // ficha 459 (design §7.3): fila sin documento
 };
 
 const RAIZ = path.resolve(__dirname, "../../..");

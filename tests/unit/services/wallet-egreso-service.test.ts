@@ -32,7 +32,11 @@ function mov(overrides: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO 
     ...overrides,
   };
   // Feature 231 (R31): `dueno` sale de la MISMA clasificacion que usa el repositorio.
-  return { ...base, dueno: overrides.dueno ?? NATURALEZA_POR_CATEGORIA[base.categoria] };
+  return {
+    ...base,
+    dueno: overrides.dueno ?? NATURALEZA_POR_CATEGORIA[base.categoria],
+    documento: overrides.documento ?? null, // ficha 459 (design §7.3)
+  };
 }
 
 /**

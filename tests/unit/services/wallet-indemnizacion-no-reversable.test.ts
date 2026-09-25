@@ -25,6 +25,7 @@ function movimiento(over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDT
   return {
     // Feature 231 (R31): todas las categorias de este fixture son dinero de Ordenex.
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
     id: "w1",
     tipo: "egreso",
     categoria: "egreso_indemnizacion",

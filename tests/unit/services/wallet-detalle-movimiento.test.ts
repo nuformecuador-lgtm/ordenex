@@ -34,6 +34,7 @@ function movimiento(over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDT
     registradoPor: null,
     fechaMovimiento: "2026-08-20T18:30:00.000Z",
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
     ...over,
   };
 }

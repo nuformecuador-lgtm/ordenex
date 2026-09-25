@@ -5,6 +5,8 @@ import {
   CONCEPTOS_MANUALES,
   CONCEPTO_MANUAL_IDS,
   CONCEPTO_MANUAL_OPTIONS,
+  FRASE_DEL_EFECTO,
+  GRUPO_CONCEPTO_LABEL,
   conceptoPorId,
   fraseDelLibro,
   libroDelConcepto,
@@ -39,9 +41,19 @@ const CATEGORIAS_CAJA_ESPERADAS = [
   "egreso_ajuste",
 ] as const;
 
-/** Los conceptos que acaban en la caja de Ordenex: los cuatro de la ficha 334. */
+/**
+ * Los cuatro conceptos de la ficha 334 (gastos administrativos y ajustes).
+ *
+ * FICHA 459 — antes se filtraba «todo lo que no es cobro a una tienda», que eran exactamente
+ * estos cuatro. Desde la 459 hay dos conceptos más que tampoco son cobro (el pago por cuenta y
+ * el saldo inicial o aporte), así que el filtro pasa a nombrar las DOS clases de la 334: la
+ * regla que protegía (ningún concepto abre a mano una categoría de la máquina) se afirma igual,
+ * y los dos nuevos tienen su propia lista exacta más abajo.
+ */
 function conceptosDeCaja(): ConceptoManual[] {
-  return CONCEPTOS_MANUALES.filter((c) => c.destino.clase !== "cobro_tienda");
+  return CONCEPTOS_MANUALES.filter(
+    (c) => c.destino.clase === "egreso_administrativo" || c.destino.clase === "ajuste_manual",
+  );
 }
 
 /** La categoría de caja de un concepto de caja, con el estrechamiento que el tipo exige. */
@@ -52,30 +64,35 @@ function categoriaDeCaja(concepto: ConceptoManual): WalletMovimientoCategoria {
   return concepto.destino.categoria;
 }
 
-describe("catálogo de conceptos manuales — son exactamente CINCO (R3 / 381-R1)", () => {
-  it("el catálogo ofrece los cinco conceptos del pedido y ninguno más", () => {
-    expect(CONCEPTOS_MANUALES).toHaveLength(5);
+// FICHA 459 (T B.15) — «exactamente CINCO» pasa a «exactamente SIETE» y el orden cambia a los
+// tres grupos de R59. Los dos casos de abajo son los de la 334/381 REESCRITOS (listados en
+// `progress/impl_459_frontend.md`): siguen siendo igualdades exactas, con la lista nueva.
+describe("catálogo de conceptos manuales — son exactamente SIETE (R3 / 381-R1 / 459-R59)", () => {
+  it("el catálogo ofrece los siete conceptos del pedido y ninguno más, en los tres grupos", () => {
+    expect(CONCEPTOS_MANUALES).toHaveLength(7);
     expect(CONCEPTOS_MANUALES.map((c) => c.id)).toEqual([
       "gasto_variable",
       "sueldo",
-      "ajuste_ingreso",
+      "pago_por_cuenta_tienda",
       "ajuste_egreso",
+      "aporte_capital",
+      "ajuste_ingreso",
       "cobro_tienda",
     ]);
     // Las opciones del `Select` salen del catálogo, no de una segunda lista escrita a mano.
     expect(CONCEPTO_MANUAL_OPTIONS.map((o) => o.value)).toEqual([...CONCEPTO_MANUAL_IDS]);
   });
 
-  it("los CUATRO de la ficha 334 siguen siendo los cuatro primeros, en su orden (R11)", () => {
-    // El quinto se añade AL FINAL: quien abría el diálogo y pulsaba «Registrar» sin tocar el
-    // selector seguía registrando un gasto variable, y sigue haciéndolo.
-    expect(CONCEPTOS_MANUALES.slice(0, 4).map((c) => c.id)).toEqual([
+  it("el gasto variable sigue siendo el primero y los cuatro de la 334 conservan su orden relativo (R11)", () => {
+    // Quien abría el diálogo y pulsaba «Registrar» sin tocar el selector registraba un gasto
+    // variable, y sigue haciéndolo.
+    expect(CONCEPTOS_MANUALES[0].id).toBe("gasto_variable");
+    expect(conceptosDeCaja().map((c) => c.id)).toEqual([
       "gasto_variable",
       "sueldo",
-      "ajuste_ingreso",
       "ajuste_egreso",
+      "ajuste_ingreso",
     ]);
-    expect(CONCEPTOS_MANUALES[0].id).toBe("gasto_variable");
   });
 });
 
@@ -145,14 +162,16 @@ describe("⭑ FICHA 381 — el quinto concepto cobra a una tienda (R1/R24)", () 
     expect(libroDelConcepto(cobro!)).toBe("tienda");
   });
 
-  it("es el ÚNICO que no va a la caja, y los otros cuatro siguen yendo a la caja", () => {
+  it("es el ÚNICO que no va a la caja; el pago por cuenta (459) va a los DOS libros", () => {
     // Sin la segunda mitad, un `libroDelConcepto` que devolviera siempre «tienda» pasaría.
     const porLibro = CONCEPTOS_MANUALES.map((c) => [c.id, libroDelConcepto(c)]);
     expect(porLibro).toEqual([
       ["gasto_variable", "caja"],
       ["sueldo", "caja"],
-      ["ajuste_ingreso", "caja"],
+      ["pago_por_cuenta_tienda", "caja_y_tienda"],
       ["ajuste_egreso", "caja"],
+      ["aporte_capital", "caja"],
+      ["ajuste_ingreso", "caja"],
       ["cobro_tienda", "tienda"],
     ]);
   });
@@ -192,7 +211,8 @@ describe("catálogo de conceptos manuales — el nombre del libro se DERIVA (R4)
     // Control de no-vacuidad: la derivación entrega los nombres REALES del libro, no cadenas
     // vacías que casarían con cualquier cosa.
     expect(nombreEnElLibro(CONCEPTOS_MANUALES[0])).toBe("Gasto variable");
-    expect(nombreEnElLibro(CONCEPTOS_MANUALES[2])).toBe("Ajuste (ingreso)");
+    // FICHA 459: por id y no por posición —el reordenado de R59 movió el ajuste que suma—.
+    expect(nombreEnElLibro(conceptoPorId("ajuste_ingreso")!)).toBe("Ajuste (ingreso)");
   });
 
   it("⭑ 381: el cobro se deriva del diccionario del libro de la TIENDA, no del de la caja", () => {
@@ -238,5 +258,101 @@ describe("⭑ FICHA 381 — la cabecera del diálogo, por libro (R4/R11)", () =>
     expect(CABECERA_POR_LIBRO.tienda.descripcion).toMatch(/no se puede editar ni deshacer/);
     // Y no promete ninguna comprobación de saldo, que es justo lo que el cobro NO hace (R27).
     expect(CABECERA_POR_LIBRO.tienda.descripcion).not.toMatch(/suficiente|insuficiente/i);
+  });
+});
+
+// ─── FICHA 459 (T B.15, design §9) — dos conceptos nuevos, agrupados por lo que le pasa a la caja ───
+
+describe("⭑ FICHA 459 — los tres grupos del selector (R59)", () => {
+  it("cada opción lleva su grupo, y los grupos son tres tramos consecutivos con estos nombres", () => {
+    // Literales: son los encabezados que ve la persona (design §9.1).
+    expect(CONCEPTO_MANUAL_OPTIONS.map((o) => [o.value, o.group])).toEqual([
+      ["gasto_variable", "Sale dinero de la caja"],
+      ["sueldo", "Sale dinero de la caja"],
+      ["pago_por_cuenta_tienda", "Sale dinero de la caja"],
+      ["ajuste_egreso", "Sale dinero de la caja"],
+      ["aporte_capital", "Entra dinero a la caja"],
+      ["ajuste_ingreso", "Entra dinero a la caja"],
+      ["cobro_tienda", "No mueve la caja"],
+    ]);
+    expect(Object.values(GRUPO_CONCEPTO_LABEL)).toEqual([
+      "Sale dinero de la caja",
+      "Entra dinero a la caja",
+      "No mueve la caja",
+    ]);
+  });
+
+  it("los dos conceptos nuevos se llaman como dice el diseño y van a su clase de destino", () => {
+    expect(conceptoPorId("pago_por_cuenta_tienda")?.label).toBe("Pago por cuenta de una tienda");
+    expect(conceptoPorId("pago_por_cuenta_tienda")?.destino).toEqual({
+      clase: "pago_por_cuenta_tienda",
+      categoria: "egreso_pago_por_cuenta_tienda",
+      categoriaTienda: "pago_por_cuenta",
+    });
+    expect(conceptoPorId("aporte_capital")?.label).toBe("Saldo inicial o aporte de capital");
+    expect(conceptoPorId("aporte_capital")?.destino).toEqual({
+      clase: "aporte_capital",
+      categoria: "ingreso_aporte_capital",
+    });
+  });
+
+  it("ningún concepto abre a mano una categoría de la máquina (lista exacta de la caja, 459)", () => {
+    const caja = CONCEPTOS_MANUALES.filter((c) => c.destino.clase !== "cobro_tienda").map(
+      (c) => (c.destino as { categoria: WalletMovimientoCategoria }).categoria,
+    );
+    expect([...caja].sort()).toEqual(
+      [...CATEGORIAS_CAJA_ESPERADAS, "egreso_pago_por_cuenta_tienda", "ingreso_aporte_capital"].sort(),
+    );
+    expect(caja).not.toContain("egreso_gasto_fijo");
+    expect(caja).not.toContain("egreso_pago_tienda");
+    expect(caja).not.toContain("ingreso_reverso_pago_por_cuenta_tienda");
+    expect(caja).not.toContain("egreso_reverso_aporte_capital");
+  });
+});
+
+describe("⭑ FICHA 459 — la frase del efecto (R60)", () => {
+  it("cada concepto tiene su frase, con el texto literal del diseño", () => {
+    expect(FRASE_DEL_EFECTO).toEqual({
+      gasto_variable: "Sale dinero de la caja y baja la ganancia de Ordenex.",
+      sueldo: "Sale dinero de la caja y baja la ganancia de Ordenex.",
+      ajuste_egreso: "Sale dinero de la caja y baja la ganancia de Ordenex.",
+      pago_por_cuenta_tienda:
+        "Sale dinero de la caja: Ordenex le paga a otro en nombre de la tienda y se lo descuenta de su saldo. La ganancia de Ordenex no cambia.",
+      aporte_capital: "Entra dinero de Ordenex a la caja. No es ganancia: la ganancia no cambia.",
+      ajuste_ingreso: "Entra dinero a la caja y sube la ganancia de Ordenex.",
+      cobro_tienda:
+        "No sale ni entra dinero: es un cobro de Ordenex a la tienda que baja su saldo. La caja y la ganancia no cambian.",
+    });
+  });
+
+  it("el pago por cuenta dice que SALE dinero de la caja y el cobro de un costo dice que NO", () => {
+    // Es la confusión que la ficha existe para matar (HF1/HF6): los 203 cobros de Nuform eran
+    // pagos por cuenta registrados como cobro porque no había otro tipo.
+    expect(FRASE_DEL_EFECTO.pago_por_cuenta_tienda).toMatch(/^Sale dinero de la caja/);
+    expect(FRASE_DEL_EFECTO.cobro_tienda).toMatch(/^No sale ni entra dinero/);
+    expect(FRASE_DEL_EFECTO.cobro_tienda).toMatch(/La caja y la ganancia no cambian/);
+    // Y los dos nombran a la tienda: los dos bajan su saldo.
+    expect(FRASE_DEL_EFECTO.pago_por_cuenta_tienda).toMatch(/su saldo/);
+    expect(FRASE_DEL_EFECTO.cobro_tienda).toMatch(/su saldo/);
+  });
+
+  it("el saldo inicial o aporte dice que no es ganancia", () => {
+    expect(FRASE_DEL_EFECTO.aporte_capital).toMatch(/No es ganancia/);
+  });
+});
+
+describe("⭑ FICHA 459 — en qué libro cae el pago por cuenta (design §9.1)", () => {
+  it("la frase nombra los DOS libros con el nombre de cada diccionario", () => {
+    expect(fraseDelLibro(conceptoPorId("pago_por_cuenta_tienda")!)).toBe(
+      "Se registra en la caja como «Pago por cuenta de una tienda» y en el libro de la tienda como «Pago por cuenta de la tienda».",
+    );
+    expect(fraseDelLibro(conceptoPorId("aporte_capital")!)).toBe(
+      "Se registra en el libro como «Saldo inicial o aporte de capital».",
+    );
+  });
+
+  it("la cabecera del pago por cuenta lleva su título y dice que no se edita", () => {
+    expect(CABECERA_POR_LIBRO.caja_y_tienda.titulo).toBe("Pago por cuenta de una tienda");
+    expect(CABECERA_POR_LIBRO.caja_y_tienda.descripcion).toMatch(/no se puede editar/);
   });
 });
