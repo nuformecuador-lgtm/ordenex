@@ -251,4 +251,5 @@ const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };
 const SIN_DOCUMENTOS_459 = {
   pagosPorCuenta: { estadoDeDocumentos: async () => [] },
   aportes: { estadoDeDocumentos: async () => [] },
+  cobros: { estadoDeDocumentos: async () => [] }, // ficha 461: lo exige `LectoresDocumentosCaja`
 };

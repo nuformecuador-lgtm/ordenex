@@ -218,6 +218,9 @@ describe("DOWN — deja la base como estaba (R40)", () => {
       "pago_por_cuenta_tienda",
       "aporte_capital",
       "cobro_manual_reclasificado",
+      // 461: las filas del cobro de Ordenex a una tienda (servicio) y las completadas por su migracion
+      "cobro_tienda",
+      "cobro_tienda_completado",
     ];
     expect(valores).toEqual(
       WALLET_ORIGEN_TIPO_SEED.filter(

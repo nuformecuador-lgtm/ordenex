@@ -31,10 +31,12 @@ function fila(
 
 /** El `tipo` con el que el SISTEMA emite cada categoria (design §2.1). */
 // Ficha 459: + `pago_por_cuenta_anulado`, el tercer credito (la anulacion devuelve el dinero).
+// Ficha 461: + `cobro_tienda_anulado`, el cuarto (la anulacion de un cobro de Ordenex lo devuelve).
 const CREDITO_SEED: readonly WalletTiendaMovimientoCategoria[] = [
   "cod_recaudado",
   "ajuste_credito",
   "pago_por_cuenta_anulado",
+  "cobro_tienda_anulado",
 ];
 
 function tipoEmitido(categoria: WalletTiendaMovimientoCategoria): WalletTiendaMovimientoTipo {
@@ -83,6 +85,23 @@ describe("CUBETA_POR_CATEGORIA — clasificacion exhaustiva (R8/R9)", () => {
     // Ficha 459 (design §5, decision de la 458 §2.6): el pago por cuenta es dinero entregado a la
     // tienda a traves de un tercero.
     expect(enPagado).toEqual(["pago_tienda", "pago_por_cuenta"]);
+  });
+
+  it("⭑ 461 (design §4): la anulacion de un cobro de Ordenex cae en `aFavor` y DEVUELVE exactamente el cobro", () => {
+    // Mutacion 5 de design §14.2 (`cobro_tienda_anulado: "cargos"`) → rojo aqui: el desglose dejaria
+    // de coincidir con el saldo derivado (la cubeta `cargos` sumaria un credito).
+    expect(CUBETA_POR_CATEGORIA.cobro_tienda_anulado).toBe("aFavor");
+    const d = derivarDesgloseTienda([
+      fila("cod_recaudado", "10000.00", "credito"),
+      fila("cobro_manual", "2500.50", "debito"),
+      fila("cobro_tienda_anulado", "2500.50", "credito"),
+    ]);
+    expect(d.aFavor).toBe("12500.50");
+    expect(d.cargos).toBe("2500.50");
+    expect(d.pagado).toBe("0.00");
+    // El saldo vuelve al de antes del cobro: 10 000,00.
+    expect(d.saldo).toBe("10000.00");
+    expect(d.signo).toBe("positivo");
   });
 
   it("R7/R8: las tres cubetas estan pobladas (ninguna nace vacia)", () => {

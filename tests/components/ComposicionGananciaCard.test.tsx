@@ -75,6 +75,7 @@ const COMPOSICION: ComposicionGananciaDTO = {
     ingreso_iva_flete_devolucion: "520.00",
     ingreso_iva_comision_cod: "30.25",
     ingreso_ajuste: "90.00",
+    ingreso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
   },
   totalIngresos: "5709.75",
   /**
@@ -90,6 +91,7 @@ const COMPOSICION: ComposicionGananciaDTO = {
   egresos: {
     egreso_pago_mensajero: "700.00",
     egreso_ajuste: "45.75",
+    egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
   },
   otrosEgresos: "194.25",
   // R9: lo decide el SERVIDOR. Aqui quedan 194,25 sin clasificar, asi que la fila se pinta.
@@ -149,7 +151,7 @@ function pintarComoLa158(overrides: Partial<ComposicionGananciaDTO> = {}) {
   return pintar({
     composicion: {
       ...COMPOSICION,
-      egresos: { egreso_pago_mensajero: "0.00", egreso_ajuste: "0.00" },
+      egresos: { egreso_pago_mensajero: "0.00", egreso_ajuste: "0.00", egreso_reverso_cobro_tienda: "0.00" },
       otrosEgresos: "0.00",
       hayOtrosEgresos: false, // ficha 343 (R7): sin residuo, la fila «Otros» no se pinta
       totalEgresos: DESGLOSE.total,
@@ -310,7 +312,7 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
 
     const filas = rotulos(listaIngresos());
     // Control de no-vacuidad: el catálogo tiene siete conceptos, no cero.
-    expect(WALLET_INGRESO_PROPIO_SEED.length).toBe(7);
+    expect(WALLET_INGRESO_PROPIO_SEED.length).toBe(8); // ficha 461 (R27): + el cobro de Ordenex a una tienda
     // Las siete filas más la del total: ninguna categoría propia se queda sin enseñar.
     expect(filas).toHaveLength(WALLET_INGRESO_PROPIO_SEED.length + 1);
     for (const categoria of WALLET_INGRESO_PROPIO_SEED) {
@@ -339,6 +341,8 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       { rotulo: "IVA del flete por rechazo", importe: "₡520" },
       { rotulo: "IVA de la comisión", importe: "₡30,25" },
       { rotulo: "Ajuste (ingreso)", importe: "₡90" },
+      // Ficha 461 (R27): la fila del cobro de Ordenex a una tienda; en este fixture vale 0,00.
+      { rotulo: "Ordenex le cobra a una tienda", importe: "₡0" },
       { rotulo: "Total de ingresos", importe: "₡5.709,75" },
     ]);
 
@@ -362,6 +366,8 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       { rotulo: "Indemnizaciones", importe: "₡25,25" },
       { rotulo: "Pagos a mensajeros", importe: "₡700" },
       { rotulo: "Ajustes (egreso)", importe: "₡45,75" },
+      // Ficha 461 (R27): la fila de los cobros anulados; en este fixture vale 0,00.
+      { rotulo: "Cobros a una tienda anulados", importe: "₡0" },
       { rotulo: "Otros gastos de Ordenex", importe: "₡194,25" },
       { rotulo: "Total de egresos", importe: "₡2.190,75" },
     ]);
@@ -404,9 +410,10 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       DESGLOSE.indemnizacion,
       COMPOSICION.egresos.egreso_pago_mensajero,
       COMPOSICION.egresos.egreso_ajuste,
+      COMPOSICION.egresos.egreso_reverso_cobro_tienda, // ficha 461
       COMPOSICION.otrosEgresos,
     ].map(money);
-    expect(importesEgresos).toHaveLength(7);
+    expect(importesEgresos).toHaveLength(8);
     expect(new Set(importesEgresos).size).toBe(importesEgresos.length);
 
     // Y ninguno coincide con un total, que es el otro modo de que una fila mal cableada pase.
@@ -459,6 +466,7 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       "Indemnizaciones",
       "Pagos a mensajeros",
       "Ajustes (egreso)",
+      "Cobros a una tienda anulados", // ficha 461: tercer nombrado, antes de «Otros»
       "Otros gastos de Ordenex",
       "Total de egresos",
     ]);
@@ -651,6 +659,7 @@ describe("Ficha 339 — «Otros» sólo cuando de verdad queda algo (R7/R8/R9/R1
       "Indemnizaciones",
       "Pagos a mensajeros",
       "Ajustes (egreso)",
+      "Cobros a una tienda anulados", // ficha 461
       "Total de egresos",
     ]);
   });

@@ -113,6 +113,8 @@ const ESCRIBEN_EN_LA_TIENDA: readonly WalletOrigenTipo[] = [
   "manual",
   "gestion_orden",
   "pago_por_cuenta_tienda",
+  // Ficha 461 (design §7.3): el credito de la anulacion de un cobro (`CobroTiendaService.anular`).
+  "cobro_tienda",
 ];
 const NO_ESCRIBEN_EN_LA_TIENDA: readonly WalletOrigenTipo[] = [
   "pago_mensajero",
@@ -121,6 +123,8 @@ const NO_ESCRIBEN_EN_LA_TIENDA: readonly WalletOrigenTipo[] = [
   "ranking_snapshot_fila",
   "aporte_capital",
   "cobro_manual_reclasificado",
+  // Ficha 461: las lineas de caja completadas por la migracion de datos solo escriben en la caja.
+  "cobro_tienda_completado",
 ];
 
 describe("FICHA 459 — ORIGEN_TIENDA_LABEL cubre cada origen que escribe en el libro de la tienda", () => {

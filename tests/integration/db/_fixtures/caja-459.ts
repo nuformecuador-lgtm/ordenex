@@ -24,8 +24,10 @@ import { UserRepository } from "@/lib/repositories/UserRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
+import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import { AporteCapitalService } from "@/lib/services/AporteCapitalService";
 import { CajaAporteCapitalFeedService } from "@/lib/services/CajaAporteCapitalFeedService";
+import { CajaCobroTiendaFeedService } from "@/lib/services/CajaCobroTiendaFeedService";
 import { CajaPagoPorCuentaFeedService } from "@/lib/services/CajaPagoPorCuentaFeedService";
 import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { CajaPremioRankingFeedService } from "@/lib/services/CajaPremioRankingFeedService";
@@ -247,8 +249,14 @@ export function montarServicios459(tx: TxDeTest) {
       new CajaPagoTiendaFeedService(cajaRepo),
       new LiquidacionRepartoRepository(c),
     ),
-    cobroTienda: new CobroTiendaService(tiendaRepo, new UserRepository(c), (fn) =>
-      c.$transaction((t) => fn(t as never)),
+    // Ficha 461 (T B.7): el cobro con su puerto de caja REAL y su repositorio de anulaciones, cableado
+    // como su `buildCobroTiendaService()`.
+    cobroTienda: new CobroTiendaService(
+      tiendaRepo,
+      new UserRepository(c),
+      new CajaCobroTiendaFeedService(cajaRepo),
+      new CobroTiendaAnulacionRepository(c),
+      (fn) => c.$transaction((t) => fn(t as never)),
     ),
     rechazoCobroRepo: new RechazoTiendaCobroRepository(c),
     rechazoCobro: new RechazoTiendaCobroService(
@@ -273,6 +281,7 @@ export function montarServicios459(tx: TxDeTest) {
     wallet: new WalletService(cajaRepo, c, new AporteCapitalRepository(c), {
       pagosPorCuenta: new PagoPorCuentaTiendaRepository(c),
       aportes: new AporteCapitalRepository(c),
+      cobros: new CobroTiendaAnulacionRepository(c),
     }),
     // Ficha 459 (T B.14) — los dos escritores nuevos, cableados como su `buildService()`.
     pagoPorCuenta: new PagoPorCuentaTiendaService(

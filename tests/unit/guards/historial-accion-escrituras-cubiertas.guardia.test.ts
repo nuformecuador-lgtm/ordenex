@@ -362,6 +362,17 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.aporteCapitalAnulacion\.create\(/,
   },
   {
+    // ⭑ FICHA 461 (R10/R55) — la ANULACION de un cobro de Ordenex a una tienda. Forma `recibe_tx`
+    // (el servicio abre la transaccion; el repositorio escribe la constancia y su historial en
+    // ella). Metodo PROPIO: la guardia mide por metodo. La mutacion exigida es la escritura de la
+    // CONSTANCIA de la anulacion, que es lo que la fila documenta.
+    tipos: ["cobro_tienda_anulado"],
+    archivo: "lib/repositories/CobroTiendaAnulacionRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.cobroTiendaAnulacion\.create\(/,
+  },
+  {
     // ⭑ Q2 (`usuario_fulfillment_cambiado`) comparte punto de escritura con el rol y la zona: es
     // el MISMO formulario, y las N filas salen con el MISMO `lote_id`.
     tipos: ["usuario_rol_cambiado", "usuario_zona_cambiada", "usuario_fulfillment_cambiado"],
@@ -907,7 +918,8 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     // 376 (`zona_central_cambiada`); 48 desde la 375 (`nodo_geografico_renombrado`); 47 desde la
     // 374 (los dos `nodo_geografico_*` de activacion); 45 desde la 373.
     // 59 desde la ficha 459 (los cuatro del pago por cuenta y del saldo inicial o aporte).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(59);
+    // 60 desde la ficha 461 (`cobro_tienda_anulado`, con su productor propio).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(60);
   });
 });
 

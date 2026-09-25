@@ -78,7 +78,11 @@ describeSiHayBase("459/T B.12 — saldo inicial o aporte de capital por la actio
   }
 
   async function estadoDeLaCaja(p: Personas459): Promise<string> {
-    const svc = new WalletService(new WalletMovimientoRepository(prisma), prisma, new AporteCapitalRepository(prisma), { pagosPorCuenta: new PagoPorCuentaTiendaRepository(prisma), aportes: new AporteCapitalRepository(prisma) });
+    const svc = new WalletService(new WalletMovimientoRepository(prisma), prisma, new AporteCapitalRepository(prisma), {
+      pagosPorCuenta: new PagoPorCuentaTiendaRepository(prisma),
+      aportes: new AporteCapitalRepository(prisma),
+      cobros: { estadoDeDocumentos: async () => [] }, // ficha 461: lo exige `LectoresDocumentosCaja`; esta suite no lee cobros
+    });
     const r = await svc.verResumenCaja({ page: 1, pageSize: 1 }, p.maestro);
     if (r.status !== "ok") throw new Error(`verResumenCaja: ${JSON.stringify(r)}`);
     return r.resumen.estado;

@@ -453,7 +453,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
       r.composicion.otrosEgresos,
       r.composicion.totalEgresos,
     ];
-    expect(importes.length).toBe(10); // 7 conceptos + 3 totales: ninguno se pierde
+    expect(importes.length).toBe(11); // 8 conceptos (ficha 461: + el cobro a una tienda) + 3 totales: ninguno se pierde
     for (const v of importes) {
       expect(typeof v).toBe("string");
       expect(v).toMatch(/^-?\d+\.\d{2}$/); // escala 2 SIEMPRE, tambien en el cero
@@ -814,6 +814,7 @@ const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };
 const SIN_DOCUMENTOS_459 = {
   pagosPorCuenta: { estadoDeDocumentos: async () => [] },
   aportes: { estadoDeDocumentos: async () => [] },
+  cobros: { estadoDeDocumentos: async () => [] }, // ficha 461
 };
 
 // ─── FICHA 459 (T B.16, design §7.3) — el DOCUMENTO de cada fila, resuelto en lote ───
@@ -822,6 +823,9 @@ describe("WalletService.listarMovimientos — el documento de las filas original
   const PAGO_2 = "1b6c1f7e-7a44-4b43-9c1a-5e0f2d9a1c12";
   const APORTE = "9f2e3d4c-1b2a-4c3d-8e9f-0a1b2c3d4e5f";
   const COBRO = "ecf6c289-9799-4558-be6d-ce5f8a12f5cd";
+  // Ficha 461: un cobro con su linea PROPIA (vigente), otro COMPLETADO por la migracion (anulado).
+  const COBRO_PROPIO = "4610000a-0000-4000-8000-000000000001";
+  const COBRO_COMPLETADO = "4610000a-0000-4000-8000-000000000002";
 
   const PAGINA: WalletMovimientoDTO[] = [
     // Original del pago por cuenta (vigente, con comprobante).
@@ -835,6 +839,11 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     // Original del saldo inicial y el contra-asiento de su anulacion.
     mov({ id: "a1", tipo: "ingreso", categoria: "ingreso_aporte_capital", origenTipo: "aporte_capital", origenId: APORTE }),
     mov({ id: "a1r", tipo: "egreso", categoria: "egreso_reverso_aporte_capital", origenTipo: "aporte_capital", origenId: APORTE }),
+    // Ficha 461 (design §5.4, R20/R37): la linea de caja de un cobro con su origen PROPIO, la de otro
+    // COMPLETADO por la migracion (los dos son originales), y el reverso del segundo (no lo es).
+    mov({ id: "k1", tipo: "ingreso", categoria: "ingreso_cobro_tienda", origenTipo: "cobro_tienda", origenId: COBRO_PROPIO }),
+    mov({ id: "k2", tipo: "ingreso", categoria: "ingreso_cobro_tienda", origenTipo: "cobro_tienda_completado", origenId: COBRO_COMPLETADO }),
+    mov({ id: "k2r", tipo: "egreso", categoria: "egreso_reverso_cobro_tienda", origenTipo: "cobro_tienda", origenId: COBRO_COMPLETADO }),
     // Una fila cualquiera.
     mov({ id: "f1" }),
   ];
@@ -849,6 +858,11 @@ describe("WalletService.listarMovimientos — el documento de las filas original
       aportes: {
         estadoDeDocumentos: vi.fn(async (ids: readonly string[]) =>
           ids.map((id) => ({ id, anulado: true, tieneComprobante: false })),
+        ),
+      },
+      cobros: {
+        estadoDeDocumentos: vi.fn(async (ids: readonly string[]) =>
+          ids.map((id) => ({ id, anulado: id === COBRO_COMPLETADO, tieneComprobante: false })),
         ),
       },
     };
@@ -871,6 +885,12 @@ describe("WalletService.listarMovimientos — el documento de las filas original
       c1: null,
       a1: { tipo: "aporte_capital", anulado: true, tieneComprobante: false },
       a1r: null,
+      // Ficha 461 (R20/R37): las DOS lineas de cobro son originales —la propia y la completada—; el
+      // reverso no. Mutacion 14 de design §14.2 (sin el origen `cobro_tienda_completado`) deja `k2`
+      // en `null` y este caso en rojo.
+      k1: { tipo: "cobro_tienda", anulado: false, tieneComprobante: false },
+      k2: { tipo: "cobro_tienda", anulado: true, tieneComprobante: false },
+      k2r: null,
       f1: null,
     });
   });
@@ -887,6 +907,9 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     expect(docs.pagosPorCuenta.estadoDeDocumentos).toHaveBeenCalledWith([PAGO, PAGO_2]);
     expect(docs.aportes.estadoDeDocumentos).toHaveBeenCalledTimes(1);
     expect(docs.aportes.estadoDeDocumentos).toHaveBeenCalledWith([APORTE]);
+    // Ficha 461: UNA consulta para los dos cobros (propio y completado), sin el reverso.
+    expect(docs.cobros.estadoDeDocumentos).toHaveBeenCalledTimes(1);
+    expect(docs.cobros.estadoDeDocumentos).toHaveBeenCalledWith([COBRO_PROPIO, COBRO_COMPLETADO]);
   });
 
   it("sin filas de un tipo, ese lector NO se consulta", async () => {
@@ -898,6 +921,7 @@ describe("WalletService.listarMovimientos — el documento de las filas original
 
     expect(docs.pagosPorCuenta.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.aportes.estadoDeDocumentos).not.toHaveBeenCalled();
+    expect(docs.cobros.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 461
     if (r.status !== "ok") throw new Error("se esperaba ok");
     expect(r.data.movimientos.every((m) => m.documento === null)).toBe(true);
   });
@@ -908,6 +932,7 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     expect(await svc.listarMovimientos({ page: 1, pageSize: 20 }, OTRO)).toEqual({ status: "forbidden" });
     expect(docs.pagosPorCuenta.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.aportes.estadoDeDocumentos).not.toHaveBeenCalled();
+    expect(docs.cobros.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 461
   });
 
   it("la descarga del libro NO resuelve documentos (R58: la descarga no los lleva)", async () => {
@@ -919,5 +944,6 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     await svc.listarMovimientosCompleto({}, MAESTRO);
     expect(docs.pagosPorCuenta.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.aportes.estadoDeDocumentos).not.toHaveBeenCalled();
+    expect(docs.cobros.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 461
   });
 });

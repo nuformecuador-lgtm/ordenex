@@ -213,7 +213,19 @@ describe("R23/R26 — la particion de la ganancia cubre TODAS las categorias pro
       (c) => NATURALEZA_POR_CATEGORIA[c] === "propio" && tipoDe(c) === "ingreso",
     );
     expect([...WALLET_INGRESO_PROPIO_SEED].sort()).toEqual([...derivados].sort());
-    expect(derivados.length).toBe(7); // D5: los seis del feed MAS el ajuste
+    // D5: los seis del feed MAS el ajuste; ficha 461 (R27): MAS el cobro de Ordenex a una tienda.
+    expect(derivados.length).toBe(8);
+    expect(derivados).toContain("ingreso_cobro_tienda");
+  });
+
+  it("⭑ 461 (R27): el reverso del cobro es el TERCER egreso nombrado; «otros» sigue siendo solo `egreso_gasto`", () => {
+    expect([...WALLET_EGRESO_NOMBRADO_SEED]).toEqual([
+      "egreso_pago_mensajero",
+      "egreso_ajuste",
+      "egreso_reverso_cobro_tienda",
+    ]);
+    expect(NATURALEZA_POR_CATEGORIA.egreso_reverso_cobro_tienda).toBe("propio");
+    expect(OTROS_EGRESOS_DE_ORDENEX).toEqual(["egreso_gasto"]);
   });
 });
 

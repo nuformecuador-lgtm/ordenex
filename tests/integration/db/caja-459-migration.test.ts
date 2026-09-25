@@ -72,20 +72,27 @@ describeSiHayBase("459/B.5 — las migraciones de la 459 contra Postgres", () =>
     expect([...caja].sort()).toEqual([...WALLET_MOVIMIENTO_CATEGORIA_SEED].sort());
     expect([...tienda].sort()).toEqual([...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED].sort());
     expect([...origen].sort()).toEqual([...WALLET_ORIGEN_TIPO_SEED].sort());
-    expect(caja.slice(-4)).toEqual(VALORES_CAJA_459);
-    expect(tienda.slice(-2)).toEqual(["pago_por_cuenta", "pago_por_cuenta_anulado"]);
-    expect(origen.slice(-3)).toEqual(["pago_por_cuenta_tienda", "aporte_capital", "cobro_manual_reclasificado"]);
+    // Ficha 461 (2026-09-25): sus valores van DESPUES de los de la 459 (`20260926120000`), asi que los
+    // de la 459 ya no cierran la lista: se leen justo antes de los de la 461. El orden relativo —los
+    // de esta ficha, contiguos y al final de lo que habia antes— es lo que se afirma.
+    expect(caja.slice(-6, -2)).toEqual(VALORES_CAJA_459);
+    expect(caja.slice(-2)).toEqual(["ingreso_cobro_tienda", "egreso_reverso_cobro_tienda"]);
+    expect(tienda.slice(-3, -1)).toEqual(["pago_por_cuenta", "pago_por_cuenta_anulado"]);
+    expect(tienda.slice(-1)).toEqual(["cobro_tienda_anulado"]);
+    expect(origen.slice(-5, -2)).toEqual(["pago_por_cuenta_tienda", "aporte_capital", "cobro_manual_reclasificado"]);
+    expect(origen.slice(-2)).toEqual(["cobro_tienda", "cobro_tienda_completado"]);
 
     const tipos = await etiquetasDeEnum(prisma, "historial_accion_tipo");
     const entidades = await etiquetasDeEnum(prisma, "historial_accion_entidad");
     expect([...tipos].sort()).toEqual([...HISTORIAL_ACCION_TIPOS].sort());
     expect([...entidades].sort()).toEqual([...HISTORIAL_ACCION_ENTIDADES].sort());
-    expect(tipos.slice(-4)).toEqual([
+    expect(tipos.slice(-5, -1)).toEqual([
       "pago_por_cuenta_tienda_registrado",
       "pago_por_cuenta_tienda_anulado",
       "aporte_capital_registrado",
       "aporte_capital_anulado",
     ]);
+    expect(tipos.slice(-1)).toEqual(["cobro_tienda_anulado"]);
     expect(entidades.slice(-2)).toEqual(["pago_por_cuenta_tienda", "aporte_capital"]);
   });
 
