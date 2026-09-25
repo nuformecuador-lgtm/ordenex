@@ -37,6 +37,17 @@ export interface OrdenLiberableRow {
    * p90 22,1 h) por un invariante que en esa via ya se cumple.
    */
   gestionEsVisitaReal: boolean;
+  /**
+   * FICHA 462 (T1.2, design §1.1, 2026-09-25) — el mensajero ASIGNADO a la orden en el instante de
+   * la lectura. Es un HECHO mas de la misma fila, no una decision: lo necesita el conteo de las
+   * reprogramadas retenidas para agrupar las que NO tienen cierre bajo «sin cierre enviado» de su
+   * mensajero (R5). `null` si la orden no tiene mensajero (dato imposible para una `reprogramado`
+   * que espera cierre, y se declara igual). Ni el `where`, ni el `orderBy`, ni el `take` cambian.
+   *
+   * REQUERIDO y no opcional, a proposito: un `undefined` aqui obligaria al servicio a decidir que
+   * significa, y no significa nada.
+   */
+  mensajeroAsignadoId: string | null;
 }
 
 // Entrada del UPDATE guardado por orden (idempotente por estado de origen).

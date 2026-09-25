@@ -3077,6 +3077,15 @@ enum NotificacionEvento {
   // nada -- deja de tener trabajo, no le aparece trabajo. En el panel de avisos si lo recibe, para
   // que su lista encogida tenga explicacion.
   traspaso_ordenes_cedido
+  // Ficha 462 (R9-R12, 2026-09-25) - hay reprogramadas DE HOY que siguen retenidas porque el cierre
+  // de su gestion no esta aprobado (regla 276). El CUARTO aviso AGREGADO: UNO por AMBITO (la
+  // administracion central, o la zona de un satelite) y por rol destinatario, una vez por dia CR,
+  // con el numero VIVO en el titulo (se recompone al leer). Lo emite el cron `avisos-diarios` a las
+  // 07:00 CR (`lib/config/reprogramadas-retenidas.ts`). Destinatarios: `maestro` y `admin` para el
+  // ambito central; `adminSatelite` acotado a su zona. PUSH: `admin` y `adminSatelite`.
+  // ⚠️ Su entidad es `${ambito}:${dia_CR}` con `ambito = 'central' | <zona_id>`: ver
+  // `reprogramadas_esperan_cierre_dia` mas abajo. La regla 276 NO cambia: esto solo AVISA.
+  reprogramadas_esperan_cierre
 
   @@map("notificacion_evento")
 }
@@ -3203,6 +3212,15 @@ enum NotificacionEntidadTipo {
   // acto (origen y destino) no se pisan. La regla no es «prefija siempre», es «comprueba si el
   // alcance esta en la clave» (413).
   orden_traspaso_lote
+  // Ficha 462 (design DE, 2026-09-25) - NOVENO `entidad_tipo` que NO apunta a una fila de tabla: la
+  // entidad es EL AMBITO Y EL DIA CR (`entidad_id = '<central|zona_id>:YYYY-MM-DD'`). Misma forma
+  // que `devoluciones_represadas_dia` y por el mismo motivo: el ALCANCE (`zona_id`) NO entra en
+  // `notificacion_dedupe_key`, asi que sin el ambito dentro LAS ZONAS SE PISARIAN ENTRE SI y solo la
+  // primera del recorrido recibiria su aviso. Con el dia dentro, el recordatorio diario es
+  // ESTRUCTURAL y la corrida repetida el mismo dia deja UNA sola fila.
+  // Es `'central'` y NO `'global'` a proposito: maestro y admin NO cuentan el total del sistema
+  // sino los cierres con destino `bodega_central`, que es lo que ven en `/cierres-admin`.
+  reprogramadas_esperan_cierre_dia
 
   @@map("notificacion_entidad_tipo")
 }

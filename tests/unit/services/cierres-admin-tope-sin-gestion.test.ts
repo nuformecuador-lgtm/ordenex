@@ -4,6 +4,7 @@ import path from "path";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import { reintentosConfig } from "@/lib/config/reintentos";
 import type { ICierresAdminRepository } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
@@ -89,7 +90,7 @@ function newService(
     sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
       Object.fromEntries(ids.map((id) => [id, "0.00"])),
     ),
-  });
+  }, sinRetenidas()); // FICHA 462: 7.o argumento requerido; este archivo no mide la marca
   return { service, repo, ordenRepo };
 }
 

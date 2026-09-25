@@ -506,6 +506,10 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // Son AGREGADOS: UNA fila por ACTO con el numero DENTRO del texto, jamas una por orden (R38).
       "traspaso_ordenes_recibido", // ficha 427 / §6.5 - al que RECIBE; push si
       "traspaso_ordenes_cedido", // ficha 427 / §6.5 - al que CEDE; push NO, y es la misma decision
+      // FICHA 462 (2026-09-25) — DECIMOCTAVO valor, y este test rojo fue otra vez LA PRUEBA de que
+      // el inventario sigue cerrado. El CUARTO aviso AGREGADO: reprogramadas de hoy retenidas por
+      // un cierre sin aprobar, UNA fila por ambito (central | zona) y por rol, a las 07:00 CR.
+      "reprogramadas_esperan_cierre", // ficha 462 / design §3.1 - a maestro/admin (central) y adminSatelite (zona); push admin+satelite
     ]);
   });
 
@@ -598,6 +602,11 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // un USUARIO y `destinatario_usuario_id` YA ES una columna de la clave unica, asi que los DOS
       // avisos del mismo acto no se pisan.
       "orden_traspaso_lote", // ficha 427 / §6.5 - EL ACTO (`lote_id`), no la orden ni el mensajero
+      // FICHA 462 (design DE) — NOVENO valor que NO apunta a una fila de tabla: EL AMBITO Y EL DIA CR
+      // (`${ambito}:${diaCR}`, ambito = "central" | zonaId). El alcance va DENTRO porque `zona_id` no
+      // esta en `notificacion_dedupe_key`; y es "central", no "global": maestro y admin cuentan el
+      // ambito central, no el total del sistema.
+      "reprogramadas_esperan_cierre_dia", // ficha 462 / design DE - EL AMBITO Y EL DIA, no un cierre ni una orden
     ]);
   });
 });

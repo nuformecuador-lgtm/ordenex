@@ -35,6 +35,17 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(async () => null),
 }));
 
+// FICHA 462 (T3.5): la página lee, para maestro/admin, la franja de reprogramados retenidos. Se
+// dobla a «0 retenidos» para que estos tests sigan herméticos (sin DB): con el módulo real, los
+// casos con `admin`/`maestro` consultarían la base local. La franja se cubre en
+// `OrdenesPageFranjaRetenidas.test.tsx`. Cambio del ARNÉS: ninguna aserción de este archivo se toca.
+vi.mock("@/lib/actions/reprogramadas-retenidas", () => ({
+  resumenReprogramadasRetenidasCentral: vi.fn(async () => ({
+    status: "ok" as const,
+    resumen: { diaCR: "2026-01-01", total: 0, porForma: { reprogramado: 0, enReparto: 0 }, cierres: [], sinCierre: [] },
+  })),
+}));
+
 // Feature 144/TB2.5: la página resuelve el catálogo de filtros server-side. Se
 // mockea para que estos tests sigan siendo herméticos (sin DB), igual que
 // `listarOrdenes`. La resolución en sí se cubre en `OrdenesPageFiltros.test.tsx`.

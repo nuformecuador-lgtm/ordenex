@@ -709,6 +709,23 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     expect(fuente).toContain("notificarNovedadesSinGestionarReal");
   });
 
+  it("⭑⭑ 462/R19: app/api/cron/avisos-diarios/route.ts PASA el TERCER notificador real y el conteo de retenidas", () => {
+    // FICHA 462 (T2.7, R19) — MISMO MOLDE, MISMO MOTIVO MEDIDO. El notificador es el SEPTIMO
+    // argumento de `AvisosDiariosService`, detras de los dos de la 409; si `buildService()` dejara
+    // de pasarlo, el aviso de las retenidas no se emitiria JAMAS en produccion con la suite en verde.
+    // MUTACION OBLIGATORIA (design §8.2-8): borrar el argumento DEJANDO EL IMPORT INTACTO ⇒ ROJO.
+    const fuente = leer("app", "api", "cron", "avisos-diarios", "route.ts");
+    const uso = fuenteSinImportsNiComentarios(fuente);
+    expect(uso).toContain("notificarReprogramadasEsperanCierreReal");
+    expect(uso).toMatch(
+      /new AvisosDiariosService\([\s\S]*notificarDevolucionesRepresadasReal,?[\s\S]*notificarReprogramadasEsperanCierreReal,?[\s\S]*\)/,
+    );
+    // ⭑ Y LA OTRA MITAD DEL CABLEADO: el CONTEO UNICO, con el MISMO ensamblaje que la campana y la
+    // marca (R7). Sin el, el servicio no compila; que sea ESTE ensamblaje y no uno propio es lo
+    // que se afirma aqui.
+    expect(uso).toMatch(/new AvisosDiariosService\([\s\S]*buildReprogramadasRetenidasService\(prisma\)/);
+  });
+
   it("⭑⭑ 413/R36: app/api/cron/aviso-reparto-manana/route.ts PASA su notificador real", () => {
     // FICHA 413 (T5.3, R36) — MISMO MOLDE QUE `avisos-diarios`, Y POR EL MISMO MOTIVO MEDIDO. El
     // notificador es el TERCER argumento de `RepartoMananaAvisoService`, detras de los dos
@@ -760,6 +777,25 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     expect(uso).toMatch(
       /new VigenciaAvisoAgregadoService\([\s\S]*new RepartoMananaRepository\(prisma\)[\s\S]*\)/,
     );
+    // ⭑⭑ FICHA 462 (T2.8, R14/R19) — Y EL SERVICIO DE RETENIDAS, que es el QUINTO argumento de ese
+    // resolutor. Sin el, `cifra("reprogramadas_esperan_cierre", ...)` LANZA, `cifrasVivas` lo
+    // registra y el aviso sale SIN numero (R14): nada visible se rompe, Y POR ESO EL FALLO SERIA
+    // MUDO. Misma familia, mismo remedio: se afirma que alguien lo PASA, con el MISMO ensamblaje
+    // que el cron (R7).
+    expect(uso).toMatch(
+      /new VigenciaAvisoAgregadoService\([\s\S]*new RepartoMananaRepository\(prisma\),?[\s\S]*buildReprogramadasRetenidasService\(prisma\)[\s\S]*\)/,
+    );
+  });
+
+  it("⭑⭑ 462/R23: lib/services/jobs/push-web-handler.ts PASA el servicio de retenidas a la vigencia del PUSH", () => {
+    // El cuerpo del push es la PRESENTACION del aviso, con la cifra del instante de la emision
+    // (R23). El drenador construye su PROPIA vigencia; si se olvidara el servicio, el push de este
+    // evento saldria sin numero mientras la campana lo enseña con el — dos verdades sobre el mismo
+    // hecho, y ningun test rojo.
+    const uso = fuenteSinImportsNiComentarios(leer("lib", "services", "jobs", "push-web-handler.ts"));
+    expect(uso).toMatch(
+      /new VigenciaAvisoAgregadoService\([\s\S]*buildReprogramadasRetenidasService\(prisma\)[\s\S]*\)/,
+    );
   });
 
   it("lib/actions/cierres-admin.ts inyecta LOS DOS notificadores reales que cablea", () => {
@@ -780,6 +816,19 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     expect(uso).toMatch(
       /new CierresAdminService\([\s\S]*notificarMensajeroBloqueadoReal[\s\S]*notificarCierreDiaRechazadoReal[\s\S]*\)/,
     );
+  });
+
+  it("⭑⭑ 462/R7/R26: lib/actions/cierres-admin.ts PASA el conteo de retenidas con el MISMO ensamblaje que el cron", () => {
+    // La marca «Retiene N reprogramadas de hoy» sale de `contarPorCierre`, que es una dependencia
+    // OBLIGATORIA del servicio (sin ella no compila). Lo que este caso afirma no es que se pase
+    // ALGO —eso lo exige el compilador— sino que se pase EL ensamblaje unico
+    // (`buildReprogramadasRetenidasService`) y no un servicio construido a mano aqui: dos
+    // ensamblajes distintos son dos cifras que pueden divergir entre la campana y la marca (R7).
+    const uso = fuenteSinImportsNiComentarios(leer("lib", "actions", "cierres-admin.ts"));
+    expect(uso).toMatch(
+      /new CierresAdminService\([\s\S]*new PagoMensajeroMovimientoRepository\(prisma\),?[\s\S]*buildReprogramadasRetenidasService\(prisma\)[\s\S]*notificarMensajeroBloqueadoReal/,
+    );
+    expect(uso).not.toContain("new ReprogramadasRetenidasService(");
   });
 
   // El titulo NO lleva el numero a proposito: decia «los TRES» cuando eran cinco y «los CINCO»

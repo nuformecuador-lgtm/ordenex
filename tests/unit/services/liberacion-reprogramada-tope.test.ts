@@ -41,6 +41,7 @@ function fila(over: Partial<OrdenLiberableRow> = {}): OrdenLiberableRow {
     gestionCierreId: "c1",
     gestionCierreEstado: "aprobado",
     gestionEsVisitaReal: true,
+    mensajeroAsignadoId: "m1", // FICHA 462 (T1.2): hecho proyectado, sin efecto en la liberacion
     ...over,
   };
 }

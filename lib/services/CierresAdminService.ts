@@ -24,6 +24,7 @@ import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/reposi
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IReprogramadasRetenidasService } from "@/lib/interfaces/services/IReprogramadasRetenidasService";
 import type { CierreGrupos } from "@/lib/interfaces/services/ICierreDiaService";
 import type {
   ActualizarPagosGestionInput,
@@ -50,6 +51,9 @@ import type {
 } from "@/lib/interfaces/services/ICierresAdminService";
 import { descargaConfig } from "@/lib/config/descarga";
 import { esColaCierreDia } from "@/lib/utils/colas-cierre";
+// FICHA 462: `startOfDayCR` y NO `inicioDelDiaCREnUtc` — `fecha_reprogramacion` es `@db.Date` y el
+// conteo de retenidas compara en la convencion del reloj de liberacion (medianoche UTC del dia CR).
+import { startOfDayCR } from "@/lib/utils/fecha-cr";
 import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
 import { excesoIndemnizacion } from "@/lib/utils/tope-indemnizacion";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
@@ -260,6 +264,22 @@ export class CierresAdminService implements ICierresAdminService {
      */
     private readonly premiosRepo: PremiosLecturaRepo,
     /**
+     * FICHA 462 (T2.9, design §5.1, R26/R51) — el CONTEO UNICO de las reprogramadas de hoy que
+     * cada cierre retiene, para la marca «Retiene N reprogramadas de hoy» de la cola, el historico
+     * y el detalle. Solo se le pide `contarPorCierre` (`Pick`): esta pantalla no puede leer nada mas
+     * del conteo, y desde luego no puede escribir.
+     *
+     * OBLIGATORIA, SIN DEFAULT, y es la decision mas discutida de la ficha: un default no-op que
+     * devolviera un `Map` vacio seria el fallo mudo exacto de este repo —la marca no saldria NUNCA
+     * con la suite entera en verde—, y uno que lanzara rompe el detalle entero por un dato
+     * accesorio. Sin default, las suites que instancian este servicio pasan un doble
+     * (`tests/fixtures/retenidas-doble.ts`, una linea cada una) y una guardia afirma que
+     * `lib/actions/cierres-admin.ts` lo PASA con el MISMO ensamblaje que la campana y el cron (R7).
+     * Va DESPUES de `premiosRepo` y ANTES de los notificadores opcionales: sin el, el constructor no
+     * compila; no hay forma de cablearlo «casi bien».
+     */
+    private readonly retenidas: Pick<IReprogramadasRetenidasService, "contarPorCierre">,
+    /**
      * FEATURE 271 (T6.6, R42/R47) — notificador de «quedaste BLOQUEADO», con DEFAULT NO-OP. Lo
      * dispara el RECHAZO, que es la UNICA via por la que un mensajero llega a tener DOS cierres
      * re-solicitables (solicita el dia 1, solicita el dia 2, el admin rechaza los dos): sin este
@@ -298,6 +318,13 @@ export class CierresAdminService implements ICierresAdminService {
      * (`tests/unit/services/notificacion-notificadores-reales.test.ts`).
      */
     private readonly notificarRechazo: CierreRechazadoNotificador = notificadorNoOp,
+    /**
+     * FICHA 462 (T2.9) — el reloj, inyectable para los tests de la marca. Fija el «hoy CR» con el
+     * que se cuenta cuantas reprogramadas retiene cada cierre (`startOfDayCR(now())`, la misma
+     * convencion `@db.Date` del reloj de liberacion). Va al FINAL, con default, porque ninguno de
+     * los otros caminos del servicio lee el reloj (el `resueltoAt` lo escribe la base).
+     */
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   /**
@@ -1118,6 +1145,18 @@ export class CierresAdminService implements ICierresAdminService {
       .filter((r) => r.estado === "aprobado")
       .map((r) => r.cierreId);
 
+    // FICHA 462 (S3, R26/R27/R28/R51) — LA MARCA «Retiene N reprogramadas de hoy», con UNA sola
+    // lectura por pagina para TODOS los cierres de la pagina (los `aprobado` incluidos: por
+    // construccion no retienen y salen `0`, y asi el numero de consultas no depende del estado).
+    // Los que no retienen no vienen en el `Map` y quedan en `0` (`?? 0`). MUTACION OBLIGATORIA
+    // (design §8.2-12): pedirlo por fila => el test de llamadas cuenta N en vez de 1 => ROJO.
+    // El «hoy» es el del reloj del servicio en convencion `@db.Date` (`startOfDayCR`), el mismo
+    // con el que cuentan el cron, la campana y la franja (R7).
+    const retenidas = await this.retenidas.contarPorCierre(
+      startOfDayCR(this.now()),
+      resumenes.map((r) => r.cierreId),
+    );
+
     // UNA sola llamada, siempre: tambien con la lista vacia, para que el conteo de consultas de
     // este listado sea el mismo se pinte lo que se pinte.
     const pagados = await this.liquidacionRepo.sumarVigentesPorCierre(idsAprobados);
@@ -1146,10 +1185,13 @@ export class CierresAdminService implements ICierresAdminService {
         cierresAbiertos: c.n,
         cierresPorReenviar: c.v,
       };
+      // FICHA 462 (R27/R28): el aprobado retiene 0 por construccion; los demas, lo que diga el conteo.
+      const reprogramadasRetenidasHoy = retenidas.get(r.cierreId) ?? 0;
       return r.estado === "aprobado"
         ? {
             ...r,
             bloqueoMensajero,
+            reprogramadasRetenidasHoy,
             pendientePagoMensajero: derivarPendienteCierre({
               pagoDebido: r.totalPagoMensajero, // P — snapshot de la 39, NUNCA reescrito (293/R13)
               efectivo: r.totales.efectivo, // E — snapshot de la 37
@@ -1157,7 +1199,7 @@ export class CierresAdminService implements ICierresAdminService {
               pagadoVigente: pagados[r.cierreId] ?? "0.00", // Σ pagos VIGENTES del cierre (R80)
             }),
           }
-        : { ...r, bloqueoMensajero }; // R28: no aprobado -> `null` (lo que ya puso `toResumen`)
+        : { ...r, bloqueoMensajero, reprogramadasRetenidasHoy }; // R28: no aprobado -> `null` (lo que ya puso `toResumen`)
     });
   }
 

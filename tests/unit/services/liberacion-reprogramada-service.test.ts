@@ -42,6 +42,7 @@ function liberableRow(overrides: Partial<OrdenLiberableRow> = {}): OrdenLiberabl
     gestionCierreId: "c-aprobado",
     gestionCierreEstado: "aprobado",
     gestionEsVisitaReal: true,
+    mensajeroAsignadoId: "m1", // FICHA 462 (T1.2): hecho proyectado, sin efecto en la liberacion
     ...overrides,
   };
 }

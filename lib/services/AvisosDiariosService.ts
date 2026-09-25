@@ -5,37 +5,57 @@ import type {
   IAvisosDiariosService,
 } from "@/lib/interfaces/services/IAvisosDiariosService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
+import type {
+  AmbitoRetenidas,
+  IReprogramadasRetenidasService,
+} from "@/lib/interfaces/services/IReprogramadasRetenidasService";
 import { reintentosConfig } from "@/lib/config/reintentos";
 import { alcanzaElTope } from "@/lib/types/tope-intentos";
-import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { fechaCalendarioCR, startOfDayCR } from "@/lib/utils/fecha-cr";
 import type { PlazoNovedades } from "@/lib/notificaciones/emitir";
 import {
   emitirBestEffort,
   notificadorNoOp,
   type DevolucionesRepresadasNotificador,
   type NovedadesSinGestionarNotificador,
+  type ReprogramadasEsperanCierreNotificador,
 } from "@/lib/notificaciones/notificadores";
 
-// FICHA 409 (T4.2, design §4.4) — EL PROCESO DIARIO que emite los dos avisos AGREGADOS.
+// FICHA 409 (T4.2, design §4.4) — EL PROCESO DIARIO que emite los avisos AGREGADOS de las 07:00 CR.
+// Eran dos; desde la 462 son TRES (novedades, represadas y reprogramadas retenidas).
 //
 // Decide QUE se avisa: agrupacion, umbral, homogeneidad de plazos y best-effort. No conoce
-// Next.js, ni Prisma, ni HTTP: el repositorio y los dos notificadores entran por constructor.
+// Next.js, ni Prisma, ni HTTP: los repositorios y los notificadores entran por constructor.
 //
 // LOS TRES INVARIANTES QUE ESTE SERVICIO SOSTIENE, y donde se prueban:
 //   · UN aviso por tienda y por dia, con el numero DENTRO (R35/R36) — la dedupe la da la ENTIDAD
 //     (`${tiendaId}:${diaCR}`), no una rama de codigo, y se mide contra Postgres real;
-//   · UN aviso por AMBITO y por rol (R47/R48/R49) — la zona lleva SU numero, jamas el total;
-//   · una emision que falla NO se lleva por delante a las demas (R60) — cada una va envuelta.
+//   · UN aviso por AMBITO y por rol (R47/R48/R49; 462/R9/R12) — la zona lleva SU numero, jamas el
+//     total;
+//   · una emision que falla NO se lleva por delante a las demas (R60; 462/R18) — cada una va
+//     envuelta.
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
 
 /** Lo unico que este servicio necesita del historial: el conteo de intentos EN LOTE (215/R4). */
 type HistorialSvc = Pick<IOrdenHistorialService, "contarIntentosEnLote">;
+/** Lo unico que este servicio necesita del conteo de retenidas: el resumen entero, agrupado. */
+type RetenidasSvc = Pick<IReprogramadasRetenidasService, "resumen">;
 
 export class AvisosDiariosService implements IAvisosDiariosService {
   constructor(
     private readonly repo: IAvisoAgregadoRepository,
     private readonly historial: HistorialSvc,
+    /**
+     * FICHA 462 (T2.7, design §3.4) — EL CONTEO UNICO de las reprogramadas retenidas, REQUERIDO y
+     * sin default (a diferencia de los notificadores): un default construido aqui abriria una
+     * conexion por instanciar el servicio, y un no-op que devolviera «cero retenidas» seria el fallo
+     * mudo exacto que esta ficha existe para no cometer (un aviso que nunca sale). Va ANTES del
+     * umbral para que no haya forma de cablearlo «casi bien»: sin el, el constructor no compila.
+     * Es el MISMO servicio que alimenta la campana, la marca de `/cierres-admin` y la franja de
+     * `/ordenes` (R7): las cuatro superficies leen la misma cifra.
+     */
+    private readonly retenidas: RetenidasSvc,
     /**
      * R53 — EL UMBRAL ENTRA POR AQUI Y NO ESTA ESCRITO EN ESTE ARCHIVO. En produccion lo pasa el
      * route handler desde `lib/config/avisos-diarios.ts` (donde vive la medicion que lo justifica);
@@ -53,6 +73,16 @@ export class AvisosDiariosService implements IAvisosDiariosService {
      */
     private readonly notificarNovedades: NovedadesSinGestionarNotificador = notificadorNoOp,
     private readonly notificarRepresadas: DevolucionesRepresadasNotificador = notificadorNoOp,
+    /**
+     * FICHA 462 (T2.7, R19) — el notificador del tercer agregado. DEFAULT NO-OP, como sus dos
+     * hermanos y por el mismo motivo: ninguna suite que construya este servicio puede escribir
+     * avisos en la base local compartida. Que el cron lo PASE de verdad lo vigila
+     * `tests/unit/services/notificacion-notificadores-reales.test.ts` sobre el fuente sin imports ni
+     * comentarios (mutacion 8 del design: borrar el argumento dejando el import => ROJO).
+     * VA DESPUES de `notificarRepresadas` y ANTES del logger: mover un posicional en un constructor
+     * que se construye en varios sitios es como se cablea «casi bien» sin que nada se ponga rojo.
+     */
+    private readonly notificarRetenidas: ReprogramadasEsperanCierreNotificador = notificadorNoOp,
     private readonly logger: ErrorLogger = defaultLogger,
   ) {}
 
@@ -64,6 +94,7 @@ export class AvisosDiariosService implements IAvisosDiariosService {
 
     const novedades = await this.emitirAvisosDeNovedades(now, diaCR, fallos);
     const represadas = await this.emitirAvisosDeRepresadas(now, diaCR, fallos);
+    const retenidas = await this.emitirAvisosDeRetenidas(now, diaCR, fallos);
 
     return {
       fecha: diaCR,
@@ -72,8 +103,63 @@ export class AvisosDiariosService implements IAvisosDiariosService {
       ordenesRepresadas: represadas.ordenes,
       zonasConRepresadas: represadas.zonas,
       avisosRepresadasEmitidos: represadas.emitidos,
+      reprogramadasRetenidas: retenidas.total,
+      ambitosConRetenidas: retenidas.ambitos,
+      avisosRetenidasEmitidos: retenidas.emitidos,
       fallos: fallos.total,
     };
+  }
+
+  /**
+   * FICHA 462 (R9/R10/R12/R18) — UN aviso por AMBITO con retenidas: el central (maestro + admin) y
+   * cada zona con su `adminSatelite`. El ambito con CERO no recibe nada (R10). Cada emision va
+   * envuelta: una zona que falle no deja sin aviso al central ni a las demas (R18).
+   *
+   * ⚠️ EL AMBITO SALE DEL CONTEO UNICO (`resumen`), no de una consulta propia: cada cierre que
+   * retiene ya trae su ambito por el destino PERSISTIDO, y cada grupo «sin cierre» el suyo por la
+   * zona de la orden. Reagruparlo aqui es sumar, no decidir. El NUMERO no viaja en el aviso: el
+   * titulo lo compone el catalogo con la cifra viva al leer (409/R57), asi que el contexto es solo
+   * el ambito y el dia.
+   *
+   * ⚠️ `startOfDayCR(now)` Y NO `inicioDelDiaCREnUtc`: `fecha_reprogramacion` es `@db.Date` y el
+   * conteo compara contra medianoche UTC de la fecha CR, la misma convencion que el reloj de
+   * liberacion y los timbres 315/371 (design §1.2). Con el otro helper serian seis horas de mas.
+   *
+   * SOLO LECTURA (R8/R49): este metodo no toca ninguna orden; `resumen` es una lectura y lo vigila
+   * la guardia `reprogramadas-retenidas-solo-lectura`.
+   */
+  private async emitirAvisosDeRetenidas(
+    now: Date,
+    diaCR: string,
+    fallos: { total: number },
+  ): Promise<{ total: number; ambitos: number; emitidos: number }> {
+    const resumen = await this.retenidas.resumen(startOfDayCR(now));
+    if (resumen.total === 0) return { total: 0, ambitos: 0, emitidos: 0 }; // R10
+
+    // Por ambito: clave `central` o el `zonaId`. Se suma lo de los cierres Y lo de «sin cierre».
+    const porAmbito = new Map<string, { ambito: AmbitoRetenidas; cuantas: number }>();
+    const sumar = (ambito: AmbitoRetenidas, cuantas: number) => {
+      const clave = ambito.tipo === "central" ? "central" : ambito.zonaId;
+      const acumulado = porAmbito.get(clave) ?? { ambito, cuantas: 0 };
+      acumulado.cuantas += cuantas;
+      porAmbito.set(clave, acumulado);
+    };
+    for (const c of resumen.cierres) sumar(c.ambito, c.cuantas);
+    for (const m of resumen.sinCierre) sumar(m.ambito, m.cuantas);
+
+    let emitidos = 0;
+    let ambitos = 0;
+    for (const { ambito, cuantas } of porAmbito.values()) {
+      if (cuantas <= 0) continue; // R10: el ambito con cero no recibe nada (defensa: no deberia llegar)
+      ambitos += 1;
+      const ok = await this.emitirYContar(
+        "reprogramadas_esperan_cierre",
+        () => this.notificarRetenidas({ ambito, diaCR }),
+        fallos,
+      );
+      if (ok) emitidos += 1;
+    }
+    return { total: resumen.total, ambitos, emitidos };
   }
 
   /**

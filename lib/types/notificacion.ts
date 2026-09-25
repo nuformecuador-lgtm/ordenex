@@ -133,7 +133,25 @@ export type NotificacionEvento =
   // ⚠️ LOS DOS llevan como entidad el `lote_id` del acto (`orden_traspaso_lote`), NUNCA la orden ni
   // el mensajero: con cualquiera de esos dos, el SEGUNDO traspaso del dia a la misma persona no
   // avisaria NUNCA. Ver el valor de entidad, mas abajo.
-  | "traspaso_ordenes_cedido";
+  | "traspaso_ordenes_cedido"
+  // FICHA 462 (R9-R17) — hay reprogramadas DE HOY que siguen RETENIDAS porque el cierre de la
+  // gestion que las reprogramo no esta aprobado (regla 276; la 454 añade la forma `en_reparto` con
+  // gestion pendiente). Caso real (prod, 24/09/2026): una guia espero ~20 h con fecha de hoy sin que
+  // nadie supiera que estaba retenida ni por que cierre. Es el CUARTO aviso AGREGADO: UNA fila por
+  // AMBITO (la administracion central, o la zona de un satelite) y por rol destinatario, una vez por
+  // dia CR, emitida por el cron `avisos-diarios` a las 07:00 CR (`lib/config/reprogramadas-retenidas.ts`).
+  // Destinatarios: `maestro` y `admin` para el ambito CENTRAL (los cierres con destino
+  // `bodega_central`, que es lo que ven en `/cierres-admin`); `adminSatelite` ACOTADO a su zona.
+  //
+  // ⚠️ EL NUMERO NO SE PERSISTE (409/R57): el titulo lo compone el catalogo con la CIFRA VIVA en
+  // cada lectura («Reprogramado para hoy: N paquetes esperan la aprobacion de su cierre»), y con 0 el
+  // aviso se apaga solo (R15) — al aprobar el cierre, la Forma A deja de cumplir «cierre no aprobado»
+  // aunque el timbre 315 falle, y la Forma B deja de existir porque la aprobacion aplica la gestion.
+  // El texto persistido (`descripcion`) es llano y SIN PII: ni guia, ni mensajero, ni monto (R17).
+  //
+  // ⚠️ SU ENTIDAD ES `${ambito}:${diaCR}` con `ambito ∈ { "central" } ∪ { zonaId }`: ver el
+  // comentario de `reprogramadas_esperan_cierre_dia` mas abajo. La regla 276 NO cambia con esto.
+  | "reprogramadas_esperan_cierre";
 
 /** Entidad de origen referenciada (referencia polimorfica, sin FK — design §1.2). */
 export type NotificacionEntidadTipo =
@@ -314,7 +332,26 @@ export type NotificacionEntidadTipo =
   // **ES** una columna de esa clave, asi que los DOS avisos del mismo acto —al origen y al destino,
   // con eventos distintos ademas— no se pisan. La regla no es «prefija siempre», es «comprueba si
   // el alcance esta en la clave» (413).
-  | "orden_traspaso_lote";
+  | "orden_traspaso_lote"
+  // ⚠️ FICHA 462 (design DE) — NOVENO `entidad_tipo` que NO apunta a una fila de tabla: la entidad
+  // es **EL AMBITO Y EL DIA CR**:
+  //
+  //     entidadId = `${ambito}:${diaCR}`,  con ambito ∈ { "central" } ∪ { zonaId }
+  //
+  // MISMA FORMA QUE `devoluciones_represadas_dia` Y POR EL MISMO MOTIVO: el destinatario es un ROL
+  // CON ALCANCE (`{ rol: adminSatelite, zonaId }`) y el alcance NO esta en `notificacion_dedupe_key`
+  // (`columnasDestinatario`), asi que sin el ambito dentro la PRIMERA zona de la corrida se llevaria
+  // el aviso y todas las demas quedarian mudas, sin error y sin log (R12, mutacion 7 del design).
+  // Con el dia dentro, el recordatorio diario es ESTRUCTURAL (dias distintos ⇒ filas distintas) y
+  // la corrida repetida el mismo dia deja UNA sola fila por destinatario (R11): lo decide el INDICE
+  // UNICO, no un `if` que una carrera pueda burlar.
+  //
+  // ⚠️ ES `"central"` Y NO `"global"` (el literal de la 409), A PROPOSITO. Alli maestro y admin
+  // cuentan el TOTAL del sistema; aqui cuentan solo el ambito CENTRAL —las retenidas cuyo cierre
+  // tiene destino `bodega_central`—, porque es exactamente lo que ven en `/cierres-admin`
+  // (`resolveAlcance`). Un aviso que dijera 5 y una pantalla con 3 marcas quedaria desacreditado el
+  // primer dia (requirements, decision 3). El literal nunca colisiona con un uuid de zona.
+  | "reprogramadas_esperan_cierre_dia";
 
 /**
  * DTO que viaja al cliente (design §3.1). `read` NO es una columna de `notificacion`:

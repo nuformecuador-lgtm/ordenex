@@ -23,6 +23,7 @@ import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
 import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 
 import {
@@ -251,6 +252,7 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
         URLS_NO_USADAS,
         new LiquidacionPagoRepository(cliente),
         new PagoMensajeroMovimientoRepository(cliente),
+        sinRetenidas(), // FICHA 462: 7.o argumento requerido; este caso no mide la marca
       ),
       corteDe: (mensajeroId: string) =>
         new CorteDiarioService(
