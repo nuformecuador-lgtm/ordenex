@@ -20,6 +20,7 @@ import { anularAjusteCajaAction } from "@/lib/actions/wallet";
 import { anularCobroTiendaAction } from "@/lib/actions/wallet-tienda";
 import type { ObtenerComprobanteResult } from "@/lib/types/pago-por-cuenta-tienda";
 import type { DocumentoCajaDTO, WalletMovimientoDTO } from "@/lib/types/wallet";
+import type { MotivoNoAnulable } from "@/lib/types/wallet-tienda";
 
 import {
   ANULAR_DOCUMENTO_CAJA_RESPUESTA,
@@ -33,14 +34,18 @@ import {
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // FICHA 459 (T B.16, design §9.4 — R65/R66/R67) — las acciones de una fila ORIGINAL del libro de
-// la caja que tiene DOCUMENTO: un pago por cuenta de una tienda o un saldo inicial o aporte.
+// la caja que tiene DOCUMENTO: el pago de un gasto de una tienda, el aporte de dinero a la caja y,
+// desde la FICHA 461, la línea de caja de un cobro de Ordenex a una tienda (propia o completada por
+// la migración de datos; R20/R37) y la corrección de caja (R71).
 //
 //  - «Anular…» solo si el documento está VIGENTE (R66); con motivo obligatorio y el diálogo
 //    abierto ante cualquier rechazo (molde `AnularPagoDialog` de la 172: `closeOnConfirm={false}`,
 //    `confirmVariant="destructive"` y dos barreras para el motivo).
-//  - «Anulado» como texto si ya lo está. Deshacer una anulación no existe (R52).
+//  - «Anulado» como texto si ya lo está. Deshacer una anulación no existe (R52 / 461-R19).
 //  - «Ver comprobante» si lo tiene (R67): pide el enlace temporal al servidor (R57) y lo abre en
-//    otra pestaña. El enlace no se guarda ni se pinta.
+//    otra pestaña. El enlace no se guarda ni se pinta. Un cobro nunca lo tiene.
+//  - FICHA 461 (R17, design §9): si el servidor responde `no_anulable`, el diálogo se queda abierto y
+//    dice POR QUÉ con el motivo que él devolvió (se reclasificó / no tiene su línea en la caja).
 //
 // La fila solo llega aquí con `documento` no nulo: los contra-asientos y las salidas de los cobros
 // reclasificados vienen del servidor con `documento: null` y el libro ni monta este componente.
@@ -54,11 +59,21 @@ import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 type TipoDocumento = DocumentoCajaDTO["tipo"];
 
+/**
+ * Lo que las cuatro actions de anulación tienen en común, normalizado: el estado, los errores por
+ * campo (`validation_error`) y, en el cobro (461-R17), POR QUÉ no se puede anular (`no_anulable`).
+ */
+type ResultadoAnulacion = {
+  status: string;
+  fieldErrors?: Record<string, string[]>;
+  motivo?: MotivoNoAnulable;
+};
+
 /** Las dos acciones por tipo de documento, con la clave que cada schema `.strict()` espera. */
 const ACCIONES: Record<
   TipoDocumento,
   {
-    anular: (id: string, motivo: string) => Promise<{ status: string; fieldErrors?: Record<string, string[]> }>;
+    anular: (id: string, motivo: string) => Promise<ResultadoAnulacion>;
     comprobante: (id: string) => Promise<ObtenerComprobanteResult>;
   }
 > = {
@@ -70,16 +85,16 @@ const ACCIONES: Record<
     anular: (aporteId, motivo) => anularAporteCapitalAction({ aporteId, motivo }),
     comprobante: (aporteId) => obtenerComprobanteAporteCapitalAction({ aporteId }),
   },
-  // Ficha 461 (design §9, R20): la rama la exige el compilador (`Record` total). `anular` llama a la
-  // action real; `comprobante` nunca se ofrece (`tieneComprobante` es siempre `false` en un cobro),
-  // asi que responde «sin comprobante» sin viajar al servidor. El aviso `no_anulable` y el resto de
-  // la superficie los completa el bloque C (frontend).
+  // Ficha 461 (design §9, R20): el cobro de Ordenex a una tienda. `anular` llama a la action real con
+  // el id del DÉBITO de la tienda (el `origenId` de la línea de caja); `comprobante` nunca se ofrece
+  // (`tieneComprobante` es siempre `false` en un cobro), así que responde «sin comprobante» sin
+  // viajar al servidor.
   cobro_tienda: {
     anular: (cobroId, motivo) => anularCobroTiendaAction({ cobroId, motivo }),
     comprobante: async () => ({ status: "sin_comprobante" as const }),
   },
-  // Ficha 461 (R71, auditoria D3): la correccion de caja original. La rama la exige el compilador
-  // (`Record` total); el id del «documento» es el de la propia fila (lo resuelve el servidor).
+  // Ficha 461 (R71, auditoría D3): la corrección de caja original; el id del «documento» es el de la
+  // propia fila (lo resuelve el servidor).
   ajuste_caja: {
     anular: (movimientoId, motivo) => anularAjusteCajaAction({ movimientoId, motivo }),
     comprobante: async () => ({ status: "sin_comprobante" as const }),
@@ -87,8 +102,14 @@ const ACCIONES: Record<
 };
 
 /** El aviso de cada respuesta de la anulación que NO la deja hecha. */
-function avisoDeAnulacion(status: string): string {
-  switch (status) {
+function avisoDeAnulacion(resultado: ResultadoAnulacion): string {
+  switch (resultado.status) {
+    // Ficha 461 (R17): el cobro reclasificado o sin línea de caja no se anula desde aquí, y se dice
+    // por qué con el motivo que devolvió el servidor. Sin motivo (no debería pasar) cae al fallo genérico.
+    case "no_anulable":
+      return resultado.motivo === undefined
+        ? ANULAR_DOCUMENTO_CAJA_RESPUESTA.fallo
+        : ANULAR_DOCUMENTO_CAJA_RESPUESTA.noAnulable(resultado.motivo);
     case "no_encontrado":
       return ANULAR_DOCUMENTO_CAJA_RESPUESTA.noEncontrado;
     case "forbidden":
@@ -142,7 +163,7 @@ export function DocumentoCajaAcciones({ movimiento, onAnulado }: DocumentoCajaAc
     setError(undefined);
     setAviso(null);
 
-    let resultado: { status: string; fieldErrors?: Record<string, string[]> };
+    let resultado: ResultadoAnulacion;
     try {
       resultado = await ACCIONES[documento.tipo].anular(documentoId as string, motivoLimpio);
     } catch {
@@ -167,7 +188,7 @@ export function DocumentoCajaAcciones({ movimiento, onAnulado }: DocumentoCajaAc
       setAviso(delCampo ? null : ANULAR_DOCUMENTO_CAJA_RESPUESTA.validacion);
       return;
     }
-    setAviso(avisoDeAnulacion(resultado.status));
+    setAviso(avisoDeAnulacion(resultado));
   }
 
   async function verComprobante() {

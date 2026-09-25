@@ -24,6 +24,7 @@ import {
   CATEGORIA_LABEL,
   DUENO_LABEL,
   ORIGEN_LABEL,
+  REVERSA_EGRESO_ACCION,
   TIPO_LABEL,
   esEgresoAdministrativo,
   money,
@@ -39,6 +40,33 @@ import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 // el cron). La reversa se confirma con un `Modal` y dispara la Server Action
 // `reversarEgresoAdministrativoAction`; el backend crea el `ingreso_ajuste` compensatorio
 // (append-only, idempotente) — la UI solo dispara y refresca. No hay editar/borrar (R14).
+//
+// Ficha 461 — auditoría de la wallet P3 (`progress/auditoria_wallet.md`): «Reversar» seguía
+// ofreciéndose sobre un egreso YA reversado, y el segundo clic solo podía responder «ya tenía su
+// reversa». Desde esta ficha la fila dice «Reversado» —como «Anulado» en los documentos— cuando el
+// libro sabe que el egreso tiene su reverso. Cómo lo sabe, y su LÍMITE declarado:
+//
+//  - por el propio libro: el reverso de un egreso es un `ingreso_ajuste` de origen `gasto` cuyo
+//    `origenId` es el egreso (lo escribe solo `WalletEgresoService.reversarEgreso`, y el índice
+//    único de la base garantiza uno por egreso). Si ese reverso está en la página que se está
+//    viendo, el original se marca;
+//  - por esta sesión: el egreso que se acaba de reversar (respuesta `ok` o `already_reversed`) se
+//    marca aunque el libro se relea con otros filtros.
+//
+// `WalletMovimientoDTO` NO trae hoy un campo que diga «este egreso ya tiene reverso», así que un
+// egreso cuyo reverso vive en OTRA página sigue ofreciendo el botón (es el comportamiento anterior,
+// y el servidor lo guarda: no hay doble asiento). Cerrar ese resto exige que el servidor lo
+// resuelva en lote, como hace con `documento`; queda anotado en `progress/impl_461_frontend.md`.
+
+/** El reverso de un egreso administrativo, tal como lo escribe el servicio de la 45 (R13/R16). */
+function esReversoDeUnEgreso(m: WalletMovimientoDTO): m is WalletMovimientoDTO & { origenId: string } {
+  return (
+    m.tipo === "ingreso" &&
+    m.categoria === "ingreso_ajuste" &&
+    m.origenTipo === "gasto" &&
+    m.origenId !== null
+  );
+}
 
 /**
  * Badge de color por tipo: ingreso (entra) vs egreso (sale).
@@ -169,6 +197,19 @@ export function WalletLedger({
 
   // Egreso administrativo elegido para reversar (abre el modal de confirmación).
   const [objetivo, setObjetivo] = useState<WalletMovimientoDTO | null>(null);
+  // P3 (461): los egresos que ESTA sesión reversó (o encontró ya reversados).
+  const [reversadosEnSesion, setReversadosEnSesion] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  // P3 (461): los egresos cuyo reverso está en la página que se está viendo.
+  const reversadosEnPagina = useMemo(
+    () => new Set(movimientos.filter(esReversoDeUnEgreso).map((m) => m.origenId)),
+    [movimientos],
+  );
+
+  function marcarReversado(id: string) {
+    setReversadosEnSesion((previos) => new Set([...previos, id]));
+  }
 
   async function confirmarReversa() {
     if (!objetivo) return;
@@ -176,6 +217,7 @@ export function WalletLedger({
 
     if (result.status === "ok") {
       toast.success("Egreso reversado. Se registró el ajuste compensatorio.");
+      marcarReversado(objetivo.id);
       setObjetivo(null);
       onReversado?.();
       router.refresh();
@@ -183,6 +225,7 @@ export function WalletLedger({
     }
     if (result.status === "already_reversed") {
       toast.info("Este egreso ya tenía su reversa.");
+      marcarReversado(objetivo.id);
       setObjetivo(null);
       onReversado?.();
       return;
@@ -288,6 +331,10 @@ export function WalletLedger({
         // salidas de los cobros reclasificados llegan con `null` y aqui no se pinta nada.
         render: (m) => {
           if (esEgresoAdministrativo(m)) {
+            // P3 (461): el egreso que ya tiene su reverso dice «Reversado», no ofrece el botón.
+            if (reversadosEnSesion.has(m.id) || reversadosEnPagina.has(m.id)) {
+              return <Badge variant="secondary">{REVERSA_EGRESO_ACCION.reversado}</Badge>;
+            }
             return (
               <Button
                 type="button"
@@ -295,7 +342,7 @@ export function WalletLedger({
                 size="sm"
                 onClick={() => setObjetivo(m)}
               >
-                Reversar
+                {REVERSA_EGRESO_ACCION.reversar}
               </Button>
             );
           }
@@ -309,7 +356,7 @@ export function WalletLedger({
         },
       },
     ],
-    [onDocumentoAnulado],
+    [onDocumentoAnulado, reversadosEnSesion, reversadosEnPagina],
   );
 
   return (
