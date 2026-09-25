@@ -297,7 +297,10 @@ describeSiHayBase("462/T1.5 — reprogramadas retenidas (Postgres real)", () => 
       const b2 = await sembrarB(e, { cierreId: cBSol, mensajeroId: mB }); // retenida
       const b3 = await sembrarB(e, { cierreId: cBApr, mensajeroId: mB }); // NO: cierre aprobado
       const b4 = await e.sembrarOrden({ estatus: "en_reparto", mensajeroId: mB, zona: "central" }); // NO: sin gestion pendiente (mutacion 4)
-      const b5 = await sembrarB(e, { cierreId: cBEnt, mensajeroId: mB, resultado: "entregado", fecha: null }); // NO: entregado (mutacion 3)
+      // NO: entregado (mutacion 3). ⚠️ CON fecha de HOY a proposito: medido el 2026-09-25, con `fecha:
+      // null` la mutacion «quitar `resultado = 'reprogramado'`» SOBREVIVIA porque el filtro de fecha la
+      // tapaba (NULL <= hoy es NULL). Solo con una fecha valida este caso mide la condicion de resultado.
+      const b5 = await sembrarB(e, { cierreId: cBEnt, mensajeroId: mB, resultado: "entregado", fecha: HOY });
       const b6 = await sembrarB(e, { cierreId: cBFut, mensajeroId: mB, fecha: MANANA }); // NO: futura (mutacion 1)
       const b7 = await sembrarB(e, { cierreId: cBAnu, mensajeroId: mB, anulada: true }); // NO: anulada
       const b8 = await sembrarB(e, { cierreId: cBLeg, mensajeroId: mB, conEvento: false }); // NO: legada (sin evento) -> no pendiente (R4)
