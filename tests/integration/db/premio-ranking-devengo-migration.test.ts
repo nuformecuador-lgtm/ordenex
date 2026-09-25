@@ -93,7 +93,9 @@ describe("T1.5 — los dos SEED tipados ganan su valor y conservan los previos",
 
   it("`ranking_snapshot_fila` entra en los origenes, sin perder los 7 previos", () => {
     expect(WALLET_ORIGEN_TIPO_SEED).toContain("ranking_snapshot_fila");
-    expect(WALLET_ORIGEN_TIPO_SEED).toHaveLength(8);
+    // 8 al cerrar la 293; la 459 anadio DESPUES tres origenes (sus documentos y el reclasificado).
+    const AGREGADOS_459 = ["pago_por_cuenta_tienda", "aporte_capital", "cobro_manual_reclasificado"];
+    expect(WALLET_ORIGEN_TIPO_SEED.filter((v) => !AGREGADOS_459.includes(v))).toHaveLength(8);
     for (const previo of [
       "cierre_dia",
       "gestion_orden",

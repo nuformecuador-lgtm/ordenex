@@ -336,7 +336,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.7 (a) — los enums de la base SON el
     expect(tipos.indexOf("cierre_dia_gestion_corregida")).toBe(tipos.indexOf(TIPO_NUEVO) + 1);
     const entidades = await valoresDeEnum(admin, "public", "historial_accion_entidad");
     expect(entidades.indexOf(ENTIDAD_NUEVA)).toBeGreaterThan(entidades.indexOf("distrito"));
-    expect(entidades.at(-1)).toBe(ENTIDAD_NUEVA);
+    // ⏳ 2026-09-25 (ficha 459): ya no es la ultima; se afirma la posicion RELATIVA, como con los tipos.
+    expect(entidades.indexOf("pago_por_cuenta_tienda")).toBe(entidades.indexOf(ENTIDAD_NUEVA) + 1);
   });
 });
 
@@ -397,6 +398,13 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.7 (b) — el down recrea 50 tipos y 2
       // `historial-accion-conciliacion-bodega-migration.test.ts`.
       "cierre_bodega_conciliado",
       "cierre_bodega_conciliacion_revertida",
+      // ficha 459 (2026-09-25): el pago por cuenta de una tienda y el saldo inicial o aporte de
+      // capital, registrar y anular cada uno (la guardia del censo mide por metodo). Su archivo:
+      // `caja-459-migration.test.ts`.
+      "pago_por_cuenta_tienda_registrado",
+      "pago_por_cuenta_tienda_anulado",
+      "aporte_capital_registrado",
+      "aporte_capital_anulado",
     ];
     expect([...tiposAntes].sort()).toEqual(
       [...HISTORIAL_ACCION_TIPOS]
@@ -404,7 +412,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.7 (b) — el down recrea 50 tipos y 2
         .sort(),
     );
     expect([...entidadesAntes].sort()).toEqual(
-      [...HISTORIAL_ACCION_ENTIDADES].filter((e) => e !== ENTIDAD_NUEVA).sort(),
+      [...HISTORIAL_ACCION_ENTIDADES]
+        // ficha 459: las dos entidades de sus documentos, apendidas despues.
+        .filter((e) => e !== ENTIDAD_NUEVA && !["pago_por_cuenta_tienda", "aporte_capital"].includes(e))
+        .sort(),
     );
   });
 

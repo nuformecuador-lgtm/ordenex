@@ -456,7 +456,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.6 (a) — el enum de la base ES el ca
   it("el valor nuevo va AL FINAL: `ADD VALUE` sin BEFORE/AFTER apende", async () => {
     // Es de donde saldra la lista previa del `down.sql` de la SIGUIENTE ficha que amplie el enum.
     const enLaBase = await valoresDeEnum(admin, "public", TIPO_ENUM);
-    expect(enLaBase.at(-1)).toBe(VALOR_NUEVO);
+    // ⏳ 2026-09-25 (ficha 459): ya no es el ultimo; se afirma la posicion RELATIVA —«`ADD VALUE`
+    // apende»—: el siguiente es el primero de la 459.
+    expect(enLaBase.indexOf("pago_por_cuenta")).toBe(enLaBase.indexOf(VALOR_NUEVO) + 1);
     expect(enLaBase.indexOf(VALOR_NUEVO)).toBeGreaterThan(enLaBase.indexOf("ajuste_debito"));
   });
 
@@ -536,7 +538,12 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.6 (b)(c) — el ciclo up/down, medido
   });
 
   it("⭑ el estado previo reconstruido ES el catalogo de HOY menos el valor nuevo", () => {
-    const sinElNuevo = WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.filter((c) => c !== VALOR_NUEVO);
+    // ⚠️ Cada ficha que amplie el enum despues de esta entra aqui. 459: `pago_por_cuenta`,
+    // `pago_por_cuenta_anulado` (`caja-459-migration.test.ts`).
+    const POSTERIORES = ["pago_por_cuenta", "pago_por_cuenta_anulado"];
+    const sinElNuevo = WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.filter(
+      (c) => c !== VALOR_NUEVO && !POSTERIORES.includes(c),
+    );
     expect([...enumAntes].sort()).toEqual([...sinElNuevo].sort());
   });
 
