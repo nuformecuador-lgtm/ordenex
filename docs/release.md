@@ -461,6 +461,28 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 > vacía al ejecutarla. Si esta sección tiene entradas, **la release no está terminada** aunque el
 > despliegue esté verde.
 
+### De la 461 — `pnpm run db:rollback` revierte siempre el ÚLTIMO directorio (herramienta; no bloquea)
+
+> Hallazgo H4 de `progress/review_461.md` (2026-09-25). Es una limitación PREVIA de
+> `scripts/db-rollback.ts` (viene de la ficha 53), no de la 461, y **aquí no se arregla**: se deja
+> escrito para que, si una release hay que deshacerla, nadie cuente con un rollback en cadena que no
+> existe. Aplica a cualquier ficha que traiga más de una migración.
+
+- **Qué hace el script.** `getLastMigrationDir()` lista `db/migrations/`, ordena por nombre y toma el
+  **último directorio**; ejecuta su `down.sql` y borra su fila de `_prisma_migrations`. No mira qué
+  migración está APLICADA en la base ni acepta un nombre por argumento.
+- **Consecuencia, medida por el reviewer en un clon con las seis de la 461 aplicadas.** Seis
+  invocaciones seguidas revirtieron **seis veces la misma** (`20260926120500_wallet_461_fechas_cr_pagos`,
+  `ROLLBACK_1..6_EXIT=0`) y dejaron intactas la 1 a la 5. Como los `down` de la 461 son idempotentes,
+  encima sale «verde»: el modo de fallo mudo que este repo persigue.
+- **Cómo deshacer VARIAS.** A mano, una por una y en orden inverso al de aplicación, con su `down.sql`:
+  `pnpm exec prisma db execute --file db/migrations/<nombre>/down.sql` y después
+  `DELETE FROM "_prisma_migrations" WHERE migration_name = '<nombre>'`; repetir con la anterior. Para la
+  461 son seis, de la `…120500` a la `…120000`; los `down` de la 1, la 2 y la 5 **abortan sin borrar** si
+  hay filas que usen lo suyo (R62), y eso es lo esperado, no un fallo del rollback.
+- **Deuda para quien la tome (fuera de la 461).** Que el script elija la última migración **aplicada**
+  (`_prisma_migrations`) o acepte el nombre por argumento.
+
 ### De la 459 — la caja con el dinero real (DINERO: bloqueante)
 
 1. **Antes de desplegar:** crear el bucket PRIVADO `wallet-comprobantes` en preview y en producción (hoy no
