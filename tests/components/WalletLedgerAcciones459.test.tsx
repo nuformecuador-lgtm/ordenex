@@ -57,6 +57,7 @@ import {
   COLUMNAS_DESCARGA_WALLET_CAJA,
   filaDescargaMovimientoCaja,
 } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+import { CATEGORIA_OPTIONS } from "@/app/(app)/wallet/_components/wallet-labels";
 
 const PAGO_ID = "0b6c1f7e-7a44-4b43-9c1a-5e0f2d9a1c11";
 const APORTE_ID = "9f2e3d4c-1b2a-4c3d-8e9f-0a1b2c3d4e5f";
@@ -313,6 +314,91 @@ describe("FICHA 459 — el cobro reclasificado en el libro y en su descarga (T C
     expect(f.categoria).toBe("Pago por cuenta de una tienda");
     expect(f.dueno).toBe("Tienda");
     expect(Object.keys(f).sort()).toEqual(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave).sort());
+  });
+});
+
+// ── Revisión B1 (R45/R77, design §5) ─────────────────────────────────────────────────────────
+//
+// El revisor cambió el dueño «Ordenex (capital)», el origen «Saldo inicial o aporte» y el origen
+// «Pago por cuenta de tienda» en `wallet-labels.ts` y la suite siguió verde (M-R5, M-R6). Aquí se
+// afirman LITERALES —escritos a mano, nunca leídos de `DUENO_LABEL`/`ORIGEN_LABEL`, que sería
+// comparar un texto contra su propia fuente—, en la TABLA y en la DESCARGA.
+
+/** El contra-asiento de un saldo inicial anulado: dueño capital, sin documento. */
+const REVERSO_APORTE = fila({
+  id: "m-aporte-reverso",
+  tipo: "egreso",
+  categoria: "egreso_reverso_aporte_capital",
+  origenTipo: "aporte_capital",
+  origenId: APORTE_ID,
+  monto: "2500000.50",
+  dueno: "capital",
+  fechaMovimiento: "2026-08-26T15:00:00.000Z",
+  descripcion: "Anulación · Saldo inicial · Arranque",
+});
+
+/** Lo que tiene que leerse en cada fila: concepto, origen legible y dueño (design §5). */
+const ESPERADO: ReadonlyArray<{
+  caso: string;
+  movimiento: WalletMovimientoDTO;
+  concepto: string;
+  origen: string;
+  dueno: string;
+}> = [
+  {
+    caso: "saldo inicial",
+    movimiento: SALDO_INICIAL,
+    concepto: "Saldo inicial o aporte de capital",
+    origen: "Saldo inicial o aporte · Saldo inicial · Arranque",
+    dueno: "Ordenex (capital)",
+  },
+  {
+    caso: "anulación del saldo inicial",
+    movimiento: REVERSO_APORTE,
+    concepto: "Saldo inicial o aporte anulado",
+    origen: "Saldo inicial o aporte · Anulación · Saldo inicial · Arranque",
+    dueno: "Ordenex (capital)",
+  },
+  {
+    caso: "pago por cuenta",
+    movimiento: PAGO_VIGENTE,
+    concepto: "Pago por cuenta de una tienda",
+    origen: "Pago por cuenta de tienda · Tienda Norte · A Facebook · Pauta · SINPE · REF-1",
+    dueno: "Tienda",
+  },
+  {
+    caso: "anulación del pago por cuenta",
+    movimiento: CONTRA_ASIENTO,
+    concepto: "Pago por cuenta anulado",
+    origen: "Pago por cuenta de tienda · Anulación · Tienda Sur · A Jet Cargo · Envío · Efectivo",
+    dueno: "Tienda",
+  },
+];
+
+describe("FICHA 459 — concepto, origen y dueño del capital y del pago por cuenta (R45/R77, revisión B1)", () => {
+  it.each(ESPERADO)("tabla — $caso: «$concepto» · «$origen» · «$dueno»", (e) => {
+    render(<WalletLedger movimientos={[e.movimiento]} />);
+    const f = screen.getAllByRole("row")[1];
+    expect(within(f).getByText(e.concepto)).toBeInTheDocument();
+    expect(within(f).getByText(e.origen)).toBeInTheDocument();
+    expect(within(f).getByText(e.dueno)).toBeInTheDocument();
+    // Ningún valor crudo del enum se asoma en la fila.
+    expect(f.textContent ?? "").not.toMatch(/[a-z]+_[a-z_]+/);
+  });
+
+  it.each(ESPERADO)("descarga — $caso: las mismas tres palabras que la tabla", (e) => {
+    const d = filaDescargaMovimientoCaja(e.movimiento);
+    expect(d.categoria).toBe(e.concepto);
+    expect(d.origen).toBe(e.origen);
+    expect(d.dueno).toBe(e.dueno);
+  });
+
+  it("el filtro por concepto del libro ofrece los cuatro conceptos nuevos con su nombre", () => {
+    const opciones = new Map(CATEGORIA_OPTIONS.map((o) => [o.value, o.label]));
+    expect(opciones.get("egreso_pago_por_cuenta_tienda")).toBe("Pago por cuenta de una tienda");
+    expect(opciones.get("ingreso_reverso_pago_por_cuenta_tienda")).toBe("Pago por cuenta anulado");
+    expect(opciones.get("ingreso_aporte_capital")).toBe("Saldo inicial o aporte de capital");
+    expect(opciones.get("egreso_reverso_aporte_capital")).toBe("Saldo inicial o aporte anulado");
   });
 });
 
