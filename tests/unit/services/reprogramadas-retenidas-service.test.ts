@@ -293,6 +293,11 @@ describe("462/R6/R44 — el ambito: por el destino PERSISTIDO del cierre; sin ci
     // Y no toco el original.
     expect(resumen.total).toBe(7);
     expect(resumen.cierres).toHaveLength(2);
+    // 462/H4 — `porForma` es GLOBAL por contrato tambien en el recorte: es el insumo de R3 (contra el
+    // `esperandoCierre` del reloj, que no tiene ambito) y ninguna superficie lo muestra.
+    expect(central.porForma).toEqual({ reprogramado: 4, enReparto: 3 });
+    expect(sat.porForma).toEqual(resumen.porForma);
+    expect(otra.porForma).toEqual(resumen.porForma);
   });
 
   it("con la zona central desconocida (`null`), las sin cierre caen a su propia zona (fallback seguro de `resolverDestinoCierre`)", async () => {

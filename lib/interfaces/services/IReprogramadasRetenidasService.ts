@@ -55,7 +55,14 @@ export interface ResumenRetenidas {
   diaCR: string;
   /** Todas las retenidas del sistema (las dos formas, todos los ambitos). */
   total: number;
-  /** Cuantas de cada forma. Es lo que R3 compara con el `esperandoCierre` del reloj. */
+  /**
+   * Cuantas de cada forma, DEL SISTEMA ENTERO. Es lo que R3 compara con el `esperandoCierre` del
+   * reloj, que tampoco tiene ambito. ⚠️ 462/H4: `recortarPorAmbito` NO lo recorta —lo copia tal
+   * cual—, asi que en un resumen recortado `porForma.reprogramado + porForma.enReparto` es el
+   * `total` GLOBAL, no el del recorte. Ninguna superficie lo muestra (la franja lee `total`,
+   * `cierres` y `sinCierre`); recortarlo exigiria llevar la forma por cierre en el DTO, un cambio de
+   * contrato para un numero que nadie pinta. Documentado y medido en el test del helper.
+   */
   porForma: { reprogramado: number; enReparto: number };
   /** Orden: mas retenidas primero, luego jornada ascendente (las sin jornada al final), luego mensajero. */
   cierres: CierreQueRetiene[];
@@ -88,7 +95,8 @@ export function mismoAmbito(a: AmbitoRetenidas, b: AmbitoRetenidas): boolean {
 /**
  * Helper PURO: recorta un resumen a un ambito. Lo usan la franja de `/ordenes` (solo el central) y
  * los tests (R7: `contar(a)` tiene que dar este `total`). El `total` del recorte es la suma de lo que
- * queda: nunca el total global, que es el numero de OTRA bodega (R6/R44).
+ * queda: nunca el total global, que es el numero de OTRA bodega (R6/R44). `porForma` se copia SIN
+ * recortar (462/H4, ver el tipo): es un dato global de diagnostico, no una cifra del ambito.
  */
 export function recortarPorAmbito(r: ResumenRetenidas, ambito: AmbitoRetenidas): ResumenRetenidas {
   const cierres = r.cierres.filter((c) => mismoAmbito(c.ambito, ambito));
