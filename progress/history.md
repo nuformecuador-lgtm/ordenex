@@ -5602,3 +5602,6 @@ casos hubieran corrido antes. Y el tope comprobado *después* de llamar al prove
 
 **NO se desplegó.** `ANTHROPIC_API_KEY` está en `.env` y probada con una llamada real, pero **no en
 Vercel**: T25, T26 y T27 quedan sin marcar a propósito, que es la señal de que falta.
+
+## 2026-09-25 — 462: aviso de reprogramados que esperan la aprobación de un cierre
+Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y franja en /ordenes desde un conteo único de solo lectura. Causa medida en prod el 24/09: la regla 276 retiene la reprogramada hasta aprobar su cierre (no hay 24 h). PR #825.

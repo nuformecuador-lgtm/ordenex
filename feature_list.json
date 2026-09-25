@@ -5518,11 +5518,11 @@
       "title": "aviso a primera hora: reprogramadas de hoy que esperan la aprobacion de un cierre",
       "description": "La oficina ve cuantas reprogramadas de hoy siguen retenidas porque el cierre de su mensajero no se ha aprobado, con enlace directo a ese cierre.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "media",
       "depends_on": null,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-25. Causa medida en prod (24/09): la regla 276 retiene la reprogramada hasta aprobar el cierre de su gestion; la guia 46397476 espero ~20 h (fecha cambiada a hoy a las 11:45, cierre aprobado al dia siguiente 07:32). NO se cambia la regla (riesgo de intento de mas y cobro por tope). El aviso reutiliza el conteo esperandoCierre de LiberacionReprogramadaService (~:246-252) y el sistema de avisos existente. Entra en la release completa. || CONFIRMADO POR EL HUMANO el 2026-09-25: el aviso sale a las 07:00 CR y la notificacion al celular NO va al maestro (admin y adminSatelite).",
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-25. Causa medida en prod (24/09): la regla 276 retiene la reprogramada hasta aprobar el cierre de su gestion; la guia 46397476 espero ~20 h (fecha cambiada a hoy a las 11:45, cierre aprobado al dia siguiente 07:32). NO se cambia la regla (riesgo de intento de mas y cobro por tope). El aviso reutiliza el conteo esperandoCierre de LiberacionReprogramadaService (~:246-252) y el sistema de avisos existente. Entra en la release completa. || CONFIRMADO POR EL HUMANO el 2026-09-25: el aviso sale a las 07:00 CR y la notificacion al celular NO va al maestro (admin y adminSatelite). || HECHA 2026-09-25, en dev por PR #825. NO desplegada: entra en la release completa. Revision APROBADA; campana optimizada a 7 consultas. Pendiente de release: medir con scripts/medir-462-retenidas.sql (T5.1) y comprobar el push con VAPID en la primera corrida de las 07:00 (H6).",
       "branch": "feature/462-aviso-reprogramadas"
     }
   ]
