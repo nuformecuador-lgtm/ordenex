@@ -5495,11 +5495,11 @@
       "title": "la ayuda y el asistente al dia con la 454, la 456 y la 459",
       "description": "Actualizar docs/ayuda (que tambien alimenta al asistente) con el estado al aprobar el cierre, el boton de informacion y la caja nueva.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "media",
       "depends_on": 459,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-24. Arranca cuando la 459 este en dev. Una sola pasada por oficina, tienda, mensajero y satelite: 454 (nota «pendiente de confirmacion», el estado se aplica al aprobar el cierre, la ayuda es un aviso), 456 (boton de informacion), 459 (Flujo de dinero registrado vs Dinero en caja, Pago por cuenta de una tienda vs Cobrar un costo, saldo inicial/aporte, anulacion con motivo, comprobante). Verificar al asistente con preguntas reales. La 457 y la 458 actualizan su parte de la ayuda dentro de su propia ficha."
+      "status_note": "HECHA 2026-09-25, en dev por PR #823. NO desplegada: sale con SF-001, 454-456 y 459. 15 paginas de docs/ayuda; test de contexto por rol (23 casos); 4 preguntas reales al asistente, correctas (progress/impl_460.md)."
     }
   ]
 }
