@@ -1,0 +1,1033 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Guía de integración — API de Ordenex</title>
+<meta name="author" content="Ordenex">
+<meta name="description" content="Documentación técnica de integración del canal por API key de Ordenex. Versión del documento: septiembre 2026.">
+<!--
+  FUENTE EDITABLE de la guía de integración (canal por API key).
+  El PDF se genera desde este archivo con Chrome/Edge headless: ver README.md y generar-pdf.py
+  en esta misma carpeta. No edites el PDF: edita esto y regenera.
+
+  Convenciones del documento:
+   - Códigos de estado y de resultado: SIEMPRE los vigentes (lib/types/order-status.ts). Los
+     códigos anteriores al cambio de nombres solo aparecen en la sección «Cambios respecto de la
+     versión de agosto 2026», en su tabla viejo → nuevo.
+   - Los ejemplos JSON son válidos (se validan al generar el PDF) y coinciden con lo que devuelve
+     el código: lib/api/openapi-spec.ts y los route handlers de app/api/ordenes/api-key/**.
+   - Valores, guías, UUID y claves son ilustrativos.
+-->
+<style>
+  :root {
+    --navy: #0f2b46;
+    --navy-2: #14395c;
+    --slate: #3d566e;
+    --muted: #4a6076;
+    --foot: #7a8c9c;
+    --ink: #1a1a1a;
+    --accent: #d8a13a;
+    --callout-bg: #fdf6e6;
+    --callout-ink: #5c4415;
+    --code-bg: #f1f3f6;
+    --code-ink: #17364f;
+    --zebra: #f6f8fa;
+    --line: #dfe3e8;
+    --line-2: #d7dce2;
+  }
+  @page {
+    size: A4;
+    margin: 17mm 16mm 20mm 16mm;
+    @bottom-left { content: "Guía de integración — API de Ordenex"; font: 8pt "Segoe UI", "DejaVu Sans", Arial, sans-serif; color: #7a8c9c; }
+    @bottom-right { content: counter(page) " / " counter(pages); font: 8pt "Segoe UI", "DejaVu Sans", Arial, sans-serif; color: #7a8c9c; }
+  }
+  @page :first {
+    @bottom-left { content: none; }
+    @bottom-right { content: none; }
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 9.6pt; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Segoe UI", "DejaVu Sans", Arial, Helvetica, sans-serif;
+    line-height: 1.42;
+    background: #fff;
+  }
+  @media screen {
+    body { max-width: 210mm; margin: 0 auto; padding: 16mm 12mm; }
+  }
+  h1, h2, h3, h4 { color: var(--navy); margin: 0; page-break-after: avoid; break-after: avoid; }
+  h1 { font-size: 15.5pt; margin: 18pt 0 8pt; padding-bottom: 4pt; border-bottom: 1.5pt solid var(--accent); }
+  h2 { font-size: 12pt; margin: 14pt 0 6pt; color: var(--navy-2); }
+  h3 { font-size: 10.4pt; margin: 11pt 0 4pt; color: var(--navy-2); }
+  p { margin: 0 0 6pt; }
+  ul, ol { margin: 0 0 6pt 0; padding-left: 18pt; }
+  li { margin: 0 0 2.5pt; }
+  strong { color: var(--navy); }
+  a { color: var(--navy-2); text-decoration: none; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 10pt 0; }
+  code, pre, .mono {
+    font-family: "Consolas", "DejaVu Sans Mono", "Cascadia Mono", Menlo, monospace;
+  }
+  code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 0 3px;
+    border-radius: 2px;
+    font-size: 8.6pt;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-left: 3px solid var(--navy-2);
+    padding: 7pt 9pt;
+    margin: 4pt 0 8pt;
+    font-size: 8.1pt;
+    line-height: 1.38;
+    white-space: pre-wrap;
+    word-break: break-word;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .k { color: #6b2d0f; }
+  .s { color: #0b5d2a; }
+  table { width: 100%; border-collapse: collapse; margin: 4pt 0 9pt; font-size: 8.9pt; break-inside: auto; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  th { background: var(--navy-2); color: #fff; text-align: left; font-weight: 600; padding: 4.5pt 6pt; border: 1px solid var(--navy-2); }
+  td { padding: 4pt 6pt; border: 1px solid var(--line); vertical-align: top; }
+  tbody tr:nth-child(even) td { background: var(--zebra); }
+  td code, th code { white-space: nowrap; }
+  .warn {
+    background: var(--callout-bg);
+    color: var(--callout-ink);
+    border: 1px solid #efd9a8;
+    border-left: 3px solid var(--accent);
+    padding: 6pt 9pt;
+    margin: 6pt 0 8pt;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .warn strong { color: var(--callout-ink); }
+  .warn code { background: #f7ead0; color: #5c4415; }
+  .w { color: #9a6b12; font-weight: 700; }
+  .note {
+    border: 1px solid var(--line);
+    background: #f7f8fa;
+    padding: 6pt 9pt;
+    margin: 6pt 0 8pt;
+    break-inside: avoid;
+  }
+  .badge {
+    display: inline-block;
+    font-family: "Consolas", "DejaVu Sans Mono", monospace;
+    font-size: 8pt;
+    font-weight: 700;
+    color: #fff;
+    background: var(--navy-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .badge.get { background: #1f6f43; }
+  .badge.post { background: #1d4f8c; }
+  .badge.put { background: #8a5a12; }
+  .badge.delete { background: #8c2d2d; }
+  .ep { font-family: "Consolas", "DejaVu Sans Mono", monospace; font-size: 9.4pt; color: var(--navy); }
+  .ep-title { font-weight: 400; color: var(--muted); }
+  .meta { color: var(--muted); font-size: 8.6pt; }
+  .pb { break-before: page; page-break-before: always; }
+  .keep { break-inside: avoid; page-break-inside: avoid; }
+  .two { columns: 2; column-gap: 18pt; }
+  .small { font-size: 8.4pt; }
+  .tight td, .tight th { padding: 3pt 5pt; }
+  .ok { color: #1f6f43; font-weight: 600; }
+  .no { color: #8c2d2d; font-weight: 600; }
+  /* Portada */
+  .cover { height: 245mm; position: relative; }
+  .cover .block { position: absolute; top: 58mm; left: 0; border-left: 4px solid var(--accent); padding-left: 14pt; }
+  .cover .kicker { font-size: 8pt; letter-spacing: 2.2px; color: var(--muted); text-transform: uppercase; margin-bottom: 8pt; }
+  .cover .title { font-size: 26pt; font-weight: 700; color: var(--navy); line-height: 1.15; margin-bottom: 8pt; }
+  .cover .sub { font-size: 11pt; color: var(--slate); margin: 2pt 0; }
+  .cover .meta { margin-top: 18pt; font-size: 8.6pt; color: var(--foot); line-height: 1.6; }
+  /* Índice */
+  .toc { list-style: none; padding: 0; margin: 6pt 0 0; }
+  .toc li { margin: 0 0 3pt; }
+  .toc li.l2 { padding-left: 16pt; font-size: 9pt; color: var(--slate); }
+  .toc li.l1 { font-weight: 600; margin-top: 5pt; color: var(--navy); }
+  .toc .ep { font-size: 8.6pt; }
+  .chg h2 { margin-top: 12pt; }
+  .chg .tag { display: inline-block; font-size: 7.6pt; font-weight: 700; letter-spacing: .6px; padding: 1px 6px; border-radius: 3px; color: #fff; background: #8c2d2d; margin-right: 6px; vertical-align: middle; }
+  .chg .tag.add { background: #1f6f43; }
+  .chg .tag.done { background: #3d566e; }
+  .check td:first-child { width: 22pt; text-align: center; font-size: 11pt; color: var(--slate); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ PORTADA -->
+<section class="cover">
+  <div class="block">
+    <div class="kicker">Documentación técnica</div>
+    <div class="title">Guía de integración<br>API de Ordenex</div>
+    <div class="sub">Logística de última milla — Costa Rica</div>
+    <div class="sub">Para desarrolladores backend del comercio integrador</div>
+    <div class="meta">
+      Versión del documento: septiembre 2026<br>
+      Base URL de producción: https://ordenex.co
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ CONTENIDO -->
+<section class="pb">
+  <h1>Contenido</h1>
+  <ul class="toc">
+    <li class="l1">Cambios respecto de la versión de agosto 2026</li>
+    <li class="l2">Qué se rompe y desde cuándo · Tabla de códigos viejo → nuevo · Eventos nuevos · Qué tiene que cambiar el integrador · Cambios ya vigentes desde agosto</li>
+    <li class="l1">1. Qué resuelve esta API y qué NO</li>
+    <li class="l2">Qué resuelve · Qué NO resuelve</li>
+    <li class="l1">2. Requisitos previos</li>
+    <li class="l1">3. La API key</li>
+    <li class="l2">3.1 Obtención · 3.2 Uso · 3.3 Alcance · 3.4 Rotación · 3.5 Revocación · 3.6 Custodia</li>
+    <li class="l1">4. Convenciones</li>
+    <li class="l2">4.1 Base URL · 4.2 Headers · 4.3 Formato uniforme de error · 4.4 401 vs 403 · 4.5 Fechas y horas · 4.6 Paginación · 4.7 Catálogo de estados (respuestas REST)</li>
+    <li class="l1">5. Endpoints</li>
+    <li class="l2">5.1 <span class="ep">POST /api/ordenes/api-key/carga</span> — Crear órdenes (lote de 1 a 5000)</li>
+    <li class="l2">5.2 <span class="ep">POST /api/ordenes/api-key/cotizacion</span> — Cotizar un lote (no crea nada)</li>
+    <li class="l2">5.3 <span class="ep">GET /api/ordenes/api-key</span> — Listado paginado de órdenes propias</li>
+    <li class="l2">5.4 <span class="ep">GET /api/ordenes/api-key/orden/{id}</span> — Detalle de una orden (por guía o remisión)</li>
+    <li class="l2">5.5 <span class="ep">POST /api/ordenes/api-key/orden/{id}/generate</span> — PDF de etiqueta de una orden</li>
+    <li class="l2">5.6 <span class="ep">POST /api/ordenes/api-key/carga/{cargaId}/generate</span> — PDF consolidado del lote</li>
+    <li class="l2">5.7 <span class="ep">DELETE /api/ordenes/api-key/orden/{id}</span> — Eliminar una orden propia</li>
+    <li class="l2">5.8 <span class="ep">GET /api/ordenes/api-key/analitica</span> — Estadísticas de gestión</li>
+    <li class="l2">5.9 <span class="ep">PUT /api/ordenes/api-key/{numGuia}/cancelar</span> — Cancelar una orden en bodega</li>
+    <li class="l2">5.10 <span class="ep">POST /api/ordenes/api-key/habilitar</span> — Habilitar pedidos con novedad (lote)</li>
+    <li class="l1">6. Webhooks salientes: <span class="ep">orden.estado_actualizado</span> y los eventos de orden</li>
+    <li class="l2">6.1 Alta de la suscripción · 6.2 Cuerpo del evento · 6.3 Autenticación de la entrega · 6.4 Idempotencia y confirmación · 6.5 Estados que este webhook puede emitir · 6.6 <code>motivo</code> depende de <code>estado</code> · 6.7 Eventos de gestión y de ayuda</li>
+    <li class="l1">7. Checklist de puesta en producción</li>
+    <li class="l1">8. Errores frecuentes y cómo diagnosticarlos</li>
+    <li class="l2">8.1 Por código · 8.2 Síntomas sin error visible</li>
+  </ul>
+</section>
+
+<!-- ============================================================ INTRO -->
+<section class="pb">
+  <h1>Guía de integración — API de Ordenex</h1>
+  <p><strong>Logística de última milla en Costa Rica.</strong> Documento técnico para desarrolladores backend del comercio integrador.</p>
+  <div class="warn">Todos los importes, números de guía, UUID y ejemplos de este documento son <strong>ilustrativos</strong>. Ninguna clave mostrada es real: siempre se usan placeholders del tipo <code>ordx_XXXXXXXXXXXX</code>. El contrato completo y ejecutable vive en el OpenAPI del canal (<code>docs/api/api-key-openapi.yaml</code>) y los cambios se anuncian en su changelog (<code>docs/api/CHANGELOG.md</code>).</div>
+
+  <!-- ============================================================ CAMBIOS -->
+  <div class="chg">
+  <h1>Cambios respecto de la versión de agosto 2026</h1>
+  <p>Esta versión describe el canal tal como queda tras dos cambios de contrato que <strong>rompen</strong> integraciones existentes (bloques A y B, pendientes de despliegue) y recoge además los cambios que entraron en producción entre agosto y septiembre (bloque C). Lea primero el bloque A: es el que exige tocar código.</p>
+
+  <h2><span class="tag">RUPTURA</span>A. Los estados cambian de código y ganan su nombre</h2>
+  <p><strong>Desde cuándo.</strong> Fecha de despliegue <strong>pendiente</strong>: Ordenex la avisará con antelación y la escribirá en el changelog del canal (entrada del 2026-09-24). Hasta ese día el canal sigue respondiendo con los códigos anteriores. Este cambio y el del bloque B se despliegan <strong>juntos</strong>.</p>
+  <p><strong>Qué se rompe.</strong> Cada estado de una orden pasa a llamarse igual en todas partes (aplicación, rastreo público y este canal). Siete estados cambian de <strong>código</strong>; los cuatro resultados de gestión que compartían nombre con ellos cambian con ellos; y toda respuesta que lleva un código lleva ahora, <strong>al lado</strong>, su nombre visible.</p>
+
+  <h3>A.1 Los siete códigos de estado que cambian (el resto no cambia)</h3>
+  <table>
+    <thead><tr><th>Código anterior (agosto 2026)</th><th>Código vigente</th><th>Nombre visible (<code>estadoNombre</code>)</th></tr></thead>
+    <tbody>
+      <tr><td><code>entregada</code></td><td><code>entregado</code></td><td>Entregado</td></tr>
+      <tr><td><code>devuelta</code></td><td><code>novedad</code></td><td>Novedad</td></tr>
+      <tr><td><code>reprogramada</code></td><td><code>reprogramado</code></td><td>Reprogramado</td></tr>
+      <tr><td><code>por_recoger</code></td><td><code>mensajero_recogiendo_en_bodega</code></td><td>Mensajero recogiendo en la bodega</td></tr>
+      <tr><td><code>rechazada</code></td><td><code>devolucion_a_origen_por_rechazo</code></td><td>Devolución a origen por rechazo</td></tr>
+      <tr><td><code>sin_gestionar</code></td><td><code>novedad_interna</code></td><td>Novedad interna</td></tr>
+      <tr><td><code>por_devolver</code></td><td><code>por_devolver_a_bodega_central</code></td><td>Por devolver a bodega central</td></tr>
+    </tbody>
+  </table>
+
+  <h3>A.2 Los resultados de gestión se llaman como su estado destino</h3>
+  <p>Aplica a <code>gestiones[].resultado</code>, <code>evidencias[].resultado</code> y a <code>data.resultado</code> / <code>data.resultadoAnterior</code> de los eventos de gestión (§6.7). <code>incidente</code> no cambia.</p>
+  <table class="tight">
+    <thead><tr><th>Resultado anterior</th><th>Resultado vigente</th><th>Nombre visible</th></tr></thead>
+    <tbody>
+      <tr><td><code>entregada</code></td><td><code>entregado</code></td><td>Entregado</td></tr>
+      <tr><td><code>reprogramada</code></td><td><code>reprogramado</code></td><td>Reprogramado</td></tr>
+      <tr><td><code>devuelta</code></td><td><code>novedad</code></td><td>Novedad</td></tr>
+      <tr><td><code>rechazada</code></td><td><code>devolucion_a_origen_por_rechazo</code></td><td>Devolución a origen por rechazo</td></tr>
+    </tbody>
+  </table>
+
+  <h3>A.3 Campos nuevos <code>…Nombre</code>, un campo renombrado y un 422 nuevo</h3>
+  <ul>
+    <li><strong>Al lado de cada código viaja su nombre visible</strong>, siempre presente (<code>null</code> cuando el código es <code>null</code>): <code>estadoNombre</code> en el listado, el detalle, la carga (<code>ordenes[]</code> y <code>filas[]</code>), la cancelación (<code>estadoAnteriorNombre</code> y <code>estadoNombre</code>), la eliminación y la habilitación; <code>resultadoNombre</code> y <code>estadoResultanteNombre</code> en <code>gestiones[]</code>; <code>resultadoNombre</code> en <code>evidencias[]</code>; <code>data.estadoNombre</code> en <code>orden.estado_actualizado</code>, <strong>inmediatamente detrás de <code>data.estado</code></strong>; <code>data.resultadoNombre</code> (y <code>data.resultadoAnteriorNombre</code>) en los eventos de gestión.</li>
+    <li><strong>Campo renombrado en la carga:</strong> <code>filas[].estatus</code> pasa a ser <code>filas[].estado</code>, con <code>filas[].estadoNombre</code> al lado.</li>
+    <li><strong>Filtrar el listado por un código anterior responde <code>422</code></strong>, no una página vacía. El mensaje nombra el código que lo sustituye:</li>
+  </ul>
+<pre>{
+  "status": "error",
+  "code": "VALIDATION_ERROR",
+  "message": "Los datos enviados no son validos.",
+  "details": { "fieldErrors": { "estado": [
+    "'devuelta' ya no existe: ahora se llama 'novedad' («Novedad»). Ver docs/api/CHANGELOG.md."
+  ] } }
+}</pre>
+  <ul>
+    <li>El <code>enum</code> de estados del contrato enumera los <strong>20 códigos vigentes</strong> (§4.7). La versión de agosto listaba 16 y omitía cinco que una orden ya podía alcanzar.</li>
+    <li><strong>Lo que NO cambia:</strong> los paths, la autenticación, la firma y su verificación, y el <code>eventoId</code> de <code>orden.estado_actualizado</code>: un evento encolado antes del despliegue y entregado después llega con el código vigente y el <strong>mismo</strong> <code>eventoId</code>. El texto firmado sí cambia (gana <code>estadoNombre</code>): verifique siempre sobre el cuerpo crudo (§6.3).</li>
+  </ul>
+
+  <h2><span class="tag">RUPTURA</span>B. El estado real se aplica al aprobar el cierre; la ayuda deja de ser un estado; eventos nuevos</h2>
+  <p><strong>Desde cuándo.</strong> Se despliega junto con el bloque A (fecha pendiente, con aviso previo).</p>
+  <ul>
+    <li><strong><code>orden.estado_actualizado</code> llega al APROBAR el cierre del mensajero, no al gestionar.</strong> Cuando el mensajero registra una gestión en calle, la orden <strong>sigue en <code>en_reparto</code></strong> con la gestión <em>pendiente de confirmar</em>; el estado real (<code>entregado</code>, <code>reprogramado</code>, <code>novedad</code>, <code>devolucion_a_origen_por_rechazo</code>, <code>incidente</code>) se aplica cuando se aprueba el cierre del día de ese mensajero, horas después de la visita (dato de referencia de Ordenex: mediana 8,2 h, p90 22,1 h). Si necesita enterarse en el instante del registro, consuma <code>orden.gestion_registrada</code>.</li>
+    <li><strong>Se retiran dos estados</strong> del vocabulario: <code>ayuda_tienda</code> (la solicitud de ayuda a la tienda deja de mover la orden: sigue <code>en_reparto</code> y la ayuda viaja como evento) y <code>devolucion_por_confirmar</code>, que nunca fue público. Ninguno vuelve a llegar en <code>data.estado</code> ni aparece en el catálogo (§4.7).</li>
+    <li><strong>Cinco eventos nuevos</strong>, en un cuerpo nuevo, al <strong>mismo callback</strong> y con la <strong>misma firma</strong> y el mismo circuito de reintento (§6.7): <code>orden.gestion_registrada</code>, <code>orden.gestion_anulada</code>, <code>orden.gestion_corregida</code>, <code>orden.ayuda_solicitada</code>, <code>orden.ayuda_resuelta</code>. Ramifique por <code>evento</code> y trate uno desconocido como «ignorar».</li>
+    <li><strong>Campo nuevo en el detalle:</strong> <code>gestiones[].pendienteConfirmacion</code> (§5.4). <code>true</code> mientras la gestión espera la aprobación de su cierre; entonces <code>estadoResultante</code> es <code>null</code>.</li>
+    <li><strong>Campo nuevo en la habilitación:</strong> <code>resultados[].ayudaCerrada</code> (§5.10). Habilitar una orden con ayuda abierta ya no cambia su estado (sigue <code>en_reparto</code>); la clave nueva dice que la ayuda quedó cerrada.</li>
+  </ul>
+
+  <h3 class="keep">Qué tiene que cambiar el integrador, antes del despliegue</h3>
+  <ol>
+    <li>Busque en su código los <strong>once literales anteriores</strong> (los siete estados de A.1 y los cuatro resultados de A.2) y cámbielos por los vigentes. Ojo con <code>por_devolver</code>, que es prefijo de <code>por_devolver_a_tienda</code> y de <code>por_devolver_a_bodega_central</code>.</li>
+    <li>Si mostraba el estado con una traducción propia, use el campo <code>…Nombre</code>: es la misma cadena que ve la aplicación.</li>
+    <li>Si leía <code>filas[].estatus</code> en la respuesta de la carga, lea <code>filas[].estado</code>.</li>
+    <li>Si su receptor de webhooks rechaza eventos desconocidos, actualícelo: responda <code>2xx</code> e ignore lo que no conozca. Si su lógica de negocio dependía de recibir el estado final «en el momento», suscríbase a <code>orden.gestion_registrada</code> y lea <code>pendienteConfirmacion</code>.</li>
+    <li>Si valida el esquema en estricto (<code>additionalProperties: false</code>, DTO generado), <strong>regenere su modelo</strong> contra el contrato actualizado: <code>…Nombre</code>, <code>pendienteConfirmacion</code>, <code>ayudaCerrada</code> y el schema <code>WebhookOrdenEvento</code> son nuevos.</li>
+  </ol>
+
+  <h2><span class="tag done">YA VIGENTE</span>C. Cambios que entraron en producción después de la versión de agosto</h2>
+  <p>Todos están publicados en el changelog del canal con su fecha. Los que quitan algo van marcados.</p>
+  <table class="small">
+    <thead><tr><th style="width:70pt">Fecha</th><th>Cambio</th><th style="width:44pt">Sección</th></tr></thead>
+    <tbody>
+      <tr><td>2026-08-25</td><td><strong>Rompe:</strong> desaparece el campo <code>generado</code> de las respuestas de <code>/generate</code>. Además: <code>num_remision</code> pasa a ser único <em>por tienda</em> (menos filas <code>duplicada</code>); la cotización y la carga ganan el concepto <code>fulfillment</code>; con fulfillment, las órdenes nacen en <code>en_preparacion</code> y sin guía.</td><td>§5.5, §5.6, §5.1, §5.2</td></tr>
+      <tr><td>2026-08-28</td><td><strong>Rompe:</strong> los importes de la cotización viajan crudos (<code>"2500.00"</code>, sin símbolo ni miles). Nuevo <code>DELETE /api/ordenes/api-key/orden/{id}</code>.</td><td>§5.2, §5.7</td></tr>
+      <tr><td>2026-08-31</td><td><strong>Rompe:</strong> se retira <code>GET /api/ordenes/api-key/{numGuia}</code> (use <code>/orden/{id}</code>); en carga y cotización las filas con error salen de <code>filas</code> y viajan en <code>errores</code>; la cotización pierde el bloque <code>totales</code> y cada fila gana <code>montoCobrar</code>. Aditivo: la analítica admite los tres parámetros opcionales y sin tope de 366 días; el webhook empieza a emitir <code>en_preparacion</code>.</td><td>§5.4, §5.1, §5.2, §5.8, §6.5</td></tr>
+      <tr><td>2026-09-04</td><td>La analítica publica el día en curso marcado con <code>parcial: true</code> y <code>corteAt</code>, y cada serie trae <code>cobertura</code>. Un integrador que sumaba <code>data</code> a ciegas incluye ahora un día a medias.</td><td>§5.8</td></tr>
+      <tr><td>2026-09-06</td><td>Tres mensajes nuevos de error de fila: provincia, cantón o distrito <em>retirados del catálogo</em>. Sigue siendo <code>200</code> con éxito parcial.</td><td>§5.1, §5.2</td></tr>
+      <tr><td>2026-09-09</td><td>Campo nuevo <code>mensajero</code> (<code>{ id, nombre } | null</code>, siempre presente) en el listado, el detalle y <code>data</code> del webhook.</td><td>§5.3, §6.2</td></tr>
+      <tr><td>2026-09-10</td><td>Campos nuevos <code>gestiones[]</code> (detalle), <code>zona</code>, <code>costoEstimado</code> y <code>costoReal</code> (listado y detalle). Arreglo de <code>evidenciasUrl</code>: el enlace del evento de incidente ahora sí resuelve (usa la guía o la remisión, no un id interno).</td><td>§5.3, §5.4, §6.2</td></tr>
+    </tbody>
+  </table>
+  <p>La versión de agosto además <strong>omitía dos endpoints que ya existían</strong> —<code>PUT …/{numGuia}/cancelar</code> y <code>POST …/habilitar</code>— y describía la eliminación con la ruta y la respuesta equivocadas. Quedan documentados en §5.7, §5.9 y §5.10.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 1 -->
+<section class="pb">
+  <h1>1. Qué resuelve esta API y qué NO</h1>
+  <h2>Qué resuelve</h2>
+  <p>La API de Ordenex le permite a su sistema (e-commerce, ERP, WMS) operar sus envíos sin entrar a la aplicación web:</p>
+  <table>
+    <thead><tr><th>Necesidad</th><th>Cómo se resuelve</th></tr></thead>
+    <tbody>
+      <tr><td>Cotizar antes de despachar</td><td><code>POST /api/ordenes/api-key/cotizacion</code></td></tr>
+      <tr><td>Crear órdenes en firme, en lote de 1 a 5000</td><td><code>POST /api/ordenes/api-key/carga</code></td></tr>
+      <tr><td>Listar y filtrar sus órdenes</td><td><code>GET /api/ordenes/api-key</code></td></tr>
+      <tr><td>Ver el detalle, las evidencias y el historial de gestiones de una orden</td><td><code>GET /api/ordenes/api-key/orden/{id}</code></td></tr>
+      <tr><td>Imprimir etiquetas (una orden o el lote completo)</td><td><code>POST …/orden/{id}/generate</code> y <code>POST …/carga/{cargaId}/generate</code></td></tr>
+      <tr><td>Eliminar una orden que todavía no se movió hacia el cliente</td><td><code>DELETE /api/ordenes/api-key/orden/{id}</code></td></tr>
+      <tr><td>Cancelar una orden que ya está en bodega o en ruta a ella</td><td><code>PUT /api/ordenes/api-key/{numGuia}/cancelar</code></td></tr>
+      <tr><td>Reactivar pedidos con novedad o con ayuda pendiente</td><td><code>POST /api/ordenes/api-key/habilitar</code></td></tr>
+      <tr><td>Estadísticas de gestión</td><td><code>GET /api/ordenes/api-key/analitica</code></td></tr>
+      <tr><td>Enterarse de los cambios de estado y de cada gestión</td><td>Webhooks <code>orden.estado_actualizado</code>, <code>orden.gestion_*</code> y <code>orden.ayuda_*</code></td></tr>
+    </tbody>
+  </table>
+  <h2>Qué NO resuelve</h2>
+  <ul>
+    <li><strong>No hay registro self-service.</strong> No existe un endpoint para crear API keys ni suscripciones de webhook: las emite Ordenex.</li>
+    <li><strong>La cotización no reserva ni crea nada.</strong> Es lectura pura.</li>
+    <li><strong>No hay edición de órdenes.</strong> No existe un endpoint para modificar los datos de una orden ya creada (destinatario, dirección, monto). Las mutaciones publicadas son crear, cancelar, eliminar, habilitar y generar etiquetas.</li>
+    <li><strong>La analítica no publica importes</strong> ni identifica mensajeros; el listado no se puede filtrar ni ordenar por mensajero, zona ni costo.</li>
+  </ul>
+
+  <h1>2. Requisitos previos</h1>
+  <p>Antes de escribir la primera línea de código:</p>
+  <ol>
+    <li><strong>Requiere una API key emitida por Ordenex</strong> (ver §3).</li>
+    <li><em>Opcional pero recomendado:</em> <strong>un endpoint HTTPS público propio</strong> para recibir los webhooks (ver §6). Sin él, su sistema solo se entera de los cambios si consulta por su cuenta.</li>
+  </ol>
+
+  <h1>3. La API key</h1>
+  <h2>3.1 Obtención</h2>
+  <ul>
+    <li><strong>La emite Ordenex, no el integrador.</strong> Se genera desde la aplicación de Ordenex (Configuración › API keys, personal de oficina) y el secreto se muestra <strong>una sola vez</strong>.</li>
+    <li>El comercio la solicita a Ordenex y Ordenex la entrega por un canal seguro acordado.</li>
+  </ul>
+  <h2>3.2 Uso</h2>
+  <p>Enviar en <strong>todos</strong> los endpoints:</p>
+<pre>Authorization: Bearer ordx_XXXXXXXXXXXX</pre>
+  <h2>3.3 Alcance</h2>
+  <p>Cada key está atada a una <strong>cuenta dedicada</strong> de integración. El <strong>dueño</strong> de las órdenes es esa cuenta o, si la key se emitió apuntando a una tienda ya registrada en Ordenex, esa tienda. En cualquiera de los dos casos, <strong>toda llamada opera solo sobre las órdenes de ese dueño</strong>: no hay forma de ampliar el alcance (un <code>tiendaId</code> u <code>owner</code> en la query se ignora), y una orden ajena responde el mismo <code>404</code> que una inexistente.</p>
+  <h2>3.4 Rotación</h2>
+  <p>No se rota desde el lado del integrador: se <strong>solicita a Ordenex</strong>, que genera una key nueva y desactiva la anterior, cuando:</p>
+  <ul>
+    <li>La key se perdió (no es recuperable: Ordenex tampoco puede volver a mostrarla).</li>
+    <li>Se sospecha exposición (repositorio, log, frontend, ticket de soporte).</li>
+    <li>El integrador deja de operar con esa cuenta.</li>
+  </ul>
+  <p>Diseñe su despliegue para poder <strong>cambiar el secreto sin recompilar</strong>: variable de entorno o gestor de secretos, leída en caliente o con un reinicio corto.</p>
+  <h2>3.5 Revocación</h2>
+  <p>Ordenex puede desactivar la key <strong>o</strong> la cuenta dedicada (y, si la key apunta a una tienda, dar de baja esa tienda). En todos los casos las llamadas pasan a responder <code>403</code>.</p>
+  <h2>3.6 Custodia</h2>
+  <p>Guárdela como <strong>secreto de servidor</strong>: variable de entorno o gestor de secretos. <strong>Nunca</strong> en frontend, repositorio ni logs.</p>
+</section>
+
+<!-- ============================================================ 4 -->
+<section>
+  <h1>4. Convenciones</h1>
+  <h2>4.1 Base URL</h2>
+  <table class="tight" style="width:60%">
+    <thead><tr><th>Ambiente</th><th>URL</th></tr></thead>
+    <tbody><tr><td>Producción</td><td><code>https://ordenex.co</code></td></tr></tbody>
+  </table>
+  <h2>4.2 Headers</h2>
+  <table class="tight">
+    <thead><tr><th>Header</th><th>Cuándo</th><th>Valor</th></tr></thead>
+    <tbody>
+      <tr><td><code>Authorization</code></td><td>Siempre</td><td><code>Bearer ordx_XXXXXXXXXXXX</code></td></tr>
+      <tr><td><code>Content-Type</code></td><td>Solo en requests con cuerpo</td><td><code>application/json</code></td></tr>
+    </tbody>
+  </table>
+  <h2>4.3 Formato uniforme de error</h2>
+  <p>Todos los errores comparten esta forma (<code>details</code> es opcional; en un <code>422</code> trae <code>fieldErrors</code>, un mapa <em>campo → lista de mensajes</em>):</p>
+<pre>{
+  "status": "error",
+  "code": "VALIDATION_ERROR",
+  "message": "Los datos enviados no son validos.",
+  "details": { "fieldErrors": { "campo": ["mensaje"] } }
+}</pre>
+  <table class="tight" style="width:60%">
+    <thead><tr><th><code>code</code></th><th>HTTP</th><th><code>message</code> fijo</th></tr></thead>
+    <tbody>
+      <tr><td><code>VALIDATION_ERROR</code></td><td>422</td><td>Los datos enviados no son validos.</td></tr>
+      <tr><td><code>UNAUTHORIZED</code></td><td>401</td><td>No hay una sesion valida.</td></tr>
+      <tr><td><code>FORBIDDEN</code></td><td>403</td><td>No tienes permiso para realizar esta accion.</td></tr>
+      <tr><td><code>NOT_FOUND</code></td><td>404</td><td>El recurso solicitado no existe.</td></tr>
+      <tr><td><code>CONFLICT</code></td><td>409</td><td>La operacion entra en conflicto con el estado actual. (o un mensaje específico, ver §5)</td></tr>
+      <tr><td><code>INTERNAL</code></td><td>500</td><td>Error interno del servidor.</td></tr>
+    </tbody>
+  </table>
+  <h2>4.4 401 vs 403</h2>
+  <table class="tight">
+    <thead><tr><th>Código</th><th>Significado</th></tr></thead>
+    <tbody>
+      <tr><td><code>401</code></td><td>No mandó key (header ausente, esquema distinto de <code>Bearer</code> o token vacío), <strong>o</strong> la key no existe. <span class="w">⚠</span> Los dos casos son indistinguibles a propósito.</td></tr>
+      <tr><td><code>403</code></td><td>La key existe, pero está desactivada, <strong>o</strong> su cuenta dedicada no está activa, <strong>o</strong> la tienda a la que apunta fue dada de baja. En analítica, además: pidió una métrica no publicable (§5.8).</td></tr>
+    </tbody>
+  </table>
+  <p>Consecuencia práctica: un <code>401</code> es problema de su cliente HTTP o de su secreto; un <code>403</code> requiere hablar con Ordenex (salvo el de analítica).</p>
+  <h2>4.5 Fechas y horas</h2>
+  <ul>
+    <li><strong>Fechas de calendario:</strong> <code>YYYY-MM-DD</code>, medidas en <strong>hora de Costa Rica (UTC-6)</strong>. Deben ser fechas reales: <code>2026-02-31</code> es <code>422</code>.</li>
+    <li><strong>Timestamps:</strong> ISO 8601 en UTC (<code>2026-09-22T14:03:11.000Z</code>).</li>
+  </ul>
+  <div class="warn">Mezclar los dos sistemas es el error más común: si convierte un timestamp UTC a fecha de calendario sin pasar a UTC-6, las órdenes de la noche caen en el día siguiente y sus filtros <code>desde</code>/<code>hasta</code> no cuadran con lo que ve en la aplicación.</div>
+  <h2>4.6 Paginación</h2>
+  <p>Solo el listado (§5.3) pagina, con <code>limit</code> (1..100, default 50) y <code>offset</code> (≥0, default 0). La respuesta trae:</p>
+<pre>"pagination": { "limit": 50, "offset": 0, "total": 1 }</pre>
+  <p>Recorra incrementando <code>offset</code> en <code>limit</code> hasta alcanzar <code>total</code>. El orden de las filas es estable entre páginas.</p>
+
+  <h2>4.7 Catálogo de estados (respuestas REST)</h2>
+  <p>Son <strong>20 códigos</strong>. Todo campo que lleva un código (<code>estado</code>, <code>estadoAnterior</code>, <code>estadoResultante</code>, <code>resultado</code>, <code>resultadoAnterior</code>) va acompañado de su nombre visible en el campo hermano <code>…Nombre</code> (<code>estadoNombre</code>, <code>resultadoNombre</code>, …), que es <strong>exactamente la cadena que muestra la aplicación</strong>. Compare por el código; muestre el nombre.</p>
+  <table class="small">
+    <thead><tr><th>Código</th><th>Nombre visible</th><th>Qué significa</th><th style="width:44pt">Webhook</th></tr></thead>
+    <tbody>
+      <tr><td><code>por_recolectar_en_tienda</code></td><td>Por recolectar en tienda</td><td>El paquete está en la tienda y todavía no hay un mensajero asignado para recogerlo.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>recolectando</code></td><td>Recolectando</td><td>Ya hay un mensajero asignado y va camino a la tienda a recoger el paquete.</td><td class="no">No</td></tr>
+      <tr><td><code>en_ruta_bodega_central</code></td><td>En ruta a bodega central</td><td>El mensajero recogió el paquete en la tienda y lo lleva a la bodega central.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>en_preparacion</code></td><td>En preparación</td><td>El paquete ya está en nuestra bodega y se está preparando su guía para despacharlo.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>en_bodega_central</code></td><td>En bodega central</td><td>El paquete está en la bodega central, listo para asignarse a un mensajero o enviarse a una bodega satélite.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>en_ruta_bodega_satelite</code></td><td>En ruta a bodega satélite</td><td>El paquete viaja desde la bodega central hacia la bodega satélite de su zona.</td><td class="no">No</td></tr>
+      <tr><td><code>en_bodega_satelite</code></td><td>En bodega satélite</td><td>El paquete llegó a la bodega satélite de su zona y espera ser asignado a un mensajero.</td><td class="no">No</td></tr>
+      <tr><td><code>mensajero_recogiendo_en_bodega</code></td><td>Mensajero recogiendo en la bodega</td><td>El paquete ya tiene mensajero asignado, que debe recogerlo en la bodega para salir a reparto.</td><td class="no">No</td></tr>
+      <tr><td><code>en_reparto</code></td><td>En reparto</td><td>El mensajero tiene el paquete y lo lleva al destinatario. Si ya lo gestionó, verá el resultado como «pendiente de confirmación» hasta que se apruebe su cierre del día.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>entregado</code></td><td>Entregado</td><td>El paquete fue entregado al destinatario y la bodega lo confirmó al aprobar el cierre del mensajero.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>reprogramado</code></td><td>Reprogramado</td><td>No se pudo entregar y se acordó una nueva fecha. El paquete vuelve a su bodega para asignarse de nuevo.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>novedad</code></td><td>Novedad</td><td>El mensajero no pudo entregar el paquete (cliente no localizado, número o dirección errados). La tienda debe decidir si se vuelve a intentar o se devuelve. Si no responde: con cliente no localizado, a las 24 horas vuelve a salir a reparto; con número o dirección errados, a los 5 días se devuelve a la tienda. Si ya agotó sus intentos, se devuelve antes.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>novedad_interna</code></td><td>Novedad interna</td><td>El mensajero terminó el día sin gestionar el paquete. Al aprobarse su cierre, el paquete vuelve a su bodega para asignarse de nuevo.</td><td class="no">No</td></tr>
+      <tr><td><code>devolucion_a_origen_por_rechazo</code></td><td>Devolución a origen por rechazo</td><td>El destinatario rechazó el paquete. Al aprobarse el cierre, empieza su regreso a la tienda.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>incidente</code></td><td>Incidente</td><td>El paquete se dañó, se perdió o fue robado. Quedó reportado para su revisión.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>por_devolver_a_bodega_central</code></td><td>Por devolver a bodega central</td><td>El paquete devuelto está en la bodega satélite, esperando ser enviado a la bodega central.</td><td class="no">No</td></tr>
+      <tr><td><code>devolviendo_a_bodega_central</code></td><td>Devolviendo a bodega central</td><td>El paquete devuelto viaja de la bodega satélite a la bodega central.</td><td class="no">No</td></tr>
+      <tr><td><code>por_devolver_a_tienda</code></td><td>Por devolver a tienda</td><td>El paquete devuelto está en la bodega central, esperando ser enviado a la tienda.</td><td class="no">No</td></tr>
+      <tr><td><code>devolviendo_a_tienda</code></td><td>Devolviendo a tienda</td><td>El paquete va camino de regreso a la tienda. También pasa aquí cuando la tienda cancela el envío.</td><td class="ok">Sí</td></tr>
+      <tr><td><code>devuelta_a_tienda</code></td><td>Devuelta a tienda</td><td>La tienda recibió de vuelta su paquete. Fin del recorrido.</td><td class="ok">Sí</td></tr>
+    </tbody>
+  </table>
+  <p>La columna «Webhook» dice si ese estado viaja en <code>orden.estado_actualizado</code> (§6.5). <strong>Resultados de una gestión</strong> (<code>gestiones[].resultado</code>, <code>evidencias[].resultado</code>, eventos de gestión): cinco códigos, los mismos que su estado destino: <code>entregado</code>, <code>reprogramado</code>, <code>novedad</code>, <code>devolucion_a_origen_por_rechazo</code>, <code>incidente</code> (en <code>evidencias[]</code> solo los tres que producen fotos: <code>entregado</code>, <code>devolucion_a_origen_por_rechazo</code>, <code>incidente</code>).</p>
+  <p>La lista puede crecer de forma aditiva, con aviso previo. Un código anterior al cambio de nombres (sección de cambios, A.1) responde <code>422</code> si se usa como filtro. Trate un código desconocido como «ignorar», no como error.</p>
+</section>
+
+<!-- ============================================================ 5 -->
+<section class="pb">
+  <h1>5. Endpoints</h1>
+  <p>Todos requieren <code>Authorization</code>. Todos operan únicamente sobre las órdenes del dueño de la key (§3.3).</p>
+
+  <!-- 5.1 -->
+  <h2>5.1 <span class="badge post">POST</span><span class="ep">/api/ordenes/api-key/carga</span> <span class="ep-title">— Crear órdenes (lote de 1 a 5000)</span></h2>
+  <p><strong>Estado inicial:</strong> depende de la configuración de la tienda (fulfillment: el paquete ya está en la bodega de Ordenex).</p>
+  <table class="tight">
+    <thead><tr><th>Configuración de la tienda</th><th>Estado en que nace la orden</th><th>Guía</th><th>Manifiesto</th></tr></thead>
+    <tbody>
+      <tr><td>Sin fulfillment</td><td><code>por_recolectar_en_tienda</code></td><td>Asignada en el acto (<code>numGuia</code> entero)</td><td>Sí (el lote produce un movimiento tienda → bodega)</td></tr>
+      <tr><td>Con fulfillment</td><td><code>en_preparacion</code></td><td><strong>Ninguna todavía</strong> (<code>numGuia: null</code>); se emite después, al preparar la orden</td><td>No</td></tr>
+    </tbody>
+  </table>
+  <div class="warn"><strong><code>monto_cobrar</code> no acepta decimales.</strong> La cifra se redondea al colón más cercano (el medio sube). Si su sistema maneja centavos, redondee usted antes de enviar para que el COD que cobra el mensajero coincida con el que muestra su tienda; si no, el redondeo lo hace Ordenex y la fila creada lo declara en <code>montoAjustado: { original, aplicado }</code>.</div>
+  <table class="tight" style="width:70%">
+    <thead><tr><th>Campo (todos texto)</th><th>Requerido</th></tr></thead>
+    <tbody>
+      <tr><td><code>num_remision</code></td><td>Sí — es la clave de deduplicación (única entre sus órdenes vivas)</td></tr>
+      <tr><td><code>destinatario</code></td><td>Sí</td></tr>
+      <tr><td><code>telefono</code></td><td>Sí</td></tr>
+      <tr><td><code>provincia</code></td><td>Sí</td></tr>
+      <tr><td><code>canton</code></td><td>Sí</td></tr>
+      <tr><td><code>distrito</code></td><td>Sí — su zona decide la tarifa</td></tr>
+      <tr><td><code>direccion</code></td><td>Sí</td></tr>
+      <tr><td><code>producto</code></td><td>Sí</td></tr>
+      <tr><td><code>peso</code></td><td>Sí — kilogramos como texto (<code>"1.5"</code>)</td></tr>
+      <tr><td><code>monto_cobrar</code></td><td>Sí — sin decimales</td></tr>
+      <tr><td><code>notas</code></td><td>No</td></tr>
+    </tbody>
+  </table>
+  <p class="small">El sobre admite además dos claves opcionales: <code>name</code> (nombre del lote, 1..120 caracteres; repetirlo dentro de la misma cuenta responde <code>409</code> y no crea nada) y <code>download_type</code> (<code>consolidate</code>, el valor por defecto, o <code>individual</code>: una URL de etiqueta por orden en <code>ordenes[].downloadUrl</code>).</p>
+  <h3>Request</h3>
+<pre>curl -X POST https://ordenex.co/api/ordenes/api-key/carga \
+  -H "Authorization: Bearer ordx_XXXXXXXXXXXX" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ordenes": [
+      { "num_remision": "REM-0001", "destinatario": "Juan Pérez", "telefono": "88887777",
+        "provincia": "San José", "canton": "San José", "distrito": "Carmen",
+        "direccion": "Av. Central, 200m norte del parque", "producto": "Camiseta talla M",
+        "peso": "1.5", "monto_cobrar": "26", "notas": "Entregar en la tarde" },
+      { "num_remision": "REM-0002", "destinatario": "María Solís", "telefono": "",
+        "provincia": "San José", "canton": "Escazú", "distrito": "San Rafael",
+        "direccion": "Multiplaza, local 12", "producto": "Zapatos talla 38",
+        "peso": "0.8", "monto_cobrar": "40" }
+    ]
+  }'</pre>
+  <h3>Response <code>200</code> — éxito parcial (una creada, una con error)</h3>
+<pre>{
+  "total": 2, "creadas": 1, "duplicadas": 0, "conError": 1,
+  "filas": [
+    { "fila": 1, "numRemision": "REM-0001", "resultado": "creada",
+      "estado": "por_recolectar_en_tienda", "estadoNombre": "Por recolectar en tienda",
+      "numGuia": 100234 }
+  ],
+  "errores": [
+    { "fila": 2, "numRemision": "REM-0002", "resultado": "error",
+      "errores": { "telefono": ["requerido"] } }
+  ],
+  "ordenes": [
+    { "id": "6f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f", "numRemision": "REM-0001", "numGuia": 100234,
+      "estado": "por_recolectar_en_tienda", "estadoNombre": "Por recolectar en tienda",
+      "costoEnvio": "3.39", "fulfillment": "0.00", "downloadUrl": null }
+  ],
+  "cargaId": "9c2b7f10-5d3a-4e21-9a4b-77c8e0f1a2b3",
+  "downloadType": "consolidate",
+  "etiquetasPdf": { "url": "https://&lt;host-de-storage&gt;/object/sign/etiquetas/...", "expiraEnSegundos": 3600 },
+  "manifiesto": { "filas": [ { "...": "..." } ], "omitidas": [] }
+}</pre>
+  <h3>Comportamientos que debe manejar</h3>
+  <ul>
+    <li><strong>Dos listas.</strong> <code>filas</code> trae solo lo que entró (<code>creada</code> y <code>duplicada</code>; en una duplicada, <code>estado</code> es el de la orden que ya ocupa esa remisión); <code>errores</code> trae solo lo que no se creó, con el detalle por campo. Los contadores se calculan sobre el lote completo: <code>conError === errores.length</code>. La pregunta «¿falló algo?» se responde con <code>errores.length</code>.</li>
+    <li><strong><code>cargaId</code> es <code>null</code> si no se creó ninguna orden.</strong> Se necesita para el PDF consolidado del lote (§5.6): guárdelo cuando no sea nulo.</li>
+    <li><code>costoEnvio</code> es flete + IVA + fulfillment de la tarifa vigente del par (tienda, zona), en texto de dos decimales; <code>fulfillment</code> es la parte de ese total que corresponde al servicio de bodega (<code>"0.00"</code> si su tienda no lo tiene). Es distinto del COD.</li>
+    <li><span class="w">⚠</span> <strong>Una fila puede no crear orden por un problema de tarifa o de cobertura.</strong> Vuelve en <code>errores</code> con la clave <code>tarifa</code>, que agrupa dos causas distintas: (1) no hay tarifa vigente para el par (tienda, zona del distrito de la fila); (2) la zona no tiene cobertura de Ordenex. En ambos casos el mensaje es el mismo: <code>{ "tarifa": ["no hay tarifa vigente para la zona de esta fila"] }</code>. Es un tema comercial con Ordenex, no de código.</li>
+    <li>Una provincia, un cantón o un distrito <strong>retirados del catálogo</strong> producen un error de fila propio, bajo la clave del nivel afectado: <code>la provincia esta retirada del catalogo</code>, <code>el canton esta retirado del catalogo</code>, <code>el distrito '&lt;nombre&gt;' esta retirado del catalogo</code>. Un nodo retirado no vuelve solo: corrija la dirección o pida a Ordenex reactivarlo.</li>
+    <li><span class="w">⚠</span> <strong><code>409</code> si NINGUNA de las filas que llegaron a la resolución de tarifa la resolvió.</strong> En ese caso no se persiste nada: ni órdenes, ni lote, ni notificación. <code>{ "status": "error", "code": "CONFLICT", "message": "la tienda no tiene una tarifa vigente asociada: no se pueden crear órdenes" }</code></li>
+    <li>Una fila creada puede traer además <code>montoAjustado</code> (si se redondeó el COD) y <code>textoNormalizado</code> (lista de <code>{ campo, original, aplicado }</code> con los textos que hubo que reparar para poder imprimir la etiqueta). Ambos se omiten cuando no hubo ajuste.</li>
+    <li><code>etiquetasPdf</code>, <code>manifiesto</code> y <code>ordenes[].downloadUrl</code> son <em>best-effort</em>: si el PDF o el manifiesto no se pudo armar, la carga <strong>no se revierte</strong> y el bloque llega como <code>{ "error": "…" }</code>; <code>null</code> significa que no había nada que generar. La URL del PDF de la carga vence en 1 hora (<code>expiraEnSegundos: 3600</code>); para volver a obtenerla use §5.6. Estos tres bloques no forman parte del contrato OpenAPI publicado.</li>
+  </ul>
+
+  <!-- 5.2 -->
+  <h2>5.2 <span class="badge post">POST</span><span class="ep">/api/ordenes/api-key/cotizacion</span> <span class="ep-title">— Cotizar un lote (no crea nada)</span></h2>
+  <p>Acepta <strong>el mismo cuerpo que <code>/carga</code>, sin recortarlo</strong>: las claves que no usa se ignoran. Puede reutilizar literalmente el payload que va a mandar a <code>/carga</code>.</p>
+  <p>Diferencias con <code>/carga</code>:</p>
+  <ul>
+    <li>Solo importan <code>provincia</code>, <code>canton</code>, <code>distrito</code> (la terna decide la zona y la tarifa) y <code>monto_cobrar</code> (base de la comisión; vacío o ausente se trata como cero). <code>direccion</code> se acepta y no participa del precio.</li>
+    <li><code>num_remision</code> es <strong>opcional</strong> acá y solo sirve para correlacionar. Si falta, la fila responde <code>numRemision: null</code>. No se deduplica.</li>
+    <li>Mismo tope: 1..5000 filas. El precio se calcula suponiendo que la orden cobra comisión COD.</li>
+  </ul>
+  <h3>Response <code>200</code></h3>
+<pre>{
+  "total": 2, "cotizadas": 1, "conError": 1,
+  "filas": [
+    { "fila": 1, "numRemision": "REM-0001", "montoCobrar": "25900.00", "resultado": "cotizada",
+      "costos": {
+        "entregado": { "flete": "2500.00", "iva": "325.00", "comision": "906.50",
+                       "ivaComision": "117.85", "fulfillment": "0.00", "total": "22050.65" },
+        "devuelto":  { "flete": "1396.46", "iva": "181.54", "comision": "0.00",
+                       "fulfillment": "0.00", "total": "-1578.00" }
+      } }
+  ],
+  "errores": [
+    { "fila": 2, "numRemision": null, "resultado": "error",
+      "errores": { "distrito": ["distrito no encontrado en el canton"] } }
+  ]
+}</pre>
+  <h3>Comportamientos que debe manejar</h3>
+  <ul>
+    <li><strong>Lectura pura.</strong> No crea órdenes, no consume números de guía, no persiste nada.</li>
+    <li><strong>Importes crudos:</strong> texto con dos decimales y punto decimal, sin símbolo de moneda ni separador de miles (<code>"2500.00"</code>, <code>"-1578.00"</code>). Es el mismo dialecto que <code>costoEnvio</code>, <code>costoEstimado</code> y <code>costoReal</code>.</li>
+    <li><strong>Devuelve los dos escenarios:</strong> <code>entregado</code> (seis conceptos; <code>total</code> es lo que <em>recibe</em> la tienda = monto a cobrar − los cinco conceptos, y puede ser negativo) y <code>devuelto</code> (cinco conceptos, sin <code>ivaComision</code>; <code>comision</code> es un cero explícito; <code>total</code> es la <em>deuda</em> de la tienda, negativo). El escenario <code>devuelto</code> es lo que se cobra cuando la orden termina en <code>devolucion_a_origen_por_rechazo</code>: una novedad que sigue viva no cobra nada por sí sola.</li>
+    <li><code>montoCobrar</code> es <strong>el valor sobre el que se cotizó</strong>: ya redondeado al colón, igual que en la carga (<code>"11898.81"</code> se cotiza como <code>"11899.00"</code>), y <code>"0.00"</code> si la fila no traía monto.</li>
+    <li>No hay bloque de totales del lote: la cotización es <strong>por orden</strong>. Si necesita un agregado, súmelo usted con la tasa de entrega real de su operación.</li>
+    <li>Una fila queda en <code>errores</code> por: terna ausente o vacía, distrito no encontrado o ambiguo, distrito sin zona, nivel retirado del catálogo, <code>monto_cobrar</code> con formato inválido, o (clave <code>tarifa</code>) sin tarifa vigente. <code>422</code> solo por el lote entero (vacío, por encima del tope o con valores que no son texto).</li>
+    <li><code>409</code> con el mismo criterio que la carga: <code>{ "status": "error", "code": "CONFLICT", "message": "la tienda no tiene una tarifa vigente asociada: no se puede cotizar" }</code></li>
+  </ul>
+
+  <!-- 5.3 -->
+  <h2>5.3 <span class="badge get">GET</span><span class="ep">/api/ordenes/api-key</span> <span class="ep-title">— Listado paginado de órdenes propias</span></h2>
+  <p>Todos los query params son <strong>opcionales</strong>, se combinan en <strong>AND</strong>, y solo <strong>acotan dentro de sus órdenes</strong>. Nunca amplían el alcance. Parámetros desconocidos se ignoran.</p>
+  <table class="tight">
+    <thead><tr><th>Param</th><th>Tipo</th><th>Detalle</th></tr></thead>
+    <tbody>
+      <tr><td><code>limit</code></td><td>entero</td><td>1..100, default 50</td></tr>
+      <tr><td><code>offset</code></td><td>entero</td><td>≥ 0, default 0</td></tr>
+      <tr><td><code>estado</code></td><td>string</td><td>Valor <strong>exacto</strong> del catálogo (§4.7, uno de los 20). Un código anterior al cambio de nombres responde <code>422</code> nombrando el vigente; cualquier otro valor, <code>422</code> genérico.</td></tr>
+      <tr><td><code>desde</code> / <code>hasta</code></td><td><code>YYYY-MM-DD</code></td><td>Fecha de creación, <strong>inclusivas</strong>, hora CR. <code>desde &gt; hasta</code> es <code>422</code> (en <code>fieldErrors.hasta</code>).</td></tr>
+      <tr><td><code>num_guia</code></td><td>entero</td><td>Guía exacta. Excluye las órdenes que aún no tienen guía.</td></tr>
+      <tr><td><code>num_remision</code></td><td>string</td><td><span class="w">⚠</span> Coincidencia <strong>exacta</strong>: sin prefijo, sin subcadena, distingue mayúsculas.</td></tr>
+    </tbody>
+  </table>
+  <h3>Request</h3>
+<pre>curl "https://ordenex.co/api/ordenes/api-key?limit=50&offset=0&estado=en_reparto&desde=2026-09-01&hasta=2026-09-21" \
+  -H "Authorization: Bearer ordx_XXXXXXXXXXXX"</pre>
+  <h3>Response <code>200</code></h3>
+<pre>{
+  "items": [
+    { "numGuia": 100234, "numRemision": "REM-0001",
+      "estado": "en_reparto", "estadoNombre": "En reparto",
+      "destinatario": "Juan Pérez", "telefonoDest": "88887777", "producto": "Camiseta talla M",
+      "direccion": "Av. Central, 200m norte del parque", "montoCobrar": 26,
+      "createdAt": "2026-09-22T14:03:11.000Z",
+      "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" },
+      "zona": { "id": "018f2c31-0000-4000-8000-0000000000b1", "nombre": "GAM" },
+      "costoEstimado": { "flete": "2500.00", "iva": "325.00", "comision": "906.50",
+                         "ivaComision": "117.85", "fulfillment": "0.00" },
+      "costoReal": null }
+  ],
+  "pagination": { "limit": 50, "offset": 0, "total": 1 }
+}</pre>
+  <p>Las catorce claves del ítem están <strong>siempre presentes</strong>. Tres de ellas merecen una lectura aparte:</p>
+  <ul>
+    <li><code>mensajero</code> es <strong>quién lleva la orden en el momento de la lectura</strong> (<code>null</code> = nadie), no quién la gestionó; varios flujos limpian la asignación (generación de guía, quitar mensajero, devolución o recuperación a bodega, liberación de una orden en <code>reprogramado</code>, el barrido del cierre diario). Agrupe por <code>id</code> (UUID en texto, estable), nunca por <code>nombre</code>. Para «quién gestionó cada intento», use <code>gestiones[]</code> del detalle.</li>
+    <li><code>zona</code> es la <strong>zona del envío</strong> (a dónde va el paquete; nunca <code>null</code>), no la del mensajero. Misma forma y misma regla que <code>mensajero</code>: agrupe por <code>id</code>.</li>
+    <li><code>costoEstimado</code> y <code>costoReal</code> son lo que ese paquete le cuesta a su tienda <strong>si se entrega</strong>, con exactamente cinco conceptos y sin ningún campo que los sume. <code>costoEstimado</code> se calcula con la tarifa vigente <em>hoy</em> y <strong>puede cambiar entre dos lecturas</strong> mientras <code>costoReal</code> sea <code>null</code>; <code>costoReal</code> es lo que se congeló cuando la orden entró en un cierre aprobado y ya no se mueve (salvo un segundo cierre aprobado: se publica el más reciente). <code>costoEstimado: null</code> significa «no hay tarifa configurada para su tienda en esa zona» (avise a Ordenex), <strong>no</strong> envío gratis; <code>costoReal: null</code> significa «todavía no entró en ningún cierre aprobado». Archive <code>costoReal</code>, no el estimado. Si la orden termina con rechazo, lo que se factura es el escenario <code>devuelto</code> de la cotización, no estos importes.</li>
+  </ul>
+
+  <!-- 5.4 -->
+  <h2>5.4 <span class="badge get">GET</span><span class="ep">/api/ordenes/api-key/orden/{id}</span> <span class="ep-title">— Detalle de una orden (por guía o remisión)</span></h2>
+  <p>Acepta el <strong>número de guía</strong> o el <strong>número de remisión</strong> en la misma posición de la ruta (<code>{id}</code>: 1..128 caracteres, se recortan los espacios de borde; si no cumple, <code>422</code>). La remisión se manda codificada como componente de ruta si lleva <code>/</code>, <code>?</code>, <code>#</code>, <code>%</code> o espacios.</p>
+  <p><strong>Regla de resolución:</strong></p>
+  <ol>
+    <li>Si el valor es un entero positivo en forma canónica (<code>^[1-9][0-9]*$</code>, sin ceros a la izquierda), se busca <strong>primero por <code>num_guia</code></strong>.</li>
+    <li>Si no hay coincidencia, se busca por <code>num_remision</code> (igualdad exacta, distingue mayúsculas). Un valor que no es entero canónico (<code>"007"</code>, <code>"REM-1"</code>) se busca solo por remisión.</li>
+  </ol>
+  <div class="warn"><strong>Si un mismo valor casa con la guía de una orden y con la remisión de otra, se prioriza la guía.</strong> La API no responde <code>409</code> por ambigüedad: devuelve una orden en silencio, y puede no ser la que usted esperaba. Si sus remisiones son numéricas, tenga presente esta prioridad.</div>
+  <p>Devuelve el mismo objeto del listado, más <code>evidencias[]</code> (URLs firmadas de corta duración) y <code>gestiones[]</code> (historial de gestiones). Las dos claves viajan <strong>siempre</strong>, y pueden ser <code>[]</code>.</p>
+  <h3>Response <code>200</code></h3>
+<pre>{
+  "numGuia": 100234, "numRemision": "REM-0001",
+  "estado": "en_reparto", "estadoNombre": "En reparto",
+  "destinatario": "Juan Pérez", "telefonoDest": "88887777", "producto": "Camiseta talla M",
+  "direccion": "Av. Central, 200m norte del parque", "montoCobrar": 26,
+  "createdAt": "2026-09-22T14:03:11.000Z",
+  "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000bb", "nombre": "Ana Solís Vargas" },
+  "zona": { "id": "018f2c31-0000-4000-8000-0000000000b1", "nombre": "GAM" },
+  "costoEstimado": { "flete": "2500.00", "iva": "325.00", "comision": "906.50",
+                     "ivaComision": "117.85", "fulfillment": "0.00" },
+  "costoReal": { "flete": "2500.00", "iva": "325.00", "comision": "906.50",
+                 "ivaComision": "117.85", "fulfillment": "0.00" },
+  "evidencias": [
+    { "resultado": "devolucion_a_origen_por_rechazo", "resultadoNombre": "Devolución a origen por rechazo",
+      "contentType": "image/jpeg",
+      "url": "https://&lt;host-de-storage&gt;/object/sign/gestion-evidencias/...", "expiraEnSegundos": 300 }
+  ],
+  "gestiones": [
+    { "createdAt": "2026-09-23T15:41:07.000Z",
+      "resultado": "reprogramado", "resultadoNombre": "Reprogramado",
+      "estadoResultante": "reprogramado", "estadoResultanteNombre": "Reprogramado",
+      "motivo": null,
+      "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" },
+      "pendienteConfirmacion": false },
+    { "createdAt": "2026-09-24T18:02:55.000Z",
+      "resultado": "novedad", "resultadoNombre": "Novedad",
+      "estadoResultante": null, "estadoResultanteNombre": null,
+      "motivo": "wrong_address",
+      "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000bb", "nombre": "Ana Solís Vargas" },
+      "pendienteConfirmacion": true }
+  ]
+}</pre>
+  <h3>Comportamientos que debe manejar</h3>
+  <ul>
+    <li><code>evidencias[].resultado</code> ∈ <code>entregado</code> | <code>devolucion_a_origen_por_rechazo</code> | <code>incidente</code>; <code>contentType</code> puede ser <code>null</code>.</li>
+    <li><span class="w">⚠</span> <strong>Las URLs firmadas vencen a los 5 minutos (300 s).</strong> <strong>Descargue el archivo, no guarde la URL.</strong> Si persiste la URL en su base de datos, sus enlaces van a estar rotos antes de que alguien los abra.</li>
+    <li><strong><code>gestiones[]</code></strong> va de la más antigua a la más reciente, completo y sin paginar. Las ocho claves de cada elemento están siempre presentes. No incluye las gestiones anuladas ni los incidentes que reporta el personal de bodega (sus fotos sí están en <code>evidencias[]</code>).</li>
+    <li><strong><code>pendienteConfirmacion: true</code></strong> = la gestión se registró pero su estado todavía no se aplicó: la orden sigue <code>en_reparto</code> y <code>estadoResultante</code> es <code>null</code>. Al aprobarse el cierre del mensajero pasa a <code>false</code> y <code>estadoResultante</code> trae el estado aplicado. Es la misma señal que la aplicación muestra como «<em>&lt;resultado&gt; · pendiente de confirmación</em>».</li>
+    <li><code>estadoResultante</code> <strong>no se deduce del <code>resultado</code></strong>: es el estado al que esa gestión llevó la orden, leído del historial. Puede ser <code>null</code> en gestiones antiguas y, en gestiones anteriores al 2026-09-23, una <code>novedad</code> puede mostrar un estado ya retirado del catálogo. Se publica sin lista cerrada: trate un valor desconocido como texto.</li>
+    <li><code>motivo</code> es la <strong>causa tipificada</strong>, nunca el texto libre del mensajero (ese texto no sale del sistema): <code>not_found</code> / <code>wrong_number</code> / <code>wrong_address</code> en una <code>novedad</code>; <code>danado</code> / <code>perdido</code> / <code>robado</code> en un <code>incidente</code>; <code>null</code> en cualquier otro resultado y en gestiones antiguas sin causa registrada. La asimetría de idioma es deliberada: no traduzca ni «armonice».</li>
+    <li><code>gestiones[].mensajero</code> nunca es <code>null</code> y es el <strong>atribuido</strong> a la gestión, que no siempre es quien la registró: las gestiones que crea el sistema o la propia tienda (reprogramación de escritorio, escalado por plazo, rechazo manual, corte por tope de reintento) quedan atribuidas al mensajero de la última novedad. <code>gestiones.length</code> no es el contador de intentos de entrega de Ordenex (ese cuenta cierres aprobados distintos).</li>
+    <li>Orden inexistente, borrada o ajena → el mismo <code>404</code>.</li>
+  </ul>
+
+  <!-- 5.5 -->
+  <h2>5.5 <span class="badge post">POST</span><span class="ep">/api/ordenes/api-key/orden/{id}/generate</span> <span class="ep-title">— PDF de etiqueta de una orden</span></h2>
+  <p>Solo <code>POST</code>. <strong>Sin cuerpo.</strong> <code>{id}</code> se resuelve igual que en §5.4. Retorna una <strong>URL firmada para descargar el PDF</strong> de la etiqueta. La primera llamada construye el PDF; las siguientes lo vuelven a firmar (misma forma de respuesta, sin ningún indicador de reuso).</p>
+<pre>curl -X POST https://ordenex.co/api/ordenes/api-key/orden/100234/generate \
+  -H "Authorization: Bearer ordx_XXXXXXXXXXXX"</pre>
+<pre>{ "url": "https://&lt;host-de-storage&gt;/object/sign/etiquetas/...", "expiraEnSegundos": 300 }</pre>
+  <ul>
+    <li><span class="w">⚠</span> No compare URLs para detectar cambios, y no las cachee: la URL cambia en cada llamada y vence a los 300 s, igual que las evidencias.</li>
+    <li>Orden sin guía imprimible (todavía sin <code>numGuia</code>, típico de fulfillment recién cargado) → <code>409</code>.</li>
+  </ul>
+
+  <!-- 5.6 -->
+  <h2>5.6 <span class="badge post">POST</span><span class="ep">/api/ordenes/api-key/carga/{cargaId}/generate</span> <span class="ep-title">— PDF consolidado del lote</span></h2>
+  <p><code>{cargaId}</code> es el UUID que devolvió <code>POST /carga</code> (§5.1); cualquier otra cosa es <code>422</code>. Misma forma de respuesta que §5.5, pero sobre <strong>todas las etiquetas imprimibles del lote</strong>, y solo de órdenes propias y vivas.</p>
+  <ul>
+    <li>Lote <strong>sin etiquetas imprimibles</strong> (ninguna orden viva con guía) → <code>409</code>. Lote que excede el tope de etiquetas por PDF (300 por defecto) → <code>409</code>: imprima por guía.</li>
+    <li>Lote inexistente o de otro integrador → el mismo <code>404</code>.</li>
+  </ul>
+
+  <!-- 5.7 -->
+  <h2>5.7 <span class="badge delete">DELETE</span><span class="ep">/api/ordenes/api-key/orden/{id}</span> <span class="ep-title">— Eliminar una orden propia</span></h2>
+  <p><strong>Sin cuerpo.</strong> Elimina la orden. <code>{id}</code> se resuelve igual que en §5.4 (lo habitual aquí es la remisión, porque una orden recién cargada con fulfillment todavía no tiene guía).</p>
+  <p>Solo procede si se cumplen <strong>las dos condiciones</strong> a la vez:</p>
+  <ol>
+    <li>El estado actual es uno de estos siete: <code>en_preparacion</code>, <code>por_recolectar_en_tienda</code>, <code>recolectando</code>, <code>en_bodega_central</code>, <code>en_ruta_bodega_central</code>, <code>en_ruta_bodega_satelite</code>, <code>mensajero_recogiendo_en_bodega</code>. Es decir: el paquete no ha salido hacia el cliente. Haber generado la etiqueta <strong>no</strong> impide eliminar.</li>
+    <li><span class="w">⚠</span> <strong>La orden no tiene ningún intento de entrega</strong> (cierres aprobados con una gestión vigente de novedad, reprogramación o rechazo). Una orden con un intento deja de ser eliminable aunque el estado vuelva a estar en la lista.</li>
+  </ol>
+<pre>curl -X DELETE https://ordenex.co/api/ordenes/api-key/orden/REM-0001 \
+  -H "Authorization: Bearer ordx_XXXXXXXXXXXX"</pre>
+<pre>{ "numGuia": 100234, "numRemision": "REM-0001", "estado": "en_bodega_central", "estadoNombre": "En bodega central" }</pre>
+  <ul>
+    <li><code>estado</code> es el que la orden <strong>tenía</strong> al eliminarla (eliminar no transiciona). <code>numGuia</code> es <code>null</code> si aún no tenía guía.</li>
+    <li><span class="w">⚠</span> Propia y viva pero en un estado no permitido, o con un intento de entrega → <code>409</code>, sin distinguir cuál de las dos condiciones falló. Consulte el estado antes de intentar eliminar, o maneje el <code>409</code> como resultado esperado. Para una orden que ya va camino del cliente no hay eliminación: la salida es cancelar (§5.9), y solo desde bodega.</li>
+    <li>Es un <strong>borrado lógico</strong>: la orden desaparece del canal (un <code>GET</code> posterior responde <code>404</code>, y repetir el <code>DELETE</code> también) y <strong>libera su <code>num_remision</code></strong> para volver a cargarla.</li>
+  </ul>
+
+  <!-- 5.8 -->
+  <h2>5.8 <span class="badge get">GET</span><span class="ep">/api/ordenes/api-key/analitica</span> <span class="ep-title">— Estadísticas de gestión</span></h2>
+  <p>Los tres parámetros son opcionales; <code>GET …/analitica</code> a secas es una llamada válida (todas las métricas, todo el histórico). Un parámetro presente pero vacío cuenta como ausente.</p>
+  <table class="tight">
+    <thead><tr><th>Param</th><th>Detalle</th></tr></thead>
+    <tbody>
+      <tr><td><code>metricas</code></td><td>Ids separados por comas, o <code>all</code>, o vacío (= <code>all</code>). <code>all</code> no se combina con ids; un elemento vacío en medio (<code>a,,b</code>) y más de 10 ids son <code>422</code>. Un id repetido se sirve una sola vez, conservando su primera posición.<br><strong>Ids publicables:</strong> <code>ordenes_creadas</code>, <code>ordenes_por_estado</code>, <code>entregas</code>, <code>devoluciones</code>, <code>rechazos</code>, <code>reprogramaciones</code>, <code>tasa_entrega</code>, <code>tasa_devolucion</code>, <code>tasa_rechazo</code>, <code>tiempo_ciclo</code>.</td></tr>
+      <tr><td><code>desde</code> / <code>hasta</code></td><td><code>YYYY-MM-DD</code>, hora CR, ambos <strong>inclusivos</strong>. Sin <code>hasta</code>: hoy. Sin <code>desde</code>: el primer día del que hay histórico. Rango invertido: <code>422</code>. No hay tope de ventana ni atajos tipo «últimos 7 días»: calcule las fechas usted.</td></tr>
+    </tbody>
+  </table>
+  <h3>Request</h3>
+<pre>curl "https://ordenex.co/api/ordenes/api-key/analitica?metricas=entregas,tasa_entrega&desde=2026-09-19&hasta=2026-09-21" \
+  -H "Authorization: Bearer ordx_XXXXXXXXXXXX"</pre>
+  <h3>Response <code>200</code> (llamada hecha el 2026-09-21 a las 12:40 hora CR)</h3>
+<pre>{
+  "rango": { "desde": "2026-09-19", "hasta": "2026-09-21" },
+  "metricas": [
+    { "metrica": "entregas", "unidad": "conteo",
+      "data": [
+        { "fecha": "2026-09-19", "valor": 41 },
+        { "fecha": "2026-09-20", "valor": 37 },
+        { "fecha": "2026-09-21", "valor": 12, "parcial": true, "corteAt": "2026-09-21T18:40:00.000Z" }
+      ],
+      "cobertura": { "fechasNoComparables": [], "penumbra": "ordenes_vivas_al_horizonte_sin_transicion_posterior" } },
+    { "metrica": "tasa_entrega", "unidad": "porcentaje",
+      "data": [
+        { "fecha": "2026-09-19", "valor": 0.93 },
+        { "fecha": "2026-09-20", "valor": null },
+        { "fecha": "2026-09-21", "valor": 0.8, "parcial": true, "corteAt": "2026-09-21T18:40:00.000Z" }
+      ],
+      "cobertura": { "fechasNoComparables": [], "penumbra": "ordenes_vivas_al_horizonte_sin_transicion_posterior" } }
+  ]
+}</pre>
+  <h3>Comportamientos que debe manejar</h3>
+  <ul>
+    <li><span class="w">⚠</span> <strong>El lote es todo o nada.</strong> Si <em>una</em> métrica pedida no está en la lista publicable, la llamada <em>entera</em> responde <code>403</code> — idéntico al <code>403</code> de una métrica que no existe, a propósito. No hay respuesta parcial. Valide su lista de ids contra la lista publicable antes de llamar.</li>
+    <li><span class="w">⚠</span> <strong>El día en curso viene marcado, no cerrado.</strong> Su punto trae <code>parcial: true</code> y <code>corteAt</code> (el instante hasta el que se contó). Se lee más bajo que un día completo y no es comparable: si suma <code>data</code> para un total del periodo, descarte primero los puntos con <code>parcial: true</code>. Un día cerrado trae solo <code>fecha</code> y <code>valor</code>; <code>parcial</code> nunca llega como <code>false</code>.</li>
+    <li><span class="w">⚠</span> <strong>No rellene huecos con ceros.</strong> Un día puede faltar en <code>data</code> (sin dato), y los días del rango que caen por debajo del horizonte del histórico vienen listados en <code>cobertura.fechasNoComparables</code>: ahí un cero es falta de <em>datos</em>, no falta de operación. <code>penumbra</code> es una limitación permanente del histórico (las órdenes vivas cuando nació el historial y que nunca volvieron a cambiar de estado no entran en ningún día).</li>
+    <li><code>data</code> vacío es un <code>200</code> correcto; <code>rango</code> es el eco exacto de lo pedido (o de lo resuelto por defecto), sin recortar. No lo use para deducir hasta dónde hay datos.</li>
+    <li><span class="w">⚠</span> <strong><code>valor: null</code> no es <code>0</code>.</strong> Significa «no se sabe» (por ejemplo, una tasa con denominador cero). Ese día <em>sí</em> aparece en <code>data</code>. Distinga en su gráfico: día con número, día con <code>null</code>, día parcial y día ausente.</li>
+    <li><code>unidad</code> ∈ <code>conteo</code> | <code>porcentaje</code> | <code>segundos</code> (<code>tiempo_ciclo</code>).</li>
+    <li>Sin <code>desde</code>, <code>data</code> crece un punto por día de operación: este endpoint no pagina.</li>
+  </ul>
+  <div class="warn"><strong>No todas las métricas cuentan lo mismo:</strong></div>
+  <table class="tight">
+    <thead><tr><th>Grupo</th><th>Métricas</th><th>Qué cuenta</th></tr></thead>
+    <tbody>
+      <tr><td>Gestiones</td><td><code>entregas</code>, <code>devoluciones</code>, <code>rechazos</code>, <code>reprogramaciones</code>, <code>tasa_entrega</code>, <code>tasa_devolucion</code>, <code>tasa_rechazo</code></td><td><strong>Gestiones vigentes</strong> (anuladas excluidas). Una orden que se reprograma y luego se entrega aporta <strong>DOS</strong> gestiones. Las tasas dividen entre entregas + devoluciones + rechazos + incidentes.</td></tr>
+      <tr><td>Órdenes</td><td><code>ordenes_creadas</code>, <code>ordenes_por_estado</code></td><td><strong>Órdenes.</strong> Desde el cambio del bloque B, el estado de una orden gestionada cambia al aprobar el cierre; <code>ordenes_por_estado</code> refleja el estado aplicado.</td></tr>
+      <tr><td>Duración</td><td><code>tiempo_ciclo</code></td><td>Una <strong>duración</strong> en segundos: de la creación a un estado terminal.</td></tr>
+    </tbody>
+  </table>
+  <p>Este canal <strong>no publica importes</strong> ni identifica a los mensajeros.</p>
+
+  <!-- 5.9 -->
+  <h2>5.9 <span class="badge put">PUT</span><span class="ep">/api/ordenes/api-key/{numGuia}/cancelar</span> <span class="ep-title">— Cancelar una orden en bodega</span></h2>
+  <p><strong>Sin cuerpo.</strong> Se identifica por <strong>número de guía</strong> (entero positivo; si no, <code>422</code>): una orden con fulfillment recién cargada no tiene guía todavía y no se puede cancelar por aquí (use §5.7). Solo procede si el estado actual es <code>en_bodega_central</code> o <code>en_ruta_bodega_central</code>; cualquier otro → <code>409</code>. No borra la orden: la transiciona a <code>devolviendo_a_tienda</code> (el paquete vuelve a su tienda) y emite el webhook <code>orden.estado_actualizado</code> con ese estado.</p>
+<pre>curl -X PUT https://ordenex.co/api/ordenes/api-key/100234/cancelar \
+  -H "Authorization: Bearer ordx_XXXXXXXXXXXX"</pre>
+<pre>{ "numGuia": 100234,
+  "estadoAnterior": "en_ruta_bodega_central", "estadoAnteriorNombre": "En ruta a bodega central",
+  "estado": "devolviendo_a_tienda", "estadoNombre": "Devolviendo a tienda" }</pre>
+  <ul>
+    <li>Inexistente, ajena o borrada → el mismo <code>404</code>. Repetir la cancelación → <code>409</code> (ya no está en un estado cancelable).</li>
+  </ul>
+
+  <!-- 5.10 -->
+  <h2>5.10 <span class="badge post">POST</span><span class="ep">/api/ordenes/api-key/habilitar</span> <span class="ep-title">— Habilitar pedidos con novedad (lote)</span></h2>
+  <p>Reactiva, por lote, órdenes detenidas: las que tienen una <strong>ayuda a la tienda abierta</strong> (el mensajero pidió ayuda; la orden sigue <code>en_reparto</code>) y las que están en <code>novedad</code>. Cuerpo:</p>
+<pre>{
+  "ordenes": [
+    { "num_guia": 100234, "nota": "el cliente pidió reintento mañana" },
+    { "num_guia": 100235, "nota": "dirección corregida por el call center" }
+  ]
+}</pre>
+  <p><code>num_guia</code> debe ser un <strong>entero</strong> (no texto). <code>nota</code> es <strong>obligatoria</strong> (1 a 200 caracteres, se recorta) y queda en la bitácora de la orden. El lote acepta <strong>entre 1 y 100 filas</strong>; fuera de eso, o sin la forma de un lote, <code>422</code> y ninguna fila procesada. Una fila mal formada <strong>no</strong> tira el lote: se marca <code>fila_invalida</code> y las demás siguen.</p>
+  <h3>Response <code>200</code> (aunque todas las filas fallen)</h3>
+<pre>{
+  "resumen": { "total": 3, "habilitadas": 1, "habilitadasSinCambioDeEstado": 1, "conError": 1 },
+  "resultados": [
+    { "numGuia": 100234, "resultado": "habilitada",
+      "estado": "en_reparto", "estadoNombre": "En reparto", "ayudaCerrada": true, "error": null },
+    { "numGuia": 100235, "resultado": "habilitada_sin_cambio_de_estado",
+      "estado": "novedad", "estadoNombre": "Novedad", "ayudaCerrada": false, "error": null },
+    { "numGuia": 999999, "resultado": "error", "estado": null, "estadoNombre": null, "ayudaCerrada": false,
+      "error": { "codigo": "no_encontrada", "mensaje": "no existe una orden viva con esa guia" } }
+  ]
+}</pre>
+  <ul>
+    <li><code>resultados</code> viene en el <strong>mismo orden y la misma cantidad</strong> que las filas enviadas: case por índice. <code>total = habilitadas + habilitadasSinCambioDeEstado + conError</code>.</li>
+    <li><code>habilitada</code>: la orden tenía la ayuda abierta y la ayuda quedó <strong>cerrada</strong> (<code>ayudaCerrada: true</code>); la orden sigue <code>en_reparto</code> con su mensajero y vuelve a ser gestionable. Emite el evento <code>orden.ayuda_resuelta</code> con <code>via: "api"</code> (§6.7). No hay cambio de estado, así que no emite <code>orden.estado_actualizado</code>.</li>
+    <li><code>habilitada_sin_cambio_de_estado</code>: se registró la habilitación y el estado <strong>no</strong> cambió. Es <strong>siempre</strong> el caso de una <code>novedad</code>: su paquete ya volvió a la bodega y no hay nadie en la calle a quien devolvérselo. No emite ningún evento.</li>
+    <li><code>error</code>: la fila no se procesó; <code>error.codigo</code> es uno de cuatro: <code>fila_invalida</code>, <code>duplicada_en_lote</code> (la guía ya apareció antes en el mismo lote), <code>no_encontrada</code> (no distingue «no existe» de «es de otro dueño»), <code>estado_no_habilitable</code> (la orden no tiene ayuda abierta ni está en <code>novedad</code>: incluye <code>reprogramado</code>, <code>devolucion_a_origen_por_rechazo</code>, <code>incidente</code>, <code>novedad_interna</code> y la segunda habilitación de una orden cuya ayuda ya se cerró).</li>
+    <li>Habilitar dos veces la misma orden devuelve <code>estado_no_habilitable</code> la segunda vez y no escribe nada: no se devuelve un acuse falso.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 6 -->
+<section class="pb">
+  <h1>6. Webhooks salientes: <span class="ep">orden.estado_actualizado</span> y los eventos de orden</h1>
+  <p><strong>Ordenex envía</strong> (<code>POST</code>) al callback del dueño de la orden un evento cada vez que una orden suya cambia a un estado publicable (<code>orden.estado_actualizado</code>, §6.2–6.6) y cada vez que ocurre un hecho sobre la orden que no es un cambio de estado (<code>orden.gestion_*</code>, <code>orden.ayuda_*</code>, §6.7). Todos llegan al <strong>mismo callback</strong>, con la <strong>misma firma</strong> y el mismo circuito de reintento.</p>
+  <div class="warn"><strong>No es un endpoint que usted llame.</strong> Es un endpoint que usted <strong>expone</strong>. El destino se deriva siempre del dueño de la orden.</div>
+  <h2>6.1 Alta de la suscripción</h2>
+  <p>Se registra en Ordenex, <strong>una suscripción por dueño</strong>, con:</p>
+  <ul>
+    <li>Una <strong>URL HTTPS absoluta</strong> (otro esquema se rechaza).</li>
+    <li>Un <strong>secreto de firma</strong>, generado por Ordenex y entregado una sola vez.</li>
+  </ul>
+  <p>Cambiar la URL conserva el secreto. El secreto se puede rotar (invalida el anterior) y la suscripción se puede desactivar, solicitándolo a Ordenex. Sin suscripción activa, los eventos no se encolan: no se «acumulan» para entregarse después de un alta.</p>
+  <h2>6.2 Cuerpo del evento</h2>
+<pre>{
+  "evento": "orden.estado_actualizado",
+  "eventoId": "webhook_estado:&lt;ordenId&gt;:&lt;estatusDestinoId&gt;:&lt;ocurridoAt&gt;",
+  "ocurridoAt": "2026-09-21T14:03:11.000Z",
+  "data": {
+    "numGuia": 100234,
+    "numRemision": "REM-0001",
+    "estado": "novedad",
+    "estadoNombre": "Novedad",
+    "motivo": "not_found",
+    "mensajero": null
+  }
+}</pre>
+  <p>Las seis claves de <code>data</code> —<code>numGuia</code>, <code>numRemision</code>, <code>estado</code>, <code>estadoNombre</code>, <code>motivo</code>, <code>mensajero</code>— están <strong>siempre presentes</strong>, en ese orden. <code>motivo</code> y <code>mensajero</code> viajan como <code>null</code> cuando no aplica, <strong>nunca omitidos</strong>. <code>mensajero</code> es quien lleva la orden en el momento de <em>esa entrega</em>, con la misma forma que en el listado.</p>
+  <p>Hay una <strong>séptima clave opcional</strong>, <code>evidenciasUrl</code>, que se <strong>omite</strong> salvo en eventos con <code>estado: "incidente"</code>. Es un enlace estable, sin token ni expiración, al detalle de esa orden en este canal (<code>GET /api/ordenes/api-key/orden/{id}</code>, con la guía o, si no la tiene, la remisión como último segmento): invóquelo con su propio <code>Authorization</code> y obtendrá las URLs firmadas frescas de las fotos. Ramifique por «la clave existe», no por su valor. Ejemplo:</p>
+<pre>{
+  "evento": "orden.estado_actualizado",
+  "eventoId": "webhook_estado:&lt;ordenId&gt;:&lt;estatusDestinoId&gt;:&lt;ocurridoAt&gt;",
+  "ocurridoAt": "2026-09-22T14:30:00.000Z",
+  "data": {
+    "numGuia": 100235, "numRemision": "REM-0002",
+    "estado": "incidente", "estadoNombre": "Incidente",
+    "motivo": "robado",
+    "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" },
+    "evidenciasUrl": "https://ordenex.co/api/ordenes/api-key/orden/100235"
+  }
+}</pre>
+  <div class="warn"><code>numGuia</code> puede ser <code>null</code> si aún no está asignado (evento de nacimiento <code>en_preparacion</code>). No lo use como clave primaria en su lado sin manejar ese caso; <code>numRemision</code> es su ancla.</div>
+  <h2>6.3 Autenticación de la entrega</h2>
+  <div class="warn"><strong>La entrega NO lleva header <code>Authorization</code>.</strong> Se autentica con una firma HMAC:</div>
+  <table class="tight">
+    <thead><tr><th>Header</th><th>Contenido</th></tr></thead>
+    <tbody>
+      <tr><td><code>X-Ordenex-Timestamp</code></td><td>Instante unix en <strong>segundos</strong> en que se firmó</td></tr>
+      <tr><td><code>X-Ordenex-Signature</code></td><td><code>sha256=&lt;hex&gt;</code> — HMAC-SHA256 sobre la cadena <code>${timestamp}.${cuerpo}</code> con el secreto de la suscripción</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Procedimiento de verificación:</strong></p>
+  <ol>
+    <li><span class="w">⚠</span> Tome el <strong>cuerpo crudo, byte a byte</strong>, tal como llegó.</li>
+    <li>Arme la cadena <code>${timestamp}.${cuerpo}</code>.</li>
+    <li>Calcule HMAC-SHA256 con el secreto (en hexadecimal).</li>
+    <li><strong>Compare en tiempo constante</strong> contra el valor de <code>X-Ordenex-Signature</code>.</li>
+    <li>Descarte entregas cuyo <code>X-Ordenex-Timestamp</code> caiga <strong>fuera de su ventana anti-replay</strong> (referencia: 5 minutos).</li>
+    <li><strong>Solo entonces</strong> parsee el JSON.</li>
+  </ol>
+  <div class="warn">Si su framework parsea el cuerpo antes de que usted lo lea (Express con <code>express.json()</code>, por ejemplo), la firma <strong>no va a validar nunca</strong>: al re-serializar cambia el orden de claves o el espaciado. Configure la ruta del webhook para recibir el cuerpo crudo. El orden de las claves del cuerpo es parte de la firma: cuando el contrato gana una clave (como <code>estadoNombre</code>), el texto firmado cambia, y su verificación sigue siendo válida si trabaja sobre el cuerpo crudo.</div>
+  <p class="small">(El tamaño de la ventana anti-replay lo define usted. Las IPs de origen de las entregas no están definidas en esta guía: consultar con Ordenex.)</p>
+  <h2>6.4 Idempotencia y confirmación</h2>
+  <ul>
+    <li>Una misma entrega <strong>puede repetirse</strong>: reintento tras fallo transitorio, o duplicado. Deduplique por <code>eventoId</code>, que es determinista para un mismo hecho: <code>webhook_estado:…</code> para un cambio de estado y <code>webhook_evento:&lt;id&gt;</code> para los eventos de orden (§6.7). Dos entregas del mismo <code>eventoId</code> pueden diferir en <code>data.numGuia</code>, <code>mensajero</code>, <code>motivo</code> o <code>evidenciasUrl</code> si la orden cambió entre un intento y otro: quédese con la última.</li>
+    <li>Responda <code>2xx</code> para confirmar. <strong>Cualquier otra respuesta, un timeout (10 s) o un fallo de red se trata como fallo transitorio y la entrega se reintenta.</strong></li>
+    <li><strong>Política de reintento</strong> (valores por defecto): hasta <strong>5 intentos</strong> por entrega, con espera exponencial entre ellos (1, 2, 4 y 8 minutos, tope 1 hora). Agotados los intentos, la entrega se descarta y no se vuelve a enviar: si su endpoint estuvo caído más de ese tiempo, reconcilie con el listado (§5.3). Un <code>429</code> con <code>Retry-After</code> se respeta (nunca por debajo de la espera calculada, y nunca más de 1 hora).</li>
+    <li><strong>Circuito de pausa:</strong> tras 3 fallos consecutivos y 30 minutos sin ninguna entrega aceptada, los reintentos de <em>toda</em> la suscripción pasan a espaciarse a 1 hora. Un <code>2xx</code> la saca de la pausa de inmediato. Los eventos nuevos se siguen encolando.</li>
+    <li>El orden de llegada <strong>no está garantizado</strong> entre eventos (un reintento puede llegar después de un evento posterior): ordene por <code>ocurridoAt</code>.</li>
+  </ul>
+  <div class="warn">Si su handler responde <code>4xx</code> ante un evento que no le interesa (estado o evento desconocido, orden que no reconoce), Ordenex va a reintentarlo y a contarlo como fallo del circuito. Responda <code>2xx</code> e ignore internamente.</div>
+
+  <h2>6.5 Estados que este webhook puede emitir</h2>
+  <p>Es un <strong>subconjunto</strong> del catálogo REST (§4.7): solo los estados públicos del ciclo. Son estos doce:</p>
+  <table class="tight">
+    <thead><tr><th>#</th><th>Estado</th><th>Nota</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><code>por_recolectar_en_tienda</code></td><td>Evento de nacimiento — tiendas <strong>sin</strong> fulfillment (§5.1)</td></tr>
+      <tr><td>2</td><td><code>en_preparacion</code></td><td>Evento de nacimiento — tiendas <strong>con</strong> fulfillment (§5.1). Llega con <code>numGuia: null</code>, una sola vez por orden.</td></tr>
+      <tr><td>3</td><td><code>en_ruta_bodega_central</code></td><td></td></tr>
+      <tr><td>4</td><td><code>en_bodega_central</code></td><td>Con fulfillment, es el primer evento que trae la guía.</td></tr>
+      <tr><td>5</td><td><code>en_reparto</code></td><td><span class="w">⚠</span> Puede llegar <strong>más de una vez</strong> sobre la misma orden (por ejemplo, una orden en <code>reprogramado</code> que vuelve a salir a reparto). Son cambios reales, con <code>eventoId</code> distinto.</td></tr>
+      <tr><td>6</td><td><code>entregado</code></td><td rowspan="5"><span class="w">⚠</span> Cuando el resultado lo registra el mensajero en calle, el evento llega <strong>al aprobar su cierre del día</strong>, no al gestionar: horas después de lo que ve el mensajero. Para enterarse al instante, use <code>orden.gestion_registrada</code> (§6.7). Una reprogramación o un rechazo que registra la propia tienda desde la aplicación, o el escalado automático de una novedad, llegan en el instante en que ocurren.</td></tr>
+      <tr><td>7</td><td><code>reprogramado</code></td></tr>
+      <tr><td>8</td><td><code>novedad</code></td></tr>
+      <tr><td>9</td><td><code>devolucion_a_origen_por_rechazo</code></td></tr>
+      <tr><td>10</td><td><code>incidente</code></td></tr>
+      <tr><td>11</td><td><code>devolviendo_a_tienda</code></td><td>También por una cancelación (§5.9)</td></tr>
+      <tr><td>12</td><td><code>devuelta_a_tienda</code></td><td></td></tr>
+    </tbody>
+  </table>
+  <div class="warn">Los otros ocho estados del catálogo <strong>nunca</strong> viajan en un evento: <code>recolectando</code>, los internos de ruteo satélite (<code>en_ruta_bodega_satelite</code>, <code>en_bodega_satelite</code>, <code>mensajero_recogiendo_en_bodega</code>), <code>novedad_interna</code> y los tres del flujo de devolución interna (<code>por_devolver_a_bodega_central</code>, <code>devolviendo_a_bodega_central</code>, <code>por_devolver_a_tienda</code>).</div>
+  <p>La lista puede crecer de forma aditiva con aviso previo. Trate un valor desconocido como <strong>«ignorar»</strong>, no como error.</p>
+
+  <h2>6.6 <code>motivo</code> depende de <code>estado</code></h2>
+  <div class="warn"><code>motivo</code> transporta dos catálogos distintos, y cuál aplica lo decide <code>estado</code>.</div>
+  <table class="tight">
+    <thead><tr><th><code>estado</code></th><th>Contenido de <code>motivo</code></th></tr></thead>
+    <tbody>
+      <tr><td><code>novedad</code></td><td>Un valor del catálogo de causas de devolución: <code>not_found</code>, <code>wrong_number</code>, <code>wrong_address</code> (en inglés)</td></tr>
+      <tr><td><code>incidente</code></td><td>Un valor del catálogo de causas de incidente: <code>danado</code>, <code>perdido</code>, <code>robado</code> (en español, sin eñe)</td></tr>
+      <tr><td>cualquier otro</td><td>siempre <code>null</code></td></tr>
+    </tbody>
+  </table>
+  <div class="warn">No interprete <code>motivo</code> sin mirar antes <code>estado</code>: el mismo campo significa cosas distintas según el caso. Son valores crudos: compárelos contra el literal exacto, sin normalizar ni traducir. La asimetría de idioma es deliberada y no se va a «armonizar». <code>motivo</code> es <code>null</code> también en una <code>novedad</code> o un <code>incidente</code> sin causa registrada, y es la causa <strong>vigente en el momento de la entrega</strong>, nunca el texto libre del mensajero.</div>
+
+  <h2>6.7 Eventos de gestión y de ayuda (<span class="ep">orden.gestion_*</span>, <span class="ep">orden.ayuda_*</span>)</h2>
+  <p>Cinco eventos que no son un cambio de estado. Llegan al mismo callback, firmados igual (§6.3) y con el mismo circuito de reintento (§6.4). Ramifique por <code>evento</code>:</p>
+  <table class="tight">
+    <thead><tr><th><code>evento</code></th><th>Cuándo</th><th>Claves propias en <code>data</code></th></tr></thead>
+    <tbody>
+      <tr><td><code>orden.gestion_registrada</code></td><td>El mensajero (o la tienda, desde una ayuda) registró una gestión en calle. Queda <strong>pendiente de confirmar</strong>: el estado de la orden no cambia todavía; el real llegará como <code>orden.estado_actualizado</code> al aprobarse el cierre.</td><td><code>gestionId</code>, <code>resultado</code>, <code>resultadoNombre</code>, <code>pendienteConfirmacion: true</code></td></tr>
+      <tr><td><code>orden.gestion_anulada</code></td><td>El mensajero deshizo esa gestión pendiente antes de que entrara en un cierre. La orden vuelve a ser gestionable.</td><td><code>gestionId</code>, <code>resultado</code>, <code>resultadoNombre</code></td></tr>
+      <tr><td><code>orden.gestion_corregida</code></td><td>Se corrigió el resultado de una gestión pendiente dentro de un cierre abierto (<code>resultadoAnterior</code> → <code>resultado</code>).</td><td><code>gestionId</code>, <code>resultado</code>, <code>resultadoNombre</code>, <code>resultadoAnterior</code>, <code>resultadoAnteriorNombre</code>, <code>pendienteConfirmacion: true</code></td></tr>
+      <tr><td><code>orden.ayuda_solicitada</code></td><td>El mensajero pidió ayuda a la tienda. La orden sigue <code>en_reparto</code>.</td><td>—</td></tr>
+      <tr><td><code>orden.ayuda_resuelta</code></td><td>La ayuda se cerró: por el mensajero («Recuperar»), por la tienda («Habilitar» en la aplicación) o por este canal (§5.10).</td><td><code>via</code> ∈ <code>mensajero</code> | <code>tienda</code> | <code>api</code></td></tr>
+    </tbody>
+  </table>
+  <p><code>data</code> lleva <strong>siempre</strong> <code>numGuia</code>, <code>numRemision</code>, <code>motivo</code> (la causa tipificada de la gestión, con los mismos valores de §6.6; <code>null</code> en los eventos de ayuda) y <code>mensajero</code> (el atribuido al hecho, o <code>null</code>). Las demás claves <strong>se omiten</strong> cuando el evento no las lleva. <code>resultado</code> usa los cinco códigos de resultado (§4.7). <code>eventoId</code> es <code>webhook_evento:&lt;id&gt;</code>, único por hecho.</p>
+<pre>{
+  "evento": "orden.gestion_registrada",
+  "eventoId": "webhook_evento:018f2c31-0000-4000-8000-000000000101",
+  "ocurridoAt": "2026-09-23T15:10:00.000Z",
+  "data": {
+    "numGuia": 100234, "numRemision": "REM-0001",
+    "gestionId": "018f2c31-0000-4000-8000-000000000201",
+    "resultado": "novedad", "resultadoNombre": "Novedad",
+    "motivo": "not_found",
+    "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" },
+    "pendienteConfirmacion": true
+  }
+}</pre>
+<pre>{
+  "evento": "orden.ayuda_resuelta",
+  "eventoId": "webhook_evento:018f2c31-0000-4000-8000-000000000102",
+  "ocurridoAt": "2026-09-23T16:00:00.000Z",
+  "data": {
+    "numGuia": 100235, "numRemision": "REM-0002",
+    "motivo": null,
+    "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" },
+    "via": "api"
+  }
+}</pre>
+  <div class="warn"><strong>La secuencia típica de una entrega en calle</strong> es: <code>orden.gestion_registrada</code> (al instante, con <code>pendienteConfirmacion: true</code>) → horas después, <code>orden.estado_actualizado</code> con <code>estado: "entregado"</code> (al aprobarse el cierre). Si entre medias llega <code>orden.gestion_anulada</code>, no habrá cambio de estado para esa gestión; si llega <code>orden.gestion_corregida</code>, el estado que se aplicará es el <code>resultado</code> corregido. La lista de eventos puede crecer de forma aditiva, con aviso previo: trate un <code>evento</code> desconocido como «ignorar».</div>
+</section>
+
+<!-- ============================================================ 7 -->
+<section class="pb">
+  <h1>7. Checklist de puesta en producción</h1>
+  <table class="check tight">
+    <thead><tr><th>✔</th><th>Punto</th><th style="width:60pt">Por qué</th></tr></thead>
+    <tbody>
+      <tr><td>☐</td><td>La API key vive en un <strong>gestor de secretos</strong> o variable de entorno — nunca en frontend, repo ni logs</td><td>§3.6</td></tr>
+      <tr><td>☐</td><td>Puede <strong>cambiar el secreto sin recompilar</strong></td><td>§3.4</td></tr>
+      <tr><td>☐</td><td>Compara <strong>códigos</strong> de estado y muestra los <strong>nombres</strong> (<code>…Nombre</code>); no mantiene una traducción propia</td><td>§4.7</td></tr>
+      <tr><td>☐</td><td>No queda ningún literal de los <strong>once códigos anteriores</strong> (tabla de cambios A.1 y A.2)</td><td>Cambios</td></tr>
+      <tr><td>☐</td><td>En <code>/carga</code>, lee <code>errores[]</code> y usa <code>creadas</code> y <code>conError</code> como semáforo del lote, no el status HTTP</td><td>§5.1</td></tr>
+      <tr><td>☐</td><td>Guarda <code>cargaId</code> cuando no es <code>null</code>, para el PDF del lote</td><td>§5.1, §5.6</td></tr>
+      <tr><td>☐</td><td>Maneja el error de clave <code>tarifa</code> (sin tarifa o sin cobertura) y los de catálogo retirado como casos de negocio</td><td>§5.1</td></tr>
+      <tr><td>☐</td><td>Contempla los dos estados iniciales posibles según fulfillment, y <code>numGuia: null</code> en el segundo</td><td>§5.1</td></tr>
+      <tr><td>☐</td><td>Parsea los importes como texto crudo (<code>"2500.00"</code>); no le aplica un parser de miles/coma</td><td>§5.2</td></tr>
+      <tr><td>☐</td><td>Tiene presente que la guía se prioriza sobre la remisión en <code>/orden/{id}</code></td><td>§5.4</td></tr>
+      <tr><td>☐</td><td><strong>Descarga</strong> los archivos de URLs firmadas de inmediato; no persiste la URL (300 s)</td><td>§5.4, §5.5</td></tr>
+      <tr><td>☐</td><td>Lee <code>pendienteConfirmacion</code> en <code>gestiones[]</code> y no deduce el estado del <code>resultado</code></td><td>§5.4</td></tr>
+      <tr><td>☐</td><td>Archiva <code>costoReal</code>, no <code>costoEstimado</code>; agrupa por <code>id</code> de zona y mensajero, nunca por <code>nombre</code></td><td>§5.3</td></tr>
+      <tr><td>☐</td><td>Verifica el <strong>HMAC sobre el cuerpo crudo</strong>, en tiempo constante, antes de parsear</td><td>§6.3</td></tr>
+      <tr><td>☐</td><td>La ruta del webhook recibe el cuerpo <strong>sin parsear</strong> por el framework</td><td>§6.3</td></tr>
+      <tr><td>☐</td><td>Deduplica por <code>eventoId</code> y ordena por <code>ocurridoAt</code></td><td>§6.4</td></tr>
+      <tr><td>☐</td><td>Responde <code>2xx</code> siempre que recibe el evento, incluso si lo ignora; su endpoint responde en menos de 10 s</td><td>§6.4</td></tr>
+      <tr><td>☐</td><td>Interpreta <code>motivo</code> según <code>estado</code>, contra literales exactos</td><td>§6.6</td></tr>
+      <tr><td>☐</td><td>Trata <strong>estados y eventos desconocidos como «ignorar»</strong>, nunca como error</td><td>§6.5, §6.7</td></tr>
+      <tr><td>☐</td><td>Sabe que el estado final de una gestión en calle llega <strong>al aprobar el cierre</strong>; usa <code>orden.gestion_registrada</code> si necesita el instante</td><td>§6.5, §6.7</td></tr>
+      <tr><td>☐</td><td>No rellena huecos de analítica con ceros, descarta los puntos <code>parcial</code> al sumar, y distingue <code>null</code> de <code>0</code></td><td>§5.8</td></tr>
+      <tr><td>☐</td><td>Valida los ids de métricas antes de llamar (el lote es todo o nada)</td><td>§5.8</td></tr>
+      <tr><td>☐</td><td>Maneja fechas de calendario en <strong>UTC-6</strong> y timestamps en <strong>UTC</strong></td><td>§4.5</td></tr>
+      <tr><td>☐</td><td>Si valida el esquema en estricto, su modelo está regenerado contra el contrato vigente</td><td>Cambios</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ 8 -->
+<section>
+  <h1>8. Errores frecuentes y cómo diagnosticarlos</h1>
+  <h2>8.1 Por código</h2>
+  <table class="small">
+    <thead><tr><th style="width:34pt">HTTP</th><th style="width:88pt"><code>code</code></th><th>Causa probable</th><th>Acción concreta</th></tr></thead>
+    <tbody>
+      <tr><td><code>401</code></td><td><code>UNAUTHORIZED</code></td><td>No mandó el header, <strong>o</strong> la key no existe. Los dos casos son indistinguibles.</td><td>Revise que envía <code>Authorization: Bearer ordx_...</code> en <strong>todos</strong> los endpoints. Verifique que el secreto llegó completo (no truncado por su gestor de config).</td></tr>
+      <tr><td><code>403</code></td><td><code>FORBIDDEN</code></td><td>La key existe pero está <strong>desactivada</strong>, o su <strong>cuenta dedicada</strong> (o la tienda a la que apunta) no está activa. En analítica: pidió una métrica no publicable.</td><td>Si es analítica, valide sus ids contra la lista de §5.8. En cualquier otro endpoint, contacte a Ordenex: no es algo que se arregle desde su lado.</td></tr>
+      <tr><td><code>404</code></td><td><code>NOT_FOUND</code></td><td>Recurso inexistente, borrado, <strong>o de otra tienda</strong>. Deliberadamente indistinguibles. También la ruta retirada <code>GET …/api-key/{numGuia}</code>.</td><td>Confirme el <code>numGuia</code>/<code>numRemision</code>/<code>cargaId</code> y la ruta (<code>/orden/{id}</code>). Si cree que la orden es suya, verifíquela con el listado (§5.3).</td></tr>
+      <tr><td><code>409</code></td><td><code>CONFLICT</code></td><td>Ninguna fila resolvió tarifa; nombre de lote repetido; orden sin guía imprimible; lote sin etiquetas o por encima del tope; eliminación o cancelación desde un estado no permitido, o con intentos de entrega.</td><td>Lea el <code>message</code>: distingue los casos. Si es de tarifa, es un tema comercial con Ordenex, no de código.</td></tr>
+      <tr><td><code>422</code></td><td><code>VALIDATION_ERROR</code></td><td>Cuerpo, path o query params mal formados; fecha inexistente; rango invertido; <code>estado</code> con un <strong>código anterior</strong> al cambio de nombres.</td><td>Lea <code>details.fieldErrors</code>: trae el campo y el mensaje. Si el mensaje dice «ya no existe: ahora se llama», reemplace el literal por el código vigente.</td></tr>
+      <tr><td><code>500</code></td><td><code>INTERNAL</code></td><td>Falla del lado de Ordenex.</td><td>Reintente con backoff. Si persiste, reporte con el <code>cargaId</code> o <code>numGuia</code> involucrado.</td></tr>
+    </tbody>
+  </table>
+  <h2>8.2 Síntomas sin error visible</h2>
+  <p>Estos son los que más tiempo cuestan, porque la API responde <code>200</code>.</p>
+  <table class="small">
+    <thead><tr><th style="width:150pt">Síntoma</th><th>Causa</th><th>Acción</th></tr></thead>
+    <tbody>
+      <tr><td>“Mandé 500 órdenes y llegaron 480”</td><td>Éxito parcial: 20 filas volvieron en <code>errores[]</code> dentro de un <code>200</code>.</td><td>Mire <code>conError</code> y revise solo <code>errores[]</code>. §5.1</td></tr>
+      <tr><td>“El lote entero falló pero me dio <code>200</code>, no <code>409</code>”</td><td>El status HTTP no es el semáforo del lote.</td><td>Use <code>creadas</code> y <code>conError</code>. §5.1</td></tr>
+      <tr><td>“Filtro <code>filas</code> por <code>resultado: "error"</code> y nunca encuentro nada”</td><td>Desde el 2026-08-31 las filas con error no viajan en <code>filas</code>.</td><td>Lea <code>errores[]</code>. §5.1, §5.2</td></tr>
+      <tr><td>“Una fila no se creó y no entiendo por qué”</td><td>Error bajo la clave <code>tarifa</code>: sin tarifa vigente <strong>o</strong> sin cobertura en esa zona; o un nivel de la dirección retirado del catálogo.</td><td>Muéstreselo al usuario. §5.1</td></tr>
+      <tr><td>“El monto que cobró el mensajero no es el que mandé”</td><td><code>monto_cobrar</code> se redondeó al colón.</td><td>Redondee usted antes de enviar; lea <code>montoAjustado</code>. §5.1</td></tr>
+      <tr><td>“Busco por <code>num_remision</code> y no aparece”</td><td>La coincidencia es <strong>exacta</strong>: sin prefijo, sin subcadena, distingue mayúsculas.</td><td>Compare el literal carácter por carácter. §5.3</td></tr>
+      <tr><td>“Pedí una remisión y me devolvió otra orden”</td><td>El valor casó con la <strong>guía</strong> de una orden y la <strong>remisión</strong> de otra. Se prioriza la guía.</td><td>§5.4</td></tr>
+      <tr><td>“Los enlaces de etiquetas y evidencias están rotos”</td><td>Las URLs firmadas vencen a los <strong>300 s</strong> (1 h la del PDF que devuelve la carga).</td><td>Descargue el archivo al recibirlo; no persista la URL. §5.4, §5.5</td></tr>
+      <tr><td>“Mi parser convierte <code>"2500.00"</code> en <code>2.5</code>”</td><td>Quedó puesto un parser de importes con punto de miles y coma decimal.</td><td>Los importes ya son números en texto: <code>parseFloat</code>/<code>Decimal</code> tal cual. §5.2</td></tr>
+      <tr><td>“El total cotizado no cuadra”</td><td>Cada fila se cotizó sobre <code>montoCobrar</code> redondeado; no hay bloque de totales.</td><td>Sume las filas de <code>filas[]</code> con su tasa de entrega real. §5.2</td></tr>
+      <tr><td>“No puedo eliminar una orden”</td><td>El estado no está en la lista eliminable, <strong>o</strong> la orden ya tiene un intento de entrega.</td><td>Consulte el estado primero; si ya está en bodega o en ruta a ella, cancele. §5.7, §5.9</td></tr>
+      <tr><td>“Una orden que el mensajero entregó sigue <code>en_reparto</code>”</td><td>Comportamiento esperado: el estado se aplica al aprobar el cierre del mensajero.</td><td>Lea <code>gestiones[]</code> (<code>pendienteConfirmacion</code>) o consuma <code>orden.gestion_registrada</code>. §5.4, §6.7</td></tr>
+      <tr><td>“Un estado que usaba ya no existe / me dan 422 al filtrar por estado”</td><td>Los códigos cambiaron de nombre (tabla de cambios).</td><td>Use el código vigente que nombra el mensaje del 422. Cambios, §4.7</td></tr>
+      <tr><td>“El gráfico muestra caídas a cero en días sueltos, o hoy siempre sale bajo”</td><td>Rellenó con ceros días que <code>data</code> omite, convirtió <code>null</code> en <code>0</code>, o sumó el día en curso (<code>parcial</code>).</td><td>No rellene. Distinga ausente / <code>null</code> / número / parcial. §5.8</td></tr>
+      <tr><td>“Las entregas + devoluciones no suman las órdenes creadas”</td><td>Unas cuentan <strong>gestiones</strong> y otras cuentan <strong>órdenes</strong>.</td><td>§5.8</td></tr>
+      <tr><td>“Mi cliente generado rechaza la respuesta”</td><td>Validación estricta del esquema contra un modelo viejo: hay claves nuevas (<code>…Nombre</code>, <code>zona</code>, <code>costoReal</code>, <code>gestiones</code>, <code>pendienteConfirmacion</code>, <code>ayudaCerrada</code>, <code>cobertura</code>…).</td><td>Regenere el modelo contra el contrato vigente o relaje la validación. Cambios</td></tr>
+      <tr><td>“La firma del webhook nunca valida”</td><td>Su framework parseó y re-serializó el cuerpo antes de que usted lo leyera.</td><td>Reciba el cuerpo crudo en esa ruta. §6.3</td></tr>
+      <tr><td>“Recibo el mismo evento varias veces”</td><td>Comportamiento esperado: reintentos y duplicados.</td><td>Deduplique por <code>eventoId</code>. §6.4</td></tr>
+      <tr><td>“Ordenex me reintenta un evento que no me interesa”</td><td>Su handler responde algo distinto de <code>2xx</code>.</td><td>Responda <code>2xx</code> e ignore internamente. §6.4</td></tr>
+      <tr><td>“Recibo un <code>evento</code> que no conozco”</td><td>Eventos de gestión y de ayuda (bloque B de los cambios).</td><td>Ramifique por <code>evento</code>; ignore lo que no consuma. §6.7</td></tr>
+      <tr><td>“Dejaron de llegar eventos durante una hora”</td><td>Su endpoint falló varias veces seguidas y la suscripción entró en pausa; o el evento agotó sus 5 intentos.</td><td>Revise la disponibilidad de su endpoint y reconcilie con el listado. §6.4</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</body>
+</html>
