@@ -38,7 +38,7 @@ function expresionHoyCr(): string {
   const sinComentarios = SCRIPT.split("\n")
     .filter((l) => !l.trim().startsWith("--"))
     .join("\n");
-  const m = /SELECT\s+(.+?)\s+AS hoy_cr/s.exec(sinComentarios);
+  const m = /SELECT\s+([\s\S]+?)\s+AS hoy_cr/.exec(sinComentarios);
   if (!m?.[1]) throw new Error("el script ya no define `hoy_cr` en su CTE `params`");
   return m[1];
 }
