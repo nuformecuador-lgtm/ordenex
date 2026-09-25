@@ -17,6 +17,7 @@ import {
   ESTADO_CIERRE_PLURAL,
   REPARTO_PREVISUALIZACION,
 } from "./wallet-mensajeros-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Feature 205 (T5.2/T6.2, design §6/§8) — la PREVISUALIZACIÓN del reparto, dentro del
 // formulario de pago.
@@ -224,7 +225,7 @@ function ImputacionesPrevistas({
             <span className="text-sm font-medium">
               {/* El cierre se nombra por el día TRABAJADO, que es la antigüedad que ordena
                   el reparto (R8). La hora no aporta nada acá. */}
-              {REPARTO_PREVISUALIZACION.cierre(imputacion.solicitadoAt.slice(0, 10))}
+              {REPARTO_PREVISUALIZACION.cierre(fechaDiaMovimientoCR(imputacion.solicitadoAt))}
             </span>
             {/* R33: la parcial va MARCADA. Solo la última puede serlo. */}
             {imputacion.parcial ? (

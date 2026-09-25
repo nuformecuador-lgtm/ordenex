@@ -18,6 +18,7 @@ import {
 } from "./composicion-detalle-labels";
 import { inputDeFiltros, type WalletFiltrosValue } from "./WalletFiltros";
 import { CATEGORIA_LABEL, ORIGEN_LABEL, money } from "./wallet-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Ficha 339 (T5.2, design 5.3/5.5) — LOS MOVIMIENTOS QUE COMPONEN UNA FILA de la tarjeta
 // «Como se compone la ganancia de Ordenex».
@@ -145,7 +146,7 @@ const COLUMNS: Column<WalletMovimientoDTO>[] = [
   {
     id: "fecha",
     value: COMPOSICION_DETALLE_COLUMNAS.fecha,
-    render: (m) => m.fechaMovimiento.slice(0, 10),
+    render: (m) => fechaDiaMovimientoCR(m.fechaMovimiento),
   },
   {
     id: "concepto",
@@ -210,7 +211,7 @@ const COLUMNS_MOVIL: Column<WalletMovimientoDTO>[] = [
     render: (m) => (
       <div className="flex flex-col gap-0.5 wrap-anywhere">
         <span className="text-xs whitespace-nowrap tabular-nums text-muted-foreground">
-          {m.fechaMovimiento.slice(0, 10)}
+          {fechaDiaMovimientoCR(m.fechaMovimiento)}
         </span>
         {/* R5: la etiqueta legible del catalogo, nunca el valor del enum. */}
         <span className="font-medium">{CATEGORIA_LABEL[m.categoria]}</span>

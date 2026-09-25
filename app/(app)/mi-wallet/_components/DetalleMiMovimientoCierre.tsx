@@ -41,6 +41,7 @@ import {
   resultadosTexto,
 } from "./detalle-mi-movimiento-labels";
 import { money } from "./mi-wallet-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Ficha 344 (T7.1, design §5) — LAS ÓRDENES QUE COMPONEN EL IMPORTE de una fila del libro de
 // movimientos de LA PROPIA TIENDA.
@@ -307,7 +308,7 @@ export function DetalleMiMovimientoCierre({
       {payload ? (
         <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
           <span className="font-medium">
-            {DETALLE_MI_MOVIMIENTO_CABECERA.cierre(payload.cierre.fecha.slice(0, 10))}
+            {DETALLE_MI_MOVIMIENTO_CABECERA.cierre(fechaDiaMovimientoCR(payload.cierre.fecha))}
           </span>
           <span className="text-muted-foreground">
             {DETALLE_MI_MOVIMIENTO_CABECERA.cardinales(payload.total, payload.ordenesDelCierre)}

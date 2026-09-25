@@ -40,6 +40,7 @@ import {
   money,
   origenLabel,
 } from "./desglose-tienda-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Feature 171 (T2.3, R1–R21) — DESGLOSE del dinero de UNA tienda para los roles de acceso
 // total. Se MONTA al expandir su fila en `SaldosTiendasTable` (el `renderExpanded` del
@@ -189,7 +190,7 @@ const COLUMNS: Column<WalletTiendaMovimientoDTO>[] = [
   {
     id: "fecha",
     value: DESGLOSE_TIENDA_COLUMNAS.fecha,
-    render: (m) => m.fechaMovimiento.slice(0, 10),
+    render: (m) => fechaDiaMovimientoCR(m.fechaMovimiento),
   },
   {
     id: "tipo",

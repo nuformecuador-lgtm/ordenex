@@ -41,6 +41,7 @@ import {
   resultadosTexto,
 } from "./detalle-movimiento-labels";
 import { money } from "./wallet-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Ficha 344 (T6.2/T6.3, design §5) — LAS ÓRDENES QUE COMPONEN EL IMPORTE de una fila del libro
 // de movimientos de la caja principal.
@@ -366,7 +367,7 @@ export function DetalleMovimientoCierre({
       {payload ? (
         <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
           <span className="font-medium">
-            {DETALLE_MOVIMIENTO_CABECERA.cierre(payload.cierre.fecha.slice(0, 10))}
+            {DETALLE_MOVIMIENTO_CABECERA.cierre(fechaDiaMovimientoCR(payload.cierre.fecha))}
           </span>
           {/* R15: sólo la caja principal nombra al mensajero. El servidor manda `null` en
               `/mi-wallet`, y ese panel además no pinta esta línea. */}

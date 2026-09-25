@@ -28,6 +28,7 @@ import {
   esEgresoAdministrativo,
   money,
 } from "./wallet-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Feature 42 (T12, R18/R21) — libro de movimientos (tabla, más reciente primero: el
 // backend ya lo devuelve ordenado). Datos por props desde el módulo. Money-safe: la
@@ -239,7 +240,7 @@ export function WalletLedger({
         id: "fecha",
         value: "Fecha",
         minWidth: "7rem",
-        render: (m) => m.fechaMovimiento.slice(0, 10),
+        render: (m) => fechaDiaMovimientoCR(m.fechaMovimiento),
       },
       {
         id: "tipo",
@@ -338,7 +339,7 @@ export function WalletLedger({
             <DetalleMovimientoCierre
               movimientoId={m.id}
               concepto={CATEGORIA_LABEL[m.categoria]}
-              fecha={m.fechaMovimiento.slice(0, 10)}
+              fecha={fechaDiaMovimientoCR(m.fechaMovimiento)}
             />
           ) : null
         }
@@ -348,7 +349,7 @@ export function WalletLedger({
         expandAriaLabel={(m) =>
           DETALLE_MOVIMIENTO_NOMBRE.abrir(
             CATEGORIA_LABEL[m.categoria],
-            m.fechaMovimiento.slice(0, 10),
+            fechaDiaMovimientoCR(m.fechaMovimiento),
           )
         }
         // Feature 170 (T C.4, R1/R9/R13): el control aparece solo si el módulo bajó el

@@ -28,6 +28,7 @@ import {
   VER_COMPROBANTE_RESPUESTA,
   money,
 } from "./wallet-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // FICHA 459 (T B.16, design §9.4 — R65/R66/R67) — las acciones de una fila ORIGINAL del libro de
 // la caja que tiene DOCUMENTO: un pago por cuenta de una tienda o un saldo inicial o aporte.
@@ -103,7 +104,7 @@ export function DocumentoCajaAcciones({ movimiento, onAnulado }: DocumentoCajaAc
   const { documento } = movimiento;
   const documentoId = movimiento.origenId;
   const concepto = CATEGORIA_LABEL[movimiento.categoria];
-  const fecha = movimiento.fechaMovimiento.slice(0, 10);
+  const fecha = fechaDiaMovimientoCR(movimiento.fechaMovimiento);
   const montoPintado = money(movimiento.monto);
   const motivoLimpio = motivo.trim();
 

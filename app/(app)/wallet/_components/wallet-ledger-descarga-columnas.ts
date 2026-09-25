@@ -17,7 +17,7 @@
  */
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
-import { fechaDiaISO } from "@/lib/utils/fecha-dia-iso";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 import { CATEGORIA_LABEL, DUENO_LABEL, ORIGEN_LABEL, TIPO_LABEL } from "./wallet-labels";
 
@@ -55,7 +55,7 @@ function origen(movimiento: WalletMovimientoDTO): string {
  */
 export function filaDescargaMovimientoCaja(movimiento: WalletMovimientoDTO): DescargaFila {
   return {
-    fecha: fechaDiaISO(movimiento.fechaMovimiento),
+    fecha: fechaDiaMovimientoCR(movimiento.fechaMovimiento),
     tipo: TIPO_LABEL[movimiento.tipo] ?? movimiento.tipo,
     categoria: CATEGORIA_LABEL[movimiento.categoria] ?? movimiento.categoria,
     monto: movimiento.monto, // STRING tal cual (money-safe): sin parseo, sin símbolo
