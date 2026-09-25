@@ -211,10 +211,46 @@ Verdes en la corrida dirigida (17 archivos, 200 tests): `nombres-wallet-461` (nu
 ## 7. Gate
 
 Comando: `./init.sh > progress/gate_461_frontend.log 2>&1; echo "INIT_EXIT=$?" >> progress/gate_461_frontend.log`
-(gate COMPLETO, sin `tail`, contra `ordenex_461`).
+(gate COMPLETO, sin `tail`, contra `ordenex_461`, desacoplado con `nohup` para que un corte de la sesión no lo
+mate). Se mira que `tests/integration/db` no tenga saltados: sin `.env` se saltan y el gate dice «OK».
 
-(pendiente: se anota al terminar)
+- **1.ª corrida** (`000590d6`, guardada en `scratchpad/gate_461_frontend_1.log`): `INIT_EXIT=1` —
+  2 224 archivos, **3 rojos**, los tres consecuencia de esta ficha y ninguno del dinero:
+  1. `PremiosRankingPanel.test.tsx` › «el refresco dirigido apunta a claves que EXISTEN»: la guardia buscaba
+     el literal `"wallet-mensajeros:cuentas"` en `CuentasPorPagarTable.tsx` y P1 lo movió al módulo puro
+     `cuentas-por-pagar-clave.ts`. → La guardia apunta al módulo que hoy define la clave y gana un caso que
+     exige que la tabla la importe de ahí (`claveCuentasPorPagar`) y no la escriba a mano.
+  2. `wallet-ledger-dueno.test.tsx` › R36 «ninguna fuente de `app/wallet` deriva el dueño»:
+     `esReversoDeUnEgreso` (P3) comparaba `categoria === "ingreso_ajuste"`. → Se reconoce el reverso por
+     tipo + origen `gasto` + `origenId`, sin mirar la categoría; medido en el árbol: el único INGRESO con
+     origen `gasto` es el reverso (`WalletEgresoService.ts:128-131`; los otros tres escritores con ese
+     origen —`GastoFijoCobroService`, `GeneracionGastosFijosService`, el propio gasto— son egresos).
+  3. `ancla-de-carga.guardia.test.ts`: mi `WalletSaldosTiendasRefrescoP1.test.tsx:185` anclaba un
+     `waitFor` a `getAllByText(...).length > 0`. → `getByText("₡5.000")` en singular + `toBeInTheDocument`.
+  Corregidos en `9a98c940`; los tres archivos y los que dependen de lo tocado, aislados: 6 archivos, 71
+  tests, verdes.
+- **2.ª corrida** (`9a98c940`), la que vale:
+
+```
+ Test Files  2224 passed (2224)
+      Tests  31395 passed | 26 skipped (31421)
+   Duration  789.03s
+== init OK ==
+INIT_EXIT=0
+```
+
+Los 26 `skipped` son los de siempre en `tests/components/AnaliticaPage.test.tsx` (17) y
+`AnaliticaShell.test.tsx` (9); **0 skipped en `tests/integration/db`**.
 
 ## 8. Veredicto
 
-(pendiente: se anota al terminar el gate)
+Frontend de la 461 (bloques C y D) + P1/P3 de la auditoría **terminado y verde**: typecheck 0, lint 0
+errores, gate completo `INIT_EXIT=0`, 14 mutaciones en rojo y revertidas (design §14.2 11–13 + una por
+pieza clave), las guardias de la 455, la 459, la 460 y la nueva de la 461 verdes, y las cuatro preguntas
+reales al asistente respondidas con los nombres nuevos y el acotamiento por rol. Rama
+`feature/461-frontend` pusheada.
+
+Queda fuera de este bloque y se dice: **T Z.3/R65** (recorrido por rol con capturas) es del cierre Z;
+**P3 completo** (un egreso cuyo reverso vive en otra página) exige que el servidor resuelva el estado del
+egreso en lote, como hace con `documento` (458 o quien tome P3); y el origen «Manual» del libro del
+mensajero queda declarado en la guardia nueva como pendiente de la 458.
