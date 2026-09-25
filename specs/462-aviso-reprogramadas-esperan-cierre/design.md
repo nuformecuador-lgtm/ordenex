@@ -168,6 +168,15 @@ actor con el aviso vivo son ~5 consultas por sondeo de 60 s; la 409 aceptó 2. S
 optimización es que `contar` no pida nombres de mensajero ni jornadas (una consulta menos), sin cambiar
 el contrato.
 
+> **Medido y aplicado (2026-09-25, review H2).** Prisma parte cada relación del `select` en una consulta
+> aparte, así que `resumen` cuesta **10** (A 4 + B 1 + cierres 3 + mensajeros 1 + zona 1), no ~5. Se aplicó
+> la optimización de arriba: `contar` va por un camino ligero que pide de cada cierre solo estado y destino
+> (`IReprogramadaRetenidaRepository.findDestinoDeCierres`, sin relaciones) y comparte con `resumen` la
+> función de atribución y ámbito (`ambitoDeRetenida`). **`contar`: 10 → 7** por sondeo (6 sin «sin cierre»);
+> `resumen` y `contarPorCierre` siguen en 10 porque sí muestran nombres y jornadas. Contrato del servicio
+> intacto; el test de R7 (`contar` = `recortarPorAmbito(resumen).total`) sigue midiendo la igualdad contra
+> Postgres. Detalle en `progress/impl_462.md` §Cierre de hallazgos.
+
 ### 2.2 `IReprogramadaRetenidaRepository` (`lib/interfaces/repositories/`) y su implementación
 
 ```ts

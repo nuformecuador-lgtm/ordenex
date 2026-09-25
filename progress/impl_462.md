@@ -192,3 +192,78 @@ rojos de la corrida #2 fueron flakes de saturación reproducidos VERDES aislados
 Backend de la 462 implementado según el spec con los dos cambios del leader (down dinámico; hora y roles del
 push como constantes), 15 mutaciones en rojo y revertidas, migración probada up→down→up en el clon, 0
 `skipped` en integración; queda abierto el conflicto de literales con la 455 (BLOQUEO 1) antes de la Fase 3.
+
+---
+
+## Cierre de hallazgos de `review_462.md` (H1–H4), 2026-09-25 — rama `feature/462-final` desde `origin/review/462` @ `5ecc1142`
+
+Worktree propio, `pnpm install --frozen-lockfile` sin junction, `prisma generate`, `.env` del worktree hermano
+apuntando al clon `ordenex_462`. El grafo (`codebase-memory`) sigue rancio para la 462 (la revisión ya lo anotó):
+la lectura fue sobre los archivos reales. H5 (`history.md`) y H6 (push en la primera corrida de prod) son del
+leader y de la release: no se tocan.
+
+### H2 — camino ligero de `contar` (commit `9cff8e16`)
+
+**Qué cambió.** `contar(hoyCR, ambito)` ya no pasa por `resumen`: lee las MISMAS candidatas (A por
+`findOrdenesLiberables` + `!puedeLiberarse`, B por `findRetenidasEnReparto`), pide de cada cierre SOLO estado y
+destino con el método nuevo `IReprogramadaRetenidaRepository.findDestinoDeCierres(ids)` (un `findMany` de
+`cierre_dia` sin relaciones) y resuelve la zona central solo si hay retenidas «sin cierre». La regla de atribución y
+ámbito (sin cierre → bodega de la orden; cierre `aprobado` → no retiene; cierre inexistente → lanza) es UNA función
+(`ambitoDeRetenida`) que usan `resumen` y `contar`: la igualdad de R7 es por construcción, no por coincidencia.
+Contrato de `IReprogramadasRetenidasService` intacto (misma firma, misma semántica); el repo gana un método de solo
+lectura y la guardia `reprogramadas-retenidas-solo-lectura` (13) sigue verde con el mismo `Pick` del cliente.
+
+**Medido con `log: [{ emit: "event", level: "query" }]`** (script de un solo uso, borrado), sobre la siembra de
+`review_462.md` §3 sembrada en una transacción revertida del clon (`conEscenario` de la 454 con `mundo.prisma`
+apuntando al cliente que graba): cierre central `solicitado` que retiene 2 (A+B), central `rechazado` 1 (A),
+satélite `vencido` 1 (A), 1 sin cierre (B, central). `resumen` = total 5, `porForma` {A 3, B 2}, 3 cierres, 1 grupo
+sin cierre. Dos corridas cada medida; sin `BEGIN`/`SAVEPOINT`.
+
+| Llamada | ANTES (`5ecc1142`) | DESPUÉS (`9cff8e16`) | Por tabla (después) |
+|---|---|---|---|
+| `contar(central)` | **10** (orden 2, gestion_orden 2, cierre_dia 2, historial 1, usuario 2, zona 1) | **7** | orden 2, gestion_orden 1, cierre_dia 2, orden_historial_estado 1, zona 1 |
+| `contar(zona satélite)` | 10 | **7** | ídem |
+| `resumen()` | 10 | 10 | sin cambio (sí muestra nombres y jornadas) |
+| `contarPorCierre(3 ids)` | 10 | 10 | sin cambio (deriva de `resumen`) |
+
+Cifras idénticas antes y después: `contar(central)` = 4, `contar(satélite)` = 1, marca 2/1/1, y
+`contar(central) === recortarPorAmbito(resumen, central).total` = 4. Sin retenidas «sin cierre» el camino ligero
+baja a 6 (no consulta `zona`). Lo que se va por sondeo y admin: `usuario` ×2 (nombres de mensajero del cierre y del
+grupo sin cierre) y `gestion_orden` ×1 (las fechas para `derivarJornada`). La campana con el aviso vivo pasa de
+12 (2 base + 10) a 9 (2 + 7) por sondeo; con 5 admins, de ~50 a ~35 consultas/min.
+
+**Tests.** `tests/unit/services/reprogramadas-retenidas-service.test.ts` (17): nuevo «⭑ R7 (462/H2): `contar(a)` ES
+`recortarPorAmbito(resumen, a).total` para los tres ámbitos», nuevo «`contar` va por el camino LIGERO» (llama a
+`findDestinoDeCierres` una vez con los ids distintos y NO a `findCierresQueRetienen` ni a `findMensajeros`; zona
+central solo con «sin cierre»), y los tests de la carrera del aprobado y del cierre fantasma afirman también
+`contar`. `tests/integration/db/462/reprogramadas-retenidas-sql-real.test.ts` (25) verde contra el clon: «⭑ R7:
+`contar`, `contarPorCierre` y `recortarPorAmbito` cuentan lo mismo» y «⭑ ámbito» miden `cifraCentral ===
+central.total` con el servicio real. `pnpm exec tsc --noEmit` → 0; eslint de los 5 archivos → 0.
+
+**Mutaciones del cambio (cada una aplicada sobre `9cff8e16`, medida y revertida restaurando el archivo desde el
+commit, árbol limpio comprobado):**
+
+| # | Mutación (en `contar`, `ReprogramadasRetenidasService.ts:137`) | Rojo |
+|---|---|---|
+| H2-a | `ambitoFila !== null && mismoAmbito(...)` → `ambitoFila !== null` (ignora el ámbito) | **4**: unit «contar central no incluye satélite» (5≠3) y «⭑ R7 (462/H2)» (5≠3); sql-real «⭑ ámbito» (13≠3) y «⭑ R7» (**13≠10**) |
+| H2-b | `!== null &&` → `=== null \|\|` (cuenta las descartadas por cierre aprobado) | **1**: unit «carrera … en `resumen` Y en `contar`» (1≠0). El sql-real no lo ve: en una base estática `puedeLiberarse` y la LATERAL de la 454 ya excluyen el cierre aprobado ANTES de `ambitoDeRetenida`; el `null` solo aparece en la carrera de segundos, que solo un doble reproduce |
+
+### H4 — `porForma` global en el recorte (commit `7820775f`)
+
+Elegido **documentar**, no recortar: `porForma` es el insumo de R3 (comparación con el `esperandoCierre` del reloj,
+que no tiene ámbito) y ninguna superficie lo pinta (la franja lee `total`, `cierres`, `sinCierre`). Recortarlo
+exigiría llevar la forma por cierre en `CierreQueRetiene`/`MensajeroSinCierre`, un cambio de contrato para un número
+que nadie muestra. Doc en `ResumenRetenidas.porForma` y en `recortarPorAmbito`; el test del helper afirma que los
+tres recortes traen el `porForma` global.
+
+### H3 — literales del spec y del comentario del tipo
+
+`requirements.md` R13, R17, R27, R32 y R34 llevan ahora los literales definitivos en masculino («paquetes
+reprogramados para hoy»), con nota fechada de la decisión del leader (2026-09-25, `impl_462_frontend.md`
+§Decisión), y el comentario de `lib/types/notificacion.ts:147` dice «N paquetes esperan». El design §3.1/§5.2/§6.2
+conserva sus bocetos de código con el literal viejo; el desvío ya está anotado en `impl_462_frontend.md` §Desvíos.
+
+### H1 — `tasks.md`
+
+T0.1–T0.3, T1.1–T1.7, T2.1–T2.11, T3.1–T3.6 y T4.1–T4.4 marcadas `[x]` con la evidencia (bitácora y sección); T4.3
+cerrada con este H2. T5.x quedan abiertas (release).
