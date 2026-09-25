@@ -244,3 +244,8 @@ Mutaciones (mismo arnés; cada una en su archivo, revertida, árbol limpio al fi
 | R98, R99 | `tests/integration/db/caja-459-migration.test.ts` |
 | R100 | `tests/components/WalletLedgerAcciones459.test.tsx`, `tests/integration/mi-wallet-page.test.tsx`, `tests/unit/services/pago-por-cuenta-tienda-service.test.ts`, `tests/unit/utils/descripcion-pago-por-cuenta.test.ts` |
 | Recorrido F1 / F2 | `tests/components/WalletFechaCostaRica459.test.tsx`, `tests/unit/guards/wallet-fecha-cr-459.guardia.test.ts` / `tests/unit/services/aporte-capital-service.test.ts` |
+
+### Gate de las correcciones
+
+- Corrida 1 (`progress/gate_459_fix_corrida1.log`): `INIT_EXIT=1`, 1 rojo AJENO al código: `wallet-tienda-cobro` R17 contaba los `cobro_manual` de toda la base contra 0, y el recorrido dejó dos commiteados en `ordenex_459` (medido: «Recorrido 459: cobro de un costo a la tienda», 5000 × 2). Rojo también en 3 corridas aisladas. Arreglo: R17 afirma por diferencia (antes = después), commit `fbb52aad`; 3 corridas aisladas verdes.
+- Corrida 2 (`progress/gate_459_fix.log`, sobre `fbb52aad`): typecheck ✓, lint 0 errores (217 warnings previos), `Test Files 2200 passed (2200)`, `Tests 31112 passed | 26 skipped` (los 26 son `AnaliticaPage`/`AnaliticaShell`, previos; 0 en `tests/integration/db`), `== init OK ==`, `INIT_EXIT=0`.
