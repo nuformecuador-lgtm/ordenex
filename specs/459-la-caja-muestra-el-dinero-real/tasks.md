@@ -221,7 +221,7 @@ separado (design §15): A no lleva migración; B sí; C solo existe cuando haya 
   0,00, C2 sin filas, C5 idéntico a la línea base; errores de runtime en la hora siguiente = 0.
   *Hecho:* `progress/contraste_459.md` con «antes» y «después» de A, B y C. **Si alguna diferencia no
   es 0,00, no se sigue con el siguiente bloque.** (R91)
-- [ ] **T Z.4** (LEADER) Actualizar los specs de la 457 y la 458 con los acoples de design §14, y
+- [x] **T Z.4** (LEADER) Actualizar los specs de la 457 y la 458 con los acoples de design §14, y
   anotar en `docs/release.md` los pasos de operaciones (bucket, migraciones, contraste). *Hecho:* las
   dos fichas citan esta y sus mediciones rancias quedan marcadas para re-medir.
 
