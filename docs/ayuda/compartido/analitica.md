@@ -3,8 +3,11 @@ titulo: Analítica
 modulo: analitica
 pantalla: /analitica
 roles: [maestro, admin, adminTienda, adminSatelite]
-actualizado: 2026-09-15
+actualizado: 2026-09-25
 fuentes:
+  - app/(app)/analitica/_components/finanzas/cargar-kpis.ts
+  - app/(app)/analitica/_components/entregas/ConteoPorStatusDona.tsx
+  - components/shared/EstadoInfo.tsx
   - app/(app)/analitica/page.tsx
   - app/(app)/_components/FiltrosEntregas.tsx
   - app/(app)/analitica/_components/operativo/FiltrosOperativos.tsx
@@ -42,7 +45,13 @@ tienda y mensajero.
 comparativa por categoría.
 
 Y el bloque **financiero**: qué cobró Ordenex, cómo se compone la ganancia y la conciliación de los
-cierres.
+cierres. Sus cifras de dinero son solo para maestro y admin, y la de la caja se llama igual que en
+**Wallet · Caja**: **Flujo de dinero registrado** mientras no haya un saldo inicial registrado, o
+**Dinero en caja** cuando lo hay.
+
+**Los estados en las gráficas.** En el conteo por estado, cada estado de la leyenda lleva su botón
+**(i)**, que explica qué significa. Las órdenes cuentan en el estado que tienen: una orden ya gestionada
+sigue contando **En reparto** hasta que se apruebe el cierre del mensajero.
 
 ## Dos avisos que vas a ver, y qué significan
 

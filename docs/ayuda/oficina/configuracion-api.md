@@ -3,8 +3,9 @@ titulo: Configuración · API keys
 modulo: configuracion
 pantalla: /configuracion/api
 roles: [maestro, admin]
-actualizado: 2026-09-24
+actualizado: 2026-09-25
 fuentes:
+  - lib/types/orden-evento.ts
   - app/(app)/configuracion/api/page.tsx
   - app/(app)/configuracion/api/_components/
 ---
@@ -42,6 +43,13 @@ sigue usando los códigos de estado de antes del cambio de nombres: cada estado 
 la aplicación y en la API, y la respuesta le dice qué código usar. El aviso completo, con la tabla de
 códigos, está en el changelog del canal (`docs/api/CHANGELOG.md`). Cada respuesta trae además el
 nombre visible del estado al lado de su código.
+
+Si reporta que **una orden entregada sigue «en reparto»** o que el aviso de cambio de estado **le llega
+horas después**, es el comportamiento esperado: el estado real se aplica **al aprobar el cierre del
+mensajero**, y el aviso de cambio de estado (`orden.estado_actualizado`) sale en ese momento. Lo que el
+mensajero registra le llega al instante por otro aviso, `orden.gestion_registrada`, y en el detalle de
+la orden como una gestión pendiente de confirmación. La ayuda a la tienda tampoco es un estado: llega
+como `orden.ayuda_solicitada` y `orden.ayuda_resuelta`. El detalle está en el mismo changelog.
 
 ## Lo que esta pantalla NO hace
 

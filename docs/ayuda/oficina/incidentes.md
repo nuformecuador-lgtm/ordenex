@@ -3,8 +3,9 @@ titulo: Incidentes
 modulo: incidentes
 pantalla: /incidentes
 roles: [maestro, admin, adminSatelite]
-actualizado: 2026-09-15
+actualizado: 2026-09-25
 fuentes:
+  - components/shared/EstadoInfo.tsx
   - app/(app)/incidentes/page.tsx
   - app/(app)/incidentes/_components/
 ---
@@ -23,7 +24,8 @@ cualquier cosa que haya salido mal y necesite una decisión con dinero de por me
 ## Resolver un incidente
 
 Abrís el incidente y ves **todo el caso**: la causa, los datos de la orden, el destinatario, en qué
-estado quedó la orden y la evidencia que se adjuntó al reportarlo.
+estado quedó la orden y la evidencia que se adjuntó al reportarlo. El estado lleva su botón **(i)**,
+que explica qué significa.
 
 Con eso decidís:
 
