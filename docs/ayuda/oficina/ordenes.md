@@ -3,10 +3,14 @@ titulo: Órdenes
 modulo: ordenes
 pantalla: /ordenes
 roles: [maestro, admin]
-actualizado: 2026-09-15
+actualizado: 2026-09-25
 fuentes:
   - app/(app)/ordenes/page.tsx
   - app/(app)/ordenes/_components/OrdenesListado.tsx
+  - app/(app)/ordenes/_components/NotaGestionPendiente.tsx
+  - app/(app)/ordenes/_components/HistorialOrdenTimeline.tsx
+  - components/shared/EstadoInfo.tsx
+  - lib/types/order-status.ts
   - app/(app)/ordenes/_components/ordenes-filtros-def.ts
   - app/(app)/ordenes/exclude-por-rol.ts
   - lib/services/alcance-borrado-orden.ts
@@ -18,6 +22,24 @@ fuentes:
 desde acá se asigna, se rutea y se resuelve lo que se traba.
 
 La tienda ve esta misma pantalla acotada a lo suyo. Vos la ves entera.
+
+## El estado de cada orden, y su botón de información
+
+Junto al estado de cada orden hay un botón **(i)** que explica qué significa. Se abre al pasar el
+puntero o al tocarlo —en el teléfono, al tocar—, y se cierra al tocar fuera o con Escape. El texto es
+el mismo para todos los roles y para el rastreo del cliente. También lo llevan las opciones del filtro
+de estado.
+
+**Dos notas que pueden ir al lado de «En reparto».** No son estados: la orden sigue En reparto.
+
+- **«Entregado · pendiente de confirmación»** (o el resultado que sea): el mensajero ya registró la
+  gestión y falta que se apruebe su cierre del día. **El estado real se aplica al aprobar el cierre.**
+  Mientras tanto, esa orden **no se puede traspasar ni cambiarle el día**: la fila lo avisa con un «!».
+- **La nota de ayuda**: el mensajero pidió ayuda a la tienda con esa entrega. La orden sigue en reparto
+  hasta que la tienda responda, el mensajero la recupere o se registre su gestión. Sí se puede traspasar.
+
+En la **línea de tiempo** de la orden quedan además los pasos de la gestión: **Gestión registrada**,
+**Gestión anulada**, **Gestión corregida**, la solicitud de ayuda y su cierre.
 
 ## Buscar y filtrar
 

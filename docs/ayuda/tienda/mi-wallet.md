@@ -3,9 +3,11 @@ titulo: Mi wallet
 modulo: mi-wallet
 pantalla: /mi-wallet
 roles: [adminTienda]
-actualizado: 2026-09-15
+actualizado: 2026-09-25
 fuentes:
   - app/(app)/mi-wallet/_components/MiWalletModule.tsx
+  - app/(app)/mi-wallet/_components/mi-wallet-labels.ts
+  - lib/utils/descripcion-pago-por-cuenta.ts
   - app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx
   - app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx
   - app/(app)/mi-wallet/_components/MiWalletFiltros.tsx
@@ -30,19 +32,36 @@ Una sola cifra que resume todo, con tres lecturas posibles:
 
 ## De dónde sale cada número
 
-El saldo no es un número suelto: es la suma de todos tus movimientos. Los principales:
+El saldo no es un número suelto: es la suma de todos tus movimientos. Arriba del desglose lo ves
+resumido en cuatro cifras: **A tu favor**, **Cargos de Ordenex**, **Ya pagado** y **Saldo a favor**.
 
 **Lo que suma a tu favor**
 - **COD recaudado** — la plata que el mensajero cobró al cliente en tu nombre. Es el grueso.
-- **Ajuste (crédito)** y **aportes** — correcciones a tu favor.
+- **Ajuste (crédito)** — correcciones a tu favor.
+- **Pago por cuenta anulado** — la devolución de un pago por cuenta que se anuló.
 
 **Lo que resta**
-- **Comisión COD** — lo que cobra Ordenex por recaudar el contra-entrega.
-- **Cargos de Ordenex** — el servicio: fletes y demás.
+- **Flete**, **Flete por rechazo**, **Comisión COD** y su **IVA** — el servicio de Ordenex.
+- **Cobro de Ordenex** — un cargo que la oficina te hace a mano, por ejemplo material de despacho.
 - **Ajuste (débito)** — correcciones en contra.
+- **Pago a la tienda** — lo que Ordenex ya te pagó.
+- **Pago por cuenta de la tienda** — lo que Ordenex **le pagó a otro en tu nombre**.
 
 Cada línea dice de qué orden y de qué cierre viene, así que siempre podés rastrear una cifra hasta la
 entrega concreta que la produjo.
+
+## Un pago que Ordenex hizo por tu cuenta
+
+A veces Ordenex paga algo **por vos**: tu proveedor, tu publicidad, alguien de tu personal. Lo ves como
+**Pago por cuenta de la tienda**, y la descripción dice **a quién se le pagó, el motivo, el método** y,
+si la hay, **la referencia** (por ejemplo, «A Facebook · Pauta de publicidad · SINPE · 12345»).
+
+- **Baja tu saldo** en el monto, y se cuenta dentro de **Ya pagado**: es dinero que Ordenex ya puso
+  por vos.
+- Si no tenías saldo suficiente, **tu saldo queda en contra**: le debés ese dinero a Ordenex.
+- Si la oficina lo anula, aparece una línea **Pago por cuenta anulado** que te devuelve el monto. El
+  pago original no se borra.
+- Un **Cobro de Ordenex** es otra cosa: un cargo de Ordenex, no un pago a un tercero.
 
 ## Buscar en el desglose
 
@@ -70,5 +89,6 @@ cuando se entrega el paquete. Si la entrega es de hoy, es normal que todavía no
 ## Lo que esta pantalla NO hace
 
 - **No se pagan saldos desde acá.** El pago se coordina con la oficina; esta pantalla lo refleja.
+- **No se abre el comprobante de un pago por cuenta.** Si lo necesitás, pedíselo a la oficina.
 - **No se corrigen cifras.** Un número mal sale de una entrega mal registrada: se arregla en la orden,
   no en el saldo.

@@ -3,8 +3,11 @@ titulo: Monitoreo
 modulo: monitoreo
 pantalla: /monitoreo
 roles: [maestro, admin, adminSatelite]
-actualizado: 2026-09-24
+actualizado: 2026-09-25
 fuentes:
+  - app/(app)/monitoreo/_components/detalle-columnas.ts
+  - app/(app)/ordenes/_components/NotaGestionPendiente.tsx
+  - components/shared/EstadoInfo.tsx
   - app/(app)/monitoreo/_components/TableroDiaModule.tsx
   - app/(app)/monitoreo/_components/TableroDiaControles.tsx
   - app/(app)/monitoreo/_components/filtrar-mensajeros.ts
@@ -33,6 +36,11 @@ El campo de búsqueda **filtra por nombre de mensajero**. Es solo para encontrar
 datos ni se guarda.
 
 Tocando una tarjeta se abre el **detalle de ese mensajero**, con sus órdenes del día.
+
+En el detalle, **Estado** es el estado de la orden y **Resultado del día** es lo que registró el
+mensajero. No siempre coinciden: una orden gestionada **sigue En reparto** —con la nota «pendiente de
+confirmación»— hasta que se apruebe el cierre del mensajero, y recién ahí pasa a su estado real. Los
+dos llevan el botón **(i)**, que explica qué significa cada estado.
 
 ## Densidad
 

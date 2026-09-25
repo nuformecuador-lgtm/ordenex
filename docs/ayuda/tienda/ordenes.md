@@ -3,9 +3,13 @@ titulo: Órdenes
 modulo: ordenes
 pantalla: /ordenes
 roles: [adminTienda]
-actualizado: 2026-09-15
+actualizado: 2026-09-25
 fuentes:
   - app/(app)/ordenes/page.tsx
+  - app/(app)/ordenes/_components/NotaGestionPendiente.tsx
+  - app/(app)/ordenes/_components/HistorialOrdenTimeline.tsx
+  - components/shared/EstadoInfo.tsx
+  - lib/types/order-status.ts
   - app/(app)/ordenes/exclude-por-rol.ts
   - app/(app)/ordenes/_components/OrdenesListado.tsx
   - app/(app)/ordenes/_components/ordenes-filtros-def.ts
@@ -18,6 +22,29 @@ Es tu pantalla principal: acá están **todas tus órdenes**, en qué estado va 
 creás y las gestionás.
 
 Solo ves las tuyas. No hace falta que filtres por tienda — la pantalla ya viene acotada a tu cuenta.
+
+## Qué significa cada estado
+
+Junto al estado de cada orden hay un botón **(i)**. Tocalo —o pasá el puntero por encima— y te explica
+qué significa ese estado. En el teléfono se abre al tocar y se cierra al tocar fuera. Es el mismo texto
+que ve tu cliente cuando rastrea su envío.
+
+## «Entregado · pendiente de confirmación»
+
+Cuando el mensajero registra qué pasó con una entrega, **lo ves al instante**, pero la orden **sigue En
+reparto** con una nota: el resultado y **«pendiente de confirmación»**. Por ejemplo, «Entregado ·
+pendiente de confirmación» o «Novedad · pendiente de confirmación».
+
+Quiere decir que el mensajero ya lo registró y **falta que se apruebe su cierre del día**. Al
+aprobarse, la orden pasa a su estado real —Entregado, Novedad, Devolución a origen por rechazo…— y
+recién ahí se mueve el dinero en tu **Mi wallet**. Si el mensajero se había equivocado y deshace la
+gestión, la nota desaparece y la orden vuelve a su ruta.
+
+**La nota de ayuda** es otra cosa: el mensajero te pidió ayuda con esa entrega. No es un estado —la
+orden sigue En reparto— y la respondés desde **Novedades**.
+
+En el historial de la orden vas a ver también esos pasos: **Gestión registrada**, **Gestión anulada**,
+**Gestión corregida**, la solicitud de ayuda y su cierre.
 
 ## Crear órdenes
 

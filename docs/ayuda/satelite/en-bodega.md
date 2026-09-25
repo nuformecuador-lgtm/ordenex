@@ -3,8 +3,10 @@ titulo: En bodega
 modulo: recepcion-satelite
 pantalla: /recepcion-satelite/en-bodega
 roles: [adminSatelite]
-actualizado: 2026-09-16
+actualizado: 2026-09-25
 fuentes:
+  - app/(app)/ordenes/_components/NotaGestionPendiente.tsx
+  - components/shared/EstadoInfo.tsx
   - app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx
   - app/(app)/recepcion-satelite/_components/satelite-ordenes-filtros.ts
   - app/(app)/recepcion-satelite/_components/asignacion-satelite-bloqueo.ts
@@ -30,6 +32,20 @@ Si te equivocaste, **Deshacer asignación** la devuelve a la bodega para volver 
 > **autorices la asignación sin ubicación** antes de dejarte seguir. Es un aviso, no un bloqueo:
 > confirmás y se asigna igual. Sirve para que sepas que ese paquete no va a entrar en la ruta
 > optimizada del mensajero.
+
+## El estado de cada orden
+
+Junto al estado hay un botón **(i)** que explica qué significa: se abre al pasar el puntero o al tocarlo
+—en el teléfono, al tocar— y se cierra al tocar fuera. También lo llevan las opciones del filtro de
+estado.
+
+Al lado de **En reparto** puede aparecer una nota, que **no es un estado**:
+
+- **«Entregado · pendiente de confirmación»** (o el resultado que sea): el mensajero ya registró la
+  gestión y falta que se apruebe su cierre del día. **Al aprobar el cierre** la orden pasa a su estado
+  real.
+- **La nota de ayuda**: el mensajero pidió ayuda a la tienda con esa entrega. Sigue en reparto hasta
+  que se registre su gestión.
 
 ## Enviar a central
 
