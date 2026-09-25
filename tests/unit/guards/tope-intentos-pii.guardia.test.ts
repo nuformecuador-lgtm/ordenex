@@ -93,6 +93,7 @@ describe("276/R38 — el aviso agregado del cron de liberacion no lleva PII", ()
           gestionCierreId: "9c858901-8a57-4791-81fe-4c455b099bc9",
           gestionCierreEstado: "solicitado",
           gestionEsVisitaReal: true,
+          mensajeroAsignadoId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8", // FICHA 462 (T1.2)
         },
         {
           id: "7d444840-9dc0-11d1-b245-5ffdce74fad2",
@@ -101,6 +102,7 @@ describe("276/R38 — el aviso agregado del cron de liberacion no lleva PII", ()
           gestionCierreId: null,
           gestionCierreEstado: null,
           gestionEsVisitaReal: true,
+          mensajeroAsignadoId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8", // FICHA 462 (T1.2)
         },
       ]),
       findOrdenesLiberablesDeCierre: vi.fn(async () => []), // ficha 315: sin uso en este caso

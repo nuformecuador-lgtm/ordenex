@@ -129,6 +129,9 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
       select: {
         id: true,
         zonaId: true,
+        // FICHA 462 (T1.2): un hecho mas de la fila para el conteo de retenidas (grupo «sin cierre
+        // enviado» por mensajero, R5). Solo se PROYECTA; no entra en el `where`.
+        mensajeroAsignadoId: true,
         gestiones: {
           // LA GESTION VIGENTE = la mas reciente no anulada. La correlacion se EXPANDE del objeto
           // compartido (`gestion-reprogramada-vigente.ts`) y no se escribe aqui: la correccion de
@@ -191,6 +194,7 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
         gestionCierreId: gestion?.cierreId ?? null,
         gestionCierreEstado: gestion?.cierre?.estado ?? null,
         gestionEsVisitaReal: (gestion?.historialEstados?.length ?? 0) > 0,
+        mensajeroAsignadoId: r.mensajeroAsignadoId, // FICHA 462: hecho crudo, sin decidir nada
       });
     }
     return liberables;

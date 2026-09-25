@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 
 import {
   sqlExisteGestionPendiente,
+  sqlUltimaGestionPendienteLateral,
   whereGestionPendiente,
   whereOrdenConGestionPendiente,
   whereOrdenSinGestionPendiente,
@@ -145,5 +146,35 @@ describeSiHayBase("454/T1.3 — gestion pendiente de confirmar (Postgres real)",
     expect(r.prismaGestion).toBe(true);
     // ...pero la ORDEN no esta «con gestion pendiente» (no esta en reparto).
     expect(r.prismaOrden).toBe(false);
+  }, 60_000);
+
+  it("FICHA 462 (T1.1): la LATERAL proyecta ademas `gestion_id`, `cierre_id` y `fecha_reprogramacion`, y las dos previas siguen", async () => {
+    // La Forma B de las reprogramadas retenidas COMPONE esta LATERAL y lee las tres columnas
+    // nuevas por nombre. Las dos previas (`resultado`, `registrada_at`) las lee `senalesGestionDe`
+    // y NO cambian: una columna mas no toca a los consumidores que leen por nombre.
+    const r = await conEscenario(mundo, async (e) => {
+      const ids = await sembrar(e, { nombre: "x", conEvento: true, cierre: "solicitado", esperado: true });
+      await e.tx.gestionOrden.update({
+        where: { id: ids.gestionId },
+        data: { fechaReprogramacion: new Date("2026-09-25T00:00:00.000Z") },
+      });
+      const gp = sqlUltimaGestionPendienteLateral({
+        id: Prisma.sql`"o"."id"`,
+        estatusId: Prisma.sql`"o"."estatus_id"`,
+      });
+      const filas = await e.tx.$queryRaw<Record<string, unknown>[]>(
+        Prisma.sql`SELECT "gp".* FROM "orden" "o" LEFT JOIN LATERAL (${gp}) "gp" ON TRUE WHERE "o"."id" = ${ids.ordenId}`,
+      );
+      return { fila: filas[0], ids };
+    });
+
+    expect(r.fila).toBeDefined();
+    expect(Object.keys(r.fila ?? {}).sort()).toEqual(
+      ["cierre_id", "fecha_reprogramacion", "gestion_id", "registrada_at", "resultado"].sort(),
+    );
+    expect(r.fila?.gestion_id).toBe(r.ids.gestionId);
+    expect(r.fila?.resultado).toBe("entregado");
+    expect(typeof r.fila?.cierre_id).toBe("string");
+    expect(r.fila?.fecha_reprogramacion).toEqual(new Date("2026-09-25T00:00:00.000Z"));
   }, 60_000);
 });
