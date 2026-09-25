@@ -1305,7 +1305,8 @@ const MOTIVO = "Monto mal tecleado";
 
 /** 14:30 de Costa Rica del 5 de agosto: el dia CALENDARIO de la anulacion es el 2026-08-05. */
 const AHORA_ANULACION = () => new Date("2026-08-05T20:30:00.000Z");
-const DIA_DE_LA_ANULACION = "2026-08-05T00:00:00.000Z";
+// Ficha 461 (R73): el contra-asiento se fecha al INICIO del dia CR de la anulacion (06:00Z).
+const DIA_DE_LA_ANULACION = "2026-08-05T06:00:00.000Z";
 
 /** Un pago a la tienda CON referencia y metodo electronico: R78 va justo sobre esos dos datos. */
 function pagoConReferencia(monto: string, clave: string): RegistrarPagoTiendaInput {
@@ -1457,7 +1458,8 @@ describe("T F.3/R79/R80 — MENSAJERO: pagar, anular y volver a pagar lo mismo",
 
     const pagado = store.movimientosMensajero.find((m) => m.categoria === "liquidacion");
     const reverso = store.movimientosMensajero.find((m) => m.categoria === "ajuste_devengo");
-    expect(pagado?.fechaMovimiento?.toISOString()).toBe("2026-07-30T00:00:00.000Z");
+    // Ficha 461 (R73): el asiento del pago, al inicio del dia de pago en CR; el documento sigue a 00:00Z.
+    expect(pagado?.fechaMovimiento?.toISOString()).toBe("2026-07-30T06:00:00.000Z");
     expect(reverso?.fechaMovimiento?.toISOString()).toBe(DIA_DE_LA_ANULACION);
     // El reverso es del signo opuesto y cuelga del MISMO documento (R69/R38).
     expect(reverso).toMatchObject({ tipo: "devengo", origenTipo: "pago_mensajero" });

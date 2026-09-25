@@ -294,7 +294,9 @@ describeSiHayBase("ficha 343 — el detalle de una fila contra Postgres (R18/R19
           page: 1,
           pageSize: 10,
           desde: DESDE,
-          hasta: FUERA_DE_LA_VENTANA,
+          // Ficha 461 (R72): `hasta` es EXCLUSIVO en el repositorio; para incluir la fila fechada
+          // exactamente en `FUERA_DE_LA_VENTANA`, la cota es el milisegundo siguiente.
+          hasta: new Date(FUERA_DE_LA_VENTANA.getTime() + 1),
         },
         MAESTRO,
       );

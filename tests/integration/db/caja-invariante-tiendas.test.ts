@@ -17,45 +17,67 @@ import {
   type Escenario459,
   type LecturaCaja459,
 } from "./_fixtures/caja-459";
+import { UP_COMPLETAR_461 } from "./_fixtures/completar-caja-461-sql";
 import { CLAVE_CANDADO_459 } from "./_fixtures/escrituras-459";
 import { upCon } from "./_fixtures/reclasificacion-459-sql";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
-// ⭑ FICHA 459 / T B.14 — LA INVARIANTE CON TODO (R7, R8, R89; y R21, R39, R48, R72, R75).
+// ⭑ FICHA 459 / T B.14 → FICHA 461 / T B.12 — LA INVARIANTE CON TODO, Y SIN EXCEPCION.
+// (R7, R8, R23, R24, R25, R26, R31, R32, R33, R59, R61 de la 461; R21, R39, R48, R72, R75 de la 459.)
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 //
 // Sobre el escenario de la fase 0 (todos los caminos que escriben en la caja o en el libro de las
-// tiendas, sembrados por los SERVICIOS REALES) se ejecutan, uno a uno, los caminos NUEVOS de la
-// ficha: pago por cuenta, su anulacion, saldo inicial, aporte, anulacion del aporte y un cobro de un
-// costo RECLASIFICADO (la fila que escribe la migracion de T C.4). Tras CADA paso se comprueba:
+// tiendas, sembrados por los SERVICIOS REALES; desde la 461 el cobro de Ordenex a la tienda B ya
+// escribe su CARGO en la caja) se ejecutan, uno a uno, los caminos nuevos de la 459 y de la 461.
+// Tras CADA paso se comprueba:
 //
 //   R7 — cifra principal = ganancia + «De las tiendas» + capital, al centimo, sobre el libro ENTERO
-//        (la identidad vale para cualquier conjunto) y sobre la diferencia con el «antes».
-//   R8 — Δ«De las tiendas» = Σ saldos de las tiendas del escenario + Σ cobros de un costo de esas
-//        tiendas que NO estan reclasificados. Se mide por DIFERENCIA: la base local es compartida y
-//        trae su propia historia (la de antes de esta ficha, donde R8 no tiene por que cuadrar: L1);
-//        las tiendas del escenario son nuevas, asi que su parte del libro es exactamente la suya.
+//        y sobre la diferencia con el «antes».
+//   R8 — Δ«De las tiendas» = Σ saldos de las tiendas del escenario. SIN EXCEPCION (HD2 de la 461):
+//        la 459 sumaba aqui «+ cobros de un costo no reclasificados»; ese sumando desaparece porque
+//        el cobro tiene su contrapartida en la caja (R1) y los cobros previos la reciben por la
+//        migracion de datos (R31). Se mide por DIFERENCIA: la base local trae su propia historia
+//        (L1); las tiendas del escenario son nuevas, asi que su parte del libro es exactamente la suya.
+//
+// LO QUE ESTA FICHA AÑADE AL RECORRIDO —y por que en este orden—:
+//
+//   6. Dos cobros LEGADOS de la tienda B, sembrados por INSERT directo SIN linea de caja: es el estado
+//      que dejo la 381 y que motiva la 461. En esa foto R8 NO se cumple, y el test lo AFIRMA con la
+//      cifra exacta (la suma de los dos): una invariante que cuadrara aqui estaria midiendo mal.
+//   7. El primero se RECLASIFICA con el SQL REAL de la 459 (R61: esa migracion no se toca y sigue
+//      funcionando sobre un cobro sin linea de caja).
+//   8. El segundo recibe su linea de caja con el SQL REAL de la migracion de datos de la 461 (R31,
+//      R32: al reclasificado NO se la escribe; R33: la fila lleva `cobro_tienda_completado`).
+//      Con los dos, R8 vuelve a cuadrar SIN excepcion.
+//   9. Se ANULA el cobro del escenario (el que registro el servicio, con su cargo): credito a la
+//      tienda + reverso del cargo (R10/R12/R25): «De las tiendas» sube, la ganancia baja, la cifra
+//      principal no se mueve.
 //
 // Y que cada paso escribio filas (una invariante sobre un libro vacio no prueba nada).
 //
-// AISLAMIENTO: todo en UNA transaccion REPEATABLE READ que SIEMPRE se revierte. Toma, ademas del
-// lock de las escrituras reales, el candado de los archivos de la 459 que COMMITEAN (el saldo
-// inicial es unico en toda la base): sin el, el `pg_advisory_xact_lock` del saldo inicial que esta
-// transaccion sostiene hasta el final dejaria esperando —y caducando— a esos tests.
+// AISLAMIENTO: todo en UNA transaccion REPEATABLE READ que SIEMPRE se revierte, con el candado de
+// los archivos de la 459 que COMMITEAN (el saldo inicial es unico en toda la base).
 //
-// MUTACION DE LA TAREA: «el reverso del pago por cuenta como propio» (NATURALEZA de
-// `ingreso_reverso_pago_por_cuenta_tienda` = "propio") → rojo: tras anular, «De las tiendas» no
-// vuelve a subir y la ganancia sube.
+// MUTACIONES DE LA TAREA (design §14.2 de la 461): (1) quitar `emitirCargoDeCobro` → R8 se rompe en
+// «escenario» por 2 500,50; (6) anular sin el credito → R8 en «anulacion del cobro»; (8) la migracion
+// de datos escribe tambien para el reclasificado → R8 en «cobro completado» y filas 2 ≠ 1.
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
+
+/** Los dos cobros LEGADOS (381: sin linea de caja) que se siembran a mano en el paso 6. */
+const LEGADO_RECLASIFICADO = "700.00";
+const LEGADO_COMPLETADO = "300.00";
+const LEGADOS = new Prisma.Decimal(LEGADO_RECLASIFICADO).add(LEGADO_COMPLETADO).toFixed(2); // 1000.00
+/** El cobro del ESCENARIO (lo registra `CobroTiendaService` en `sembrarEscenario459`). */
+const COBRO_DEL_ESCENARIO = "2500.50";
 
 interface Paso {
   nombre: string;
   lectura: LecturaCaja459;
   saldos: string; // Σ saldos de las dos tiendas del escenario
-  cobrosNoReclasificados: string;
   filasNuevasEnCaja: number;
   saldoTiendaA: string;
+  saldoTiendaB: string;
 }
 
 interface Medida {
@@ -63,7 +85,7 @@ interface Medida {
   pasos: Paso[];
   estados: Record<string, string>;
   respuestas: Record<string, string>;
-  /** La salida que escribio la migracion REAL, comparada con su cobro. */
+  /** La salida que escribio la migracion REAL de la 459, comparada con su cobro legado. */
   reclasificada: {
     salidas: number;
     mismoMonto: boolean;
@@ -71,11 +93,23 @@ interface Medida {
     categoria: string;
     descripcion: string | null;
   } | null;
+  /** La linea que escribio la migracion REAL de la 461, comparada con su cobro legado. */
+  completada: {
+    lineas: number;
+    lineasDelReclasificado: number;
+    mismoMonto: boolean;
+    mismoInstante: boolean;
+    categoria: string;
+    origen: string;
+    descripcion: string | null;
+  } | null;
+  /** Los dos contra-asientos de la anulacion del cobro del escenario. */
+  anulacion: { creditos: number; reversos: number; montoCredito: string; montoReverso: string } | null;
 }
 
 const suma = (xs: string[]) => xs.reduce((a, x) => a.add(new Prisma.Decimal(x)), new Prisma.Decimal(0)).toFixed(2);
 
-describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo (Postgres real)", () => {
+describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cada camino, sin excepcion (Postgres real)", () => {
   let prisma: PrismaClient;
   let medida: Medida | undefined;
   let fallo: unknown;
@@ -113,6 +147,8 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
     const estados: Record<string, string> = {};
     const respuestas: Record<string, string> = {};
     let reclasificada: Medida["reclasificada"] = null;
+    let completada: Medida["completada"] = null;
+    let anulacion: Medida["anulacion"] = null;
 
     const foto = async (nombre: string) => {
       const lectura = await leerCajaEntera(s, esc.maestro);
@@ -123,9 +159,9 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
         nombre,
         lectura,
         saldos: suma([a.saldo, b.saldo]),
-        cobrosNoReclasificados: await cobrosNoReclasificados(tx, esc),
         filasNuevasEnCaja: filas - filasPrevias,
         saldoTiendaA: a.saldo,
+        saldoTiendaB: b.saldo,
       });
       estados[nombre] = lectura.resumen.estado;
       filasPrevias = filas;
@@ -195,13 +231,33 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
     ).status;
     await foto("anulacion del aporte");
 
-    // 6 — el cobro de un costo de la tienda B, RECLASIFICADO por el SQL REAL de la migracion de
-    // T C.4 (revision m1: antes era un insert de Prisma escrito a mano, y una migracion que no
-    // escribia nada lo dejaba verde). El libro de la tienda NO cambia.
-    reclasificada = await reclasificar(tx, esc);
+    // 6 — dos cobros LEGADOS de la tienda B, como los dejaba la 381: debito `cobro_manual` sin linea
+    // de caja. INSERT directo a proposito: el servicio de hoy ya no puede producir este estado (R1),
+    // y es exactamente lo que las dos migraciones de datos (459 y 461) tienen que arreglar.
+    const legadoReclasificado = await sembrarCobroLegado(tx, esc, LEGADO_RECLASIFICADO, "Legado 381 · reclasificar");
+    const legadoCompletado = await sembrarCobroLegado(tx, esc, LEGADO_COMPLETADO, "Legado 381 · completar");
+    await foto("cobros legados sin linea de caja");
+
+    // 7 — el primero, RECLASIFICADO por el SQL REAL de la migracion de la 459 (R61: no se toca).
+    reclasificada = await reclasificar(tx, esc, legadoReclasificado);
     await foto("cobro reclasificado");
 
-    // 7 — anular el saldo inicial: la caja vuelve a «flujo» (R21).
+    // 8 — el segundo recibe su LINEA DE CAJA por el SQL REAL de la migracion de datos de la 461
+    // (R31/R32/R33): el reclasificado y el cobro del escenario (que ya tiene cargo) quedan fuera.
+    completada = await completar(tx, legadoCompletado, legadoReclasificado);
+    await foto("cobro completado");
+
+    // 9 — ANULAR el cobro del escenario (registrado por el servicio, con su cargo): R10/R12/R25.
+    const cobroDelEscenario = await tx.walletTiendaMovimiento.findFirstOrThrow({
+      where: { tiendaId: esc.tiendaB, categoria: "cobro_manual", monto: new Prisma.Decimal(COBRO_DEL_ESCENARIO) },
+      select: { id: true },
+    });
+    const anulado = await s.cobroTienda.anular({ cobroId: cobroDelEscenario.id, motivo: "Cobro equivocado" }, esc.maestro);
+    respuestas.anularCobro = anulado.status;
+    anulacion = await contraAsientosDe(tx, cobroDelEscenario.id);
+    await foto("anulacion del cobro");
+
+    // 10 — anular el saldo inicial: la caja vuelve a «flujo» (R21).
     if (saldoInicial.status === "ok") {
       respuestas.anularSaldoInicial = (
         await s.aporteCapital.anular({ aporteId: saldoInicial.aporte.id, motivo: "Cifra equivocada" }, esc.maestro)
@@ -209,40 +265,40 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
     }
     await foto("anulacion del saldo inicial");
 
-    return { antes, pasos, estados, respuestas, reclasificada };
+    return { antes, pasos, estados, respuestas, reclasificada, completada, anulacion };
   }
 
-  /** Σ de los cobros de un costo de las tiendas del escenario que no tienen su salida reclasificada. */
-  async function cobrosNoReclasificados(tx: TxDeTest, esc: Escenario459): Promise<string> {
-    const cobros = await tx.walletTiendaMovimiento.findMany({
-      where: { tiendaId: { in: [esc.tiendaA, esc.tiendaB] }, categoria: "cobro_manual" },
-      select: { id: true, monto: true },
+  /** Un cobro como los de la 381: `debito/cobro_manual`, origen manual, SIN linea de caja, fechado en el pasado. */
+  async function sembrarCobroLegado(tx: TxDeTest, esc: Escenario459, monto: string, descripcion: string) {
+    return tx.walletTiendaMovimiento.create({
+      data: {
+        tiendaId: esc.tiendaB,
+        tipo: "debito",
+        categoria: "cobro_manual",
+        monto: new Prisma.Decimal(monto),
+        origenTipo: "manual",
+        origenId: null,
+        descripcion,
+        registradoPor: esc.maestro.usuarioId,
+        fechaMovimiento: new Date("2026-09-20T15:00:00.000Z"),
+      },
+      select: { id: true, monto: true, fechaMovimiento: true },
     });
-    const reclasificados = new Set(
-      (
-        await tx.walletMovimiento.findMany({
-          where: { origenTipo: "cobro_manual_reclasificado", origenId: { in: cobros.map((c) => c.id) } },
-          select: { origenId: true },
-        })
-      ).map((r) => r.origenId),
-    );
-    return suma(cobros.filter((c) => !reclasificados.has(c.id)).map((c) => c.monto.toFixed(2)));
   }
 
   /**
    * Ejecuta el `migration.sql` REAL (`db/migrations/20260925120300_reclasificar_cobros_459`) con la
-   * lista y el control sustituidos por el cobro de la tienda B del escenario —los 203 ids aprobados
-   * no existen en una base de test—, dentro de la transaccion revertida de este archivo. Si la
-   * migracion lanza, el test cae entero: no hay SAVEPOINT que lo trague.
+   * lista y el control sustituidos por el cobro legado —los 203 ids aprobados no existen en una base
+   * de test—, dentro de la transaccion revertida de este archivo. Si la migracion lanza, el test cae
+   * entero: no hay SAVEPOINT que lo trague.
    */
-  async function reclasificar(tx: TxDeTest, esc: Escenario459): Promise<NonNullable<Medida["reclasificada"]>> {
-    const cobro = await tx.walletTiendaMovimiento.findFirstOrThrow({
-      where: { tiendaId: esc.tiendaB, categoria: "cobro_manual" },
-    });
+  async function reclasificar(
+    tx: TxDeTest,
+    esc: Escenario459,
+    cobro: { id: string; monto: Prisma.Decimal; fechaMovimiento: Date },
+  ): Promise<NonNullable<Medida["reclasificada"]>> {
     const monto = cobro.monto.toFixed(2);
-    await tx.$executeRawUnsafe(
-      upCon([{ id: cobro.id, monto }], { n: 1, suma: monto, tienda: esc.tiendaB }),
-    );
+    await tx.$executeRawUnsafe(upCon([{ id: cobro.id, monto }], { n: 1, suma: monto, tienda: esc.tiendaB }));
     const salidas = await tx.walletMovimiento.findMany({
       where: { origenTipo: "cobro_manual_reclasificado", origenId: cobro.id },
     });
@@ -256,39 +312,103 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
     };
   }
 
+  /** Ejecuta el `migration.sql` REAL de `20260926120200_cobro_tienda_461_completar_caja`, TAL CUAL. */
+  async function completar(
+    tx: TxDeTest,
+    cobro: { id: string; monto: Prisma.Decimal; fechaMovimiento: Date },
+    reclasificado: { id: string },
+  ): Promise<NonNullable<Medida["completada"]>> {
+    await tx.$executeRawUnsafe(UP_COMPLETAR_461);
+    const lineas = await tx.walletMovimiento.findMany({ where: { origenId: cobro.id } });
+    const [l] = lineas;
+    return {
+      lineas: lineas.length,
+      lineasDelReclasificado: await tx.walletMovimiento.count({
+        where: { origenId: reclasificado.id, categoria: "ingreso_cobro_tienda" },
+      }),
+      mismoMonto: l !== undefined && l.monto.toFixed(2) === cobro.monto.toFixed(2),
+      mismoInstante: l !== undefined && l.fechaMovimiento.getTime() === cobro.fechaMovimiento.getTime(),
+      categoria: l?.categoria ?? "",
+      origen: l?.origenTipo ?? "",
+      descripcion: l?.descripcion ?? null,
+    };
+  }
+
+  async function contraAsientosDe(tx: TxDeTest, cobroId: string): Promise<NonNullable<Medida["anulacion"]>> {
+    const creditos = await tx.walletTiendaMovimiento.findMany({
+      where: { origenTipo: "cobro_tienda", origenId: cobroId, categoria: "cobro_tienda_anulado" },
+    });
+    const reversos = await tx.walletMovimiento.findMany({
+      where: { origenTipo: "cobro_tienda", origenId: cobroId, categoria: "egreso_reverso_cobro_tienda" },
+    });
+    return {
+      creditos: creditos.length,
+      reversos: reversos.length,
+      montoCredito: creditos[0]?.monto.toFixed(2) ?? "",
+      montoReverso: reversos[0]?.monto.toFixed(2) ?? "",
+    };
+  }
+
   const delta = (p: Paso, f: (l: LecturaCaja459) => string) => menos(f(p.lectura), f(m().antes));
 
-  it("anti-vacuidad: todos los pasos respondieron `ok` y CADA paso escribio en la caja", () => {
+  it("anti-vacuidad: todos los pasos respondieron `ok` y CADA paso escribio en la caja lo que le toca", () => {
     expect(m().respuestas).toEqual({
       pagoPorCuenta: "ok",
       anularPagoPorCuenta: "ok",
       saldoInicial: "ok",
       aporte: "ok",
       anularAporte: "ok",
+      anularCobro: "ok",
       anularSaldoInicial: "ok",
     });
     expect(m().pasos.map((p) => [p.nombre, p.filasNuevasEnCaja])).toEqual([
-      ["escenario", 22],
+      // 22 de la 459 + el CARGO del cobro del escenario (461/R1): 23.
+      ["escenario", 23],
       ["pago por cuenta", 1],
       ["anulacion del pago por cuenta", 1],
       ["saldo inicial", 1],
       ["aporte", 1],
       ["anulacion del aporte", 1],
+      // Los legados se siembran SOLO en el libro de la tienda: la caja no se toca.
+      ["cobros legados sin linea de caja", 0],
       ["cobro reclasificado", 1],
+      ["cobro completado", 1],
+      // El REVERSO del cargo (el credito va al libro de la tienda).
+      ["anulacion del cobro", 1],
       ["anulacion del saldo inicial", 1],
     ]);
   });
 
-  it("revision m1: la salida del cobro reclasificado la escribio el SQL REAL de la migracion", () => {
+  it("R61 (revision m1 de la 459): la salida del cobro reclasificado la escribio el SQL REAL de la migracion de la 459", () => {
     expect(m().reclasificada).toMatchObject({
       salidas: 1,
       mismoMonto: true,
       mismoInstante: true,
       categoria: "egreso_pago_por_cuenta_tienda",
     });
-    // La descripcion la compone la migracion («Nombre Apellido · descripcion del cobro»): un insert
-    // escrito a mano en el test no la produciria.
+    // La descripcion la compone la migracion («Nombre Apellido · descripcion del cobro»).
     expect(m().reclasificada?.descripcion).toMatch(/ · /);
+  });
+
+  it("R31/R32/R33: la migracion de datos de la 461 completa SOLO al legado sin reclasificar, en su fecha, con su origen", () => {
+    expect(m().completada).toMatchObject({
+      lineas: 1,
+      lineasDelReclasificado: 0, // R32: al reclasificado NO se le escribe cargo
+      mismoMonto: true,
+      mismoInstante: true, // R31: la fecha ORIGINAL del cobro, no la de hoy
+      categoria: "ingreso_cobro_tienda",
+      origen: "cobro_tienda_completado", // R33
+    });
+    expect(m().completada?.descripcion).toMatch(/ · Legado 381 · completar$/);
+  });
+
+  it("R10/R12/R13: anular el cobro deja UN credito a la tienda y UN reverso en la caja, los dos por el monto del cobro", () => {
+    expect(m().anulacion).toEqual({
+      creditos: 1,
+      reversos: 1,
+      montoCredito: COBRO_DEL_ESCENARIO,
+      montoReverso: COBRO_DEL_ESCENARIO,
+    });
   });
 
   it("R7: cifra principal = ganancia + «De las tiendas» + capital, tras CADA paso (libro entero y diferencia)", () => {
@@ -303,19 +423,29 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
     }
   });
 
-  it("R8/R89: Δ«De las tiendas» = Σ saldos + cobros de un costo NO reclasificados, tras CADA paso", () => {
+  it("R8 (HD2): Δ«De las tiendas» = Σ saldos de las tiendas, SIN excepcion, tras CADA paso — salvo en la foto legada, que falla por la cifra exacta", () => {
     for (const p of m().pasos) {
-      expect(delta(p, (l) => l.resumen.deTerceros), `R8 · ${p.nombre}`).toBe(
-        suma([p.saldos, p.cobrosNoReclasificados]),
-      );
+      if (p.nombre === "cobros legados sin linea de caja") {
+        // El estado de la 381: dos debitos en el libro de la tienda y NADA en la caja. R8 se rompe
+        // por EXACTAMENTE la suma de los dos, y las dos migraciones (pasos 7 y 8) lo arreglan.
+        expect(delta(p, (l) => l.resumen.deTerceros), `R8 rota a proposito · ${p.nombre}`).toBe(
+          suma([p.saldos, LEGADOS]),
+        );
+        continue;
+      }
+      if (p.nombre === "cobro reclasificado") {
+        // La 459 arreglo UNO; el otro legado sigue sin linea de caja hasta el paso 8. R8 se rompe
+        // por EXACTAMENTE ese importe, y ni un centimo mas: la reclasificacion cerro el suyo.
+        expect(delta(p, (l) => l.resumen.deTerceros), `R8 rota solo por el legado pendiente · ${p.nombre}`).toBe(
+          suma([p.saldos, LEGADO_COMPLETADO]),
+        );
+        continue;
+      }
+      expect(delta(p, (l) => l.resumen.deTerceros), `R8 · ${p.nombre}`).toBe(p.saldos);
     }
-    // Y la reclasificacion es la que mueve el segundo sumando: antes 2 500,50, despues 0,00.
-    const porNombre = Object.fromEntries(m().pasos.map((p) => [p.nombre, p]));
-    expect(porNombre["anulacion del aporte"].cobrosNoReclasificados).toBe("2500.50");
-    expect(porNombre["cobro reclasificado"].cobrosNoReclasificados).toBe("0.00");
   });
 
-  it("R39/R48/R72/R75: cada camino mueve EXACTAMENTE su cifra, y nunca la ganancia", () => {
+  it("R23–R26, R39/R48/R72/R75: cada camino mueve EXACTAMENTE su cifra", () => {
     const pasos = m().pasos;
     const cambio = (i: number) => {
       const [a, b] = [pasos[i - 1].lectura.resumen, pasos[i].lectura.resumen];
@@ -325,19 +455,33 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
         capital: menos(b.capital, a.capital),
         ganancia: menos(b.ganancia, a.ganancia),
         saldoTiendaA: menos(pasos[i].saldoTiendaA, pasos[i - 1].saldoTiendaA),
+        saldoTiendaB: menos(pasos[i].saldoTiendaB, pasos[i - 1].saldoTiendaB),
       };
     };
-    expect(cambio(1)).toEqual({ enCaja: "-1234.56", deTerceros: "-1234.56", capital: "0.00", ganancia: "0.00", saldoTiendaA: "-1234.56" });
-    expect(cambio(2)).toEqual({ enCaja: "1234.56", deTerceros: "1234.56", capital: "0.00", ganancia: "0.00", saldoTiendaA: "1234.56" });
-    expect(cambio(3)).toEqual({ enCaja: "1000000.00", deTerceros: "0.00", capital: "1000000.00", ganancia: "0.00", saldoTiendaA: "0.00" });
-    expect(cambio(4)).toEqual({ enCaja: "50000.25", deTerceros: "0.00", capital: "50000.25", ganancia: "0.00", saldoTiendaA: "0.00" });
-    expect(cambio(5)).toEqual({ enCaja: "-50000.25", deTerceros: "0.00", capital: "-50000.25", ganancia: "0.00", saldoTiendaA: "0.00" });
-    // El reclasificado: sale de la caja y de «De las tiendas»; el libro de la tienda no cambia (R87).
-    expect(cambio(6)).toEqual({ enCaja: "-2500.50", deTerceros: "-2500.50", capital: "0.00", ganancia: "0.00", saldoTiendaA: "0.00" });
-    expect(cambio(7)).toEqual({ enCaja: "-1000000.00", deTerceros: "0.00", capital: "-1000000.00", ganancia: "0.00", saldoTiendaA: "0.00" });
+    const nada = { enCaja: "0.00", deTerceros: "0.00", capital: "0.00", ganancia: "0.00", saldoTiendaA: "0.00", saldoTiendaB: "0.00" };
+    expect(cambio(1)).toEqual({ ...nada, enCaja: "-1234.56", deTerceros: "-1234.56", saldoTiendaA: "-1234.56" });
+    expect(cambio(2)).toEqual({ ...nada, enCaja: "1234.56", deTerceros: "1234.56", saldoTiendaA: "1234.56" });
+    expect(cambio(3)).toEqual({ ...nada, enCaja: "1000000.00", capital: "1000000.00" });
+    expect(cambio(4)).toEqual({ ...nada, enCaja: "50000.25", capital: "50000.25" });
+    expect(cambio(5)).toEqual({ ...nada, enCaja: "-50000.25", capital: "-50000.25" });
+    // 6 — los legados: solo baja el saldo de la tienda B; la caja no se entera (ese es el fallo).
+    expect(cambio(6)).toEqual({ ...nada, saldoTiendaB: `-${LEGADOS}` });
+    // 7 — el reclasificado: sale de la caja y de «De las tiendas»; el libro de la tienda no cambia (R87 de la 459).
+    expect(cambio(7)).toEqual({ ...nada, enCaja: `-${LEGADO_RECLASIFICADO}`, deTerceros: `-${LEGADO_RECLASIFICADO}` });
+    // 8 — el completado (R23/R24 de la 461): la cifra principal NO se mueve (el cargo no es efectivo),
+    // «De las tiendas» baja y la ganancia sube por el mismo importe; el libro de la tienda no cambia.
+    expect(cambio(8)).toEqual({ ...nada, deTerceros: `-${LEGADO_COMPLETADO}`, ganancia: LEGADO_COMPLETADO });
+    // 9 — la anulacion del cobro (R25/R26): lo contrario exacto del cargo, y el saldo de B vuelve.
+    expect(cambio(9)).toEqual({
+      ...nada,
+      deTerceros: COBRO_DEL_ESCENARIO,
+      ganancia: `-${COBRO_DEL_ESCENARIO}`,
+      saldoTiendaB: COBRO_DEL_ESCENARIO,
+    });
+    expect(cambio(10)).toEqual({ ...nada, enCaja: "-1000000.00", capital: "-1000000.00" });
   });
 
-  it("R14/R21: la caja esta en «saldo» mientras el saldo inicial esta vigente, y vuelve a «flujo» al anularlo", () => {
+  it("R14/R21 (459): la caja esta en «saldo» mientras el saldo inicial esta vigente, y vuelve a «flujo» al anularlo", () => {
     expect(m().estados).toEqual({
       escenario: "flujo",
       "pago por cuenta": "flujo",
@@ -345,9 +489,11 @@ describeSiHayBase("⭑ 459/T B.14 — R7 y R8 al centimo tras cada camino nuevo 
       "saldo inicial": "saldo",
       aporte: "saldo",
       "anulacion del aporte": "saldo",
+      "cobros legados sin linea de caja": "saldo",
       "cobro reclasificado": "saldo",
+      "cobro completado": "saldo",
+      "anulacion del cobro": "saldo",
       "anulacion del saldo inicial": "flujo",
     });
   });
 });
-

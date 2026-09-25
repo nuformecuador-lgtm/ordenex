@@ -222,13 +222,14 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
       const repo = repoDe(tx);
       const svc = new WalletService(repo, tx as unknown as PrismaClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
 
-      // El rango se cierra sobre UN SOLO instante (`gte` y `lte` iguales): son exactamente las
-      // filas que comparten `fecha_movimiento`, que es donde vive el empate.
+      // El rango se cierra sobre UN SOLO instante: son exactamente las filas que comparten
+      // `fecha_movimiento`, que es donde vive el empate. Ficha 461 (R72): `hasta` es EXCLUSIVO en el
+      // repositorio (`lt`), asi que la cota superior es el milisegundo siguiente.
       const instante = new Date(`${ayerCR}T06:00:00.000Z`);
       const filtro = {
         categoria: "egreso_ajuste" as const,
         desde: instante,
-        hasta: instante,
+        hasta: new Date(instante.getTime() + 1),
       };
 
       const previo = await repo.listar({ ...filtro, page: 1, pageSize: 10 });
