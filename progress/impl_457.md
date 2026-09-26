@@ -179,26 +179,32 @@ en la ENTRADA original (`ingreso_abono_tienda` + origen `abono_tienda`) y `null`
 | R38 | anulación «R38»; integración; concurrencia «R36» (saldo −10 000) |
 | R39 | `caja-derivacion-457` «R39»; integración «R19/R39»; invariante `cambio(12)` |
 | R40 | `U/actions/abono-tienda-action.test.ts` «son tres»; service «la superficie pública son TRES métodos» |
-| R41 | `U/services/wallet-service.test.ts` (b1/b1r, lector `abonos`); `I/abono-tienda-457.test.ts` «R41» (por `listarMovimientosAction`); repositorio `estadoDeDocumentos`. **UI (`WalletLedgerAcciones457.test.tsx`): frontend** |
+| R41 | `U/services/wallet-service.test.ts` (b1/b1r, lector `abonos`); `I/abono-tienda-457.test.ts` «R41» (por `listarMovimientosAction`); repositorio `estadoDeDocumentos`. **UI: `C/WalletLedgerAcciones457.test.tsx`** («Anular…»/«Ver comprobante» solo en la original vigente; «Anulado»; nada en el reverso; `{ abonoId, motivo }` sin monto) |
 | R42–R44 | `U/services/abono-tienda-comprobante.test.ts`; integración «R42–R44» |
-| R45, R46, R47 | `U/components/wallet-labels.test.ts`, `desglose-tienda-labels.test.ts`, `mi-wallet-labels.test.ts` (diccionarios, 4f47226c). **Descargas y tablas: frontend** |
-| R48 | service «R48» (DTO); integración (sin uuid en descripciones ni en historial). **Descargas: frontend** |
+| R45, R46, R47 | `U/components/wallet-labels.test.ts`, `desglose-tienda-labels.test.ts`, `mi-wallet-labels.test.ts` (diccionarios, 4f47226c). **Tablas, filtros y descargas: `C/WalletLedgerAcciones457.test.tsx` (caja, R45) y `C/DesgloseTiendaAbono457.test.tsx` (`/wallet/tiendas` R46 y `/mi-wallet` R47)** |
+| R48 | service «R48» (DTO); integración (sin uuid en descripciones ni en historial). **Pantallas y descargas: `C/WalletLedgerAcciones457.test.tsx` «R48» (×2), `C/DesgloseTiendaAbono457.test.tsx` (tablas y descargas de los dos libros de la tienda, sin uuid ni valor técnico)** |
 | R49 | `U/utils/desglose-tienda.test.ts` (`CUBETA` concuerda con el tipo; mutación 4); invariante (saldo de B) |
-| R50, R51 | **frontend** (pistas de cabecera; `desglose-tienda-ledger`) |
+| R50 | `C/DesgloseTiendaAbono457.test.tsx` «R50» ×2 (pistas literales de las dos cabeceras); `U/components/desglose-tienda-labels.test.ts`, `mi-wallet-labels.test.ts`, `saldo-tienda-card.negativo.test.tsx`, `I/mi-wallet-page.test.tsx` (literales reescritos) |
+| R51 | `C/DesgloseTiendaAbono457.test.tsx` (las filas del pago y de su anulación no ofrecen desplegar, en las dos pantallas) |
 | R52 | `U/analytics/metrics-caja-naturaleza.guardia.test.ts` (7/25/9; `ganancia_ordenex` 16, `egresos` 10) |
-| R53 | `U/guards/nombres-wallet-461.guardia.test.ts` («457/R53»: tomados exactamente por su clave; contrapruebas con un reservado ficticio) |
-| R54–R60 | **frontend** (diálogo, desglose, refrescos) |
+| R53 | `U/guards/nombres-wallet-461.guardia.test.ts` («457/R53»: tomados exactamente por su clave —«Una tienda le paga a Ordenex» también por `CONCEPTOS_MANUALES.label.abono_tienda`, la fila «Diálogo: concepto» de design §2—; contrapruebas con un reservado ficticio) |
+| R54, R55 | `U/components/wallet-conceptos-manuales.test.ts` (ocho conceptos, tres grupos, `entra` con tres, frase de efecto y cabecera literales; «⭑ FICHA 457»); `U/components/wallet-registrar-movimiento-dialog.test.tsx` «ofrece los ocho conceptos», «R55» |
+| R56 | `wallet-registrar-movimiento-dialog.test.tsx` «R56 (mutación 9)» (claves EXACTAS del `FormData`, clave de idempotencia, `fechaPago`), «R56: la fecha viaja SIEMPRE…», «R56: pide tienda, monto…»; los otros seis payloads, con sus tests de siempre sin tocar |
+| R57 | ídem «R57» ×2 (saldo del servidor con signo; «todavía le debe» solo si sigue en contra), «R25/R57: `ya_registrado`… UN solo aviso» |
+| R58 | ídem «R58: `sin_deuda`… bajo la TIENDA», «R58: `excede`… bajo el MONTO con la deuda que devolvió el servidor» (aria-describedby del campo) |
+| R59 | `C/PagoTiendaAccionesAbono457.test.tsx` (botón solo en contra; a favor y en cero no; concepto y tienda fijos y deshabilitados, sin catálogo; tras registrar relee desglose, comprobantes y tabla de saldos) — mutación 13; `wallet-registrar-movimiento-dialog.test.tsx` «⭑ FICHA 457 (D8)» (props) |
+| R60 | registrar: `wallet-registrar-movimiento-dialog.test.tsx` «R57…» (`onRegistrado` + `router.refresh`); anular: `C/WalletLedgerAcciones457.test.tsx` «motivo obligatorio…; el módulo relee» (`onDocumentoAnulado`) |
 | R61–R63 | `U/historial-accion/catalogo-y-choke-point.test.ts` («⭑ FICHA 457», 63/41/24); `U/guards/historial-accion-escrituras-cubiertas.guardia.test.ts` (+2 `recibe_tx`); repositorio (sin texto libre); integración |
-| R64 | catálogo: el filtro admite los dos tipos. **Pantalla: frontend (`HistorialAccionesAbonoTienda457.test.tsx`)** |
+| R64 | catálogo: el filtro admite los dos tipos. **Pantalla: `C/HistorialAccionesAbonoTienda457.test.tsx`** (opciones del filtro «Acción» con su texto; filas del registro y de la anulación sin nada técnico) |
 | R65 | `U/guards/abono-tienda-alcance.guardia.test.ts` (1)(2); integración «R65 (T8.3)» (Σ por origen) |
-| R67 | alcance (3): hoy «como mucho uno, y es `abono_tienda`». **El frontend, al añadir el octavo concepto, debe apretarlo a EXACTAMENTE uno** |
-| R68, R69 | **frontend** (Fase 7: ayuda y asistente; `tasks.md` los asigna a `frontend_dev`) |
+| R67 | `U/guards/abono-tienda-alcance.guardia.test.ts` (3): **EXACTAMENTE uno** (`toEqual(["abono_tienda"])`, con su ingreso en la caja) + contraprueba sin el concepto; `wallet-conceptos-manuales.test.ts` |
+| R68, R69 | `U/asistente/contexto-457.test.ts` (frases literales de design §11 por rol; mensajero/adminTienda/adminSatelite sin la caja; fuentes y fecha), `contexto-461.test.ts` (literal del grupo reescrito), `nombres-wallet-461.guardia` sobre `docs/ayuda/**`, guardias `ayuda-*`/`asistente-*`; cuatro preguntas reales (§11.4) |
 | R70–R73 | fotografía `I/caja-caracterizacion-459.test.ts` verde SIN tocar literales; `progress/fase0_457.md` (a)–(e); `liquidacion-idempotencia`, `cobro-tienda-461`, `pago-por-cuenta-tienda` verdes sin tocar (gate) |
 | R74 | integración «R74» |
 | R75, R76 | `I/abono-tienda-457-migration.test.ts` (a)–(f) + ciclo real §2 |
 | R77 | `progress/fase0_457.md` + §7 de esta bitácora |
 | R78 | leader (`progress/contraste_457.md`) |
-| R79 | recorrido por rol: leader/frontend |
+| R79 | recorrido por rol: leader (T9.3; no hecho por el frontend) |
 
 ## 7. Mutaciones de la ficha (design §13), con el rojo comprobado
 
@@ -321,3 +327,111 @@ la fotografía.
 **Veredicto:** backend de la 457 completo y verde (gate completo `INIT_EXIT=0`, 0 saltados en `integration/db`, 12/12 mutaciones del dinero rojas); falta la UI (Fase 6-7) y R78/R79 del leader.
 
 **Entorno al cerrar:** el clon `ordenex_457` se BORRÓ (0 conexiones vivas medidas antes del `DROP DATABASE`) y el `.env` de este worktree también. El `.env` del worktree del agente anterior (`agent-a97bb7d8335763b13`) apunta a esa base, que ya no existe. El `frontend_dev` necesita su propio clon (`CREATE DATABASE … TEMPLATE ordenex` + `prisma migrate deploy`) para su gate.
+
+## 11. Frontend (Fases 6 y 7) — `frontend_dev`, worktree `agent-a5ac5d03ce3d25807`
+
+**Rama:** `wt/457-frontend` (de `origin/feature/457-backend` @ `11d6993c`), empujada a
+`origin/feature/457-backend`. **Base:** clon `ordenex_457f` (`TEMPLATE ordenex` + `prisma migrate deploy`:
+las dos migraciones de la ficha aplicadas); `.env` del worktree = el del checkout principal con la base
+cambiada (copiado sin imprimirlo). `pnpm install` propio, sin junction. **Búsqueda:** el MCP
+`codebase-memory` NO estaba en el conjunto de herramientas de esta sesión: todo se leyó con `grep` y
+lectura directa de los archivos reales. Ningún dev server levantado.
+
+### 11.1 Commits
+
+| SHA | Qué |
+| --- | --- |
+| `efe15944` | Octavo concepto, diálogo (`formDataAbono`, respuestas, props D8), botón del desglose, pistas R50, borra el `@sin-superficie`, guardia de alcance (3) a EXACTAMENTE uno |
+| `72d02fb3` | Tests nuevos: `PagoTiendaAccionesAbono457`, `WalletLedgerAcciones457`, `DesgloseTiendaAbono457`, `HistorialAccionesAbonoTienda457` |
+| `f312a6f5` | Ayuda (caja, tiendas, Mi wallet) con las frases de design §11 + `contexto-457.test.ts` |
+| (este) | bitácora |
+
+### 11.2 Lo que cambió en la UI (pantallas)
+
+- **`/wallet` — «Registrar movimiento»** (`wallet-conceptos-manuales.ts`, `RegistrarMovimientoCajaDialog.tsx`):
+  ocho conceptos; «Llega dinero a la caja» = Aporte de dinero a la caja · **Una tienda le paga a Ordenex** ·
+  Corrección de caja (suma). Con el concepto: frase de efecto de §8.2, frase del libro con los dos nombres,
+  cabecera de §8.1, campos tienda («Tienda que paga» + pista), monto, fecha SIN ventana hacia atrás (`min`
+  ausente, `max` hoy), «Motivo del pago», método, referencia (solo SINPE/transferencia), comprobante
+  opcional. `formDataAbono()` = SOLO `claveIdempotencia, tiendaId, monto, metodo, referencia?, motivo,
+  fechaPago, comprobante?` (la fecha viaja SIEMPRE). `ok`/`ya_registrado` → un aviso con el saldo del
+  servidor (`TEXTO_ABONO.registrado`); `sin_deuda` → bajo la tienda; `excede` → bajo el monto con
+  `money(res.deuda)`; `comprobante_no_guardado` → aviso general; `validation_error` con `fechaPago` → bajo la
+  fecha. Props D8 `conceptoInicial`, `tiendaFija`, `etiquetaBoton`; sin props, el diálogo es byte a byte el
+  de antes (los tests existentes, sin tocar salvo el conteo 7→8, lo fijan).
+- **`/wallet` — el libro**: nada de código nuevo (la rama `ACCIONES.abono_tienda` la cableó el backend en
+  `4f47226c`); ahora con test de pantalla propio.
+- **`/wallet/tiendas` — desglose** (`PagoTiendaAcciones.tsx`): «Registrar pago de la tienda a Ordenex»
+  (`ABONO_TIENDA_TEXTO.abrir`) solo con `signo === "negativo"`, que monta el MISMO diálogo con
+  `conceptoInicial="abono_tienda"`, `tiendaFija` y `onRegistrado = refrescarEstaTienda` (desglose,
+  comprobantes y tabla de saldos). Pistas de cabecera nuevas (R50).
+- **`/mi-wallet`**: pistas de cabecera nuevas (R50). Tabla, filtro y descarga ya decían «Le pagaste a
+  Ordenex» / «Ordenex anuló el pago que le hiciste» por el diccionario (backend); ahora con test de pantalla.
+- **`/historico/acciones`**: sin código nuevo (catálogo del backend); test de pantalla propio (R64).
+- **Ayuda**: `docs/ayuda/oficina/wallet-caja.md`, `oficina/wallet-tiendas.md`, `tienda/mi-wallet.md`.
+- `lib/actions/abono-tienda.ts`: borrado el `@sin-superficie` transitorio (solo el comentario).
+
+**L2 medido (T6.4):** `WalletTiendaMovimientoRepository.listarSaldosTodasTiendas` agrupa
+`wallet_tienda_movimiento` por `tienda_id` y lee `usuario` SIN filtrar por estado: **una tienda inactiva con
+movimientos SÍ sale en `/wallet/tiendas`**, así que su deuda se paga desde su desglose (`tiendaFija`). El
+catálogo del diálogo (`listarAdminTiendas`) sigue siendo solo de tiendas activas.
+
+### 11.3 Tests reescritos (ninguno desaparece; cada uno con su R)
+
+| Test | Qué cambió | R |
+| --- | --- | --- |
+| `U/components/wallet-conceptos-manuales.test.ts` | siete → ocho (ids, nombres, libros, categorías de caja 7→8, grupos, frases); +describe «⭑ FICHA 457»; `nombreEnElLibroDeLaTienda` del abono | R54, R55, R67 |
+| `U/components/wallet-registrar-movimiento-dialog.test.tsx` | «ofrece los ocho conceptos» (+«Una tienda le paga a Ordenex»), 7→8 opciones en el caso 85/R25; +mock de `abono-tienda`; +15 casos 457 | R54–R58 |
+| `U/guards/abono-tienda-alcance.guardia.test.ts` | (3) «como mucho uno» → `toEqual(["abono_tienda"])` + contraprueba sin el concepto | R67 |
+| `U/guards/nombres-wallet-461.guardia.test.ts` | `NOMBRES_TOMADOS_457[].tambien` (la fila «Diálogo: concepto» de §2); `CONCEPTOS_MANUALES.label` por id en `DICCIONARIOS_POR_NOMBRE`; +1 caso | R53 |
+| `U/components/desglose-tienda-labels.test.ts`, `mi-wallet-labels.test.ts`, `saldo-tienda-card.negativo.test.tsx`, `I/mi-wallet-page.test.tsx` | literales de las pistas de cabecera (design §2) | R50 |
+| `U/asistente/contexto-461.test.ts:78` | el grupo «Llega dinero a la caja» con tres conceptos; «siete» → «ocho» en el nombre del caso | R68 |
+
+### 11.4 El asistente, preguntado de verdad (T7.2)
+
+Scripts de un solo uso (borrados; salida en el scratchpad de la sesión): mismo
+`instruccionesDelSistema(rol)` + `contextoPara(docs, rol)` que `/api/asistente`, `AnthropicAsistenteClient`,
+`ANTHROPIC_API_KEY` del `.env` (no impresa), modelo `claude-sonnet-5`.
+
+- **[maestro] «¿cómo registro que Nuform me pagó?»** — correcta: los dos caminos (desglose de la tienda con
+  **Registrar pago de la tienda a Ordenex**, «solo aparece si Nuform tiene saldo **en contra**»; y
+  **Registrar movimiento** → **Una tienda le paga a Ordenex** en «Llega dinero a la caja»), monto hasta lo
+  que debe, fecha real, referencia obligatoria en SINPE/transferencia. `[[doc:oficina/wallet-tiendas]]
+  [[doc:oficina/wallet-caja]]`
+- **[maestro] «¿sube la ganancia si una tienda me paga?»** — correcta: «No, la ganancia no se mueve […]
+  **Entró** y la cifra grande suben […] **Lo que Ordenex les debe a las tiendas** sube […] esa plata ya se
+  había contado como ganancia cuando se aprobaron los cierres». `[[doc:oficina/wallet-caja]]`
+- **[admin] «¿cómo anulo un pago de una tienda?»** — correcta en lo que llega a decir (distingue el pago de
+  Ordenex a la tienda, que se anula en **Wallet · Tiendas**, del pago de un gasto y del pago de la tienda a
+  Ordenex, que se anulan en la caja) **pero se CORTA a media frase las dos veces que se preguntó**: la
+  segunda corrida informó `tokens salida 1024` = `MAX_TOKENS_DEFAULT` de
+  `lib/clients/anthropic-asistente.ts:37`. **Hallazgo fuera del alcance de esta ficha:** con el tope de
+  1024 y `claude-sonnet-5`, una respuesta que enumera tres casos se trunca también en producción. No lo
+  toco (es `lib/clients`, no UI); queda para el leader.
+- **[adminTienda] «¿qué es Le pagaste a Ordenex?»** — correcta: «cuando tu saldo había quedado en contra […]
+  **sube tu saldo** […] "Ordenex anuló el pago que le hiciste" […] el comprobante de ese pago lo guarda la
+  oficina». `[[doc:tienda/mi-wallet]]` (7 documentos en el contexto, ninguno de la oficina: R69).
+
+### 11.5 Mutaciones de la UI (design §13), con el rojo comprobado
+
+Arnés `mutaciones_457f.py` (scratchpad) con autocomprobación: el texto a mutar aparece EXACTAMENTE una vez →
+`git diff --numstat` no vacío → vitest SOLO sobre los tests nombrados → línea `Tests` → `git checkout` →
+diff vacío (si no, aborta). Árbol limpio al final (`git status --porcelain -- app` vacío).
+
+| Mut. | Dónde · cambio | numstat | Resultado | Casos en rojo | R |
+| --- | --- | --- | --- | --- | --- |
+| 9 | `formDataAbono`: se quita `fd.set("claveIdempotencia", clave);` | `0 1` | **ROJO** · `Tests 3 failed \| 67 passed (70)` | «R56 (mutación 9): el FormData lleva EXACTAMENTE sus claves…», «R56: la fecha viaja SIEMPRE…», «(D8) registra con el id de la tienda FIJA…» | R56 |
+| 13 | `PagoTiendaAcciones`: `const tiendaDebe = signo === "negativo";` → `const tiendaDebe = false;` | `1 1` | **ROJO** · `Tests 3 failed \| 39 passed (42)` (con `pago-tienda-acciones` y `wallet-tiendas-pago`, que siguen verdes) | «con saldo negativo, el desglose ofrece…», «concepto… y tienda… deshabilitados», «tras registrar, se releen…» | R59 |
+| 11 (tablas/descargas) | `CATEGORIA_MI_WALLET_LABEL.abono_tienda` → «La tienda le paga a Ordenex» | `1 1` | **ROJO** · `Tests 3 failed \| 5 passed (8)` sobre `DesgloseTiendaAbono457` | tabla, descarga y filtro de `/mi-wallet` | R47 |
+
+### 11.6 Verificación
+
+Ver §12 (gate completo del frontend).
+
+### 11.7 Pendiente
+
+- **Leader:** R78 (contraste en producción) y R79 (recorrido por rol de design §17, T9.3), T9.1 (repetir las
+  14 mutaciones sobre el árbol final: aquí se corrieron las de la UI, 9 y 13, y la 11 sobre tablas).
+- El tope de 1024 tokens del asistente (§11.4): trunca respuestas de tres casos. Fuera de la ficha.
+- `design.md` §5.1 y el orden de la clave (R25): sigue anotado en §10, sin tocar.
+
