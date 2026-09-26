@@ -49,7 +49,10 @@ export interface EstadoCuentaDeps {
  * sentido, saldo inicial, abonos y cargos netos del periodo, saldo final) y el extracto paginado con
  * el saldo corrido de la cuenta ENTERA.
  *
- * @sin-superficie FICHA 458-B (backend por delante del frontend): la llaman las paginas `/wallet/tiendas/[tiendaId]`, `/wallet/mensajeros/[mensajeroId]` y `/wallet/satelites/[zonaId]` de la 458-D (design §5). Esta anotacion CADUCA con la 458-D.
+ * Superficie (FICHA 458-D): las paginas `/wallet/tiendas/[tiendaId]`, `/wallet/mensajeros/[mensajeroId]`
+ * y `/wallet/satelites/[zonaId]` (primera pagina, en el servidor) y `components/shared/estado-cuenta/
+ * EstadoCuenta.tsx` (periodo, chip, paginas y descarga). La anotacion de excepcion que llevaba se borro
+ * al montarlas.
  */
 export async function verEstadoCuentaAction(
   input: unknown,

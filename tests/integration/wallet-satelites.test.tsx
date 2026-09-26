@@ -69,6 +69,7 @@ vi.mock("@/app/_components/LogoutButton", () => ({
 }));
 
 import { SaldosSatelitesTable } from "@/app/(app)/wallet/satelites/_components/SaldosSatelitesTable";
+import { ConciliacionSatelite } from "@/app/(app)/wallet/satelites/_components/ConciliacionSatelite";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
@@ -177,10 +178,7 @@ const COMPLETA = consolidacion({
 
 function renderTabla(
   items: SaldoSateliteDTO[] = [PUNTARENAS, GUANACASTE],
-  {
-    resumen = RESUMEN,
-    puedeConciliar = true,
-  }: { resumen?: ResumenSatelitesDTO | null; puedeConciliar?: boolean } = {},
+  { resumen = RESUMEN }: { resumen?: ResumenSatelitesDTO | null } = {},
 ) {
   function Wrapper({ children }: Readonly<{ children: ReactNode }>) {
     return (
@@ -193,10 +191,32 @@ function renderTabla(
     <SaldosSatelitesTable
       initialData={{ items, total: items.length, pageSize: 25 }}
       resumen={resumen}
-      puedeConciliar={puedeConciliar}
     />,
     { wrapper: Wrapper },
   );
+}
+
+/**
+ * FICHA 458-D (T D.4/T D.8, R31, D14) — la conciliación de UNA bodega ya no se DESPLIEGA en la fila:
+ * vive en su estado de cuenta (`/wallet/satelites/[zonaId]`), debajo del extracto. Se monta aquí
+ * `ConciliacionSatelite` tal como la monta esa página: la bodega, su pendiente (el saldo actual del
+ * estado de cuenta, que el servidor cuadra con la MISMA resta que el listado) y el permiso.
+ */
+const onCambioConciliacion = vi.fn();
+function montarConciliacion({ puedeConciliar = true }: { puedeConciliar?: boolean } = {}) {
+  render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <ToastProvider>
+        <ConciliacionSatelite
+          bodega={{ zonaId: PUNTARENAS.zonaId, zonaNombre: PUNTARENAS.zonaNombre }}
+          pendiente={PUNTARENAS.saldoSinConciliar}
+          puedeConciliar={puedeConciliar}
+          onCambio={onCambioConciliacion}
+        />
+      </ToastProvider>
+    </SWRConfig>,
+  );
+  return screen.findByRole("region", { name: `Conciliación de ${PUNTARENAS.zonaNombre}` });
 }
 
 /**
@@ -216,12 +236,6 @@ function badgeDeFila(region: HTMLElement, dia: string): HTMLElement {
   return within(fila).getByText(/^(?:Pendiente de conciliar|Recibido|Recibido incompleto)$/);
 }
 
-/** Abre el desglose de una bodega y devuelve su región. */
-async function desplegar(bodega: string) {
-  const user = userEvent.setup();
-  await user.click(screen.getByRole("button", { name: `Ver desglose de ${bodega}` }));
-  return screen.findByRole("region", { name: `Desglose de ${bodega}` });
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -340,10 +354,9 @@ describe("R23 — la tabla de saldos y sus tres tarjetas", () => {
 });
 
 // =========================================================================
-describe("R22/R24 — el desglose de una bodega", () => {
+describe("R22/R24 — la conciliación de una bodega (458-D: en su estado de cuenta)", () => {
   it("lista sus consolidaciones con declarado, recibido, estado y quién conciló", async () => {
-    renderTabla([PUNTARENAS]);
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion();
     await waitFor(() => expect(listarConsolidacionesMock).toHaveBeenCalled());
 
     // El «Pendiente de llegar» de la cabecera es el saldo que el SERVIDOR cuadró.
@@ -355,8 +368,7 @@ describe("R22/R24 — el desglose de una bodega", () => {
   });
 
   it("⭑ los TRES estados se nombran con el vocabulario aprobado (R28)", async () => {
-    renderTabla([PUNTARENAS]);
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion();
     await within(region).findByText("Pendiente de conciliar");
     expect(badgeDeFila(region, "16 sept")).toHaveTextContent("Pendiente de conciliar");
     expect(badgeDeFila(region, "15 sept")).toHaveTextContent("Recibido incompleto");
@@ -376,8 +388,7 @@ describe("R22/R24 — el desglose de una bodega", () => {
     // Los badges se localizan POR SU FILA (por el importe recibido, que es único en el doble) y
     // no por su texto: «Recibido» también es el encabezado de una columna, y buscarlo por texto
     // acabaría comparando un `th` con un `Badge`.
-    renderTabla([PUNTARENAS]);
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion();
     await within(region).findByText("Pendiente de conciliar");
 
     const incompleto = badgeDeFila(region, "15 sept");
@@ -394,8 +405,7 @@ describe("R22/R24 — el desglose de una bodega", () => {
   it("⭑ Q7 — la DIFERENCIA se explica en la cabecera, no sólo en una columna", async () => {
     // La mitad que faltaba del control de seguimiento: sin este aviso la bodega descubre la
     // diferencia cuando se la reclaman semanas después.
-    renderTabla([PUNTARENAS]);
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion();
     const aviso = await within(region).findByRole("status");
     expect(aviso).toHaveTextContent("Una consolidación llegó incompleta");
     expect(aviso).toHaveTextContent(
@@ -411,15 +421,13 @@ describe("R22/R24 — el desglose de una bodega", () => {
       page: 1,
       pageSize: 25,
     });
-    renderTabla([PUNTARENAS]);
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion();
     await waitFor(() => expect(listarConsolidacionesMock).toHaveBeenCalled());
     expect(within(region).queryByRole("status")).toBeNull();
   });
 
   it("D6 — la nota de «Desmarcar no mueve dinero» va al pie y visible", async () => {
-    renderTabla([PUNTARENAS]);
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion();
     const nota = within(region).getByRole("note");
     expect(nota).toHaveTextContent("Desmarcar no mueve dinero.");
     expect(nota).toHaveTextContent(
@@ -428,12 +436,16 @@ describe("R22/R24 — el desglose de una bodega", () => {
     expect(nota).toHaveTextContent(/queda registrado quién marcó y quién deshizo/);
   });
 
-  it("abrir UNA bodega consulta UNA sola vez, y sólo la suya", async () => {
+  it("listar las bodegas no lee ninguna conciliación; la de UNA bodega lee UNA vez, y sólo la suya", async () => {
     renderTabla([PUNTARENAS, GUANACASTE]);
-    // Listar dos bodegas no dispara ninguna lectura de desglose: el `useSWR` vive dentro del
-    // componente desplegado, y el `DataTable` sólo lo MONTA cuando la fila está abierta.
+    // 458-D (D14): la fila ya no despliega; enlaza al estado de cuenta de su bodega.
+    expect(screen.getByRole("link", { name: "Ver estado de cuenta de FGAM Puntarenas" }).getAttribute("href")).toBe(
+      "/wallet/satelites/z-punta",
+    );
+    expect(screen.queryByRole("button", { name: /Ver desglose/ })).toBeNull();
     expect(listarConsolidacionesMock).not.toHaveBeenCalled();
-    await desplegar("FGAM Puntarenas");
+    cleanup();
+    await montarConciliacion();
     await waitFor(() => expect(listarConsolidacionesMock).toHaveBeenCalledTimes(1));
     expect(listarConsolidacionesMock.mock.calls[0][0]).toMatchObject({ zonaId: "z-punta" });
   });
@@ -443,8 +455,7 @@ describe("R22/R24 — el desglose de una bodega", () => {
 describe("R25 — marcar recibido, corregir y desmarcar", () => {
   it("⭑ el diálogo PRECARGA el monto con lo declarado, y lo dice", async () => {
     const user = userEvent.setup();
-    renderTabla([PUNTARENAS]);
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion();
     await user.click(
       await within(region).findByRole("button", {
         name: /Marcar recibido la consolidación de FGAM Puntarenas/,
@@ -463,8 +474,7 @@ describe("R25 — marcar recibido, corregir y desmarcar", () => {
 
   it("marcar por MENOS envía el monto tecleado y refresca ESTA bodega", async () => {
     const user = userEvent.setup();
-    renderTabla([PUNTARENAS]);
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion();
     await user.click(
       await within(region).findByRole("button", {
         name: /Marcar recibido la consolidación de FGAM Puntarenas/,
@@ -483,11 +493,12 @@ describe("R25 — marcar recibido, corregir y desmarcar", () => {
       // La nota vacía NO se manda: el schema del borde es `.strict()` y una cadena vacía sería
       // una nota en blanco guardada como si alguien la hubiera escrito.
     });
+    // 458-D (R30): tras marcar se relee el estado de cuenta de ESTA bodega.
+    await waitFor(() => expect(onCambioConciliacion).toHaveBeenCalled());
   });
 
   it("sobre una INCOMPLETA se ofrece «Corregir» y «Desmarcar», nunca «Marcar recibido»", async () => {
-    renderTabla([PUNTARENAS]);
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion();
     expect(
       await within(region).findByRole("button", { name: /Corregir el monto recibido/ }),
     ).toBeInTheDocument();
@@ -498,8 +509,7 @@ describe("R25 — marcar recibido, corregir y desmarcar", () => {
 
   it("⭑ «Desmarcar» dice el importe que va a borrar ANTES de borrarlo", async () => {
     const user = userEvent.setup();
-    renderTabla([PUNTARENAS]);
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion();
     const botones = await within(region).findAllByRole("button", {
       name: /Desmarcar la consolidación/,
     });
@@ -513,8 +523,7 @@ describe("R25 — marcar recibido, corregir y desmarcar", () => {
   });
 
   it("R27 — sin permiso NO se monta ningún botón de conciliar", async () => {
-    renderTabla([PUNTARENAS], { puedeConciliar: false });
-    const region = await desplegar("FGAM Puntarenas");
+    const region = await montarConciliacion({ puedeConciliar: false });
     await waitFor(() => expect(listarConsolidacionesMock).toHaveBeenCalled());
     expect(within(region).queryByRole("button", { name: /Marcar recibido/ })).toBeNull();
     expect(within(region).queryByRole("button", { name: /Desmarcar/ })).toBeNull();
@@ -545,7 +554,9 @@ describe("R27 — las dos mitades del control", () => {
     // Se conserva por lo mismo que en `/wallet/tiendas`: el día que esta vista admita un rol que
     // mira y no concilia, la línea deja de ser redundante de golpe y un `true` hardcodeado que
     // hubiera entrado mientras tanto sería un botón de marcar para quien no puede marcar.
-    const fuente = codigoSinComentarios("app/(app)/wallet/satelites/page.tsx");
+    // 458-D: el permiso viaja desde la página del estado de cuenta de la bodega, donde vive ahora la
+    // conciliación.
+    const fuente = codigoSinComentarios("app/(app)/wallet/satelites/[zonaId]/page.tsx");
     expect(fuente).toMatch(/puedeConciliar=\{esAccesoTotal\(actor\.rol\)\}/);
     expect(fuente).not.toMatch(/puedeConciliar=\{true\}/);
 
@@ -563,7 +574,9 @@ describe("R27 — las dos mitades del control", () => {
 describe("R20 — money-safe: el navegador no hace aritmética de dinero", () => {
   it.each([
     "app/(app)/wallet/satelites/_components/SaldosSatelitesTable.tsx",
-    "app/(app)/wallet/satelites/_components/DesgloseConsolidacionesSatelite.tsx",
+    "app/(app)/wallet/satelites/_components/ConciliacionSatelite.tsx",
+    "app/(app)/wallet/satelites/_components/EstadoCuentaSatelite.tsx",
+    "app/(app)/wallet/satelites/[zonaId]/page.tsx",
     "app/(app)/wallet/satelites/_components/satelites-labels.ts",
     "app/(app)/wallet/satelites/_components/saldos-satelites-descarga-columnas.ts",
     "app/(app)/wallet/satelites/_components/consolidaciones-satelite-descarga-columnas.ts",
@@ -585,7 +598,8 @@ describe("R20 — money-safe: el navegador no hace aritmética de dinero", () =>
     // se calcula: se lee. Una resta escrita en el cliente se vería como un `-` entre dos
     // expresiones de dinero, y estos archivos no tienen ninguna.
     for (const ruta of [
-      "app/(app)/wallet/satelites/_components/DesgloseConsolidacionesSatelite.tsx",
+      "app/(app)/wallet/satelites/_components/ConciliacionSatelite.tsx",
+      "app/(app)/wallet/satelites/_components/EstadoCuentaSatelite.tsx",
       "app/(app)/wallet/satelites/_components/SaldosSatelitesTable.tsx",
     ]) {
       const codigo = codigoSinComentarios(ruta);

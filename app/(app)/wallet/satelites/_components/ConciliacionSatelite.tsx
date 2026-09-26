@@ -18,10 +18,7 @@ import {
   listarConsolidacionesSateliteCompletoAction,
 } from "@/lib/actions/conciliacion-satelites";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
-import type {
-  ConsolidacionSateliteDTO,
-  SaldoSateliteDTO,
-} from "@/lib/types/conciliacion-satelites";
+import type { ConsolidacionSateliteDTO } from "@/lib/types/conciliacion-satelites";
 
 import {
   COLUMNAS_DESCARGA_CONSOLIDACIONES_SATELITE,
@@ -43,14 +40,16 @@ import {
 } from "./satelites-labels";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
-// ⭑ FICHA 431 (T21, R22/R24/R25) — EL DESGLOSE DE UNA BODEGA SATÉLITE.
+// ⭑ FICHA 431 (T21, R22/R24/R25) — LA CONCILIACIÓN DE UNA BODEGA SATÉLITE.
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 //
-// Se MONTA al desplegar su fila en `SaldosSatelitesTable` (el `renderExpanded` del `DataTable`
-// sólo monta lo abierto), y es aquí —dentro de este componente— donde vive el `useSWR`: por eso
-// listar N bodegas cuesta CERO lecturas de desglose y abrir una fila cuesta exactamente una, sólo
-// la de esa bodega. Cada instancia lleva su página, su filtro y su caché, así que dos filas
-// abiertas no se pisan. Es el patrón exacto de `DesgloseMovimientosTienda` (feature 171).
+// FICHA 458-D (T D.4/T D.8, R31, D14) — hasta la 458-D esto era el DESGLOSE que se desplegaba en la
+// fila de `SaldosSatelitesTable`. El desplegable se retira: la bodega tiene su ESTADO DE CUENTA
+// (`/wallet/satelites/[zonaId]`), y esta tabla de consolidaciones con sus acciones de conciliación
+// (marcar y desmarcar lo recibido) se muda a esa página, DEBAJO del extracto, con el MISMO efecto y
+// los MISMOS textos (`ConciliacionAcciones`, `MarcarRecibidoDialog`, sin tocar). Lo único que cambia:
+// el «Pendiente de llegar» llega del estado de cuenta (el mismo `saldoDe` que el listado, R22) y,
+// tras marcar o desmarcar, se relee también el estado de cuenta de ESTA bodega (R30).
 //
 // ── MONEY-SAFE (R20): CERO `Number(`, CERO `parseFloat`, CERO restas.
 // Los cinco importes de cada fila y el «Pendiente de llegar» de la cabecera llegan como STRING ya
@@ -74,17 +73,13 @@ import {
 const DESGLOSE_PAGE_SIZE = cierreBodegaConfig.DEFAULT_PAGE_SIZE;
 
 /** Prefijo de la clave SWR. Identifica esta lectura entre todas las de la app. */
-const CLAVE_DESGLOSE = "wallet-satelites:desglose";
+const CLAVE_DESGLOSE = "wallet-satelites:conciliacion";
 
 /** Los dos conjuntos que el conmutador ofrece. */
 type FiltroDesglose = "sin_conciliar" | "todas";
 
-/**
- * Clave SWR de UN desglose. Exportada a propósito, por el mismo motivo que
- * `claveDesgloseTienda`: es lo que permite refrescar el desglose de UNA bodega —y sólo ésa— desde
- * fuera, tras marcar o desmarcar, sin recargar la página ni tocar las demás filas abiertas.
- */
-export function claveDesgloseSatelite(
+/** Clave SWR de las consolidaciones de UNA bodega (página y filtro). */
+export function claveConciliacionSatelite(
   zonaId: string,
   page: number = 1,
   filtro: FiltroDesglose = "sin_conciliar",
@@ -134,36 +129,38 @@ function conciliadoPorTexto(c: ConsolidacionSateliteDTO): string {
   return `${c.conciliadoPorNombre} · ${diaCR(c.conciliadoAt)}`;
 }
 
-export interface DesgloseConsolidacionesSateliteProps {
+export interface ConciliacionSateliteProps {
+  /** La bodega. El nombre baja por props (lo trae el estado de cuenta); el id solo viaja. */
+  bodega: { zonaId: string; zonaNombre: string };
   /**
-   * La fila de la tabla de saldos desde la que se despliega. El nombre y el saldo bajan por props
-   * y NO se le piden al servidor: ya están aquí, y consultarlos costaría una lectura por cada
-   * fila que se abre.
+   * «Pendiente de llegar» de ESTA bodega: el saldo actual de su estado de cuenta, STRING del servidor
+   * (la misma resta que el listado, R22). Aquí no se suma nada.
    */
-  resumen: SaldoSateliteDTO;
-  /** id del elemento, para enlazar con el `aria-controls` del botón que lo expande. */
-  id?: string;
+  pendiente: string;
   /**
    * Si el actor puede marcar y desmarcar. Lo decide el SERVIDOR (`esAccesoTotal`, el mismo
    * predicado con el que el servicio responde `forbidden`) y baja por props. **Default `false`:
    * falla cerrado.**
    */
   puedeConciliar?: boolean;
+  /** R30 — tras marcar o desmarcar: relee el estado de cuenta de ESTA bodega. */
+  onCambio?: () => Promise<void> | void;
 }
 
-export function DesgloseConsolidacionesSatelite({
-  resumen,
-  id,
+export function ConciliacionSatelite({
+  bodega,
+  pendiente,
   puedeConciliar = false,
-}: Readonly<DesgloseConsolidacionesSateliteProps>) {
-  const { zonaId, zonaNombre } = resumen;
+  onCambio,
+}: Readonly<ConciliacionSateliteProps>) {
+  const { zonaId, zonaNombre } = bodega;
   const { mutate } = useSWRConfig();
   const [page, setPage] = useState(1);
   // Arranca en «Sin conciliar» porque es la pregunta que trae a alguien a esta pantalla: qué
   // falta por llegar. Lo ya recibido es historia y está a un clic.
   const [filtro, setFiltro] = useState<FiltroDesglose>("sin_conciliar");
 
-  const { data, error, isLoading } = useSWR(claveDesgloseSatelite(zonaId, page, filtro), () =>
+  const { data, error, isLoading } = useSWR(claveConciliacionSatelite(zonaId, page, filtro), () =>
     leerDesglose(zonaId, page, filtro),
   );
 
@@ -173,16 +170,17 @@ export function DesgloseConsolidacionesSatelite({
   /**
    * Las consolidaciones de ESTA página que llegaron incompletas. Se usa SÓLO para decidir si el
    * aviso se enciende y para contarlas — **nunca para sumar dinero**: el importe del aviso es
-   * `resumen.saldoSinConciliar`, que el servidor ya cuadró sobre la bodega entera.
+   * `pendiente`, que el servidor ya cuadró sobre la bodega entera.
    */
   const incompletas = items.filter((c) => estadoConciliacionDe(c) === "incompleto");
 
-  /** Refresco DIRIGIDO tras marcar o desmarcar: esta bodega y la tabla de saldos, nada más. */
+  /** Refresco DIRIGIDO tras marcar o desmarcar: esta bodega (su tabla y su estado de cuenta), nada más. */
   async function refrescar() {
     await Promise.all([
+      onCambio?.(),
       // Todas las páginas y filtros de ESTE desglose (la fila puede haberse movido de conjunto).
       mutate((clave) => Array.isArray(clave) && clave[0] === CLAVE_DESGLOSE && clave[1] === zonaId),
-      // Y la tabla de arriba, cuyo «Pendiente» y cuyas tres tarjetas acaban de cambiar.
+      // Y el listado de bodegas, cuyo «Pendiente» y cuyas tres tarjetas acaban de cambiar.
       mutate((clave) => Array.isArray(clave) && clave[0] === "wallet-satelites:saldos"),
     ]);
   }
@@ -261,7 +259,6 @@ export function DesgloseConsolidacionesSatelite({
 
   return (
     <section
-      id={id}
       aria-label={DESGLOSE_SATELITE_NOMBRE.region(zonaNombre)}
       className="flex flex-col gap-4 rounded-lg bg-muted/40 p-4"
     >
@@ -272,7 +269,7 @@ export function DesgloseConsolidacionesSatelite({
             {DESGLOSE_SATELITE.pendienteRotulo}
           </span>
           <span className="text-2xl font-semibold tabular-nums text-foreground">
-            {money(resumen.saldoSinConciliar)}
+            {money(pendiente)}
           </span>
         </div>
 
@@ -297,7 +294,7 @@ export function DesgloseConsolidacionesSatelite({
                     money(incompletas[0].montoRecibido),
                     money(incompletas[0].faltaPorRecibir),
                   )
-                : DESGLOSE_SATELITE.diferenciaDetalleVarias(money(resumen.saldoSinConciliar))}
+                : DESGLOSE_SATELITE.diferenciaDetalleVarias(money(pendiente))}
             </span>
           </div>
         ) : null}
@@ -366,6 +363,3 @@ export function DesgloseConsolidacionesSatelite({
     </section>
   );
 }
-
-/** El tope de página del dominio, para que la tabla de arriba no invente el suyo. */
-export const DESGLOSE_SATELITE_MAX_PAGE_SIZE = cierreBodegaConfig.MAX_PAGE_SIZE;

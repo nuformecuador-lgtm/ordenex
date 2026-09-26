@@ -33,10 +33,9 @@ import {
 // `/wallet/mensajeros`: el botón que abre el formulario compartido, la previsualización que
 // se pinta dentro de él y el resultado que se enseña al terminar.
 //
-// Se monta en la cabecera del DESGLOSE expandido, espejo exacto de `PagoTiendaAcciones` en la
-// pantalla de tiendas. Ahí y no en una columna de la tabla-resumen: esa lista se descarga y
-// sus columnas están atadas a guardias, y además no hay sitio en una celda para los avisos de
-// R37/R56.
+// FICHA 458-D (T D.3, R29): se monta en las ACCIONES del estado de cuenta del mensajero
+// (`/wallet/mensajeros/[mensajeroId]`), donde antes iba la cabecera del desglose expandido. No en una
+// columna de la tabla-resumen: no hay sitio en una celda para los avisos de R37/R56.
 //
 // EL PERMISO. `/wallet/mensajeros` es una pantalla de ACCESO TOTAL entera (`page.tsx`:
 // `notFound()` para cualquier otro rol), así que acá no se vuelve a decidir quién ve el
@@ -56,8 +55,12 @@ import {
 // `montoValido` comparando TEXTO.
 
 export interface PagoMensajeroAccionesProps {
-  /** La fila del mensajero: de acá salen su id y su nombre. Los montos vienen del servidor. */
-  resumen: CuentaPorPagarResumenDTO;
+  /**
+   * El mensajero: su id y su nombre, y nada más. FICHA 458-D (T D.3): desde que el pago se ofrece en
+   * el estado de cuenta, ya no hace falta la fila entera del listado (los montos nunca se leyeron
+   * aquí: los dice la previsualización del servidor).
+   */
+  resumen: Pick<CuentaPorPagarResumenDTO, "mensajeroId" | "mensajeroNombre">;
   /**
    * Se invoca tras un pago registrado, para que el desglose vuelva a leerse. Lo llama el
    * PADRE porque es el dueño de esas claves de SWR: acá se refresca lo propio y nada más.

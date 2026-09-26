@@ -71,16 +71,6 @@ export default async function WalletSatelitesPage() {
             pageSize: saldosResult.pageSize,
           }}
           resumen={resumen}
-          /**
-           * R25/R27 — el permiso de conciliar se resuelve SÓLO server-side y con el MISMO
-           * predicado (`esAccesoTotal`) que el servicio usa para responder `forbidden`.
-           *
-           * Hoy esta página ya hace `notFound` para cualquier rol sin acceso total, así que el
-           * valor es siempre `true` aquí. Se pasa igualmente y **no se escribe `true` literal**:
-           * el día que esta pantalla se abra a un rol que mira pero no concilia, los botones
-           * desaparecen solos. Mismo criterio, palabra por palabra, que `/wallet/tiendas`.
-           */
-          puedeConciliar={esAccesoTotal(actor.rol)}
         />
       </section>
     </AppPage>

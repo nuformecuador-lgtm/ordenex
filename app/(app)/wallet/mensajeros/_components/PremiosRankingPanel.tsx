@@ -68,7 +68,10 @@ const CLAVE_PREMIOS = "wallet-mensajeros:premios";
  *
  *  - `wallet-mensajeros:premios`  — el estado de la fila que se acaba de tocar (R9);
  *  - `wallet-mensajeros:cuentas`  — la cuenta por pagar de ese mensajero subió o bajó;
- *  - `wallet-mensajeros:desglose` — el desglose abierto tiene un movimiento más (R34);
+ *  - `estado-cuenta` — el estado de cuenta del mensajero tiene un movimiento más (R34). FICHA 458-D:
+ *    sustituye a `wallet-mensajeros:desglose` (el desplegable retirado). La caché de SWR sobrevive a la
+ *    navegación, así que un estado de cuenta ya visitado quedaría con la cifra vieja; no hay id de
+ *    mensajero para acotarlo (ver abajo) y se alcanzan los estados de cuenta en caché;
  *  - `liquidacion:reparto-previsualizacion` — **lo pagable de su cierre cambió** (R24/R27/R33):
  *    un cierre que estaba saldado vuelve a ofrecer pago por el importe del premio.
  *
@@ -82,7 +85,9 @@ const CLAVE_PREMIOS = "wallet-mensajeros:premios";
 const PREFIJOS_A_REFRESCAR: readonly string[] = [
   CLAVE_PREMIOS,
   "wallet-mensajeros:cuentas",
-  "wallet-mensajeros:desglose",
+  // El literal es el de `CLAVE_ESTADO_CUENTA` (`components/shared/estado-cuenta/estado-cuenta-clave.ts`);
+  // `PremiosRankingPanel.test.tsx` empareja los dos, como con las demás claves de esta lista.
+  "estado-cuenta",
   "liquidacion:reparto-previsualizacion",
 ];
 

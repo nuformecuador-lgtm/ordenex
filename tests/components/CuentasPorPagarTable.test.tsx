@@ -4,24 +4,12 @@ import { render, screen, within, cleanup, waitFor } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
-import type { DesglosePagosMensajeroProps } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
-// Feature 44 (T14) — tabla-resumen de cuentas por pagar, ahora sobre `DataTable` (columnas +
-// `renderExpanded`). Se stubbea el DESGLOSE por cierre (SWR + Server Action) para aislar el
-// comportamiento de la TABLA: columnas, datos money-safe, filtro por nombre y expand por fila.
-// El stub captura el `resumen` para afirmar que expande la fila correcta.
-vi.mock(
-  "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero",
-  () => ({
-    DesglosePagosMensajero: ({ resumen }: DesglosePagosMensajeroProps) => (
-      <div data-testid={`desglose-stub-${resumen.mensajeroId}`}>
-        Desglose de {resumen.mensajeroNombre}
-      </div>
-    ),
-  }),
-);
+// Feature 44 (T14) — tabla-resumen de cuentas por pagar, sobre `DataTable`: columnas, datos
+// money-safe y filtro por nombre. FICHA 458-D (T D.3, D14): la fila ya NO despliega el desglose por
+// cierre; enlaza al estado de cuenta del mensajero (último bloque).
 
 // Feature 170 — FASE 2 (T L.2): la tabla pinta la PÁGINA que le da el servidor y la búsqueda
 // por nombre la resuelve él. El doble de la Server Action FILTRA de verdad (con el mismo
@@ -204,20 +192,11 @@ describe("CuentasPorPagarTable — búsqueda por nombre (servidor, T L.2)", () =
   });
 });
 
-describe("CuentasPorPagarTable — expand del desglose por fila (R18)", () => {
-  it("expande la fila del mensajero y monta su desglose por cierre", async () => {
-    const user = userEvent.setup();
+describe("CuentasPorPagarTable — la fila enlaza al estado de cuenta (458-D, R17; antes: expand del desglose, R18)", () => {
+  it("cada fila lleva el enlace a SU estado de cuenta, y no hay desglose que desplegar", () => {
     renderTabla(MENSAJEROS);
-
-    // Sin expandir: ningún desglose montado.
-    expect(screen.queryByTestId("desglose-stub-u1")).not.toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: "Ver desglose de Ana Mensajera" }),
-    );
-
-    // Se monta el desglose de ESA fila (no el de otra).
-    expect(screen.getByTestId("desglose-stub-u1")).toBeInTheDocument();
-    expect(screen.queryByTestId("desglose-stub-u2")).not.toBeInTheDocument();
+    const enlace = within(tabla()).getByRole("link", { name: "Ver estado de cuenta de Ana Mensajera" });
+    expect(enlace.getAttribute("href")).toBe("/wallet/mensajeros/u1");
+    expect(within(tabla()).queryByRole("button", { name: /Ver desglose/ })).toBeNull();
   });
 });

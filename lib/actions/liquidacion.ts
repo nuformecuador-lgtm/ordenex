@@ -314,7 +314,11 @@ export async function listarPagosDeCierreAction(
   return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
 }
 
-/** R3/R50 — los comprobantes de una tienda, con el mismo molde. */
+/**
+ * R3/R50 — los comprobantes de una tienda, con el mismo molde.
+ *
+ * Superficie (FICHA 458-D): `PagosTiendaEstadoCuenta`, en el estado de cuenta de la tienda
+ * (`/wallet/tiendas/[tiendaId]`); antes, `PagoTiendaAcciones` en el desglose retirado. */
 export async function listarPagosDeTiendaAction(
   input: unknown,
   deps: LiquidacionDeps = {},

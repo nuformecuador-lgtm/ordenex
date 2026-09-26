@@ -5,7 +5,6 @@ import type { CierreEstado } from "@/lib/types/cierre";
 import type {
   CuentaPorPagarSigno,
   PagoMensajeroMovimientoCategoria,
-  PagoMensajeroMovimientoTipo,
 } from "@/lib/types/wallet-mensajero";
 
 // Feature 44 (T14) — etiquetas i18n-ready y helper de moneda de la vista del MAESTRO
@@ -49,40 +48,6 @@ export const CUENTA_COLOR: Record<CuentaPorPagarSigno, string> = {
   cero: "text-muted-foreground",
 };
 
-/**
- * Etiquetas del saldo del desglose (split devengado/pagado/pendiente de un mensajero). En la
- * vista del maestro el saldo refleja el CONJUNTO FILTRADO (R22): al aplicar filtros de
- * fecha/cierre estos tres montos se recalculan desde `result.data.cuenta`, no del agregado.
- *
- * Deuda 203 (cabo suelto) — cada pista lleva AHORA la salvedad de la limitación N1. Antes, el
- * desglose repetía el párrafo entero de la tabla (`CUENTAS_AVISO_BRUTOS`) con los rótulos
- * cambiados, y las dos copias se veían A LA VEZ: medido en la app el 2026-08-12 con la primera
- * fila desplegada, una en y=181 y la otra en y=457 de una ventana de 900 px. Como la tabla
- * admite varias filas abiertas a la vez, cada fila añadía otra copia del mismo párrafo.
- *
- * Lo que NO se podía hacer es borrarlo sin más y dejar que hablara el de la tabla:
- *
- *  - estos tres importes son los del CONJUNTO FILTRADO (R22), no los de la fila de la tabla:
- *    filtrar por fecha los cambia, y el párrafo de arriba habla de otras cifras y con otros
- *    rótulos («Pagado», no «Total pagado»);
- *  - para las filas de abajo, el párrafo de la tabla ni siquiera está en pantalla: con el
- *    tamaño de página por defecto (25) y filas de 42 px, desplegar la 19.ª deja el aviso de la
- *    cabecera a más de 900 px por encima del desglose.
- *
- * Así que la salvedad se queda donde estaba el importe que describe, en una línea y con las
- * MISMAS palabras que ya usan las cabeceras del archivo descargable (más abajo). Deja de ser un
- * párrafo repetido y pasa a ser lo que la cifra promete.
- */
-export const DESGLOSE_LABEL = {
-  devengado: "Total devengado",
-  devengadoHint:
-    "Lo que Ordenex le debe por sus entregas. Incluye la devolución de los pagos anulados.",
-  pagado: "Total pagado",
-  pagadoHint: "Lo ya entregado (del efectivo recaudado). Incluye los pagos anulados.",
-  cuentaPorPagar: "Cuenta por pagar",
-  cuentaPorPagarHint:
-    "Lo pendiente de pagar al mensajero. Es el número correcto: ya tiene descontado lo anulado.",
-} as const;
 
 /**
  * Feature 172 (T H.4) — el AVISO de la limitación N1, compuesto con los rótulos REALES de la
@@ -101,8 +66,8 @@ export const DESGLOSE_LABEL = {
  *
  * Deuda 203 — lo que cambió es la FORMA, no la regla: este párrafo se pinta UNA sola vez por
  * pantalla, en la cabecera de la tabla, porque es la única superficie que se ve sin desplegar
- * nada. La otra superficie con agregados —la cabecera del desglose— lleva la misma salvedad
- * pegada a cada importe (`DESGLOSE_LABEL`, arriba), que es donde no puede sobrar.
+ * nada. (La otra superficie con agregados —la cabecera del desglose, con la salvedad pegada a cada
+ * importe— se retiró en la 458-D: el estado de cuenta que la sustituye enseña cifras NETAS, D3.)
  *
  * Sin jerga: ni «contraasiento», ni «neteo», ni siglas.
  */
@@ -153,11 +118,6 @@ export const ENCABEZADOS_DESCARGA_MAESTRO = {
 
 // ── Desglose POR CIERRE del maestro (R18/R22) ──
 
-/** Etiqueta legible del tipo de movimiento (devengo = lo devengado / pago = lo entregado). */
-export const TIPO_PAGO_LABEL: Record<PagoMensajeroMovimientoTipo, string> = {
-  devengo: "Devengo",
-  pago: "Pago",
-};
 
 /** Etiqueta legible de cada categoria (concepto) del libro del pago al mensajero. */
 export const CATEGORIA_PAGO_LABEL: Record<PagoMensajeroMovimientoCategoria, string> = {
@@ -178,33 +138,7 @@ export function origenLabel(origenTipo: WalletOrigenTipo): string {
   return ORIGEN_PAGO_LABEL[origenTipo];
 }
 
-/** Cabeceras de la tabla del desglose por cierre (mas reciente primero). */
-export const DESGLOSE_COLUMNAS = {
-  fecha: "Fecha",
-  tipo: "Tipo",
-  concepto: "Concepto",
-  monto: "Monto",
-  origen: "Origen",
-} as const;
 
-/**
- * Etiquetas de los filtros server-side del desglose por cierre (fecha/cierre, R22).
- *
- * Ficha 458-A (TA.4, R2/R10): el cierre se ELIGE de un selector con los cierres de este mensajero
- * (rotulados por día y mensajero, con búsqueda por día o por nombre; textos en
- * `CIERRE_SELECTOR_TEXTOS`). El `cierreId` elegido sigue yendo al WHERE server-side (R22) y a la
- * descarga del desglose completo; lo que desaparece es el campo de texto donde había que pegarlo.
- */
-export const DESGLOSE_FILTRO_LABEL = {
-  cierre: "Cierre",
-  desde: "Desde",
-  hasta: "Hasta",
-  aplicar: "Aplicar",
-  limpiar: "Limpiar",
-} as const;
-
-/** Mensaje cuando el desglose filtrado no tiene movimientos. */
-export const DESGLOSE_VACIO = "No hay movimientos que coincidan con los filtros.";
 
 // ── Feature 205 — pagar la cuenta por pagar del mensajero desde esta pantalla ──
 //
@@ -239,22 +173,21 @@ export const CIERRE_ENLACE = {
     ` de ${mensajero} al que se aplicaron ${money(monto)}`,
 } as const;
 
-/** La cabecera de la columna del desglose que lleva el enlace (R43). */
-export const DESGLOSE_COLUMNA_CIERRE = "Cierre";
-
-/** Lo que se pinta en la celda de una fila que NO corresponde a ningún cierre (R43). */
-export const DESGLOSE_SIN_CIERRE = "—";
 
 /** Textos del bloque de pago del desglose (R3). */
 export const PAGO_MENSAJERO_WALLET = {
-  /** Nombre accesible del bloque entero, en la cabecera del desglose. */
+  /** Nombre accesible del bloque entero, en las acciones del estado de cuenta (458-D). */
   seccion: "Pago al mensajero",
   /** Rótulo del importe que este pago puede saldar AHORA (el imputable de la ventana). */
   disponible: "Se puede pagar ahora",
   disponibleHint:
     "La suma de los cierres aprobados que un solo pago puede saldar. Sale del servidor.",
-  /** Abre el formulario. */
-  abrir: "Registrar pago",
+  /**
+   * Abre el formulario. FICHA 458-D (T D.3, R29): la acción del estado de cuenta se nombra como todas
+   * las de la wallet desde la 461, desde Ordenex y diciendo quién le paga a quién (antes «Registrar
+   * pago»; el botón que CONFIRMA dentro del formulario sigue siendo «Registrar pago»).
+   */
+  abrir: "Ordenex le paga al mensajero",
   /** R15 — sin cierres aprobados con saldo no hay nada que pagar, y se dice con texto. */
   sinImputable:
     "Este mensajero no tiene cierres aprobados con saldo pendiente: no hay nada que pagar desde acá.",
