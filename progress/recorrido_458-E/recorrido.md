@@ -50,3 +50,67 @@ La insignia «Anulado» que la revisión de la 458-C puso en la celda de «Ver»
 - El botón de cerrar del panel (`Sheet` de shadcn) se anuncia «Close» en inglés: ajeno a la 458-E.
 - Un aviso ajeno («Confirmá el SINPE de GAM») se abre al entrar a `/wallet` con el maestro; el script lo cierra con «Ahora no».
 - El cobro por rechazo anulado (TE.4) no se re-midió en vivo: lo midió la 458-C (paso 7) y aquí lo cubre `WalletLibroCaja458E.test.tsx` (T E.4) + `wallet-anulacion-458.test.ts` (R73, contra Postgres).
+
+
+---
+
+# Cierre de la pantalla — filtro «A quién» (R59), «Cerrar» y el panel sin relectura · 2026-09-26
+
+Playwright ad hoc (fuera del árbol) contra UN dev server (`next dev -p 3487`, apagado al terminar) sobre
+la base propia `ordenex_458ec` (`CREATE DATABASE … TEMPLATE ordenex`, `migrate deploy` sin pendientes),
+sobre `6c773e73`. Claves QA rotadas SOLO en el clon (`seed-usuarios-qa` + `seed-maestro` con
+`maestro.qa`). Salida cruda: `maestro-aquien.json`, `admin-aquien.json`, `asistente.json`.
+
+El clon no tenía ninguna fila de la caja atribuida a una tienda ni ningún nombre anotado a mano, así que
+cada rol registró POR LA UI un sueldo con «a quién» libre, un cobro a «Tania Tienda» y un pago de un
+gasto de «Tania Tienda» (a «Imprenta Recorrido», efectivo).
+
+**Oráculo independiente del filtro:** el libro SIN filtro descargado entero, quedándose con las filas
+cuya columna «A quién» (la otra lectura, `autoriaDelLibroCajaAction`) es ese nombre; contra él, el libro
+CON filtro descargado entero y las tarjetas pintadas. «Entró»/«Salió» de la tarjeta = Σ de las filas
+de efectivo (sin los cargos a una tienda, que no son dinero nuevo: `LIQUIDEZ_MOVIMIENTO`).
+
+| Rol | Filtro (cómo se eligió) | Filas filtro / oráculo | Entra · Sale del libro | Tarjeta: Movimientos · Entró · Salió | Coinciden |
+| --- | --- | --- | --- | --- | --- |
+| maestro | Tienda «Tania Tienda» (buscando «tania» → 1 opción) | 2 / 2 | 1.500,00 (cargo) · 2.345,67 | 2 · ₡0 · ₡2.345,67 | sí (5/5) |
+| maestro | Mensajero «Marco Mensajero» | 19 / 19 | 179.287,21 (152.900,00 efectivo) · 27.800,00 | 19 · ₡152.900 · ₡27.800 | sí (5/5) |
+| maestro | Nombre anotado «Proveedora Ñandú Recorrido» (buscando «provee») | 2 / 2 | 0,00 · 15.555,40 | 2 · ₡0 · ₡15.555,40 | sí (5/5) |
+| admin | Tienda «Tania Tienda» | 4 / 4 | 2.400,50 (cargo) · 3.456,78 | 4 · ₡0 · ₡3.456,78 | sí (5/5) |
+| admin | Mensajero «Marco Mensajero» | 19 / 19 | 179.287,21 · 27.800,00 | 19 · ₡152.900 · ₡27.800 | sí (5/5) |
+| admin | Nombre anotado «Transportes Solano Recorrido» | 1 / 1 | 0,00 · 4.321,09 | 1 · ₡0 · ₡4.321,09 | sí (5/5) |
+
+- Opciones del selector: maestro 5 + «Todos» («Marco Mensajero · Mensajero · 19 movimientos», «Proveedora
+  Ñandú Recorrido · Nombre anotado · 2 movimientos», «Quino QUEPOS · Mensajero · 7 movimientos», «Rita
+  Recorrido · Mensajero · 7 movimientos», «Tania Tienda · Tienda · 2 movimientos»); admin 6 + «Todos».
+  Ningún uuid en las opciones, en los `aria-label` ni en las dos descargas. El disparador dice lo elegido
+  («A quién: Tania Tienda · Tienda · 2 movimientos»); con filtro la cifra grande pasa a «Movimiento neto
+  del periodo». «Todos» devuelve las tarjetas EXACTAS de antes de filtrar (40 / 43 movimientos).
+- El panel «Ver»: botones `Anular…`, `Cerrar` (antes «Close»); «Cerrar» lo cierra (0 diálogos).
+- Capturas: `<rol>-aquien-01-opciones.png`, `-02-busqueda-tienda.png`, `-{tienda,mensajero,nombre}-{libro,tarjetas}.png`.
+
+## R7 / R8 — `progress/recorrido_458-C/c458c-1.sql` (solo lectura, contra el clon)
+
+| Momento | cifra | ganancia | De las tiendas | Σ saldos | R8 | R7 |
+| --- | --- | --- | --- | --- | --- | --- |
+| antes de todo (primera pasada del maestro) | 13.483.932,72 | 13.336.262,62 | 147.670,10 | 147.670,10 | 0,00 | 0,00 |
+| tras su sueldo con nombre = antes de la segunda pasada | 13.476.155,02 | 13.328.484,92 | 147.670,10 | 147.670,10 | 0,00 | 0,00 |
+| tras el sueldo con nombre (maestro) | 13.468.377,32 | 13.320.707,22 | 147.670,10 | 147.670,10 | 0,00 | 0,00 |
+| tras el cobro y el pago de Tania (maestro) | 13.466.031,65 | 13.322.207,22 | 143.824,43 | 143.824,43 | 0,00 | 0,00 |
+| tras filtrar (maestro, sin escribir) | 13.466.031,65 | 13.322.207,22 | 143.824,43 | 143.824,43 | 0,00 | 0,00 |
+| tras el sueldo con nombre (admin) | 13.461.710,56 | 13.317.886,13 | 143.824,43 | 143.824,43 | 0,00 | 0,00 |
+| tras el cobro y el pago de Tania (admin) | 13.460.599,45 | 13.318.786,63 | 141.812,82 | 141.812,82 | 0,00 | 0,00 |
+| tras filtrar (admin) | 13.460.599,45 | 13.318.786,63 | 141.812,82 | 141.812,82 | 0,00 | 0,00 |
+
+Todas `0,00`. (La primera pasada del maestro no encontró ninguna tienda en el selector; se le añadió
+registrar lo de la tienda y se repitió entera: por eso el maestro tiene dos sueldos «Proveedora Ñandú».)
+
+## Asistente — cuatro preguntas reales en local (R103), sobre la ayuda nueva
+
+| Rol / pantalla | Pregunta | Respuesta (resumen literal) |
+| --- | --- | --- |
+| maestro · `/wallet` | ¿Cómo veo solo los movimientos de una tienda en el libro de la caja? ¿Las tarjetas de arriba cambian? | «en la barra de filtros arriba del libro, usá A quién: elegís de la lista (podés buscar por el nombre de la tienda) y se aplica al elegirlo. Y sí, las tarjetas cambian […] la cifra grande […] pasa a "Movimiento neto del periodo" […] Lo mismo pasa con la composición de la ganancia y el desglose de egresos» |
+| maestro · `/wallet` | ¿Qué significa la columna «Registró» cuando dice «Automático»? | «ese movimiento no lo tecleó nadie a mano […] te dice además qué lo produjo: «Automático · Aprobación del cierre por Ana», «Automático · Plantilla de gasto fijo»» |
+| admin · `/wallet` | Le pagué un sueldo a Juan Pérez, ¿cómo encuentro ese pago en el libro? | «En Concepto, elegí Sueldo […] En A quién, buscá por el nombre que se anotó al registrar el pago […] Tocando Ver en esa fila vas a ver el detalle completo» |
+| admin · `/wallet` | ¿Cómo sé si un movimiento del libro está anulado, y quién lo anuló? | «una fila anulada aparece tachada y dice Anulado al lado del botón Ver. Para saber quién la anuló y por qué, tocá Ver […] el día en que se anuló, quién lo anuló, el motivo que escribió y cómo se anuló» |
+
+Las cuatro citan «Wallet · Caja»; ninguna nombra un identificador. Capturas `<rol>-asistente-e<n>.png`.

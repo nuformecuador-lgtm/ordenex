@@ -1,0 +1,26 @@
+[
+  {
+    "rol": "maestro",
+    "ruta": "/wallet",
+    "pregunta": "¿Cómo veo solo los movimientos de una tienda en el libro de la caja? ¿Las tarjetas de arriba cambian?",
+    "respuesta": "¿Cómo veo solo los movimientos de una tienda en el libro de la caja? ¿Las tarjetas de arriba cambian? En Wallet · Caja, en la barra de filtros arriba del libro, usá A quién: elegís de la lista (podés buscar por el nombre de la tienda) y se aplica al elegirlo. Y sí, las tarjetas cambian: al filtrar por una tienda, lo que entró y lo que salió pasan a ser solo los de esa tienda, y la cifra grande deja de llamarse \"Flujo de dinero registrado\" o \"Dinero en caja\" para pasar a \"Movimiento neto del periodo\" — o sea, ya no representa el total de la caja sino solo lo filtrado. Lo mismo pasa con la composición de la ganancia y el desglose de egresos: cuentan solo lo que estás mirando. Si querés volver a ver todo, tocás Limpiar para quitar los filtros. Wallet · Caja"
+  },
+  {
+    "rol": "maestro",
+    "ruta": "/wallet",
+    "pregunta": "¿Qué significa la columna «Registró» cuando dice «Automático»?",
+    "respuesta": "¿Qué significa la columna «Registró» cuando dice «Automático»? Significa que ese movimiento no lo tecleó nadie a mano: lo generó el sistema solo, normalmente porque se aprobó el cierre de un mensajero. Al lado de «Automático» te dice además qué lo produjo, por ejemplo: - «Automático · Aprobación del cierre por Ana» - «Automático · Plantilla de gasto fijo» Es distinto de cuando alguien registra el movimiento manualmente desde Registrar movimiento, ahí esa columna muestra el nombre de la persona que lo hizo. Wallet · Caja"
+  },
+  {
+    "rol": "admin",
+    "ruta": "/wallet",
+    "pregunta": "Le pagué un sueldo a Juan Pérez, ¿cómo encuentro ese pago en el libro?",
+    "respuesta": "Le pagué un sueldo a Juan Pérez, ¿cómo encuentro ese pago en el libro? Para encontrarlo, andá a Wallet · Caja y usá los filtros que están arriba del libro: 1. En Concepto, elegí Sueldo — así solo ves los movimientos de ese tipo. 2. En A quién, buscá por el nombre que se anotó al registrar el pago (el de la persona, no el de una tienda o mensajero) — el buscador te deja escribir parte del nombre. 3. Si hace falta acotar más, poné el rango de fechas en Desde y Hasta y tocá Aplicar. Con eso te queda la fila de ese pago en el libro. Tocando Ver en esa fila vas a ver el detalle completo: a quién se le pagó, el motivo, quién lo registró y el comprobante si se adjuntó uno. Wallet · Caja"
+  },
+  {
+    "rol": "admin",
+    "ruta": "/wallet",
+    "pregunta": "¿Cómo sé si un movimiento del libro está anulado, y quién lo anuló?",
+    "respuesta": "¿Cómo sé si un movimiento del libro está anulado, y quién lo anuló? En el libro mismo lo ves de un vistazo: una fila anulada aparece tachada y dice Anulado al lado del botón Ver. Para saber quién la anuló y por qué, tocá Ver en esa fila. En el detalle vas a encontrar el estado del movimiento: si dice Anulado, junto con eso te muestra el día en que se anuló, quién lo anuló, el motivo que escribió y cómo se anuló. Wallet · Caja"
+  }
+]
