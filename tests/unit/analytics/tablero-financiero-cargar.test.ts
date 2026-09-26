@@ -211,13 +211,16 @@ describe("R23 · un fallo de validacion es un error, nunca un panel vacio", () =
   });
 });
 
-describe("FICHA 459 (revision m3) · la cifra de la caja se llama como en la tarjeta de /wallet", () => {
+// Reescrito en la 458-A (TA.7, R62): el panel es MENSUAL (una cifra de periodo), así que se nombra
+// «Movimiento neto del periodo» en los tres casos; antes (459, m3) decía «Flujo de dinero
+// registrado» o «Dinero en caja» según el estado de la caja entera. Literales a mano.
+describe("FICHA 459 (m3) → 458-A R62 · la cifra de la caja del panel mensual es la de un periodo", () => {
   function etiquetaDe(paneles: readonly cargador.PanelFinanciero[], id: string): string | undefined {
     const panel = paneles.find((p) => p.id === id);
     return panel?.estado === "ok" ? panel.datos.etiqueta : undefined;
   }
 
-  it("sin saldo inicial: «Flujo de dinero registrado», nunca «Dinero en caja»", async () => {
+  it("sin saldo inicial: «Movimiento neto del periodo», nunca «Dinero en caja» ni «Flujo…»", async () => {
     consultar.mockImplementation((metricaId) => Promise.resolve(respuestaOk(metricaId)));
     resumenCaja.mockResolvedValue({
       status: "ok",
@@ -227,33 +230,33 @@ describe("FICHA 459 (revision m3) · la cifra de la caja se llama como en la tar
     const paneles = await cargarTableroFinanciero();
 
     // Literal escrito a mano (design §3.3), no leido de `CAJA_RESUMEN_LABEL`.
-    expect(etiquetaDe(paneles, "dinero_en_caja")).toBe("Flujo de dinero registrado");
+    expect(etiquetaDe(paneles, "dinero_en_caja")).toBe("Movimiento neto del periodo");
     // El estado se pide SIN filtros: es el de la caja hoy, como en la tarjeta.
     expect(resumenCaja).toHaveBeenCalledWith({});
     // Las demas metricas conservan la etiqueta de su catalogo.
     expect(etiquetaDe(paneles, "ganancia_ordenex")).toBe("Etiqueta de ganancia_ordenex");
   });
 
-  it("con saldo inicial vigente: «Dinero en caja»", async () => {
+  it("con saldo inicial vigente: tampoco «Dinero en caja» (es un periodo)", async () => {
     consultar.mockImplementation((metricaId) => Promise.resolve(respuestaOk(metricaId)));
     resumenCaja.mockResolvedValue({
       status: "ok",
       resumen: { estado: "saldo", periodoFiltrado: false },
     });
 
-    expect(etiquetaDe(await cargarTableroFinanciero(), "dinero_en_caja")).toBe("Dinero en caja");
+    expect(etiquetaDe(await cargarTableroFinanciero(), "dinero_en_caja")).toBe("Movimiento neto del periodo");
   });
 
-  it("si el estado de la caja no se conoce (denegado o caido), se dice el de «flujo»", async () => {
+  it("si el estado de la caja no se conoce (denegado o caido), sigue siendo el nombre del periodo", async () => {
     consultar.mockImplementation((metricaId) => Promise.resolve(respuestaOk(metricaId)));
     resumenCaja.mockResolvedValue({ status: "error", message: "x" });
     expect(etiquetaDe(await cargarTableroFinanciero(), "dinero_en_caja")).toBe(
-      "Flujo de dinero registrado",
+      "Movimiento neto del periodo",
     );
 
     resumenCaja.mockRejectedValue(new Error("caida"));
     const paneles = await cargarTableroFinanciero();
-    expect(etiquetaDe(paneles, "dinero_en_caja")).toBe("Flujo de dinero registrado");
+    expect(etiquetaDe(paneles, "dinero_en_caja")).toBe("Movimiento neto del periodo");
     // Y no se lleva ninguna cifra por delante: los diez paneles siguen en `ok`.
     expect(paneles.filter((p) => p.estado === "ok")).toHaveLength(10);
   });

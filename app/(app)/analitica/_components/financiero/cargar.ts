@@ -30,10 +30,8 @@
 
 import { consultarMetricaFinanciera } from "@/lib/actions/analitica-financiera";
 import { verResumenCajaAction } from "@/lib/actions/wallet";
-import {
-  CAJA_RESUMEN_LABEL,
-  rotuloCifraPrincipal,
-} from "@/app/(app)/wallet/_components/wallet-labels";
+import { rotuloCifraPrincipal } from "@/app/(app)/wallet/_components/wallet-labels";
+import type { CajaResumenDTO } from "@/lib/types/wallet";
 import {
   IDS_FINANCIERAS_SERVIDAS,
   type RespuestaFinanciera,
@@ -110,24 +108,25 @@ export async function cargarTableroFinanciero(): Promise<readonly PanelFinancier
 }
 
 /**
- * Ficha 459 (revision, m3) — el NOMBRE de la cifra de la caja en `/analitica`.
+ * Ficha 459 (revision, m3) → 458-A (TA.7, R62) — el NOMBRE de la cifra de la caja en `/analitica`.
  *
- * El catalogo la llama «Dinero en caja», y mientras nadie haya registrado un saldo inicial esa
- * cifra es el flujo registrado, no el dinero que hay (R16, HF4). El nombre sale de la MISMA
- * funcion que la tarjeta de `/wallet` (`rotuloCifraPrincipal`), con el estado que decide el
- * servidor (`verResumenCajaAction`, sin filtros: el estado de la caja HOY). Si esa lectura no
- * responde `ok` (o se cae), el estado no se conoce y se dice el de «flujo», igual que los KPIs
- * de `cargar-kpis.ts`: «Dinero en caja» nunca se afirma sin saberlo. No se silencia ningun dato:
- * la cifra del panel sigue llegando entera de su metrica.
+ * El catalogo la llama «Dinero en caja». Este panel es MENSUAL: su cifra es la de un periodo (la
+ * ventana de `FILTRO_FINANCIERO_POR_DEFECTO`), no la caja de hoy. Por eso se nombra con la MISMA
+ * funcion que la tarjeta de `/wallet` (`rotuloCifraPrincipal`) diciendole que HAY periodo:
+ * «Movimiento neto del periodo», nunca «Dinero en caja» ni «Flujo de dinero registrado» sobre una
+ * cifra recortada (la 459 le pasaba el resumen SIN filtros y el panel tomaba el nombre de la caja
+ * entera). El estado sigue saliendo del servidor (`verResumenCajaAction`); si esa lectura no
+ * responde `ok` (o se cae) se toma el de «flujo». No se silencia ningun dato: la cifra del panel
+ * sigue llegando entera de su metrica.
  */
 async function rotuloDeLaCaja(): Promise<string> {
+  const delPeriodo = (estado: CajaResumenDTO["estado"]) =>
+    rotuloCifraPrincipal({ periodoFiltrado: true, estado });
   try {
     const respuesta = await verResumenCajaAction({});
-    return respuesta.status === "ok"
-      ? rotuloCifraPrincipal(respuesta.resumen)
-      : CAJA_RESUMEN_LABEL.flujo;
+    return delPeriodo(respuesta.status === "ok" ? respuesta.resumen.estado : "flujo");
   } catch {
-    return CAJA_RESUMEN_LABEL.flujo;
+    return delPeriodo("flujo");
   }
 }
 
