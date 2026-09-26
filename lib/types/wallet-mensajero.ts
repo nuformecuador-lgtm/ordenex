@@ -158,7 +158,9 @@ export type ListarPagosDeMensajeroResult = {
 export const listarPagosMensajeroSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
-  cierreId: z.string().min(1).optional(),
+  // Ficha 458-A (TA.4, R12): el cierre se elige en un selector y viaja su id; el borde rechaza todo
+  // valor que no tenga forma de identificador (antes `min(1)`: «Pegá el identificador»).
+  cierreId: z.string().uuid().optional(),
   mensajeroId: z.string().min(1).optional(),
   // Ficha 461 (R72, auditoria T1): dias de Costa Rica; `hasta` exclusivo en el repositorio.
   desde: desdeDiaCRSchema.optional(),

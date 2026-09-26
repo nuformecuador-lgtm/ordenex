@@ -123,7 +123,7 @@ describe("listarPagosDeMensajeroCompletoAction (borde)", () => {
     });
 
     const r = await listarPagosDeMensajeroCompletoAction(
-      { mensajeroId: "msg-A", cierreId: "c1" },
+      { mensajeroId: "msg-A", cierreId: "c0c0c0c0-0000-4000-8000-000000000001" },
       { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
@@ -131,7 +131,7 @@ describe("listarPagosDeMensajeroCompletoAction (borde)", () => {
     expect(r).toEqual({ status: "ok", items: [conOrigenFalso(ITEM)], total: 1 });
     const [data, actor] = listarPagosDeMensajeroCompleto.mock.calls[0];
     expect(actor).toEqual(MAESTRO);
-    expect(data).toEqual({ mensajeroId: "msg-A", cierreId: "c1" });
+    expect(data).toEqual({ mensajeroId: "msg-A", cierreId: "c0c0c0c0-0000-4000-8000-000000000001" });
     expect(data).not.toHaveProperty("page");
     expect(data).not.toHaveProperty("pageSize");
   });
