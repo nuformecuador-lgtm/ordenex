@@ -115,7 +115,7 @@ export async function anularAporteCapitalAction(
 /**
  * R57 — el enlace temporal del comprobante (solo acceso total).
  *
- * @sin-superficie FICHA 458-C (TC.3/TC.5, decision, no deuda): el panel «Ver» del libro pide TODO comprobante por `verComprobanteAction({ destino })`, que tambien lee el de este documento (458-B, R77).
+ * @sin-superficie FICHA 458-C/458-D (decision, no deuda): el panel «Ver» del libro (458-C) y «Ver comprobante» de `/mi-wallet` (458-D, TD.5) piden TODO comprobante por `verComprobanteAction({ destino })`, que tambien lee el de este documento (458-B, R77): un solo camino para la oficina y para la tienda. Retirar esta accion es un cambio de servidor, anotado como pendiente en `progress/impl_458-D.md`.
  */
 export async function obtenerComprobanteAporteCapitalAction(
   input: unknown,

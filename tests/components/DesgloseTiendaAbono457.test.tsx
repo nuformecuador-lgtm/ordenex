@@ -11,26 +11,33 @@ import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 // TIENDA: `/wallet/tiendas` (desde Ordenex) y `/mi-wallet` (desde la tienda)
 // =================================================================================================
 //
-// R46: el desglose de `/wallet/tiendas` dice «La tienda le paga a Ordenex» / «Pago de la tienda a
-// Ordenex anulado», con origen «Pago de una tienda a Ordenex», en tabla, filtro y descarga. R47:
+// R46: el ESTADO DE CUENTA de la tienda en la oficina (458-D: sustituye al desglose de
+// `/wallet/tiendas`) dice «La tienda le paga a Ordenex» / «Pago de la tienda a Ordenex anulado», con
+// origen «Pago de una tienda a Ordenex», en tabla, chip y descarga. R47:
 // `/mi-wallet` dice «Le pagaste a Ordenex» / «Ordenex anuló el pago que le hiciste» —DISTINTAS de las de
 // Ordenex—. R48: ni un valor técnico ni un uuid. R50: las pistas de la cabecera nombran el pago y su
-// anulación con la palabra de su fila. R51: las filas del pago no ofrecen desplegar órdenes.
+// anulación con la palabra de su fila (solo queda la cabecera de `/mi-wallet`: la del desglose de la
+// oficina se retiró con él, 458-D). R51: las filas del pago no ofrecen desplegar órdenes.
 //
 // Los literales van escritos a mano: comparar contra el diccionario sería una aserción contra su
 // propia fuente.
 
-const listarDesgloseMock = vi.fn();
 vi.mock("@/lib/actions/wallet-tienda", () => ({
-  listarMovimientosDeTiendaAction: (...a: unknown[]) => listarDesgloseMock(...a),
-  listarMovimientosDeTiendaCompletoAction: vi.fn(),
+  verDetalleDeMiMovimientoAction: vi.fn(),
+  verDetalleDeMiMovimientoCompletoAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/estado-cuenta", () => ({ verEstadoCuentaAction: vi.fn(async () => ({ status: "forbidden" })) }));
+vi.mock("@/lib/actions/como-quedo", () => ({ comoQuedoAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-anulacion", () => ({ anularMovimientoAction: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
 
 import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
-import { DesgloseMovimientosTienda } from "@/app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda";
+import { EstadoCuentaTienda, ROTULOS_TIENDA } from "@/app/(app)/wallet/tiendas/_components/EstadoCuentaTienda";
+import { lineaDeFila } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
+import { estado, fila } from "@/tests/fixtures/estado-cuenta";
 
 /** 458-A: lo que devolveria `conceptosConMovimientosAction` para una tienda con los dos. */
 const CON_MOVIMIENTOS = [
@@ -38,13 +45,8 @@ const CON_MOVIMIENTOS = [
   { categoria: "abono_tienda_anulado", movimientos: 1 },
 ];
 import { DesgloseTiendaLedger } from "@/app/(app)/mi-wallet/_components/DesgloseTiendaLedger";
-import { filaDescargaDesgloseTienda } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-descarga-columnas";
 import { filaDescargaMiWallet } from "@/app/(app)/mi-wallet/_components/mi-wallet-descarga-columnas";
-import {
-  CATEGORIA_TIENDA_LABEL,
-  CONCEPTO_TIENDA_TODOS_OPTION,
-  DESGLOSE_TIENDA_LABEL,
-} from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-labels";
+import { CATEGORIA_TIENDA_LABEL } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-labels";
 import {
   CATEGORIA_MI_WALLET_LABEL,
   CONCEPTO_MI_WALLET_TODOS_OPTION,
@@ -75,45 +77,64 @@ const ANULADO: WalletTiendaMovimientoDTO = {
   fechaMovimiento: "2026-09-25T06:00:00.000Z",
 };
 
+/** Las dos filas en el estado de cuenta de la oficina, como las manda el servidor. */
+const FILA_ABONO = fila({
+  n: 1,
+  fecha: "2026-09-24",
+  categoria: "abono_tienda",
+  origenTipo: "abono_tienda",
+  chip: "pagos",
+  abono: "4000.00",
+  saldoCorrido: "4000.00",
+  descripcion: "Pago de los fletes · SINPE · 123456",
+  registro: { nombre: "Ana Admin", automatico: null },
+  anulacion: { motivo: "Duplicado", por: "Ana Admin", fecha: "2026-09-25" },
+  naceDeUnCierre: false,
+});
+const FILA_ANULADO = fila({
+  n: 2,
+  fecha: "2026-09-25",
+  categoria: "abono_tienda_anulado",
+  origenTipo: "abono_tienda",
+  chip: "pagos",
+  abono: null,
+  cargo: "4000.00",
+  saldoCorrido: "0.00",
+  descripcion: "Anulación · Pago de los fletes · SINPE · 123456",
+  registro: { nombre: "Ana Admin", automatico: null },
+  esContraAsiento: true,
+  naceDeUnCierre: false,
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
-  listarDesgloseMock.mockResolvedValue({
-    status: "ok",
-    data: {
-      tiendaId: TIENDA_ID,
-      movimientos: [ABONO, ANULADO],
-      total: 2,
-      page: 1,
-      pageSize: 20,
-      desglose: { aFavor: "4000.00", cargos: "4000.00", pagado: "0.00", saldo: "0.00", signo: "cero" },
-    },
-  });
 });
 
 afterEach(() => {
   cleanup();
 });
 
-describe("457/R46/R48/R49/R51 — `/wallet/tiendas`: el desglose lo dice desde Ordenex", () => {
-  it("tabla: «La tienda le paga a Ordenex» y «Pago de la tienda a Ordenex anulado», con su origen; sin desplegar ni ids", async () => {
+describe("457/R46/R48/R49/R51 — `/wallet/tiendas/[tiendaId]`: el estado de cuenta lo dice desde Ordenex", () => {
+  it("tabla: «La tienda le paga a Ordenex» y «Pago de la tienda a Ordenex anulado», con su origen; sin desplegar ni ids", () => {
     render(
       <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
         <ToastProvider>
-          <DesgloseMovimientosTienda
-            resumen={{ tiendaId: TIENDA_ID, tiendaNombre: "Tienda Norte", saldo: "0.00", signo: "cero" }}
+          <EstadoCuentaTienda
+            inicial={estado({ id: TIENDA_ID, nombre: "Tienda Norte", filas: [FILA_ABONO, FILA_ANULADO], total: 2 })}
+            puedeRegistrar={false}
           />
         </ToastProvider>
       </SWRConfig>,
     );
-    const pago = await screen.findByRole("row", { name: /La tienda le paga a Ordenex/ });
-    expect(within(pago).getByText("Pago de una tienda a Ordenex · Pago de los fletes · SINPE · 123456")).toBeInTheDocument();
-    const anulado = screen.getByRole("row", { name: /Pago de la tienda a Ordenex anulado/ });
-    expect(
-      within(anulado).getByText("Pago de una tienda a Ordenex · Anulación · Pago de los fletes · SINPE · 123456"),
-    ).toBeInTheDocument();
-    // R51: ninguna de las dos se despliega (no nacen de un cierre).
+    const tabla = screen.getByRole("table", { name: "Estado de cuenta de Tienda Norte" });
+    const pago = within(tabla).getByText("La tienda le paga a Ordenex").closest("tr") as HTMLElement;
+    expect(within(pago).getByText("Pago de una tienda a Ordenex")).toBeInTheDocument();
+    expect(within(pago).getByText("Pago de los fletes · SINPE · 123456")).toBeInTheDocument();
+    const anulado = within(tabla).getByText("Pago de la tienda a Ordenex anulado").closest("tr") as HTMLElement;
+    expect(within(anulado).getByText("Anulación · Pago de los fletes · SINPE · 123456")).toBeInTheDocument();
+    // R51: ninguna de las dos se despliega (no nacen de un cierre); solo «Ver» abre SU panel.
     for (const f of [pago, anulado]) {
-      expect(within(f).queryByRole("button", { name: /desglose|órdenes|Ver/i })).toBeNull();
+      expect(within(f).queryByRole("button", { name: /desglose|órdenes/i })).toBeNull();
     }
     const texto = document.body.textContent ?? "";
     expect(texto).not.toMatch(UUID);
@@ -121,36 +142,24 @@ describe("457/R46/R48/R49/R51 — `/wallet/tiendas`: el desglose lo dice desde O
   });
 
   it("descarga: las mismas palabras que la tabla, sin uuids", () => {
-    expect(filaDescargaDesgloseTienda(ABONO)).toEqual({
+    expect(lineaDeFila(FILA_ABONO, ROTULOS_TIENDA)).toMatchObject({
       fecha: "2026-09-24",
-      tipo: expect.any(String),
-      concepto: "La tienda le paga a Ordenex",
-      monto: "4000.00",
-      origen: "Pago de una tienda a Ordenex · Pago de los fletes · SINPE · 123456",
+      movimiento: "La tienda le paga a Ordenex",
+      abono: "4000.00",
+      origen: "Pago de una tienda a Ordenex",
+      motivo: "Pago de los fletes · SINPE · 123456",
     });
-    expect(filaDescargaDesgloseTienda(ANULADO).concepto).toBe("Pago de la tienda a Ordenex anulado");
-    for (const m of [ABONO, ANULADO]) {
-      const valores = Object.values(filaDescargaDesgloseTienda(m)).join(" | ");
+    expect(lineaDeFila(FILA_ANULADO, ROTULOS_TIENDA).movimiento).toBe("Pago de la tienda a Ordenex anulado");
+    for (const f of [FILA_ABONO, FILA_ANULADO]) {
+      const valores = Object.values(lineaDeFila(f, ROTULOS_TIENDA)).join(" | ");
       expect(valores).not.toMatch(UUID);
       expect(valores).not.toMatch(/abono_tienda/);
     }
   });
 
-  it("filtro por concepto: los dos, con su nombre desde Ordenex", () => {
-    // 458-A (TA.3): las opciones son los conceptos CON movimientos, con su número.
-    const lista = opcionesDeConceptos(CON_MOVIMIENTOS, CATEGORIA_TIENDA_LABEL, "", CONCEPTO_TIENDA_TODOS_OPTION);
-    const opciones = new Map(lista.map((o) => [o.value, o.label]));
-    expect(opciones.get("abono_tienda")).toBe("La tienda le paga a Ordenex (2)");
-    expect(opciones.get("abono_tienda_anulado")).toBe("Pago de la tienda a Ordenex anulado (1)");
-  });
-
-  it("R50: las pistas de la cabecera nombran el pago y su anulación, literales", () => {
-    expect(DESGLOSE_TIENDA_LABEL.aFavorHint).toBe(
-      "Contra-entrega cobrado, correcciones a favor, pagos de la tienda a Ordenex y devoluciones por anulaciones",
-    );
-    expect(DESGLOSE_TIENDA_LABEL.cargosHint).toBe(
-      "Fletes, comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados",
-    );
+  it("el diccionario desde Ordenex nombra los dos (el filtro de la oficina es el chip «Pagos», D10)", () => {
+    expect(CATEGORIA_TIENDA_LABEL.abono_tienda).toBe("La tienda le paga a Ordenex");
+    expect(CATEGORIA_TIENDA_LABEL.abono_tienda_anulado).toBe("Pago de la tienda a Ordenex anulado");
   });
 });
 
@@ -161,7 +170,11 @@ describe("457/R47/R48/R51 — `/mi-wallet`: la tienda lo lee desde su lado", () 
     expect(within(pago).getByText("Pago de una tienda a Ordenex · Pago de los fletes · SINPE · 123456")).toBeInTheDocument();
     const anulado = screen.getByRole("row", { name: /Ordenex anuló el pago que le hiciste/ });
     expect(anulado).toBeInTheDocument();
-    for (const f of [pago, anulado]) expect(within(f).queryAllByRole("button")).toHaveLength(0);
+    // R51: nada que desplegar. 458-D (R78): el pago lleva «Ver comprobante» —ver, no desplegar—.
+    for (const f of [pago, anulado]) {
+      const botones = within(f).queryAllByRole("button").map((b) => b.textContent);
+      expect(botones.filter((b) => b !== "Ver comprobante")).toEqual([]);
+    }
     // Los nombres desde Ordenex NO se asoman en la pantalla de la tienda (R47).
     const texto = document.body.textContent ?? "";
     expect(texto).not.toContain("La tienda le paga a Ordenex");

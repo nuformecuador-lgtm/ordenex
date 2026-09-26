@@ -10,6 +10,7 @@ import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 
 import { DetalleMiMovimientoCierre } from "./DetalleMiMovimientoCierre";
+import { CATEGORIAS_CON_COMPROBANTE, VerComprobanteMiMovimiento } from "./VerComprobanteMiMovimiento";
 import { DETALLE_MI_MOVIMIENTO_NOMBRE } from "./detalle-mi-movimiento-labels";
 import { COLUMNAS_DESCARGA_MI_WALLET } from "./mi-wallet-descarga-columnas";
 // Ficha 461 (R44, P4): la tienda lee su libro con la lectura DESDE LA TIENDA («Ordenex te cobró»),
@@ -64,6 +65,20 @@ const COLUMNS: Column<WalletTiendaMovimientoDTO>[] = [
     value: "Origen",
     // 458-A (R5–R8): el origen con su entidad, leido desde la tienda (sin el mensajero).
     render: (m) => <OrigenMovimiento fila={m} rotulos={ORIGEN_TIENDA_LABEL} />,
+  },
+  {
+    // FICHA 458-D (T D.5, R78, H3): la tienda ve el comprobante que subió Ordenex en las filas de SU
+    // libro que pueden llevarlo. Solo verlo (R35). Columna de pantalla: no baja a la descarga.
+    id: "comprobante",
+    value: "Comprobante",
+    render: (m) =>
+      CATEGORIAS_CON_COMPROBANTE.has(m.categoria) ? (
+        <VerComprobanteMiMovimiento
+          movimientoId={m.id}
+          concepto={CATEGORIA_MI_WALLET_LABEL[m.categoria]}
+          fecha={fechaDiaMovimientoCR(m.fechaMovimiento)}
+        />
+      ) : null,
   },
 ];
 
