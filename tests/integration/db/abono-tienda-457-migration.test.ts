@@ -313,8 +313,9 @@ describeSiHayBase("457/T1.5 — las migraciones del pago de una tienda a Ordenex
 
   it("(f) `TIPO_POR_CATEGORIA_TIENDA` coincide con el CHECK de la tienda LEIDO DEL MOTOR", async () => {
     const [check] = await prisma.$queryRaw<{ def: string }[]>`
-      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
-      WHERE conname = 'wallet_tienda_movimiento_tipo_categoria_check'`;
+      SELECT pg_get_constraintdef(c.oid) AS def FROM pg_constraint c
+      JOIN pg_namespace n ON n.oid = c.connamespace
+      WHERE n.nspname = 'public' AND c.conname = 'wallet_tienda_movimiento_tipo_categoria_check'`;
     expect(check).toBeDefined();
     const rama = (tipo: "credito" | "debito"): string[] => {
       const m = new RegExp(`tipo = '${tipo}'::wallet_tienda_movimiento_tipo\\) AND \\(categoria = ANY \\(ARRAY\\[([^\\]]*)\\]`).exec(check.def);

@@ -101,6 +101,8 @@ async function leerComprobante(
 /**
  * R1–R30 — registra un pago de una tienda a Ordenex. Entrada: `FormData` con `claveIdempotencia`,
  * `tiendaId`, `monto`, `metodo`, `referencia?`, `motivo`, `fechaPago` y `comprobante?` (File).
+ *
+ * @sin-superficie FICHA 457, TRANSITORIA: el backend de la ficha se entrega antes que su UI (tasks.md, Fase 6, `frontend_dev`). La consumen el concepto «Una tienda le paga a Ordenex» de `RegistrarMovimientoCajaDialog` (T6.4) y el botón «Registrar pago de la tienda a Ordenex» de `PagoTiendaAcciones` (T6.6); la T6.4 BORRA esta anotación. Sin ella la ficha no se puede desplegar.
  */
 export async function registrarAbonoTiendaAction(
   formData: FormData,

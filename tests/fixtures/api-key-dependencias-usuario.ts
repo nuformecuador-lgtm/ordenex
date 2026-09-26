@@ -217,6 +217,17 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
   "AjusteCajaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "AporteCapital.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "AporteCapitalAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // ⭑ FICHA 457 — el pago de una tienda a Ordenex. La tienda la valida `AbonoTiendaService` (R10):
+  // rol `adminTienda` (activa o no, D2), asi que la cuenta dedicada de una key (rol `apiKey`) no
+  // puede serlo. Registrar y anular son solo de acceso total. Las tres FK son `Restrict`.
+  "AbonoTienda.tienda": {
+    categoria: "no_alcanzable",
+    motivo:
+      "R10 de la 457: el servicio exige que la cuenta sea `adminTienda`; una cuenta dedicada de API " +
+      "key tiene rol `apiKey` y nunca pasa esa validacion.",
+  },
+  "AbonoTienda.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "AbonoTiendaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "GastoFijoCobro.decisor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "RechazoTiendaCobro.decisor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "ApiKey.createdBy": {
