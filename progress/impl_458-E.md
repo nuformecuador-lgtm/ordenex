@@ -134,6 +134,18 @@ type QuienDelLibroCajaOpcionDTO = {
 | `wallet-movimiento-repository` (R47) | la clase ganó un método (`gruposConAQuien`) | pasa a función del módulo: la superficie sigue siendo de nueve métodos |
 | `wallet-etiqueta-cuenta.guardia` (458-A R33) | `FiltrosWalletRepository` nombraba la cuenta con `nombreCompletoUsuario` | `etiquetaDeCuenta` (la función única de la wallet) |
 
+### Verificación de esta tanda
+
+- `pnpm run typecheck` y `eslint` de los archivos tocados: verdes (un warning ajeno previo en `IOrdenRepository.ts`).
+- `pnpm run build`: `BUILD_EXIT=0` sobre el código final (`progress/build_458E_quien.log`).
+- Gate completo `./init.sh` contra `ordenex_458eq`, log sin `tail` con `INIT_EXIT` dentro:
+  1. `progress/gate_458E_quien_1.log` — `INIT_EXIT=1`: 3 rojos nuevos, los tres míos (tabla de arriba).
+  2. `progress/gate_458E_quien_2.log` — `INIT_EXIT=1`: 1 rojo, `tests/integration/tablero-dia-conteo.test.ts`
+     por **deadlock 40P01** (ajeno a la wallet); aislado 3/3 verde (`progress/rerun_458E_quien_tablero_aislado.log`).
+  3. `progress/gate_458E_quien.log` — **`INIT_EXIT=0`**: 2312/2312 archivos, 32.235 tests verdes, 26
+     skipped (todos en `AnaliticaPage`/`AnaliticaShell`, previos); **`integration/db`: 404 archivos, 0 skipped**.
+- Base `ordenex_458eq` borrada al terminar; la base `ordenex` solo como plantilla; `feature_list.json` sin tocar.
+
 ### R59 → tests
 
 | Qué | Test |
