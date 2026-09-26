@@ -4,7 +4,8 @@
 
 - **En `dev`, sin desplegar:** 454, 455, 456, 459, 460, 461 (PR #826, gate post-merge verde, `progress/gate_dev_tras_826.log`) y 462.
 - **457 HECHA en dev** (PR #827, gate post-merge verde, `progress/gate_dev_tras_827.log`). Las líneas de la 457 que siguen quedan como historia.
-- **458 en curso (2026-09-26):** A (parte backend) en `feature/458-A` y B (cimientos, más el arreglo del saldo bajo el candado en LiquidacionService) en `feature/458-B`, en paralelo. Después: el frontend de A, la revisión, el merge de A y de B, luego C, y luego D∥E.
+- **458-A en dev** (PR #828) y **458-B en dev** (PR #829, migraciones `20260928120000/120100`); base local migrada. **458-C en curso** en `feature/458-C`. Faltan D∥E, el cierre de la 458 y el plan de pruebas y la lista de release finales.
+- **458 (historia):** A (parte backend) en `feature/458-A` y B (cimientos, más el arreglo del saldo bajo el candado en LiquidacionService) en `feature/458-B`, en paralelo. Después: el frontend de A, la revisión, el merge de A y de B, luego C, y luego D∥E.
 - **457, backend (historia):** rama `feature/457-backend` en origin, con cada paso pusheado. Hechos: la Fase 0, las migraciones, el servicio con su puerto de caja, las actions y parte de los tests. El clon de base es `ordenex_457`. Falta cerrar los tests y las mutaciones, escribir `progress/impl_457.md` (contratos para el frontend) y correr el gate completo. Si el agente murió, relanzar un backend_dev (Opus) desde el último SHA de la rama.
 - **457, frontend:** sin empezar. Va después del backend, sobre la misma rama (design §8). Luego revisión, recorrido, PR y merge.
 - **458:** spec rehecho en `dev` (104 R, hijas A→B→C→D∥E). Arranca con la 457 ya en `dev`.
