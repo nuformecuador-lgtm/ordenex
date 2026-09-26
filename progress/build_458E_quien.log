@@ -6,7 +6,7 @@ Loaded Prisma config from prisma.config.ts.
 
 Prisma schema loaded from db\schema.prisma.
 
-✔ Generated Prisma Client (v7.8.0) to .\node_modules\.pnpm\@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9\node_modules\@prisma\client in 905ms
+✔ Generated Prisma Client (v7.8.0) to .\node_modules\.pnpm\@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9\node_modules\@prisma\client in 782ms
 
 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
 
@@ -27,15 +27,15 @@ Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
 
 ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
   Creating an optimized production build ...
-✓ Compiled successfully in 23.3s
+✓ Compiled successfully in 16.6s
   Running TypeScript ...
-  Finished TypeScript in 79s ...
+  Finished TypeScript in 54s ...
   Collecting page data using 11 workers ...
   Generating static pages using 11 workers (0/60) ...
   Generating static pages using 11 workers (15/60) 
   Generating static pages using 11 workers (30/60) 
   Generating static pages using 11 workers (45/60) 
-✓ Generating static pages using 11 workers (60/60) in 1091ms
+✓ Generating static pages using 11 workers (60/60) in 611ms
   Finalizing page optimization ...
 
 Route (app)
