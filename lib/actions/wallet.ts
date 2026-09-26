@@ -3,6 +3,11 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { AbonoTiendaRepository } from "@/lib/repositories/AbonoTiendaRepository";
 import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnulacionRepository";
+import {
+  EgresoCajaDocumentosRepository,
+  IndemnizacionDocumentosRepository,
+} from "@/lib/repositories/EgresoCajaDocumentosRepository";
+import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/RechazoTiendaCobroAnulacionRepository";
 import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
 import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
 import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
@@ -110,6 +115,10 @@ function buildService(): IWalletService {
     cobros: new CobroTiendaAnulacionRepository(prisma),
     ajustes: new AjusteCajaAnulacionRepository(prisma),
     abonos: new AbonoTiendaRepository(prisma),
+    // Ficha 458-B (design §3.6, R71/R72): egresos, indemnizaciones y cobros por rechazo.
+    egresos: new EgresoCajaDocumentosRepository(prisma),
+    indemnizaciones: new IndemnizacionDocumentosRepository(prisma),
+    rechazos: new RechazoTiendaCobroAnulacionRepository(prisma),
   });
 }
 

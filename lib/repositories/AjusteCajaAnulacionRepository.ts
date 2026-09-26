@@ -4,8 +4,11 @@ import type {
   AjusteCajaAnulacionTxClient,
   AnularAjusteCajaRepoInput,
   AnularAjusteCajaRepoResult,
+  AnularEgresoCajaRepoInput,
+  ConstanciaDeAnulacion,
   IAjusteCajaAnulacionRepository,
 } from "@/lib/interfaces/repositories/IAjusteCajaAnulacionRepository";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 import type { EstadoDocumentoCaja } from "@/lib/interfaces/services/IWalletService";
 import { esP2002, textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
@@ -69,6 +72,67 @@ export class AjusteCajaAnulacionRepository implements IAjusteCajaAnulacionReposi
       if (esChoqueDeAnulacion(error)) return { status: "ya_anulado" };
       throw error;
     }
+  }
+
+  /**
+   * FICHA 458-B (D13, R64/R66/R67) — la constancia de la anulacion de un EGRESO (sueldo, gasto de
+   * Ordenex, gasto fijo cobrado, indemnizacion) y `egreso_caja_anulado`, en la MISMA transaccion.
+   *
+   * `createMany({ skipDuplicates })` y NO `create` + P2002: un choque dentro de una transaccion de
+   * Postgres la deja abortada, y leer el nombre de la restriccion en un P2002 es justo lo que la
+   * ficha prohibe («no se interpreta un P2002 sin `meta.target`»). `count = 0` ES la respuesta: ya
+   * habia constancia; no se escribe historial de una anulacion que no ocurrio.
+   *
+   * FORMA `recibe_tx`: el tipo del primer parametro no expone `$transaction`.
+   */
+  async anularEgreso(
+    tx: AjusteCajaAnulacionTxClient,
+    input: AnularEgresoCajaRepoInput,
+  ): Promise<AnularAjusteCajaRepoResult> {
+    const escritas = await tx.ajusteCajaAnulacion.createMany({
+      data: [{ movimientoId: input.movimientoId, motivo: input.motivo, anuladoPor: input.anuladoPor }],
+      skipDuplicates: true,
+    });
+    if (escritas.count === 0) return { status: "ya_anulado" };
+    const egreso = await tx.walletMovimiento.findUnique({
+      where: { id: input.movimientoId },
+      select: { monto: true, categoria: true },
+    });
+    const actor = await resolverActorCongelado(tx, input.anuladoPor);
+    await appendAccion(tx, [
+      {
+        accion: "egreso_caja_anulado",
+        entidadTipo: "wallet_movimiento",
+        entidadId: input.movimientoId,
+        // La etiqueta es la CATEGORIA del egreso (un enum), nunca su descripcion ni el motivo.
+        entidadEtiqueta: etiquetaDeEntidad("wallet_movimiento", { categoria: egreso?.categoria ?? "" }),
+        monto: egreso?.monto ?? null,
+        ...actor,
+      },
+    ]);
+    return { status: "anulado" };
+  }
+
+  /** FICHA 458-B (R25/R71/R72) — las constancias de estos movimientos, con el nombre de quien anulo. */
+  async constanciasDe(movimientoIds: readonly string[]): Promise<ConstanciaDeAnulacion[]> {
+    if (movimientoIds.length === 0) return [];
+    const filas = await this.prisma.ajusteCajaAnulacion.findMany({
+      where: { movimientoId: { in: [...movimientoIds] } },
+      select: {
+        movimientoId: true,
+        motivo: true,
+        anuladoPor: true,
+        createdAt: true,
+        anulador: { select: NOMBRE_USUARIO_SELECT },
+      },
+    });
+    return filas.map((f) => ({
+      movimientoId: f.movimientoId,
+      motivo: f.motivo,
+      anuladoPor: f.anuladoPor,
+      anuladoPorNombre: nombreCompletoUsuario(f.anulador),
+      createdAt: f.createdAt,
+    }));
   }
 
   /** R71 — UNA consulta para todos los ids de la pagina; cada id vuelve, anulado o no. */

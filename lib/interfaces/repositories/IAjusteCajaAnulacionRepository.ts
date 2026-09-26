@@ -28,9 +28,35 @@ export interface AnularAjusteCajaRepoInput {
 /** `ya_anulado` = el `UNIQUE(movimiento_id)` rechazo la fila: no queda rastro de una anulacion que no ocurrio. */
 export type AnularAjusteCajaRepoResult = { status: "anulado" } | { status: "ya_anulado" };
 
+/**
+ * FICHA 458-B (D13, R63/R64) — la constancia de la anulacion con motivo de un EGRESO de caja sin
+ * documento propio: sueldo, gasto de Ordenex, gasto fijo cobrado o indemnizacion por incidente.
+ * `movimientoId` es el del egreso ORIGINAL. Misma tabla que la correccion (la 461 la dejo con FK a
+ * `wallet_movimiento(id)` y `UNIQUE(movimiento_id)`), metodo y tipo de historial PROPIOS.
+ */
+export type AnularEgresoCajaRepoInput = AnularAjusteCajaRepoInput;
+
+/** Una constancia de anulacion leida en lote: quien, cuando y por que. */
+export interface ConstanciaDeAnulacion {
+  movimientoId: string;
+  motivo: string;
+  anuladoPor: string;
+  anuladoPorNombre: string | null;
+  createdAt: Date;
+}
+
 export interface IAjusteCajaAnulacionRepository {
   /** Constancia + fila del historial, en `tx`. Choque del UNIQUE(movimiento_id) -> `ya_anulado` (R70). */
   anular(tx: AjusteCajaAnulacionTxClient, input: AnularAjusteCajaRepoInput): Promise<AnularAjusteCajaRepoResult>;
+  /**
+   * FICHA 458-B (R64/R66/R67) — constancia + `egreso_caja_anulado`, en `tx`. La constancia va con
+   * `createMany({ skipDuplicates })`: `count = 0` ES «ya estaba anulado» (no se interpreta un P2002)
+   * y en ese caso NO se escribe historial. Dos anulaciones a la vez: la segunda espera en el indice
+   * UNIQUE y, tras el commit de la primera, inserta 0 filas.
+   */
+  anularEgreso(tx: AjusteCajaAnulacionTxClient, input: AnularEgresoCajaRepoInput): Promise<AnularAjusteCajaRepoResult>;
+  /** FICHA 458-B (R25/R71/R72) — las constancias de estos movimientos, UNA consulta; lista vacia -> sin consulta. */
+  constanciasDe(movimientoIds: readonly string[]): Promise<ConstanciaDeAnulacion[]>;
   /**
    * R71 — para el libro de la caja: por cada correccion de la pagina, si esta anulada. UNA consulta
    * para todos los ids; lista vacia -> sin consulta. `tieneComprobante` es SIEMPRE `false`: una

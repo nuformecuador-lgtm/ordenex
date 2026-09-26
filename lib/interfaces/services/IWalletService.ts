@@ -87,6 +87,11 @@ export interface EstadoDocumentoCaja {
   id: string;
   anulado: boolean;
   tieneComprobante: boolean;
+  /**
+   * Ficha 458-B (R72) — `true` cuando esta anulado por un reverso de ANTES de esta ficha, sin
+   * constancia: la pantalla dice «motivo no registrado». Ausente en todo lo demas.
+   */
+  sinConstancia?: boolean;
 }
 
 /**
@@ -116,6 +121,17 @@ export interface LectoresDocumentosCaja {
    * ofreceria «Anular…» ni «Ver comprobante».
    */
   abonos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 458-B (design §3.6, R71/R72) — el estado de los EGRESOS sin documento propio (sueldo,
+   * gasto de Ordenex, gasto fijo cobrado; origen `gasto`). El id es el de la PROPIA fila. «Anulado»
+   * lo decide el contra-asiento en la base, no la pagina. Lo implementa
+   * `EgresoCajaDocumentosRepository`. Sin valor por defecto.
+   */
+  egresos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /** Ficha 458-B (D8, R71) — las indemnizaciones por incidente (id = la propia fila). */
+  indemnizaciones: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /** Ficha 458-B (D7, R71) — los cobros por rechazo aprobados: id = la GESTION (sus dos lineas). */
+  rechazos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
 }
 
 export interface IWalletService {

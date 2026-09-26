@@ -400,6 +400,27 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.ajusteCajaAnulacion\.create\(/,
   },
   {
+    // ⭑ FICHA 458-B (D13, R64) — la ANULACION con motivo de un EGRESO de caja (sueldo, gasto,
+    // gasto fijo, indemnizacion). MISMA tabla que la correccion, METODO PROPIO: si viviera dentro de
+    // `anular`, borrar uno de los dos `appendAccion` dejaria esta guardia verde (mide por metodo).
+    // La mutacion exigida es la constancia con `createMany` (`skipDuplicates`).
+    tipos: ["egreso_caja_anulado"],
+    archivo: "lib/repositories/AjusteCajaAnulacionRepository.ts",
+    metodo: "anularEgreso",
+    forma: "recibe_tx",
+    mutacion: /tx\.ajusteCajaAnulacion\.createMany\(/,
+  },
+  {
+    // ⭑ FICHA 458-B (D7, R64) — la ANULACION de un cobro por rechazo aprobado. `recibe_tx`; los
+    // reversos de la caja y los creditos de la tienda los escribe `RechazoTiendaCobroService` en la
+    // misma transaccion. La mutacion exigida es la constancia.
+    tipos: ["cobro_rechazo_tienda_anulado"],
+    archivo: "lib/repositories/RechazoTiendaCobroAnulacionRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.rechazoTiendaCobroAnulacion\.createMany\(/,
+  },
+  {
     // ⭑ Q2 (`usuario_fulfillment_cambiado`) comparte punto de escritura con el rol y la zona: es
     // el MISMO formulario, y las N filas salen con el MISMO `lote_id`.
     tipos: ["usuario_rol_cambiado", "usuario_zona_cambiada", "usuario_fulfillment_cambiado"],
@@ -949,7 +970,9 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     // de una correccion de caja (`wallet_movimiento_manual_anulado`, auditoria D3, tambien propio).
     // 63 desde la ficha 457 (`abono_tienda_registrado` y `abono_tienda_anulado`, un tipo por metodo
     // de `AbonoTiendaRepository`).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(63);
+    // 65 desde la ficha 458-B (`cobro_rechazo_tienda_anulado` y `egreso_caja_anulado`, cada uno con
+    // su metodo propio).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(65);
   });
 });
 

@@ -4,6 +4,8 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
 import { AbonoTiendaRepository } from "@/lib/repositories/AbonoTiendaRepository";
+import { EgresoCajaDocumentosRepository, IndemnizacionDocumentosRepository } from "@/lib/repositories/EgresoCajaDocumentosRepository";
+import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/RechazoTiendaCobroAnulacionRepository";
 import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnulacionRepository";
 import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import { PagoPorCuentaTiendaRepository } from "@/lib/repositories/PagoPorCuentaTiendaRepository";
@@ -168,6 +170,10 @@ function walletDe(tx: TxDeTest) {
     cobros: new CobroTiendaAnulacionRepository(tx as never),
     ajustes: new AjusteCajaAnulacionRepository(tx as never),
     abonos: new AbonoTiendaRepository(tx as never), // ficha 457: lo exige `LectoresDocumentosCaja`
+    // Ficha 458-B: lo exige `LectoresDocumentosCaja`.
+    egresos: new EgresoCajaDocumentosRepository(tx as never),
+    indemnizaciones: new IndemnizacionDocumentosRepository(tx as never),
+    rechazos: new RechazoTiendaCobroAnulacionRepository(tx as never),
   });
 }
 

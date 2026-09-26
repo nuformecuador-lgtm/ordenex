@@ -19,6 +19,7 @@ import {
 } from "@/lib/actions/pago-por-cuenta-tienda";
 import { anularAjusteCajaAction } from "@/lib/actions/wallet";
 import { anularCobroTiendaAction } from "@/lib/actions/wallet-tienda";
+import { anularMovimientoAction } from "@/lib/actions/wallet-anulacion";
 import type { ObtenerComprobanteResult } from "@/lib/types/pago-por-cuenta-tienda";
 import type { DocumentoCajaDTO, WalletMovimientoDTO } from "@/lib/types/wallet";
 import type { MotivoNoAnulable } from "@/lib/types/wallet-tienda";
@@ -109,7 +110,33 @@ const ACCIONES: Record<
     anular: (abonoId, motivo) => anularAbonoTiendaAction({ abonoId, motivo }),
     comprobante: (abonoId) => obtenerComprobanteAbonoAction({ abonoId }),
   },
+  // Ficha 458-B (design §3.6/§4.2): los tres documentos nuevos se anulan por la acción ÚNICA, con el
+  // id de la PROPIA fila del libro (`{ libro: "caja", movimientoId }`); el servidor decide el camino.
+  // (El egreso administrativo sigue con «Reversar» en el libro hasta la 458-C: no llega aquí.)
+  egreso_caja: {
+    anular: (movimientoId, motivo) => anularDesdeLaCaja(movimientoId, motivo),
+    comprobante: async () => ({ status: "sin_comprobante" as const }),
+  },
+  indemnizacion: {
+    anular: (movimientoId, motivo) => anularDesdeLaCaja(movimientoId, motivo),
+    comprobante: async () => ({ status: "sin_comprobante" as const }),
+  },
+  rechazo_tienda_cobro: {
+    anular: (movimientoId, motivo) => anularDesdeLaCaja(movimientoId, motivo),
+    comprobante: async () => ({ status: "sin_comprobante" as const }),
+  },
 };
+
+/** Ficha 458-B — la acción única, con su `no_anulable` traducido a los dos motivos que esta fila sabe decir. */
+async function anularDesdeLaCaja(movimientoId: string, motivo: string): Promise<ResultadoAnulacion> {
+  const r = await anularMovimientoAction({ destino: { libro: "caja", movimientoId }, motivo });
+  if (r.status === "no_anulable") {
+    return r.motivo === "reclasificado" || r.motivo === "sin_linea_de_caja"
+      ? { status: r.status, motivo: r.motivo }
+      : { status: r.status };
+  }
+  return r;
+}
 
 /** El aviso de cada respuesta de la anulación que NO la deja hecha. */
 function avisoDeAnulacion(resultado: ResultadoAnulacion): string {
@@ -151,7 +178,14 @@ export function DocumentoCajaAcciones({ movimiento, onAnulado }: DocumentoCajaAc
   const { documento } = movimiento;
   // Ficha 461 (R71; recorrido F1): la corrección de caja ES su propio documento —`origenId` viene
   // `null` a propósito— y `anularAjusteCajaSchema` espera el id de la fila (`movimientoId`).
-  const documentoId = documento.tipo === "ajuste_caja" ? movimiento.id : movimiento.origenId;
+  // Ficha 458-B: los tres documentos nuevos también se anulan por el id de la PROPIA fila.
+  const documentoId =
+    documento.tipo === "ajuste_caja" ||
+    documento.tipo === "egreso_caja" ||
+    documento.tipo === "indemnizacion" ||
+    documento.tipo === "rechazo_tienda_cobro"
+      ? movimiento.id
+      : movimiento.origenId;
   const concepto = CATEGORIA_LABEL[movimiento.categoria];
   const fecha = fechaDiaMovimientoCR(movimiento.fechaMovimiento);
   const montoPintado = money(movimiento.monto);

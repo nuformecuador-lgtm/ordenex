@@ -311,9 +311,24 @@ export type DocumentoCajaDTO = {
    * Ficha 457 (design §8.5, R41): + `abono_tienda`, la entrada del pago de una tienda a Ordenex
    * (`ingreso_abono_tienda` con origen `abono_tienda`); su reverso lleva `null`.
    */
-  tipo: "pago_por_cuenta_tienda" | "aporte_capital" | "cobro_tienda" | "ajuste_caja" | "abono_tienda";
+  /**
+   * Ficha 458-B (design §3.6, R71): + `egreso_caja` (sueldo, gasto de Ordenex, gasto fijo cobrado),
+   * `indemnizacion` (la del incidente, no la del cierre) y `rechazo_tienda_cobro` (las DOS lineas del
+   * cobro por rechazo apuntan al mismo documento). Sus contra-asientos llevan `null`.
+   */
+  tipo:
+    | "pago_por_cuenta_tienda"
+    | "aporte_capital"
+    | "cobro_tienda"
+    | "ajuste_caja"
+    | "abono_tienda"
+    | "egreso_caja"
+    | "indemnizacion"
+    | "rechazo_tienda_cobro";
   anulado: boolean;
   tieneComprobante: boolean;
+  /** Ficha 458-B (R72): anulado por un reverso anterior a la 458, sin constancia: «motivo no registrado». */
+  motivoNoRegistrado?: boolean;
 };
 
 export type WalletBalanceSigno = "positivo" | "negativo" | "cero";

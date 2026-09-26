@@ -24,6 +24,12 @@ import type {
   ListarCobrosRechazoTiendaServiceResult,
   RechazarCobroRechazoTiendaServiceResult,
 } from "@/lib/types/rechazo-tienda-cobro";
+import type {
+  AnularCobroRechazoTiendaServiceResult,
+} from "@/lib/interfaces/services/IRechazoTiendaCobroService";
+import type { IRechazoTiendaCobroAnulacionRepository } from "@/lib/interfaces/repositories/IRechazoTiendaCobroAnulacionRepository";
+import type { ICajaRechazoTiendaCobroFeedService } from "@/lib/interfaces/services/ICajaRechazoTiendaCobroFeedService";
+import type { AnularCobroRechazoTiendaInput } from "@/lib/types/wallet-anulacion";
 import { rechazoTiendaCobroConfig } from "@/lib/config/rechazo-tienda-cobro";
 import { walletTiendaConfig, type WalletTiendaConfig } from "@/lib/config/wallet-tienda";
 import { conceptoIngresoADebitoTienda } from "@/lib/utils/mapeo-concepto-tienda";
@@ -69,6 +75,14 @@ function aporta(montoStr: string): boolean {
   return new Prisma.Decimal(montoStr).gt(0);
 }
 
+/** Ficha 458-B: sale de la transaccion de ANULAR (que revierte) cuando ya habia constancia. */
+class CobroYaAnuladoError extends Error {
+  constructor() {
+    super("rechazo-tienda-cobro: ya anulado");
+    this.name = "CobroYaAnuladoError";
+  }
+}
+
 /**
  * 💰 FICHA 337 (segunda mitad, 2026-08-31) — logica de negocio de los COBROS POR RECHAZO DESDE
  * NOVEDADES: ver la cola, APROBAR y RECHAZAR.
@@ -110,6 +124,16 @@ export class RechazoTiendaCobroService implements IRechazoTiendaCobroService {
     private readonly writeClient: RechazoTiendaCobroTxClient,
     /** Ejecutor de la transaccion de APROBAR. Inyectado: el servicio no importa el cliente. */
     private readonly runTx: RechazoTiendaCobroTxRunner,
+    /**
+     * Ficha 458-B (D7) — lo que ANULAR necesita: el repositorio de la constancia (y de las lineas
+     * originales) y el puerto estrecho de la caja para los dos reversos. SIN valor por defecto a
+     * proposito: un composition root que se olvidara de pasarlo no compila (memoria «el composition
+     * root que no inyecta»).
+     */
+    private readonly anulacion: {
+      repo: IRechazoTiendaCobroAnulacionRepository;
+      caja: ICajaRechazoTiendaCobroFeedService;
+    },
     /**
      * ⚠️ EL INTERRUPTOR Q3 DE LA FEATURE 43, LEIDO EN UN SOLO PUNTO, igual que en
      * `WalletTiendaFeedService`. Si `TIENDA_DEBITA_FLETE_DEVOLUCION` es `false`, el ledger de la
@@ -241,6 +265,110 @@ export class RechazoTiendaCobroService implements IRechazoTiendaCobroService {
       ahora,
     );
     return decididos === 0 ? { status: "ya_decidido" } : { status: "ok" };
+  }
+
+  /**
+   * ⚠️ FICHA 458-B (D7, R63–R68, R73) — ANULA un cobro por rechazo YA APROBADO. Mueve dinero.
+   *
+   * LA DECISION ATOMICA DE `aprobar` NO SE TOCA: esto no des-aprueba. El cobro conserva
+   * `estado = 'aprobado'` (R73: la cola no lo vuelve a ofrecer y nadie lo vuelve a decidir) y
+   * «anulado» se deriva de que exista la constancia en `rechazo_tienda_cobro_anulacion` —el patron
+   * de la 172, la 459, la 461 y la 457—. Ni la gestion ni la orden se tocan.
+   *
+   * EL ORDEN ES PARTE DEL REQUISITO:
+   *  1. ROL PRIMERO (R82), antes de leer nada.
+   *  2. El cobro, y SOLO si esta `aprobado` (`pendiente`/`rechazado` no movieron dinero: nada que
+   *     anular).
+   *  3. Dentro de UNA transaccion: las lineas ORIGINALES del cobro en los dos libros. Sin el
+   *     ingreso del flete en la caja no hay cargo que revertir: `no_anulable` sin escribir nada
+   *     (un reverso sin su original romperia R8).
+   *  4. La constancia: `skipDuplicates` con `count = 0` ⇒ `ya_anulado` y la transaccion se revierte
+   *     sin haber escrito nada mas (R66/R67).
+   *  5. Los reversos de cargo en la caja, cada uno por el monto de SU linea original (R64/R68).
+   *  6. Los creditos espejo en la tienda SOLO por los debitos que existen: si al aprobar el
+   *     interruptor `TIENDA_DEBITA_FLETE_DEVOLUCION` estaba apagado, la tienda no fue debitada y no
+   *     se le acredita nada (R68: el efecto inverso EXACTO del original).
+   *
+   * Efecto (design §4.3): saldo de la tienda +M, «De las tiendas» +M, ganancia −M; «Entro»,
+   * «Salio» y la cifra principal no cambian. R7 y R8 siguen en 0,00.
+   */
+  async anular(
+    input: AnularCobroRechazoTiendaInput,
+    actor: Actor,
+    ahora: Date,
+  ): Promise<AnularCobroRechazoTiendaServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R82: antes de leer
+
+    const cobro = await this.cobroRepo.obtenerPorId(input.cobroId);
+    if (cobro === null) return { status: "no_encontrado" };
+    if (cobro.estado !== "aprobado") return { status: "no_anulable", motivo: "no_aprobado" };
+
+    try {
+      return await this.runTx(async (tx: RechazoTiendaCobroTx) => {
+        const lineas = await this.anulacion.repo.lineasDelCobro(tx, {
+          gestionId: cobro.gestionId,
+          tiendaId: cobro.tiendaId,
+        });
+        const flete = lineas.caja.find((l) => l.categoria === CONCEPTO_FLETE) ?? null;
+        const iva = lineas.caja.find((l) => l.categoria === CONCEPTO_IVA) ?? null;
+        if (flete === null) {
+          return { status: "no_anulable" as const, motivo: "sin_linea_de_caja" as const };
+        }
+
+        const constancia = await this.anulacion.repo.anular(tx, {
+          cobroId: cobro.id,
+          motivo: input.motivo,
+          anuladoPor: actor.usuarioId,
+        });
+        if (constancia.status === "ya_anulado") throw new CobroYaAnuladoError(); // R66/R67
+
+        // (1) LA CAJA: los reversos de cargo, por el monto de SU linea (nunca uno de la peticion).
+        const esperados = iva === null ? 1 : 2;
+        const insertados = await this.anulacion.caja.emitirReversosDeAnulacion(tx, {
+          gestionId: cobro.gestionId,
+          montoFlete: flete.monto,
+          montoIva: iva?.monto ?? null,
+          descripcion: null,
+          registradoPor: actor.usuarioId,
+          fechaMovimiento: ahora, // R64: el MISMO instante en los dos libros
+        });
+        // Un reverso que ya estaba SIN constancia no deberia existir (solo este metodo lo escribe);
+        // si aparece, la base no esta como este codigo cree: se revierte todo, ruidosamente.
+        if (insertados !== esperados) {
+          throw new Error(
+            `rechazo-tienda-cobro: la anulacion del cobro ${cobro.id} esperaba ${esperados} reversos y escribio ${insertados}`,
+          );
+        }
+
+        // (2) LA TIENDA: un credito espejo por cada debito que EXISTE, por su monto.
+        const creditos: CrearMovimientoTiendaInput[] = lineas.tienda.map((debito) => ({
+          tiendaId: cobro.tiendaId,
+          tipo: "credito" as const,
+          categoria:
+            debito.categoria === "flete_devolucion"
+              ? ("flete_devolucion_anulado" as const)
+              : ("iva_flete_devolucion_anulado" as const),
+          monto: debito.monto,
+          origenTipo: ORIGEN_TIPO,
+          origenId: cobro.gestionId,
+          descripcion: null,
+          registradoPor: actor.usuarioId,
+          fechaMovimiento: ahora,
+        }));
+        if (creditos.length > 0) await this.movimientoTiendaRepo.crearMovimientos(tx, creditos);
+
+        // Sin sumar aqui (este servicio no calcula dinero): los dos importes tal como se anularon.
+        return {
+          status: "ok" as const,
+          montoFlete: flete.monto,
+          montoIva: iva?.monto ?? null,
+          creditosEnLaTienda: creditos.length > 0,
+        };
+      });
+    } catch (error) {
+      if (error instanceof CobroYaAnuladoError) return { status: "ya_anulado" };
+      throw error;
+    }
   }
 
   /**

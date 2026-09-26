@@ -51,6 +51,11 @@ function montaje(correccion: WalletMovimientoDTO | null = mov(), constancia: "an
   const anulaciones: IAjusteCajaAnulacionRepository = {
     anular: vi.fn(async () => ({ status: constancia })),
     estadoDeDocumentos: vi.fn(async () => []),
+    // Ficha 458-B: la anulacion de EGRESOS vive en la misma tabla pero no en este servicio.
+    anularEgreso: vi.fn(async () => {
+      throw new Error("la correccion no anula egresos");
+    }),
+    constanciasDe: vi.fn(async () => []),
   };
   const runTransaction = vi.fn(async (fn: (tx: never) => Promise<unknown>) => fn(TX as never));
   const servicio = new AjusteCajaService(walletRepo, anulaciones, runTransaction as never, () => AHORA);

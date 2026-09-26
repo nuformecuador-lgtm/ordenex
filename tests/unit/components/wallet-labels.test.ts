@@ -173,13 +173,17 @@ describe("461 — el resto de textos de la caja que esta ficha toca (R42/R50, de
     expect(TIPO_EGRESO_MANUAL_LABEL.gasto_variable).toBe(CATEGORIA_LABEL.egreso_gasto_variable);
   });
 
-  it("los cinco documentos anulables se nombran desde Ordenex dentro de «Anular …»", () => {
+  it("los ocho documentos anulables se nombran desde Ordenex dentro de «Anular …»", () => {
     expect(DOCUMENTO_CAJA_NOMBRE).toEqual({
       pago_por_cuenta_tienda: "el pago de un gasto de una tienda",
       aporte_capital: "el aporte de dinero a la caja",
       cobro_tienda: "el cobro de Ordenex a una tienda",
       ajuste_caja: "la corrección de caja",
       abono_tienda: "el pago de una tienda a Ordenex", // ficha 457 (design §8.5)
+      // Ficha 458-B (design §3.6): egresos sin documento, indemnización y cobro por rechazo.
+      egreso_caja: "el gasto de la caja",
+      indemnizacion: "la indemnización por un incidente",
+      rechazo_tienda_cobro: "el cobro por rechazo a una tienda",
     });
   });
 

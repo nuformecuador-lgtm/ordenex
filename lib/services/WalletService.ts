@@ -90,6 +90,20 @@ function tipoDeDocumentoOriginal(m: WalletMovimientoDTO): DocumentoCajaDTO["tipo
   ) {
     return "ajuste_caja";
   }
+  // Ficha 458-B (design §3.6, R63/R71): los EGRESOS sin documento propio. Todo egreso con origen
+  // `gasto` es un original (su reverso es un `ingreso_ajuste`): sueldo, gasto de Ordenex y gasto
+  // fijo cobrado. La indemnizacion SOLO con origen `orden_incidente` (la del cierre no se anula, R65).
+  if (m.tipo === "egreso" && m.origenTipo === "gasto") return "egreso_caja";
+  if (m.categoria === "egreso_indemnizacion" && m.origenTipo === "orden_incidente") return "indemnizacion";
+  // Ficha 458-B (D7, R63): las DOS lineas del cobro por rechazo aprobado (origen `gestion_orden`)
+  // son originales del MISMO documento; sus reversos (`egreso_reverso_*`) no. Mutacion 10 de design
+  // §8.2: sin esta rama, la fila no ofreceria «Anular…».
+  if (
+    (m.categoria === "ingreso_flete_devolucion" || m.categoria === "ingreso_iva_flete_devolucion") &&
+    m.origenTipo === "gestion_orden"
+  ) {
+    return "rechazo_tienda_cobro";
+  }
   return null;
 }
 
@@ -97,9 +111,12 @@ function tipoDeDocumentoOriginal(m: WalletMovimientoDTO): DocumentoCajaDTO["tipo
  * Ficha 461 (R71) — el id del DOCUMENTO de una fila original. Para el pago de un gasto, el aporte y
  * el cobro es el `origenId` (el documento vive en otra tabla o es el debito de la tienda); para la
  * correccion de caja es la PROPIA fila, porque la correccion no tiene documento aparte.
+ *
+ * Ficha 458-B: el egreso y la indemnizacion tampoco tienen documento aparte (la PROPIA fila); el
+ * cobro por rechazo se lee por su GESTION (el `origenId` de sus dos lineas).
  */
 function idDeDocumento(m: WalletMovimientoDTO, tipo: DocumentoCajaDTO["tipo"]): string | null {
-  return tipo === "ajuste_caja" ? m.id : m.origenId;
+  return tipo === "ajuste_caja" || tipo === "egreso_caja" || tipo === "indemnizacion" ? m.id : m.origenId;
 }
 
 /**
@@ -151,13 +168,22 @@ export class WalletService implements IWalletService {
     const idsCobros = idsDe("cobro_tienda");
     const idsAjustes = idsDe("ajuste_caja");
     const idsAbonos = idsDe("abono_tienda");
+    const idsEgresos = idsDe("egreso_caja");
+    const idsIndemnizaciones = idsDe("indemnizacion");
+    // Las dos lineas de un cobro por rechazo comparten documento: se pide UNA vez por gestion.
+    const idsRechazos = [...new Set(idsDe("rechazo_tienda_cobro"))];
 
-    const [pagos, aportes, cobros, ajustes, abonos] = await Promise.all([
+    const [pagos, aportes, cobros, ajustes, abonos, egresos, indemnizaciones, rechazos] = await Promise.all([
       idsPagos.length > 0 ? this.documentos.pagosPorCuenta.estadoDeDocumentos(idsPagos) : [],
       idsAportes.length > 0 ? this.documentos.aportes.estadoDeDocumentos(idsAportes) : [],
       idsCobros.length > 0 ? this.documentos.cobros.estadoDeDocumentos(idsCobros) : [],
       idsAjustes.length > 0 ? this.documentos.ajustes.estadoDeDocumentos(idsAjustes) : [],
       idsAbonos.length > 0 ? this.documentos.abonos.estadoDeDocumentos(idsAbonos) : [],
+      idsEgresos.length > 0 ? this.documentos.egresos.estadoDeDocumentos(idsEgresos) : [],
+      idsIndemnizaciones.length > 0
+        ? this.documentos.indemnizaciones.estadoDeDocumentos(idsIndemnizaciones)
+        : [],
+      idsRechazos.length > 0 ? this.documentos.rechazos.estadoDeDocumentos(idsRechazos) : [],
     ]);
     const estado = {
       pago_por_cuenta_tienda: new Map(pagos.map((e) => [e.id, e])),
@@ -165,6 +191,9 @@ export class WalletService implements IWalletService {
       cobro_tienda: new Map(cobros.map((e) => [e.id, e])),
       ajuste_caja: new Map(ajustes.map((e) => [e.id, e])),
       abono_tienda: new Map(abonos.map((e) => [e.id, e])),
+      egreso_caja: new Map(egresos.map((e) => [e.id, e])),
+      indemnizacion: new Map(indemnizaciones.map((e) => [e.id, e])),
+      rechazo_tienda_cobro: new Map(rechazos.map((e) => [e.id, e])),
     };
 
     return movimientos.map((m) => {
@@ -176,7 +205,12 @@ export class WalletService implements IWalletService {
       if (tipo === null || e === undefined) return { ...m, documento: null };
       return {
         ...m,
-        documento: { tipo, anulado: e.anulado, tieneComprobante: e.tieneComprobante },
+        documento: {
+          tipo,
+          anulado: e.anulado,
+          tieneComprobante: e.tieneComprobante,
+          ...(e.sinConstancia === true ? { motivoNoRegistrado: true } : {}),
+        },
       };
     });
   }

@@ -18,6 +18,7 @@ import {
   type ReversarEgresoInput,
 } from "@/lib/types/wallet";
 import { instanteDelMovimientoManual } from "@/lib/utils/fecha-movimiento-manual";
+import { nombreDelEgresoAnulable } from "@/lib/utils/egreso-anulable";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Roles autorizados (R17): acceso total (maestro/admin, dueños de la caja central), espejo de
@@ -130,7 +131,8 @@ export class WalletEgresoService implements IWalletEgresoService {
         monto: original.monto,
         origenTipo: "gasto",
         origenId: original.id,
-        descripcion: `Reverso de: ${original.descripcion ?? original.id}`,
+        // Ficha 458-B (R4): sin descripcion, el NOMBRE del egreso; nunca su uuid (C4.2).
+        descripcion: `Reverso de: ${original.descripcion ?? nombreDelEgresoAnulable(original.categoria)}`,
         registradoPor: actor.usuarioId,
       },
       { accion: "egreso_administrativo_reversado", actorUsuarioId: actor.usuarioId },

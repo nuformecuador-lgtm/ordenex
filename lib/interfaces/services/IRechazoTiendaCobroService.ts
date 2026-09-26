@@ -1,4 +1,9 @@
+import type { PrismaClient } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type {
+  AnularCobroRechazoTiendaInput,
+  AnularCobroRechazoTiendaResult,
+} from "@/lib/types/wallet-anulacion";
 import type { RechazoTiendaCobroTxClient } from "@/lib/interfaces/repositories/IRechazoTiendaCobroRepository";
 import type { WalletTxClient } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { WalletTiendaTxClient } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
@@ -28,7 +33,18 @@ import type {
  */
 export type RechazoTiendaCobroTx = RechazoTiendaCobroTxClient &
   WalletTxClient &
-  WalletTiendaTxClient;
+  WalletTiendaTxClient &
+  // Ficha 458-B (D7): la constancia de la ANULACION va en la misma transaccion que sus reversos.
+  Pick<PrismaClient, "rechazoTiendaCobroAnulacion">;
+
+/**
+ * Ficha 458-B (D7, R63–R68) — resultado de DOMINIO de anular un cobro por rechazo aprobado. La
+ * sesion y la forma son del borde.
+ */
+export type AnularCobroRechazoTiendaServiceResult = Exclude<
+  AnularCobroRechazoTiendaResult,
+  { status: "unauthenticated" } | { status: "validation_error" }
+>;
 
 /**
  * Ejecuta `fn` dentro de UNA transaccion y revierte si lanza: o quedan los apuntes de los DOS
@@ -84,4 +100,22 @@ export interface IRechazoTiendaCobroService {
     actor: Actor,
     ahora: Date,
   ): Promise<RechazarCobroRechazoTiendaServiceResult>;
+  /**
+   * ⚠️ FICHA 458-B (D7, R63–R68, R73) — ANULA un cobro YA APROBADO. Tambien mueve dinero, y la
+   * decision atomica de arriba no se toca: esto no «des-aprueba» (el estado sigue `aprobado`, R73),
+   * registra una constancia y los contra-asientos. Dentro de UNA transaccion:
+   *
+   *   guardia de rol (antes de leer) -> el cobro, que tiene que estar `aprobado`
+   *   -> sus lineas ORIGINALES en los dos libros (sin la del flete en la caja: `no_anulable`)
+   *   -> constancia (`skipDuplicates`: `0` ⇒ `ya_anulado`, sin escribir nada mas)
+   *   -> los reversos de cargo en la caja (flete e IVA, cada uno por el monto de SU linea)
+   *   -> los creditos espejo en la tienda SOLO por los debitos que existen.
+   *
+   * `ahora` se INYECTA y es el MISMO instante en los dos libros (R64).
+   */
+  anular(
+    input: AnularCobroRechazoTiendaInput,
+    actor: Actor,
+    ahora: Date,
+  ): Promise<AnularCobroRechazoTiendaServiceResult>;
 }

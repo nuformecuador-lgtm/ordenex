@@ -49,6 +49,17 @@ interface Fotografia {
   tiendaA: Awaited<ReturnType<typeof leerTienda>>;
   tiendaB: Awaited<ReturnType<typeof leerTienda>>;
   mensajero: Awaited<ReturnType<typeof leerMensajero>>;
+  /**
+   * FICHA 458-B — lo que la 458 AÑADE: la foto se toma ENTERA primero (todo lo de arriba no cambia)
+   * y DESPUES se anula el cobro por rechazo del escenario y se vuelve a leer. Nada de lo anterior se
+   * relee: los literales de la 459/461 siguen midiendo exactamente lo mismo.
+   */
+  trasAnularRechazo: {
+    respuesta: string;
+    caja: LecturaCaja459;
+    tiendaA: Awaited<ReturnType<typeof leerTienda>>;
+    tiendaB: Awaited<ReturnType<typeof leerTienda>>;
+  };
 }
 
 /** La diferencia de una cifra de la caja entre despues y antes. */
@@ -93,7 +104,7 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
       const lector = { usuarioId: "00000000-0000-4000-8000-000000000459", rol: "maestro" as const };
       const antes = await leerCajaEntera(s, lector);
       const esc = await sembrarEscenario459(tx, cat);
-      return {
+      const foto = {
         pasos: esc.pasos,
         antes,
         despues: await leerCajaEntera(s, esc.maestro),
@@ -101,6 +112,25 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
         tiendaA: await leerTienda(s, esc.maestro, esc.tiendaA),
         tiendaB: await leerTienda(s, esc.maestro, esc.tiendaB),
         mensajero: await leerMensajero(s, esc.maestro, esc.mensajeroId),
+      };
+      // FICHA 458-B — SOLO DESPUES de la foto: anular el cobro por rechazo aprobado del escenario.
+      const cobro = await tx.rechazoTiendaCobro.findFirstOrThrow({
+        where: { tiendaId: esc.tiendaA, estado: "aprobado" },
+        select: { id: true },
+      });
+      const anulado = await s.rechazoCobro.anular(
+        { cobroId: cobro.id, motivo: "Fotografia 458" },
+        esc.maestro,
+        new Date(),
+      );
+      return {
+        ...foto,
+        trasAnularRechazo: {
+          respuesta: anulado.status,
+          caja: await leerCajaEntera(s, esc.maestro),
+          tiendaA: await leerTienda(s, esc.maestro, esc.tiendaA),
+          tiendaB: await leerTienda(s, esc.maestro, esc.tiendaB),
+        },
       };
     });
   }
@@ -467,6 +497,73 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
       expect(delta(foto(), (l) => l.resumen.capital)).toBe("0.00");
       expect(foto().tiendaB.saldo).toBe("5515.12");
       expect(foto().mensajero.cuentaPorPagar).toBe("1836.00");
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────────────────────
+  // ⭑ LO QUE LA FICHA 458 AÑADE A PROPOSITO (D7, R68/R91, design §8.1) — anular el cobro por rechazo
+  // aprobado del escenario (tienda A: flete 1 000,00 + IVA 130,00 = 1 130,00). Es el UNICO bloque que
+  // la 458-B escribe en esta fotografia; todo lo de arriba se mide ANTES de anular y no cambia.
+  // Literales calculados A MANO (nunca con la funcion probada):
+  //   ganancia:        −87 374,34 − 1 130,00 = −88 504,34   (Δ −1 130,00)
+  //   De las tiendas:   13 045,82 + 1 130,00 =  14 175,82   (Δ +1 130,00)
+  //   cifra principal: −74 328,52 (sin cambio) ; «Entro» 87 517,25 y «Salio» 161 845,77 (sin cambio)
+  //   saldo tienda A:    7 530,70 + 1 130,00 =   8 660,70 ; tienda B 5 515,12 (sin cambio)
+  //   R7: −88 504,34 + 14 175,82 + 0 = −74 328,52 → diferencia 0,00
+  //   R8: 14 175,82 − (8 660,70 + 5 515,12) = 0,00
+  // ───────────────────────────────────────────────────────────────────────────────────────────
+  describe("⭑ lo que la 458 añade a proposito (anular el cobro por rechazo)", () => {
+    const deltaAnulado = (lector: (l: LecturaCaja459) => string) =>
+      menos(lector(foto().trasAnularRechazo.caja), lector(foto().antes));
+
+    it("la anulacion respondio `ok`", () => {
+      expect(foto().trasAnularRechazo.respuesta).toBe("ok");
+    });
+
+    it("la ganancia baja 1 130,00 y «De las tiendas» sube 1 130,00; la cifra principal, «Entro» y «Salio» no cambian", () => {
+      expect({
+        ganancia: deltaAnulado((l) => l.resumen.ganancia),
+        deTerceros: deltaAnulado((l) => l.resumen.deTerceros),
+        enCaja: deltaAnulado((l) => l.resumen.enCaja),
+        entradas: deltaAnulado((l) => l.resumen.entradas),
+        salidas: deltaAnulado((l) => l.resumen.salidas),
+        capital: deltaAnulado((l) => l.resumen.capital),
+      }).toEqual({
+        ganancia: "-88504.34",
+        deTerceros: "14175.82",
+        enCaja: "-74328.52",
+        entradas: "87517.25",
+        salidas: "161845.77",
+        capital: "0.00",
+      });
+    });
+
+    it("el saldo de la tienda A sube 1 130,00 y el de B no se mueve", () => {
+      expect(foto().trasAnularRechazo.tiendaA.saldo).toBe("8660.70");
+      expect(foto().trasAnularRechazo.tiendaB.saldo).toBe("5515.12");
+    });
+
+    it("el desglose de A: los dos creditos espejo caen «a favor» (19 900,00 + 1 130,00 = 21 030,00); cargos y pagado sin cambio", () => {
+      // Mutacion 5 de design §8.2 (`flete_devolucion_anulado` en «cargos») → rojo aqui.
+      expect(foto().trasAnularRechazo.tiendaA.desglose).toEqual({
+        aFavor: "21030.00",
+        cargos: "7369.30",
+        pagado: "5000.00",
+        saldo: "8660.70",
+        signo: "positivo",
+      });
+    });
+
+    it("R7 y R8 dan 0,00 con los reversos dentro", () => {
+      /** a + b sin salir de STRING/Decimal: a − (0 − b). */
+      const mas = (a: string, b: string) => menos(a, menos("0.00", b));
+      const r7 = menos(
+        deltaAnulado((l) => l.resumen.enCaja),
+        mas(mas(deltaAnulado((l) => l.resumen.ganancia), deltaAnulado((l) => l.resumen.deTerceros)), deltaAnulado((l) => l.resumen.capital)),
+      );
+      expect(r7).toBe("0.00");
+      const saldos = mas(foto().trasAnularRechazo.tiendaA.saldo, foto().trasAnularRechazo.tiendaB.saldo);
+      expect(menos(deltaAnulado((l) => l.resumen.deTerceros), saldos)).toBe("0.00");
     });
   });
 });

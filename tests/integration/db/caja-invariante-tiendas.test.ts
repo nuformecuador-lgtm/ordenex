@@ -76,6 +76,10 @@ const COBRO_DEL_ESCENARIO = "2500.50";
  */
 const COBRO_GRANDE_B = "20000.00";
 const PAGO_DE_B = "4000.00";
+/** FICHA 458-B (TB.9): la indemnizacion por incidente que se siembra y se anula en los pasos 15–16. */
+const INDEMNIZACION_458 = "700.00";
+/** FICHA 458-B (TB.9): el cobro por rechazo del escenario (tienda A): flete 1 000,00 + IVA 130,00. */
+const COBRO_RECHAZO_458 = "1130.00";
 
 interface Paso {
   nombre: string;
@@ -317,6 +321,41 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
     }
     await foto("anulacion del saldo inicial");
 
+    // ── FICHA 458-B (TB.9, R68/R91) ──────────────────────────────────────────────────────────
+    // 14 — ANULAR el cobro por rechazo aprobado del escenario (tienda A: flete 1 000,00 + IVA 130,00):
+    // dos reversos de cargo en la caja y dos creditos espejo en la tienda (el escenario debita).
+    const cobroRechazo = await tx.rechazoTiendaCobro.findFirstOrThrow({
+      where: { tiendaId: esc.tiendaA, estado: "aprobado" },
+      select: { id: true },
+    });
+    respuestas.anularCobroRechazo = (
+      await s.rechazoCobro.anular({ cobroId: cobroRechazo.id, motivo: "Se cobró por error" }, esc.maestro, new Date())
+    ).status;
+    await foto("anulacion del cobro por rechazo");
+
+    // 15 — una indemnizacion por incidente como la deja la aprobacion del incidente (158): egreso
+    // PROPIO y efectivo con origen `orden_incidente`. INSERT directo: el camino del incidente del admin
+    // no es de este escenario; la fila es exactamente la que escribe `WalletIndemnizacionIncidenteFeedService`.
+    const indemnizacion = await tx.walletMovimiento.create({
+      data: {
+        tipo: "egreso",
+        categoria: "egreso_indemnizacion",
+        monto: new Prisma.Decimal(INDEMNIZACION_458),
+        origenTipo: "orden_incidente",
+        origenId: randomUUID(),
+        descripcion: null,
+        registradoPor: null,
+      },
+      select: { id: true },
+    });
+    await foto("indemnizacion de un incidente");
+
+    // 16 — su ANULACION con motivo (D8): `ingreso_ajuste` con origen el incidente, por su monto.
+    respuestas.anularIndemnizacion = (
+      await s.egresoAnulacion.anular({ movimientoId: indemnizacion.id, motivo: "Se indemnizó por error" }, esc.maestro)
+    ).status;
+    await foto("indemnizacion anulada");
+
     return { antes, pasos, estados, respuestas, reclasificada, completada, anulacion, abono };
   }
 
@@ -432,6 +471,8 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
       pagoDeTienda: "ok",
       anularPagoDeTienda: "ok",
       anularSaldoInicial: "ok",
+      anularCobroRechazo: "ok", // ficha 458-B
+      anularIndemnizacion: "ok", // ficha 458-B
     });
     expect(m().pasos.map((p) => [p.nombre, p.filasNuevasEnCaja])).toEqual([
       // 22 de la 459 + el CARGO del cobro del escenario (461/R1): 23.
@@ -453,6 +494,10 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
       ["pago de la tienda B a Ordenex", 1],
       ["anulacion del pago de la tienda B", 1],
       ["anulacion del saldo inicial", 1],
+      // Ficha 458-B: los DOS reversos de cargo (flete e IVA); la indemnizacion; su contra-asiento.
+      ["anulacion del cobro por rechazo", 2],
+      ["indemnizacion de un incidente", 1],
+      ["indemnizacion anulada", 1],
     ]);
   });
 
@@ -586,6 +631,22 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
     expect(menos(pasos[12].lectura.resumen.entradas, pasos[11].lectura.resumen.entradas)).toBe("0.00");
     expect(pasos[12].saldoTiendaB).toBe("-12984.38");
     expect(cambio(13)).toEqual({ ...nada, enCaja: "-1000000.00", capital: "-1000000.00" });
+    // ── Ficha 458-B (R68, design §4.3) ──
+    // 14 — la anulacion del cobro por rechazo: lo contrario exacto de su aprobacion. «De las tiendas» y el
+    // saldo de A suben 1 130,00; la ganancia baja lo mismo; la cifra principal, «Entro» y «Salio» NO se
+    // mueven (son reversos de cargo). Mutacion 4 de §8.2 (reverso como efectivo) → «Salio» sube aqui.
+    expect(cambio(14)).toEqual({
+      ...nada,
+      deTerceros: COBRO_RECHAZO_458,
+      ganancia: `-${COBRO_RECHAZO_458}`,
+      saldoTiendaA: COBRO_RECHAZO_458,
+    });
+    expect(menos(pasos[14].lectura.resumen.entradas, pasos[13].lectura.resumen.entradas)).toBe("0.00");
+    expect(menos(pasos[14].lectura.resumen.salidas, pasos[13].lectura.resumen.salidas)).toBe("0.00");
+    // 15 — la indemnizacion: sale dinero de Ordenex (cifra y ganancia −700,00).
+    expect(cambio(15)).toEqual({ ...nada, enCaja: `-${INDEMNIZACION_458}`, ganancia: `-${INDEMNIZACION_458}` });
+    // 16 — su anulacion: vuelve el dinero (cifra y ganancia +700,00), nada mas.
+    expect(cambio(16)).toEqual({ ...nada, enCaja: INDEMNIZACION_458, ganancia: INDEMNIZACION_458 });
   });
 
   it("R14/R21 (459): la caja esta en «saldo» mientras el saldo inicial esta vigente, y vuelve a «flujo» al anularlo", () => {
@@ -604,6 +665,9 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
       "pago de la tienda B a Ordenex": "saldo",
       "anulacion del pago de la tienda B": "saldo",
       "anulacion del saldo inicial": "flujo",
+      "anulacion del cobro por rechazo": "flujo", // ficha 458-B
+      "indemnizacion de un incidente": "flujo",
+      "indemnizacion anulada": "flujo",
     });
   });
 });

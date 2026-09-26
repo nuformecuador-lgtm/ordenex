@@ -139,3 +139,52 @@ esperado calculado a mano, dos lecturas iguales; tienda y mensajero). Tests rees
 nuevo, R23): `wallet-tienda-movimiento-repository.test.ts` R19 y `pago-mensajero-movimiento-repository
 .test.ts` R20 (`orderBy` = la lista de tres). Mutaciones: tienda solo por fecha → rojo (1/2);
 mensajero sin `createdAt` → rojo (1/2).
+
+## TB.8 / TB.9 — Estado de anulación derivado y anulación uniforme
+
+**Piezas nuevas (backend):**
+
+| Pieza | Qué hace |
+| --- | --- |
+| `lib/types/wallet-anulacion.ts` | Contratos de borde: `destinoMovimientoSchema` (`{libro, movimientoId}` \| `{documento, id}`), `anularMovimientoSchema`, `AnularMovimientoResult`, `CaminoAnulacion`, `MotivoNoAnulable`; `anularEgresoCajaSchema`, `anularCobroRechazoTiendaSchema` y sus resultados. Todos `.strict()`, sin monto. |
+| `EgresoCajaAnulacionService` (+ interfaz) | Anula con motivo sueldo / gasto de Ordenex / gasto fijo cobrado (origen `gasto`) e indemnización (origen `orden_incidente`, D8). Rol antes de leer; constancia (`AjusteCajaAnulacionRepository.anularEgreso`, `createMany skipDuplicates`) + contra-asiento `ingreso_ajuste` por el monto del original con `ahora()` inyectado; si el contra-asiento ya existía (vía vieja sin motivo) revierte y responde `ya_anulado`. Servicio propio (no un método de `WalletEgresoService`, construido en 32 sitios): **desviación anotada** respecto de «`reversarEgreso` gana motivo»; `reversarEgreso` conserva su comportamiento y solo gana el arreglo R4 (sin uuid). |
+| `AjusteCajaAnulacionRepository.anularEgreso` / `.constanciasDe` | D13: misma tabla que la corrección, método y tipo de historial propios (`egreso_caja_anulado`). |
+| `RechazoTiendaCobroService.anular` + `RechazoTiendaCobroAnulacionRepository` + `CajaRechazoTiendaCobroFeedService` | D7: rol → cobro `aprobado` (si no, `no_anulable/no_aprobado`) → en la tx: líneas originales (sin la del flete en la caja: `no_anulable/sin_linea_de_caja`, sin escribir) → constancia (`skipDuplicates`) → reversos de cargo por el monto de SU línea → créditos espejo SOLO por los débitos existentes. `estado` sigue `aprobado` (R73). Historial `cobro_rechazo_tienda_anulado` (etiqueta: la del envío, como la aprobación; monto: el flete, como la aprobación — **desviación anotada**: el design decía «etiqueta = tienda», pero el constructor tipado de `rechazo_tienda_cobro` es el del envío). El constructor del servicio gana `anulacion: {repo, caja}` SIN valor por defecto (4 sitios actualizados). |
+| `anularCobroRechazoTiendaAction` | Borde del camino nuevo (`lib/actions/rechazo-tienda-cobro.ts`). |
+| `WalletAnulacionService.enrutar` + `WalletAnulacionDestinoRepository` | La tabla de design §4.2: cada destino a su camino (egreso_caja, ajuste_caja, cobro_tienda, pago_por_cuenta_tienda, aporte_capital, abono_tienda, liquidacion_pago, rechazo_tienda_cobro, premio_del_ranking); `no_anulable` con motivo para lo del cierre, lo reclasificado y los contra-asientos (R65). Rol antes de leer (R82). |
+| `anularMovimientoAction` / `anularEgresoCajaAction` (`lib/actions/wallet-anulacion.ts`) | La acción única: sesión → forma → `enrutar` → la action existente del camino con el MISMO actor → respuesta normalizada; un estado desconocido lanza (500), nunca se traduce a «ok». |
+| `EgresoCajaDocumentosRepository` / `IndemnizacionDocumentosRepository` | Lectores nuevos de `LectoresDocumentosCaja` (`egresos`, `indemnizaciones`); `rechazos` = `RechazoTiendaCobroAnulacionRepository.estadoDeDocumentos` (id = la gestión). «Anulado» del egreso lo decide el contra-asiento en la base; sin constancia → `motivoNoRegistrado` (R72). |
+| `WalletService.tipoDeDocumentoOriginal` | + `egreso_caja`, `indemnizacion` (solo origen `orden_incidente`), `rechazo_tienda_cobro` (las dos líneas, mismo documento). `DocumentoCajaDTO` gana esos tipos y `motivoNoRegistrado?`. |
+
+**Toque mínimo de UI (lo exige el `Record` total de `DocumentoCajaAcciones` y `DOCUMENTO_CAJA_NOMBRE`):**
+los tres tipos nuevos se anulan desde el libro actual por `anularMovimientoAction` con el id de la
+propia fila. Efecto visible hoy: la indemnización por incidente y las dos líneas del cobro por rechazo
+ofrecen «Anular…» en `/wallet`; el egreso administrativo sigue con «Reversar» (la columna lo resuelve
+antes, `WalletLedger`), hasta que la 458-C lo sustituya por el panel. Nada más de UI.
+
+**Desviación de alcance anotada (TB.8):** el `documento` de las filas del libro de la TIENDA y del
+MENSAJERO no se añade a `WalletTiendaMovimientoDTO`/`PagoMensajeroMovimientoDTO` (los desgloses que
+los pintan se retiran en 458-D): el estado de anulación de esas filas viaja en `FilaEstadoCuentaDTO`
+(TB.6), que es lo que 458-D consume.
+
+**Tests:** `tests/unit/services/wallet-anulacion-service.test.ts` (19: servicio de egresos, tabla de
+enrutado, borde y normalización), `tests/unit/services/rechazo-tienda-cobro-anulacion.test.ts` (11),
+`tests/integration/db/wallet-anulacion-458.test.ts` (10, por las actions sobre el escenario 459),
+`tests/integration/db/wallet-anulacion-concurrencia.test.ts` (2, composition roots reales y filas
+commiteadas), `caja-invariante-tiendas.test.ts` (+3 pasos: anulación del cobro por rechazo,
+indemnización, indemnización anulada; R7/R8 a 0,00), bloque «lo que la 458 añade a propósito» en
+`caja-caracterizacion-459.test.ts` (6 casos nuevos; ningún literal anterior tocado).
+
+**Mutaciones TB.8/TB.9** (arnés con autocomprobación; todas `aplicado=true`, `restaurado=true`):
+
+| # | Mutación | Tests | Rojos |
+| --- | --- | --- | --- |
+| 4 | `egreso_reverso_flete_devolucion` como `efectivo` | 48 | 7 |
+| 5 | `flete_devolucion_anulado` en «cargos» | 47 | 1 (medida antes de añadir el caso de desglose al bloque a propósito; se repite en TB.15) |
+| 6 | anular el rechazo sin el crédito de la tienda | 41 | 7 |
+| 7 | reverso del flete con el monto del IVA | 41 | 7 |
+| 7b | contra-asiento del egreso con monto `1.00` | 19 | 3 |
+| 8 | constancia del egreso sin `skipDuplicates` (dos a la vez) | 2 | 1 |
+| 8b | constancia del rechazo sin `skipDuplicates` | 2 | 1 |
+| 10 | `tipoDeDocumentoOriginal` sin `rechazo_tienda_cobro` | 10 | 1 |
+| 11 | el lector de egresos no mira la base | 10 | 2 |
