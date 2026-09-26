@@ -163,6 +163,46 @@ describeSiHayBase("458-A R10–R12 — el selector de cierre y el WHERE con la c
     expect(opciones(r.porDiaUtc)).toEqual([]); // el 13 en UTC es el 12 en Costa Rica
   });
 
+  // Revision 458-A (m4): la busqueda iba a una lectura previa SIN tope cuyos ids viajaban en un `IN`.
+  // Buscar un nombre muy comun casa los cierres de casi toda la historia y el `IN` pasa el limite de
+  // parametros de Postgres (32.767): el selector entraba en «error». Aqui 33.000 cierres de Anacleta
+  // SIN movimientos en la tienda ni en su libro casan la busqueda; la respuesta tiene que seguir
+  // siendo el unico cierre suyo que SI los tiene.
+  it("m4: 33.000 cierres que casan la búsqueda no rompen el selector (tienda y mensajero)", async () => {
+    const r = await enTransaccionRevertida(prisma, async (tx) => {
+      const e = await sembrar(tx);
+      const zona = await tx.zona.findFirstOrThrow({ select: { id: true } });
+      await tx.$executeRaw`
+        INSERT INTO "cierre_dia" ("id", "mensajero_id", "estado", "destino_tipo", "destino_zona_id", "solicitado_at", "updated_at")
+        SELECT gen_random_uuid()::text, ${e.ana.id}, 'aprobado'::"cierre_estado", 'bodega_satelite'::"cierre_destino_tipo",
+               ${zona.id}, TIMESTAMP '2026-01-01 00:00:00' + g * INTERVAL '1 minute', now()
+        FROM generate_series(1, 33000) AS g
+      `;
+      const d = filtros(tx, e.p.maestro);
+      return {
+        e,
+        tienda: await cierresDeLaCuentaAction({ cuenta: "tienda", tiendaId: e.p.tiendaId, busqueda: "Zúñiga458" }, d),
+        mensajero: await cierresDeLaCuentaAction({ cuenta: "mensajero", mensajeroId: e.ana.id, busqueda: "Anacleta" }, d),
+      };
+    });
+    expect(opciones(r.tienda).map((o) => o.cierreId)).toEqual([r.e.cA.id]);
+    expect(opciones(r.mensajero).map((o) => o.cierreId)).toEqual([r.e.cA.id]);
+  }, 60_000);
+
+  it("m4: el texto buscado es literal, `%` y `_` no son comodines", async () => {
+    const r = await enTransaccionRevertida(prisma, async (tx) => {
+      const e = await sembrar(tx);
+      const d = filtros(tx, e.p.maestro);
+      const base = { cuenta: "tienda" as const, tiendaId: e.p.tiendaId };
+      return {
+        porciento: await cierresDeLaCuentaAction({ ...base, busqueda: "%" }, d),
+        guion: await cierresDeLaCuentaAction({ ...base, busqueda: "Z_ñiga458" }, d),
+      };
+    });
+    expect(opciones(r.porciento)).toEqual([]);
+    expect(opciones(r.guion)).toEqual([]);
+  });
+
   it("R12 tienda: un cierre AJENO como filtro devuelve 0 filas; el propio, las suyas", async () => {
     const r = await enTransaccionRevertida(prisma, async (tx) => {
       const e = await sembrar(tx);

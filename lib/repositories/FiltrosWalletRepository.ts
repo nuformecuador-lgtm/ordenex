@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type {
   BusquedaDeCierre,
@@ -12,7 +12,7 @@ import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cu
 
 type FiltrosPrismaClient = Pick<
   PrismaClient,
-  "walletMovimiento" | "walletTiendaMovimiento" | "pagoMensajeroMovimiento" | "cierreDia"
+  "walletMovimiento" | "walletTiendaMovimiento" | "cierreDia" | "$queryRaw"
 >;
 
 function rangoFecha(desde?: Date, hasta?: Date): { gte?: Date; lt?: Date } | undefined {
@@ -24,32 +24,33 @@ function rangoFecha(desde?: Date, hasta?: Date): { gte?: Date; lt?: Date } | und
   };
 }
 
-/** Los ids de cierre que casan la busqueda. `undefined` = sin busqueda (no acota). */
-async function idsQueCasan(
-  prisma: FiltrosPrismaClient,
-  busqueda: BusquedaDeCierre | undefined,
-): Promise<string[] | undefined> {
-  if (busqueda === undefined) return undefined;
-  const where: Prisma.CierreDiaWhereInput =
-    busqueda.tipo === "dia"
-      ? { solicitadoAt: { gte: busqueda.desde, lt: busqueda.hasta } }
-      : {
-          mensajero: {
-            OR: [
-              { nombre: { contains: busqueda.texto, mode: "insensitive" } },
-              { primerApellido: { contains: busqueda.texto, mode: "insensitive" } },
-              { segundoApellido: { contains: busqueda.texto, mode: "insensitive" } },
-            ],
-          },
-        };
-  const filas = await prisma.cierreDia.findMany({ where, select: { id: true } });
-  return filas.map((f) => f.id);
+/** El texto de la persona como LITERAL dentro de un `ILIKE`: sus `%`, `_` y `\` no son comodines. */
+function patronQueContiene(texto: string): string {
+  return `%${texto.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
-type GrupoDeCierre = { origenId: string | null; _count: { _all: number }; _max: { fechaMovimiento: Date | null } };
+/**
+ * Revision 458-A (m4) — la busqueda se resuelve EN LA MISMA consulta que agrupa los cierres de la
+ * cuenta (un `JOIN` con el cierre y su mensajero), no en una lectura previa cuyos ids viajaban en un
+ * `IN`. Aquella lectura no tenia tope: buscar «a» casaba los cierres de casi todos los mensajeros de
+ * la historia y el `IN` crecia con ellos hasta el limite de parametros de Postgres (32.767), y el
+ * selector entraba en «error». Ahora la consulta lleva SIEMPRE los mismos parametros, casen 3
+ * cierres o 300.000, y devuelve como mucho `limite` filas.
+ */
+function condicionDeBusqueda(busqueda: BusquedaDeCierre | undefined): Prisma.Sql {
+  if (busqueda === undefined) return Prisma.empty;
+  if (busqueda.tipo === "dia") {
+    return Prisma.sql`AND c."solicitado_at" >= ${busqueda.desde} AND c."solicitado_at" < ${busqueda.hasta}`;
+  }
+  const patron = patronQueContiene(busqueda.texto);
+  return Prisma.sql`AND (u."nombre" ILIKE ${patron} OR u."primer_apellido" ILIKE ${patron} OR u."segundo_apellido" ILIKE ${patron})`;
+}
+
+/** Un cierre de la cuenta, agrupado en SQL: su id y cuantas filas del libro lleva. */
+type GrupoDeCierre = { origenId: string; movimientos: number };
 
 /**
- * Ficha 458-A (TA.3/TA.4, design §3.5) — los filtros de la wallet. SOLO queries Prisma: conteos por
+ * Ficha 458-A (TA.3/TA.4, design §3.5) — los filtros de la wallet. SOLO queries: conteos por
  * concepto (`groupBy` + `_count`, nunca `_sum`) y los cierres de una cuenta con el nombre de su
  * mensajero. La CUENTA va primero en cada `where` y la escribe el metodo (R12).
  */
@@ -88,20 +89,19 @@ export class FiltrosWalletRepository implements IFiltrosWalletRepository {
     busqueda: BusquedaDeCierre | undefined,
     limite: number,
   ): Promise<CierreDeCuentaRow[]> {
-    const ids = await idsQueCasan(this.prisma, busqueda);
-    if (ids !== undefined && ids.length === 0) return [];
-    const grupos = await this.prisma.walletTiendaMovimiento.groupBy({
-      by: ["origenId"],
-      where: {
-        tiendaId, // R11/R12: SOLO los cierres con movimientos en ESTA tienda
-        origenTipo: "cierre_dia",
-        origenId: ids === undefined ? { not: null } : { in: ids },
-      },
-      _max: { fechaMovimiento: true },
-      _count: { _all: true },
-      orderBy: [{ _max: { fechaMovimiento: "desc" } }, { origenId: "desc" }],
-      take: limite,
-    });
+    // R11/R12: SOLO los cierres con movimientos en ESTA tienda; la cuenta, primera en el WHERE.
+    const grupos = await this.prisma.$queryRaw<GrupoDeCierre[]>(Prisma.sql`
+      SELECT w."origen_id" AS "origenId", COUNT(*)::int AS "movimientos"
+      FROM "wallet_tienda_movimiento" w
+      JOIN "cierre_dia" c ON c."id" = w."origen_id"
+      JOIN "usuario" u ON u."id" = c."mensajero_id"
+      WHERE w."tienda_id" = ${tiendaId}
+        AND w."origen_tipo"::text = 'cierre_dia'
+        ${condicionDeBusqueda(busqueda)}
+      GROUP BY w."origen_id"
+      ORDER BY MAX(w."fecha_movimiento") DESC, w."origen_id" DESC
+      LIMIT ${limite}
+    `);
     return this.conMensajero(grupos);
   }
 
@@ -110,26 +110,28 @@ export class FiltrosWalletRepository implements IFiltrosWalletRepository {
     busqueda: BusquedaDeCierre | undefined,
     limite: number,
   ): Promise<CierreDeCuentaRow[]> {
-    const ids = await idsQueCasan(this.prisma, busqueda);
-    if (ids !== undefined && ids.length === 0) return [];
-    const grupos = await this.prisma.pagoMensajeroMovimiento.groupBy({
-      by: ["origenId"],
-      where: {
-        mensajeroId, // R11/R12: SOLO los cierres con movimientos en ESTE mensajero
-        origenTipo: "cierre_dia",
-        origenId: ids === undefined ? { not: null } : { in: ids },
-      },
-      _max: { fechaMovimiento: true },
-      _count: { _all: true },
-      orderBy: [{ _max: { fechaMovimiento: "desc" } }, { origenId: "desc" }],
-      take: limite,
-    });
+    // R11/R12: SOLO los cierres con movimientos en ESTE mensajero; la cuenta, primera en el WHERE.
+    const grupos = await this.prisma.$queryRaw<GrupoDeCierre[]>(Prisma.sql`
+      SELECT w."origen_id" AS "origenId", COUNT(*)::int AS "movimientos"
+      FROM "pago_mensajero_movimiento" w
+      JOIN "cierre_dia" c ON c."id" = w."origen_id"
+      JOIN "usuario" u ON u."id" = c."mensajero_id"
+      WHERE w."mensajero_id" = ${mensajeroId}
+        AND w."origen_tipo"::text = 'cierre_dia'
+        ${condicionDeBusqueda(busqueda)}
+      GROUP BY w."origen_id"
+      ORDER BY MAX(w."fecha_movimiento") DESC, w."origen_id" DESC
+      LIMIT ${limite}
+    `);
     return this.conMensajero(grupos);
   }
 
-  /** Nombre y dia de cada cierre de la pagina, en UNA consulta; conserva el orden del `groupBy`. */
+  /**
+   * Nombre y dia de cada cierre de la pagina, en UNA consulta; conserva el orden de la agrupacion.
+   * El `IN` de aqui lleva como mucho `limite` ids (los de la pagina), nunca los de la busqueda.
+   */
   private async conMensajero(grupos: readonly GrupoDeCierre[]): Promise<CierreDeCuentaRow[]> {
-    const ids = grupos.map((g) => g.origenId).filter((id): id is string => id !== null);
+    const ids = grupos.map((g) => g.origenId);
     if (ids.length === 0) return [];
     const cierres = await this.prisma.cierreDia.findMany({
       where: { id: { in: ids } },
@@ -138,15 +140,15 @@ export class FiltrosWalletRepository implements IFiltrosWalletRepository {
     const porId = new Map(cierres.map((c) => [c.id, c]));
     const filas: CierreDeCuentaRow[] = [];
     for (const g of grupos) {
-      const c = g.origenId === null ? undefined : porId.get(g.origenId);
-      // Un `origen_id` de cierre sin su cierre no deberia existir (FK logica del feed); si pasara, la
-      // opcion se omite en vez de viajar sin dia ni mensajero.
+      const c = porId.get(g.origenId);
+      // El `JOIN` ya descarta un `origen_id` sin su cierre; si el cierre desapareciera entre las dos
+      // lecturas, la opcion se omite en vez de viajar sin dia ni mensajero.
       if (c === undefined) continue;
       filas.push({
         cierreId: c.id,
         solicitadoAt: c.solicitadoAt.toISOString(),
         mensajero: etiquetaDeCuenta(c.mensajero),
-        movimientos: g._count._all,
+        movimientos: g.movimientos,
       });
     }
     return filas;
