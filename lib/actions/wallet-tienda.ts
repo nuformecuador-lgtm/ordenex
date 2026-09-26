@@ -510,11 +510,11 @@ export async function verDetalleDeMiMovimientoCompletoAction(
  * que nacio esta accion se BORRO al cablear ese concepto, en el mismo commit: una excepcion que
  * sobrevive a su motivo pone roja la guardia de superficie igual que su ausencia.
  */
-export function registrarCobroTiendaAction(
+export async function registrarCobroTiendaAction(
   input: FormData,
   deps?: CobroTiendaDeps,
 ): Promise<RegistrarCobroTiendaConComprobanteActionResult>;
-export function registrarCobroTiendaAction(
+export async function registrarCobroTiendaAction(
   input: unknown,
   deps?: CobroTiendaDeps,
 ): Promise<RegistrarCobroTiendaActionResult>;
