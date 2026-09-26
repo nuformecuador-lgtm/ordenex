@@ -9,6 +9,7 @@ import type {
   DesgloseTiendaDTO,
   WalletTiendaMovimientoDTO,
 } from "@/lib/types/wallet-tienda";
+import { ORIGENES_FALSOS, conOrigenFalso } from "@/tests/fixtures/origenes-falsos";
 
 // Feature 171 / T1.5 (R25/R29/R40) — BORDE del desglose de una tienda.
 //
@@ -71,7 +72,7 @@ describe("listarMovimientosDeTiendaAction (borde, R25/R29)", () => {
 
     const r = await listarMovimientosDeTiendaAction(
       { tiendaId: "tienda-A" },
-      { service, getActor: async () => null },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => null },
     );
 
     expect(r).toEqual({ status: "unauthenticated" });
@@ -81,7 +82,7 @@ describe("listarMovimientosDeTiendaAction (borde, R25/R29)", () => {
 
   it("R29: la falta de sesion se resuelve ANTES de validar (entrada invalida y sin sesion -> unauthenticated)", async () => {
     const { service, listarMovimientosDeTienda } = fakeService(OK_PAGINADO);
-    const r = await listarMovimientosDeTiendaAction({}, { service, getActor: async () => null });
+    const r = await listarMovimientosDeTiendaAction({}, { service, origenes: ORIGENES_FALSOS, getActor: async () => null });
 
     expect(r).toEqual({ status: "unauthenticated" });
     expect(listarMovimientosDeTienda).not.toHaveBeenCalled();
@@ -92,7 +93,7 @@ describe("listarMovimientosDeTiendaAction (borde, R25/R29)", () => {
 
     const r = await listarMovimientosDeTiendaAction(
       { page: 1, pageSize: 20 },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r.status).toBe("validation_error");
@@ -105,7 +106,7 @@ describe("listarMovimientosDeTiendaAction (borde, R25/R29)", () => {
 
     const r = await listarMovimientosDeTiendaAction(
       { tiendaId: "" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r.status).toBe("validation_error");
@@ -119,6 +120,7 @@ describe("listarMovimientosDeTiendaAction (borde, R25/R29)", () => {
       const { service, listarMovimientosDeTienda } = fakeService(OK_PAGINADO);
       const r = await listarMovimientosDeTiendaAction(entrada, {
         service,
+        origenes: ORIGENES_FALSOS,
         getActor: async () => MAESTRO,
       });
 
@@ -132,7 +134,7 @@ describe("listarMovimientosDeTiendaAction (borde, R25/R29)", () => {
 
     const r = await listarMovimientosDeTiendaAction(
       { tiendaId: "tienda-A" },
-      { service, getActor: async () => ({ usuarioId: "t1", rol: "adminTienda" }) },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => ({ usuarioId: "t1", rol: "adminTienda" }) },
     );
 
     expect(r).toEqual({ status: "forbidden" });
@@ -144,10 +146,11 @@ describe("listarMovimientosDeTiendaAction (borde, R25/R29)", () => {
 
     const r = await listarMovimientosDeTiendaAction(
       { tiendaId: "tienda-A", categoria: "flete" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
-    expect(r).toEqual(OK_PAGINADO);
+    // Ficha 458-A (TA.2): el borde adjunta el origen legible a cada fila.
+    expect(r).toEqual({ ...OK_PAGINADO, data: { ...OK_PAGINADO.data, movimientos: [conOrigenFalso(ITEM)] } });
     const [data, actor] = listarMovimientosDeTienda.mock.calls[0];
     expect(actor).toEqual(MAESTRO);
     expect(data).toMatchObject({ tiendaId: "tienda-A", categoria: "flete", page: 1, pageSize: 20 });
@@ -157,7 +160,7 @@ describe("listarMovimientosDeTiendaAction (borde, R25/R29)", () => {
     const { service } = fakeService(OK_PAGINADO);
     const r = await listarMovimientosDeTiendaAction(
       { tiendaId: "tienda-A" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r.status).toBe("ok");
@@ -179,7 +182,7 @@ describe("listarMovimientosDeTiendaCompletoAction (borde, R25/R29/R37/R40)", () 
 
     const r = await listarMovimientosDeTiendaCompletoAction(
       { tiendaId: "tienda-A" },
-      { service, getActor: async () => null },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => null },
     );
 
     expect(r.status).toBe("unauthenticated");
@@ -196,7 +199,7 @@ describe("listarMovimientosDeTiendaCompletoAction (borde, R25/R29/R37/R40)", () 
 
     const r = await listarMovimientosDeTiendaCompletoAction(
       {},
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r.status).toBe("validation_error");
@@ -209,11 +212,11 @@ describe("listarMovimientosDeTiendaCompletoAction (borde, R25/R29/R37/R40)", () 
 
     const conPage = await listarMovimientosDeTiendaCompletoAction(
       { tiendaId: "tienda-A", page: 1 },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     const conPageSize = await listarMovimientosDeTiendaCompletoAction(
       { tiendaId: "tienda-A", pageSize: 20 },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(conPage.status).toBe("validation_error");
@@ -226,7 +229,7 @@ describe("listarMovimientosDeTiendaCompletoAction (borde, R25/R29/R37/R40)", () 
 
     const r = await listarMovimientosDeTiendaCompletoAction(
       { tiendaId: "tienda-A", todasLasTiendas: true },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r.status).toBe("validation_error");
@@ -238,7 +241,7 @@ describe("listarMovimientosDeTiendaCompletoAction (borde, R25/R29/R37/R40)", () 
 
     const r = await listarMovimientosDeTiendaCompletoAction(
       { tiendaId: "tienda-A" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r).toEqual({ status: "limite_excedido", total: 6120, limite: 5000 });
@@ -250,7 +253,7 @@ describe("listarMovimientosDeTiendaCompletoAction (borde, R25/R29/R37/R40)", () 
 
     const r = await listarMovimientosDeTiendaCompletoAction(
       { tiendaId: "tienda-A" },
-      { service, getActor: async () => ({ usuarioId: "t1", rol: "adminTienda" }) },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => ({ usuarioId: "t1", rol: "adminTienda" }) },
     );
 
     expect(r).toEqual({ status: "forbidden" });
@@ -271,6 +274,7 @@ describe("listarMovimientosDeTiendaCompletoAction (borde, R25/R29/R37/R40)", () 
       const { service } = fakeService({ status: "ok", items: [ITEM], total: 1 });
       const r = await listarMovimientosDeTiendaCompletoAction(caso.input, {
         service,
+        origenes: ORIGENES_FALSOS,
         getActor: async () => caso.actor,
       });
 
@@ -288,10 +292,11 @@ describe("listarMovimientosDeTiendaCompletoAction (borde, R25/R29/R37/R40)", () 
 
     const r = await listarMovimientosDeTiendaCompletoAction(
       { tiendaId: "tienda-A", categoria: "cod_recaudado" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
-    expect(r).toEqual({ status: "ok", items: [ITEM], total: 1 });
+    // Ficha 458-A (TA.2): el borde adjunta el origen legible a cada fila.
+    expect(r).toEqual({ status: "ok", items: [conOrigenFalso(ITEM)], total: 1 });
     const [data, actor] = listarMovimientosDeTiendaCompleto.mock.calls[0];
     expect(actor).toEqual(MAESTRO);
     expect(data).toEqual({ tiendaId: "tienda-A", categoria: "cod_recaudado" });

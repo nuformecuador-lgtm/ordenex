@@ -142,6 +142,7 @@ const MOVIMIENTOS_OK = {
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
         dueno: "propio" as const, // feature 231 (R31): el flete es dinero de Ordenex
         documento: null, // ficha 459 (design §7.3): fila sin documento
+        origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
       },
       // Feature 173 (R62): un movimiento de una de las categorías NUEVAS viaja por el mismo
       // camino, con la misma forma y sin ningún campo de más.
@@ -157,6 +158,7 @@ const MOVIMIENTOS_OK = {
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
         dueno: "terceros" as const, // feature 231 (R31): el contra-entrega es de las tiendas
         documento: null, // ficha 459 (design §7.3): fila sin documento
+        origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
       },
     ],
     total: 2,

@@ -181,7 +181,9 @@ describe("R3 — se paga desde acá, sin ir a otra pantalla", () => {
 describe("R43 — el enlace al cierre, por fila y solo donde hay cierre", () => {
   it("la fila con cierre lleva enlace a su detalle, con nombre accesible propio", async () => {
     montar();
-    await screen.findByText("Liquidación · SINPE · 1234567");
+    // Ficha 458-A (TA.2): el origen `pago_mensajero` se nombra con el texto de la 461 §7.3
+    // (antes «Liquidación», que es el nombre de un CONCEPTO de este libro).
+    await screen.findByText("Pago de Ordenex a un mensajero · SINPE · 1234567");
 
     const enlaces = within(tabla()).getAllByRole("link", { name: /^Ver el cierre/ });
     // Las DOS filas que identifican un cierre: la del devengo y la del pago (cuyo cierre lo
@@ -199,7 +201,8 @@ describe("R43 — el enlace al cierre, por fila y solo donde hay cierre", () => 
 
   it("la fila SIN cierre no lleva enlace: ni roto ni deshabilitado", async () => {
     montar();
-    const celda = await within(tabla()).findByText("Manual · Ajuste manual");
+    // Ficha 458-A (TA.2): el origen `manual` se nombra «Registrado a mano» (461 §7.3; «Manual» retirado).
+    const celda = await within(tabla()).findByText("Registrado a mano · Ajuste manual");
     const fila = celda.closest("tr") as HTMLElement;
 
     expect(within(fila).queryByRole("link")).not.toBeInTheDocument();
@@ -212,7 +215,9 @@ describe("R43 — el enlace al cierre, por fila y solo donde hay cierre", () => 
     // enlace roto justo en la fila del pago, cuyo `origenId` es el ID DEL PAGO y no el del
     // cierre. Acá se comprueba que ninguna URL lleva ese id.
     montar();
-    await screen.findByText("Liquidación · SINPE · 1234567");
+    // Ficha 458-A (TA.2): el origen `pago_mensajero` se nombra con el texto de la 461 §7.3
+    // (antes «Liquidación», que es el nombre de un CONCEPTO de este libro).
+    await screen.findByText("Pago de Ordenex a un mensajero · SINPE · 1234567");
 
     for (const enlace of within(tabla()).getAllByRole("link", { name: /^Ver el cierre/ })) {
       expect(enlace.getAttribute("href")).not.toContain(PAGO);

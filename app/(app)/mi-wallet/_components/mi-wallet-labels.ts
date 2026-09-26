@@ -1,3 +1,4 @@
+import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import type {
   WalletTiendaMovimientoCategoria,
   WalletTiendaMovimientoTipo,
@@ -124,32 +125,41 @@ export const CATEGORIA_MI_WALLET_LABEL: Record<WalletTiendaMovimientoCategoria, 
 };
 
 /**
- * Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 43).
+ * Etiqueta legible del origen de un movimiento del libro de la tienda.
  *
- * `Record<string, string>` con caida al valor crudo: el compilador NO avisa si falta un origen.
- * Por eso un test recorre `WALLET_ORIGEN_TIPO_SEED` y exige rotulo aqui para cada origen que
- * escribe en el libro de la tienda (`tests/unit/components/mi-wallet-labels.test.ts`).
+ * Ficha 458-A (TA.2, R5/R9/R94): `Record<WalletOrigenTipo, string>` TOTAL y sin caida al valor
+ * tecnico. Antes era `Record<string, string>` con `?? origenTipo`: un origen nuevo se pintaba crudo
+ * sin que el compilador avisara. Ahora un origen nuevo del catalogo NO COMPILA sin su nombre aqui,
+ * y la guardia `wallet-origen-total` falla si el mapa vuelve a ser parcial. Los origenes que hoy no
+ * escriben en este libro llevan igualmente su nombre (el de la caja, 461 §7.3).
  *
  * Ficha 461 (design §7.3): los MISMOS textos que `ORIGEN_LABEL` en el libro de la caja para los
  * origenes que comparten («Registrado a mano», «Pago de Ordenex a una tienda», «Pago de un gasto de
  * una tienda»); y + `cobro_tienda`, el credito de la anulacion de un cobro. Los lee tambien la
  * oficina en `/wallet/tiendas` (que reexporta este objeto).
  */
-export const ORIGEN_TIENDA_LABEL: Record<string, string> = {
+export const ORIGEN_TIENDA_LABEL: Record<WalletOrigenTipo, string> = {
   cierre_dia: "Cierre del día",
   pago_tienda: "Pago de Ordenex a una tienda",
   manual: "Registrado a mano",
   gestion_orden: "Gestión de orden",
   pago_por_cuenta_tienda: "Pago de un gasto de una tienda",
   cobro_tienda: "Cobro de Ordenex a una tienda",
-  // Ficha 457 (design §2/§4.2): el compilador NO avisa aqui (`Record<string, string>`); sin esta
-  // clave, tabla y descargas pintarian `abono_tienda`. El MISMO texto que `ORIGEN_LABEL` en la caja.
+  // Ficha 457 (design §2/§4.2): el MISMO texto que `ORIGEN_LABEL` en la caja.
   abono_tienda: "Pago de una tienda a Ordenex",
+  // Ficha 458-A (TA.2): los origenes que hoy no escriben en este libro, con el texto de la caja.
+  pago_mensajero: "Pago de Ordenex a un mensajero",
+  gasto: "Gasto o sueldo registrado a mano",
+  orden_incidente: "Incidente de orden",
+  ranking_snapshot_fila: "Premio del ranking",
+  aporte_capital: "Aporte de dinero a la caja",
+  cobro_manual_reclasificado: "Cobro reclasificado como pago de un gasto de la tienda",
+  cobro_tienda_completado: "Cobro de Ordenex a una tienda (línea de caja completada al corregir)",
 };
 
-/** Origen legible con fallback al valor crudo si no hay etiqueta conocida. */
-export function origenLabel(origenTipo: string): string {
-  return ORIGEN_TIENDA_LABEL[origenTipo] ?? origenTipo;
+/** Origen legible (458-A: sin caida al valor tecnico; el `Record` es total). */
+export function origenLabel(origenTipo: WalletOrigenTipo): string {
+  return ORIGEN_TIENDA_LABEL[origenTipo];
 }
 
 /**

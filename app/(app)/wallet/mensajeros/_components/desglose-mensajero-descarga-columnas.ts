@@ -35,7 +35,7 @@ export const COLUMNAS_DESCARGA_DESGLOSE_MENSAJERO: DescargaColumna[] = [
 
 /** Origen legible: la MISMA composición que pinta la tabla (etiqueta · descripción). */
 function origen(movimiento: PagoMensajeroMovimientoDTO): string {
-  const base = ORIGEN_PAGO_LABEL[movimiento.origenTipo] ?? movimiento.origenTipo;
+  const base = ORIGEN_PAGO_LABEL[movimiento.origenTipo];
   return movimiento.descripcion ? `${base} · ${movimiento.descripcion}` : base;
 }
 

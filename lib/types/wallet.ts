@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import type { ConOrigen } from "@/lib/types/wallet-origen";
 import type {
   WalletMovimientoTipo as PrismaWalletMovimientoTipo,
   WalletMovimientoCategoria as PrismaWalletMovimientoCategoria,
@@ -657,7 +658,8 @@ export type ListarMovimientosDeFilaInput = z.infer<typeof listarMovimientosDeFil
 // Feature 170 (T C.2): resultado del modo completo en el BORDE. `limite_excedido` lleva
 // SOLO conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Money-safe: los
 // montos siguen siendo STRING dentro del DTO.
-export type ListarMovimientosCompletoResult = ListarCompletoResult<WalletMovimientoDTO>;
+// Ficha 458-A (TA.2): cada fila de la descarga lleva su origen legible (R5, R94).
+export type ListarMovimientosCompletoResult = ListarCompletoResult<ConOrigen<WalletMovimientoDTO>>;
 
 // ── Feature 45 — egresos administrativos (manual) + reversa ──
 

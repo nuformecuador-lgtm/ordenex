@@ -8,6 +8,8 @@ import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
 // FICHA 381: las dos piezas del borde del dinero manual, reutilizadas TAL CUAL desde el libro de la
 // caja. Ver `registrarCobroTiendaSchema` al final del archivo.
 import { claveIdempotenciaSchema, fechaMovimientoSchema, montoPositivoSchema } from "@/lib/types/wallet";
+import type { WalletOrigenTipo } from "@/lib/types/wallet";
+import type { ConOrigen } from "@/lib/types/wallet-origen";
 import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 
 // Feature 43 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del ledger POR
@@ -102,7 +104,8 @@ export type WalletTiendaMovimientoDTO = {
   tipo: WalletTiendaMovimientoTipo;
   categoria: WalletTiendaMovimientoCategoria;
   monto: string; // Decimal -> STRING 2 dec (R4/R27)
-  origenTipo: string; // cierre_dia | pago_tienda | manual (WalletOrigenTipo)
+  // Ficha 458-A (TA.2, R9): el catalogo, no `string`: un diccionario parcial ya no compila.
+  origenTipo: WalletOrigenTipo;
   origenId: string | null;
   descripcion: string | null;
   fechaMovimiento: string; // ISO
@@ -211,8 +214,9 @@ export type ListarMovimientosTiendaCompletoInput = z.infer<
 
 // Feature 170 (T C.2): resultado del modo completo en el BORDE. `limite_excedido` lleva SOLO
 // conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18).
+// Ficha 458-A (TA.2): cada fila de la descarga lleva su origen legible (R5, R94).
 export type ListarMovimientosTiendaCompletoResult =
-  ListarCompletoResult<WalletTiendaMovimientoDTO>;
+  ListarCompletoResult<ConOrigen<WalletTiendaMovimientoDTO>>;
 
 // ── Feature 171 — DESGLOSE del dinero de UNA tienda elegida (vista de ACCESO TOTAL) ──
 //
@@ -289,7 +293,7 @@ export type ListarMovimientosDeTiendaCompletoInput = z.infer<
 // Resultado del modo completo en el BORDE. `limite_excedido` lleva SOLO conteos y ninguna
 // rama de error viaja con filas (R39/R40).
 export type ListarMovimientosDeTiendaCompletoResult =
-  ListarCompletoResult<WalletTiendaMovimientoDTO>;
+  ListarCompletoResult<ConOrigen<WalletTiendaMovimientoDTO>>;
 
 // ── FICHA 335 — las opciones del selector de cierre de `/mi-wallet` ──
 

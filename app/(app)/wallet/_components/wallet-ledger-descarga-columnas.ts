@@ -44,7 +44,7 @@ export const COLUMNAS_DESCARGA_WALLET_CAJA: DescargaColumna[] = [
  * origen más la descripción cuando la hay. Sin descripción, solo la etiqueta.
  */
 function origen(movimiento: WalletMovimientoDTO): string {
-  const base = ORIGEN_LABEL[movimiento.origenTipo] ?? movimiento.origenTipo;
+  const base = ORIGEN_LABEL[movimiento.origenTipo];
   return movimiento.descripcion ? `${base} · ${movimiento.descripcion}` : base;
 }
 

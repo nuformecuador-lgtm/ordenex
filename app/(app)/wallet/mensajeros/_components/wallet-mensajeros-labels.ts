@@ -1,3 +1,4 @@
+import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import { money, moneyTope } from "@/lib/config/moneda";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type {
@@ -169,20 +170,36 @@ export const CATEGORIA_PAGO_LABEL: Record<PagoMensajeroMovimientoCategoria, stri
   premio_ranking: "Premio del ranking",
 };
 
-/** Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 44). */
-export const ORIGEN_PAGO_LABEL: Record<string, string> = {
+/**
+ * Etiqueta legible del origen de un movimiento del libro del mensajero.
+ *
+ * Ficha 458-A (TA.2, R5/R9/R94): `Record<WalletOrigenTipo, string>` TOTAL, sin caida al valor
+ * tecnico, con los textos de la 461 §7.3 (los mismos que `ORIGEN_LABEL` de la caja). «Liquidación»
+ * y «Manual» se retiran: el primero es el nombre de un CONCEPTO de este libro y el segundo es un
+ * nombre retirado por la 461. Un origen nuevo del catalogo no compila sin su nombre aqui.
+ */
+export const ORIGEN_PAGO_LABEL: Record<WalletOrigenTipo, string> = {
   cierre_dia: "Cierre del día",
-  pago_mensajero: "Liquidación",
-  manual: "Manual",
-  // Feature 293 (T1.6): origen de las filas de CAJA del premio. No aparece en este libro
-  // —aqui el premio va con `cierre_dia`—, pero el mapa es de `WalletOrigenTipo` y dejarlo fuera
-  // haria que un dia se pintara el valor crudo.
+  pago_mensajero: "Pago de Ordenex a un mensajero",
+  manual: "Registrado a mano",
+  // Feature 293 (T1.6): origen de las filas de CAJA del premio. En este libro el premio va con
+  // `cierre_dia`, pero el mapa es total.
   ranking_snapshot_fila: "Premio del ranking",
+  gestion_orden: "Gestión de orden",
+  pago_tienda: "Pago de Ordenex a una tienda",
+  gasto: "Gasto o sueldo registrado a mano",
+  orden_incidente: "Incidente de orden",
+  pago_por_cuenta_tienda: "Pago de un gasto de una tienda",
+  aporte_capital: "Aporte de dinero a la caja",
+  cobro_manual_reclasificado: "Cobro reclasificado como pago de un gasto de la tienda",
+  cobro_tienda: "Cobro de Ordenex a una tienda",
+  cobro_tienda_completado: "Cobro de Ordenex a una tienda (línea de caja completada al corregir)",
+  abono_tienda: "Pago de una tienda a Ordenex",
 };
 
-/** Origen legible con fallback al valor crudo si no hay etiqueta conocida. */
-export function origenLabel(origenTipo: string): string {
-  return ORIGEN_PAGO_LABEL[origenTipo] ?? origenTipo;
+/** Origen legible (458-A: sin caida al valor tecnico; el `Record` es total). */
+export function origenLabel(origenTipo: WalletOrigenTipo): string {
+  return ORIGEN_PAGO_LABEL[origenTipo];
 }
 
 /** Cabeceras de la tabla del desglose por cierre (mas reciente primero). */

@@ -1,3 +1,5 @@
+import type { WalletOrigenTipo } from "@/lib/types/wallet";
+import type { ConOrigen } from "@/lib/types/wallet-origen";
 import { z } from "zod";
 import type {
   PagoMensajeroMovimientoTipo as PrismaPagoMensajeroMovimientoTipo,
@@ -80,7 +82,8 @@ export type PagoMensajeroMovimientoDTO = {
   tipo: PagoMensajeroMovimientoTipo;
   categoria: PagoMensajeroMovimientoCategoria;
   monto: string; // Decimal -> STRING 2 dec (R4/R27)
-  origenTipo: string; // cierre_dia | pago_mensajero | manual (WalletOrigenTipo)
+  // Ficha 458-A (TA.2, R9): el catalogo, no `string`: un diccionario parcial ya no compila.
+  origenTipo: WalletOrigenTipo;
   origenId: string | null;
   descripcion: string | null;
   fechaMovimiento: string; // ISO
@@ -261,5 +264,6 @@ export type ListarCuentasPorPagarCompletoResult =
 // Resultado del modo completo en el BORDE (T C.2). `limite_excedido` lleva SOLO conteos
 // (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Eran DOS, uno por superficie;
 // la ficha 336 retiro `ListarMisPagosCompletoResult` con la vista propia del mensajero.
+// Ficha 458-A (TA.2): cada fila de la descarga lleva su origen legible (R5, R94).
 export type ListarPagosDeMensajeroCompletoResult =
-  ListarCompletoResult<PagoMensajeroMovimientoDTO>;
+  ListarCompletoResult<ConOrigen<PagoMensajeroMovimientoDTO>>;

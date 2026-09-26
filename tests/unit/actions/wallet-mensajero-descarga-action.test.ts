@@ -5,6 +5,7 @@ import {
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IWalletMensajeroService } from "@/lib/interfaces/services/IWalletMensajeroService";
 import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
+import { ORIGENES_FALSOS, conOrigenFalso } from "@/tests/fixtures/origenes-falsos";
 
 // Feature 170 / T C.2 (R14/R16/R18 + refuerzo R9/R17/R27) — borde del ledger del pago por
 // mensajero que pide el acceso total (el desglose de UN mensajero).
@@ -48,7 +49,7 @@ describe("listarPagosDeMensajeroCompletoAction (borde)", () => {
 
     const r = await listarPagosDeMensajeroCompletoAction(
       { mensajeroId: "msg-A" },
-      { service, getActor: async () => null },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => null },
     );
 
     expect(r.status).toBe("unauthenticated");
@@ -65,7 +66,7 @@ describe("listarPagosDeMensajeroCompletoAction (borde)", () => {
 
     const r = await listarPagosDeMensajeroCompletoAction(
       {},
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r.status).toBe("validation_error");
@@ -81,7 +82,7 @@ describe("listarPagosDeMensajeroCompletoAction (borde)", () => {
 
     const r = await listarPagosDeMensajeroCompletoAction(
       { mensajeroId: "msg-A", incluirOtrosMensajeros: true },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r.status).toBe("validation_error");
@@ -95,7 +96,7 @@ describe("listarPagosDeMensajeroCompletoAction (borde)", () => {
 
     const r = await listarPagosDeMensajeroCompletoAction(
       { mensajeroId: "msg-B" },
-      { service, getActor: async () => MENSAJERO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MENSAJERO },
     );
 
     expect(r).toEqual({ status: "forbidden" });
@@ -107,7 +108,7 @@ describe("listarPagosDeMensajeroCompletoAction (borde)", () => {
 
     const r = await listarPagosDeMensajeroCompletoAction(
       { mensajeroId: "msg-A" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r).toEqual({ status: "limite_excedido", total: 9001, limite: 5000 });
@@ -123,10 +124,11 @@ describe("listarPagosDeMensajeroCompletoAction (borde)", () => {
 
     const r = await listarPagosDeMensajeroCompletoAction(
       { mensajeroId: "msg-A", cierreId: "c1" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
-    expect(r).toEqual({ status: "ok", items: [ITEM], total: 1 });
+    // Ficha 458-A (TA.2): el borde adjunta el origen legible a cada fila.
+    expect(r).toEqual({ status: "ok", items: [conOrigenFalso(ITEM)], total: 1 });
     const [data, actor] = listarPagosDeMensajeroCompleto.mock.calls[0];
     expect(actor).toEqual(MAESTRO);
     expect(data).toEqual({ mensajeroId: "msg-A", cierreId: "c1" });

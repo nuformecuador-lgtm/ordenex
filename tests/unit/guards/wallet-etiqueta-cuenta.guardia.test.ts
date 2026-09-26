@@ -54,6 +54,8 @@ describe("458-A R33 — el nombre de una cuenta de la wallet se compone en UN so
     const servidor = archivosDelServidor();
     expect(servidor).toContain("lib/repositories/WalletTiendaMovimientoRepository.ts");
     expect(servidor).toContain("lib/repositories/PagoMensajeroMovimientoRepository.ts");
+    expect(servidor).toContain("lib/services/OrigenLegibleService.ts");
+    expect(servidor).toContain("lib/repositories/OrigenLegibleRepository.ts");
     expect(servidor.length).toBeGreaterThanOrEqual(8);
   });
 

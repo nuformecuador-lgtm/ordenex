@@ -111,10 +111,12 @@ const MOVIMIENTOS_OK = {
         tipo: "credito" as const,
         categoria: "cod_recaudado" as const,
         monto: "5000.00",
-        origenTipo: "cierre_dia",
+        origenTipo: "cierre_dia" as const,
         origenId: "c1",
         descripcion: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
+        // Ficha 458-A (TA.2): el borde adjunta el origen legible a cada fila.
+        origen: { texto: "Cierre del día · 2026-07-12", enlace: null },
       },
       {
         id: "m2",
@@ -122,10 +124,11 @@ const MOVIMIENTOS_OK = {
         tipo: "debito" as const,
         categoria: "flete" as const,
         monto: "1000.00",
-        origenTipo: "cierre_dia",
+        origenTipo: "cierre_dia" as const,
         origenId: "c1",
         descripcion: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
+        origen: { texto: "Cierre del día · 2026-07-12", enlace: null },
       },
     ],
     total: 2,
@@ -329,7 +332,8 @@ function sembrarTienda(movs: WalletTiendaMovimientoDTO[], debitos: string) {
   listarMock.mockResolvedValue({
     status: "ok",
     data: {
-      movimientos: movs,
+      // Ficha 458-A (TA.2): el borde adjunta el origen legible (aqui, el rotulo solo).
+      movimientos: movs.map((m) => ({ ...m, origen: { texto: "Registrado a mano", enlace: null } })),
       total: movs.length,
       page: 1,
       pageSize: 20,

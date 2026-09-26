@@ -25,8 +25,15 @@ import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_component
 import type { CuentasPorPagarTableProps } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
 import type {
   CuentaPorPagarResumenDTO,
-  ListarPagosDeMensajeroResult,
+  ListarPagosDeMensajeroResult as ListarPagosDeMensajeroResultBase,
+  PagoMensajeroMovimientoDTO,
 } from "@/lib/types/wallet-mensajero";
+import type { ConOrigen } from "@/lib/types/wallet-origen";
+
+// Ficha 458-A (TA.2): el borde adjunta el origen legible a cada fila del desglose.
+type ListarPagosDeMensajeroResult = Omit<ListarPagosDeMensajeroResultBase, "movimientos"> & {
+  movimientos: ConOrigen<PagoMensajeroMovimientoDTO>[];
+};
 
 // Feature 44 (T14, R18/R19/R21) — la pagina `/wallet/mensajeros` resuelve el rol SOLO
 // server-side; rol != maestro (o sin sesion) → `notFound` (R19). La tabla cliente se stubbea
@@ -147,6 +154,7 @@ const DESGLOSE_DATA: ListarPagosDeMensajeroResult = {
       cierreId: "c2", // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
       descripcion: null,
       fechaMovimiento: "2026-07-12T10:00:00.000Z",
+      origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
     },
     {
       id: "m1",
@@ -159,6 +167,7 @@ const DESGLOSE_DATA: ListarPagosDeMensajeroResult = {
       cierreId: "c1",
       descripcion: null,
       fechaMovimiento: "2026-07-05T10:00:00.000Z",
+      origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
     },
   ],
   total: 2,
@@ -188,6 +197,7 @@ const DESGLOSE_FILTRADO: ListarPagosDeMensajeroResult = {
       cierreId: "c1",
       descripcion: null,
       fechaMovimiento: "2026-07-05T10:00:00.000Z",
+      origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
     },
   ],
   total: 1,
