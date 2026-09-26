@@ -3,9 +3,12 @@ titulo: Mi wallet
 modulo: mi-wallet
 pantalla: /mi-wallet
 roles: [adminTienda]
-actualizado: 2026-09-25
+actualizado: 2026-09-26
 fuentes:
   - app/(app)/mi-wallet/_components/MiWalletModule.tsx
+  - components/shared/wallet/conceptos-filtro.ts
+  - components/shared/wallet/OrigenMovimiento.tsx
+  - lib/services/OrigenLegibleService.ts
   - app/(app)/mi-wallet/_components/mi-wallet-labels.ts
   - lib/utils/descripcion-pago-por-cuenta.ts
   - lib/services/CobroTiendaService.ts
@@ -58,7 +61,8 @@ Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 - **Ordenex anuló el pago que le hiciste** — la anulación de un pago tuyo registrado por error: tu saldo vuelve a bajar.
 
 Cada línea dice de qué orden y de qué cierre viene, así que siempre podés rastrear una cifra hasta la
-entrega concreta que la produjo.
+entrega concreta que la produjo. La columna **Origen** lo dice con nombre, por ejemplo «Cierre del día
+· 2026-09-12» o «Gestión de orden · cobro por rechazo · guía 4321».
 
 ## Un cobro que Ordenex te hizo
 
@@ -92,8 +96,12 @@ Si tu saldo quedó en contra y le pagaste a Ordenex, lo ves como **Le pagaste a 
 
 Dos filtros:
 
-- **Por concepto** — para ver solo, por ejemplo, las comisiones o los cobros.
-- **Por cierre** — todos los movimientos que entraron con un cierre determinado.
+- **Por concepto** — para ver solo, por ejemplo, las comisiones o los cobros. Solo aparecen los
+  conceptos que **tienen movimientos** tuyos en el periodo (y el cierre) que elegiste, cada uno con su
+  número entre paréntesis, por ejemplo «Ordenex te cobró el flete (8)». Si cambiás el periodo y el
+  concepto elegido se queda sin movimientos, sigue elegido con **(0)** hasta que lo quites.
+- **Por cierre** — todos los movimientos que entraron con un cierre determinado. Cada cierre se
+  nombra por su día y cuántos movimientos trajo.
 
 Las fechas **Desde** y **Hasta** son días completos de Costa Rica. Y podés **descargar el desglose**
 para cuadrarlo por tu cuenta o pasarlo a tu contabilidad, con los mismos nombres que la tabla.
