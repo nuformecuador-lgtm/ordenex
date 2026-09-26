@@ -40,6 +40,9 @@ const CREDITO_SEED: readonly WalletTiendaMovimientoCategoria[] = [
   "pago_por_cuenta_anulado",
   "cobro_tienda_anulado",
   "abono_tienda",
+  // Ficha 458-B: los creditos espejo de la anulacion de un cobro por rechazo (flete e IVA).
+  "flete_devolucion_anulado",
+  "iva_flete_devolucion_anulado",
 ];
 
 function tipoEmitido(categoria: WalletTiendaMovimientoCategoria): WalletTiendaMovimientoTipo {

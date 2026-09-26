@@ -73,6 +73,11 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   // ganancia. Su anulacion es el egreso de terceros que lo devuelve.
   "ingreso_abono_tienda",
   "egreso_reverso_abono_tienda",
+  // Ficha 458-B (design §2.1/§2.3, D7): la anulacion de un cobro por rechazo aprobado (337). DOS
+  // reversos de CARGO —flete e IVA por separado—, como el reverso del cobro de la 461: propios,
+  // liquidez «cargo»; bajan la ganancia y suben «De las tiendas» sin tocar «Entro» ni «Salio».
+  "egreso_reverso_flete_devolucion",
+  "egreso_reverso_iva_flete_devolucion",
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -191,10 +196,15 @@ export type WalletEgresoDesglosado = (typeof WALLET_EGRESO_DESGLOSADO_SEED)[numb
 //
 // Ficha 461 (design §4, R27): + `egreso_reverso_cobro_tienda`, el TERCER egreso nombrado. La
 // anulacion de un cobro baja la ganancia y tiene que verse con su nombre, no dentro de «Otros».
+//
+// Ficha 458-B (design §2.3): + los dos reversos del cobro por rechazo (flete e IVA). Bajan la
+// ganancia igual que el reverso del cobro de la 461 y, por el mismo motivo, se ven con su nombre.
 export const WALLET_EGRESO_NOMBRADO_SEED = [
   "egreso_pago_mensajero",
   "egreso_ajuste",
   "egreso_reverso_cobro_tienda",
+  "egreso_reverso_flete_devolucion",
+  "egreso_reverso_iva_flete_devolucion",
 ] as const satisfies readonly WalletMovimientoCategoria[];
 
 export type WalletEgresoNombrado = (typeof WALLET_EGRESO_NOMBRADO_SEED)[number];
@@ -302,9 +312,24 @@ export type DocumentoCajaDTO = {
    * Ficha 457 (design §8.5, R41): + `abono_tienda`, la entrada del pago de una tienda a Ordenex
    * (`ingreso_abono_tienda` con origen `abono_tienda`); su reverso lleva `null`.
    */
-  tipo: "pago_por_cuenta_tienda" | "aporte_capital" | "cobro_tienda" | "ajuste_caja" | "abono_tienda";
+  /**
+   * Ficha 458-B (design §3.6, R71): + `egreso_caja` (sueldo, gasto de Ordenex, gasto fijo cobrado),
+   * `indemnizacion` (la del incidente, no la del cierre) y `rechazo_tienda_cobro` (las DOS lineas del
+   * cobro por rechazo apuntan al mismo documento). Sus contra-asientos llevan `null`.
+   */
+  tipo:
+    | "pago_por_cuenta_tienda"
+    | "aporte_capital"
+    | "cobro_tienda"
+    | "ajuste_caja"
+    | "abono_tienda"
+    | "egreso_caja"
+    | "indemnizacion"
+    | "rechazo_tienda_cobro";
   anulado: boolean;
   tieneComprobante: boolean;
+  /** Ficha 458-B (R72): anulado por un reverso anterior a la 458, sin constancia: «motivo no registrado». */
+  motivoNoRegistrado?: boolean;
 };
 
 export type WalletBalanceSigno = "positivo" | "negativo" | "cero";

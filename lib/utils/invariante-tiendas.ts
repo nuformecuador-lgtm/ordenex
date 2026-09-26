@@ -48,6 +48,8 @@ export const TIPO_POR_CATEGORIA_TIENDA: Record<
   cobro_tienda_anulado: "credito", // ficha 461: la anulacion devuelve el monto a la tienda
   abono_tienda: "credito", // ficha 457: la tienda le paga a Ordenex y su saldo sube
   abono_tienda_anulado: "debito", // ficha 457: la anulacion del pago: vuelve a deber
+  flete_devolucion_anulado: "credito", // ficha 458-B: la anulacion del cobro por rechazo devuelve el flete
+  iva_flete_devolucion_anulado: "credito", // ficha 458-B: ... y su IVA
 };
 
 /** Marca de los conceptos de la tienda que NO tienen asiento en la caja. */
@@ -91,4 +93,9 @@ export const CONTRAPARTIDA_EN_CAJA: Record<
   // La misma pareja «efectivo de terceros» que `cod_recaudado ↔ ingreso_cod_recaudado`.
   abono_tienda: "ingreso_abono_tienda",
   abono_tienda_anulado: "egreso_reverso_abono_tienda",
+  // Ficha 458-B (design §2.3/§4.2, D7): la anulacion de un cobro por rechazo acredita a la tienda y
+  // escribe el REVERSO de cada cargo en la caja, en la misma transaccion; los dos mueven «De las
+  // tiendas» y el saldo hacia arriba (la misma pareja que `cobro_tienda_anulado`).
+  flete_devolucion_anulado: "egreso_reverso_flete_devolucion",
+  iva_flete_devolucion_anulado: "egreso_reverso_iva_flete_devolucion",
 };

@@ -455,7 +455,8 @@ describe("R29/R31/R32 — el pago va contra el SALDO ACUMULADO de la tienda", ()
     const r = await d.service.registrarPagoTienda(INPUT, ACTOR_ADMIN);
 
     expect(r.status).toBe("ok");
-    expect(d.tiendaRepo.agregarSaldoPorTienda).toHaveBeenCalledWith("t1", {});
+    // Ficha 458-B (arreglo heredado, 457 §12.4): el saldo que decide viaja por el `tx` del candado.
+    expect(d.tiendaRepo.agregarSaldoPorTienda).toHaveBeenCalledWith("t1", {}, d.tx);
     // El documento se escribe SIN cierre (el CHECK de la base lo exige, §2.3).
     const arg = (d.pagoRepo.crear as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1] as Record<string, unknown>;
     expect(arg.cierreId).toBeNull();

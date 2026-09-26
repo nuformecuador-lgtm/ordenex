@@ -145,6 +145,9 @@ function problemasDeClasificacion(t: Tablas): string[] {
     ...WALLET_INGRESO_CONCEPTO_SEED,
     "ingreso_cobro_tienda",
     "egreso_reverso_cobro_tienda",
+    // Ficha 458-B (design §2.3): los dos reversos de cargo de la anulacion del cobro por rechazo.
+    "egreso_reverso_flete_devolucion",
+    "egreso_reverso_iva_flete_devolucion",
   ].sort();
   if (JSON.stringify(cargos) !== JSON.stringify(cargosEsperados)) {
     problemas.push(`cargos a tienda = ${JSON.stringify(cargos)}`);
@@ -172,13 +175,15 @@ describe("459 — guardia de la clasificacion de la caja y del libro de las tien
     ).toEqual(["ajuste_debito"]);
   });
 
-  it("(4) literal del contrato: los ocho cargos a una tienda (seis del feed, el cobro y su reverso)", () => {
+  it("(4) literal del contrato: los diez cargos a una tienda (seis del feed, el cobro y su reverso, y los dos reversos del cobro por rechazo de la 458-B)", () => {
     expect(
       WALLET_MOVIMIENTO_CATEGORIA_SEED.filter(
         (c) => LIQUIDEZ_POR_CATEGORIA[c] === "cargo_a_tienda",
       ).sort(),
     ).toEqual([
       "egreso_reverso_cobro_tienda",
+      "egreso_reverso_flete_devolucion", // ficha 458-B
+      "egreso_reverso_iva_flete_devolucion", // ficha 458-B
       "ingreso_cobro_tienda",
       "ingreso_comision_cod",
       "ingreso_flete",
@@ -198,6 +203,27 @@ describe("459 — guardia de la clasificacion de la caja y del libro de las tien
     expect(CONTRAPARTIDA_EN_CAJA.cobro_manual).toBe("ingreso_cobro_tienda");
     expect(CONTRAPARTIDA_EN_CAJA.cobro_tienda_anulado).toBe("egreso_reverso_cobro_tienda");
     expect(TIPO_POR_CATEGORIA_TIENDA.cobro_tienda_anulado).toBe("credito");
+  });
+
+  it("⭑ 458-B (R68/R91, design §2.3): los dos reversos del cobro por rechazo son propios, reversos de cargo y suben «De las tiendas»", () => {
+    for (const c of ["egreso_reverso_flete_devolucion", "egreso_reverso_iva_flete_devolucion"] as const) {
+      expect(NATURALEZA_POR_CATEGORIA[c]).toBe("propio");
+      expect(LIQUIDEZ_POR_CATEGORIA[c]).toBe("cargo_a_tienda");
+      expect(efectoEnDeLasTiendas(REALES, c)).toBe(1);
+    }
+    // Y son las parejas de los dos creditos espejo del libro de la tienda (contrapartidas +2).
+    expect(CONTRAPARTIDA_EN_CAJA.flete_devolucion_anulado).toBe("egreso_reverso_flete_devolucion");
+    expect(CONTRAPARTIDA_EN_CAJA.iva_flete_devolucion_anulado).toBe("egreso_reverso_iva_flete_devolucion");
+    expect(TIPO_POR_CATEGORIA_TIENDA.flete_devolucion_anulado).toBe("credito");
+    expect(TIPO_POR_CATEGORIA_TIENDA.iva_flete_devolucion_anulado).toBe("credito");
+  });
+
+  it("⭑ 458-B contraprueba (mutacion 4 de design §8.2): un reverso del flete por rechazo como EFECTIVO → rojo", () => {
+    const comoEfectivo: Tablas = {
+      ...REALES,
+      liquidez: { ...LIQUIDEZ_POR_CATEGORIA, egreso_reverso_flete_devolucion: "efectivo" },
+    };
+    expect(problemasDeClasificacion(comoEfectivo).length).toBeGreaterThan(0);
   });
 
   it("las parejas de los seis cargos son las del feed del cierre (MAPEO_CONCEPTO_TIENDA)", () => {

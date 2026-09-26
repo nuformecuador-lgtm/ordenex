@@ -3,6 +3,13 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import type { ComprobanteGuardado } from "@/lib/interfaces/repositories/IWalletComprobanteRepository";
+import type {
+  ComprobanteRecibido,
+  FalloDeComprobante,
+  IWalletComprobanteService,
+} from "@/lib/interfaces/services/IWalletComprobanteService";
+import { registrarConComprobante } from "@/lib/services/registro-con-comprobante";
 import type { ICobroTiendaAnulacionRepository } from "@/lib/interfaces/repositories/ICobroTiendaAnulacionRepository";
 import type { IUserRepository } from "@/lib/interfaces/repositories/IUserRepository";
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
@@ -105,6 +112,11 @@ export class CobroTiendaService implements ICobroTiendaService {
     private readonly runTransaction: CobroTiendaTxRunner,
     /** R3/R11: el MISMO instante para todas las filas de una operacion. Inyectable para los tests. */
     private readonly ahora: () => Date = () => new Date(),
+    /**
+     * FICHA 458-B (R74) — el comprobante del cobro (cuelga del debito `cobro_manual`). Sin el,
+     * registrar CON comprobante lanza; sin comprobante, el cobro es byte a byte el de antes.
+     */
+    private readonly comprobantes?: IWalletComprobanteService,
   ) {}
 
   /**
@@ -129,94 +141,110 @@ export class CobroTiendaService implements ICobroTiendaService {
   async registrarCobro(
     input: RegistrarCobroTiendaInput,
     actor: Actor,
-  ): Promise<RegistrarCobroTiendaServiceResult> {
+    comprobante: ComprobanteRecibido | null = null,
+  ): Promise<RegistrarCobroTiendaServiceResult | FalloDeComprobante> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R8: antes de tocar la base
+    // FICHA 458-B (R74–R76): el comprobante se sube ANTES y se escribe en la transaccion del cobro.
+    // La escritura, como closure y no como metodo: la superficie del servicio no crece (lista cerrada).
+    const escribirCobro = async (guardado: ComprobanteGuardado | null): Promise<RegistrarCobroTiendaServiceResult> => {
+      // Escala 2 fijada UNA vez, desde el STRING. `montoStr` es lo unico que viaja de aqui en adelante.
+      const montoStr = new Prisma.Decimal(input.monto)
+        .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
+        .toFixed(2);
 
-    // Escala 2 fijada UNA vez, desde el STRING. `montoStr` es lo unico que viaja de aqui en adelante.
-    const montoStr = new Prisma.Decimal(input.monto)
-      .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
-      .toFixed(2);
+      // R6: existe / es cuenta de tienda / esta activa. Tres mensajes distintos, todos bajo `tiendaId`,
+      // y NINGUNO escribe nada.
+      const cuenta = await this.usuarioRepo.obtenerCuentaTienda(input.tiendaId);
+      if (cuenta === null) return errorDeTienda(MSG_TIENDA.inexistente);
+      if (cuenta.rol !== ROL_TIENDA) return errorDeTienda(MSG_TIENDA.rol);
+      if (cuenta.estado !== ESTADO_TIENDA) return errorDeTienda(MSG_TIENDA.inactiva);
 
-    // R6: existe / es cuenta de tienda / esta activa. Tres mensajes distintos, todos bajo `tiendaId`,
-    // y NINGUNO escribe nada.
-    const cuenta = await this.usuarioRepo.obtenerCuentaTienda(input.tiendaId);
-    if (cuenta === null) return errorDeTienda(MSG_TIENDA.inexistente);
-    if (cuenta.rol !== ROL_TIENDA) return errorDeTienda(MSG_TIENDA.rol);
-    if (cuenta.estado !== ESTADO_TIENDA) return errorDeTienda(MSG_TIENDA.inactiva);
+      const id = randomUUID();
+      // R3: UN instante para el debito y la linea de caja.
+      const ahora = this.ahora();
+      const fechaMovimiento = instanteDelMovimientoManual(input.fecha, ahora) ?? ahora;
 
-    const id = randomUUID();
-    // R3: UN instante para el debito y la linea de caja.
-    const ahora = this.ahora();
-    const fechaMovimiento = instanteDelMovimientoManual(input.fecha, ahora) ?? ahora;
-
-    try {
-      await this.runTransaction(async (tx) => {
-        // El debito, igual que en la 381: categoria propia de los cobros, `origen_tipo: manual` y
-        // `origen_id: null` (fuera del indice unico parcial), y la descripcion que tecleo la persona,
-        // TAL CUAL (R7). Ficha 461 (R66/R67/R68, auditoria D2): + la CLAVE del cliente, UNIQUE en la
-        // fila. Si `createMany` devuelve 0, la clave ya tenia su cobro: se sale de la transaccion
-        // ANTES del historial y de la linea de caja, y no queda ni una fila nueva.
-        const escritas = await this.tiendaRepo.crearMovimientos(tx, [
-          {
-            id,
+      try {
+        await this.runTransaction(async (tx) => {
+          // El debito, igual que en la 381: categoria propia de los cobros, `origen_tipo: manual` y
+          // `origen_id: null` (fuera del indice unico parcial), y la descripcion que tecleo la persona,
+          // TAL CUAL (R7). Ficha 461 (R66/R67/R68, auditoria D2): + la CLAVE del cliente, UNIQUE en la
+          // fila. Si `createMany` devuelve 0, la clave ya tenia su cobro: se sale de la transaccion
+          // ANTES del historial y de la linea de caja, y no queda ni una fila nueva.
+          const escritas = await this.tiendaRepo.crearMovimientos(tx, [
+            {
+              id,
+              tiendaId: input.tiendaId,
+              tipo: "debito",
+              categoria: "cobro_manual",
+              monto: montoStr,
+              origenTipo: "manual",
+              origenId: null,
+              descripcion: input.descripcion,
+              registradoPor: actor.usuarioId,
+              fechaMovimiento,
+              claveIdempotencia: input.claveIdempotencia,
+            },
+          ]);
+          if (escritas === 0) throw new ClaveRepetidaError();
+          // El rastro, en LA MISMA transaccion y por el MISMO importe.
+          await this.tiendaRepo.registrarCobroEnHistorial(tx, {
+            cobroId: id,
             tiendaId: input.tiendaId,
-            tipo: "debito",
-            categoria: "cobro_manual",
             monto: montoStr,
-            origenTipo: "manual",
-            origenId: null,
-            descripcion: input.descripcion,
+            actorUsuarioId: actor.usuarioId,
+          });
+          // R1/R2/R4 (HD1): la linea de caja del cobro —el CARGO—, por el MISMO monto y el MISMO
+          // instante, vinculada al debito por `(cobro_tienda, id)`, descrita con el nombre de la tienda
+          // y la descripcion, sin ningun id (R7). Sin esta linea, la ganancia no sube y R8 se rompe.
+          const tiendaNombre = await this.tiendaRepo.nombreDeTienda(tx, input.tiendaId);
+          await this.caja.emitirCargoDeCobro(tx, {
+            cobroId: id,
+            monto: montoStr,
+            descripcion: descripcionCobroEnCaja(tiendaNombre, input.descripcion),
             registradoPor: actor.usuarioId,
             fechaMovimiento,
-            claveIdempotencia: input.claveIdempotencia,
-          },
-        ]);
-        if (escritas === 0) throw new ClaveRepetidaError();
-        // El rastro, en LA MISMA transaccion y por el MISMO importe.
-        await this.tiendaRepo.registrarCobroEnHistorial(tx, {
-          cobroId: id,
-          tiendaId: input.tiendaId,
-          monto: montoStr,
-          actorUsuarioId: actor.usuarioId,
+          });
+          // FICHA 458-B (R74): el comprobante del cobro, en ESTA transaccion, colgado del debito.
+          if (guardado !== null) {
+            if (this.comprobantes === undefined) {
+              throw new Error("cobro con comprobante sin el puerto de comprobantes: revisar el composition root");
+            }
+            const r = await this.comprobantes.registrarEnTx(tx, { tienda: id }, guardado, actor.usuarioId);
+            if (r !== "creado") throw new Error(`cobro ${id}: ya tenia comprobante recien creado`);
+          }
         });
-        // R1/R2/R4 (HD1): la linea de caja del cobro —el CARGO—, por el MISMO monto y el MISMO
-        // instante, vinculada al debito por `(cobro_tienda, id)`, descrita con el nombre de la tienda
-        // y la descripcion, sin ningun id (R7). Sin esta linea, la ganancia no sube y R8 se rompe.
-        const tiendaNombre = await this.tiendaRepo.nombreDeTienda(tx, input.tiendaId);
-        await this.caja.emitirCargoDeCobro(tx, {
-          cobroId: id,
-          monto: montoStr,
-          descripcion: descripcionCobroEnCaja(tiendaNombre, input.descripcion),
-          registradoPor: actor.usuarioId,
-          fechaMovimiento,
-        });
-      });
-    } catch (error) {
-      if (error instanceof ClaveRepetidaError) {
-        // R68: el segundo envio responde con el cobro ORIGINAL y el saldo actual, sin escribir nada.
-        const original = await this.tiendaRepo.obtenerCobroPorClave(input.claveIdempotencia);
-        if (original === null) {
-          throw new Error("cobro-tienda: clave de idempotencia repetida sin cobro que releer");
+      } catch (error) {
+        if (error instanceof ClaveRepetidaError) {
+          // R68: el segundo envio responde con el cobro ORIGINAL y el saldo actual, sin escribir nada.
+          const original = await this.tiendaRepo.obtenerCobroPorClave(input.claveIdempotencia);
+          if (original === null) {
+            throw new Error("cobro-tienda: clave de idempotencia repetida sin cobro que releer");
+          }
+          return { status: "ya_registrado", cobro: original, saldo: await this.saldoDe(original.tiendaId) };
         }
-        return { status: "ya_registrado", cobro: original, saldo: await this.saldoDe(original.tiendaId) };
+        throw error;
       }
-      throw error;
-    }
 
-    // Se relee POR ID Y POR TIENDA, no «el mas reciente de esta categoria»: con una fecha del pasado
-    // el mas reciente seria OTRO cobro, y el servicio afirmaria «este es el que registraste» sobre
-    // una fila ajena. Es la leccion escrita de la ficha 334.
-    const cobro = await this.tiendaRepo.obtenerPorIdDeTienda(id, input.tiendaId);
-    if (cobro === null) {
-      // Imposible por construccion: `createMany` devolvio 1, asi que la fila con ESTE id existe. Se
-      // propaga con contexto en vez de devolver una fila inventada: en un libro de dinero, mentir es
-      // peor que fallar.
-      throw new Error(`cobro-tienda: el cobro ${id} no se pudo releer tras insertarlo`);
-    }
+      // Se relee POR ID Y POR TIENDA, no «el mas reciente de esta categoria»: con una fecha del pasado
+      // el mas reciente seria OTRO cobro, y el servicio afirmaria «este es el que registraste» sobre
+      // una fila ajena. Es la leccion escrita de la ficha 334.
+      const cobro = await this.tiendaRepo.obtenerPorIdDeTienda(id, input.tiendaId);
+      if (cobro === null) {
+        // Imposible por construccion: `createMany` devolvio 1, asi que la fila con ESTE id existe. Se
+        // propaga con contexto en vez de devolver una fila inventada: en un libro de dinero, mentir es
+        // peor que fallar.
+        throw new Error(`cobro-tienda: el cobro ${id} no se pudo releer tras insertarlo`);
+      }
 
-    // R5: el saldo DESPUES del cobro, derivado del ledger entero (sin filtros) y con su signo
-    // calculado en el SERVIDOR. PUEDE ser negativo, y se devuelve entero.
-    return { status: "ok", cobro, saldo: await this.saldoDe(input.tiendaId) };
+      // R5: el saldo DESPUES del cobro, derivado del ledger entero (sin filtros) y con su signo
+      // calculado en el SERVIDOR. PUEDE ser negativo, y se devuelve entero.
+      return { status: "ok", cobro, saldo: await this.saldoDe(input.tiendaId) };
+    };
+    return registrarConComprobante(this.comprobantes, "wallet_tienda_movimiento", comprobante, async (guardado) => {
+      const r = await escribirCobro(guardado);
+      return { quedo: r.status === "ok", resultado: r };
+    });
   }
 
   /**

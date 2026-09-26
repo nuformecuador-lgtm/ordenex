@@ -524,6 +524,14 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
         },
       },
       walletTiendaMovimiento: {
+        /**
+         * Ficha 458-B (arreglo heredado de la 457 §12.4): el saldo que DECIDE se lee ahora por el
+         * `tx` del candado, no por el cliente propio del repositorio. Aqui es la MISMA lectura
+         * comprometida (misma foto al empezar la sentencia, mismo `log`): dentro de esta transaccion
+         * aun no hay escrituras propias cuando se lee, asi que ver lo commiteado es lo que Postgres
+         * haria en READ COMMITTED. El experimento del candado (R83/R46) no cambia.
+         */
+        groupBy: clienteLectura.walletTiendaMovimiento.groupBy,
         createMany: async ({
           data,
           skipDuplicates,

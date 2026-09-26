@@ -92,6 +92,8 @@ const COMPOSICION: ComposicionGananciaDTO = {
     egreso_pago_mensajero: "700.00",
     egreso_ajuste: "45.75",
     egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
+    egreso_reverso_flete_devolucion: "0.00", // ficha 458-B: la exige el `Record` total
+    egreso_reverso_iva_flete_devolucion: "0.00", // ficha 458-B
   },
   otrosEgresos: "194.25",
   // R9: lo decide el SERVIDOR. Aqui quedan 194,25 sin clasificar, asi que la fila se pinta.
@@ -151,7 +153,13 @@ function pintarComoLa158(overrides: Partial<ComposicionGananciaDTO> = {}) {
   return pintar({
     composicion: {
       ...COMPOSICION,
-      egresos: { egreso_pago_mensajero: "0.00", egreso_ajuste: "0.00", egreso_reverso_cobro_tienda: "0.00" },
+      egresos: {
+        egreso_pago_mensajero: "0.00",
+        egreso_ajuste: "0.00",
+        egreso_reverso_cobro_tienda: "0.00",
+        egreso_reverso_flete_devolucion: "0.00", // ficha 458-B
+        egreso_reverso_iva_flete_devolucion: "0.00", // ficha 458-B
+      },
       otrosEgresos: "0.00",
       hayOtrosEgresos: false, // ficha 343 (R7): sin residuo, la fila «Otros» no se pinta
       totalEgresos: DESGLOSE.total,
@@ -368,6 +376,9 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       { rotulo: "Correcciones de caja (resta)", importe: "₡45,75" },
       // Ficha 461 (R27): la fila de los cobros anulados; en este fixture vale 0,00.
       { rotulo: "Cobros a una tienda anulados", importe: "₡0" },
+      // Ficha 458-B (design §2.3): las dos filas de la anulacion de un cobro por rechazo; aqui 0,00.
+      { rotulo: "Fletes por rechazo cobrados a una tienda anulados", importe: "₡0" },
+      { rotulo: "IVA de fletes por rechazo cobrados a una tienda anulados", importe: "₡0" },
       { rotulo: "Otros gastos de Ordenex", importe: "₡194,25" },
       { rotulo: "Total de egresos", importe: "₡2.190,75" },
     ]);
@@ -467,6 +478,8 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       "Pagos de Ordenex a mensajeros",
       "Correcciones de caja (resta)",
       "Cobros a una tienda anulados", // ficha 461: tercer nombrado, antes de «Otros»
+      "Fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
+      "IVA de fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
       "Otros gastos de Ordenex",
       "Total de egresos",
     ]);
@@ -660,6 +673,8 @@ describe("Ficha 339 — «Otros» sólo cuando de verdad queda algo (R7/R8/R9/R1
       "Pagos de Ordenex a mensajeros",
       "Correcciones de caja (resta)",
       "Cobros a una tienda anulados", // ficha 461
+      "Fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
+      "IVA de fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
       "Total de egresos",
     ]);
   });

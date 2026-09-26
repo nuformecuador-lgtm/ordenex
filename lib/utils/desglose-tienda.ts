@@ -64,6 +64,11 @@ export const CUBETA_POR_CATEGORIA: Record<WalletTiendaMovimientoCategoria, Cubet
   // Mutacion 4 de design §13 (`abono_tienda: "cargos"`) → la cabecera dejaria de cuadrar con el saldo.
   abono_tienda: "aFavor",
   abono_tienda_anulado: "cargos",
+  // FICHA 458-B (design §2.3, D7): la anulacion de un cobro por rechazo le DEVUELVE a la tienda el
+  // flete y el IVA -> `aFavor`, como `cobro_tienda_anulado`. Mutacion 5 de design §8.2
+  // (`flete_devolucion_anulado: "cargos"`) → la cabecera dejaria de cuadrar con el saldo.
+  flete_devolucion_anulado: "aFavor",
+  iva_flete_devolucion_anulado: "aFavor",
 };
 
 /**

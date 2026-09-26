@@ -97,13 +97,15 @@ describeSiHayBase("457/T1.5 — las migraciones del pago de una tienda a Ordenex
     expect([...origen].sort()).toEqual([...WALLET_ORIGEN_TIPO_SEED].sort());
     expect([...tipos].sort()).toEqual([...HISTORIAL_ACCION_TIPOS].sort());
     expect([...entidades].sort()).toEqual([...HISTORIAL_ACCION_ENTIDADES].sort());
-    expect(caja.slice(-2)).toEqual([...VALORES_457.wallet_movimiento_categoria]);
-    expect(tienda.slice(-2)).toEqual([...VALORES_457.wallet_tienda_movimiento_categoria]);
+    // Ficha 458-B (2026-09-26): sus valores (`20260928120000`) van DETRAS de los de la 457 (dos en la
+    // caja, dos en la tienda, dos en el historial): los de esta ficha se leen un tramo mas atras.
+    expect(caja.slice(-4, -2)).toEqual([...VALORES_457.wallet_movimiento_categoria]);
+    expect(tienda.slice(-4, -2)).toEqual([...VALORES_457.wallet_tienda_movimiento_categoria]);
     expect(origen.slice(-1)).toEqual([...VALORES_457.wallet_origen_tipo]);
-    expect(tipos.slice(-2)).toEqual([...VALORES_457.historial_accion_tipo]);
+    expect(tipos.slice(-4, -2)).toEqual([...VALORES_457.historial_accion_tipo]);
     expect(entidades.slice(-1)).toEqual([...VALORES_457.historial_accion_entidad]);
-    // Los conteos de design §14 «despues»: 25 / 16 / 14 / 63 / 24.
-    expect([caja.length, tienda.length, origen.length, tipos.length, entidades.length]).toEqual([25, 16, 14, 63, 24]);
+    // Los conteos de design §14 «despues»: 25 / 16 / 14 / 63 / 24; con la 458-B detras: 27 / 18 / 14 / 65 / 24.
+    expect([caja.length, tienda.length, origen.length, tipos.length, entidades.length]).toEqual([27, 18, 14, 65, 24]);
     // El `up` de la 1 es aditivo y solo eso: ocho `ADD VALUE IF NOT EXISTS`, ni un CHECK ni una tabla.
     const up1 = soloEjecutable(UP_1);
     expect(up1.match(/ADD VALUE IF NOT EXISTS/g)).toHaveLength(8);
@@ -330,7 +332,7 @@ describeSiHayBase("457/T1.5 — las migraciones del pago de una tienda a Ordenex
     expect(rama("debito")).toEqual(esperado("debito"));
     expect(rama("credito")).toContain("abono_tienda");
     expect(rama("debito")).toContain("abono_tienda_anulado");
-    expect(rama("credito")).toHaveLength(5);
+    expect(rama("credito")).toHaveLength(7); // 5 con la 457; + los dos creditos espejo de la 458-B
     expect(rama("debito")).toHaveLength(11);
   });
 });

@@ -26,6 +26,7 @@ import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiend
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnulacionRepository";
 import { AbonoTiendaRepository } from "@/lib/repositories/AbonoTiendaRepository";
+import { EgresoCajaDocumentosRepository, IndemnizacionDocumentosRepository } from "@/lib/repositories/EgresoCajaDocumentosRepository";
 import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import type { AbonoTiendaTxRunner } from "@/lib/interfaces/services/IAbonoTiendaService";
 import { AbonoTiendaService } from "@/lib/services/AbonoTiendaService";
@@ -44,6 +45,9 @@ import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import { PagoPorCuentaTiendaService } from "@/lib/services/PagoPorCuentaTiendaService";
 import { PremioRankingDevengoService } from "@/lib/services/PremioRankingDevengoService";
 import { RechazoTiendaCobroService } from "@/lib/services/RechazoTiendaCobroService";
+import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/RechazoTiendaCobroAnulacionRepository";
+import { CajaRechazoTiendaCobroFeedService } from "@/lib/services/CajaRechazoTiendaCobroFeedService";
+import { EgresoCajaAnulacionService } from "@/lib/services/EgresoCajaAnulacionService";
 import { WalletEgresoService } from "@/lib/services/WalletEgresoService";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
@@ -272,7 +276,18 @@ export function montarServicios459(tx: TxDeTest) {
       tiendaRepo,
       c,
       (fn) => c.$transaction((t) => fn(t as never)),
+      // Ficha 458-B (D7): la anulacion del cobro por rechazo, cableada como su `buildService()`.
+      {
+        repo: new RechazoTiendaCobroAnulacionRepository(c),
+        caja: new CajaRechazoTiendaCobroFeedService(cajaRepo),
+      },
       { TIENDA_DEBITA_FLETE_DEVOLUCION: true },
+    ),
+    // Ficha 458-B (D13): la anulacion con motivo de un egreso de caja, cableada como su `buildService()`.
+    egresoAnulacion: new EgresoCajaAnulacionService(
+      cajaRepo,
+      new AjusteCajaAnulacionRepository(c),
+      (fn) => c.$transaction((t) => fn(t as never)),
     ),
     gastoFijo: new GastoFijoCobroService(new GastoFijoCobroRepository(c), cajaRepo, c, (fn) =>
       c.$transaction((t) => fn(t as never)),
@@ -291,6 +306,10 @@ export function montarServicios459(tx: TxDeTest) {
       cobros: new CobroTiendaAnulacionRepository(c),
       ajustes: new AjusteCajaAnulacionRepository(c),
       abonos: new AbonoTiendaRepository(c), // ficha 457 (R41)
+      // Ficha 458-B (R71): egresos, indemnizaciones y cobros por rechazo.
+      egresos: new EgresoCajaDocumentosRepository(c),
+      indemnizaciones: new IndemnizacionDocumentosRepository(c),
+      rechazos: new RechazoTiendaCobroAnulacionRepository(c),
     }),
     // Ficha 459 (T B.14) — los dos escritores nuevos, cableados como su `buildService()`.
     pagoPorCuenta: new PagoPorCuentaTiendaService(

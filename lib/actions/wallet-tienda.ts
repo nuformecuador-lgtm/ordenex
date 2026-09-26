@@ -56,6 +56,8 @@ import {
   verDetalleDeMovimientoCompletoSchema,
   verDetalleDeMovimientoSchema,
 } from "@/lib/types/detalle-movimiento";
+import { separarComprobante } from "@/lib/types/wallet-laterales";
+import { buildComprobantes, leerComprobanteOpcional } from "@/lib/actions/_shared/comprobante-lateral";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -170,6 +172,8 @@ function buildCobroTiendaService(): ICobroTiendaService {
     new CajaCobroTiendaFeedService(new WalletMovimientoRepository(prisma)),
     new CobroTiendaAnulacionRepository(prisma),
     (fn) => prisma.$transaction((tx) => fn(tx)),
+    undefined, // el reloj por defecto
+    buildComprobantes(prisma), // FICHA 458-B (R74): el comprobante del cobro
   );
 }
 
@@ -201,6 +205,11 @@ export interface CobroTiendaDeps {
 export type RegistrarCobroTiendaActionResult =
   | RegistrarCobroTiendaServiceResult
   | { status: "unauthenticated" };
+
+/** FICHA 458-B (R74): con un `FormData` (458-C) se suma la rama `comprobante_no_guardado`. */
+export type RegistrarCobroTiendaConComprobanteActionResult =
+  | RegistrarCobroTiendaActionResult
+  | { status: "comprobante_no_guardado" };
 
 /** Las dependencias del detalle, inyectables en test igual que las del ledger. */
 export interface DetalleMiMovimientoDeps {
@@ -501,16 +510,28 @@ export async function verDetalleDeMiMovimientoCompletoAction(
  * que nacio esta accion se BORRO al cablear ese concepto, en el mismo commit: una excepcion que
  * sobrevive a su motivo pone roja la guardia de superficie igual que su ausencia.
  */
+export function registrarCobroTiendaAction(
+  input: FormData,
+  deps?: CobroTiendaDeps,
+): Promise<RegistrarCobroTiendaConComprobanteActionResult>;
+export function registrarCobroTiendaAction(
+  input: unknown,
+  deps?: CobroTiendaDeps,
+): Promise<RegistrarCobroTiendaActionResult>;
 export async function registrarCobroTiendaAction(
   input: unknown,
   deps: CobroTiendaDeps = {},
-): Promise<RegistrarCobroTiendaActionResult> {
+): Promise<RegistrarCobroTiendaConComprobanteActionResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R13: antes del schema y del service
-    const data = registrarCobroTiendaSchema.parse(input); // R14/R15/R16: ZodError -> VALIDATION_ERROR
+    // FICHA 458-B (R74): el objeto de hoy o un FormData con `comprobante` (molde 459); el `.strict()`
+    // se conserva: el archivo se separa ANTES y cualquier otra clave no prevista sigue muriendo aqui.
+    const { crudo, comprobante } = separarComprobante(input);
+    const data = registrarCobroTiendaSchema.parse(crudo); // R14/R15/R16: ZodError -> VALIDATION_ERROR
+    const archivo = await leerComprobanteOpcional(comprobante);
     const service = deps.service ?? buildCobroTiendaService();
-    return service.registrarCobro(data, actor);
+    return archivo === null ? service.registrarCobro(data, actor) : service.registrarCobro(data, actor, archivo);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

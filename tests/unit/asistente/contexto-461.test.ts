@@ -135,8 +135,8 @@ describe("461 R58 — cada documento tocado declara su fecha y las fuentes de lo
   ] as const)("%s: actualizado el 2026-09-25 o después y con las fuentes del cobro", (slug, fuentes) => {
     const doc = docs.find((d) => d.slug === slug);
     expect(doc).toBeDefined();
-    // 458-A (R102): un documento tocado por una ficha POSTERIOR actualiza su fecha; lo que esta
-    // ficha fija es que se actualizó al menos con ella, no que nadie lo vuelva a tocar.
+    // 458-A (R102) / 458-B: un documento tocado por una ficha POSTERIOR actualiza su fecha; lo que
+    // esta ficha fija es que se actualizó al menos con ella, no que nadie lo vuelva a tocar.
     expect((doc?.actualizado ?? "") >= "2026-09-25").toBe(true);
     // `fuentes` no viaja en el catálogo a propósito (es para auditar, no para leer): se lee del
     // frontmatter crudo, como hace la guardia `asistente-sin-frontmatter`.

@@ -1,5 +1,7 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CobroTiendaTxClient } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
+import type { WalletComprobanteTxClient } from "@/lib/interfaces/repositories/IWalletComprobanteRepository";
+import type { ComprobanteRecibido, FalloDeComprobante } from "@/lib/interfaces/services/IWalletComprobanteService";
 import type {
   AnularCobroTiendaInput,
   AnularCobroTiendaResult,
@@ -33,7 +35,10 @@ import type {
  * FICHA 461: el cliente que entrega (`CobroTiendaTxClient`) expone tambien `walletMovimiento` y
  * `cobroTiendaAnulacion`, para que el cargo, el reverso y la constancia viajen en la MISMA transaccion.
  */
-export type CobroTiendaTxRunner = <T>(fn: (tx: CobroTiendaTxClient) => Promise<T>) => Promise<T>;
+export type CobroTiendaTxRunner = <T>(
+  // FICHA 458-B (R74): + `walletComprobante`, para el comprobante del cobro en la MISMA transaccion.
+  fn: (tx: CobroTiendaTxClient & WalletComprobanteTxClient) => Promise<T>,
+) => Promise<T>;
 
 /**
  * ⚠️ TRES RAMAS Y NI UNA MAS. En particular NO existe `sin_saldo` ni `excede`, y es la decision
@@ -66,7 +71,9 @@ export interface ICobroTiendaService {
   registrarCobro(
     input: RegistrarCobroTiendaInput,
     actor: Actor,
-  ): Promise<RegistrarCobroTiendaServiceResult>;
+    /** FICHA 458-B (R74): el comprobante opcional, ya leido por el borde. */
+    comprobante?: ComprobanteRecibido | null,
+  ): Promise<RegistrarCobroTiendaServiceResult | FalloDeComprobante>;
   /**
    * R10–R18 — ANULA un cobro con motivo: constancia (motivo, quien, cuando), credito compensatorio
    * a la tienda por el monto DEL COBRO y reverso del cargo en la caja, fechados con el MISMO instante

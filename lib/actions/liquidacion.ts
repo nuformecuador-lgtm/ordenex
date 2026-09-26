@@ -29,6 +29,8 @@ import {
   type PrevisualizarRepartoResult,
   type RegistrarRepartoResult,
 } from "@/lib/types/liquidacion-reparto";
+import { separarComprobante } from "@/lib/types/wallet-laterales";
+import { buildComprobantes, leerComprobanteOpcional } from "@/lib/actions/_shared/comprobante-lateral";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -58,6 +60,10 @@ export type AnularRepartoActionResult = AnularRepartoResult;
 // bajo test — anadir aqui un `editarRepartoAction` rompe la suite (R52).
 export type PrevisualizarRepartoActionResult = PrevisualizarRepartoResult;
 export type RegistrarRepartoActionResult = RegistrarRepartoResult;
+// FICHA 458-B (R74): con un `FormData` (458-C) el pago y el reparto admiten comprobante, y se suma la
+// rama `comprobante_no_guardado`. Con un OBJETO (las pantallas de hoy) el contrato es el de siempre.
+export type RegistrarPagoConComprobanteActionResult = RegistrarPagoResult | { status: "comprobante_no_guardado" };
+export type RegistrarRepartoConComprobanteActionResult = RegistrarRepartoResult | { status: "comprobante_no_guardado" };
 
 /**
  * Traduce el `AppErrorShape` del borde: ZodError (VALIDATION_ERROR) o falta de sesion
@@ -107,6 +113,9 @@ function buildService(): ILiquidacionService {
     // tocarse en la rama del mensajero ([P2] = (a)) y el `tope` no se pasa: lo pone el unico
     // punto de configuracion por defecto (R53), sin que este archivo escriba ningun numero.
     new LiquidacionRepartoRepository(prisma),
+    undefined, // el reloj por defecto
+    undefined, // el tope del reparto por defecto (R53)
+    buildComprobantes(prisma), // FICHA 458-B (R74): el comprobante del pago y del reparto
   );
 }
 
@@ -137,16 +146,30 @@ export async function registrarPagoMensajeroAction(
  * R3/R29 — registra un pago a una TIENDA contra su saldo acumulado. Sin cierre: `.strict()`
  * rechaza un `cierreId` colado en la peticion.
  */
+export function registrarPagoTiendaAction(
+  input: FormData,
+  deps?: LiquidacionDeps,
+): Promise<RegistrarPagoConComprobanteActionResult>;
+export function registrarPagoTiendaAction(
+  input: unknown,
+  deps?: LiquidacionDeps,
+): Promise<RegistrarPagoActionResult>;
 export async function registrarPagoTiendaAction(
   input: unknown,
   deps: LiquidacionDeps = {},
-): Promise<RegistrarPagoActionResult> {
+): Promise<RegistrarPagoConComprobanteActionResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R3
-    const data = registrarPagoTiendaSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    // FICHA 458-B (R74): el objeto de hoy o un FormData con `comprobante` (molde 459). El `.strict()`
+    // se conserva: el archivo se separa ANTES y cualquier otra clave no prevista sigue muriendo aqui.
+    const { crudo, comprobante } = separarComprobante(input);
+    const data = registrarPagoTiendaSchema.parse(crudo); // ZodError -> VALIDATION_ERROR
+    const archivo = await leerComprobanteOpcional(comprobante);
     const service = deps.service ?? buildService();
-    return service.registrarPagoTienda(data, actor);
+    return archivo === null
+      ? service.registrarPagoTienda(data, actor)
+      : service.registrarPagoTienda(data, actor, archivo);
   });
   return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
 }
@@ -195,16 +218,29 @@ export async function previsualizarRepartoMensajeroAction(
  * excepcion que esta accion llevo anotada mientras esa pantalla no existia quedo BORRADA al
  * montarla: el guard `superficie-de-uso` exige que ninguna excepcion sobreviva a su motivo.
  */
+export function registrarRepartoMensajeroAction(
+  input: FormData,
+  deps?: LiquidacionDeps,
+): Promise<RegistrarRepartoConComprobanteActionResult>;
+export function registrarRepartoMensajeroAction(
+  input: unknown,
+  deps?: LiquidacionDeps,
+): Promise<RegistrarRepartoActionResult>;
 export async function registrarRepartoMensajeroAction(
   input: unknown,
   deps: LiquidacionDeps = {},
-): Promise<RegistrarRepartoActionResult> {
+): Promise<RegistrarRepartoConComprobanteActionResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R2: antes de evaluar ningun otro dato
-    const data = registrarRepartoMensajeroSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    // FICHA 458-B (R74): el objeto de hoy o un FormData con `comprobante` (molde 459).
+    const { crudo, comprobante } = separarComprobante(input);
+    const data = registrarRepartoMensajeroSchema.parse(crudo); // ZodError -> VALIDATION_ERROR
+    const archivo = await leerComprobanteOpcional(comprobante);
     const service = deps.service ?? buildService();
-    return service.registrarRepartoMensajero(data, actor);
+    return archivo === null
+      ? service.registrarRepartoMensajero(data, actor)
+      : service.registrarRepartoMensajero(data, actor, archivo);
   });
   return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
 }

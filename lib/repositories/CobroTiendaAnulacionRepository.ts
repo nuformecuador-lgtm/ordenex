@@ -13,7 +13,7 @@ import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registr
 import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 
-type CobroTiendaAnulacionPrismaClient = Pick<PrismaClient, "cobroTiendaAnulacion" | "$queryRaw">;
+type CobroTiendaAnulacionPrismaClient = Pick<PrismaClient, "cobroTiendaAnulacion" | "walletComprobante" | "$queryRaw">;
 
 /** El P2002 de la anulacion es el de `UNIQUE(cobro_id)` (la unica otra unica es la PK sobre un uuid nuevo). */
 function esChoqueDeAnulacion(error: unknown): boolean {
@@ -99,14 +99,26 @@ export class CobroTiendaAnulacionRepository implements ICobroTiendaAnulacionRepo
     };
   }
 
-  /** R20/R37 — UNA consulta para todos los ids de la pagina; cada id vuelve, anulado o no. */
+  /**
+   * R20/R37 — DOS consultas para todos los ids de la pagina; cada id vuelve, anulado o no.
+   *
+   * FICHA 458-B (revision M1): `tieneComprobante` lo decide la base. El id del documento es el del
+   * DEBITO `cobro_manual` en el libro de la tienda, que es donde TB.11 cuelga el comprobante
+   * (`wallet_comprobante.tienda_movimiento_id`).
+   */
   async estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> {
     if (ids.length === 0) return [];
+    const lista = [...ids];
     const anuladas = await this.prisma.cobroTiendaAnulacion.findMany({
-      where: { cobroId: { in: [...ids] } },
+      where: { cobroId: { in: lista } },
       select: { cobroId: true },
     });
+    const comprobantes = await this.prisma.walletComprobante.findMany({
+      where: { tiendaMovimientoId: { in: lista } },
+      select: { tiendaMovimientoId: true },
+    });
     const anulados = new Set(anuladas.map((a) => a.cobroId));
-    return ids.map((id) => ({ id, anulado: anulados.has(id), tieneComprobante: false }));
+    const conComprobante = new Set(comprobantes.map((c) => c.tiendaMovimientoId));
+    return lista.map((id) => ({ id, anulado: anulados.has(id), tieneComprobante: conComprobante.has(id) }));
   }
 }

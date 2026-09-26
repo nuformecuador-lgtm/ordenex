@@ -200,6 +200,17 @@ export const HISTORIAL_ACCION_TIPOS = [
   // su contrapartida en la caja en la misma transaccion; lo protege la guardia de alcance de la 457.
   "abono_tienda_registrado", // AbonoTiendaRepository.crear
   "abono_tienda_anulado", // AbonoTiendaRepository.anular
+  // ⭑ FICHA 458-B (R63/R64, D7) — alguien ANULO un cobro por rechazo aprobado (337). Mueve dinero:
+  // le devuelve a la tienda el flete y el IVA y baja la ganancia. TIPO PROPIO y metodo propio (la
+  // guardia del censo mide POR METODO). La fila lleva el importe (flete + IVA) y el NOMBRE de la
+  // tienda; NUNCA el motivo (texto libre, R5 de la 362). Entidad: `rechazo_tienda_cobro`.
+  "cobro_rechazo_tienda_anulado", // RechazoTiendaCobroAnulacionRepository.anular
+  // ⭑ FICHA 458-B (R63/R64, D13) — alguien ANULO con motivo un sueldo, un gasto de Ordenex, un gasto
+  // fijo cobrado o una indemnizacion. Mueve dinero: el contra-asiento devuelve el importe a la caja
+  // y a la ganancia. TIPO PROPIO: el de la 461 (`wallet_movimiento_manual_anulado`) dice «corrección
+  // de caja». La fila lleva el importe y la CATEGORIA del egreso; NUNCA el motivo. Entidad:
+  // `wallet_movimiento` (el egreso original).
+  "egreso_caja_anulado", // AjusteCajaAnulacionRepository.anularEgreso
   // ⭑ FICHA 398 — UN MAESTRO/ADMIN CORRIGIO EL RESULTADO de una gestion que ya estaba dentro de un
   // cierre ABIERTO: `entregada -> rechazada`. Entra en DINERO y no admite discusion — la fila
   // documenta que del cierre SALIO un cobro que nadie recaudo (baja `total_general` y el balde de
@@ -437,6 +448,10 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   // FICHA 457 (R61/R62): entra dinero de una tienda y su saldo sube; la anulacion lo deshace.
   abono_tienda_registrado: "mueve_dinero",
   abono_tienda_anulado: "mueve_dinero",
+  // FICHA 458-B (R63/R64): anular un cobro por rechazo le devuelve dinero a la tienda y baja la
+  // ganancia; anular un egreso devuelve el importe a la caja y a la ganancia.
+  cobro_rechazo_tienda_anulado: "mueve_dinero",
+  egreso_caja_anulado: "mueve_dinero",
   // FICHA 398: la correccion saca del cierre un cobro que nadie recaudo y pone en cero el pago
   // de esa gestion al mensajero. No hay lectura mas directa de «mueve dinero», y R17 exige
   // exactamente una categoria por tipo.
@@ -516,6 +531,9 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   // Ficha 457 (design §2/§9): desde Ordenex, diciendo quien le paga a quien (HD3 de la 461).
   abono_tienda_registrado: "Registró un pago de una tienda a Ordenex",
   abono_tienda_anulado: "Anuló un pago de una tienda a Ordenex",
+  // Ficha 458-B (R63/R64): verbo en pasado con la persona como sujeto, como el resto del catálogo.
+  cobro_rechazo_tienda_anulado: "Anuló un cobro por rechazo a una tienda",
+  egreso_caja_anulado: "Anuló un gasto de la caja",
   cierre_dia_gestion_corregida: "Corrigió el resultado de una gestión",
   cierre_bodega_conciliado: "Marcó recibida una consolidación de bodega",
   cierre_bodega_conciliacion_revertida: "Revirtió la conciliación de una consolidación de bodega",

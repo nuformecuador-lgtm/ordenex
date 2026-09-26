@@ -141,8 +141,8 @@ describe("457 R68 — cada documento tocado declara su fecha y las fuentes del p
   ] as const)("%s: actualizado el 2026-09-25 o después y con las fuentes del pago", (slug, fuentes) => {
     const doc = docs.find((d) => d.slug === slug);
     expect(doc).toBeDefined();
-    // 458-A (R102): un documento tocado por una ficha POSTERIOR actualiza su fecha; lo que esta
-    // ficha fija es que se actualizó al menos con ella, no que nadie lo vuelva a tocar.
+    // 458-A (R102) / 458-B: un documento tocado por una ficha POSTERIOR actualiza su fecha; lo que
+    // esta ficha fija es que se actualizó al menos con ella, no que nadie lo vuelva a tocar.
     expect((doc?.actualizado ?? "") >= "2026-09-25").toBe(true);
     const crudo = readFileSync(path.join(DIR_AYUDA, `${slug}.md`), "utf8");
     const declaradas = partirFrontmatter(crudo).datos.fuentes ?? [];

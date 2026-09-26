@@ -91,8 +91,9 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // 61 desde la ficha 461: `cobro_tienda_anulado` y `wallet_movimiento_manual_anulado` (auditoria D3).
     // 63 desde la ficha 457: `abono_tienda_registrado` y `abono_tienda_anulado` (un tipo por metodo); y
     // 24 entidades: `abono_tienda`, la TERCERA ampliacion del enum (1:1 con su tabla).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(63);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(63);
+    // 65 desde la ficha 458-B: `cobro_rechazo_tienda_anulado` y `egreso_caja_anulado` (un tipo por metodo).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(65);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(65);
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(24); // 24 desde la ficha 457
     expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(24);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
@@ -447,7 +448,8 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // 38 y no 37 desde la ficha 461: `cobro_tienda_anulado` devuelve dinero a la tienda y baja la
     // ganancia. 39 con `wallet_movimiento_manual_anulado` (auditoria D3): el contra-asiento de una
     // correccion de caja deshace su efecto en la ganancia.
-    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(41);
+    // 43 desde la ficha 458-B: anular un cobro por rechazo y anular un egreso de caja mueven dinero.
+    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(43);
     expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(10);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
   });

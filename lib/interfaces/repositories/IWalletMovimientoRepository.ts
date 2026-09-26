@@ -15,6 +15,18 @@ import type {
 // `walletMovimiento` (el `tx` de un $transaction, o el PrismaClient completo).
 export type WalletTxClient = Pick<PrismaClient, "walletMovimiento">;
 
+/**
+ * FICHA 458-B (design §4.1, R42/R74) — lo LATERAL de un movimiento de caja registrado a mano: «a
+ * quién» y la referencia (`wallet_anotacion`) y el comprobante ya subido (`wallet_comprobante`). Se
+ * escriben en la MISMA transacción que el asiento y solo si el asiento se escribió (con la clave
+ * repetida no se escribe nada). Ausentes ⇒ el registro es byte a byte el de antes.
+ */
+export interface LateralesDelRegistro {
+  /** Al menos uno de los dos no nulo (CHECK de la tabla); ya recortados y no vacíos. */
+  anotacion?: { contraparteNombre: string | null; referencia: string | null };
+  comprobante?: { storagePath: string; contentType: string; subidoPor: string };
+}
+
 // Fila a insertar en el libro. `monto` STRING (money-safe); origenId NULL solo en manual.
 export interface CrearMovimientoInput {
   /**
@@ -138,6 +150,7 @@ export interface IWalletMovimientoRepository {
   crearMovimientoRegistrado(
     mov: CrearMovimientoInput & { id: string },
     registro: { accion: HistorialAccionTipo; actorUsuarioId: string | null },
+    laterales?: LateralesDelRegistro,
   ): Promise<number>;
   /**
    * R20/R24: pagina el libro (fecha_movimiento desc) con filtros en el WHERE.

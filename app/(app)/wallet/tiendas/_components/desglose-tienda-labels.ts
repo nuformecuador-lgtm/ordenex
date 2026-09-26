@@ -58,6 +58,9 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
   // tomado aqui) y su anulacion, con el patron de «Pago de un gasto de la tienda anulado».
   abono_tienda: "La tienda le paga a Ordenex",
   abono_tienda_anulado: "Pago de la tienda a Ordenex anulado",
+  // Ficha 458-B (design §2.3, D7): la anulación de un cobro por rechazo, flete e IVA por separado.
+  flete_devolucion_anulado: "Cobro por rechazo anulado",
+  iva_flete_devolucion_anulado: "IVA del cobro por rechazo anulado",
   ajuste_credito: "Corrección a favor de la tienda",
   ajuste_debito: "Corrección en contra de la tienda",
 };

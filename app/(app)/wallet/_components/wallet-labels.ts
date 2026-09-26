@@ -292,6 +292,10 @@ export const DOCUMENTO_CAJA_NOMBRE: Record<
   ajuste_caja: "la corrección de caja",
   // Ficha 457 (design §2/§8.5).
   abono_tienda: "el pago de una tienda a Ordenex",
+  // Ficha 458-B (design §3.6): los egresos sin documento, la indemnización y el cobro por rechazo.
+  egreso_caja: "el gasto de la caja",
+  indemnizacion: "la indemnización por un incidente",
+  rechazo_tienda_cobro: "el cobro por rechazo a una tienda",
 };
 
 /**

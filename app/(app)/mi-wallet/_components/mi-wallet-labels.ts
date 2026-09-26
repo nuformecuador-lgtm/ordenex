@@ -120,6 +120,9 @@ export const CATEGORIA_MI_WALLET_LABEL: Record<WalletTiendaMovimientoCategoria, 
   // (`CATEGORIA_TIENDA_LABEL`). «Le pagaste a Ordenex» es el nombre reservado por la 461 §7.8.
   abono_tienda: "Le pagaste a Ordenex",
   abono_tienda_anulado: "Ordenex anuló el pago que le hiciste",
+  // Ficha 458-B (design §2.3, D7): la anulación de un cobro por rechazo, desde la tienda.
+  flete_devolucion_anulado: "Ordenex anuló el flete por rechazo y te lo devolvió",
+  iva_flete_devolucion_anulado: "Ordenex anuló el IVA del flete por rechazo y te lo devolvió",
   ajuste_credito: "Corrección a tu favor",
   ajuste_debito: "Corrección en tu contra",
 };

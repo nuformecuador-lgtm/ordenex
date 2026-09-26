@@ -67,6 +67,11 @@ export const WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED = [
   // caja: `ingreso_abono_tienda` / `egreso_reverso_abono_tienda` (terceros, efectivo).
   "abono_tienda",
   "abono_tienda_anulado",
+  // FICHA 458-B (design §2.1/§2.3, D7): los CREDITOS ESPEJO de la anulacion de un cobro por rechazo
+  // aprobado: le devuelven a la tienda el flete y el IVA. Contrapartida en la caja:
+  // `egreso_reverso_flete_devolucion` / `egreso_reverso_iva_flete_devolucion`.
+  "flete_devolucion_anulado",
+  "iva_flete_devolucion_anulado",
 ] as const satisfies readonly PrismaWalletTiendaMovimientoCategoria[];
 
 export type WalletTiendaMovimientoCategoria =
@@ -239,14 +244,16 @@ export type ListarMovimientosTiendaCompletoResult =
  * por ella (`pago_tienda` de la 172, `pago_por_cuenta` de la 459), leido de las categorias REALES
  * del ledger. Si «pagado» se plegara dentro de «cargos», nadie podria distinguir *lo que te
  * cobre* de *lo que ya te pague* mirando la pantalla. (Ficha 458-A, T2: el comentario de la 171
- * decia que valia siempre 0,00 hasta la 172; la 172 ya emite pagos.)
+ * decia que valia siempre 0,00 hasta la 172; la 172 ya emite pagos.) La cubeta de CADA categoria
+ * la fija `CUBETA_POR_CATEGORIA` (`lib/utils/desglose-tienda.ts`), un `Record` total: esa tabla es
+ * la fuente; los comentarios de abajo, un resumen (458-B, T2).
  *
  * Money-safe (R23): los cuatro importes cruzan la frontera como STRING escala 2.
  */
 export type DesgloseTiendaDTO = {
-  aFavor: string; // Σ creditos (cod_recaudado, ajuste_credito)
-  cargos: string; // Σ debitos en cubeta `cargos` (CUBETA_POR_CATEGORIA: fletes, comision, IVA, cobros, ajuste_debito)
-  pagado: string; // Σ debitos en cubeta `pagado` (CUBETA_POR_CATEGORIA: pagos de Ordenex a la tienda o por ella)
+  aFavor: string; // Σ creditos en cubeta `aFavor` (CUBETA_POR_CATEGORIA: cod_recaudado, ajuste_credito, abono_tienda y los creditos espejo de las anulaciones)
+  cargos: string; // Σ debitos en cubeta `cargos` (CUBETA_POR_CATEGORIA: fletes, comision, los tres IVA, ajuste_debito, cobro_manual, abono_tienda_anulado)
+  pagado: string; // Σ debitos en cubeta `pagado` (CUBETA_POR_CATEGORIA: pago_tienda de la 172, pago_por_cuenta de la 459)
   saldo: string; // aFavor - cargos - pagado (puede venir "-123.45")
   signo: SaldoTiendaSigno;
 };

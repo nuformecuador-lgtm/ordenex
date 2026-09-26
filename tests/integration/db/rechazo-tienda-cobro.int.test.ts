@@ -5,6 +5,8 @@ import { RechazoTiendaCobroRepository } from "@/lib/repositories/RechazoTiendaCo
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { RechazoTiendaCobroService } from "@/lib/services/RechazoTiendaCobroService";
+import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/RechazoTiendaCobroAnulacionRepository";
+import { CajaRechazoTiendaCobroFeedService } from "@/lib/services/CajaRechazoTiendaCobroFeedService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 import {
@@ -298,6 +300,11 @@ describeSiHayBase("💰 337 — el cobro por rechazo desde novedades, contra Pos
         new WalletTiendaMovimientoRepository(cliente),
         cliente,
         (fn) => cliente.$transaction((tx) => fn(tx)),
+        // Ficha 458-B: la anulacion, cableada como su composition root.
+        {
+          repo: new RechazoTiendaCobroAnulacionRepository(cliente),
+          caja: new CajaRechazoTiendaCobroFeedService(new WalletMovimientoRepository(cliente)),
+        },
         { TIENDA_DEBITA_FLETE_DEVOLUCION: true },
       );
     }

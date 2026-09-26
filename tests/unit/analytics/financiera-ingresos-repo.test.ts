@@ -308,7 +308,7 @@ describe("R57 · las dos metricas de la 173 salen de este repositorio, con sus c
     expect(where.categoria.in).not.toContain("ingreso_cod_recaudado");
     expect(where.categoria.in).not.toContain("egreso_pago_tienda");
     expect(where.categoria.in).not.toContain("ingreso_reverso_pago_tienda");
-    expect(where.categoria.in).toHaveLength(16); // ficha 461 (R29): + el cobro a una tienda y su reverso, los dos propios
+    expect(where.categoria.in).toHaveLength(18); // ficha 461 (R29): + el cobro a una tienda y su reverso, los dos propios; ficha 458-B: + los dos reversos del cobro por rechazo
   });
 
   it("y la validacion sigue reventando si una de ellas declarara una categoria ajena", async () => {

@@ -179,6 +179,10 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       // y sus dos tablas con los dos CHECK de los libros ampliados. Ninguna toca `orden_traspaso_mensajero`.
       "20260927120000_abono_tienda_457_enums",
       "20260927120100_abono_tienda_457_tablas_y_checks",
+      // Ficha 458-B (2026-09-26): seis valores de enum de la wallet (down dinamico) y sus tres tablas
+      // laterales con los CHECK de los libros ampliados. Ninguna toca `orden_traspaso_mensajero`.
+      "20260928120000_wallet_458_enums",
+      "20260928120100_wallet_458_tablas",
     ]);
   });
 });

@@ -37,6 +37,9 @@ import type {
   RegistrarRepartoMensajeroInput,
 } from "@/lib/types/liquidacion-reparto";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import type { ComprobanteGuardado } from "@/lib/interfaces/repositories/IWalletComprobanteRepository";
+import type { ComprobanteRecibido, IWalletComprobanteService } from "@/lib/interfaces/services/IWalletComprobanteService";
+import { registrarConComprobante, type FalloDeComprobante } from "@/lib/services/registro-con-comprobante";
 import { repartoMensajeroConfig } from "@/lib/config/reparto-mensajero";
 import { derivarCuentaPorPagar } from "@/lib/utils/cuenta-por-pagar";
 import {
@@ -276,6 +279,12 @@ export class LiquidacionService implements ILiquidacionService {
      * cincuenta y uno.
      */
     private readonly maxCierresPorReparto: number = repartoMensajeroConfig.MAX_CIERRES_POR_REPARTO,
+    /**
+     * FICHA 458-B (R74) — el comprobante del pago a una tienda o del reparto a un mensajero. Sin el,
+     * registrar CON comprobante lanza (un composition root que no inyecta no descarta el archivo en
+     * silencio); sin comprobante, el pago es byte a byte el de antes.
+     */
+    private readonly comprobantes?: IWalletComprobanteService,
   ) {}
 
   /**
@@ -492,115 +501,126 @@ export class LiquidacionService implements ILiquidacionService {
   async registrarRepartoMensajero(
     input: RegistrarRepartoMensajeroInput,
     actor: Actor,
-  ): Promise<RegistrarRepartoServiceResult> {
+    comprobante: ComprobanteRecibido | null = null,
+  ): Promise<RegistrarRepartoServiceResult | FalloDeComprobante> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R1/R4 — antes de tocar datos
+    // FICHA 458-B (R74–R76): el comprobante se sube ANTES y se escribe en la transaccion del reparto,
+    // una fila por pago del reparto (el mismo objeto: hubo UNA transferencia, R58 de la 205).
+    // La escritura, como closure y no como metodo: la superficie del servicio no crece (lista cerrada).
+    const escribirReparto = async (guardado: ComprobanteGuardado | null): Promise<RegistrarRepartoServiceResult> => {
+      // Escala 2 fijada UNA vez: el mismo STRING va al acto, a cada documento y a cada linea del
+      // libro, asi que ninguna de las tres cosas puede discrepar por un redondeo.
+      const monto = new Prisma.Decimal(input.monto).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+      const montoStr = monto.toFixed(2);
+      // R58: metodo, referencia y fecha se capturan UNA vez, aqui, y se copian literales en las N.
+      const referencia = input.referencia ?? null;
+      const nota = input.nota ?? null;
+      const fechaPago = medianocheUtcDelDia(input.fechaPago);
+      // Ficha 461 (R73, auditoria T2): el asiento de cada imputacion, al INICIO del dia de pago en CR.
+      const fechaMovimiento = inicioDelDiaCREnUtc(input.fechaPago);
 
-    // Escala 2 fijada UNA vez: el mismo STRING va al acto, a cada documento y a cada linea del
-    // libro, asi que ninguna de las tres cosas puede discrepar por un redondeo.
-    const monto = new Prisma.Decimal(input.monto).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-    const montoStr = monto.toFixed(2);
-    // R58: metodo, referencia y fecha se capturan UNA vez, aqui, y se copian literales en las N.
-    const referencia = input.referencia ?? null;
-    const nota = input.nota ?? null;
-    const fechaPago = medianocheUtcDelDia(input.fechaPago);
-    // Ficha 461 (R73, auditoria T2): el asiento de cada imputacion, al INICIO del dia de pago en CR.
-    const fechaMovimiento = inicioDelDiaCREnUtc(input.fechaPago);
-
-    try {
-      return await this.runTransaction(async (tx) => {
-        // (3) El ACTO, antes de mover un centimo.
-        const acto = await this.repartoRepo.crear(tx, {
-          claveIdempotencia: input.claveIdempotencia,
-          mensajeroId: input.mensajeroId,
-          montoTotal: montoStr,
-          registradoPor: actor.usuarioId, // R7 de la 172: un pago siempre lo registra alguien
-        });
-        if (acto.status === "clave_repetida") throw new RepartoRepetidoError();
-
-        // (4) La ventana. `ordenarCierresFifo` es la verdad del orden (R8), no el `ORDER BY`.
-        const previos = ordenarCierresFifo(await this.imputablesDe(input.mensajeroId, tx));
-        const ventana = previos.slice(0, this.maxCierresPorReparto);
-        const recortados = previos.slice(this.maxCierresPorReparto);
-
-        // (5) Los candados, EN EL ORDEN DE LA VENTANA. Es un bucle secuencial a proposito: un
-        // `Promise.all` los pediria en orden indeterminado y se acabo la defensa anti-interbloqueo.
-        for (const cierre of ventana) {
-          await this.pagoRepo.bloquearBeneficiario(tx, {
-            tipo: "cierre",
-            cierreId: cierre.cierreId,
-          });
-        }
-
-        // (6) Relectura bajo bloqueo y recalculo con el MISMO tope.
-        const bajoBloqueo = await this.ventanaBajoBloqueo(tx, input.mensajeroId, ventana);
-        const reparto = repartirEntreCierres(montoStr, bajoBloqueo, this.maxCierresPorReparto);
-
-        // R15: nada que imputar. Va ANTES que el exceso: con la ventana vacia el importe siempre
-        // «excede», y decirle al operador que el disponible es 0.00 es peor que decirle que no
-        // hay nada que pagar.
-        if (new Prisma.Decimal(reparto.imputable).lte(0)) return { status: "sin_saldo" };
-        // R14: el disponible es el de la VENTANA vigente, y no se escribe nada.
-        //
-        // Se nombra `imputable` y no `imputableTotal` aunque AQUI valgan lo mismo, y conviene
-        // saber por que valen lo mismo: a este recalculo se le pasa `bajoBloqueo`, que ya es la
-        // ventana (≤ tope), asi que no queda nada recortado y `imputableTotal = imputable + 0`.
-        // Lo que hace que el disponible sea el de la VENTANA no es esta linea: es que el conjunto
-        // que se recalcula es la ventana. Los recortados vuelven a aparecer, y solo ahi, en
-        // `restanteImputable` — que es informativo y no un limite de lo que se puede pagar hoy.
-        if (new Prisma.Decimal(reparto.sobrante).gt(0)) {
-          return { status: "excede", disponible: reparto.imputable };
-        }
-
-        // (7) Una fila de pago y un movimiento por imputacion, con SU cierre (R18/R19).
-        const imputaciones: ImputacionAplicadaDTO[] = [];
-        for (const imputacion of reparto.imputaciones) {
-          const creado = await this.escribirPagoDeCierre(tx, {
-            // §5.1: derivada y AUDITABLE. No es la barrera —esa es la fila del acto— pero deja
-            // la columna con un valor que dice de que reparto y de que cierre nacio, en vez de
-            // un uuid inventado.
-            claveIdempotencia: `${input.claveIdempotencia}:${imputacion.cierreId}`,
+      try {
+        return await this.runTransaction(async (tx) => {
+          // (3) El ACTO, antes de mover un centimo.
+          const acto = await this.repartoRepo.crear(tx, {
+            claveIdempotencia: input.claveIdempotencia,
             mensajeroId: input.mensajeroId,
-            cierreId: imputacion.cierreId,
-            monto: imputacion.monto,
-            metodo: input.metodo, // R58: los tres, IDENTICOS en las N imputaciones
-            referencia,
-            nota,
-            fechaPago,
-            fechaMovimiento,
-            registradoPor: actor.usuarioId,
-            repartoId: acto.reparto.id, // R28: lo que hace el grupo reconstruible
+            montoTotal: montoStr,
+            registradoPor: actor.usuarioId, // R7 de la 172: un pago siempre lo registra alguien
           });
-          // Imposible en teoria (ver `ImputacionRepetidaError`): revierte el reparto ENTERO en
-          // vez de devolver un `ok` al que le falta una imputacion.
-          if (creado.status !== "creado") throw new ImputacionRepetidaError(imputacion.cierreId);
+          if (acto.status === "clave_repetida") throw new RepartoRepetidoError();
 
-          imputaciones.push({
-            cierreId: imputacion.cierreId,
-            monto: imputacion.monto,
-            pendienteDespues: imputacion.pendienteDespues,
-          });
-        }
+          // (4) La ventana. `ordenarCierresFifo` es la verdad del orden (R8), no el `ORDER BY`.
+          const previos = ordenarCierresFifo(await this.imputablesDe(input.mensajeroId, tx));
+          const ventana = previos.slice(0, this.maxCierresPorReparto);
+          const recortados = previos.slice(this.maxCierresPorReparto);
 
-        return {
-          status: "ok",
-          reparto: {
-            totalImputado: reparto.totalImputado,
-            // Lo que SIGUE debiendose por cierres: lo que queda en la ventana MAS lo que quedo
-            // recortado. Tras un reparto con recorte es > 0 a proposito, y es lo que dice que
-            // hace falta registrar otro (design §7.2).
-            restanteImputable: new Prisma.Decimal(reparto.imputable)
-              .sub(reparto.totalImputado)
-              .add(sumarPendientes(recortados))
-              .toFixed(2),
-            imputaciones,
-          },
-        };
-      });
-    } catch (error) {
-      // R28: la respuesta idempotente se compone FUERA de la transaccion, que ya revirtio.
-      if (error instanceof RepartoRepetidoError) return this.responderRepartoYaRegistrado(input);
-      throw error;
-    }
+          // (5) Los candados, EN EL ORDEN DE LA VENTANA. Es un bucle secuencial a proposito: un
+          // `Promise.all` los pediria en orden indeterminado y se acabo la defensa anti-interbloqueo.
+          for (const cierre of ventana) {
+            await this.pagoRepo.bloquearBeneficiario(tx, {
+              tipo: "cierre",
+              cierreId: cierre.cierreId,
+            });
+          }
+
+          // (6) Relectura bajo bloqueo y recalculo con el MISMO tope.
+          const bajoBloqueo = await this.ventanaBajoBloqueo(tx, input.mensajeroId, ventana);
+          const reparto = repartirEntreCierres(montoStr, bajoBloqueo, this.maxCierresPorReparto);
+
+          // R15: nada que imputar. Va ANTES que el exceso: con la ventana vacia el importe siempre
+          // «excede», y decirle al operador que el disponible es 0.00 es peor que decirle que no
+          // hay nada que pagar.
+          if (new Prisma.Decimal(reparto.imputable).lte(0)) return { status: "sin_saldo" };
+          // R14: el disponible es el de la VENTANA vigente, y no se escribe nada.
+          //
+          // Se nombra `imputable` y no `imputableTotal` aunque AQUI valgan lo mismo, y conviene
+          // saber por que valen lo mismo: a este recalculo se le pasa `bajoBloqueo`, que ya es la
+          // ventana (≤ tope), asi que no queda nada recortado y `imputableTotal = imputable + 0`.
+          // Lo que hace que el disponible sea el de la VENTANA no es esta linea: es que el conjunto
+          // que se recalcula es la ventana. Los recortados vuelven a aparecer, y solo ahi, en
+          // `restanteImputable` — que es informativo y no un limite de lo que se puede pagar hoy.
+          if (new Prisma.Decimal(reparto.sobrante).gt(0)) {
+            return { status: "excede", disponible: reparto.imputable };
+          }
+
+          // (7) Una fila de pago y un movimiento por imputacion, con SU cierre (R18/R19).
+          const imputaciones: ImputacionAplicadaDTO[] = [];
+          for (const imputacion of reparto.imputaciones) {
+            const creado = await this.escribirPagoDeCierre(tx, {
+              // §5.1: derivada y AUDITABLE. No es la barrera —esa es la fila del acto— pero deja
+              // la columna con un valor que dice de que reparto y de que cierre nacio, en vez de
+              // un uuid inventado.
+              claveIdempotencia: `${input.claveIdempotencia}:${imputacion.cierreId}`,
+              mensajeroId: input.mensajeroId,
+              cierreId: imputacion.cierreId,
+              monto: imputacion.monto,
+              metodo: input.metodo, // R58: los tres, IDENTICOS en las N imputaciones
+              referencia,
+              nota,
+              fechaPago,
+              fechaMovimiento,
+              registradoPor: actor.usuarioId,
+              repartoId: acto.reparto.id, // R28: lo que hace el grupo reconstruible
+            });
+            // Imposible en teoria (ver `ImputacionRepetidaError`): revierte el reparto ENTERO en
+            // vez de devolver un `ok` al que le falta una imputacion.
+            if (creado.status !== "creado") throw new ImputacionRepetidaError(imputacion.cierreId);
+            // FICHA 458-B (R74): el comprobante del reparto cuelga de CADA pago que produjo.
+            if (guardado !== null) await registrarComprobanteDePago(this.comprobantes, tx, creado.pago.id, guardado, actor.usuarioId);
+
+            imputaciones.push({
+              cierreId: imputacion.cierreId,
+              monto: imputacion.monto,
+              pendienteDespues: imputacion.pendienteDespues,
+            });
+          }
+
+          return {
+            status: "ok",
+            reparto: {
+              totalImputado: reparto.totalImputado,
+              // Lo que SIGUE debiendose por cierres: lo que queda en la ventana MAS lo que quedo
+              // recortado. Tras un reparto con recorte es > 0 a proposito, y es lo que dice que
+              // hace falta registrar otro (design §7.2).
+              restanteImputable: new Prisma.Decimal(reparto.imputable)
+                .sub(reparto.totalImputado)
+                .add(sumarPendientes(recortados))
+                .toFixed(2),
+              imputaciones,
+            },
+          };
+        });
+      } catch (error) {
+        // R28: la respuesta idempotente se compone FUERA de la transaccion, que ya revirtio.
+        if (error instanceof RepartoRepetidoError) return this.responderRepartoYaRegistrado(input);
+        throw error;
+      }
+    };
+    return registrarConComprobante(this.comprobantes, "liquidacion_pago", comprobante, async (guardado) => {
+      const r = await escribirReparto(guardado);
+      return { quedo: r.status === "ok", resultado: r };
+    });
   }
 
   /**
@@ -624,97 +644,114 @@ export class LiquidacionService implements ILiquidacionService {
   async registrarPagoTienda(
     input: RegistrarPagoTiendaInput,
     actor: Actor,
-  ): Promise<RegistrarPagoServiceResult> {
+    comprobante: ComprobanteRecibido | null = null,
+  ): Promise<RegistrarPagoServiceResult | FalloDeComprobante> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R1/R2/R5/R6 — antes de tocar datos
+    // FICHA 458-B (R74–R76): el comprobante se sube ANTES y se escribe en la transaccion del pago.
+    // La escritura, como closure y no como metodo: la superficie del servicio no crece (lista cerrada).
+    const escribirPagoTienda = async (guardado: ComprobanteGuardado | null): Promise<RegistrarPagoServiceResult> => {
+      // Escala 2 fijada UNA vez: el mismo STRING va al documento, al libro y a la resta del
+      // restante, asi que documento y libro no pueden discrepar por un redondeo (R39).
+      const monto = new Prisma.Decimal(input.monto).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+      const montoStr = monto.toFixed(2);
 
-    // Escala 2 fijada UNA vez: el mismo STRING va al documento, al libro y a la resta del
-    // restante, asi que documento y libro no pueden discrepar por un redondeo (R39).
-    const monto = new Prisma.Decimal(input.monto).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-    const montoStr = monto.toFixed(2);
-
-    try {
-      return await this.runTransaction(async (tx) => {
-        // R83/R85: UN solo candado, sobre la fila de la tienda, ANTES de leer el disponible.
-        await this.pagoRepo.bloquearBeneficiario(tx, {
-          tipo: "tienda",
-          tiendaId: input.tiendaId,
-        });
-
-        // R31/R32: el disponible es el saldo a favor DERIVADO del ledger (creditos - debitos),
-        // sin filtros: se paga contra el saldo acumulado, no contra un periodo.
-        const agregado = await this.tiendaRepo.agregarSaldoPorTienda(input.tiendaId, {});
-        const disponible = new Prisma.Decimal(
-          derivarSaldoTienda(agregado.creditos, agregado.debitos).saldo,
-        );
-
-        if (disponible.lte(0)) return { status: "sin_saldo" }; // R32 [P1]
-        if (monto.gt(disponible)) {
-          // R31 [P1]: se rechaza y se informa de cuanto queda, sin escribir nada.
-          return { status: "excede", disponible: disponible.toFixed(2) };
-        }
-
-        const creado = await this.pagoRepo.crear(tx, {
-          claveIdempotencia: input.claveIdempotencia,
-          mensajeroId: null,
-          tiendaId: input.tiendaId, // R29: el pago a una tienda NO lleva cierre (CHECK en la base)
-          cierreId: null,
-          monto: montoStr,
-          metodo: input.metodo,
-          referencia: input.referencia ?? null,
-          nota: input.nota ?? null,
-          fechaPago: medianocheUtcDelDia(input.fechaPago), // R9: fecha REAL, distinta del registro
-          registradoPor: actor.usuarioId, // R7: un pago siempre lo registra alguien
-          repartoId: null, // feature 205: el pago a una TIENDA nunca nace de un reparto
-        });
-        // §4.1: sale de la transaccion (que revierte) y la relectura ocurre fuera.
-        if (creado.status === "clave_repetida") throw new ClaveRepetidaError();
-
-        // R36/R37/R38/R39: el debito nace del documento y va en la MISMA transaccion.
-        await this.tiendaRepo.crearMovimientos(tx, [
-          {
+      try {
+        return await this.runTransaction(async (tx) => {
+          // R83/R85: UN solo candado, sobre la fila de la tienda, ANTES de leer el disponible.
+          await this.pagoRepo.bloquearBeneficiario(tx, {
+            tipo: "tienda",
             tiendaId: input.tiendaId,
-            tipo: "debito",
-            categoria: "pago_tienda",
+          });
+
+          // R31/R32: el disponible es el saldo a favor DERIVADO del ledger (creditos - debitos),
+          // sin filtros: se paga contra el saldo acumulado, no contra un periodo.
+          //
+          // Ficha 458-B (arreglo heredado de la 457, `progress/impl_457.md` §12.4): el saldo que
+          // DECIDE se lee por el MISMO `tx` que tomo el candado, no por otra conexion del pool. Con el
+          // pool de 3 por instancia, tres operaciones de la misma tienda a la vez (una con el candado,
+          // dos esperandolo) dejaban a la primera sin conexion para leer: cuelgue y rollback. Molde:
+          // `AbonoTiendaService` (tercer parametro de `agregarSaldoPorTienda`).
+          const agregado = await this.tiendaRepo.agregarSaldoPorTienda(input.tiendaId, {}, tx);
+          const disponible = new Prisma.Decimal(
+            derivarSaldoTienda(agregado.creditos, agregado.debitos).saldo,
+          );
+
+          if (disponible.lte(0)) return { status: "sin_saldo" }; // R32 [P1]
+          if (monto.gt(disponible)) {
+            // R31 [P1]: se rechaza y se informa de cuanto queda, sin escribir nada.
+            return { status: "excede", disponible: disponible.toFixed(2) };
+          }
+
+          const creado = await this.pagoRepo.crear(tx, {
+            claveIdempotencia: input.claveIdempotencia,
+            mensajeroId: null,
+            tiendaId: input.tiendaId, // R29: el pago a una tienda NO lleva cierre (CHECK en la base)
+            cierreId: null,
             monto: montoStr,
-            origenTipo: "pago_tienda", // R38: enlaza el movimiento con su documento…
-            origenId: creado.pago.id, //      …y hereda la idempotencia del indice unico parcial
+            metodo: input.metodo,
+            referencia: input.referencia ?? null,
+            nota: input.nota ?? null,
+            fechaPago: medianocheUtcDelDia(input.fechaPago), // R9: fecha REAL, distinta del registro
+            registradoPor: actor.usuarioId, // R7: un pago siempre lo registra alguien
+            repartoId: null, // feature 205: el pago a una TIENDA nunca nace de un reparto
+          });
+          // §4.1: sale de la transaccion (que revierte) y la relectura ocurre fuera.
+          if (creado.status === "clave_repetida") throw new ClaveRepetidaError();
+
+          // R36/R37/R38/R39: el debito nace del documento y va en la MISMA transaccion.
+          await this.tiendaRepo.crearMovimientos(tx, [
+            {
+              tiendaId: input.tiendaId,
+              tipo: "debito",
+              categoria: "pago_tienda",
+              monto: montoStr,
+              origenTipo: "pago_tienda", // R38: enlaza el movimiento con su documento…
+              origenId: creado.pago.id, //      …y hereda la idempotencia del indice unico parcial
+              descripcion: descripcionDePago(input.metodo, input.referencia ?? null),
+              registradoPor: actor.usuarioId,
+              // R37: la fecha REAL del pago. Ficha 461 (R73, auditoria T2): al INICIO de ese dia en CR
+              // (06:00Z), no a la medianoche UTC: el rollup lo contaba el dia anterior.
+              fechaMovimiento: inicioDelDiaCREnUtc(input.fechaPago),
+            },
+          ]);
+
+          // Feature 173 (R18/R19/R20) — TERCERA escritura, misma transaccion: el dinero SALE de
+          // la caja principal. Va DESPUES del ledger a proposito, para que el libro de la tienda
+          // siga siendo el primero en cuadrar; y con el MISMO `montoStr` ya redondeado, de modo
+          // que documento, ledger y caja no puedan discrepar por un centimo.
+          //
+          // Ni el tipo ni la categoria se nombran aqui: los fija el puerto (R23).
+          await this.caja.emitirEgresoDePago(tx, {
+            pagoId: creado.pago.id,
+            monto: montoStr,
             descripcion: descripcionDePago(input.metodo, input.referencia ?? null),
             registradoPor: actor.usuarioId,
-            // R37: la fecha REAL del pago. Ficha 461 (R73, auditoria T2): al INICIO de ese dia en CR
-            // (06:00Z), no a la medianoche UTC: el rollup lo contaba el dia anterior.
-            fechaMovimiento: inicioDelDiaCREnUtc(input.fechaPago),
-          },
-        ]);
+            fechaMovimiento: inicioDelDiaCREnUtc(input.fechaPago), // R20 + 461/R73: la fecha REAL del pago, al inicio del dia CR
+          });
 
-        // Feature 173 (R18/R19/R20) — TERCERA escritura, misma transaccion: el dinero SALE de
-        // la caja principal. Va DESPUES del ledger a proposito, para que el libro de la tienda
-        // siga siendo el primero en cuadrar; y con el MISMO `montoStr` ya redondeado, de modo
-        // que documento, ledger y caja no puedan discrepar por un centimo.
-        //
-        // Ni el tipo ni la categoria se nombran aqui: los fija el puerto (R23).
-        await this.caja.emitirEgresoDePago(tx, {
-          pagoId: creado.pago.id,
-          monto: montoStr,
-          descripcion: descripcionDePago(input.metodo, input.referencia ?? null),
-          registradoPor: actor.usuarioId,
-          fechaMovimiento: inicioDelDiaCREnUtc(input.fechaPago), // R20 + 461/R73: la fecha REAL del pago, al inicio del dia CR
-        });
+          // FICHA 458-B (R74): el comprobante del pago, en ESTA transaccion (si falla, no queda el pago).
+          if (guardado !== null) await registrarComprobanteDePago(this.comprobantes, tx, creado.pago.id, guardado, actor.usuarioId);
 
-        return {
-          status: "ok",
-          pago: aPagoRegistradoDTO(creado.pago),
-          restante: disponible.sub(monto).toFixed(2),
-        };
-      });
-    } catch (error) {
-      if (error instanceof ClaveRepetidaError) {
-        return this.responderYaRegistrado(input.claveIdempotencia, {
-          tipo: "tienda",
-          tiendaId: input.tiendaId,
+          return {
+            status: "ok",
+            pago: aPagoRegistradoDTO(creado.pago),
+            restante: disponible.sub(monto).toFixed(2),
+          };
         });
+      } catch (error) {
+        if (error instanceof ClaveRepetidaError) {
+          return this.responderYaRegistrado(input.claveIdempotencia, {
+            tipo: "tienda",
+            tiendaId: input.tiendaId,
+          });
+        }
+        throw error;
       }
-      throw error;
-    }
+    };
+    return registrarConComprobante(this.comprobantes, "liquidacion_pago", comprobante, async (guardado) => {
+      const r = await escribirPagoTienda(guardado);
+      return { quedo: r.status === "ok", resultado: r };
+    });
   }
 
   /**
@@ -973,6 +1010,7 @@ export class LiquidacionService implements ILiquidacionService {
    * imposible-en-teoria en el reparto). El movimiento solo se escribe si el documento se creo:
    * un libro con una linea sin documento seria peor que no escribir nada.
    */
+
   private async escribirPagoDeCierre(
     tx: LiquidacionTx,
     pago: PagoDeCierreEscrito,
@@ -1351,4 +1389,20 @@ export class LiquidacionService implements ILiquidacionService {
     const agregado = await this.tiendaRepo.agregarSaldoPorTienda(tiendaId, {});
     return derivarSaldoTienda(agregado.creditos, agregado.debitos).saldo;
   }
+}
+
+/** FICHA 458-B (R74) — la fila de `wallet_comprobante` de un pago recien creado, en su transaccion. */
+async function registrarComprobanteDePago(
+  puerto: IWalletComprobanteService | undefined,
+  tx: LiquidacionTx,
+  pagoId: string,
+  guardado: ComprobanteGuardado,
+  subidoPor: string,
+): Promise<void> {
+  if (puerto === undefined) {
+    throw new Error("pago con comprobante sin el puerto de comprobantes: revisar el composition root");
+  }
+  const r = await puerto.registrarEnTx(tx, { pago: pagoId }, guardado, subidoPor);
+  // Un pago recien creado no puede tener ya comprobante: si lo tuviera, se revierte todo.
+  if (r !== "creado") throw new Error(`pago ${pagoId}: ya tenia comprobante recien creado`);
 }

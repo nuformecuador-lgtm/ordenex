@@ -3,7 +3,7 @@ titulo: Wallet · Caja
 modulo: wallet
 pantalla: /wallet
 roles: [maestro, admin]
-actualizado: 2026-09-25
+actualizado: 2026-09-26
 fuentes:
   - app/(app)/wallet/_components/WalletModule.tsx
   - app/(app)/wallet/_components/CajaResumenCard.tsx
@@ -22,6 +22,9 @@ fuentes:
   - lib/services/CajaCobroTiendaFeedService.ts
   - lib/services/AjusteCajaService.ts
   - lib/services/AbonoTiendaService.ts
+  - lib/services/RechazoTiendaCobroService.ts
+  - lib/services/EgresoCajaAnulacionService.ts
+  - lib/actions/wallet-anulacion.ts
   - lib/utils/descripcion-abono.ts
   - lib/actions/abono-tienda.ts
   - lib/utils/descripcion-pago-por-cuenta.ts
@@ -66,6 +69,8 @@ Cada concepto del libro se lee desde Ordenex y dice quién le paga a quién. Los
 | **Corrección de caja (suma)** / **Corrección de caja (resta)** | Una corrección hecha a mano para cuadrar la caja |
 | **Aporte de dinero a la caja** / **Aporte de dinero a la caja anulado** | El saldo inicial o un aporte de Ordenex, y su anulación |
 | **Una tienda le paga a Ordenex** / **Pago de una tienda a Ordenex anulado** | Lo que una tienda con saldo en contra le paga a Ordenex, y su anulación. Es dinero de la tienda: sube lo que Ordenex les debe a las tiendas |
+| **Flete por rechazo cobrado a la tienda** / **Flete por rechazo cobrado a la tienda anulado** | El flete que Ordenex le cobra a una tienda cuando su cliente rechaza el pedido, y su anulación. El IVA va en su propia línea, con su propia anulación |
+| **Indemnización que Ordenex paga por un incidente** | Lo que Ordenex paga cuando un envío sufre un incidente. Si se anula, aparece una **Corrección de caja (suma)** por el mismo monto |
 
 La columna **Origen** dice de dónde nace cada línea con el mismo criterio: **Cierre del día**,
 **Registrado a mano**, **Gasto o sueldo registrado a mano**, **Pago de Ordenex a una tienda**, **Pago de
@@ -255,7 +260,8 @@ reparto. Si se anula, vuelve a **Flujo de dinero registrado**. La ganancia no ca
 ## Anular: con motivo, y sin borrar nada
 
 Un **pago de un gasto de una tienda**, un **aporte de dinero a la caja**, un **cobro de Ordenex a una
-tienda**, un **pago de una tienda a Ordenex** o una **corrección de caja** no se editan. Si hubo un error, se anulan desde su fila en el
+tienda**, un **pago de una tienda a Ordenex** o una **corrección de caja** no se editan. Tampoco un
+**cobro por rechazo a una tienda** ni una **indemnización por un incidente**. Si hubo un error, se anulan desde su fila en el
 libro de la caja con **Anular…**:
 
 - **El motivo es obligatorio.** Queda guardado junto a la anulación.
@@ -273,6 +279,15 @@ libro de la caja con **Anular…**:
   cambia. En la caja aparece **Pago de una tienda a Ordenex anulado**; en el libro de la tienda, «Pago
   de la tienda a Ordenex anulado».
 - Al anular una corrección de caja, aparece la corrección contraria por el mismo monto.
+- Un **cobro por rechazo** tiene dos líneas en la caja, el flete y su IVA: se anula desde **cualquiera de
+  las dos** y se anulan **las dos juntas**. La **ganancia baja** en el flete más el IVA, **lo que Ordenex
+  les debe a las tiendas** y el saldo de la tienda **vuelven a subir** en lo mismo (si al cobrarlo se le
+  descontó a la tienda), y **Entró**, **Salió** y la cifra grande no cambian. En la caja aparecen
+  **Flete por rechazo cobrado a la tienda anulado** y **IVA del flete por rechazo cobrado a la tienda
+  anulado**. En **Analítica**, «Ingreso por flete» e «Ingreso por IVA» descuentan la anulación: el
+  **neto** vuelve a ser el de antes del cobro.
+- Al anular una **indemnización**, aparece una **Corrección de caja (suma)** por el mismo monto: la
+  caja y la ganancia vuelven a subir.
 
 Si te dice **«Ya estaba anulado; no se registró nada más»**, alguien se te adelantó. Si te dice que el
 cobro **no se puede anular desde aquí**, es uno de los cobros antiguos que ya se corrigieron como pago
@@ -316,6 +331,7 @@ cuadrar fuera, con los mismos nombres que la tabla.
 - **No muestra lo que le debés a cada mensajero.** Eso es **Wallet · Mensajeros**.
 - **No es el saldo del banco**, salvo que alguien haya registrado el saldo inicial real.
 - **No se editan movimientos.** Un pago de un gasto, un aporte, un cobro a una tienda, un pago de una
-  tienda a Ordenex o una corrección se anulan con motivo; un gasto o sueldo se reversa; los demás son inmutables.
+  tienda a Ordenex, una corrección, un cobro por rechazo o una indemnización se anulan con motivo; un
+  gasto o sueldo se reversa; los demás son inmutables.
 - **No se corrigen cifras de entregas.** Un movimiento que nació de un cierre se arregla en el cierre,
   no acá.

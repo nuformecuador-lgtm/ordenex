@@ -413,6 +413,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.7 (b) — el down recrea 50 tipos y 2
       // mide por metodo). Su archivo: `abono-tienda-457-migration.test.ts`.
       "abono_tienda_registrado",
       "abono_tienda_anulado",
+      // Ficha 458-B (2026-09-26): la anulacion del cobro por rechazo aprobado (D7) y la de un egreso de
+      // caja (D13). Su migracion: `20260928120000_wallet_458_enums`.
+      "cobro_rechazo_tienda_anulado",
+      "egreso_caja_anulado",
     ];
     expect([...tiposAntes].sort()).toEqual(
       [...HISTORIAL_ACCION_TIPOS]

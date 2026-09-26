@@ -3,6 +3,11 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { AbonoTiendaRepository } from "@/lib/repositories/AbonoTiendaRepository";
 import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnulacionRepository";
+import {
+  EgresoCajaDocumentosRepository,
+  IndemnizacionDocumentosRepository,
+} from "@/lib/repositories/EgresoCajaDocumentosRepository";
+import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/RechazoTiendaCobroAnulacionRepository";
 import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
 import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
 import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
@@ -40,7 +45,6 @@ import {
   listarMovimientosCompletoSchema,
   listarMovimientosDeFilaSchema,
   listarMovimientosSchema,
-  registrarMovimientoManualSchema,
   type AnularAjusteCajaResult,
   type ListarMovimientosCompletoResult,
 } from "@/lib/types/wallet";
@@ -48,6 +52,8 @@ import {
   verDetalleDeMovimientoCompletoSchema,
   verDetalleDeMovimientoSchema,
 } from "@/lib/types/detalle-movimiento";
+import { registrarMovimientoManualConLateralesSchema, separarComprobante } from "@/lib/types/wallet-laterales";
+import { buildComprobantes, leerComprobanteOpcional } from "@/lib/actions/_shared/comprobante-lateral";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -80,9 +86,14 @@ export type VerResumenCajaActionResult =
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
+/** Con un OBJETO (el dialogo de hoy) no hay `comprobante_no_guardado`; con un `FormData` (458-C) si. */
 export type RegistrarMovimientoManualActionResult =
-  | RegistrarMovimientoManualServiceResult
+  | Exclude<RegistrarMovimientoManualServiceResult, { status: "comprobante_no_guardado" }>
   | { status: "unauthenticated" };
+
+export type RegistrarMovimientoManualConComprobanteActionResult =
+  | RegistrarMovimientoManualActionResult
+  | { status: "comprobante_no_guardado" };
 
 // Traduce el AppErrorShape del borde: ZodError (VALIDATION_ERROR) o falta de sesion
 // (UNAUTHORIZED). Espejo de `toCierresAdminActionError`.
@@ -119,7 +130,11 @@ function buildService(): IWalletService {
     cobros: new CobroTiendaAnulacionRepository(prisma),
     ajustes: new AjusteCajaAnulacionRepository(prisma),
     abonos: new AbonoTiendaRepository(prisma),
-  });
+    // Ficha 458-B (design §3.6, R71/R72): egresos, indemnizaciones y cobros por rechazo.
+    egresos: new EgresoCajaDocumentosRepository(prisma),
+    indemnizaciones: new IndemnizacionDocumentosRepository(prisma),
+    rechazos: new RechazoTiendaCobroAnulacionRepository(prisma),
+  }, buildComprobantes(prisma)); // Ficha 458-B (R74): el comprobante de la correccion
 }
 
 /**
@@ -354,17 +369,33 @@ export async function verDetalleDeMovimientoCompletoAction(
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }
 
-/** R15/R19: registra un movimiento manual de ajuste (solo maestro; monto>0, descripcion obligatoria). */
+/**
+ * R15/R19: registra un movimiento manual de ajuste (solo maestro; monto>0, descripcion obligatoria).
+ * FICHA 458-B (R42/R74): acepta tambien un `FormData` con `contraparteNombre`, `referencia` y
+ * `comprobante` opcionales (molde 459); anotacion y comprobante van en la MISMA transaccion.
+ */
+export function registrarMovimientoManualAction(
+  input: FormData,
+  deps?: WalletDeps,
+): Promise<RegistrarMovimientoManualConComprobanteActionResult>;
+export function registrarMovimientoManualAction(
+  input: unknown,
+  deps?: WalletDeps,
+): Promise<RegistrarMovimientoManualActionResult>;
 export async function registrarMovimientoManualAction(
   input: unknown,
   deps: WalletDeps = {},
-): Promise<RegistrarMovimientoManualActionResult> {
+): Promise<RegistrarMovimientoManualConComprobanteActionResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError();
-    const data = registrarMovimientoManualSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const { crudo, comprobante } = separarComprobante(input);
+    const data = registrarMovimientoManualConLateralesSchema.parse(crudo); // ZodError -> VALIDATION_ERROR
+    const archivo = await leerComprobanteOpcional(comprobante);
     const service = deps.service ?? buildService();
-    return service.registrarMovimientoManual(data, actor);
+    return archivo === null
+      ? service.registrarMovimientoManual(data, actor)
+      : service.registrarMovimientoManual(data, actor, archivo);
   });
   // El service ya devuelve validation_error de dominio si aplica; el borde solo traduce
   // ZodError/UNAUTHORIZED.

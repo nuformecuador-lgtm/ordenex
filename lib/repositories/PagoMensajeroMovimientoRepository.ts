@@ -196,7 +196,8 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
     const [rows, total] = await Promise.all([
       this.prisma.pagoMensajeroMovimiento.findMany({
         where,
-        orderBy: { fechaMovimiento: "desc" },
+        // Ficha 458-B (R23, m4 de la auditoria): orden TOTAL, como la caja. Ver `listarPorTienda`.
+        orderBy: [{ fechaMovimiento: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         skip,
         take: filtros.pageSize,
       }),

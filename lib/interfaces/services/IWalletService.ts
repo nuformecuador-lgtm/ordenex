@@ -9,6 +9,8 @@ import type {
   RegistrarMovimientoManualInput,
 } from "@/lib/types/wallet";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
+import type { CamposLateralesCaja } from "@/lib/types/wallet-laterales";
+import type { ComprobanteRecibido } from "@/lib/interfaces/services/IPagoPorCuentaTiendaService";
 
 // Feature 42 (design §2.1) — contrato del servicio de la wallet (libro + balance +
 // manual). Rol autorizado: maestro (R19). Resultados de dominio (sin acoplar a HTTP);
@@ -72,7 +74,9 @@ export type RegistrarMovimientoManualServiceResult =
   /** Ficha 461 (R68): la MISMA clave ya tenia su fila; se devuelve esa y no se escribio nada. */
   | { status: "ya_registrado"; movimiento: WalletMovimientoDTO }
   | { status: "forbidden" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  /** FICHA 458-B (R76): el comprobante no se pudo guardar; no se registro nada. */
+  | { status: "comprobante_no_guardado" };
 
 /**
  * Ficha 459 (R14) — lo unico que el resumen de la caja necesita saber del capital: si hay un saldo
@@ -87,6 +91,11 @@ export interface EstadoDocumentoCaja {
   id: string;
   anulado: boolean;
   tieneComprobante: boolean;
+  /**
+   * Ficha 458-B (R72) — `true` cuando esta anulado por un reverso de ANTES de esta ficha, sin
+   * constancia: la pantalla dice «motivo no registrado». Ausente en todo lo demas.
+   */
+  sinConstancia?: boolean;
 }
 
 /**
@@ -116,6 +125,17 @@ export interface LectoresDocumentosCaja {
    * ofreceria «Anular…» ni «Ver comprobante».
    */
   abonos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 458-B (design §3.6, R71/R72) — el estado de los EGRESOS sin documento propio (sueldo,
+   * gasto de Ordenex, gasto fijo cobrado; origen `gasto`). El id es el de la PROPIA fila. «Anulado»
+   * lo decide el contra-asiento en la base, no la pagina. Lo implementa
+   * `EgresoCajaDocumentosRepository`. Sin valor por defecto.
+   */
+  egresos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /** Ficha 458-B (D8, R71) — las indemnizaciones por incidente (id = la propia fila). */
+  indemnizaciones: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /** Ficha 458-B (D7, R71) — los cobros por rechazo aprobados: id = la GESTION (sus dos lineas). */
+  rechazos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
 }
 
 export interface IWalletService {
@@ -161,7 +181,9 @@ export interface IWalletService {
   ): Promise<ListarMovimientosDeFilaServiceResult>;
   /** R15/R19: solo maestro; registra un movimiento manual de AJUSTE (inmutable, R3). */
   registrarMovimientoManual(
-    input: RegistrarMovimientoManualInput,
+    input: RegistrarMovimientoManualInput & Partial<CamposLateralesCaja>,
     actor: Actor,
+    /** FICHA 458-B (R74): el comprobante opcional, ya leido por el borde. */
+    comprobante?: ComprobanteRecibido | null,
   ): Promise<RegistrarMovimientoManualServiceResult>;
 }
