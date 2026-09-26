@@ -298,9 +298,9 @@
   sembrado, un solo dev server, con Playwright ad hoc. *Hecho:* `progress/recorrido_457.md` + capturas con
   números en `progress/recorrido_457/`. (R79)
   *Evidencia:* `b1272ce2` — `progress/recorrido_457.md` + `progress/recorrido_457/` (47 OK, 1 FALLO = F1, arreglado en `e4c191fb`; 5 N/V por el bucket). Es la B2 de la revisión.
-- [ ] **T9.4** `./init.sh` COMPLETO con `INIT_EXIT=$?` dentro del log, sin `tail`, 0 saltados en
+- [x] **T9.4** `./init.sh` COMPLETO con `INIT_EXIT=$?` dentro del log, sin `tail`, 0 saltados en
   `integration/db`. *Hecho:* verde.
-  **Pendiente: el gate completo de cierre (`progress/gate_457_cierre.log`) se marca al terminar.**
+  *Evidencia:* `progress/gate_457_cierre.log` (`INIT_EXIT=0`, 2258/2258 archivos, 0 saltados en `integration/db`); la primera corrida roja por una parada global de ~30 s, aislada 3/3 verde, en `progress/gate_457_cierre_a.log` y `progress/impl_457.md` §12.6.
 - [ ] **T9.5** **(LEADER)** Antes de desplegar: confirmar el bucket `wallet-comprobantes` en preview y prod
   (M5); tras desplegar, M3/M4/M6/M8 y RLS de `design.md` §14 «después» en `progress/contraste_457.md`;
   errores de runtime en la hora siguiente = 0. Tras el primer pago real de Nuform: M1 y M8. (R78)

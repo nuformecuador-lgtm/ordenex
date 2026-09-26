@@ -186,7 +186,7 @@ en la ENTRADA original (`ingreso_abono_tienda` + origen `abono_tienda`) y `null`
 | R49 | `U/utils/desglose-tienda.test.ts` (`CUBETA` concuerda con el tipo; mutación 4); invariante (saldo de B) |
 | R50 | `C/DesgloseTiendaAbono457.test.tsx` «R50» ×2 (pistas literales de las dos cabeceras); `U/components/desglose-tienda-labels.test.ts`, `mi-wallet-labels.test.ts`, `saldo-tienda-card.negativo.test.tsx`, `I/mi-wallet-page.test.tsx` (literales reescritos) |
 | R51 | `C/DesgloseTiendaAbono457.test.tsx` (las filas del pago y de su anulación no ofrecen desplegar, en las dos pantallas) |
-| R52 | `U/analytics/metrics-caja-naturaleza.guardia.test.ts` (7/25/9; `ganancia_ordenex` 16, `egresos` 10) |
+| R52 | `U/analytics/metrics-caja-naturaleza.guardia.test.ts` (7/25/9; `ganancia_ordenex` 16, `egresos` 10); `U/analytics/metrics-cuenta-por-pagar-tienda-457.test.ts` (m1, §12) |
 | R53 | `U/guards/nombres-wallet-461.guardia.test.ts` («457/R53»: tomados exactamente por su clave —«Una tienda le paga a Ordenex» también por `CONCEPTOS_MANUALES.label.abono_tienda`, la fila «Diálogo: concepto» de design §2—; contrapruebas con un reservado ficticio) |
 | R54, R55 | `U/components/wallet-conceptos-manuales.test.ts` (ocho conceptos, tres grupos, `entra` con tres, frase de efecto y cabecera literales; «⭑ FICHA 457»); `U/components/wallet-registrar-movimiento-dialog.test.tsx` «ofrece los ocho conceptos», «R55» |
 | R56 | `wallet-registrar-movimiento-dialog.test.tsx` «R56 (mutación 9)» (claves EXACTAS del `FormData`, clave de idempotencia, `fechaPago`), «R56: la fecha viaja SIEMPRE…», «R56: pide tienda, monto…»; los otros seis payloads, con sus tests de siempre sin tocar |
@@ -200,11 +200,11 @@ en la ENTRADA original (`ingreso_abono_tienda` + origen `abono_tienda`) y `null`
 | R67 | `U/guards/abono-tienda-alcance.guardia.test.ts` (3): **EXACTAMENTE uno** (`toEqual(["abono_tienda"])`, con su ingreso en la caja) + contraprueba sin el concepto; `wallet-conceptos-manuales.test.ts` |
 | R68, R69 | `U/asistente/contexto-457.test.ts` (frases literales de design §11 por rol; mensajero/adminTienda/adminSatelite sin la caja; fuentes y fecha), `contexto-461.test.ts` (literal del grupo reescrito), `nombres-wallet-461.guardia` sobre `docs/ayuda/**`, guardias `ayuda-*`/`asistente-*`; cuatro preguntas reales (§11.4) |
 | R70–R73 | fotografía `I/caja-caracterizacion-459.test.ts` verde SIN tocar literales; `progress/fase0_457.md` (a)–(e); `liquidacion-idempotencia`, `cobro-tienda-461`, `pago-por-cuenta-tienda` verdes sin tocar (gate) |
-| R74 | integración «R74» |
+| R74 | integración «R74» (desde el cierre ejecuta el backfill de la 173 en seco: m5, §12) |
 | R75, R76 | `I/abono-tienda-457-migration.test.ts` (a)–(f) + ciclo real §2 |
 | R77 | `progress/fase0_457.md` + §7 de esta bitácora |
 | R78 | leader (`progress/contraste_457.md`) |
-| R79 | recorrido por rol: leader (T9.3; no hecho por el frontend) |
+| R79 | `progress/recorrido_457.md` + `progress/recorrido_457/` (`b1272ce2`, mergeado en el cierre; §12) |
 
 ## 7. Mutaciones de la ficha (design §13), con el rojo comprobado
 
@@ -456,3 +456,150 @@ corridas verdes (4/4 archivos, 39/39 tests) sin tocar nada; la segunda corrida c
 - El tope de 1024 tokens del asistente (§11.4): trunca respuestas de tres casos. Fuera de la ficha.
 - `design.md` §5.1 y el orden de la clave (R25): sigue anotado en §10, sin tocar.
 
+## 12. Cierre tras la revisión y el recorrido — `backend_dev`, worktree `agent-a6b9ff2d8d635347f` (2026-09-26)
+
+**Rama:** `wt/457-cierre` = `origin/feature/457-backend` @ `0ab05a1d` + merge de `origin/feature/457-recorrido`
+(`b1272ce2`) + merge de `origin/review/457` (`6d0366ea`); empujada a `origin/feature/457-backend`.
+**Base:** clon `ordenex_457c` (`CREATE DATABASE … TEMPLATE ordenex`, 0 conexiones a la plantilla; `prisma
+migrate deploy` aplicó las dos de la ficha). `.env` del worktree = el del checkout principal con la base
+cambiada y SIN `DATABASE_URL_PREVIEW`, copiado sin imprimirlo. `pnpm install --frozen-lockfile` propio, sin
+junction. La base `ordenex` no se tocó (solo como plantilla). **Búsqueda:** el MCP `codebase-memory` NO
+estaba en el conjunto de herramientas de esta sesión: todo se leyó con `grep` y lectura directa.
+
+### 12.1 Commits
+
+| SHA | Qué |
+| --- | --- |
+| `e4c191fb` | **F1** del recorrido: `design.md` §14 M8 = la C457-1 (los dos conceptos del pago como TERCEROS); SQL completo en `progress/contraste_457.md` «SQL M8 para después del despliegue», comprobado en el clon (R8 = 0,00) |
+| `99fb7610` | **m1**: `tests/unit/analytics/metrics-cuenta-por-pagar-tienda-457.test.ts` (R52) |
+| `062f26c7` | **m2**: concurrencia «R38 (m2)» — la anulación pausada con el candado y un pago de la misma tienda |
+| `e1084535` | **m3**: el saldo que decide bajo el candado se lee por la MISMA transacción |
+| `edea9870` | **m7**: el aviso de `ya_registrado` dice el importe del pago que quedó |
+| `d325ec44` | **m5**: R74 ejecuta los lectores reales (backfill de la 173 en seco) |
+| `a05cd58b` | **Asistente**: techo de respuesta 1024 → 2048 |
+| `6ca47235` | **Descargas**: el nombre del archivo lleva el día de Costa Rica |
+| `fe368180` | **m4**: `design.md` §5.1 con el orden real; **m6** anotado como límite L9 en §19 |
+| `6f47a5ba` | **B1/B2**: `tasks.md` marcado con su evidencia y enlace al recorrido |
+| `78a99bad` | **B3**: anexo T9.1 de `progress/fase0_457.md` |
+| (este) | bitácora + log del gate de cierre + T9.4 |
+
+### 12.2 Qué se arregló, con su test y su mutación
+
+- **F1 (dinero, documental):** la M8 de producción era la C461-1 literal, que cuenta `ingreso_abono_tienda` y
+  `egreso_reverso_abono_tienda` como «propio». La C457-1 los pone en terceros. Medido en `ordenex_457c` por las
+  actions reales (cobro de 147.670,10 → pago de 4.000 → anulación → segundo pago): la literal da R8 = −4.000,00
+  con un pago vigente; la C457-1, **R8 = 0,00 y R7 = 0,00 en los cinco pasos** (tabla en
+  `progress/contraste_457.md`).
+- **m1 (R52):** `cuenta_por_pagar_tienda.definicion.categorias` = EXACTAMENTE el seed del libro de las tiendas, y
+  nombra las dos del pago. Mutación H (quitar las dos líneas de `metrics.ts:794-795`): **2 rojos**.
+- **m2 (R38):** la anulación se PAUSA dentro de su transacción (constancia escrita, candado tomado) y un pago de
+  5.000 de la misma tienda arranca; con el candado espera y responde el saldo real (−5.000); sin él termina
+  durante la pausa y diría −1.000. Postgres real, sin dobles. Mutación A: **roja por este test** (antes solo la
+  mataba el orden de llamadas del unitario).
+- **m3 (R16):** `IWalletTiendaMovimientoRepository.agregarSaldoPorTienda(tiendaId, filtros, cliente?)` —el
+  tercer parámetro es OPCIONAL—; `AbonoTiendaService` le pasa el `tx` SOLO en la lectura que decide bajo el
+  candado. **El patrón compartido lo permitía sin rediseñar:** `LiquidacionService` (`:645`, pago a tienda),
+  `PagoPorCuentaTiendaService` (pago de un gasto) y `CobroTiendaService` NO se tocaron y siguen llamando con dos
+  argumentos (el riesgo sigue vivo en `LiquidacionService`: ver 12.4). Tests: unitario «m3» (la segunda lectura recibe
+  el `tx`; la primera y la última, no) e integración «R16 (m3)» con un pool de UNA conexión (sin el arreglo,
+  la transacción caduca a los 10 s). Mutaciones m3 y m3b: **rojas**.
+  Hallazgo de paso: al escribir m2, la primera versión registraba el pago previo con el cliente `prisma` del
+  test, que tiene una de sus DOS conexiones ocupada por `conCandado459`; se colgó 30 s exactamente por m3.
+- **m4:** `design.md` §5.1 con el paso 3b (la clave antes de la regla), el paso 8 (la clave otra vez si la
+  regla rechaza bajo el candado) y el saldo por el `tx`; el comentario de orden de `AbonoTiendaService` también.
+- **m5 (R74):** en vez de afirmar que el servicio no escribe `liquidacion_pago` (siempre verde), el test ejecuta
+  el backfill de la 173 EN SECO (`simular`) sobre la base y exige que ningún pendiente sea el pago; y comprueba
+  que el pago dejó UNA fila `credito/abono_tienda` (no vacío) que no cumple el filtro `cobro_manual`+`debito` de
+  las migraciones 459/461. Mutación m5 (el backfill lee `abono_tienda`): **roja en la aserción de pendientes**.
+- **m7 (R25/R57):** `TEXTO_ABONO.yaRegistrado(tienda, monto, saldo)` = «Este pago ya estaba registrado, por
+  ₡2.500. El saldo de … queda en …». `ok` sigue con su texto literal. `design.md` §8.3 actualizado.
+- **Asistente:** `lib/clients/anthropic-asistente.ts` `MAX_TOKENS_DEFAULT` 1024 → 2048; ningún test lo fijaba:
+  caso nuevo en `tests/unit/asistente/peticion-al-proveedor.test.ts` («el techo por defecto es 2048»).
+- **Descargas (O3 del recorrido):** `nombreArchivoDescarga` usa `fechaCalendarioCR(fecha)`. Tests nuevos en
+  `tests/unit/utils/descarga-dataset.test.ts`: 23:00 CR (05:00Z del 26) → `…-2026-09-25`; 00:01 CR → el día
+  siguiente; `construirDescarga` igual. `tests/unit/descarga/ranking-historico-descarga-columnas.test.ts`
+  construía «hoy» con `new Date(2026, 7, 10)` (medianoche LOCAL, que en CR aún es el día anterior): ahora
+  mediodía de CR en UTC explícito, mismo nombre esperado. Mutación (volver a la fecha local): **roja**.
+
+### 12.3 Lo que quedó documentado sin cambiar
+
+- **m6** (un pago retroactivo puede quedar antes del saldo inicial): observación, límite **L9** en
+  `design.md` §19. No se tocó.
+- **B2** (R79): resuelto por el merge del recorrido (`b1272ce2`), enlazado desde `tasks.md` (cabecera y T9.3).
+- **O2 del recorrido** (`obtenerComprobanteAbonoAction` lanza un 500 si el almacenamiento falla): mismo molde
+  que `pago-por-cuenta-tienda.ts:79`; la pantalla lo traduce. No se tocó (no estaba en el encargo).
+
+### 12.4 Riesgo que sigue vivo fuera de la ficha
+
+El patrón de m3 (leer el saldo que decide por el cliente global, no por el `tx` que tiene el candado) sigue en
+`LiquidacionService.registrarPagoTienda` (`:645`, el pago de Ordenex a una tienda). `PagoPorCuentaTiendaService`
+no lo tiene (solo lee el saldo FUERA de la transacción, para la respuesta). Con el pool de 3 por instancia,
+tres operaciones de la MISMA tienda a la vez en la misma instancia pueden dejar a la primera sin conexión:
+falla cerrado (rollback, sin dinero mal escrito). El repositorio ya acepta el `tx` opcional: el arreglo en
+`LiquidacionService` es de una línea, pero toca otro servicio y no estaba en el encargo; queda para otra ficha.
+
+### 12.5 Trazabilidad: lo que cambia respecto de §6
+
+| R | Test añadido en el cierre |
+| --- | --- |
+| R16 | `I/abono-tienda-457-concurrencia.test.ts` «R16 (m3)… UNA sola conexión»; `U/services/abono-tienda-service.test.ts` «m3» |
+| R25/R57 | `U/components/wallet-registrar-movimiento-dialog.test.tsx` «R25/R57 + m7» |
+| R38 | `I/abono-tienda-457-concurrencia.test.ts` «R38 (m2)… la ANULACIÓN toma el candado» |
+| R52 | `U/analytics/metrics-cuenta-por-pagar-tienda-457.test.ts` |
+| R74 | `I/abono-tienda-457.test.ts` «R74» (backfill de la 173 en seco + filtro de las migraciones) |
+| R78 | `progress/contraste_457.md` (ANTES) + la C457-1 lista para el DESPUÉS (T9.5, leader) |
+| R79 | `progress/recorrido_457.md` + `progress/recorrido_457/` (`b1272ce2`) |
+
+### 12.6 Verificación: gate COMPLETO de cierre
+
+`./init.sh` completo contra `ordenex_457c`, sobre `78a99bad` (código final = `6f47a5ba`; lo posterior son
+documentos), log `progress/gate_457_cierre.log`, sin `tail`, con `INIT_EXIT=$?` escrito dentro:
+
+```
+✓ typecheck paso
+✓ lint paso                      (0 errors, 218 warnings)
+✓ DATABASE_URL resuelta: los 295 archivos de tests contra Postgres SI se ejecutan
+ Test Files  2258 passed (2258)
+      Tests  31791 passed | 26 skipped (31817)
+! migraciones sin down.sql: 20260814120000_… 20260814140000_… 20260814160000_…   (previo, ajeno)
+== init OK ==
+INIT_EXIT=0
+```
+
+**`tests/integration/db`: 383 archivos, los 383 `passed`, 0 tests saltados** (leído de `.vitest/rojos.json`).
+Los 26 `skipped` son `tests/components/AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (9), ajenos y
+los mismos de los gates anteriores.
+
+**La primera corrida (`progress/gate_457_cierre_a.log`) fue ROJA: `INIT_EXIT=1`, 6 archivos, 5 tests + 1 hook,
+32 skipped.** Todos de `tests/integration/db` y todos a la vez: una PARADA GLOBAL de ~30 s en la base, visible
+en tests verdes que tardaron justo eso (`cobro-tienda-461-completar-migration` «R34» 29.901 ms,
+`abono-tienda-457` «R14» 30.699 ms) y en cinco que agotaron su tiempo de 20 s:
+
+| Archivo | Caso | Error |
+| --- | --- | --- |
+| `abono-tienda-457-concurrencia` (ESTA ficha) | «R16: el pago de Ordenex a la tienda ESPERA…» | la transacción de `LiquidacionService.registrarPagoTienda` caducó (30.049 ms > 30.000) |
+| `busqueda-comportamiento` | «el corpus queda acotado…» | timeout 20 s |
+| `busqueda-usa-indice` | «el findMany se resuelve por `orden_busqueda_texto_trgm_idx`…» | timeout 20 s |
+| `caja-459-migration` | «(b) los CHECK admiten…» | timeout 20 s |
+| `cierre-rechazo-tienda-sql-real` | «R1/R18…» | timeout 20 s |
+| `cierre-rechazado-aviso-dedupe` | `beforeAll` | hook timeout 20 s → sus 6 tests saltados (de ahí 32 = 26 + 6) |
+
+El único de la 457 es el de la transacción de `LiquidacionService` (el pago de Ordenex a la tienda, código NO
+tocado por esta ficha), que es exactamente el patrón de m3 que sigue vivo en ese servicio (12.4): con el
+candado tomado lee el saldo por OTRA conexión, y si esa lectura queda en cola detrás de un bloqueo de otra
+sesión (aquí, bajo 2.258 archivos en paralelo), la transacción espera hasta caducar. La causa exacta de la
+parada global no se pudo aislar (ningún rastro en el log); los modos conocidos del repo son los de la memoria
+«Gate rojo: cuatro modos de flake» (timeout bajo carga).
+
+**Aislados, 3 de 3 verdes:** los seis archivos juntos, tres corridas seguidas sin tocar nada: `6 passed (6)`,
+`80 passed (80)` las tres. **La segunda corrida completa, arriba, verde.** Las 8 pruebas del archivo de
+concurrencia de la 457 pasaron en las dos corridas aisladas previas y en el gate verde.
+
+### 12.7 Entorno al cerrar
+
+El clon `ordenex_457c` se BORRA al terminar (0 conexiones vivas antes del `DROP DATABASE`) y el `.env` de este
+worktree también. La base `ordenex` no se tocó.
+
+**Veredicto:** la 457 queda cerrada del lado del código: F1, B1, B2, B3, m1, m2, m3, m4, m5, m7, asistente y
+descargas resueltos con su test y su mutación roja; m6 anotado (L9); gate completo `INIT_EXIT=0` con 0
+saltados en `integration/db`. Pendiente solo T9.5/T9.6 (leader, tras desplegar), con la C457-1 lista.
