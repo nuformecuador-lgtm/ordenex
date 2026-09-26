@@ -1,7 +1,7 @@
 // Feature 131 (T1.4) — TEXTOS de UI del tablero operativo.
 //
 // Modulo PURO: sin React, sin DOM, sin imports de runtime salvo `lib/utils/fecha-cr`
-// (calendario de Costa Rica) e `Intl`. Se prueba invocandolo.
+// (calendario de Costa Rica) y `lib/utils/hora-cr` (hora, con `Intl`). Se prueba invocandolo.
 //
 // R7 — LA FECHA DEL HORIZONTE DEL HISTORIAL NO SE ESCRIBE AQUI. Ni como literal, ni
 // como constante propia, ni "para el texto del aviso". El aviso de cobertura se DERIVA
@@ -15,6 +15,7 @@
 // proposito: si se reusan, tres problemas distintos se leen como el mismo pixel.
 
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { horaCostaRica } from "@/lib/utils/hora-cr";
 
 import type { PuntoSerie } from "@/lib/types/analitica-operativa";
 
@@ -23,22 +24,10 @@ import type { PuntoSerie } from "@/lib/types/analitica-operativa";
 /* -------------------------------------------------------------------------- */
 
 /**
- * Hora de pared de Costa Rica de un instante ISO. Se delega en `Intl` con
- * `timeZone`: cero aritmetica horaria propia (la parte de calendario la resuelve
- * `fechaCalendarioCR`, que es la unica pieza del repo que sabe del desfase).
+ * Hora de pared de Costa Rica de un instante ISO. Vive en `lib/utils/hora-cr.ts` desde la
+ * 458-A (la lee tambien un servicio); se re-exporta para sus consumidores de siempre.
  */
-const HORA_CR = new Intl.DateTimeFormat("es-CR", {
-  timeZone: "America/Costa_Rica",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-
-export function horaCostaRica(corteAt: string): string {
-  const instante = new Date(corteAt);
-  if (Number.isNaN(instante.getTime())) return "";
-  return HORA_CR.format(instante);
-}
+export { horaCostaRica };
 
 /* -------------------------------------------------------------------------- */
 /* R8 / D2 — el dia en curso, marcado POR TEXTO                                */

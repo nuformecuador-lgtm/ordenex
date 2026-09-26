@@ -1,14 +1,12 @@
-import { hrefDetalleCierre } from "@/app/(app)/cierres-admin/_components/cierre-enlace";
-import { ORIGEN_TIENDA_LABEL } from "@/app/(app)/mi-wallet/_components/mi-wallet-labels";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import {
   METODO_ORIGEN_LABEL,
   ORIGEN_ENLACE_LABEL,
   ORIGEN_ENTIDAD_LABEL,
   SEPARADOR_ORIGEN,
-} from "@/app/(app)/wallet/_components/origen-legible-labels";
-import { ORIGEN_LABEL } from "@/app/(app)/wallet/_components/wallet-labels";
-import { ORIGEN_PAGO_LABEL } from "@/app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels";
-import { esAccesoTotal } from "@/lib/auth/acceso-total";
+} from "@/lib/constants/origen-legible-rotulos";
+import { ORIGEN_LABEL, ORIGEN_PAGO_LABEL, ORIGEN_TIENDA_LABEL } from "@/lib/constants/wallet-rotulos";
+import { hrefDetalleCierre } from "@/lib/utils/cierre-enlace";
 import type {
   AbonoDeOrigen,
   CierreDeOrigen,

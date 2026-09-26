@@ -19,7 +19,7 @@ import {
 } from "@/lib/types/wallet";
 import { instanteDelMovimientoManual } from "@/lib/utils/fecha-movimiento-manual";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-import { CATEGORIA_LABEL } from "@/app/(app)/wallet/_components/wallet-labels";
+import { CATEGORIA_LABEL } from "@/lib/constants/wallet-rotulos";
 
 // Roles autorizados (R17): acceso total (maestro/admin, dueños de la caja central), espejo de
 // WalletService.

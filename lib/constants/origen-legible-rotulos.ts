@@ -1,15 +1,14 @@
 // Ficha 458-A (TA.2, design §3.3, R5–R8) — los textos con que se nombra la ENTIDAD de origen de un
 // movimiento. Modulo PURO (sin React): lo lee `OrigenLegibleService` en el servidor, que compone el
-// texto completo y el enlace; el cliente recibe el resultado hecho.
+// texto completo y el enlace; el cliente recibe el resultado hecho. Vivia en
+// `app/(app)/wallet/_components/origen-legible-labels.ts`; desde la revision de la 458-A (m2) vive
+// en `lib/`, porque un servicio no importa de `app/**/_components`.
 //
 // Regla H6: ningun texto de aqui recibe un identificador interno. Reciben dias (`YYYY-MM-DD`,
 // dia de Costa Rica), nombres (ya con `etiquetaDeCuenta`), guias, metodos y conceptos.
 
-import { METODO_LABEL } from "@/app/(app)/cierres-admin/_components/cierre-labels";
-import {
-  DETALLE_MOVIMIENTO_VER_ORDEN,
-  etiquetaVerOrden,
-} from "@/app/(app)/wallet/_components/detalle-movimiento-labels";
+import { METODO_LABEL } from "@/lib/constants/metodo-pago-label";
+import { DETALLE_MOVIMIENTO_VER_ORDEN, etiquetaVerOrden } from "@/lib/constants/wallet-rotulos";
 
 /** El separador de la casa entre el rotulo y la entidad («Cierre del día · 2026-09-12 · Juan»). */
 export const SEPARADOR_ORIGEN = " · ";

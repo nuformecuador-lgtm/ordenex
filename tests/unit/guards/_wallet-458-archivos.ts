@@ -38,9 +38,20 @@ export function archivosBajo(carpetas: readonly string[]): string[] {
     .sort();
 }
 
-/** Los archivos de las superficies de la wallet. */
+/**
+ * Revision 458-A (m2): los rotulos de la wallet que lee el SERVIDOR se mudaron de las carpetas de
+ * las pantallas a `lib/constants/` (un servicio no importa de `app/**\/_components`). Siguen siendo
+ * textos de la wallet y las guardias los barren como antes: entran en el censo por nombre.
+ */
+export const ROTULOS_WALLET_EN_LIB = [
+  "lib/constants/wallet-rotulos.ts",
+  "lib/constants/origen-legible-rotulos.ts",
+] as const;
+
+/** Los archivos de las superficies de la wallet (y sus rotulos en `lib/constants`). */
 export function archivosDeLaWallet(): string[] {
-  return archivosBajo(CARPETAS_WALLET);
+  const rotulos = ROTULOS_WALLET_EN_LIB.filter((r) => existsSync(path.join(RAIZ, r)));
+  return [...archivosBajo(CARPETAS_WALLET), ...rotulos].sort();
 }
 
 /** La fuente sin comentarios (los comentarios pueden NOMBRAR lo prohibido para explicarlo). */

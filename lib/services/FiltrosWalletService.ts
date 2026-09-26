@@ -1,4 +1,4 @@
-import { horaCostaRica } from "@/app/(app)/analitica/_components/operativo/textos";
+import { horaCostaRica } from "@/lib/utils/hora-cr";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
 import type {

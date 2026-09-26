@@ -114,17 +114,7 @@ export const DETALLE_MOVIMIENTO_NOMBRE = {
     `Órdenes que componen ${concepto} del ${fecha}`,
 } as const;
 
-/**
- * R11 — el rótulo del enlace a `/ordenes`. Dice a dónde va Y con qué, nunca «ver».
- *
- * Se exporta el prefijo para que el test no repita el literal, igual que hizo la ficha 341 con
- * `ETIQUETA_VER_ORDEN`.
- */
-export const DETALLE_MOVIMIENTO_VER_ORDEN = "Ver en órdenes la guía";
-
-export function etiquetaVerOrden(guia: string): string {
-  return `${DETALLE_MOVIMIENTO_VER_ORDEN} ${guia}`;
-}
+export { DETALLE_MOVIMIENTO_VER_ORDEN, etiquetaVerOrden } from "@/lib/constants/wallet-rotulos";
 
 /** Separador entre los resultados de las gestiones de UNA orden en el mismo cierre (R20). */
 const SEPARADOR_RESULTADOS = " · ";

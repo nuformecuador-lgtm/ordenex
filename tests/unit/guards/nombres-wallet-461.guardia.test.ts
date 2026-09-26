@@ -215,6 +215,8 @@ function archivosDeCodigo(): string[] {
     ...listar(path.join(RAIZ, "app", "(app)", "mi-wallet"), /\.tsx?$/),
     ...archivosCompartidos458(),
     ...listar(path.join(RAIZ, "lib", "types"), /^historial-accion.*\.ts$/),
+    // Revision 458-A (m2): los rotulos que lee el servidor se mudaron a `lib/constants/`.
+    ...listar(path.join(RAIZ, "lib", "constants"), /^(wallet-rotulos|origen-legible-rotulos)\.ts$/),
   ];
 }
 
@@ -347,6 +349,8 @@ describe("461/R47/R48 — los archivos de la wallet y del historial no citan un 
       "app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts",
       "app/(app)/mi-wallet/_components/mi-wallet-labels.ts",
       "lib/types/historial-accion.ts",
+      "lib/constants/wallet-rotulos.ts",
+      "lib/constants/origen-legible-rotulos.ts",
     ]) {
       expect(archivos.map(rel)).toContain(esperado);
     }
