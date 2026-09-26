@@ -364,3 +364,27 @@ previó — R50 medido, no supuesto; tabla de «cambia» de §4.1). `caja-deriva
 Mutaciones TB.12 (todas rojas, `restaurado=true`): **M9** aporte sin la línea de capital → 3/19; cobro
 con categoría de corrección → 2/5; pagar el saldo exacto como excedido → 1/14; sin aviso de saldo en
 contra → 2/19; rol después de leer → 1/5; pago a tienda como crédito → 1/5.
+
+## TB.13 — «Cómo quedó» (R58, parte servidor)
+
+`ComoQuedoRepository` (+ interfaz), `ComoQuedoService` (+ interfaz), `lib/types/como-quedo.ts` y
+`comoQuedoAction` (`lib/actions/como-quedo.ts`, `@sin-superficie` hasta 458-C). Entrada: la fila de un
+libro (`{ libro, movimientoId }`). Salida: `caja` (`derivarCaja` sobre las líneas con
+`(fecha_movimiento, created_at, id) ≤` la de referencia, comparadas EN SQL contra la fila, sin pasar
+instantes como parámetro) y `cuenta` (saldo de la tienda / cuenta por pagar del mensajero hasta su fila).
+
+**Contrapartida entre libros** (lo que el design no detalla): la fila del otro libro con el MISMO origen
+(`origen_tipo`, `origen_id`; el débito de un cobro, por las líneas `cobro_tienda*` que lo nombran)
+escrita MÁS CERCA en `created_at`. Los dos asientos de un registro van en la misma transacción; su
+contra-asiento, en otra: así un pago y su anulación, que comparten origen, no se confunden (medido: la
+mutación «la más lejana» cae). Una línea de caja cuya contrapartida toca VARIAS cuentas (un cierre) da
+`cuenta: null`; una fila de cuenta sin línea de caja (pago a un mensajero, [P2] de la 173) da `caja:
+null`. **Desviación anotada:** servicio propio en vez de `EstadoCuentaService`/`WalletService` (no
+ensanchar dos constructores compartidos con la 458-A y decenas de tests).
+
+**Test:** `tests/integration/db/como-quedo.test.ts` (7, Postgres; lo esperado se deriva APARTE cortando
+el prefijo de los libros leídos en orden): tras la última línea == resumen sin filtros; una línea del
+medio == su prefijo; el pago a una tienda que tiene anulación → la tienda tras SU débito; el débito de un
+cobro → la caja tras SU cargo; el pago al mensajero sin caja; R82. Mutaciones TB.13 (todas rojas):
+contrapartida más lejana → 1/7; caja sin incluir la fila → 4/7; cobro sin su cargo → 1/7; saldo sin
+acotar a la tienda → 2/7; orden sin `created_at` → 1/7.
