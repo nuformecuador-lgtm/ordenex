@@ -3,10 +3,12 @@ import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 
 import * as acciones from "@/lib/actions/wallet-comprobante";
+import { registrarEgresoAdministrativoAction } from "@/lib/actions/wallet-egresos";
 import { adjuntarComprobanteAction, verComprobanteAction } from "@/lib/actions/wallet-comprobante";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { WalletAnulacionDestinoRepository } from "@/lib/repositories/WalletAnulacionDestinoRepository";
 import { WalletComprobanteRepository } from "@/lib/repositories/WalletComprobanteRepository";
 import { WalletAnulacionService } from "@/lib/services/WalletAnulacionService";
@@ -102,17 +104,32 @@ describeSiHayBase("458-B/TB.10 — comprobante lateral: una vez, a su destino, y
         const tiendaA: Actor = { usuarioId: esc.tiendaA, rol: "adminTienda" };
         const tiendaB: Actor = { usuarioId: esc.tiendaB, rol: "adminTienda" };
 
-        const sueldo = await tx.walletMovimiento.findFirstOrThrow({
-          where: { categoria: "egreso_sueldo", registradoPor: esc.maestro.usuarioId },
-          select: { id: true },
-        });
+        // FICHA 458-B (revision m6): `adjuntar` rechaza lo ANULADO, y el escenario 459 reversa su sueldo
+        // (R72) y anula un pago a la tienda A. Estos casos miden el destino y el alcance, no la
+        // anulacion (esa va en `wallet-documento-comprobante-458.test.ts`): se eligen los NO anulados.
+        // El sueldo del escenario esta reversado: se registra uno nuevo por su action real.
+        const claveSueldo = randomUUID();
+        const nuevoSueldo = await registrarEgresoAdministrativoAction(
+          { tipoEgreso: "sueldo", monto: "25.00", descripcion: "Sueldo sin anular", claveIdempotencia: claveSueldo },
+          { getActor: async () => esc.maestro, service: s.egresos },
+        );
+        if (nuevoSueldo.status !== "ok") throw new Error(`sueldo: ${JSON.stringify(nuevoSueldo)}`);
+        const sueldo = await tx.walletMovimiento.findFirstOrThrow({ where: { claveIdempotencia: claveSueldo }, select: { id: true } });
         const cierre = await tx.walletMovimiento.findFirstOrThrow({ where: { origenTipo: "cierre_dia" }, select: { id: true } });
         const cajaDelGasto = await tx.walletMovimiento.findFirstOrThrow({
           where: { origenTipo: "pago_por_cuenta_tienda", origenId: pago.pago.id },
           select: { id: true },
         });
+        // El pago a la tienda A del escenario esta anulado: se registra uno nuevo por el servicio real.
+        const clavePago = randomUUID();
+        const nuevoPago = await s.liquidacion.registrarPagoTienda(
+          { claveIdempotencia: clavePago, tiendaId: esc.tiendaA, monto: "1.00", metodo: "efectivo", fechaPago: fechaCalendarioCR(new Date()) },
+          esc.maestro,
+        );
+        if (nuevoPago.status !== "ok") throw new Error(`pago a la tienda A: ${JSON.stringify(nuevoPago)}`);
+        const pagoNuevo = await tx.liquidacionPago.findFirstOrThrow({ where: { claveIdempotencia: clavePago }, select: { id: true } });
         const filaPagoTiendaA = await tx.walletTiendaMovimiento.findFirstOrThrow({
-          where: { tiendaId: esc.tiendaA, categoria: "pago_tienda", origenTipo: "pago_tienda" },
+          where: { tiendaId: esc.tiendaA, categoria: "pago_tienda", origenTipo: "pago_tienda", origenId: pagoNuevo.id },
           select: { id: true, origenId: true },
         });
         const cobroB = await tx.walletTiendaMovimiento.findFirstOrThrow({
