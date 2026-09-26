@@ -47,8 +47,13 @@ export class ComoQuedoRepository implements IComoQuedoRepository {
       SELECT m.id FROM wallet_movimiento m, ref
       WHERE (ref.origen_id IS NOT NULL AND m.origen_tipo::text = ref.origen_tipo AND m.origen_id = ref.origen_id)
          OR ${delCobro}
-      ORDER BY abs(extract(epoch FROM (m.created_at - ref.created_at))), m.id
+      ORDER BY abs(extract(epoch FROM (m.created_at - ref.created_at))),
+               m.fecha_movimiento DESC, m.created_at DESC, m.id DESC
       LIMIT 1`;
+    // FICHA 458-B (revision m2) — el DESEMPATE es la posicion MAXIMA en el orden del libro
+    // `(fecha, created_at, id)`, no el menor `id`: las dos lineas de caja de un cobro por rechazo
+    // (flete e IVA) son de la misma transaccion y empatan en `created_at`; con el menor `id` la caja
+    // mostrada podia quedar ENTRE las dos y excluir la otra linea del mismo registro.
     return filas[0]?.id ?? null;
   }
 

@@ -50,6 +50,8 @@ interface Medida {
   esperado: Record<string, ComoQuedoDTO>;
   resumenSinFiltros: { enCaja: string; ganancia: string; deTerceros: string; capital: string };
   pagoConReverso: boolean;
+  /** 458-B m2: las dos lineas de caja del rechazo empatan en `created_at` (sin empate, el caso no mide nada). */
+  empateRechazo: boolean;
 }
 
 describeSiHayBase("458-B/TB.13 — «Cómo quedó» (Postgres real)", () => {
@@ -102,6 +104,7 @@ describeSiHayBase("458-B/TB.13 — «Cómo quedó» (Postgres real)", () => {
 
         const r: Record<string, ComoQuedoResult> = {};
         const esperado: Record<string, ComoQuedoDTO> = {};
+        let empateRechazo = false;
 
         // 1. La ULTIMA linea de la caja: «Cómo quedó» == el resumen sin filtros.
         const ultima = cajaEntera[cajaEntera.length - 1];
@@ -136,6 +139,28 @@ describeSiHayBase("458-B/TB.13 — «Cómo quedó» (Postgres real)", () => {
         r.cobro = await ver("tienda", cobro.id);
         esperado.cobro = { caja: cajaHasta(cargo.id), cuenta: { tipo: "tienda", id: esc.tiendaB, saldo: tiendaHasta(libroB, cobro.id) } };
 
+        // 4b. (458-B, revision m2) El debito del cobro por RECHAZO en el libro de la tienda A: sus DOS
+        //     lineas de caja (flete e IVA) son de la MISMA transaccion y empatan en `created_at`. «Cómo
+        //     quedó» tiene que dar la caja tras la ULTIMA de las dos (el registro entero), desde el
+        //     debito del flete y desde el del IVA por igual.
+        const libroA = await tiendaEntera(esc.tiendaA);
+        const debitosRechazo = libroA.filter((f) => f.origen_tipo === "gestion_orden" && f.tipo === "debito");
+        const gestionRechazo = debitosRechazo[0]?.origen_id ?? null;
+        const lineasRechazo = cajaEntera.filter((f) => f.origen_tipo === "gestion_orden" && f.origen_id === gestionRechazo);
+        if (debitosRechazo.length !== 2 || lineasRechazo.length !== 2) {
+          throw new Error(`el rechazo de la tienda A no tiene 2 debitos y 2 lineas de caja (${debitosRechazo.length}/${lineasRechazo.length})`);
+        }
+        const empate = await tx.walletMovimiento.findMany({ where: { id: { in: lineasRechazo.map((f) => f.id) } }, select: { createdAt: true } });
+        empateRechazo = empate[0].createdAt.getTime() === empate[1].createdAt.getTime();
+        const ultimaDelRechazo = lineasRechazo[1]; // `cajaEntera` va en (fecha, created_at, id)
+        for (const [n, d] of debitosRechazo.entries()) {
+          r[`rechazo${n}`] = await ver("tienda", d.id);
+          esperado[`rechazo${n}`] = {
+            caja: cajaHasta(ultimaDelRechazo.id),
+            cuenta: { tipo: "tienda", id: esc.tiendaA, saldo: tiendaHasta(libroA, d.id) },
+          };
+        }
+
         // 5. Un pago al mensajero (su libro): NO tiene linea de caja ([P2] de la 173); su cuenta, tras el.
         const libroM = await mensajeroEntero(esc.mensajeroId);
         const liquidacion = libroM.find((f) => f.origen_tipo === "pago_mensajero");
@@ -162,6 +187,7 @@ describeSiHayBase("458-B/TB.13 — «Cómo quedó» (Postgres real)", () => {
             capital: resumen.resumen.capital,
           },
           pagoConReverso: conReverso !== undefined,
+          empateRechazo,
         };
       });
     } catch (error) {
@@ -198,6 +224,12 @@ describeSiHayBase("458-B/TB.13 — «Cómo quedó» (Postgres real)", () => {
 
   it("R58: el debito de un cobro da la caja tras SU cargo y la tienda tras el", () => {
     expect(m().r.cobro).toEqual({ status: "ok", comoQuedo: m().esperado.cobro });
+  });
+
+  it("R58 (458-B m2): el debito del cobro por rechazo (flete o IVA) da la caja tras la ULTIMA de sus dos lineas", () => {
+    expect(m().empateRechazo).toBe(true);
+    expect(m().r.rechazo0).toEqual({ status: "ok", comoQuedo: m().esperado.rechazo0 });
+    expect(m().r.rechazo1).toEqual({ status: "ok", comoQuedo: m().esperado.rechazo1 });
   });
 
   it("R58/[P2]: un pago al mensajero no tiene linea de caja; su cuenta, tras el", () => {
