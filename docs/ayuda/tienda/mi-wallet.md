@@ -7,6 +7,7 @@ actualizado: 2026-09-26
 fuentes:
   - app/(app)/mi-wallet/page.tsx
   - app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx
+  - app/(app)/mi-wallet/_components/ResumenMiWallet.tsx
   - app/(app)/mi-wallet/_components/mi-estado-cuenta-labels.ts
   - components/shared/estado-cuenta/EstadoCuenta.tsx
   - components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx
@@ -34,6 +35,26 @@ fuentes:
 
 Acá está **tu plata con Ordenex**, como el extracto de un banco: cuánto se cobró a tus clientes en tus
 entregas, cuánto te cobró Ordenex de servicio, lo que te pagó, y cómo queda la cuenta entre los dos.
+
+## El resumen: a tu favor, cargos y ya pagado
+
+Lo primero que ves son tres cifras de **toda tu cuenta** (no cambian con el periodo, el filtro ni el
+cierre que elijas):
+
+| Cifra | Qué suma |
+| --- | --- |
+| **A tu favor** | Lo cobrado a tus clientes, las correcciones a tu favor, lo que le pagaste a Ordenex y lo que Ordenex te devolvió al anular |
+| **Cargos de Ordenex** | Fletes, comisión, IVA, lo que Ordenex te cobró y los pagos a Ordenex que se anularon |
+| **Ya pagado** | Lo que Ordenex te pagó o pagó por ti |
+
+Debajo está el **Saldo a favor**, que es la resta: a tu favor menos cargos menos ya pagado. Es el
+mismo número que el **saldo actual** de la tarjeta de abajo y que el saldo de la última fila del
+extracto. Así distinguís lo que Ordenex **te pagó** de lo que **te cobró**, aunque los dos te bajen el
+saldo.
+
+Un pago que Ordenex te hizo y después anuló **sigue contando** en «Ya pagado», y su devolución suma en
+«A tu favor»: esas dos cifras quedan más altas de lo que se movió de verdad. El «Saldo a favor» ya
+tiene todo eso descontado: ese es el número correcto.
 
 ## El saldo, arriba
 

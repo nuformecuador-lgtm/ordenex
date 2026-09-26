@@ -176,6 +176,8 @@ describe("R55 — la pantalla de la tienda NO clasifica: solo pinta", () => {
     // FICHA 458-D (T D.5): `MiWalletModule` y `SaldoTiendaCard` se retiraron; la pantalla es el estado
     // de cuenta de la tienda, cuyas tarjetas y abonos/cargos los clasifica el SERVIDOR (chips incluidos).
     "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+    // FICHA 458-D (cierre): VUELVE el resumen de tres cifras; su pantalla solo pinta lo que manda el servidor.
+    "app/(app)/mi-wallet/_components/ResumenMiWallet.tsx",
     "components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx",
     "components/shared/estado-cuenta/EstadoCuenta.tsx",
   ];
@@ -197,6 +199,16 @@ describe("R55 — la pantalla de la tienda NO clasifica: solo pinta", () => {
         "CUBETA_POR_CATEGORIA",
       );
     }
+  });
+
+  it("458-D (cierre): el resumen de `/mi-wallet` lo clasifica el estado de cuenta con LA MISMA función que el maestro", () => {
+    // Desde la 458-D la cabecera de `/mi-wallet` sale de `EstadoCuentaService` (lectura de la propia
+    // tienda), no de `WalletTiendaService.listarMisMovimientos`. Que ese servicio pase por
+    // `derivarDesgloseTienda` —y no copie la clasificación— es lo que mantiene a la tienda y al maestro
+    // leyendo la MISMA cubeta; que cuadre con la tarjeta lo mide `tests/integration/db/mi-wallet-resumen-458d.test.ts`.
+    const codigo = codigoSinComentarios("lib/services/EstadoCuentaService.ts");
+    expect(codigo).toContain("derivarDesgloseTienda(await repo.desgloseDeTienda(");
+    expect(codigo).not.toContain("CUBETA_POR_CATEGORIA");
   });
 
   it("CONTRAPRUEBA: el barrido detecta de verdad una categoría colada", () => {

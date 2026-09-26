@@ -10,6 +10,7 @@ import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
 
 import { DetalleMiMovimientoCierre } from "./DetalleMiMovimientoCierre";
+import { ResumenMiWallet } from "./ResumenMiWallet";
 import { CATEGORIAS_CON_COMPROBANTE, VerComprobanteMiMovimiento } from "./VerComprobanteMiMovimiento";
 import { DETALLE_MI_MOVIMIENTO_NOMBRE } from "./detalle-mi-movimiento-labels";
 import { MI_ESTADO_CUENTA_TEXTO } from "./mi-estado-cuenta-labels";
@@ -97,30 +98,37 @@ export interface MiEstadoCuentaProps {
 
 export function MiEstadoCuenta({ inicial, cierres }: Readonly<MiEstadoCuentaProps>) {
   return (
-    <EstadoCuenta
-      inicial={inicial}
-      rotulos={ROTULOS_MI_WALLET}
-      lector={LECTOR_MI_TIENDA}
-      vista="tienda"
-      selectorCierre={(valor, onCambiar) => <SelectorMiCierre cierres={cierres} valor={valor} onCambiar={onCambiar} />}
-      detalleDeFila={{
-        nombre: ({ concepto, fecha }) => DETALLE_MI_MOVIMIENTO_NOMBRE.abrir(concepto, fecha),
-        render: (f, { concepto, fecha }) =>
-          f.ref !== null && "movimientoId" in f.ref ? (
-            <DetalleMiMovimientoCierre movimientoId={f.ref.movimientoId} concepto={concepto} fecha={fecha} />
-          ) : null,
-      }}
-      accionDeFila={{
-        titulo: MI_ESTADO_CUENTA_TEXTO.comprobante,
-        render: (f) =>
-          CATEGORIAS_CON_COMPROBANTE.has(categoria(f)) && f.ref !== null && "movimientoId" in f.ref ? (
-            <VerComprobanteMiMovimiento
-              movimientoId={f.ref.movimientoId}
-              concepto={ROTULOS_MI_WALLET.concepto(f)}
-              fecha={f.fecha}
-            />
-          ) : null,
-      }}
-    />
+    // 172 R55 (cierre de la 458-D) — el resumen de tres cifras ENCIMA del estado de cuenta, hermano de él
+    // (nunca dentro). Es de la cuenta ENTERA: no cambia con el periodo, el chip ni el cierre, así que se
+    // pinta con la primera lectura del servidor. Sin resumen (no debería pasar en la vista de la tienda),
+    // el estado de cuenta sigue en pie.
+    <div className="flex flex-col gap-6">
+      {inicial.resumen === null ? null : <ResumenMiWallet resumen={inicial.resumen} />}
+      <EstadoCuenta
+        inicial={inicial}
+        rotulos={ROTULOS_MI_WALLET}
+        lector={LECTOR_MI_TIENDA}
+        vista="tienda"
+        selectorCierre={(valor, onCambiar) => <SelectorMiCierre cierres={cierres} valor={valor} onCambiar={onCambiar} />}
+        detalleDeFila={{
+          nombre: ({ concepto, fecha }) => DETALLE_MI_MOVIMIENTO_NOMBRE.abrir(concepto, fecha),
+          render: (f, { concepto, fecha }) =>
+            f.ref !== null && "movimientoId" in f.ref ? (
+              <DetalleMiMovimientoCierre movimientoId={f.ref.movimientoId} concepto={concepto} fecha={fecha} />
+            ) : null,
+        }}
+        accionDeFila={{
+          titulo: MI_ESTADO_CUENTA_TEXTO.comprobante,
+          render: (f) =>
+            CATEGORIAS_CON_COMPROBANTE.has(categoria(f)) && f.ref !== null && "movimientoId" in f.ref ? (
+              <VerComprobanteMiMovimiento
+                movimientoId={f.ref.movimientoId}
+                concepto={ROTULOS_MI_WALLET.concepto(f)}
+                fecha={f.fecha}
+              />
+            ) : null,
+        }}
+      />
+    </div>
   );
 }

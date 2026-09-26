@@ -24,9 +24,12 @@ import { FORMA_UUID, UUID_TIENDA, estado, fila } from "@/tests/fixtures/estado-c
 //
 // Sustituciones (el libro de la 43/172/335 se retiro con la 458-D; cada caso conserva su R):
 //  - 172 R55 (la tienda distingue el pago del cargo): la fila del pago es «Ordenex te pagó» en el chip
-//    «Pagos», la del flete «Ordenex te cobró el flete» en «Cierres»; la cabecera vieja no vuelve.
-//  - 172 N1 (la salvedad de los importes brutos): el estado de cuenta enseña cifras NETAS (D3), así
-//    que la salvedad ya no tiene a qué referirse y NO se pinta.
+//    «Pagos», la del flete «Ordenex te cobró el flete» en «Cierres»; y VUELVE (cierre de la 458-D,
+//    decisión del leader) el resumen de tres cifras de la 172 —«A tu favor», «Cargos de Ordenex», «Ya
+//    pagado»— ENCIMA del estado de cuenta, con sus textos exactos. La cabecera de la 43 («Créditos /
+//    Débitos») no vuelve.
+//  - 172 N1 (la salvedad de los importes brutos): el resumen SÍ es bruto (el pago anulado sigue en «Ya
+//    pagado»), así que la salvedad vuelve JUNTO a sus cifras. El extracto sigue siendo neto (D3).
 //  - 335 R12–R15 (presentación): las tarjetas y el extracto son bloques hermanos; el extracto tiene
 //    nombre visible y accesible; el selector va por encima de la tabla; la paginación conserva un
 //    nombre propio.
@@ -149,6 +152,13 @@ async function verMiWallet() {
 
 function tabla() {
   return screen.getByRole("table", { name: "Estado de cuenta de Tania Tienda" });
+}
+
+/** 172 R55 — el resumen de [COD, FLETE, PAGO] tal como lo manda el servidor (a favor − cargos − pagado). */
+const RESUMEN = { aFavor: "50000.00", cargos: "1200.00", pagado: "20000.00", saldo: "28800.00", signo: "positivo" as const };
+
+function resumen() {
+  return screen.getByRole("region", { name: "Resumen de tu cuenta" });
 }
 
 function tarjetas() {
@@ -309,11 +319,71 @@ describe("MiWalletPage — la tienda distingue el pago del cargo (172 R55) [P5]"
     expect(screen.queryByText("Créditos (COD)")).not.toBeInTheDocument();
   });
 
-  it("N1 (172): las cifras son NETAS (D3), así que la salvedad de los importes brutos no se pinta", async () => {
+  it("R55 (cierre 458-D): el resumen de tres cifras va ENCIMA del estado de cuenta, con los textos de la 172", async () => {
+    sembrar(estadoTienda([COD, FLETE, PAGO], { resumen: RESUMEN }));
+    await verMiWallet();
+    const r = resumen();
+    // Los rótulos y las pistas LITERALES de la 172 (T G.2, 381 R37, 457 R50, 459 T B.17): son el contrato.
+    expect(within(r).getByText("A tu favor")).toBeInTheDocument();
+    expect(within(r).getByText("Cargos de Ordenex")).toBeInTheDocument();
+    expect(within(r).getByText("Ya pagado")).toBeInTheDocument();
+    expect(
+      within(r).getByText(
+        "Lo cobrado a tus clientes, las correcciones a tu favor, lo que le pagaste a Ordenex y lo que Ordenex te devolvió al anular",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(r).getByText("Fletes, comisión, IVA, lo que Ordenex te cobró y los pagos a Ordenex que se anularon"),
+    ).toBeInTheDocument();
+    expect(within(r).getByText("Lo que Ordenex te pagó o pagó por ti")).toBeInTheDocument();
+    // El pago NO engorda los cargos: cada cifra en su sitio, tal como la manda el servidor.
+    expect(within(r).getByText("₡50.000")).toBeInTheDocument();
+    expect(within(r).getByText("₡1.200")).toBeInTheDocument();
+    expect(within(r).getByText("₡20.000")).toBeInTheDocument();
+    // ENCIMA de las tarjetas y del extracto, y hermano de ellos (nunca dentro).
+    expect(r.compareDocumentPosition(tarjetas()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(r.compareDocumentPosition(tabla()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tarjetas().contains(r)).toBe(false);
+    expect(r.contains(tarjetas())).toBe(false);
+  });
+
+  it("R55: el saldo del resumen es el de la tarjeta «Saldo actual» y el corrido de la última fila", async () => {
+    sembrar(estadoTienda([COD, FLETE, PAGO], { resumen: RESUMEN }));
+    await verMiWallet();
+    const tarjetaSaldo = within(tarjetas()).getByText("Saldo actual").parentElement as HTMLElement;
+    expect(within(tarjetaSaldo).getByText("₡28.800")).toBeInTheDocument();
+    const filaSaldo = within(resumen()).getByText("Saldo a favor").parentElement as HTMLElement;
+    expect(within(filaSaldo).getByText("₡28.800")).toBeInTheDocument();
+    expect(within(filaSaldo).getByText("A favor")).toBeInTheDocument();
+    expect(within(filaCon("Ordenex te pagó")).getByText("₡28.800")).toBeInTheDocument();
+  });
+
+  it("R55: el saldo en contra se dice en contra (el signo lo manda el servidor)", async () => {
+    const enContra = { aFavor: "1000.00", cargos: "3500.00", pagado: "0.00", saldo: "-2500.00", signo: "negativo" as const };
+    sembrar(estadoTienda([filaTienda({ n: 1, abono: null, cargo: "2500.00", categoria: "cobro_manual", saldoCorrido: "-2500.00" })], { resumen: enContra }));
+    await verMiWallet();
+    const filaSaldo = within(resumen()).getByText("Saldo a favor").parentElement as HTMLElement;
+    expect(within(filaSaldo).getByText("En contra")).toBeInTheDocument();
+    expect(within(filaSaldo).getByText("-₡2.500")).toBeInTheDocument();
+  });
+
+  it("N1 (172): el resumen es BRUTO, así que la salvedad vuelve JUNTO a sus cifras", async () => {
+    sembrar(estadoTienda([COD, FLETE, PAGO], { resumen: RESUMEN }));
+    await verMiWallet();
+    const notas = screen.getAllByRole("note");
+    expect(notas).toHaveLength(1);
+    expect(resumen().contains(notas[0])).toBe(true);
+    expect(notas[0]).toHaveTextContent(
+      "«Ya pagado» sigue contando los pagos que se anularon, y «A tu favor» suma la devolución de cada uno, así que esos dos importes quedan más altos de lo que se movió de verdad. «Saldo a favor» ya tiene todo eso descontado: ese es el número correcto.",
+    );
+  });
+
+  it("sin resumen del servidor no se pinta la cabecera, y el estado de cuenta sigue en pie", async () => {
     sembrar(estadoTienda([COD, FLETE, PAGO]));
     await verMiWallet();
-    expect(screen.queryAllByRole("note")).toHaveLength(0);
-    expect(screen.queryByText(/sigue contando los pagos que se anularon/)).toBeNull();
+    expect(screen.queryByRole("region", { name: "Resumen de tu cuenta" })).toBeNull();
+    expect(screen.queryByText("Ya pagado")).toBeNull();
+    expect(tabla()).toBeInTheDocument();
   });
 });
 

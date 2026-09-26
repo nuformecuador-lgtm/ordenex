@@ -163,6 +163,7 @@ function estadoEC(tipo: EstadoCuentaDTO["cuenta"]["tipo"], id: string, nombre: s
     abonos: "9000.00",
     cargos: "500.00",
     saldoFinal: "8500.00",
+    resumen: null,
     filas,
     total: filas.length,
     page: 1,

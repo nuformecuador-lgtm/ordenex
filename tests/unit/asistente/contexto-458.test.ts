@@ -334,9 +334,12 @@ describe("458-D (bloque D) — la tienda puede preguntar cómo ve el comprobante
     expect(wallet).toContain("**Todo · Cierres · Pagos · Cobros · Correcciones**");
     expect(wallet).toContain("«Cierre del 2026-09-12 · 7 movimientos»");
     expect(wallet).toContain("Y podés **descargar tu estado de cuenta**");
-    // Lo retirado con el libro no vuelve: ni la cabecera de tres importes ni el filtro por concepto.
-    expect(wallet).not.toContain("Cargos de Ordenex");
-    expect(wallet).not.toContain("Ya pagado");
+    // Cierre de la 458-D (172 R55/N1): VUELVE el resumen de tres cifras, cuadrando con la tarjeta.
+    expect(wallet).toContain("## El resumen: a tu favor, cargos y ya pagado");
+    expect(wallet).toContain("| **Ya pagado** | Lo que Ordenex te pagó o pagó por ti |");
+    expect(wallet).toContain("mismo número que el **saldo actual** de la tarjeta de abajo");
+    expect(wallet).toContain("sigue contando** en «Ya pagado»");
+    // El filtro por concepto se fue con el libro y no vuelve.
     expect(wallet).not.toContain("**Por concepto**");
     // Tampoco se nombra a la gente de Ordenex: la tienda no ve quién registró ni quién anuló.
     expect(wallet).not.toContain("Registró:");

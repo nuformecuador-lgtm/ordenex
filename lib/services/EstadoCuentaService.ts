@@ -34,7 +34,7 @@ import type {
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import type { LibroWallet } from "@/lib/types/wallet-origen";
 import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
-import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
+import type { DesgloseTiendaDTO, WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
 import { saldoDe } from "@/lib/utils/conciliacion-satelite";
 import { derivarCuentaPorPagar } from "@/lib/utils/cuenta-por-pagar";
 import {
@@ -59,6 +59,7 @@ import {
 } from "@/lib/utils/estado-cuenta-chips";
 import { fechaCalendarioCR, inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
+import { derivarDesgloseTienda } from "@/lib/utils/desglose-tienda";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 /** El documento de una fila ORIGINAL de un libro de cuenta: por donde se anula y se lee su estado. */
@@ -197,6 +198,8 @@ export class EstadoCuentaService implements IEstadoCuentaService {
       cierreId: input.cierreId,
       skip: (input.page - 1) * input.pageSize,
       take: input.pageSize,
+      // 172 R55 (cierre de la 458-D) — el resumen de tres cifras solo lo lee la propia tienda.
+      conResumen: vista === "tienda",
     };
 
     // FICHA 458-B (revision M2) — TODAS las lecturas del extracto en UNA transaccion REPEATABLE READ:
@@ -222,6 +225,14 @@ export class EstadoCuentaService implements IEstadoCuentaService {
     if (hastaUtc === undefined && saldoFinal !== lectura.saldoActual) {
       throw new Error(
         `estado de cuenta (${tipo}): R22 no cuadra — inicial ${lectura.saldoInicial}, abonos ${lectura.abonos}, cargos ${lectura.cargos}, final ${saldoFinal}, actual ${lectura.saldoActual}`,
+      );
+    }
+    // 172 R55 — las tres cifras TIENEN que cuadrar con la tarjeta: «A tu favor − Cargos − Ya pagado» es
+    // el saldo actual (y por R21/R22, el corrido de la ultima fila). Si una fila tuviera una categoria que
+    // no casa con su tipo, las dos derivaciones divergirian: se falla ruidoso, como R22.
+    if (lectura.resumen !== null && lectura.resumen.saldo !== lectura.saldoActual) {
+      throw new Error(
+        `estado de cuenta (${tipo}): el resumen no cuadra — a favor ${lectura.resumen.aFavor}, cargos ${lectura.resumen.cargos}, pagado ${lectura.resumen.pagado}, saldo ${lectura.resumen.saldo}, actual ${lectura.saldoActual}`,
       );
     }
 
@@ -256,6 +267,7 @@ export class EstadoCuentaService implements IEstadoCuentaService {
         abonos: lectura.abonos,
         cargos: lectura.cargos,
         saldoFinal,
+        resumen: lectura.resumen,
         filas,
         total: lectura.total,
         page: input.page,
@@ -289,9 +301,13 @@ export class EstadoCuentaService implements IEstadoCuentaService {
     const documentos = pagina.filas.map(documentoDeTienda);
     const estados = await this.estadosDeDocumentos(repo, documentos, null);
     const aprobadores = await repo.quienAproboLosCierres(cierresDe(pagina.filas));
+    // 172 R55 — la cuenta ENTERA por concepto, en la MISMA foto que `actual`, clasificada por la MISMA
+    // funcion que la cabecera del maestro (171): aqui no se decide en que importe cae nada.
+    const resumen = v.conResumen ? derivarDesgloseTienda(await repo.desgloseDeTienda(tiendaId)) : null;
     return {
       libro: "tienda",
       crudas: pagina.filas,
+      resumen,
       saldoActual: derivarSaldoTienda(actual.creditos, actual.debitos).saldo,
       saldoInicial: antes === null ? "0.00" : derivarSaldoTienda(antes.creditos, antes.debitos).saldo,
       ...totales,
@@ -324,6 +340,7 @@ export class EstadoCuentaService implements IEstadoCuentaService {
     return {
       libro: "mensajero",
       crudas: pagina.filas,
+      resumen: null,
       saldoActual: derivarCuentaPorPagar(actual.devengado, actual.pagado).cuentaPorPagar,
       saldoInicial: antes === null ? "0.00" : derivarCuentaPorPagar(antes.devengado, antes.pagado).cuentaPorPagar,
       ...totales,
@@ -361,6 +378,7 @@ export class EstadoCuentaService implements IEstadoCuentaService {
     return {
       libro: null,
       crudas: pagina.filas,
+      resumen: null,
       saldoActual: pendiente(actual),
       saldoInicial: antes === null ? cero.toFixed(2) : pendiente(antes),
       ...totales,
@@ -500,6 +518,8 @@ type Ventana = {
   pares: ParDeChip[] | null;
   skip: number;
   take: number;
+  /** 172 R55 — leer el resumen de tres cifras (solo la vista de la propia tienda). */
+  conResumen: boolean;
 };
 
 type Lectura = {
@@ -507,6 +527,8 @@ type Lectura = {
   libro: LibroWallet | null;
   /** Las filas tal como salieron del repositorio (con `origenId`), para resolver su origen en lote. */
   crudas: FilaDeLibroRow[];
+  /** 172 R55 — el resumen de tres cifras de la cuenta entera, o `null` (no se pidio / no es tienda). */
+  resumen: DesgloseTiendaDTO | null;
   saldoActual: string;
   saldoInicial: string;
   abonos: string;

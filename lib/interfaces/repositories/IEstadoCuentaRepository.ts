@@ -1,5 +1,6 @@
 import type { MetodoPagoValue } from "@prisma/client";
 
+import type { DesgloseTiendaAgregadoRow } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
 
 /**
@@ -120,6 +121,13 @@ export interface IEstadoCuentaRepository {
    * (`derivarSaldoTienda`, `derivarCuentaPorPagar`, `saldoDe`): R22 compara contra ellas.
    */
   totalesDeTienda(tiendaId: string, antesDe?: Date): Promise<{ creditos: string; debitos: string }>;
+  /**
+   * FICHA 458-D (cierre, 172 R55) — los totales de la cuenta ENTERA de una tienda por (tipo,
+   * categoria), sin periodo ni chip: la entrada de `derivarDesgloseTienda` para el resumen de tres
+   * cifras de `/mi-wallet`. Es la MISMA forma que `IWalletTiendaMovimientoRepository.
+   * agregarDesglosePorTienda`, leida DENTRO de la lectura consistente del extracto.
+   */
+  desgloseDeTienda(tiendaId: string): Promise<DesgloseTiendaAgregadoRow[]>;
   totalesDeMensajero(mensajeroId: string, antesDe?: Date): Promise<{ devengado: string; pagado: string }>;
   /** Bodega: el efectivo declarado y lo recibido, sin las consolidaciones rechazadas. */
   totalesDeBodega(zonaId: string, antesDe?: Date): Promise<{ efectivo: string; recibido: string }>;

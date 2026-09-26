@@ -7,6 +7,7 @@ import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
 import type { OrigenLegibleDTO } from "@/lib/types/wallet-origen";
 import { diaCalendarioSchema } from "@/lib/types/filtro-dias-cr";
 import type { DestinoMovimiento } from "@/lib/types/wallet-anulacion";
+import type { DesgloseTiendaDTO } from "@/lib/types/wallet-tienda";
 import { CHIPS_BODEGA, CHIPS_MENSAJERO, CHIPS_TIENDA, type ChipEstadoCuenta } from "@/lib/utils/estado-cuenta-chips";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
@@ -201,6 +202,16 @@ export interface EstadoCuentaDTO {
   cargos: string;
   /** R22 — saldoInicial ± abonos/cargos: el saldo al terminar el periodo. */
   saldoFinal: string;
+  /**
+   * FICHA 458-D (cierre, 172 R55/N1) — el RESUMEN DE TRES CIFRAS de `/mi-wallet` («A tu favor»,
+   * «Cargos de Ordenex», «Ya pagado»): la cuenta ENTERA de la tienda, sin periodo, chip ni cierre,
+   * clasificada por `derivarDesgloseTienda` (la MISMA funcion que la cabecera del maestro, 171) y
+   * leida en la MISMA transaccion que el saldo actual. El servicio AFIRMA `resumen.saldo ===
+   * saldoActual` antes de responder. Son cifras BRUTAS (N1: el pago anulado sigue en «Ya pagado» y su
+   * devolucion en «A tu favor»); el saldo sale exacto. `null` en toda lectura que no sea la de la
+   * propia tienda (`leerMiTienda{,Completo}`).
+   */
+  resumen: DesgloseTiendaDTO | null;
   filas: FilaEstadoCuentaDTO[];
   total: number;
   page: number;

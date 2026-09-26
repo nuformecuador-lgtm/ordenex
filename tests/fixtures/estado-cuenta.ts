@@ -47,6 +47,9 @@ export function estado(parcial: Partial<EstadoCuentaDTO> & { tipo?: TipoDeCuenta
     abonos: "1000.00",
     cargos: "0.00",
     saldoFinal: "1000.00",
+    // 172 R55: el resumen de tres cifras solo viaja en la lectura de la propia tienda; los casos de
+    // `/mi-wallet` que lo miden lo dan explícito.
+    resumen: null,
     filas: [fila({})],
     total: 1,
     page: 1,

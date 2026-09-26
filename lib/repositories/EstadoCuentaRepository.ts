@@ -13,6 +13,7 @@ import type {
   TipoDeDocumentoDePago,
   VentanaDeLibro,
 } from "@/lib/interfaces/repositories/IEstadoCuentaRepository";
+import type { DesgloseTiendaAgregadoRow } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
@@ -247,6 +248,19 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
       _sum: { monto: true },
     });
     return { creditos: sumaDe(grupos, "credito"), debitos: sumaDe(grupos, "debito") };
+  }
+
+  async desgloseDeTienda(tiendaId: string): Promise<DesgloseTiendaAgregadoRow[]> {
+    const grupos = await this.prisma.walletTiendaMovimiento.groupBy({
+      by: ["tipo", "categoria"],
+      where: { tiendaId }, // la cuenta ENTERA: sin periodo, sin chip, sin cierre
+      _sum: { monto: true },
+    });
+    return grupos.map((g) => ({
+      tipo: g.tipo,
+      categoria: g.categoria,
+      total: new Prisma.Decimal(g._sum.monto ?? 0).toFixed(2), // money-safe
+    }));
   }
 
   async totalesDeMensajero(mensajeroId: string, antesDe?: Date): Promise<{ devengado: string; pagado: string }> {
