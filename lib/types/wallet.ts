@@ -325,7 +325,16 @@ export type DocumentoCajaDTO = {
     | "abono_tienda"
     | "egreso_caja"
     | "indemnizacion"
-    | "rechazo_tienda_cobro";
+    | "rechazo_tienda_cobro"
+    /**
+     * Ficha 458-C (revision B3, R71): el egreso de un pago de Ordenex A UNA TIENDA (172;
+     * `egreso_pago_tienda` con origen `pago_tienda`, documento = el `liquidacion_pago`) y el egreso del
+     * PREMIO del ranking (293; `egreso_pago_mensajero` con origen `ranking_snapshot_fila`, documento = la
+     * fila del podio). El servidor ya los anulaba desde la caja (`WalletAnulacionService.rutaDeCaja`);
+     * sin documento, la fila decia «Vigente» aunque estuviera anulada. Sus reversos llevan `null`.
+     */
+    | "pago_tienda"
+    | "premio_del_ranking";
   anulado: boolean;
   tieneComprobante: boolean;
   /** Ficha 458-B (R72): anulado por un reverso anterior a la 458, sin constancia: «motivo no registrado». */

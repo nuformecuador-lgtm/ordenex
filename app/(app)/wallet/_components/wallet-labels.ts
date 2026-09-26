@@ -299,6 +299,9 @@ export const DOCUMENTO_CAJA_NOMBRE: Record<
   egreso_caja: "el gasto de la caja",
   indemnizacion: "la indemnización por un incidente",
   rechazo_tienda_cobro: "el cobro por rechazo a una tienda",
+  // Ficha 458-C (revision B3): el pago de Ordenex a una tienda (172) y el premio del ranking (293).
+  pago_tienda: "el pago de Ordenex a una tienda",
+  premio_del_ranking: "el premio del ranking",
 };
 
 /**

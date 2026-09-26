@@ -185,20 +185,10 @@ function RegistroCelda({ autoria }: { autoria: AutoriaDeFilaDTO | string }) {
  * entidad y la descripción/motivo (la MISMA composición que la descarga, `textoDeOrigen`).
  */
 function MovimientoCelda({ movimiento }: { movimiento: WalletMovimientoDTO }) {
-  const documento = movimiento.documento;
+  // La fila anulada DICE «Anulado» en la celda de «Ver» (`CeldaVer`, revisión B2 de la 458-C).
   return (
     <span className="flex flex-col gap-0.5">
-      <span className="inline-flex flex-wrap items-center gap-2">
-        <span className="font-medium">{CATEGORIA_LABEL[movimiento.categoria]}</span>
-        {/* R71/R72 (457 R41, 459 R66, 461 R20): la fila anulada lo DICE en palabras, además de
-            salir tachada; el estado lo decidió el servidor. La insignia es `inline-flex`, así que
-            el tachado de la fila no la atraviesa. */}
-        {documento?.anulado ? (
-          <Badge variant="outline" className="text-muted-foreground">
-            {documento.motivoNoRegistrado ? PANEL_TEXTO.motivoNoRegistrado : PANEL_TEXTO.anulado}
-          </Badge>
-        ) : null}
-      </span>
+      <span className="font-medium">{CATEGORIA_LABEL[movimiento.categoria]}</span>
       <span className="text-xs text-muted-foreground">
         <OrigenMovimiento fila={movimiento} rotulos={ORIGEN_LABEL} />
       </span>
@@ -228,6 +218,21 @@ function naceDeUnCierre(m: WalletMovimientoDTO): boolean {
 /** La fila, con el estado de anulación que decidió el SERVIDOR (R71): anulada = tachada y apagada. */
 function claseDeFila(m: WalletMovimientoDTO): string | undefined {
   return m.documento?.anulado ? "text-muted-foreground line-through" : undefined;
+}
+
+/**
+ * B2 (revisión 458-C; 457 R41, 459 R66, 461 R20/R71) — la fila anulada DICE «Anulado», con la palabra y
+ * no solo con el tachado (que un lector de pantalla no anuncia). Sale del `documento` del servidor, como
+ * el tachado. Va en la celda de «Ver», donde vivían las acciones: el orden de las columnas no se toca.
+ * Es una insignia (caja en línea atómica), así que el tachado de la fila no la cruza.
+ */
+function CeldaVer({ m, onCambio }: { m: WalletMovimientoDTO; onCambio?: () => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      {m.documento?.anulado ? <Badge variant="secondary">{PANEL_TEXTO.anulado}</Badge> : null}
+      <VerMovimientoCaja movimiento={m} onCambio={onCambio} />
+    </div>
+  );
 }
 
 export interface WalletLedgerProps {
@@ -323,7 +328,7 @@ export function WalletLedger({
         id: "ver",
         value: LIBRO_CAJA_COLUMNA.ver,
         minWidth: "5rem",
-        render: (m) => <VerMovimientoCaja movimiento={m} onCambio={onCambio} />,
+        render: (m) => <CeldaVer m={m} onCambio={onCambio} />,
       },
     ],
     [onCambio, autoria],

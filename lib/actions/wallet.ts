@@ -6,6 +6,8 @@ import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnul
 import {
   EgresoCajaDocumentosRepository,
   IndemnizacionDocumentosRepository,
+  PagoTiendaCajaDocumentosRepository,
+  PremioCajaDocumentosRepository,
 } from "@/lib/repositories/EgresoCajaDocumentosRepository";
 import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/RechazoTiendaCobroAnulacionRepository";
 import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
@@ -134,6 +136,9 @@ function buildService(): IWalletService {
     egresos: new EgresoCajaDocumentosRepository(prisma),
     indemnizaciones: new IndemnizacionDocumentosRepository(prisma),
     rechazos: new RechazoTiendaCobroAnulacionRepository(prisma),
+    // Ficha 458-C (revision B3, R71): el pago de Ordenex a una tienda y el premio del ranking.
+    pagosATienda: new PagoTiendaCajaDocumentosRepository(prisma),
+    premios: new PremioCajaDocumentosRepository(prisma),
   }, buildComprobantes(prisma)); // Ficha 458-B (R74): el comprobante de la correccion
 }
 

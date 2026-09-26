@@ -83,7 +83,7 @@ describeSiHayBase("459/T B.12 — saldo inicial o aporte de capital por la actio
       aportes: new AporteCapitalRepository(prisma),
       cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] }, // ficha 461: lo exige `LectoresDocumentosCaja`; esta suite no lee cobros
       abonos: { estadoDeDocumentos: async () => [] }, // ficha 457: lo exige `LectoresDocumentosCaja`; esta suite no lee pagos de una tienda a Ordenex
-      egresos: { estadoDeDocumentos: async () => [] }, indemnizaciones: { estadoDeDocumentos: async () => [] }, rechazos: { estadoDeDocumentos: async () => [] }, // ficha 458-B: lo exige `LectoresDocumentosCaja`
+      egresos: { estadoDeDocumentos: async () => [] }, indemnizaciones: { estadoDeDocumentos: async () => [] }, rechazos: { estadoDeDocumentos: async () => [] }, pagosATienda: { estadoDeDocumentos: async () => [] }, premios: { estadoDeDocumentos: async () => [] }, // ficha 458-B: lo exige `LectoresDocumentosCaja`
     });
     const r = await svc.verResumenCaja({ page: 1, pageSize: 1 }, p.maestro);
     if (r.status !== "ok") throw new Error(`verResumenCaja: ${JSON.stringify(r)}`);

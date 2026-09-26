@@ -109,6 +109,15 @@ const ANULABLES: Array<[string, WalletMovimientoDTO]> = [
     "flete del cobro por rechazo",
     fila({ tipo: "ingreso", categoria: "ingreso_flete_devolucion", origenTipo: "gestion_orden", origenId: uuid(), monto: "1800.00", documento: doc("rechazo_tienda_cobro") }),
   ],
+  // B3 de la revisión: los dos egresos que el servidor ya anulaba desde la caja y que no traían documento.
+  [
+    "pago de Ordenex a una tienda",
+    fila({ categoria: "egreso_pago_tienda", origenTipo: "pago_tienda", origenId: uuid(), dueno: "terceros", monto: "3000.00", documento: doc("pago_tienda") }),
+  ],
+  [
+    "premio del ranking",
+    fila({ categoria: "egreso_pago_mensajero", origenTipo: "ranking_snapshot_fila", origenId: uuid(), monto: "5000.00", documento: doc("premio_del_ranking") }),
+  ],
 ];
 
 const ANULADO = fila({ categoria: "egreso_gasto_variable", monto: "999.00", documento: doc("egreso_caja", { anulado: true, motivoNoRegistrado: true }) });
@@ -273,3 +282,188 @@ describe("458-C — lo demás del panel desde el libro", () => {
   });
 });
 
+
+// ─── Revisión 458-C: B2 (la fila anulada DICE «Anulado»), B3 (sin documento no hay «Vigente»; el pago a
+// una tienda y el premio, anulados, lo dicen) y M1 (quién anuló, cuándo, por qué y cómo, en el panel) ──
+
+const PAGO_TIENDA_ANULADO = fila({
+  categoria: "egreso_pago_tienda",
+  origenTipo: "pago_tienda",
+  origenId: uuid(),
+  dueno: "terceros",
+  monto: "5000.00",
+  documento: doc("pago_tienda", { anulado: true }),
+});
+const PREMIO_ANULADO = fila({
+  categoria: "egreso_pago_mensajero",
+  origenTipo: "ranking_snapshot_fila",
+  origenId: uuid(),
+  monto: "4000.00",
+  documento: doc("premio_del_ranking", { anulado: true }),
+});
+/** Un pago a una tienda que el servidor manda SIN documento (lo que llegaba antes de B3). */
+const PAGO_TIENDA_SIN_DOCUMENTO = fila({
+  categoria: "egreso_pago_tienda",
+  origenTipo: "pago_tienda",
+  origenId: uuid(),
+  dueno: "terceros",
+  monto: "2000.00",
+  documento: null,
+});
+
+function filaDe(m: WalletMovimientoDTO): HTMLElement {
+  const filas = within(screen.getByRole("table", { name: "Libro de movimientos" })).getAllByRole("row").slice(1);
+  return filas[filasActuales.indexOf(m)];
+}
+
+function lineaDelPanel(panel: HTMLElement, nombre: string): string | null | undefined {
+  return within(panel).getByText(nombre, { selector: "dt" }).nextElementSibling?.textContent;
+}
+
+describe("458-C revisión B2 — la fila anulada del libro DICE «Anulado» (457 R41, 459 R66, 461 R20/R71)", () => {
+  it("la anulada lleva la palabra y su «Ver» lo dice en el nombre accesible; las vigentes y el contra-asiento no", () => {
+    filasActuales = [ANULABLES[0][1], ANULADO, CONTRA_ASIENTO, PAGO_TIENDA_ANULADO, PREMIO_ANULADO];
+    pintar(filasActuales);
+    for (const m of [ANULADO, PAGO_TIENDA_ANULADO, PREMIO_ANULADO]) {
+      expect(within(filaDe(m)).getByText("Anulado")).toBeTruthy();
+      expect(within(filaDe(m)).getByRole("button", { name: /^Ver / }).getAttribute("aria-label")).toMatch(/ · Anulado$/);
+    }
+    expect(within(filaDe(ANULADO)).getByRole("button", { name: /^Ver / }).getAttribute("aria-label")).toBe(
+      "Ver Gasto de Ordenex del 2026-09-20 por ₡999 · Anulado",
+    );
+    for (const m of [ANULABLES[0][1], CONTRA_ASIENTO]) {
+      expect(within(filaDe(m)).queryByText("Anulado")).toBeNull();
+      expect(within(filaDe(m)).getByRole("button", { name: /^Ver / }).getAttribute("aria-label")).not.toMatch(/Anulado/);
+    }
+  });
+});
+
+describe("458-C revisión B3 — el estado del panel es el del servidor, también en el pago a una tienda y el premio", () => {
+  for (const [nombre, m] of [
+    ["el pago de Ordenex a una tienda", PAGO_TIENDA_ANULADO],
+    ["el premio del ranking", PREMIO_ANULADO],
+  ] as const) {
+    it(`${nombre} anulado: la fila sale tachada, el panel dice «Anulado» y no ofrece «Anular…»`, async () => {
+      filasActuales = [m];
+      const { user } = pintar(filasActuales);
+      expect(filaDe(m).className).toMatch(/line-through/);
+      const panel = await abrirPanel(user, m);
+      expect(lineaDelPanel(panel, "Estado")).toMatch(/^Anulado/);
+      expect(within(panel).queryByText("Vigente")).toBeNull();
+      expect(within(panel).queryByRole("button", { name: "Anular…" })).toBeNull();
+    });
+  }
+
+  it("una fila SIN documento (contra-asiento, cierre, o lo que el servidor no clasificó) NO dice «Vigente»", async () => {
+    for (const m of [PAGO_TIENDA_SIN_DOCUMENTO, CONTRA_ASIENTO, DEL_CIERRE]) {
+      filasActuales = [m];
+      const { user } = pintar(filasActuales);
+      const panel = await abrirPanel(user, m);
+      expect(lineaDelPanel(panel, "Estado")).toBe("—");
+      expect(within(panel).queryByText("Vigente")).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("el pago a una tienda VIGENTE dice «Vigente» y se anula por la acción única con el id de su fila", async () => {
+    const m = ANULABLES[10][1];
+    filasActuales = [m];
+    const { user } = pintar(filasActuales);
+    const panel = await abrirPanel(user, m);
+    expect(lineaDelPanel(panel, "Estado")).toBe("Vigente");
+    await user.click(within(panel).getByRole("button", { name: "Anular…" }));
+    const dialogo = await screen.findByRole("dialog", { name: "Anular el pago de Ordenex a una tienda" });
+    await user.type(within(dialogo).getByLabelText(/^Motivo de la anulación/), "Cuenta equivocada");
+    await user.click(within(dialogo).getByRole("button", { name: "Anular" }));
+    await waitFor(() =>
+      expect(anularMock).toHaveBeenCalledWith({ destino: { libro: "caja", movimientoId: m.id }, motivo: "Cuenta equivocada" }),
+    );
+  });
+});
+
+describe("458-C revisión M1 — R58: quién anuló, cuándo, por qué y cómo, con lo que devuelve el servidor", () => {
+  it("anulado: «Anulado el <día> por <quién> · <motivo>»; «Cómo»: el método y la referencia", async () => {
+    autoriaMock.mockResolvedValue({
+      status: "ok",
+      filas: [
+        {
+          movimientoId: PAGO_TIENDA_ANULADO.id,
+          aQuien: { nombre: "Tienda Norte", beneficiario: null, cuenta: null, esOrdenex: false },
+          registro: { nombre: "Maestra", automatico: null },
+          como: { metodo: "SINPE", referencia: "SINPE-77" },
+          anulacion: { motivo: "Se pagó a la cuenta equivocada", por: "Carla Ruiz", fecha: "2026-09-25" },
+        },
+      ],
+    });
+    filasActuales = [PAGO_TIENDA_ANULADO];
+    const { user } = pintar(filasActuales);
+    const panel = await abrirPanel(user, PAGO_TIENDA_ANULADO);
+    await within(panel).findByText("Tienda Norte");
+    expect(lineaDelPanel(panel, "Estado")).toBe("Anulado el 2026-09-25 por Carla Ruiz · Se pagó a la cuenta equivocada");
+    expect(lineaDelPanel(panel, "Cómo")).toBe("SINPE · referencia SINPE-77");
+  });
+
+  it("la referencia anotada a mano sin método; sin «cómo» del servidor, «—»; mientras carga, «Cargando…»", async () => {
+    const m = ANULABLES[0][1];
+    let responder: (v: unknown) => void = () => undefined;
+    autoriaMock.mockReturnValueOnce(new Promise((r) => (responder = r)));
+    filasActuales = [m];
+    const { user } = pintar(filasActuales);
+    const panel = await abrirPanel(user, m);
+    expect(lineaDelPanel(panel, "Cómo")).toBe("Cargando…");
+    responder({
+      status: "ok",
+      filas: [
+        {
+          movimientoId: m.id,
+          aQuien: { nombre: "Ana Mora", beneficiario: null, cuenta: null, esOrdenex: false },
+          registro: { nombre: "Maestra", automatico: null },
+          como: { metodo: null, referencia: "SINPE 8899" },
+          anulacion: null,
+        },
+      ],
+    });
+    await waitFor(() => expect(lineaDelPanel(panel, "Cómo")).toBe("Referencia SINPE 8899"));
+    cleanup();
+
+    autoriaMock.mockResolvedValueOnce({
+      status: "ok",
+      filas: [
+        {
+          movimientoId: DEL_CIERRE.id,
+          aQuien: { nombre: "Juan", beneficiario: null, cuenta: null, esOrdenex: false },
+          registro: { nombre: null, automatico: { accion: "aprobacion_cierre", por: null } },
+          como: null,
+          anulacion: null,
+        },
+      ],
+    });
+    filasActuales = [DEL_CIERRE];
+    const otro = pintar(filasActuales);
+    const panel2 = await abrirPanel(otro.user, DEL_CIERRE);
+    await within(panel2).findByText("Juan");
+    expect(lineaDelPanel(panel2, "Cómo")).toBe("—");
+  });
+
+  it("vigente: aunque la autoría trajera una anulación, el estado lo decide el `documento` de la fila", async () => {
+    const m = ANULABLES[10][1];
+    autoriaMock.mockResolvedValue({
+      status: "ok",
+      filas: [
+        {
+          movimientoId: m.id,
+          aQuien: { nombre: "Tienda Norte", beneficiario: null, cuenta: null, esOrdenex: false },
+          registro: { nombre: "Maestra", automatico: null },
+          como: { metodo: "efectivo", referencia: null },
+          anulacion: { motivo: "x", por: "y", fecha: "2026-09-25" },
+        },
+      ],
+    });
+    filasActuales = [m];
+    const { user } = pintar(filasActuales);
+    const panel = await abrirPanel(user, m);
+    await within(panel).findByText("Tienda Norte");
+    expect(lineaDelPanel(panel, "Estado")).toBe("Vigente");
+    expect(lineaDelPanel(panel, "Cómo")).toBe("Efectivo");
+  });
+});

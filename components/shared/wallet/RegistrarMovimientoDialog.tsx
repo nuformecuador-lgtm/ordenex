@@ -260,6 +260,11 @@ export function RegistrarMovimientoDialog({
     // Cambiar de tipo de cuenta limpia la elegida: una tienda no es un mensajero.
     if (cuentaDelConcepto(siguiente) !== cuenta && cuentaFija === undefined) setCuentaId(null);
     setConcepto(siguiente);
+    // R51 (M3 de la revisión) — otro concepto es otro registro: clave NUEVA. Con la misma, un gasto
+    // cuya respuesta se perdió volvería como `ya_registrado` al confirmar un sueldo, y el diálogo
+    // anunciaría como registrado algo que la persona no pidió. Los reintentos SIN cambiar de
+    // concepto conservan la clave (el servidor los reconoce y no duplica).
+    setClave(nuevaClave());
     setAvisoGeneral(null);
     setErrores((previos) => ({ monto: previos.monto, fecha: previos.fecha }));
   }
@@ -481,7 +486,16 @@ export function RegistrarMovimientoDialog({
     }
 
     setAvisoGeneral(null);
-    const result = await registrar();
+    let result: ResultadoRegistro;
+    try {
+      result = await registrar();
+    } catch {
+      // M3 de la revisión — un fallo de red o un estado que el diálogo no conoce NO se calla: el
+      // aviso queda a la vista, el diálogo sigue abierto con lo escrito y la clave se conserva, así
+      // que repetir sin cambiar nada no duplica el registro.
+      setAvisoGeneral(REGISTRAR_MOVIMIENTO_TEXTO.falloDeRed);
+      return;
+    }
 
     if (result.status === "ok") {
       toast.success(result.mensajeExito);

@@ -1,0 +1,10 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a035e42c528f528f0
+
+
+ Test Files  265 passed | 2 skipped (267)
+      Tests  3680 passed | 19 skipped (3699)
+   Start at  10:57:59
+   Duration  46.69s (transform 14.41s, setup 9.94s, import 130.53s, tests 72.28s, environment 29.70s)
+
+GUARDS_EXIT=0

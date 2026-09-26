@@ -160,26 +160,38 @@ const AUTORIA: Record<string, Omit<AutoriaDeFilaDTO, "movimientoId">> = {
   [SUELDO.id]: {
     aQuien: { nombre: "Juan Pérez", beneficiario: null, cuenta: null, esOrdenex: false },
     registro: { nombre: "Ana Maestra", automatico: null },
+    como: null,
+    anulacion: null,
   },
   [COBRO.id]: {
     aQuien: { nombre: "Tania Tienda", beneficiario: null, cuenta: { tipo: "tienda", id: TIENDA_ID }, esOrdenex: false },
     registro: { nombre: "Ana Maestra", automatico: null },
+    como: null,
+    anulacion: null,
   },
   [DEL_CIERRE.id]: {
     aQuien: { nombre: "Mario Mensajero", beneficiario: null, cuenta: { tipo: "mensajero", id: MENSAJERO_ID }, esOrdenex: false },
     registro: { nombre: null, automatico: { accion: "aprobacion_cierre", por: "Ana Maestra" } },
+    como: null,
+    anulacion: null,
   },
   [APORTE.id]: {
     aQuien: { nombre: null, beneficiario: null, cuenta: null, esOrdenex: true },
     registro: { nombre: "Ana Maestra", automatico: null },
+    como: null,
+    anulacion: null,
   },
   [ANULADO.id]: {
     aQuien: { nombre: null, beneficiario: null, cuenta: null, esOrdenex: false },
     registro: { nombre: null, automatico: { accion: "plantilla_gasto_fijo", por: null } },
+    como: null,
+    anulacion: null,
   },
   [ANULADO_SIN_MOTIVO.id]: {
     aQuien: { nombre: "Proveedor Uno", beneficiario: null, cuenta: null, esOrdenex: false },
     registro: { nombre: "Ana Maestra", automatico: null },
+    como: null,
+    anulacion: null,
   },
 };
 
@@ -381,14 +393,15 @@ describe("458-E T E.1 — las columnas del libro (R55–R57)", () => {
     expect(celdasDe(FILAS, SUELDO)["Registró"].textContent).toBe("No se pudo leer");
   });
 
-  it("R71/R72: la fila anulada DICE «Anulado» y sale tachada; la de antes de la 458, «motivo no registrado»", () => {
+  it("R71/R72: la fila anulada DICE «Anulado» y sale tachada, también la de antes de la 458", () => {
     pintarLibro();
     const filas = within(tabla()).getAllByRole("row").slice(1);
     const anulada = filas[FILAS.indexOf(ANULADO)];
     expect(within(anulada).getByText("Anulado")).toBeInTheDocument();
     expect(anulada.className).toContain("line-through");
+    // La de antes de la 458 también lo dice en la fila; «motivo no registrado» lo detalla su panel (458-C).
     const sinMotivo = filas[FILAS.indexOf(ANULADO_SIN_MOTIVO)];
-    expect(within(sinMotivo).getByText("Anulado · motivo no registrado")).toBeInTheDocument();
+    expect(within(sinMotivo).getByText("Anulado")).toBeInTheDocument();
     expect(sinMotivo.className).toContain("line-through");
     // Control: una vigente ni lo dice ni se tacha.
     const vigente = filas[FILAS.indexOf(SUELDO)];

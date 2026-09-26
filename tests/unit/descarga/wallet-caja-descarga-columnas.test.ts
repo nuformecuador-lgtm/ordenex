@@ -140,6 +140,8 @@ describe("columnas de descarga del libro de caja", () => {
         esOrdenex: false,
       },
       registro: { nombre: "Ana Maestra", automatico: null },
+      como: { metodo: "SINPE", referencia: "123456" },
+      anulacion: null,
     };
     const fila = filaDescargaMovimientoCaja(MOV, autoria);
     expect(fila.aQuien).toBe("Tania Tienda · a Facebook");
