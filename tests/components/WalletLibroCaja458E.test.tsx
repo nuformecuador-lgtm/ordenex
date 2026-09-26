@@ -160,36 +160,43 @@ const AUTORIA: Record<string, Omit<AutoriaDeFilaDTO, "movimientoId">> = {
   [SUELDO.id]: {
     aQuien: { nombre: "Juan Pérez", beneficiario: null, cuenta: null, esOrdenex: false },
     registro: { nombre: "Ana Maestra", automatico: null },
+    // Revisión B1 (R58): tecleado el 26, con fecha del movimiento del 20.
+    registradoEl: { fecha: "2026-09-26", hora: "21:30" },
     como: null,
     anulacion: null,
   },
   [COBRO.id]: {
     aQuien: { nombre: "Tania Tienda", beneficiario: null, cuenta: { tipo: "tienda", id: TIENDA_ID }, esOrdenex: false },
     registro: { nombre: "Ana Maestra", automatico: null },
+    registradoEl: { fecha: "2026-09-20", hora: "09:15" },
     como: null,
     anulacion: null,
   },
   [DEL_CIERRE.id]: {
     aQuien: { nombre: "Mario Mensajero", beneficiario: null, cuenta: { tipo: "mensajero", id: MENSAJERO_ID }, esOrdenex: false },
     registro: { nombre: null, automatico: { accion: "aprobacion_cierre", por: "Ana Maestra" } },
+    registradoEl: { fecha: "2026-09-20", hora: "09:15" },
     como: null,
     anulacion: null,
   },
   [APORTE.id]: {
     aQuien: { nombre: null, beneficiario: null, cuenta: null, esOrdenex: true },
     registro: { nombre: "Ana Maestra", automatico: null },
+    registradoEl: { fecha: "2026-09-20", hora: "09:15" },
     como: null,
     anulacion: null,
   },
   [ANULADO.id]: {
     aQuien: { nombre: null, beneficiario: null, cuenta: null, esOrdenex: false },
     registro: { nombre: null, automatico: { accion: "plantilla_gasto_fijo", por: null } },
+    registradoEl: { fecha: "2026-09-20", hora: "09:15" },
     como: null,
     anulacion: null,
   },
   [ANULADO_SIN_MOTIVO.id]: {
     aQuien: { nombre: "Proveedor Uno", beneficiario: null, cuenta: null, esOrdenex: false },
     registro: { nombre: "Ana Maestra", automatico: null },
+    registradoEl: { fecha: "2026-09-20", hora: "09:15" },
     como: null,
     anulacion: null,
   },
@@ -502,6 +509,18 @@ describe("458-E T E.2 — filtros Todo / Entra / Sale, concepto y periodo; tarje
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 describe("458-E T E.3 — «Ver», anular y el refresco del libro (R58, R60)", () => {
+  it("R58 (revisión B1): el panel dice CUÁNDO se registró, además de la fecha del movimiento", async () => {
+    const user = pintarModulo();
+    await waitFor(() => expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument());
+    const fila = within(tabla()).getAllByRole("row").slice(1)[PAGINA.indexOf(SUELDO)];
+    await user.click(within(fila).getByRole("button", { name: /^Ver Sueldo del / }));
+    const panel = await screen.findByRole("dialog");
+    // Quién Y cuándo (created_at en hora de Costa Rica), de la misma lectura que la columna.
+    await waitFor(() => expect(within(panel).getByText("Ana Maestra · el 2026-09-26 a las 21:30")).toBeInTheDocument());
+    // La fecha del movimiento sigue siendo la suya (el 20), no la del registro.
+    expect(panel.textContent).toContain("2026-09-20");
+  });
+
   it("R60: anular desde el panel relee libro, tarjetas + composición y desglose con los filtros VIGENTES", async () => {
     const user = pintarModulo();
     await user.click(screen.getByRole("button", { name: "Sale" }));

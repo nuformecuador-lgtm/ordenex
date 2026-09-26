@@ -131,18 +131,21 @@ const AUTORIA: Record<string, Omit<AutoriaDeFilaDTO, "movimientoId">> = {
   [SUELDO.id]: {
     aQuien: { nombre: "Juan Pérez", beneficiario: null, cuenta: null, esOrdenex: false },
     registro: { nombre: "Ana Maestra", automatico: null },
+    registradoEl: { fecha: "2026-09-20", hora: "09:15" },
     como: null,
     anulacion: null,
   },
   [COBRO.id]: {
     aQuien: { nombre: "Tania Tienda", beneficiario: null, cuenta: { tipo: "tienda", id: TIENDA_ID }, esOrdenex: false },
     registro: { nombre: "Ana Maestra", automatico: null },
+    registradoEl: { fecha: "2026-09-20", hora: "09:15" },
     como: null,
     anulacion: null,
   },
   [PAGO_TIENDA.id]: {
     aQuien: { nombre: "Tania Tienda", beneficiario: null, cuenta: { tipo: "tienda", id: TIENDA_ID }, esOrdenex: false },
     registro: { nombre: "Ana Maestra", automatico: null },
+    registradoEl: { fecha: "2026-09-20", hora: "09:15" },
     como: null,
     anulacion: null,
   },

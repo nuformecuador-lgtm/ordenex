@@ -8,9 +8,17 @@ import type {
 import { tipoDeDocumentoOriginal } from "@/lib/services/WalletService";
 import type { AnulacionDeFilaDTO } from "@/lib/types/estado-cuenta";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { horaCostaRica } from "@/lib/utils/hora-cr";
+import { movimientoDeLaAnotacion } from "@/lib/utils/anotacion-de-fila";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RegistroDTO } from "@/lib/types/estado-cuenta";
-import type { AQuienDTO, AutoriaDeFilaDTO, AutoriaLibroCajaInput, ComoDTO } from "@/lib/types/libro-caja-autoria";
+import type {
+  AQuienDTO,
+  AutoriaDeFilaDTO,
+  AutoriaLibroCajaInput,
+  ComoDTO,
+  RegistradoElDTO,
+} from "@/lib/types/libro-caja-autoria";
 import type {
   AutoriaLibroCajaServiceResult,
   ILibroCajaAutoriaService,
@@ -36,7 +44,8 @@ function aCuenta(c: CuentaNombrada | undefined): AQuienDTO {
  *   cobro_tienda(_completado), cobro_manual_reclasificado   la tienda del cobro (el debito)
  *   abono_tienda                          la tienda que pago
  *   aporte_capital                        «Ordenex»
- *   gasto / manual                        la anotacion (nombre libre); sin anotacion, «—»
+ *   gasto / manual                        la anotacion (nombre libre); sin anotacion, «—». El
+ *                                         contra-asiento, la de su original (revision M2, 458-E)
  *
  * Registro: la persona (`registrado_por`) o, si es automatico, la ACCION que lo produjo y quien la
  * decidio (aprobacion del cierre, plantilla de gasto fijo, cobro por rechazo, incidente, premio).
@@ -63,9 +72,11 @@ export class LibroCajaAutoriaService implements ILibroCajaAutoriaService {
     const pagosPorCuenta = await this.repo.pagosPorCuenta(ids("pago_por_cuenta_tienda"));
     const debitos = await this.repo.debitosDeTienda(deTipos("cobro_tienda", "cobro_tienda_completado", "cobro_manual_reclasificado"));
     const abonos = await this.repo.abonos(ids("abono_tienda"));
-    const anotaciones = await this.repo.anotaciones(
-      movs.filter((m) => m.origenTipo === "gasto" || m.origenTipo === "manual").map((m) => m.id),
-    );
+    // Revision M2 (458-E): el contra-asiento de un egreso o de una correccion anulados lleva el nombre
+    // de su ORIGINAL (la misma regla que el filtro «A quién»).
+    const anotaciones = await this.repo.anotaciones([
+      ...new Set(movs.filter((m) => m.origenTipo === "gasto" || m.origenTipo === "manual").map(movimientoDeLaAnotacion)),
+    ]);
 
     const aQuien = (m: MovimientoDeCajaParaAutoria): AQuienDTO => {
       const o = m.origenId;
@@ -95,7 +106,7 @@ export class LibroCajaAutoriaService implements ILibroCajaAutoriaService {
           return { ...NADIE, esOrdenex: true };
         default: {
           // gasto / manual: el nombre libre anotado; una fila anterior a la 458 no tiene («—»).
-          const nombre = anotaciones.get(m.id) ?? null;
+          const nombre = anotaciones.get(movimientoDeLaAnotacion(m)) ?? null;
           return { ...NADIE, nombre };
         }
       }
@@ -204,12 +215,28 @@ export class LibroCajaAutoriaService implements ILibroCajaAutoriaService {
       return a === undefined ? null : { motivo: a.motivo, por: a.por, fecha: fechaCalendarioCR(a.fecha) };
     };
 
+    // Ficha 458-E (revision B1, R58): CUANDO se registro — el `created_at` de la fila en dia y hora de
+    // Costa Rica, no la fecha del movimiento (que la pantalla ya pinta aparte).
+    const registradoEl = (m: MovimientoDeCajaParaAutoria): RegistradoElDTO => ({
+      fecha: fechaCalendarioCR(m.createdAt),
+      hora: horaCostaRica(m.createdAt.toISOString()),
+    });
+
     const porId = new Map(movs.map((m) => [m.id, m]));
     const filas: AutoriaDeFilaDTO[] = input.movimientoIds.flatMap((id) => {
       const m = porId.get(id);
       return m === undefined
         ? []
-        : [{ movimientoId: id, aQuien: aQuien(m), registro: registro(m), como: como(m), anulacion: anulacion(m) }];
+        : [
+            {
+              movimientoId: id,
+              aQuien: aQuien(m),
+              registro: registro(m),
+              registradoEl: registradoEl(m),
+              como: como(m),
+              anulacion: anulacion(m),
+            },
+          ];
     });
     return { status: "ok", filas };
   }

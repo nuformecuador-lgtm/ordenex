@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import type { AQuienCuentaTipo, AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 import type { WalletMovimientoCategoria, WalletMovimientoTipo, WalletOrigenTipo } from "@/lib/types/wallet";
+import { CATEGORIAS_CONTRA_ASIENTO_ANOTADO } from "@/lib/utils/anotacion-de-fila";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 458-E (TE.2, R59; design §3.4 y §6) — «A quién» del libro de la caja, EN SQL.
@@ -151,14 +152,24 @@ function nombreNormalizado(columna: Prisma.Sql): Prisma.Sql {
 }
 
 /**
+ * Revision M2 (458-E): el id de la fila cuya anotacion vale para `w` — la ORIGINAL si `w` es el
+ * contra-asiento de un egreso o de una correccion anulados, `w` si no. El gemelo SQL de
+ * `movimientoDeLaAnotacion` (`lib/utils/anotacion-de-fila.ts`), que usa la columna «A quién».
+ */
+const MOVIMIENTO_DE_LA_ANOTACION = Prisma.sql`(CASE WHEN w."origen_id" IS NOT NULL AND w."categoria"::text IN (${Prisma.join([
+  ...CATEGORIAS_CONTRA_ASIENTO_ANOTADO,
+])}) THEN w."origen_id" ELSE w."id" END)`;
+
+/**
  * La condicion «A quién» sobre la fila `w` de `wallet_movimiento`. Una cuenta: alguna de sus ramas
- * encuentra un documento de ESA cuenta. Un nombre: la anotacion de la fila lleva ese nombre.
+ * encuentra un documento de ESA cuenta. Un nombre: la anotacion de la fila (o, si es un contra-asiento,
+ * la de su original: revision M2) lleva ese nombre.
  */
 export function condicionAQuienSql(aQuien: AQuienFiltro): Prisma.Sql {
   if ("nombre" in aQuien) {
     return Prisma.sql`(${origenDe(ORIGENES_CON_ANOTACION)} AND EXISTS (
       SELECT 1 FROM "wallet_anotacion" a
-      WHERE a."movimiento_id" = w."id"
+      WHERE a."movimiento_id" = ${MOVIMIENTO_DE_LA_ANOTACION}
         AND ${nombreNormalizado(Prisma.sql`a."contraparte_nombre"`)} = ${nombreNormalizado(Prisma.sql`${aQuien.nombre}`)}
     ))`;
   }
@@ -239,7 +250,8 @@ export function cuentasConMovimientosSql(f: FiltrosComunesSql): Prisma.Sql {
 /**
  * Los NOMBRES LIBRES anotados en filas de la caja bajo esos filtros, agrupados sin mayusculas ni
  * espacios de los bordes (la misma normalizacion del filtro), con cuantas filas. El nombre que se
- * muestra es uno de los escritos (el menor en orden de la base), siempre recortado.
+ * muestra es uno de los escritos (el menor en orden de la base), siempre recortado. El contra-asiento
+ * de una fila anotada cuenta con el nombre de su original (revision M2), como en el filtro.
  */
 export function nombresConMovimientosSql(f: FiltrosComunesSql): Prisma.Sql {
   const filtro = whereOVerdadero(condicionesComunesSql(f));
@@ -247,7 +259,7 @@ export function nombresConMovimientosSql(f: FiltrosComunesSql): Prisma.Sql {
   return Prisma.sql`
     SELECT MIN(btrim(a."contraparte_nombre")) AS "nombre", COUNT(*)::int AS "movimientos"
     FROM "wallet_movimiento" w
-    JOIN "wallet_anotacion" a ON a."movimiento_id" = w."id"
+    JOIN "wallet_anotacion" a ON a."movimiento_id" = ${MOVIMIENTO_DE_LA_ANOTACION}
     WHERE ${origenDe(ORIGENES_CON_ANOTACION)} AND a."contraparte_nombre" IS NOT NULL
       AND btrim(a."contraparte_nombre") <> '' AND ${filtro}
     GROUP BY ${clave}`;

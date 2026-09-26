@@ -140,6 +140,7 @@ describe("columnas de descarga del libro de caja", () => {
         esOrdenex: false,
       },
       registro: { nombre: "Ana Maestra", automatico: null },
+      registradoEl: { fecha: "2026-09-20", hora: "09:15" },
       como: { metodo: "SINPE", referencia: "123456" },
       anulacion: null,
     };
@@ -157,6 +158,7 @@ describe("columnas de descarga del libro de caja", () => {
       ...autoria,
       aQuien: { nombre: null, beneficiario: null, cuenta: null, esOrdenex: false },
       registro: { nombre: null, automatico: { accion: "plantilla_gasto_fijo", por: null } },
+      registradoEl: { fecha: "2026-09-20", hora: "09:15" },
     });
     expect(automatico.aQuien).toBe("—");
     expect(automatico.registro).toBe("Automático · Plantilla de gasto fijo");
