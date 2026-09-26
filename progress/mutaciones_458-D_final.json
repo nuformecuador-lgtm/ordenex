@@ -1,0 +1,138 @@
+[
+  {
+    "id": "M1",
+    "que": "R55: el resumen no se lee en /mi-wallet",
+    "archivo": "lib/services/EstadoCuentaService.ts",
+    "tests": [
+      "tests/integration/db/mi-wallet-resumen-458d.test.ts"
+    ],
+    "total": 5,
+    "rojos": 4,
+    "muerta": true
+  },
+  {
+    "id": "M2",
+    "que": "R55: el resumen se manda también a la oficina",
+    "archivo": "lib/services/EstadoCuentaService.ts",
+    "tests": [
+      "tests/integration/db/mi-wallet-resumen-458d.test.ts"
+    ],
+    "total": 5,
+    "rojos": 1,
+    "muerta": true
+  },
+  {
+    "id": "M3",
+    "que": "R55: sin el guardia del cuadre (resumen ≠ tarjeta pasa en silencio)",
+    "archivo": "lib/services/EstadoCuentaService.ts",
+    "tests": [
+      "tests/integration/db/mi-wallet-resumen-458d.test.ts"
+    ],
+    "total": 5,
+    "rojos": 1,
+    "muerta": true
+  },
+  {
+    "id": "M4",
+    "que": "R55: el resumen solo suma los créditos (WHERE de desgloseDeTienda)",
+    "archivo": "lib/repositories/EstadoCuentaRepository.ts",
+    "tests": [
+      "tests/integration/db/mi-wallet-resumen-458d.test.ts"
+    ],
+    "total": 5,
+    "rojos": 5,
+    "muerta": true
+  },
+  {
+    "id": "M5",
+    "que": "R55: «Cargos de Ordenex» pinta lo pagado (el pago engorda los cargos)",
+    "archivo": "app/(app)/mi-wallet/_components/ResumenMiWallet.tsx",
+    "tests": [
+      "tests/components/ResumenMiWallet.test.tsx",
+      "tests/integration/mi-wallet-page.test.tsx"
+    ],
+    "total": 42,
+    "rojos": 2,
+    "muerta": true
+  },
+  {
+    "id": "M6",
+    "que": "R55: /mi-wallet sin el resumen encima del estado de cuenta",
+    "archivo": "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+    "tests": [
+      "tests/integration/mi-wallet-page.test.tsx"
+    ],
+    "total": 38,
+    "rojos": 4,
+    "muerta": true
+  },
+  {
+    "id": "M7",
+    "que": "N1: sin la salvedad de las cifras brutas",
+    "archivo": "app/(app)/mi-wallet/_components/ResumenMiWallet.tsx",
+    "tests": [
+      "tests/components/ResumenMiWallet.test.tsx",
+      "tests/integration/mi-wallet-page.test.tsx"
+    ],
+    "total": 42,
+    "rojos": 2,
+    "muerta": true
+  },
+  {
+    "id": "M8",
+    "que": "R55: el saldo del resumen no es el del servidor",
+    "archivo": "app/(app)/mi-wallet/_components/ResumenMiWallet.tsx",
+    "tests": [
+      "tests/components/ResumenMiWallet.test.tsx",
+      "tests/integration/mi-wallet-page.test.tsx"
+    ],
+    "total": 42,
+    "rojos": 6,
+    "muerta": true
+  },
+  {
+    "id": "M9",
+    "que": "Retiro: la descarga de /mi-wallet acepta paginación (schema del paginado)",
+    "archivo": "lib/actions/estado-cuenta.ts",
+    "tests": [
+      "tests/unit/actions/wallet-tienda-descarga-action.test.ts"
+    ],
+    "total": 6,
+    "rojos": 2,
+    "muerta": true
+  },
+  {
+    "id": "M10",
+    "que": "Retiro: el borde de /mi-wallet no valida (pageSize 9999, tiendaId ajeno)",
+    "archivo": "lib/actions/estado-cuenta.ts",
+    "tests": [
+      "tests/unit/actions/wallet-tienda-actions.test.ts",
+      "tests/unit/types/wallet-tienda-schemas.test.ts"
+    ],
+    "total": 15,
+    "rojos": 2,
+    "muerta": true
+  },
+  {
+    "id": "M11",
+    "que": "R19: el detalle vacío vuelve a contradecir el importe (oficina)",
+    "archivo": "app/(app)/wallet/_components/detalle-movimiento-labels.ts",
+    "tests": [
+      "tests/components/DetalleMovimientoCierre.test.tsx"
+    ],
+    "total": 26,
+    "rojos": 1,
+    "muerta": true
+  },
+  {
+    "id": "M12",
+    "que": "R19: el detalle vacío vuelve a contradecir el importe (/mi-wallet)",
+    "archivo": "app/(app)/mi-wallet/_components/detalle-mi-movimiento-labels.ts",
+    "tests": [
+      "tests/components/DetalleMiMovimientoCierre.test.tsx"
+    ],
+    "total": 21,
+    "rojos": 1,
+    "muerta": true
+  }
+]
