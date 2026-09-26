@@ -75,9 +75,9 @@ se borra). Bloque a bloque:
 | «la fecha del movimiento (R19–R23, R32)» | bloque «458-C — la fecha del movimiento» (hoy CR, no viaja si no se toca, viaja tal cual, futura rechazada, pagos sin ventana) y «R49: …cada motivo bajo SU campo» (fecha del borde) | R43, R49 |
 | «tras registrar avisa al módulo y refresca (R18)» | «R48: tras registrar avisa, cierra, avisa al módulo y refresca» | R48 |
 | «los avisos hablan de vos (R31)», «los cuatro campos por su etiqueta (R32)» | los textos se leen literales en todo el archivo; cada campo se alcanza por su etiqueta (`getByLabelText`) | R43 |
-| 381: campo de tienda condicional, catálogo, catálogo caído, sin tienda, payload del cobro, doble clic, éxito con saldo, rechazos | «R40/R41 — la cuenta…» (lista al abrir, filtro por nombre, lista caída bloquea SOLO ese concepto, sin cuenta no llama) + «cobro a una tienda: …FormData sin tipo ni categoría» (aviso con el saldo del servidor en negativo). El doble clic lo sigue cubriendo `Modal` (fase `pending`) y la clave (R51) | R41, R48, R51 |
-| 459: frase del efecto, pago por cuenta (R61–R63), cobro sin claves de más (R64), aporte (R27/R68/R70) | «R39/R52 — la frase…» (las diez literales), «pago de un gasto de una tienda…», «aporte: … monto vacío, sin ejemplo, fecha SIEMPRE» | R39, R43 |
-| 457: el pago de una tienda en el diálogo (R54–R58) y el diálogo con concepto y tienda FIJOS (D8) | «una tienda le paga a Ordenex: …`fechaPago`, siempre» y «R40: con concepto y cuenta fijos…» (+ `PagoTiendaAccionesAbono457.test.tsx` adaptado) | R40, R50 |
+| 381: campo de tienda condicional, catálogo, catálogo caído, sin tienda, payload del cobro, doble clic, éxito con saldo, rechazos | «R40/R41 — la cuenta…» (lista al abrir, filtro por nombre, lista caída bloquea SOLO ese concepto, sin cuenta no llama) + «cobro a una tienda: …FormData sin tipo ni categoría» (aviso con el saldo del servidor en negativo). El doble clic lo sigue cubriendo `Modal` (fase `pending`) y la clave (R51). **Corregido en el cierre (B1):** el doble ENVÍO (`ya_registrado`, 461 R68) no lo medía nada; ahora «458-C B1 — 461 R68: `ya_registrado`… en los ocho caminos» (aviso literal, sin toast de error, cierra) | R41, R48, R51, 461 R68 |
+| 459: frase del efecto, pago por cuenta (R61–R63), cobro sin claves de más (R64), aporte (R27/R68/R70) | «R39/R52 — la frase…» (las diez literales), «pago de un gasto de una tienda…», «aporte: … monto vacío, sin ejemplo, fecha SIEMPRE». **Corregido en el cierre (B1):** esos dos casos solo miraban las claves del `FormData`; el aviso de éxito del pago de un gasto con el saldo y su signo (R63, en contra y a favor), el del saldo inicial («Registrado. Saldo inicial de ₡2.500.000,50.», R68), el del aporte y `ya_hay_saldo_inicial` bajo la clase (R70) se miden ahora en los bloques «458-C B1 — los avisos de éxito…» y «…los rechazos del servidor…» | R39, R43, 459 R63/R68/R70 |
+| 457: el pago de una tienda en el diálogo (R54–R58) y el diálogo con concepto y tienda FIJOS (D8) | «una tienda le paga a Ordenex: …`fechaPago`, siempre» y «R40: con concepto y cuenta fijos…» (+ `PagoTiendaAccionesAbono457.test.tsx` adaptado). **Corregido en el cierre (B1):** el primero solo mira las claves del `FormData`, no R57/R58; ahora el aviso de éxito con el saldo del servidor y «todavía debe» (y sin «debe» en cero), `ya_registrado` con el importe que QUEDÓ (m7), `sin_deuda` bajo la tienda y `excede` bajo el monto con la deuda del servidor, en «458-C B1 — …» | R40, R50, 457 R57/R58 |
 
 Otros tests tocados en TC.1: `wallet-conceptos-manuales.test.ts` (ampliado; «OCHO» → «DIEZ» como contrato
 nuevo, R37 supera 461-R39), `wallet-egresos-actions.test.ts` (D5; cuatro entradas ganan «a quién»),
@@ -161,9 +161,9 @@ comprobante por `verComprobanteAction`; la 458-D decide si `/mi-wallet` las usa)
 | --- | --- | --- |
 | `tests/components/WalletLedgerAcciones458.test.tsx` (entero: qué filas nuevas ofrecen «Anular…», la acción única con el id de la fila, `ya_anulado`, `no_anulable`) | `tests/components/WalletLedgerVer458C.test.tsx` («R63/R64 — «Anular…» desde el panel…», las diez filas anulables incluidas indemnización y cobro por rechazo; «R65 …NO ofrece») + `AnularMovimientoDialog.test.tsx` (`ya_anulado`, `no_anulable` ×6) | R63–R66 |
 | `tests/unit/components/wallet-ledger-reversa.test.tsx` (entero: «Reversar» visible en egresos administrativos; confirmar la reversa) | `WalletLedgerVer458C.test.tsx` («TODA fila tiene «Ver»…; no quedan «Reversar» ni «Anular…»», «sueldo»/«gasto de Ordenex» anulables por el panel con motivo) | R63, D11 |
-| `WalletLedgerAcciones457.test.tsx` — «457/R41 — qué filas del pago ofrecen acciones», «anular un pago desde el libro», «ver el comprobante del pago» | `WalletLedgerVer458C.test.tsx` («pago de una tienda a Ordenex» anulable por la acción única; «R71 … tachada»; «TC.3 Ver comprobante… por el destino de la fila») | R63, R71, R80 |
-| `WalletLedgerAcciones459.test.tsx` — «FICHA 459 — qué filas ofrecen acciones», «anular desde el libro», «ver el comprobante» | ídem («pago de un gasto de una tienda» y «aporte» por la acción única; «R65: un contra-asiento… NO ofrece»; «Ver comprobante» del pago de un gasto) | R63, R65, R80 |
-| `WalletLedgerAcciones461.test.tsx` — «461 — qué líneas del cobro ofrecen acciones», «anular un cobro desde el libro», «la corrección de caja ofrece «Anular…»», «auditoría P3 (461) — Reversado» | ídem («cobro de Ordenex» y «cobro completado por la migración», «corrección»; «R71/R72 …«Anulado · motivo no registrado» (lo trae SU fila)»; el contra-asiento no se tacha) + guardia R98 existente | R63, R71, R72 |
+| `WalletLedgerAcciones457.test.tsx` — «457/R41 — qué filas del pago ofrecen acciones», «anular un pago desde el libro», «ver el comprobante del pago» | `WalletLedgerVer458C.test.tsx` («pago de una tienda a Ordenex» anulable por la acción única; «R71 … tachada»; «TC.3 Ver comprobante… por el destino de la fila»). **Corregido en el cierre (B2):** «tachada» solo miraba `className`; el literal «Anulado» en la fila (457 R41) lo mide «458-C revisión B2 — la fila anulada del libro DICE «Anulado»» | R63, R71, R80, 457 R41 |
+| `WalletLedgerAcciones459.test.tsx` — «FICHA 459 — qué filas ofrecen acciones», «anular desde el libro», «ver el comprobante» | ídem («pago de un gasto de una tienda» y «aporte» por la acción única; «R65: un contra-asiento… NO ofrece»; «Ver comprobante» del pago de un gasto). **Corregido en el cierre (B2):** el literal «Anulado» de la fila (459 R66), en «458-C revisión B2 — …» | R63, R65, R80, 459 R66 |
+| `WalletLedgerAcciones461.test.tsx` — «461 — qué líneas del cobro ofrecen acciones», «anular un cobro desde el libro», «la corrección de caja ofrece «Anular…»», «auditoría P3 (461) — Reversado» | ídem («cobro de Ordenex» y «cobro completado por la migración», «corrección»; «R71/R72 …«Anulado · motivo no registrado» (lo trae SU fila)»; el contra-asiento no se tacha) + guardia R98 existente. **Corregido en el cierre (B2):** «Anulado · motivo no registrado» es el PANEL, no la fila; el literal «Anulado» en la fila (461 R20/R71) lo mide «458-C revisión B2 — …» | R63, R71, R72, 461 R20 |
 | `wallet-indemnizacion-libro.test.tsx` «R30 — la indemnización NO ofrece reversa» | reescrito en el mismo archivo: ninguna fila trae «Reversar»; las dos se abren con «Ver»; el criterio de la 45 sigue | R63, D11 |
 | `WalletFechaCostaRica459.test.tsx` «el nombre accesible de «Anular…» dice el 24» | reescrito: el de «Ver» dice el 24 | R16 |
 | `descarga/WalletDescarga.test.tsx` `ENCABEZADOS_ANTERIORES` («Acciones») | contrato nuevo: «Ver» | R58 |
@@ -292,3 +292,62 @@ Los 26 `skipped` son `AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (
 «Anular…» uniforme en el libro actual, D5 en el servidor; recorrido OK con R7/R8 = 0,00; 19 mutaciones
 rojas; gate completo `INIT_EXIT=0` con 0 saltados en integration/db. Bloqueada para desplegar por el
 build roto que dejó la 458-B (pendiente 1).
+
+## Cierre tras la revisión (`progress/review_458-C.md`, RECHAZADA) · 2026-09-26
+
+**Rama:** `wt/458-C-fix` = `origin/feature/458-C` (`03122992`) + `origin/review/458-C` (`24affec8`), empujada
+a `feature/458-C` tras cada paso. **Base:** clon propio `ordenex_458cx` (`CREATE DATABASE … TEMPLATE
+ordenex`, 0 conexiones a la plantilla medidas antes; `prisma migrate deploy`: «No pending migrations»;
+`migrate status` → `ordenex_458cx` en `localhost:5432`), `.env` del checkout principal con la base
+cambiada y sin `DATABASE_URL_PREVIEW`, `pnpm install --frozen-lockfile` propio sin junction; borrado al
+terminar. **Búsqueda:** el MCP `codebase-memory` no estaba en mi conjunto de herramientas en esta sesión;
+usé `grep`/lectura de los archivos reales (regla 7, declarado).
+
+### Qué se arregló, con su test y su mutación
+
+| Punto | Arreglo | Test | Mutación (roja) |
+| --- | --- | --- | --- |
+| **B1** 461 R68 | `ya_registrado` = éxito sin toast de error, en los OCHO caminos (gasto/sueldo, corrección, cobro, pago de un gasto, aporte, abono, pago a tienda, pago a mensajero), con su aviso LITERAL | `wallet-registrar-movimiento-dialog.test.tsx` «458-C B1 — 461 R68…» (8 casos) | MB1-a (gasto/sueldo → error) 2/57; MB1-b (abono → error) 1/57 |
+| **B1** 457 R57/R58 | aviso de éxito del abono con el saldo del servidor y «todavía debe» (y sin «debe» en cero); `sin_deuda` bajo la tienda; `excede` bajo el monto con la deuda del servidor | bloques «…avisos de éxito…» y «…rechazos del servidor…» | MB1-c 1/57; MB1-d 1/57 |
+| **B1** 459 R63/R68/R70 | aviso del pago de un gasto (en contra y a favor), del saldo inicial («Registrado. Saldo inicial de ₡2.500.000,50.») y del aporte; `ya_hay_saldo_inicial` bajo la clase | ídem | MB1-e 1/57; MB1-f 2/57; MB1-h 1/57 |
+| **B1** pago a un mensajero | `sin_saldo` bajo el mensajero, `excede` bajo el monto con el tope del servidor | ídem | MB1-g 1/57 |
+| **B2** 457 R41, 459 R66, 461 R20/R71 | la fila anulada lleva la palabra «Anulado» (insignia en la celda de «Ver», donde vivían las acciones: el orden de las columnas no se toca) y el nombre accesible de su «Ver» termina en «· Anulado»; sale del `documento` del servidor | `WalletLedgerVer458C.test.tsx` «458-C revisión B2 — …» | B2-a 1/47; B2-b 1/47 |
+| **B3** R71 | el panel no afirma «Vigente» sin documento («—»); el pago de Ordenex a una tienda (172) y el premio (293) llegan con documento: anulados dicen «Anulado» y salen tachados, vigentes ofrecen «Anular…» por la acción única | `DetalleMovimientoPanel.test.tsx` (estado `null` → «—»), `WalletLedgerVer458C.test.tsx` «…revisión B3…»; **Postgres:** `tests/integration/db/libro-caja-revision-458c.test.ts` (el libro REAL de `/wallet`) | B3-a (panel) 1/47; B3-b/c/d (servidor) 2/8, 1/8, 1/8 |
+| **M1** R58 | el panel dice quién anuló, el día y el motivo (de la constancia de CADA documento; el premio, de su reverso de caja) y «Cómo» (método y referencia; la referencia anotada a mano) | `WalletLedgerVer458C.test.tsx` «…revisión M1…»; Postgres: `libro-caja-revision-458c.test.ts` (pago anulado/vigente, premio, gasto por la vía uniforme, contra-asientos sin «anulado por») | M1-a/b (panel) 1/47, 3/47; M1-c/d/e (servidor) 1/8 cada una |
+| **M3** | un fallo de red o un estado desconocido deja un aviso a la vista (`role="alert"`), el diálogo abierto con lo escrito y la MISMA clave (repetir no duplica); cambiar de concepto genera una clave NUEVA | «458-C M3 — …» (3 casos) | M3-a 3/57; M3-b 1/57 |
+| **M2** | recorrido en la app de «Ordenex le paga a una tienda» (registrar, Ver, Anular…, fila «Anulado», panel con quién/cuándo/motivo/cómo) y «Ordenex le paga a un mensajero», R7/R8 = 0,00 en las cuatro medidas | `progress/recorrido_458-C/recorrido.md` §«Cierre tras la revisión» | — |
+
+**Mutaciones:** 21, una a una, con el arnés que se autocomprueba (el archivo cambia, se ejecutan > 0 tests
+con 0 saltados, se restaura byte a byte, `git status` limpio al terminar): **21/21 rojas**.
+`progress/mutaciones_458-C_cierre.json`.
+
+### Servidor tocado (mínimo, solo LECTURA; autorizado por el leader para B3 y M1)
+
+- `DocumentoCajaDTO["tipo"]` gana `pago_tienda` y `premio_del_ranking`; `tipoDeDocumentoOriginal` (ahora
+  exportada) los reconoce con las MISMAS condiciones que `WalletAnulacionService.rutaDeCaja`.
+  `LectoresDocumentosCaja` gana `pagosATienda` (`PagoTiendaCajaDocumentosRepository`: `liquidacion_anulacion`
+  + `wallet_comprobante.liquidacion_pago_id`) y `premios` (`PremioCajaDocumentosRepository`: el reverso
+  `ingreso_ajuste` con la misma clave de origen), SIN valor por defecto; inyectados en `lib/actions/wallet.ts`
+  y en los fixtures de test que construyen `WalletService`. `DOCUMENTO_CAJA_NOMBRE` gana sus dos nombres.
+- `AutoriaDeFilaDTO` gana `como` y `anulacion` (`LibroCajaAutoriaRepository.comos`/`anulaciones`, una
+  consulta por tipo presente); qué fila es ORIGINAL lo decide `tipoDeDocumentoOriginal`, la misma función
+  del libro, así que un contra-asiento nunca dice «anulado por».
+- Sin cambios de escritura, de dinero, de esquema ni de migraciones.
+
+### Bitácora corregida
+
+La tabla «Tests retirados o reescritos» de TC.1 y la de TC.3–TC.6 decían sustitutos que no medían lo que
+decían (B1, B2). Las filas afectadas llevan ahora «**Corregido en el cierre**» con el test que SÍ lo mide.
+La nota de TC.4 («el panel no puede decir quién anuló…») y el «Pendiente 3» quedan superados por M1;
+el «Pendiente 1» (el build roto de la 458-B) lo cerró `fix/458-B-async` (#830), ya en esta rama.
+
+### Menores de la revisión
+
+- m1: TC.0–TC.8 con `[x]` en `specs/458-rediseno-wallet/tasks.md`; entrada en `progress/history.md`.
+- m2: gate completo sobre el HEAD del cierre (abajo).
+- m3, m7 y el INSTANTE de registro (R58): anotados en TC.8 para TE.3 (458-E). m4: rotulado como deuda de
+  TD.5 (458-D). m6: la ayuda cita el aviso real («Este movimiento no se puede anular: …»).
+- m5 (adminSatelite): no se sondeó en este cierre; queda como estaba en la revisión.
+- Observación nueva (recorrido): en el pago a una tienda, «Por qué» dice el método, porque la 172 guarda
+  `descripcionDePago(metodo, referencia)` en la línea de caja; la nota del pago no llega al libro. Para la
+  458-E.
