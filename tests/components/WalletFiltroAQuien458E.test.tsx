@@ -286,7 +286,9 @@ describe("458-E R59 — el selector «A quién»", () => {
 
     await user.click(disparadorAQuien());
     const lista = await screen.findByRole("listbox", { name: "A quién" });
-    await waitFor(() => expect(within(lista).getAllByRole("option")).toHaveLength(OPCIONES.length + 1));
+    // Ancla de CONTENIDO (no de conteo): la última opción ya está pintada.
+    await within(lista).findByRole("option", { name: "Tania Tienda · Tienda · 2 movimientos" });
+    expect(within(lista).getAllByRole("option")).toHaveLength(OPCIONES.length + 1);
     expect(quienesMock).toHaveBeenCalledWith({});
     const rotulos = within(lista).getAllByRole("option").map((o) => o.textContent);
     expect(rotulos).toEqual([
@@ -352,7 +354,11 @@ describe("458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el de
     expect(listarMock.mock.calls[0][0]).toEqual(resumenMock.mock.calls[0][0]);
 
     // Lo que se pinta: el libro de Tania y las tarjetas de ese mismo conjunto.
-    await waitFor(() => expect(within(tabla()).getAllByRole("row").slice(1)).toHaveLength(LIBRO_TANIA.length));
+    await waitFor(() => {
+      expect(within(tabla()).queryByRole("status")).toBeNull();
+      expect(within(tabla()).queryByText("Sueldo de septiembre")).toBeNull();
+    });
+    expect(within(tabla()).getAllByRole("row").slice(1)).toHaveLength(LIBRO_TANIA.length);
     const principal = screen.getByRole("region", { name: "Resumen de la caja y acciones" });
     // La cifra principal: entradas − salidas del conjunto filtrado.
     expect(principal.textContent).toContain(money(RESUMEN_TANIA.enCaja));
@@ -447,7 +453,7 @@ describe("458-E R59 — la traducción opción ↔ filtro", () => {
 describe("458-E — el panel «Ver» usa la autoría del libro y se cierra con «Cerrar»", () => {
   it("abrir «Ver» NO vuelve a leer la autoría: el panel dice lo que el libro ya leyó", async () => {
     const user = pintarModulo();
-    await waitFor(() => expect(within(tabla()).getAllByText("Tania Tienda").length).toBeGreaterThan(0));
+    await waitFor(() => expect(within(tabla()).getByText("Juan Pérez")).toBeInTheDocument());
     expect(autoriaMock).toHaveBeenCalledTimes(1);
 
     const filaSueldo = within(tabla()).getAllByRole("row").slice(1)[PAGINA.indexOf(SUELDO)];
