@@ -500,6 +500,16 @@ export const CONCEPTO_REGISTRO_DE: Record<ConceptoManualId, ConceptoRegistro> = 
 /** FICHA 458-C (R41) — la cuenta que pide el concepto: una tienda, un mensajero o ninguna. */
 export type CuentaDelConcepto = "tienda" | "mensajero" | null;
 
+/**
+ * FICHA 458-C (R39) — con qué CLAVE viaja la cuenta en el `FormData` de su action (el enrutado vive en
+ * este catálogo, no en el diálogo): la tienda como `tiendaId` en sus cinco caminos; el mensajero, en el
+ * reparto de la 205.
+ */
+export const CLAVE_DE_LA_CUENTA: Record<NonNullable<CuentaDelConcepto>, string> = {
+  tienda: "tiendaId",
+  mensajero: "mensajeroId",
+};
+
 export function cuentaDelConcepto(concepto: ConceptoManual): CuentaDelConcepto {
   switch (concepto.destino.clase) {
     case "cobro_tienda":

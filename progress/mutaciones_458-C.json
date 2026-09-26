@@ -1,0 +1,301 @@
+[
+ {
+  "mutacion": "M1 «a quién» no viaja en el FormData",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "tests": [
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+  ],
+  "rojos": 1,
+  "total": 36,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "sueldo: a quién (obligatorio), monto, fecha, motivo, referencia y comprobante opcionales 317ms",
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx > 458-C R39/R42/R43/R51 — cada concepto pide sus campos y manda SOLO sus c"
+  ]
+ },
+ {
+  "mutacion": "M2 una clave de más: tiendaId siempre",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "tests": [
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+  ],
+  "rojos": 4,
+  "total": 36,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "sueldo: a quién (obligatorio), monto, fecha, motivo, referencia y comprobante opcionales 315ms",
+   "R42: en la corrección «a quién» es opcional; sin él no viaja la clave 250ms",
+   "aporte: clase, monto (vacío al abrir, sin ejemplo), fecha SIEMPRE y motivo 335ms"
+  ]
+ },
+ {
+  "mutacion": "M3 «a quién» deja de ser obligatorio en el diálogo",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "tests": [
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+  ],
+  "rojos": 1,
+  "total": 36,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "R42 (D5): sin «a quién» el sueldo y el gasto NO llaman al servidor y el motivo va bajo el campo 1243ms",
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx > 458-C R39/R42/R43/R51 — cada concepto pide sus campos y manda SOLO sus c"
+  ]
+ },
+ {
+  "mutacion": "M4 la clave se genera en cada envío, no al abrir",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "tests": [
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+  ],
+  "rojos": 1,
+  "total": 36,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "R51: la clave es la MISMA en los reintentos de una apertura y OTRA en la siguiente apertura 308ms",
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx > 458-C R39/R42/R43/R51 — cada concepto pide sus campos y manda SOLO sus c"
+  ]
+ },
+ {
+  "mutacion": "M5 D5 servidor: sin el superRefine de «a quién»",
+  "archivo": "lib/types/wallet-laterales.ts",
+  "tests": [
+   "tests/unit/actions/wallet-egresos-actions.test.ts"
+  ],
+  "rojos": 7,
+  "total": 28,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "sueldo con «a quién» ausente → validation_error en contraparteNombre, sin tocar el servicio 4ms",
+   "gasto_variable con «a quién» ausente → validation_error en contraparteNombre, sin tocar el servicio 1ms",
+   "sueldo con «a quién» vacío → validation_error en contraparteNombre, sin tocar el servicio 1ms"
+  ]
+ },
+ {
+  "mutacion": "M6 «Así queda» pide aunque falte la cuenta",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "tests": [
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+  ],
+  "rojos": 1,
+  "total": 36,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "con cuenta: no pide sin la cuenta; al elegirla manda su id y rotula la línea por su NOMBRE 174ms",
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx > 458-C R44–R47 — «Así queda», calculado en el servidor > con cuenta: no p"
+  ]
+ },
+ {
+  "mutacion": "M7 «Así queda» sin «no cambia» (pinta antes/después siempre)",
+  "archivo": "components/shared/wallet/AsiQueda.tsx",
+  "tests": [
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+  ],
+  "rojos": 2,
+  "total": 36,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "sin monto no pide nada y dice qué falta; con monto pide al servidor el concepto y el monto 630ms",
+   "con cuenta: no pide sin la cuenta; al elegirla manda su id y rotula la línea por su NOMBRE 684ms",
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx > 458-C R44–R47 — «Así queda», calculado en el servidor > sin monto no pid"
+  ]
+ },
+ {
+  "mutacion": "M8 «Así queda» con error sigue enseñando cifras",
+  "archivo": "components/shared/wallet/AsiQueda.tsx",
+  "tests": [
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+  ],
+  "rojos": 2,
+  "total": 36,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "R46: si el servidor no responde, lo dice y NO pinta cifras 1132ms",
+   "R46: una respuesta que no es `ok` (forbidden) también es error sin cifras 1127ms",
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx > 458-C R44–R47 — «Así queda», calculado en el servidor > R46: si el servi"
+  ]
+ },
+ {
+  "mutacion": "M9 «Así queda» sin aviso de saldo en contra",
+  "archivo": "components/shared/wallet/AsiQueda.tsx",
+  "tests": [
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+  ],
+  "rojos": 1,
+  "total": 36,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "con cuenta: no pide sin la cuenta; al elegirla manda su id y rotula la línea por su NOMBRE 729ms",
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx > 458-C R44–R47 — «Así queda», calculado en el servidor > con cuenta: no p"
+  ]
+ },
+ {
+  "mutacion": "M10 CONCEPTO_REGISTRO_DE del cobro apunta a la corrección",
+  "archivo": "app/(app)/wallet/_components/wallet-conceptos-manuales.ts",
+  "tests": [
+   "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx",
+   "tests/unit/components/wallet-conceptos-manuales.test.ts"
+  ],
+  "rojos": 2,
+  "total": 68,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "R44: cada concepto pide su «Así queda» con una clave DISTINTA del catálogo del servidor, y las diez están 5ms",
+   "con cuenta: no pide sin la cuenta; al elegirla manda su id y rotula la línea por su NOMBRE 1268ms",
+   "tests/unit/components/wallet-conceptos-manuales.test.ts > ⭑ FICHA 458-C — los dos pagos de Ordenex, la cuenta, «a quién» y el «Así queda» (R"
+  ]
+ },
+ {
+  "mutacion": "M11 el panel ofrece «Anular…» aunque la fila no sea anulable",
+  "archivo": "components/shared/wallet/DetalleMovimientoPanel.tsx",
+  "tests": [
+   "tests/components/DetalleMovimientoPanel.test.tsx",
+   "tests/components/WalletLedgerVer458C.test.tsx"
+  ],
+  "rojos": 3,
+  "total": 35,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "R65: no anulable (contra-asiento, cierre) NO ofrece «Anular…» 45ms",
+   "R65: un contra-asiento NO ofrece «Anular…» en su panel 86ms",
+   "R65: una fila del cierre NO ofrece «Anular…» en su panel 75ms"
+  ]
+ },
+ {
+  "mutacion": "M12 la fila del libro anula por el origenId (no por su id)",
+  "archivo": "app/(app)/wallet/_components/VerMovimientoCaja.tsx",
+  "tests": [
+   "tests/components/WalletLedgerVer458C.test.tsx"
+  ],
+  "rojos": 8,
+  "total": 21,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "pago de un gasto de una tienda: el panel ofrece «Anular…» y manda { destino: caja + id de la fila, motivo }, sin monto; relee 546ms",
+   "aporte: el panel ofrece «Anular…» y manda { destino: caja + id de la fila, motivo }, sin monto; relee 539ms",
+   "cobro de Ordenex: el panel ofrece «Anular…» y manda { destino: caja + id de la fila, motivo }, sin monto; relee 540ms"
+  ]
+ },
+ {
+  "mutacion": "M13 el libro ya no tacha la fila anulada",
+  "archivo": "app/(app)/wallet/_components/WalletLedger.tsx",
+  "tests": [
+   "tests/components/WalletLedgerVer458C.test.tsx"
+  ],
+  "rojos": 1,
+  "total": 21,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "R71: la fila anulada por el servidor se pinta tachada y apagada; las demás no 28ms",
+   "tests/components/WalletLedgerVer458C.test.tsx > 458-C TC.5 — la columna de acciones pasa a «Ver» (D11) > R71: la fila anulada por el servido"
+  ]
+ },
+ {
+  "mutacion": "M14 «Adjuntar» ofrecido en una fila anulada",
+  "archivo": "components/shared/wallet/DetalleMovimientoPanel.tsx",
+  "tests": [
+   "tests/unit/components/wallet-comprobante-campo.test.tsx",
+   "tests/components/DetalleMovimientoPanel.test.tsx"
+  ],
+  "rojos": 2,
+  "total": 28,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "R71: anulado dice «Anulado» y NO ofrece «Anular…» ni «Adjuntar» 32ms",
+   "R79: NO se ofrece si ya tiene comprobante, si está anulado o si la fila no lo admite 47ms",
+   "tests/components/DetalleMovimientoPanel.test.tsx > 458-C R63/R65/R71/R72 — el estado y «Anular…» los decide la fila del servidor > R71: anul"
+  ]
+ },
+ {
+  "mutacion": "M15 anular manda también el monto",
+  "archivo": "components/shared/wallet/AnularMovimientoDialog.tsx",
+  "tests": [
+   "tests/components/AnularMovimientoDialog.test.tsx"
+  ],
+  "rojos": 1,
+  "total": 12,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "manda EXACTAMENTE { destino, motivo } recortado, sin monto; `ok` avisa, cierra y relee 480ms",
+   "tests/components/AnularMovimientoDialog.test.tsx > 458-C R64 — motivo obligatorio y sin monto > manda EXACTAMENTE { destino, motivo } recort"
+  ]
+ },
+ {
+  "mutacion": "M16 `ya_anulado` se trata como fallo (no cierra)",
+  "archivo": "components/shared/wallet/AnularMovimientoDialog.tsx",
+  "tests": [
+   "tests/components/AnularMovimientoDialog.test.tsx"
+  ],
+  "rojos": 1,
+  "total": 12,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "R66: `ya_anulado` cierra con «Ya estaba anulado» y relee, sin toast de error 1267ms",
+   "tests/components/AnularMovimientoDialog.test.tsx > 458-C R65/R66 — lo que responde el servidor > R66: `ya_anulado` cierra con «Ya estaba anu"
+  ]
+ },
+ {
+  "mutacion": "M17 el campo del comprobante deja pasar un tipo no admitido",
+  "archivo": "components/shared/wallet/ComprobanteCampo.tsx",
+  "tests": [
+   "tests/unit/components/wallet-comprobante-campo.test.tsx"
+  ],
+  "rojos": 2,
+  "total": 14,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "R75: un tipo no admitido se explica bajo el campo y NO queda elegido 10ms",
+   "R75: uno de más de 4 MB se explica y NO queda elegido 7ms",
+   "tests/unit/components/wallet-comprobante-campo.test.tsx > 458-C R74/R75 — el campo avisa antes de enviar > R75: un tipo no admitido se expli"
+  ]
+ },
+ {
+  "mutacion": "M18 «Ver comprobante» no va al servidor (responde sin comprobante)",
+  "archivo": "components/shared/wallet/DetalleMovimientoPanel.tsx",
+  "tests": [
+   "tests/unit/components/wallet-comprobante-campo.test.tsx",
+   "tests/components/WalletLedgerVer458C.test.tsx"
+  ],
+  "rojos": 2,
+  "total": 35,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "la corrección de caja CON comprobante lo pide al servidor por su destino y lo abre en otra pestaña 1090ms",
+   "TC.3: «Ver comprobante» del pago de un gasto va al servidor por el destino de la fila 1173ms",
+   "tests/components/WalletLedgerVer458C.test.tsx > 458-C — lo demás del panel desde el libro > TC.3: «Ver comprobante» del pago de un gasto va "
+  ]
+ },
+ {
+  "mutacion": "M19 money-safe: «Así queda» convierte el monto a número",
+  "archivo": "components/shared/wallet/AsiQueda.tsx",
+  "tests": [
+   "tests/unit/guards/wallet-money-safe-458.guardia.test.ts"
+  ],
+  "rojos": 1,
+  "total": 3,
+  "aplicado": true,
+  "restaurado": true,
+  "casos": [
+   "ningún archivo de la carpeta convierte a número (sin comentarios: pueden nombrarlo para explicarlo) 5ms",
+   "tests/unit/guards/wallet-money-safe-458.guardia.test.ts > 458-C R90 — ninguna pieza compartida de la wallet convierte un importe a número > "
+  ]
+ }
+]

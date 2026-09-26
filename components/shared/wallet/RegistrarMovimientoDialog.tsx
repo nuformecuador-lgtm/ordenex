@@ -28,6 +28,7 @@ import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 import {
+  CLAVE_DE_LA_CUENTA,
   CONCEPTOS_MANUALES,
   CONCEPTO_REGISTRO_DE,
   FRASE_DEL_EFECTO,
@@ -356,7 +357,7 @@ export function RegistrarMovimientoDialog({
         break;
       case "pago_tienda":
       case "pago_mensajero":
-        fd.set(destino.clase === "pago_tienda" ? "tiendaId" : "mensajeroId", cuentaId ?? "");
+        fd.set(CLAVE_DE_LA_CUENTA[destino.clase === "pago_tienda" ? "tienda" : "mensajero"], cuentaId ?? "");
         fd.set("metodo", metodo);
         if (referenciaObligatoria) fd.set("referencia", referencia.trim());
         fd.set("nota", descripcion.trim());
@@ -456,7 +457,10 @@ export function RegistrarMovimientoDialog({
           };
         }
         if (res.status === "sin_saldo") {
-          return { status: "validation_error", fieldErrors: { mensajeroId: [RESPUESTA_TEXTO.sinSaldoMensajero] } };
+          return {
+            status: "validation_error",
+            fieldErrors: { [CLAVE_DE_LA_CUENTA.mensajero]: [RESPUESTA_TEXTO.sinSaldoMensajero] },
+          };
         }
         if (res.status === "excede") {
           return {
@@ -494,7 +498,7 @@ export function RegistrarMovimientoDialog({
         monto: f.monto?.[0],
         fecha: f.fecha?.[0] ?? f.fechaPago?.[0],
         descripcion: f.descripcion?.[0] ?? f.motivo?.[0] ?? f.nota?.[0],
-        cuenta: f.tiendaId?.[0] ?? f.mensajeroId?.[0],
+        cuenta: f[CLAVE_DE_LA_CUENTA.tienda]?.[0] ?? f[CLAVE_DE_LA_CUENTA.mensajero]?.[0],
         aQuien: f.contraparteNombre?.[0],
         beneficiario: f.beneficiario?.[0],
         metodo: f.metodo?.[0],
