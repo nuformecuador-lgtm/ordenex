@@ -2,9 +2,14 @@ import { randomUUID } from "node:crypto";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   BalanceFiltros,
+  CrearMovimientoInput,
   IWalletMovimientoRepository,
+  LateralesDelRegistro,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
+import type { ComprobanteRecibido, IWalletComprobanteService } from "@/lib/interfaces/services/IWalletComprobanteService";
+import { lateralesDeCaja, registrarConComprobante } from "@/lib/services/registro-con-comprobante";
+import type { CamposLateralesCaja } from "@/lib/types/wallet-laterales";
 import type {
   IWalletService,
   ListarMovimientosCompletoServiceResult,
@@ -144,6 +149,8 @@ export class WalletService implements IWalletService {
      * «Anular…» ni «Ver comprobante», y ningun test de servicio lo notaria.
      */
     private readonly documentos: LectoresDocumentosCaja,
+    /** FICHA 458-B (R74) — el comprobante de la correccion. Sin el, registrar CON comprobante lanza. */
+    private readonly comprobantes?: IWalletComprobanteService,
   ) {}
 
   /**
@@ -402,10 +409,24 @@ export class WalletService implements IWalletService {
   }
 
   async registrarMovimientoManual(
-    input: RegistrarMovimientoManualInput,
+    input: RegistrarMovimientoManualInput & Partial<CamposLateralesCaja>,
     actor: Actor,
+    comprobante: ComprobanteRecibido | null = null,
   ): Promise<RegistrarMovimientoManualServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19
+    // FICHA 458-B (R42/R74–R76): «a quien» (opcional, D5), referencia y comprobante, en la MISMA
+    // transaccion que el asiento. Sin ninguno de los tres, lo de abajo es el registro de antes.
+    return registrarConComprobante(this.comprobantes, "wallet_movimiento", comprobante, async (guardado) => {
+      const r = await this.escribirMovimientoManual(input, actor, lateralesDeCaja(input, guardado, actor.usuarioId));
+      return { quedo: r.status === "ok", resultado: r };
+    });
+  }
+
+  private async escribirMovimientoManual(
+    input: RegistrarMovimientoManualInput,
+    actor: Actor,
+    laterales: LateralesDelRegistro | undefined,
+  ): Promise<Extract<RegistrarMovimientoManualServiceResult, { status: "ok" | "ya_registrado" }>> {
 
     // R15/Q6: manual = origen_tipo manual, origen_id NULL, registrado_por = actor, monto
     // > 0, descripcion obligatoria (ya validado por zod en el borde; se persiste como
@@ -422,21 +443,24 @@ export class WalletService implements IWalletService {
     // humana sobre el dinero de la casa, y el registro tiene que ir en la misma transaccion que
     // el asiento. `this.writeClient` ya no interviene en este camino — la transaccion la abre el
     // repositorio, que es quien conoce Prisma.
-    const escritas = await this.repo.crearMovimientoRegistrado(
-      {
-        id,
-        tipo: input.tipo,
-        categoria: input.categoria,
-        monto: input.monto,
-        origenTipo: "manual",
-        origenId: null, // fuera del indice unico parcial: la idempotencia la da la CLAVE (461/R67)
-        descripcion: input.descripcion,
-        registradoPor: actor.usuarioId,
-        ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
-        claveIdempotencia: input.claveIdempotencia, // ficha 461 (R66/R67)
-      },
-      { accion: "wallet_movimiento_manual_registrado", actorUsuarioId: actor.usuarioId },
-    );
+    const mov: CrearMovimientoInput & { id: string } = {
+      id,
+      tipo: input.tipo,
+      categoria: input.categoria,
+      monto: input.monto,
+      origenTipo: "manual",
+      origenId: null, // fuera del indice unico parcial: la idempotencia la da la CLAVE (461/R67)
+      descripcion: input.descripcion,
+      registradoPor: actor.usuarioId,
+      ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
+      claveIdempotencia: input.claveIdempotencia, // ficha 461 (R66/R67)
+    };
+    const registro = { accion: "wallet_movimiento_manual_registrado" as const, actorUsuarioId: actor.usuarioId };
+    // FICHA 458-B: sin laterales, la llamada es EXACTAMENTE la de antes (dos argumentos).
+    const escritas =
+      laterales === undefined
+        ? await this.repo.crearMovimientoRegistrado(mov, registro)
+        : await this.repo.crearMovimientoRegistrado(mov, registro, laterales);
     // Ficha 461 (R68, auditoria D2): `0` = la clave YA tenia su fila (doble clic, reintento). No se
     // escribio nada —ni asiento ni historial— y se responde con la correccion ORIGINAL, releida por
     // la clave. Antes, dos envios iguales eran dos filas y nada lo notaba.

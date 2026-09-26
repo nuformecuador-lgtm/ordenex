@@ -22,6 +22,11 @@ export type SubidaComprobante =
   /** R76 — el almacenamiento fallo: nada se subio y el movimiento NO se registra. */
   | { status: "no_guardado" };
 
+/** Lo que un registro responde cuando su comprobante no llega a guardarse (R75/R76). */
+export type FalloDeComprobante =
+  | { status: "comprobante_no_guardado" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
 /** Resultados de DOMINIO: `unauthenticated` y `validation_error` de forma los decide la Server Action. */
 export type AdjuntarComprobanteServiceResult = Exclude<AdjuntarComprobanteResult, { status: "unauthenticated" }>;
 export type VerComprobanteServiceResult = Exclude<VerComprobanteResult, { status: "unauthenticated" | "validation_error" }>;

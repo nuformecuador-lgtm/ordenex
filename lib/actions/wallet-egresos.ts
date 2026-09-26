@@ -11,11 +11,9 @@ import type {
   ReversarEgresoServiceResult,
   VerDesgloseEgresosServiceResult,
 } from "@/lib/interfaces/services/IWalletEgresoService";
-import {
-  listarMovimientosSchema,
-  registrarEgresoAdministrativoSchema,
-  reversarEgresoSchema,
-} from "@/lib/types/wallet";
+import { listarMovimientosSchema, reversarEgresoSchema } from "@/lib/types/wallet";
+import { registrarEgresoConLateralesSchema, separarComprobante } from "@/lib/types/wallet-laterales";
+import { buildComprobantes, leerComprobanteOpcional } from "@/lib/actions/_shared/comprobante-lateral";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -26,10 +24,18 @@ import type { AppErrorShape } from "@/lib/errors";
 // R4/R5/R19) se resuelven en el borde; `forbidden`/`ok`/`not_found`/`already_reversed` los
 // devuelve el service como resultado de dominio. Money-safe: DTOs con montos STRING (R12).
 
+/**
+ * Con un OBJETO (el dialogo de hoy) el resultado es el de siempre: sin comprobante no hay
+ * `comprobante_no_guardado`. Con un `FormData` (458-C, R74) se suma esa rama.
+ */
 export type RegistrarEgresoActionResult =
-  | RegistrarEgresoServiceResult
+  | Exclude<RegistrarEgresoServiceResult, { status: "comprobante_no_guardado" }>
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+export type RegistrarEgresoConComprobanteActionResult =
+  | RegistrarEgresoActionResult
+  | { status: "comprobante_no_guardado" };
 
 export type ReversarEgresoActionResult =
   | ReversarEgresoServiceResult
@@ -64,7 +70,7 @@ function toEgresoActionError(
 function buildService(): IWalletEgresoService {
   const prisma = getPrismaClient();
   const repo = new WalletMovimientoRepository(prisma);
-  return new WalletEgresoService(repo, prisma);
+  return new WalletEgresoService(repo, prisma, buildComprobantes(prisma));
 }
 
 export interface WalletEgresoDeps {
@@ -72,17 +78,32 @@ export interface WalletEgresoDeps {
   getActor?: () => Promise<Actor | null>;
 }
 
-/** R1/R2/R17/R18/R19: registra un egreso administrativo manual (gasto variable o sueldo). */
+/**
+ * R1/R2/R17/R18/R19: registra un egreso administrativo manual (gasto variable o sueldo).
+ * FICHA 458-B (R42/R74): acepta tambien un `FormData` con `contraparteNombre`, `referencia` y
+ * `comprobante` opcionales (molde 459); anotacion y comprobante van en la MISMA transaccion.
+ */
+export function registrarEgresoAdministrativoAction(
+  input: FormData,
+  deps?: WalletEgresoDeps,
+): Promise<RegistrarEgresoConComprobanteActionResult>;
+export function registrarEgresoAdministrativoAction(
+  input: unknown,
+  deps?: WalletEgresoDeps,
+): Promise<RegistrarEgresoActionResult>;
 export async function registrarEgresoAdministrativoAction(
   input: unknown,
   deps: WalletEgresoDeps = {},
-): Promise<RegistrarEgresoActionResult> {
+): Promise<RegistrarEgresoConComprobanteActionResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R18: antes de tocar el service
-    const data = registrarEgresoAdministrativoSchema.parse(input); // ZodError -> VALIDATION_ERROR (R4/R5/R19)
+    // FICHA 458-B (R42/R74): el objeto de hoy o un FormData con «a quien», referencia y comprobante.
+    const { crudo, comprobante } = separarComprobante(input);
+    const data = registrarEgresoConLateralesSchema.parse(crudo); // ZodError -> VALIDATION_ERROR (R4/R5/R19)
+    const archivo = await leerComprobanteOpcional(comprobante);
     const service = deps.service ?? buildService();
-    return service.registrarEgreso(data, actor);
+    return archivo === null ? service.registrarEgreso(data, actor) : service.registrarEgreso(data, actor, archivo);
   });
   return isAppErrorShape(r) ? toEgresoActionError(r) : r;
 }

@@ -271,3 +271,68 @@ cobro a la columna de la caja → 4/28; la tienda pide cualquier documento → 1
 iniciales, anotados: quitar SOLO `libro !== "tienda"` (lo cubre `tiendaDeFila`, capa redundante:
 equivalente) y la lista de documentos de la tienda (sobrevivía hasta añadir el caso del cobro por
 rechazo, que habría respondido `sin_comprobante`).
+
+## TB.11 — Bordes: «a quién», referencia y comprobante (R42, R43, R50, R51, R74–R76)
+
+Cinco caminos, y en los cinco sin los campos nuevos la llamada es la de antes:
+
+| Camino | Action (acepta además `FormData`) | Campos nuevos | Dónde queda |
+| --- | --- | --- | --- |
+| Sueldo / gasto de Ordenex | `registrarEgresoAdministrativoAction` | `contraparteNombre?`, `referencia?`, `comprobante?` | `wallet_anotacion` + `wallet_comprobante.caja_movimiento_id` en la tx de `crearMovimientoRegistrado` |
+| Corrección de caja | `registrarMovimientoManualAction` | ídem | ídem |
+| Pago a una tienda (172) | `registrarPagoTiendaAction` | `comprobante?` | `wallet_comprobante.liquidacion_pago_id`, en la tx del pago |
+| Reparto a un mensajero (205) | `registrarRepartoMensajeroAction` | `comprobante?` | una fila por pago del reparto, el MISMO objeto (una transferencia) |
+| Cobro a una tienda (461) | `registrarCobroTiendaAction` | `comprobante?` | `wallet_comprobante.tienda_movimiento_id` (el débito `cobro_manual`) |
+
+Piezas: `lib/types/wallet-laterales.ts` (campos laterales como intersección con los schemas de hoy; topes
+reusados: 120 del beneficiario 459 y 60 de la referencia 172; campo en blanco = ausente;
+`separarComprobante`), `lib/services/registro-con-comprobante.ts` (`registrarConComprobante`: sube antes,
+escribe en la tx, retira si no quedó; `lateralesDeCaja`), `lib/actions/_shared/comprobante-lateral.ts`
+(el puerto real y la lectura del archivo validado), `IWalletMovimientoRepository.crearMovimientoRegistrado`
+gana `laterales?` (escritos en SU transacción solo si el asiento se escribió). Los servicios reciben el
+puerto `IWalletComprobanteService` como último parámetro OPCIONAL del constructor; con comprobante y sin
+puerto, LANZA (un composition root que no inyecta no descarta el archivo en silencio). Los cinco
+composition roots lo inyectan.
+
+**Decisiones anotadas:**
+- **D5 en el servidor:** «a quién» es opcional también en sueldo y gasto. R42 es del diálogo («el
+  diálogo DEBE pedir»); exigirlo en el servidor rompería el diálogo de hoy hasta que llegue la 458-C y
+  violaría «sin los campos nuevos, byte a byte el de hoy». **Contrato para la 458-C:** el diálogo lo
+  exige en sueldo y gasto.
+- **Sobrecargas de tipo, no contrato nuevo:** con un OBJETO cada action conserva su tipo de resultado
+  de hoy (sin `comprobante_no_guardado`, que no puede ocurrir sin archivo); con `FormData` el tipo suma
+  esa rama. Así los tres consumidores de hoy (`RegistrarMovimientoCajaDialog`, `PagoTiendaAcciones`,
+  `PagoMensajeroAcciones`, y el `switch` exhaustivo de `RegistrarPagoDialog`) no se tocan. Las firmas de
+  sobrecarga van como `export function` (sin `async`): la guardia de la 205 cuenta las acciones del
+  reparto con `export async function` y seguiría viendo tres.
+- **Superficie del prototipo:** las escrituras nuevas van como closures dentro del método público, no
+  como métodos privados: `CobroTiendaService` («dos métodos y ni uno más», R19 de la 461) y
+  `LiquidacionService` (lista cerrada de métodos) no cambian de superficie.
+- **El `.strict()` se conserva:** el archivo se separa del `FormData` ANTES del `parse`; cualquier otra
+  clave no prevista sigue muriendo en el borde.
+- **172 [P7]** decía que el pago a un mensajero no admite adjunto; el spec aprobado de la 458 (R74) lo
+  supera para el reparto (205). `registrarPagoMensajeroAction` (pago simple contra un cierre) no se tocó.
+
+**Tests:** `tests/integration/db/wallet-registro-comprobante-458.test.ts` (9, Postgres, por las actions
+con `FormData`: anotación recortada y comprobante en su fila; reenvío de la clave sin duplicar; sin
+campos nuevos ninguna fila lateral; corrección con solo «a quién»; archivo inválido y almacenamiento
+caído no registran; registro fallido con el objeto subido revierte y retira; pago, reparto y cobro con
+su comprobante; sin huérfanos) y `tests/unit/services/registro-con-comprobante.test.ts` (6).
+Mutaciones TB.11 (`aplicado=true`, `restaurado=true`): anotación no escrita → 3/9; sin retirar → 2/9;
+pago a tienda sin su fila → 3/9; blanco no ausente → 9/9; reparto sin fila por pago → 2/9; cobro sin
+fila → 2/9; sin puerto descarta en silencio → 1/6; laterales siempre presentes → 0/9 en integración
+(equivalente en la base: `{}` no escribe nada) y 1/70 en unit (la llamada deja de ser la de antes).
+
+**Tests ajenos adaptados (no son literales de dinero):**
+- `tests/integration/db/liquidacion-idempotencia.test.ts`: su `tx` en memoria no tenía `groupBy` del libro
+  de tiendas; el arreglo heredado (saldo por el `tx` del candado, commit `db616cf9`) lo necesita. Se
+  delega en la MISMA lectura comprometida (mismo `log`, misma foto): el experimento R83/R46 no cambia.
+  **Esto debió verse en el commit del arreglo heredado; se vio al correr integration/db entera.**
+- Catálogos de enums de las migraciones anteriores (el mecanismo establecido: «lo que features
+  posteriores añadieron»): `liquidacion-migration`, `wallet-tienda-cobro-migration` (+2 de la tienda),
+  seis de `historial_accion` (+`cobro_rechazo_tienda_anulado`, `egreso_caja_anulado`) y
+  `orden-traspaso-migration` (+2 migraciones). **También de TB.2/TB.3: se vieron aquí.**
+
+**Rojos ajenos aislados:** en la corrida entera de integration/db, 4 archivos cayeron por `40P01`
+(deadlock, 3) y una FK de siembra (`cierre-rechazado-aviso-dedupe`); aislados y en serie, 3 de 3 verdes
+(47/47 cada vez). Es el modo de flake conocido (memoria «cuatro modos de flake»).

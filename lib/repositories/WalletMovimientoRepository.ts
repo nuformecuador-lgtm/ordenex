@@ -7,6 +7,7 @@ import type {
   CrearMovimientoInput,
   DesgloseEgresosAgregado,
   IWalletMovimientoRepository,
+  LateralesDelRegistro,
   ListarMovimientosFiltros,
   ListarMovimientosPage,
   WalletTxClient,
@@ -155,10 +156,32 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   async crearMovimientoRegistrado(
     mov: CrearMovimientoInput & { id: string },
     registro: { accion: HistorialAccionTipo; actorUsuarioId: string | null },
+    laterales: LateralesDelRegistro = {},
   ): Promise<number> {
     return this.prisma.$transaction(async (tx) => {
       const count = await this.crearMovimientos(tx, [mov]);
       if (count === 0) return 0;
+
+      // FICHA 458-B (R42/R74): lo lateral, en ESTA transaccion y solo si el asiento se escribio.
+      if (laterales.anotacion !== undefined) {
+        await tx.walletAnotacion.create({
+          data: {
+            movimientoId: mov.id,
+            contraparteNombre: laterales.anotacion.contraparteNombre,
+            referencia: laterales.anotacion.referencia,
+          },
+        });
+      }
+      if (laterales.comprobante !== undefined) {
+        await tx.walletComprobante.create({
+          data: {
+            cajaMovimientoId: mov.id,
+            storagePath: laterales.comprobante.storagePath,
+            contentType: laterales.comprobante.contentType,
+            subidoPor: laterales.comprobante.subidoPor,
+          },
+        });
+      }
 
       const actor = await resolverActorCongelado(tx, registro.actorUsuarioId);
       await appendAccion(tx, [
