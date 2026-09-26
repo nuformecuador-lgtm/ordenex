@@ -275,6 +275,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   *Evidencia 458-D:* verdes (20 + 6). Desvío: el despliegue de órdenes de las filas de cierre queda pendiente de servidor (R19, `progress/impl_458-D.md` §Pendientes 3).
   *Evidencia 458-D servidor:* `verOrdenesDeFilaAction` (R19) — `tests/integration/db/detalle-movimiento-cierre-postgres.test.ts` («458-D R19 …», 3) y `tests/unit/actions/estado-cuenta-458d-action.test.ts`; origen con entidad y enlace, método y referencia, filtro por cierre (R6–R8, R10–R12) — `tests/integration/db/estado-cuenta-servidor-458d.test.ts`. Falta montarlo en pantalla (frontend).
   *Evidencia 458-D cierre de pantalla:* filtro por cierre (`SelectorCierreDeCuenta`), origen con entidad y enlace, «Cómo se pagó», despliegue de órdenes de las filas de cierre (`fuenteOrdenesDeFila` sobre `DetalleMovimientoCierre`; el mensajero dice su `snapshot_del_cierre` en palabras) — `tests/components/EstadoCuenta458DPantalla.test.tsx`, `tests/unit/descarga/ordenes-de-fila-cuenta.test.ts`; recorrido `progress/recorrido_458-D/cierre-{maestro,admin}.json`.
+  *Evidencia 458-D cierre final:* la «comisión del 2026-08-12 · 0 de 12 órdenes aportan» NO es un fallo de R19 (sus 12 órdenes se congelaron sin tarifa y ninguna gestión es «entregado»; los cierres posteriores cuadran exactos, medido); el texto vacío del panel lo explica — `tests/components/DetalleMovimientoCierre.test.tsx` y `DetalleMiMovimientoCierre.test.tsx` («R8 …», literal); mutaciones M11/M12 (`progress/mutaciones_458-D_final.json`).
 - [x] **TD.2** [P] `/wallet/tiendas/[tiendaId]` (`notFound` por rol y cuenta) + el listado enlaza y deja
   de desplegar; acciones «La tienda le paga a Ordenex» (solo con saldo en contra), «Ordenex le cobra a
   la tienda», «Ordenex le paga a la tienda» (deshabilitado con motivo sin saldo a favor) abriendo el
@@ -297,6 +298,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   *Evidencia 458-D (PARCIAL):* comprobante por fila en `/mi-wallet` (`MiWalletComprobante458.test.tsx`, R35/R78) y guardia verde; el estado de cuenta con saldo corrido (R34) y el selector de cierre esperan lectura de servidor acotada a la tienda (`progress/impl_458-D.md` §Pendientes 1 y 4).
   *Evidencia 458-D servidor:* `verMiEstadoCuentaAction` / `verMiEstadoCuentaCompletoAction` (R34–R36, R22) — `tests/integration/db/estado-cuenta-servidor-458d.test.ts` y `tests/unit/actions/estado-cuenta-458d-action.test.ts`. Falta montarlo en `/mi-wallet` (frontend).
   *Evidencia 458-D cierre de pantalla:* `/mi-wallet` = `MiEstadoCuenta` (el módulo compartido en vista «tienda»: frase en segunda persona, sin «Registró», sin «Ver»/«Anular…», «Ver comprobante» por fila, selector de cierre de la 335, despliegue de SUS órdenes) — `tests/integration/mi-wallet-page.test.tsx`, `MiWalletFiltros.test.tsx`, `MiWalletComprobante458.test.tsx`, `DetalleMiMovimientoCierre.test.tsx`, `desglose-tienda-ledger.test.tsx`, `saldo-tienda-card.negativo.test.tsx` (reescritos sobre el módulo nuevo, mismo archivo y mismos R); recorrido `progress/recorrido_458-D/cierre-tienda.json` (corrido de la última fila = tarjeta = ₡147.670,10).
+  *Evidencia 458-D cierre final:* VUELVE el resumen de tres cifras de la 172 (R55/N1: «A tu favor · Cargos de Ordenex · Ya pagado», textos exactos) encima del estado de cuenta, de la cuenta entera y afirmado en el servidor contra el saldo actual — `tests/integration/db/mi-wallet-resumen-458d.test.ts` (Postgres: 13.000 − 3.800 − 4.000 = 5.200 = tarjeta = corrido = base), `tests/components/ResumenMiWallet.test.tsx`, `tests/integration/mi-wallet-page.test.tsx` (R55/N1); mutaciones M1–M8. Retiradas `verMiSaldoAction` y `listarMisMovimientos{,Completo}Action` (solo tenían tests) con sus redes movidas a `verMiEstadoCuenta{,Completo}Action` en los mismos archivos (`wallet-tienda-actions.test.ts`, `wallet-tienda-descarga-action.test.ts`, `wallet-tienda-schemas.test.ts`); mutaciones M9/M10.
 - [x] **TD.6** [P] Descarga del estado de cuenta con saldo corrido y fila de saldo inicial. *Hecho:*
   test de columnas; `columnas-sensibles.guardia` verde (R3, R32).
   *Evidencia 458-D:* `estado-cuenta-descarga-columnas.test.ts` (6); recorrido paso 9 (0 uuid en el xlsx).
@@ -316,10 +318,12 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   anulados, comprobante); `contexto-458.test.ts` bloque D; cuatro preguntas reales (una desde la
   tienda). *Hecho:* frases literales por rol (R102, R103).
   *Evidencia 458-D:* `contexto-458.test.ts` bloque D + `contexto-457.test.ts`; cuatro preguntas en `progress/recorrido_458-D/asistente.json`.
+  *Evidencia 458-D cierre final:* `docs/ayuda/tienda/mi-wallet.md` §«El resumen: a tu favor, cargos y ya pagado»; `contexto-458.test.ts` lo afirma literal.
 - [x] **TD.10** Recorrido pasos 4–6, 8–11 de §10 + adminTienda + mensajero/adminSatelite sin acceso;
   fotografías verdes; gate rápido; revisión. *Hecho:* `progress/recorrido_458-D/`; `INIT_EXIT=0`;
   `progress/impl_458-D.md` (R104).
   *Evidencia 458-D:* `progress/recorrido_458-D/`; gate completo `progress/gate_458D.log` `INIT_EXIT=0`; `progress/impl_458-D.md`.
+  *Evidencia 458-D cierre final:* build `progress/build_458D_final.log` (`BUILD_EXIT=0`); gate completo `progress/gate_458D_final.log` `INIT_EXIT=0` (2317 archivos, 0 saltados en `integration/db`; los rojos ajenos de las corridas 1 y 2, 3/3 verdes aislados); `progress/impl_458-D.md` §«Cierre final».
 
 ## 458-E — Libro de caja (fullstack) · depende de 458-C · [P] con 458-D
 

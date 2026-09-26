@@ -562,3 +562,141 @@ tarjeta = base = 147.670,10, sin «Registró» ni escritura, selector de cierre,
    órdenes aportan».
 4. `PagosTiendaEstadoCuenta` (lista de pagos de la 172 bajo el extracto) duplica ahora el método y la referencia que
    ya dice la fila: retirarla o no es decisión aparte.
+
+---
+
+# §Cierre final — los últimos pendientes de la 458-D (backend_dev, 2026-09-26)
+
+**Rama:** `wt/458-D-final` desde `origin/feature/458-D` en `a1c2e753`, empujada a `feature/458-D` tras cada paso.
+**Base:** clon propio `ordenex_458df` (`CREATE DATABASE … TEMPLATE ordenex` con **0** conexiones a la plantilla
+medidas antes; `prisma migrate deploy`: «No pending migrations»). `.env` del checkout principal copiado sin
+imprimirlo, con la base cambiada al clon y **sin** `DATABASE_URL_PREVIEW`. `pnpm install --frozen-lockfile` propio,
+sin junction. Ni la base `ordenex` ni `feature_list.json` se tocaron. El clon se borra al terminar.
+**Búsqueda — lo digo explícitamente:** usé el MCP `codebase-memory` (`search_graph` sobre
+`R-job-singularis-projects-ordenex`) para ubicar `verMiSaldoAction`, `listarMisMovimientos*` y
+`derivarDesgloseTienda`; cada símbolo se confirmó en el archivo real. Los llamadores se barrieron con `grep` sobre
+todo el árbol (fuera `node_modules`, `.next`, `progress`, `specs`) porque el índice no ve las piezas de la 458.
+**Sin migraciones:** una lectura nueva (`desgloseDeTienda`) sobre lo que ya existe; RLS sin cambios.
+
+## Punto 1 — VUELVE el resumen de tres cifras de la 172 a `/mi-wallet` (172 R55 `[P5]`, N1)
+
+| Capa | Pieza |
+| --- | --- |
+| Repositorio | `EstadoCuentaRepository.desgloseDeTienda(tiendaId)` (+ interfaz): `groupBy (tipo, categoria)` de la cuenta ENTERA, sin periodo, chip ni cierre |
+| Servicio | `EstadoCuentaService.leerTienda` lo lee DENTRO de la lectura consistente (misma foto que el saldo actual) y lo clasifica con `derivarDesgloseTienda` (la MISMA función que la cabecera del maestro, 171); solo en la vista de la tienda (`leerMiTienda{,Completo}`). `leerCuenta` **afirma** `resumen.saldo === saldoActual` antes de responder (como R22): si divergieran, falla ruidoso |
+| Contrato | `EstadoCuentaDTO.resumen: DesgloseTiendaDTO \| null` (`null` en la oficina, el mensajero y la bodega) |
+| Pantalla | `app/(app)/mi-wallet/_components/ResumenMiWallet.tsx` ENCIMA del estado de cuenta (hermano, nunca dentro), con los textos EXACTOS de la 172 (`DESGLOSE_MI_WALLET_LABEL` / `_AVISO`: «A tu favor», «Cargos de Ordenex», «Ya pagado», sus tres pistas, «Saldo a favor» con el distintivo A favor / En contra / En cero, y la salvedad N1 junto a sus cifras). Maqueta de la `SaldoTiendaCard` retirada (git `374ff00d^`), sin la cifra grande (la da la tarjeta «Saldo actual») |
+| Ayuda | `docs/ayuda/tienda/mi-wallet.md` §«El resumen: a tu favor, cargos y ya pagado»; `contexto-458.test.ts` lo afirma literal |
+
+**Decisión técnica:** el resumen es de la **cuenta entera**, no del periodo: así sus tres cifras cuadran siempre con la
+tarjeta «Saldo actual» y con el corrido de la última fila (lo que pidió el leader). Es BRUTO (N1: el pago anulado sigue
+en «Ya pagado» y su devolución en «A tu favor»); el saldo sale exacto. El extracto sigue NETO (D3).
+
+Tests: `tests/integration/db/mi-wallet-resumen-458d.test.ts` (5, Postgres: 13.000 − 3.800 − 4.000 = 5.200 = tarjeta =
+corrido de la última fila = la resta por tipo sobre la base; igual con periodo, chip, página 2, descarga y por la
+action; `null` en la oficina; el guardia del cuadre falla ruidoso), `tests/components/ResumenMiWallet.test.tsx` (4),
+`tests/integration/mi-wallet-page.test.tsx` (R55 ×4 + N1 reescritos: encima, textos literales, saldo = tarjeta =
+corrido, en contra, la nota DENTRO del resumen, sin resumen no hay cabecera), `mi-wallet-desglose.test.ts` (el servicio
+del estado de cuenta clasifica con `derivarDesgloseTienda`, sin `CUBETA_POR_CATEGORIA`; `ResumenMiWallet` en el barrido
+«la pantalla no clasifica»).
+
+## Punto 2 — Retiradas `verMiSaldoAction` y `listarMisMovimientos{,Completo}Action`
+
+Barrido de llamadores (`app/`, `lib/`, `components/`, `scripts/`, `e2e/`, `tests/`, rutas `app/api/**`, crons, asistente):
+**solo tests**. Se retiran las tres actions y sus tipos `VerMiSaldoActionResult` / `ListarMisMovimientosActionResult`.
+Antes de borrarlas, sus redes se movieron **en los mismos archivos** (la 171 cita dos de ellos) a las actions nuevas:
+
+| Red | Ahora sobre | R |
+| --- | --- | --- |
+| `wallet-tienda-actions.test.ts` «verMiSaldoAction» (3) y «listarMisMovimientosAction» (4) | `verMiEstadoCuentaAction`: sin sesión sin servicio, forbidden del servicio, `pageSize` 9999 → `validation_error` sin servicio, ok con saldo/corrido/resumen STRING y la página pedida | 43 R19/R22/R27 |
+| `wallet-tienda-descarga-action.test.ts` (6, entero) | `verMiEstadoCuentaCompletoAction`: sin sesión sin filas, `tiendaId` → `validation_error` sin servicio, `page`/`pageSize` rechazados, `limite_excedido` y `forbidden` sin filas, entrada parseada sin cuenta ni página | 170 R9/R14/R16–R18/R27 |
+| `wallet-tienda-schemas.test.ts` «por la action: `tiendaId` ajeno» | `verMiEstadoCuentaAction` | 458-A R36 |
+| `mi-wallet-335.guardia` contraprueba de lectoras | `verMiEstadoCuentaAction` | 335 |
+| `wallet-origen-total.guardia` composition root | `wallet-tienda.ts` 4 → 2 bordes (los dos que se van ya no adjuntan origen; el estado de cuenta lo resuelve en su servicio) | 458-A R94 |
+
+**Se quedan, anotado:** los métodos del SERVICIO `WalletTiendaService.verMiSaldo` / `listarMisMovimientos{,Completo}`: los
+usan las redes de servicio de la 43/170/171/172/344/458-A y la medida R22 de `estado-cuenta-servidor-458d`. Retirarlos
+es mover esas redes (tarea aparte). `ListarMovimientosTiendaCompletoResult` y los dos schemas del listado de la tienda
+siguen en `lib/types` (los usan esas redes y el desglose de la oficina).
+
+## Punto 3 — «0 de 12 órdenes aportan» en la comisión del cierre del 2026-08-12: NO es un fallo de R19
+
+Medido en el clon (SQL de solo lectura):
+
+- La fila: `comision_cod` ₡4.343,50 de Tania, `origen_id` `70ebf5e2…` (cierre aprobado el 2026-08-12 22:56 UTC).
+- Sus 12 filas de `cierre_detail` tienen **`tarifa_id` NULL** (es el ÚNICO cierre de la base así) y **ninguna gestión
+  «entregado»** (incidente, reprogramado, novedad, devolución por rechazo). La comisión exige entrega + tarifa congelada
+  + comisión + monto a cobrar (`CRITERIO_DE_APORTE.ingreso_comision_cod`, atado a `derivarIngresoOrden` por su test de
+  equivalencia): con esos datos **ninguna orden la deriva**, y la fórmula de hoy tampoco produciría ese importe
+  (₡4.343,50 = 3,5 % de ₡124.100, lo recaudado en gestiones que no son entregas).
+- Los cierres del 13 y 14 de agosto dicen lo mismo (0 de 2, 0 de 1). **Todos los posteriores cuadran exactos**: 2026-09-24
+  «5 de 14» → Σ aportes ₡1.137,50 = libro; «1 de 2» → ₡210,00 = libro.
+
+Conclusión: la lectura es correcta — esas órdenes no aportan a esa fila con los datos congelados; el importe es anterior a
+que el cierre congelara todo lo que la fórmula necesita (datos locales de agosto; producción se vació el 2026-08-25). Lo
+que confundía era el texto: «Ninguna orden de este cierre aporta a este concepto.» junto a «Importe ₡4.343,50». Como un
+concepto en 0,00 no emite movimiento, un detalle vacío **siempre** está junto a un importe > 0, así que el texto vacío
+pasa a explicarlo:
+
+- oficina (`DETALLE_MOVIMIENTO_VACIO`): «Con los datos que el cierre guardó de sus órdenes, ninguna aporta a este
+  concepto: este importe no se puede repartir orden por orden.»
+- `/mi-wallet` (`DETALLE_MI_MOVIMIENTO_VACIO`): «Con los datos que el cierre guardó de tus órdenes, ninguna aporta a este
+  concepto: este importe no se puede repartir orden por orden.»
+
+Tests: `DetalleMovimientoCierre.test.tsx` y `DetalleMiMovimientoCierre.test.tsx` «R8…» con el literal como contrato (antes
+comparaban contra su propia constante). No hay test contra Postgres nuevo: no hubo fallo de lectura que reproducir.
+
+## Punto 4 — `PagosTiendaEstadoCuenta` se queda como está (sin tocar).
+
+## Mutaciones — 12/12 muertas (arnés con autocomprobación: el archivo cambia, corren > 0 tests, se restaura byte a byte y `git diff` del archivo queda vacío) — `progress/mutaciones_458-D_final.json`
+
+| # | Mutación | Tests | Rojos |
+| --- | --- | --- | --- |
+| M1 | el resumen no se lee en `/mi-wallet` | `mi-wallet-resumen-458d` | 4/5 |
+| M2 | el resumen se manda también a la oficina | `mi-wallet-resumen-458d` | 1/5 |
+| M3 | sin el guardia del cuadre | `mi-wallet-resumen-458d` | 1/5 |
+| M4 | el `WHERE` de `desgloseDeTienda` solo suma créditos | `mi-wallet-resumen-458d` | 5/5 |
+| M5 | «Cargos de Ordenex» pinta lo pagado | `ResumenMiWallet` + `mi-wallet-page` | 2/42 |
+| M6 | `/mi-wallet` sin el resumen | `mi-wallet-page` | 4/38 |
+| M7 | sin la salvedad N1 | `ResumenMiWallet` + `mi-wallet-page` | 2/42 |
+| M8 | el saldo del resumen no es el del servidor | `ResumenMiWallet` + `mi-wallet-page` | 6/42 |
+| M9 | la descarga de `/mi-wallet` acepta paginación | `wallet-tienda-descarga-action` | 2/6 |
+| M10 | el borde de `/mi-wallet` no valida | `wallet-tienda-actions` + `wallet-tienda-schemas` | 2/15 |
+| M11 | el detalle vacío vuelve al texto viejo (oficina) | `DetalleMovimientoCierre` | 1/26 |
+| M12 | ídem en `/mi-wallet` | `DetalleMiMovimientoCierre` | 1/21 |
+
+## Mapa R → test (cierre final)
+
+| R | Test |
+| --- | --- |
+| 172 R55 | `mi-wallet-resumen-458d.test.ts` (Postgres), `ResumenMiWallet.test.tsx`, `mi-wallet-page.test.tsx` («R55 …» ×4), `mi-wallet-desglose.test.ts` |
+| 172 N1 | `mi-wallet-page.test.tsx` («N1 …»), `ResumenMiWallet.test.tsx` («N1 …»), `mi-wallet-resumen-458d.test.ts` (el pago anulado sigue en «Ya pagado») |
+| 458 R34 / R22 (con el resumen) | `mi-wallet-resumen-458d.test.ts` («A tu favor − Cargos − Ya pagado = tarjeta = corrido = base») |
+| 458 R36 | `wallet-tienda-schemas.test.ts`, `wallet-tienda-descarga-action.test.ts`, `estado-cuenta-458d-action.test.ts` |
+| 43 R19/R22/R27, 170 R9/R14/R16–R18/R27 | `wallet-tienda-actions.test.ts`, `wallet-tienda-descarga-action.test.ts` (sobre las actions nuevas) |
+| 458 R19 / 344 R8 | `DetalleMovimientoCierre.test.tsx`, `DetalleMiMovimientoCierre.test.tsx` («R8 …», literal) |
+| R102/R103 | `contexto-458.test.ts` (el resumen en la ayuda de la tienda) |
+
+## Build y gate (cierre final)
+
+- `pnpm run typecheck` y `pnpm exec eslint` sobre los archivos tocados: 0 errores.
+- `pnpm run build` sobre `25ee4d6d`: **`BUILD_EXIT=0`** (`progress/build_458D_final.log`; migraciones omitidas, build local).
+- Gate completo `./init.sh` contra el clon `ordenex_458df`, sin tail, con `INIT_EXIT` escrito dentro:
+  - `progress/gate_458D_final_1.log` — `INIT_EXIT=1`: `455/seed.test.ts` (deadlock 40P01 en su `beforeAll`, que
+    ademas dejo sus 4 tests saltados) y `traspaso-mensajero.int.test.ts` (timeout de transaccion bajo carga). Ajenos;
+    **3/3 verdes aislados** (`progress/aislado_458D_final.log`).
+  - `progress/gate_458D_final_2.log` — `INIT_EXIT=1`: solo `cierre-bloqueo-nv-sql-real.test.ts` (el +1 en N/V de la
+    carrera 412/271, conocido). Ajeno; **3/3 verde aislado** (`progress/aislado_458D_final_2.log`); 0 saltados en
+    `integration/db`.
+  - `progress/gate_458D_final.log` — **`INIT_EXIT=0`**: «DATABASE_URL resuelta: los 317 archivos de tests contra Postgres
+    SI se ejecutan»; **2317 archivos, 32233 tests verdes, 26 saltados**, todos en `AnaliticaPage`/`AnaliticaShell`
+    (ajenos, los mismos de las corridas anteriores); **0 saltados en `integration/db`** (405 archivos, medido sobre
+    `.vitest/rojos.json`); «sin rojos nuevos». Las fotografias de 459 y 458 (`caja-caracterizacion-459`,
+    `wallet-caracterizacion-458`) y `mi-wallet-resumen-458d` corren dentro y pasan.
+
+## Veredicto (cierre final)
+
+Los cuatro puntos del leader quedan cerrados: el resumen de tres cifras de la 172 vuelve a `/mi-wallet` cuadrando con la
+tarjeta y el corrido (probado contra Postgres), las tres actions sin pantalla se retiraron con sus redes movidas, la
+«comision 0 de 12» es un importe de agosto que los datos congelados no reproducen (no un fallo de R19) y su texto ya lo
+explica; 12/12 mutaciones muertas, build y gate completo en verde.
