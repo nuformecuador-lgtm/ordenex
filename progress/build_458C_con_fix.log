@@ -1,0 +1,116 @@
+
+> ordenex@0.1.0 build R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a4ae408c49b524bfe
+> prisma generate && tsx scripts/migrate-deploy.ts && next build
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from db\schema.prisma.
+
+✔ Generated Prisma Client (v7.8.0) to .\node_modules\.pnpm\@prisma+client@7.8.0_prisma_12a6afd4e8168cdd815b06207f03ccf9\node_modules\@prisma\client in 760ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+
+[migrate] migraciones OMITIDAS — build local (sin VERCEL_ENV): usa `pnpm db:migrate` a mano
+[siembra] siembra de jobs recurrentes OMITIDA por el mismo motivo
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of R:\job\singularis\projects\ordenex\pnpm-workspace.yaml as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a4ae408c49b524bfe\pnpm-workspace.yaml
+
+▲ Next.js 16.2.10 (Turbopack)
+- Environments: .env
+- Experiments (use with caution):
+  · serverActions
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+✓ Compiled successfully in 14.6s
+  Running TypeScript ...
+  Finished TypeScript in 47s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/60) ...
+  Generating static pages using 11 workers (15/60) 
+  Generating static pages using 11 workers (30/60) 
+  Generating static pages using 11 workers (45/60) 
+✓ Generating static pages using 11 workers (60/60) in 564ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /analitica
+├ ƒ /api-docs
+├ ƒ /api/asistente
+├ ƒ /api/chat/media/[mensajeId]
+├ ƒ /api/cron/aviso-reparto-manana
+├ ƒ /api/cron/avisos-diarios
+├ ƒ /api/cron/corte-diario
+├ ƒ /api/cron/generar-gastos-fijos
+├ ƒ /api/cron/liberar-reprogramadas
+├ ƒ /api/cron/procesar-devueltas-sla
+├ ƒ /api/cron/procesar-jobs
+├ ƒ /api/cron/purga-pdf-cargas
+├ ƒ /api/cron/purga-postulaciones-recurso
+├ ƒ /api/cron/snapshot-ranking
+├ ƒ /api/cron/sync-plantillas-whatsapp
+├ ○ /api/docs/openapi
+├ ƒ /api/ordenes/api-key
+├ ƒ /api/ordenes/api-key/[numGuia]/cancelar
+├ ƒ /api/ordenes/api-key/analitica
+├ ƒ /api/ordenes/api-key/carga
+├ ƒ /api/ordenes/api-key/carga/[cargaId]/generate
+├ ƒ /api/ordenes/api-key/cotizacion
+├ ƒ /api/ordenes/api-key/habilitar
+├ ƒ /api/ordenes/api-key/orden/[id]
+├ ƒ /api/ordenes/api-key/orden/[id]/generate
+├ ƒ /api/ordenes/carga-masiva/chunk
+├ ƒ /api/webhooks/whatsapp
+├ ƒ /ayuda
+├ ƒ /ayuda/[...slug]
+├ ƒ /cierre-dia
+├ ƒ /cierres-admin
+├ ƒ /configuracion
+├ ƒ /configuracion/api
+├ ƒ /configuracion/geografia
+├ ƒ /configuracion/plantillas
+├ ƒ /configuracion/sinpe
+├ ƒ /configuracion/tarifas
+├ ƒ /configuracion/vehiculos
+├ ƒ /dashboard
+├ ƒ /historico/acciones
+├ ƒ /historico/conversaciones
+├ ○ /icon.png
+├ ƒ /incidentes
+├ ƒ /login
+├ ƒ /mi-bodega
+├ ƒ /mi-wallet
+├ ƒ /mis-asignaciones
+├ ƒ /mis-asignaciones/recoger
+├ ƒ /mis-asignaciones/reparto
+├ ƒ /monitoreo
+├ ƒ /novedades
+├ ƒ /ordenes
+├ ƒ /paquete/[numGuia]
+├ ƒ /postulacion
+├ ƒ /ranking
+├ ƒ /ranking/historico
+├ ƒ /recepcion-satelite
+├ ƒ /recepcion-satelite/en-bodega
+├ ƒ /recepcion-satelite/por-recibir
+├ ƒ /recoleccion
+├ ƒ /recuperar-contrasena
+├ ƒ /wallet
+├ ƒ /wallet/mensajeros
+├ ƒ /wallet/satelites
+└ ƒ /wallet/tiendas
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+BUILD_EXIT=0
