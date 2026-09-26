@@ -319,3 +319,5 @@ la fotografía.
 - El `design.md` §5.1 debería reflejar el orden nuevo de la clave (R25) —anotado aquí, no lo toco—.
 
 **Veredicto:** backend de la 457 completo y verde (gate completo `INIT_EXIT=0`, 0 saltados en `integration/db`, 12/12 mutaciones del dinero rojas); falta la UI (Fase 6-7) y R78/R79 del leader.
+
+**Entorno al cerrar:** el clon `ordenex_457` se BORRÓ (0 conexiones vivas medidas antes del `DROP DATABASE`) y el `.env` de este worktree también. El `.env` del worktree del agente anterior (`agent-a97bb7d8335763b13`) apunta a esa base, que ya no existe. El `frontend_dev` necesita su propio clon (`CREATE DATABASE … TEMPLATE ordenex` + `prisma migrate deploy`) para su gate.
