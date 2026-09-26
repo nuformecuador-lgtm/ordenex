@@ -12,13 +12,14 @@ import type {
 } from "@/lib/interfaces/repositories/IAbonoTiendaRepository";
 import { esP2002, textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
-import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
+import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 
 type AbonoTiendaPrismaClient = Pick<PrismaClient, "abonoTienda">;
 
 /** Lo que el documento necesita para proyectarse: nombres, no ids (R48). */
 const INCLUDE_REGISTRO = {
-  tienda: { select: { nombre: true, primerApellido: true } },
+  tienda: { select: CUENTA_USUARIO_SELECT },
   registrador: { select: { nombre: true } },
   anulacion: { select: { id: true } },
 } as const;
@@ -30,7 +31,7 @@ function aRegistro(r: RegistroRow): AbonoTiendaRegistro {
   return {
     id: r.id,
     tiendaId: r.tiendaId,
-    tiendaNombre: etiquetaDePersona(r.tienda),
+    tiendaNombre: etiquetaDeCuenta(r.tienda),
     monto: r.monto.toFixed(2),
     metodo: r.metodo,
     referencia: r.referencia,
@@ -99,7 +100,7 @@ export class AbonoTiendaRepository implements IAbonoTiendaRepository {
           entidadTipo: "abono_tienda",
           entidadId: row.id,
           entidadEtiqueta: etiquetaDeEntidad("abono_tienda", {
-            tiendaNombre: etiquetaDePersona(row.tienda),
+            tiendaNombre: etiquetaDeCuenta(row.tienda),
           }),
           monto: row.monto,
           ...actor,
@@ -127,7 +128,7 @@ export class AbonoTiendaRepository implements IAbonoTiendaRepository {
       });
       const anulado = await tx.abonoTienda.findUnique({
         where: { id: input.abonoId },
-        select: { monto: true, tienda: { select: { nombre: true, primerApellido: true } } },
+        select: { monto: true, tienda: { select: CUENTA_USUARIO_SELECT } },
       });
       const actor = await resolverActorCongelado(tx, input.anuladoPor);
       await appendAccion(tx, [
@@ -136,7 +137,7 @@ export class AbonoTiendaRepository implements IAbonoTiendaRepository {
           entidadTipo: "abono_tienda",
           entidadId: input.abonoId,
           entidadEtiqueta: etiquetaDeEntidad("abono_tienda", {
-            tiendaNombre: etiquetaDePersona(anulado?.tienda),
+            tiendaNombre: etiquetaDeCuenta(anulado?.tienda),
           }),
           monto: anulado?.monto ?? null,
           ...actor,
