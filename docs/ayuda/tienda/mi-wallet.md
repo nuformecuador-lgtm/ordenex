@@ -16,6 +16,8 @@ fuentes:
   - lib/utils/descripcion-abono.ts
   - app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx
   - app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx
+  - app/(app)/mi-wallet/_components/VerComprobanteMiMovimiento.tsx
+  - lib/actions/wallet-comprobante.ts
   - app/(app)/mi-wallet/_components/MiWalletFiltros.tsx
   - app/(app)/mi-wallet/_components/detalle-mi-movimiento-labels.ts
   - lib/auth/menu-visibility.ts
@@ -90,7 +92,14 @@ si la hay, **la referencia** (por ejemplo, «A Facebook · Pauta de publicidad �
 
 ## Un pago que le hiciste a Ordenex
 
-Si tu saldo quedó en contra y le pagaste a Ordenex, lo ves como **Le pagaste a Ordenex**, con el motivo, el método y la referencia. **Sube tu saldo** en el monto. Si la oficina lo anula por error, aparece **Ordenex anuló el pago que le hiciste** y tu saldo vuelve a bajar. El comprobante de tu pago lo guarda la oficina.
+Si tu saldo quedó en contra y le pagaste a Ordenex, lo ves como **Le pagaste a Ordenex**, con el motivo, el método y la referencia. **Sube tu saldo** en el monto. Si la oficina lo anula por error, aparece **Ordenex anuló el pago que le hiciste** y tu saldo vuelve a bajar.
+
+## Ver el comprobante
+
+Cuando la oficina guardó un comprobante, lo podés abrir desde la fila con **Ver comprobante**: en los
+pagos que Ordenex te hizo, en los pagos que Ordenex hizo por ti, en los cobros de Ordenex y en los pagos
+que le hiciste a Ordenex. Se abre en otra pestaña con un enlace que dura poco. Si esa fila no tiene
+comprobante, te lo dice: «Este registro no tiene comprobante.». Solo ves los de tu tienda.
 
 ## Buscar en el desglose
 
@@ -125,7 +134,6 @@ cuando se entrega el paquete. Si la entrega es de hoy, es normal que todavía no
 - **No se pagan saldos desde acá.** El pago se coordina con la oficina; esta pantalla lo refleja.
 - **No se anula ningún cobro ni ningún pago desde acá.** Si un cobro o un pago no te cuadra, pedíselo
   a la oficina: la anulación la hace ella, y acá la vas a ver como una línea que te devuelve el monto.
-- **No se abre el comprobante de un pago que Ordenex hizo por ti.** Si lo necesitás, pedíselo a la
-  oficina.
+- **No se sube ni se cambia ningún comprobante.** Los guarda la oficina; acá solo se ven.
 - **No se corrigen cifras.** Un número mal sale de una entrega mal registrada: se arregla en la orden,
   no en el saldo.

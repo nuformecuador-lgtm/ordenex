@@ -46,48 +46,20 @@ const FUERA_DE_OFICINA: RolValue[] = ["mensajero", "adminTienda", "adminSatelite
 
 // ── Bloque A — 458-A «Detalles y guardias»: selector de cierre, conceptos con cuenta, origen con nombre ──
 
-describe("458-A (bloque A) — la oficina puede preguntar cómo filtrar y de dónde viene cada movimiento", () => {
-  it.each(OFICINA)("%s: Wallet · Tiendas explica el selector de cierre y los conceptos con su número", (rol) => {
-    const tiendas = cuerpoEnContexto(rol, "oficina/wallet-tiendas");
-    expect(tiendas).toContain("## Filtrar el desglose");
-    expect(tiendas).toContain(
-      "**Cierre**: se elige de la lista de cierres **de esta tienda** que tienen movimientos, cada uno con su día, el mensajero y cuántos movimientos trajo. Podés buscar **por día (2026-09-12) o por el nombre del mensajero**.",
-    );
-    expect(tiendas).toContain("No hace falta copiar ni pegar nada.");
-    expect(tiendas).toContain(
-      "**Concepto**: solo aparecen los conceptos que **tienen movimientos** de esta tienda en el periodo (y el cierre) que elegiste, cada uno con su número entre paréntesis",
-    );
-    expect(tiendas).toContain("sigue elegido con **(0)** hasta que lo quites.");
-  });
+// FICHA 458-D (T D.8/T D.9): el bloque A de la oficina describía el DESGLOSE de `/wallet/tiendas` y
+// de `/wallet/mensajeros` (su filtro de cierre, sus conceptos con número y su columna «Origen» con
+// enlace). Los desgloses se retiraron (D14) y su ayuda se reescribió como la del ESTADO DE CUENTA: esos
+// tres casos pasan al bloque D con lo que la pantalla hace HOY. Lo que se conserva del bloque A es que
+// la ayuda de la oficina no llega a otros roles (arriba del bloque D, más abajo) y la de Mi wallet.
 
-  it.each(OFICINA)("%s: Wallet · Tiendas explica el origen con nombre y el enlace «Ver»", (rol) => {
-    const tiendas = cuerpoEnContexto(rol, "oficina/wallet-tiendas");
-    expect(tiendas).toContain("## De dónde viene cada movimiento");
-    expect(tiendas).toContain(
-      "La columna **Origen** dice qué produjo cada movimiento, con nombre: «Cierre del día · 2026-09-12 · Juan Pérez Mora», «Gestión de orden · cobro por rechazo · guía 4321»",
-    );
-    expect(tiendas).toContain("al lado aparece **Ver**, que te lleva al cierre, a la orden o al ranking de ese día.");
-  });
-
-  it.each(OFICINA)("%s: Wallet · Mensajeros explica el selector de cierre, sin pegar identificadores", (rol) => {
-    const mensajeros = cuerpoEnContexto(rol, "oficina/wallet-mensajeros");
-    expect(mensajeros).toContain("## Filtrar el desglose por cierre");
-    expect(mensajeros).toContain(
-      "El filtro **Cierre** se elige de la lista de cierres **de este mensajero** que tienen movimientos, cada uno con su día y cuántos movimientos trajo. Podés buscar **por día (2026-09-12) o por nombre**.",
-    );
-    expect(mensajeros).toContain("Ya no hay que copiar la dirección de ningún enlace ni pegar nada");
-    expect(mensajeros).toContain("La fila que viene de un cierre lleva además **Ver el cierre**.");
-    // La ayuda vieja («copiá su dirección y pegala») no vuelve.
-    expect(mensajeros).not.toMatch(/copiá su dirección y pegala/);
-  });
-
+describe("458-A (bloque A) — lo de la oficina no sale de la oficina", () => {
   it.each(FUERA_DE_OFICINA)("%s NO recibe la ayuda de las tiendas ni la de los mensajeros (R103)", (rol) => {
     const slugs = contextoPara(docs, rol).map((d) => d.slug);
     expect(slugs).not.toContain("oficina/wallet-tiendas");
     expect(slugs).not.toContain("oficina/wallet-mensajeros");
     const todo = todoElContexto(rol);
-    expect(todo).not.toContain("## Filtrar el desglose por cierre");
-    expect(todo).not.toContain("de esta tienda** que tienen movimientos, cada uno con su día, el mensajero");
+    expect(todo).not.toContain("## El estado de cuenta de una tienda");
+    expect(todo).not.toContain("## El estado de cuenta de un mensajero");
   });
 });
 
@@ -206,5 +178,112 @@ describe("458-C (bloque C) — la oficina puede preguntar cómo registrar, ver y
     }
     expect(declaradas).not.toContain("app/(app)/wallet/_components/RegistrarMovimientoCajaDialog.tsx");
     expect(declaradas).not.toContain("app/(app)/wallet/_components/DocumentoCajaAcciones.tsx");
+  });
+});
+
+// ── Bloque D — 458-D «Estados de cuenta y Mi wallet» ──────────────────────────────────────────────
+//
+// La oficina puede preguntar cómo se lee el estado de cuenta de una tienda, un mensajero y una bodega
+// (frase, saldo inicial, saldo corrido, chips, anulados), qué acciones tiene cada uno y cómo se anula un
+// pago a un mensajero desde la wallet. La tienda puede preguntar cómo ve el comprobante que subió
+// Ordenex. Nada de la oficina llega a la tienda, al mensajero ni a la bodega (R103).
+
+describe("458-D (bloque D) — la oficina puede preguntar por los estados de cuenta", () => {
+  it.each(OFICINA)("%s: el estado de cuenta de una tienda, sus cifras, su extracto y sus chips", (rol) => {
+    const tiendas = cuerpoEnContexto(rol, "oficina/wallet-tiendas");
+    expect(tiendas).toContain("## El estado de cuenta de una tienda");
+    expect(tiendas).toContain("una frase que dice **quién le debe a quién**");
+    expect(tiendas).toContain("Siempre se cumple: saldo inicial más abonos menos cargos es el saldo final.");
+    expect(tiendas).toContain("La primera fila es el **saldo inicial** del periodo");
+    expect(tiendas).toContain("**Todo · Cierres · Pagos · Cobros · Correcciones**");
+    expect(tiendas).toContain("El saldo de cada fila **sigue siendo el de la cuenta entera**, aunque filtres");
+    expect(tiendas).toContain("Si se anuló antes de que la wallet guardara el motivo, dice **«motivo no registrado»**.");
+    expect(tiendas).toContain("La descarga trae **el periodo entero** que estás mirando");
+  });
+
+  it.each(OFICINA)("%s: las tres acciones de la tienda y cuándo aparece cada una", (rol) => {
+    const tiendas = cuerpoEnContexto(rol, "oficina/wallet-tiendas");
+    expect(tiendas).toContain("## Registrar desde el estado de cuenta");
+    expect(tiendas).toContain("**La tienda le paga a Ordenex** — solo cuando la tienda está **en contra**");
+    expect(tiendas).toContain("**Ordenex le cobra a la tienda** — siempre");
+    expect(tiendas).toContain("el botón está apagado y lo dice: «Ordenex no le debe nada a…»");
+    // Lo retirado no vuelve a la ayuda: ni el desglose ni su filtro de cierre por selector.
+    expect(tiendas).not.toContain("## El desglose");
+    expect(tiendas).not.toContain("## Filtrar el desglose");
+  });
+
+  it.each(OFICINA)("%s: el estado de cuenta del mensajero, su pago y la anulación desde la wallet (R70)", (rol) => {
+    const mensajeros = cuerpoEnContexto(rol, "oficina/wallet-mensajeros");
+    expect(mensajeros).toContain("## El estado de cuenta de un mensajero");
+    expect(mensajeros).toContain("**Todo · Cierres · Pagos · Premios · Correcciones**");
+    expect(mensajeros).toContain("**Ordenex le paga al mensajero**, en las acciones de su estado de cuenta");
+    expect(mensajeros).toContain("## Anular un pago");
+    expect(mensajeros).toContain("Es **la misma anulación que la de Cierres**");
+    expect(mensajeros).not.toContain("## Filtrar el desglose por cierre");
+  });
+
+  it.each(OFICINA)("%s: el estado de cuenta de una bodega y la conciliación debajo (R31)", (rol) => {
+    const satelites = cuerpoEnContexto(rol, "oficina/wallet-satelites");
+    expect(satelites).toContain("## El estado de cuenta de una bodega");
+    expect(satelites).toContain("**Todo · Declarado · Recibido**");
+    expect(satelites).toContain("Debajo del estado de cuenta de la bodega están sus consolidaciones");
+  });
+
+  it.each(FUERA_DE_OFICINA)("%s NO recibe la ayuda de los estados de cuenta (R103)", (rol) => {
+    const slugs = contextoPara(docs, rol).map((d) => d.slug);
+    expect(slugs).not.toContain("oficina/wallet-satelites");
+    const todo = todoElContexto(rol);
+    expect(todo).not.toContain("## Registrar desde el estado de cuenta");
+    expect(todo).not.toContain("## El estado de cuenta de una bodega");
+    expect(todo).not.toContain("## Anular un pago");
+  });
+
+  it("los cuatro documentos, actualizados el 2026-09-26 y con las fuentes de la 458-D", () => {
+    const esperado: Record<string, string[]> = {
+      "oficina/wallet-tiendas": [
+        "app/(app)/wallet/tiendas/[tiendaId]/page.tsx",
+        "components/shared/estado-cuenta/EstadoCuenta.tsx",
+        "app/(app)/wallet/tiendas/_components/EstadoCuentaAcciones.tsx",
+      ],
+      "oficina/wallet-mensajeros": [
+        "app/(app)/wallet/mensajeros/[mensajeroId]/page.tsx",
+        "app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero.tsx",
+      ],
+      "oficina/wallet-satelites": [
+        "app/(app)/wallet/satelites/[zonaId]/page.tsx",
+        "app/(app)/wallet/satelites/_components/ConciliacionSatelite.tsx",
+      ],
+      "tienda/mi-wallet": ["app/(app)/mi-wallet/_components/VerComprobanteMiMovimiento.tsx"],
+    };
+    for (const [slug, fuentes] of Object.entries(esperado)) {
+      const doc = docs.find((d) => d.slug === slug);
+      expect(doc?.actualizado, slug).toBe("2026-09-26");
+      const crudo = readFileSync(path.join(DIR_AYUDA, `${slug}.md`), "utf8");
+      const declaradas = partirFrontmatter(crudo).datos.fuentes ?? [];
+      for (const f of fuentes) expect(declaradas, `${slug} sin ${f}`).toContain(f);
+      for (const retirada of [
+        "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
+        "app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx",
+        "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
+        "app/(app)/wallet/satelites/_components/DesgloseConsolidacionesSatelite.tsx",
+      ]) {
+        expect(declaradas, `${slug} declara la retirada ${retirada}`).not.toContain(retirada);
+      }
+    }
+  });
+});
+
+describe("458-D (bloque D) — la tienda puede preguntar cómo ve el comprobante (R78)", () => {
+  it("adminTienda: Mi wallet explica «Ver comprobante», en qué filas y que solo ve los suyos", () => {
+    const wallet = cuerpoEnContexto("adminTienda", "tienda/mi-wallet");
+    expect(wallet).toContain("## Ver el comprobante");
+    expect(wallet).toContain("lo podés abrir desde la fila con **Ver comprobante**");
+    expect(wallet).toContain("Solo ves los de tu tienda.");
+    expect(wallet).toContain("**No se sube ni se cambia ningún comprobante.** Los guarda la oficina; acá solo se ven.");
+    expect(wallet).not.toContain("No se abre el comprobante de un pago que Ordenex hizo por ti");
+  });
+
+  it.each(["mensajero", "adminSatelite"] as RolValue[])("%s NO recibe la explicación del comprobante de la tienda", (rol) => {
+    expect(todoElContexto(rol)).not.toContain("## Ver el comprobante");
   });
 });
