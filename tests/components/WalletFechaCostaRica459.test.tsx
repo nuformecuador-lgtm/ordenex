@@ -6,12 +6,8 @@ import type { ReactNode } from "react";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
-import type {
-  ListarMovimientosDeTiendaResult,
-  SaldoTiendaResumenDTO,
-  WalletTiendaMovimientoDTO,
-} from "@/lib/types/wallet-tienda";
-import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
+import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
+import { estado, fila as filaEstado } from "@/tests/fixtures/estado-cuenta";
 
 // =================================================================================================
 // FICHA 459 — RECORRIDO F1: LA FECHA DE LA WALLET ES LA DE COSTA RICA
@@ -20,19 +16,15 @@ import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
 // El recorrido registró un pago por cuenta a las 21:28 del 24/09 en Costa Rica y el libro lo
 // fechó «2026-09-25»: las tablas y las descargas recortaban el ISO en UTC con `.slice(0, 10)`.
 // Aquí, un movimiento de las 22:00 del 24 de septiembre en Costa Rica (`2026-09-25T04:00:00Z`)
-// tiene que leerse «2026-09-24» en las TRES tablas (caja, desglose de /wallet/tiendas y
-// /mi-wallet), en su nombre accesible y en las CUATRO descargas. Los días esperados van escritos
+// tiene que leerse «2026-09-24» en las TRES tablas (caja, estado de cuenta de la tienda —antes el
+// desglose de /wallet/tiendas, 458-D— y /mi-wallet), en su nombre accesible y en las CUATRO descargas. Los días esperados van escritos
 // a mano: compararlos contra la función que los produce sería verde siempre.
 //
 // Y la otra convención que vive en el mismo libro: los pagos y anulaciones de la liquidación se
 // guardan a MEDIANOCHE UTC del día elegido (`medianocheUtcDelDia`, ficha 172). Ese día ya es el
 // de Costa Rica: correrlo −6 h lo pintaría el día ANTERIOR. También se mide.
 
-const listarDesgloseMock = vi.fn();
-const listarDesgloseCompletoMock = vi.fn();
 vi.mock("@/lib/actions/wallet-tienda", () => ({
-  listarMovimientosDeTiendaAction: (...a: unknown[]) => listarDesgloseMock(...a),
-  listarMovimientosDeTiendaCompletoAction: (...a: unknown[]) => listarDesgloseCompletoMock(...a),
   verDetalleDeMiMovimientoAction: vi.fn(),
   verDetalleDeMiMovimientoCompletoAction: vi.fn(),
 }));
@@ -45,15 +37,19 @@ vi.mock("@/lib/actions/aporte-capital", () => ({
   obtenerComprobanteAporteCapitalAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-egresos", () => ({ reversarEgresoAdministrativoAction: vi.fn() }));
+vi.mock("@/lib/actions/estado-cuenta", () => ({ verEstadoCuentaAction: vi.fn(async () => ({ status: "forbidden" })) }));
+vi.mock("@/lib/actions/como-quedo", () => ({ comoQuedoAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-anulacion", () => ({ anularMovimientoAction: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
 
 import { WalletLedger } from "@/app/(app)/wallet/_components/WalletLedger";
 import { filaDescargaMovimientoCaja } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
-import { DesgloseMovimientosTienda } from "@/app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda";
-import { filaDescargaDesgloseTienda } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-descarga-columnas";
-import { filaDescargaDesgloseMensajero } from "@/app/(app)/wallet/mensajeros/_components/desglose-mensajero-descarga-columnas";
+import { EstadoCuentaTienda, ROTULOS_TIENDA } from "@/app/(app)/wallet/tiendas/_components/EstadoCuentaTienda";
+import { ROTULOS_MENSAJERO } from "@/app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero";
+import { lineaDeFila } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
 import { DesgloseTiendaLedger } from "@/app/(app)/mi-wallet/_components/DesgloseTiendaLedger";
 import { filaDescargaMiWallet } from "@/app/(app)/mi-wallet/_components/mi-wallet-descarga-columnas";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
@@ -101,17 +97,6 @@ const CARGO_TIENDA: WalletTiendaMovimientoDTO = {
   fechaMovimiento: NOCHE_CR,
 };
 
-const MOV_MENSAJERO = {
-  id: "p-noche",
-  mensajeroId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-  tipo: "credito",
-  categoria: "cod_recaudado",
-  monto: "5000.00",
-  origenTipo: "manual",
-  origenId: null,
-  descripcion: null,
-  fechaMovimiento: NOCHE_CR,
-} as unknown as PagoMensajeroMovimientoDTO;
 
 function envolver(nodo: ReactNode) {
   return render(
@@ -171,39 +156,21 @@ describe("459/F1 — /wallet: el libro de la caja y su descarga", () => {
   });
 });
 
-describe("459/F1 — /wallet/tiendas: el desglose de una tienda y su descarga", () => {
-  it("la tabla y la descarga dicen el 24", async () => {
-    const resumen: SaldoTiendaResumenDTO = {
-      tiendaId: CARGO_TIENDA.tiendaId,
-      tiendaNombre: "Tania Tienda",
-      saldo: "-10000.00",
-      signo: "negativo",
-    };
-    const respuesta: ListarMovimientosDeTiendaResult = {
-      tiendaId: resumen.tiendaId,
-      movimientos: [CARGO_TIENDA],
-      total: 1,
-      page: 1,
-      pageSize: 20,
-      desglose: {
-        aFavor: "0.00",
-        cargos: "10000.00",
-        pagado: "0.00",
-        saldo: "-10000.00",
-        signo: "negativo",
-      },
-    };
-    listarDesgloseMock.mockResolvedValue({ status: "ok", data: respuesta });
-    envolver(<DesgloseMovimientosTienda resumen={resumen} id="desglose-tania" />);
-
-    const celda = await screen.findByText("Registrado a mano · Cobro de la noche");
+// FICHA 458-D (T D.8): el desglose de /wallet/tiendas se retiró; su sustituto es el ESTADO DE CUENTA,
+// cuya fecha de fila la calcula el SERVIDOR en día CR (`EstadoCuentaService`, bordes 23:30/00:30 CR en
+// `wallet-caracterizacion-458.test.ts`, 458-B). Lo que se mide aquí es la otra mitad: que la pantalla y
+// la descarga pintan ESE día tal cual, sin volver a recortar ningún instante.
+describe("459/F1 — /wallet/tiendas/[tiendaId]: el estado de cuenta y su descarga", () => {
+  it("la tabla y la descarga dicen el 24 que manda el servidor", () => {
+    const f = filaEstado({ fecha: DIA_CR, categoria: "cobro_manual", origenTipo: "manual", descripcion: "Cobro de la noche", cargo: "10000.00", abono: null });
+    envolver(<EstadoCuentaTienda inicial={estado({ filas: [f], total: 1 })} puedeRegistrar={false} />);
+    const celda = screen.getByText("Cobro de la noche");
     const fila = celda.closest("tr");
     expect(fila).not.toBeNull();
     expect(within(fila!).getByText(DIA_CR)).toBeInTheDocument();
     expect(within(fila!).queryByText(DIA_UTC)).toBeNull();
-
-    expect(filaDescargaDesgloseTienda(CARGO_TIENDA).fecha).toBe(DIA_CR);
-  }, 15000);
+    expect(lineaDeFila(f, ROTULOS_TIENDA).fecha).toBe(DIA_CR);
+  });
 });
 
 describe("459/F1 — /mi-wallet: el libro de la tienda y su descarga", () => {
@@ -218,8 +185,9 @@ describe("459/F1 — /mi-wallet: el libro de la tienda y su descarga", () => {
   });
 });
 
-describe("459/F1 — /wallet/mensajeros: la descarga del desglose", () => {
-  it("dice el 24", () => {
-    expect(filaDescargaDesgloseMensajero(MOV_MENSAJERO).fecha).toBe(DIA_CR);
+describe("459/F1 — /wallet/mensajeros/[mensajeroId]: la descarga del estado de cuenta", () => {
+  it("dice el 24 que manda el servidor", () => {
+    const f = filaEstado({ libro: "mensajero", fecha: DIA_CR, categoria: "pago_devengado" });
+    expect(lineaDeFila(f, ROTULOS_MENSAJERO).fecha).toBe(DIA_CR);
   });
 });

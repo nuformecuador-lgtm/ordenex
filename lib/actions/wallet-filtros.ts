@@ -51,8 +51,8 @@ function toError(
  * R13–R15 — los conceptos con movimientos del periodo y la cuenta que se miran, con su numero.
  * `libro`: `caja` (`/wallet`), `tienda` (desglose/estado de cuenta de UNA tienda, con `tiendaId`) o
  * `mi_tienda` (`/mi-wallet`: la tienda sale de la sesion y NO se admite ningun id).
- * La consumen `WalletFiltros`, `MiWalletFiltros` y `DesgloseMovimientosTienda`
- * (`useConceptosConMovimientos`).
+ * La consumen `WalletFiltros` y `MiWalletFiltros` (`useConceptosConMovimientos`); el desglose de una
+ * tienda que tambien la usaba se retiro en la 458-D (el estado de cuenta filtra por chip).
  */
 export async function conceptosConMovimientosAction(
   input: unknown,
@@ -70,8 +70,10 @@ export async function conceptosConMovimientosAction(
 /**
  * R10–R12 — los cierres con movimientos en el libro de UNA tienda o de UN mensajero, para el
  * selector con busqueda (por dia `YYYY-MM-DD` o por nombre del mensajero). Solo acceso total.
- * La consume el `SelectorBuscable` de `DesgloseMovimientosTienda` y `DesglosePagosMensajero`
+ * La consumia el `SelectorBuscable` de `DesgloseMovimientosTienda` y `DesglosePagosMensajero`
  * (`useCierresDeLaCuenta`).
+ *
+ * @sin-superficie FICHA 458-D (T D.8, D14): los dos desgloses se retiraron y el estado de cuenta que los sustituye no filtra por cierre porque `estadoCuentaSchema` no acepta un cierre (R10: pendiente de servidor, anotado en `progress/impl_458-D.md`). Esta anotacion CADUCA cuando el estado de cuenta filtre por cierre.
  */
 export async function cierresDeLaCuentaAction(
   input: unknown,

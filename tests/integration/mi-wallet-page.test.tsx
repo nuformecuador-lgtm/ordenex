@@ -868,20 +868,29 @@ describe("⭑ FICHA 459 — la descarga de la tienda (R44/R100)", () => {
     expect(Object.keys(f).sort()).toEqual(COLUMNAS_DESCARGA_MI_WALLET.map((c) => c.clave).sort());
   });
 
-  it("/wallet/tiendas: el mismo concepto y origen, sin ids", async () => {
-    const { filaDescargaDesgloseTienda, COLUMNAS_DESCARGA_DESGLOSE_TIENDA } = await import(
-      "@/app/(app)/wallet/tiendas/_components/desglose-tienda-descarga-columnas"
-    );
+  it("/wallet/tiendas/[tiendaId]: el mismo concepto y el motivo, sin ids (458-D: el estado de cuenta)", async () => {
+    // FICHA 458-D (T D.8): la descarga de la oficina ya no es la del desglose retirado sino la del
+    // ESTADO DE CUENTA de la tienda, con la línea que pinta la tabla.
+    const { lineaDeFila } = await import("@/components/shared/estado-cuenta/estado-cuenta-lineas");
+    const { ROTULOS_TIENDA } = await import("@/app/(app)/wallet/tiendas/_components/EstadoCuentaTienda");
+    const { fila } = await import("@/tests/fixtures/estado-cuenta");
     for (const m of [PAGO_POR_CUENTA, PAGO_POR_CUENTA_ANULADO]) {
-      const f = filaDescargaDesgloseTienda(m);
-      const valores = Object.values(f).join(" | ");
+      const linea = lineaDeFila(
+        fila({
+          ref: { libro: "tienda", movimientoId: m.id },
+          categoria: m.categoria,
+          origenTipo: m.origenTipo,
+          descripcion: m.descripcion,
+          cargo: m.tipo === "debito" ? m.monto : null,
+          abono: m.tipo === "credito" ? m.monto : null,
+        }),
+        ROTULOS_TIENDA,
+      );
+      const valores = Object.values(linea).join(" | ");
       expect(valores).toMatch(/Ordenex paga un gasto de la tienda|Pago de un gasto de la tienda anulado/);
-      expect(valores).toContain("Pago de un gasto de una tienda · ");
+      expect(valores).toContain("Pago de un gasto de una tienda");
       expect(valores).not.toContain(PAGO_POR_CUENTA_ID);
       expect(valores).not.toMatch(/pago_por_cuenta/);
-      expect(Object.keys(f).sort()).toEqual(
-        COLUMNAS_DESCARGA_DESGLOSE_TIENDA.map((c) => c.clave).sort(),
-      );
     }
   });
 });

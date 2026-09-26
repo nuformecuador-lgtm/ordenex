@@ -9,12 +9,9 @@ import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
 import { textoDeOrigen } from "@/components/shared/wallet/origen-movimiento";
 import { ORIGEN_LABEL } from "@/app/(app)/wallet/_components/wallet-labels";
 import { filaDescargaMovimientoCaja } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
-import { filaDescargaDesgloseTienda } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-descarga-columnas";
 import { filaDescargaMiWallet } from "@/app/(app)/mi-wallet/_components/mi-wallet-descarga-columnas";
-import { filaDescargaDesgloseMensajero } from "@/app/(app)/wallet/mensajeros/_components/desglose-mensajero-descarga-columnas";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
-import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
 import type { OrigenLegibleDTO } from "@/lib/types/wallet-origen";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -64,7 +61,10 @@ describe("OrigenMovimiento — la celda", () => {
   });
 });
 
-describe("R3 — las cuatro descargas llevan el MISMO texto de origen, sin id", () => {
+// FICHA 458-D (T D.8): eran CUATRO; las del desglose de una tienda y de un mensajero se retiraron con
+// sus desplegables. La descarga que los sustituye (el estado de cuenta) no lleva ningún id: lo afirma
+// `tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts` (R3).
+describe("R3 — las descargas de los libros llevan el MISMO texto de origen, sin id", () => {
   const origen = { texto: "Premio del ranking · podio del 2026-09-10", enlace: { etiqueta: "Ver el ranking del 2026-09-10", href: `/ranking/historico?fecha=2026-09-10&x=${CIERRE}` } };
   const base = { origenId: CIERRE, descripcion: null, fechaMovimiento: "2026-09-10T18:00:00.000Z", monto: "5000.00" };
 
@@ -85,19 +85,6 @@ describe("R3 — las cuatro descargas llevan el MISMO texto de origen, sin id", 
         } as WalletMovimientoDTO & { origen: OrigenLegibleDTO }),
     ],
     [
-      "tienda",
-      () =>
-        filaDescargaDesgloseTienda({
-          ...base,
-          id: CIERRE,
-          tiendaId: CIERRE,
-          tipo: "credito",
-          categoria: "cod_recaudado",
-          origenTipo: "ranking_snapshot_fila",
-          origen,
-        } as WalletTiendaMovimientoDTO & { origen: OrigenLegibleDTO }),
-    ],
-    [
       "mi-wallet",
       () =>
         filaDescargaMiWallet({
@@ -109,20 +96,6 @@ describe("R3 — las cuatro descargas llevan el MISMO texto de origen, sin id", 
           origenTipo: "ranking_snapshot_fila",
           origen,
         } as WalletTiendaMovimientoDTO & { origen: OrigenLegibleDTO }),
-    ],
-    [
-      "mensajero",
-      () =>
-        filaDescargaDesgloseMensajero({
-          ...base,
-          id: CIERRE,
-          mensajeroId: CIERRE,
-          tipo: "devengo",
-          categoria: "premio_ranking",
-          origenTipo: "ranking_snapshot_fila",
-          cierreId: CIERRE,
-          origen,
-        } as PagoMensajeroMovimientoDTO & { origen: OrigenLegibleDTO }),
     ],
   ])("%s", (_n, fila) => {
     const f = fila();

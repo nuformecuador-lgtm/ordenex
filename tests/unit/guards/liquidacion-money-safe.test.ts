@@ -60,7 +60,11 @@ const ARCHIVOS_DE_LA_FEATURE: readonly string[] = [
   "app/(app)/mi-wallet/_components/mi-wallet-labels.ts",
   "app/(app)/mi-wallet/page.tsx",
   "app/(app)/wallet/_components/wallet-labels.ts",
-  "app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx",
+  // FICHA 458-D (T D.8): `PagoTiendaAcciones` se retiró con el desglose; el cableado del pago de la
+  // 172 en `/wallet/tiendas` vive ahora en el estado de cuenta de la tienda (la lista y la anulación
+  // de sus pagos, y las acciones que abren el registro único).
+  "app/(app)/wallet/tiendas/_components/PagosTiendaEstadoCuenta.tsx",
+  "app/(app)/wallet/tiendas/_components/EstadoCuentaAcciones.tsx",
   "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
   "app/(app)/wallet/tiendas/page.tsx",
   "components/shared/liquidacion/AnularPagoDialog.tsx",
@@ -122,7 +126,9 @@ const ARCHIVOS_DE_LA_FEATURE: readonly string[] = [
   // `parseInt(`, el `.toFixed(` está prohibido (son cliente) y no pueden importar
   // `@prisma/client` ni `decimal.js` — sin biblioteca de decimales y sin conversión a número,
   // en el navegador no queda forma de operar con dinero, solo de pintarlo.
-  "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
+  // FICHA 458-D (T D.8): el desplegable del desglose se retiró; el pago del mensajero se monta ahora en
+  // su ESTADO DE CUENTA, que entra en su lugar con las mismas cuatro aserciones.
+  "app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero.tsx",
   "app/(app)/wallet/mensajeros/_components/PagoMensajeroAcciones.tsx",
   "app/(app)/wallet/mensajeros/_components/RepartoPrevisualizacion.tsx",
   // Feature 205 (review m2, R16/R50) — los RÓTULOS de esos tres. Entra por el mismo criterio de

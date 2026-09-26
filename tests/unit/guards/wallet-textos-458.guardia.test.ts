@@ -56,8 +56,10 @@ export const AFIRMACIONES: readonly Afirmacion[] = [
     conComentarios: true,
   },
   {
+    // FICHA 458-D (T D.8): el desglose de la tienda se retiró; la afirmación se vigila en el archivo que
+    // lo sustituye en la oficina, el estado de cuenta compartido (tienda, mensajero y bodega).
     id: "T5-tienda",
-    archivo: "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
+    archivo: "components/shared/estado-cuenta/EstadoCuenta.tsx",
     patron: /se\s+pueblan?\s+del\s+SEED|pobla\w*\s+(?:desde\s+el|del)\s+SEED/i,
     conComentarios: true,
   },

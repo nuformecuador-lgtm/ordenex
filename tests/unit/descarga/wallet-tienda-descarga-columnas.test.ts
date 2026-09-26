@@ -1,9 +1,17 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// FICHA 458-D: el estado de cuenta de la oficina se importa con sus rótulos; sus actions no se usan aquí.
+vi.mock("@/lib/actions/estado-cuenta", () => ({ verEstadoCuentaAction: vi.fn() }));
+vi.mock("@/lib/actions/como-quedo", () => ({ comoQuedoAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-anulacion", () => ({ anularMovimientoAction: vi.fn() }));
+vi.mock("@/lib/actions/usuarios-por-rol", () => ({ listarAdminTiendas: vi.fn(), listarMensajerosActivos: vi.fn() }));
 import {
   COLUMNAS_DESCARGA_MI_WALLET,
   filaDescargaMiWallet,
 } from "@/app/(app)/mi-wallet/_components/mi-wallet-descarga-columnas";
-import { filaDescargaDesgloseTienda } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-descarga-columnas";
+import { lineaDeFila } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
+import { fila as filaEstado } from "@/tests/fixtures/estado-cuenta";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 
 // Feature 170 / T C.3 (R5/R7/R8/R23) — columnas de export del ledger de la tienda.
@@ -125,18 +133,30 @@ describe("⭑ FICHA 381/461 (R39/R44) — el cobro sale en el archivo con el nom
     expect(fila.fecha).toBe("2026-09-08");
   });
 
-  it("⭑ 461 R44: la tienda y la oficina descargan el MISMO movimiento con DOS lecturas del concepto", () => {
+  it("⭑ 461 R44: la tienda y la oficina descargan el MISMO movimiento con DOS lecturas del concepto", async () => {
+    // FICHA 458-D: la descarga de la oficina es ahora la del ESTADO DE CUENTA de la tienda (el desglose
+    // se retiró). La MISMA fila, leída por el servidor del estado de cuenta.
+    const { ROTULOS_TIENDA } = await import("@/app/(app)/wallet/tiendas/_components/EstadoCuentaTienda");
     const tienda = filaDescargaMiWallet(COBRO);
-    const oficina = filaDescargaDesgloseTienda(COBRO);
+    const oficina = lineaDeFila(
+      filaEstado({
+        fecha: "2026-09-08",
+        categoria: "cobro_manual",
+        origenTipo: "manual",
+        descripcion: COBRO.descripcion,
+        cargo: COBRO.monto,
+        abono: null,
+      }),
+      ROTULOS_TIENDA,
+    );
     // Literales, uno por lado (design §7.4/§7.5): la mutación 12 los igualaría.
     expect(tienda.concepto).toBe("Ordenex te cobró");
-    expect(oficina.concepto).toBe("Ordenex le cobra a la tienda");
-    expect(tienda.concepto).not.toBe(oficina.concepto);
-    // Y TODO lo demás de la fila es idéntico: es el mismo dinero, la misma fecha y el mismo origen.
+    expect(oficina.movimiento).toBe("Ordenex le cobra a la tienda");
+    expect(tienda.concepto).not.toBe(oficina.movimiento);
+    // Y lo demás es el mismo dinero, la misma fecha y el mismo motivo.
     expect(tienda.fecha).toBe(oficina.fecha);
-    expect(tienda.tipo).toBe(oficina.tipo);
-    expect(tienda.monto).toBe(oficina.monto);
-    expect(tienda.origen).toBe(oficina.origen);
+    expect(tienda.monto).toBe(oficina.cargo);
+    expect(String(tienda.origen)).toContain(oficina.motivo ?? "∅");
   });
 
   it("un cobro y una corrección NO se confunden en el archivo (R33/D2)", () => {

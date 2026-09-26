@@ -23,10 +23,14 @@ import { archivosDeLaWallet, codigo } from "./_wallet-458-archivos";
 
 const SEED_DE_CATEGORIAS = /\b[A-Z_]*CATEGORIA_SEED\b/g;
 
-/** Los tres filtros de concepto de la wallet y el libro que cada uno pide. */
+/**
+ * Los filtros de concepto de la wallet y el libro que cada uno pide. FICHA 458-D (T D.8, D10): eran
+ * TRES; el del desglose de una tienda se retiró con él y el estado de cuenta que lo sustituye filtra
+ * por CHIPS (R24, un diccionario total decidido en el servidor), no por concepto. Quedan dos; el
+ * barrido del SEED de abajo sigue cubriendo la carpeta entera, estado de cuenta incluido.
+ */
 const FILTROS: Record<string, string> = {
   "app/(app)/wallet/_components/WalletFiltros.tsx": 'libro: "caja"',
-  "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx": 'libro: "tienda"',
   "app/(app)/mi-wallet/_components/MiWalletFiltros.tsx": 'libro: "mi_tienda"',
 };
 
@@ -35,8 +39,10 @@ export function usosDelSeed(fuente: string): string[] {
 }
 
 describe("458-A R95 — ningún filtro de concepto de la wallet se puebla del catálogo completo", () => {
-  it("no-vacuidad: los tres filtros están en el censo de la wallet", () => {
-    expect(archivosDeLaWallet()).toEqual(expect.arrayContaining(Object.keys(FILTROS)));
+  it("no-vacuidad: los filtros de concepto y el estado de cuenta están en el censo de la wallet", () => {
+    expect(archivosDeLaWallet()).toEqual(
+      expect.arrayContaining([...Object.keys(FILTROS), "components/shared/estado-cuenta/EstadoCuenta.tsx"]),
+    );
   });
 
   it("ninguna superficie de la wallet usa un catálogo de categorías (`…CATEGORIA_SEED`)", () => {

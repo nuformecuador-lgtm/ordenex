@@ -2,13 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   CATEGORIA_TIENDA_LABEL,
-  CONCEPTO_TIENDA_TODOS_OPTION,
-  DESGLOSE_TIENDA_COLUMNAS,
-  DESGLOSE_TIENDA_ERROR,
-  DESGLOSE_TIENDA_FILTRO_LABEL,
   DESGLOSE_TIENDA_LABEL,
-  DESGLOSE_TIENDA_NOMBRE,
-  DESGLOSE_TIENDA_VACIO,
   ORIGEN_TIENDA_LABEL,
   SALDO_SIGNO_LABEL,
   TIPO_TIENDA_LABEL,
@@ -16,6 +10,10 @@ import {
   origenLabel,
 } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-labels";
 import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
+import {
+  COLUMNAS_TEXTO,
+  ESTADO_CUENTA_TEXTO,
+} from "@/components/shared/estado-cuenta/estado-cuenta-labels";
 import * as miWalletLabels from "@/app/(app)/mi-wallet/_components/mi-wallet-labels";
 import { CATEGORIA_LABEL } from "@/app/(app)/wallet/_components/wallet-labels";
 import { SALDO_SIGNO_LABEL as SALDO_SIGNO_LABEL_TABLA } from "@/app/(app)/wallet/tiendas/_components/saldo-tienda-signo-label";
@@ -127,7 +125,9 @@ describe("⭑ FICHA 461 — CATEGORIA_TIENDA_LABEL: el libro de la tienda, desde
       WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({ categoria, movimientos: 3 })),
       CATEGORIA_TIENDA_LABEL,
       "",
-      CONCEPTO_TIENDA_TODOS_OPTION,
+      // 458-D: el filtro de concepto del desglose se retiró (el estado de cuenta filtra por chips);
+      // lo que este caso mide es el DICCIONARIO desde Ordenex, con la opción «todos» escrita aquí.
+      { value: "", label: "Todos los conceptos" },
     );
     const valores = lista.map((o) => o.value);
     expect(lista[0]).toEqual({ value: "", label: "Todos los conceptos" });
@@ -189,39 +189,50 @@ describe("textos propios del desglose por tienda (R7, P1; 461 R45)", () => {
     expect(textos).not.toMatch(/cuenta por pagar/i);
   });
 
-  it("las cinco columnas del ledger, en el orden de R15", () => {
-    expect(Object.keys(DESGLOSE_TIENDA_COLUMNAS)).toEqual([
-      "fecha",
-      "tipo",
-      "concepto",
-      "monto",
-      "origen",
-    ]);
+  // FICHA 458-D (T D.8): las columnas, los filtros, el vacío, el error y los nombres accesibles del
+  // DESGLOSE se retiraron con él. Sus sustitutos, los del ESTADO DE CUENTA de la tienda, se afirman aquí
+  // con los mismos criterios (orden de la pantalla, periodo, vacío y error que se explican, un nombre
+  // accesible por cuenta).
+  it("las columnas del estado de cuenta, en el orden de la pantalla (R19)", () => {
+    expect(COLUMNAS_TEXTO.tienda).toEqual({
+      fecha: "Fecha",
+      movimiento: "Movimiento y motivo",
+      cargo: "Cargo",
+      abono: "Abono",
+      saldo: "Saldo",
+      ver: "Ver",
+    });
   });
 
-  it("los filtros son cuatro: cierre, concepto y rango de fechas (R18)", () => {
-    expect(DESGLOSE_TIENDA_FILTRO_LABEL.cierre).toBe("Cierre");
-    expect(DESGLOSE_TIENDA_FILTRO_LABEL.concepto).toBe("Concepto");
-    expect(DESGLOSE_TIENDA_FILTRO_LABEL.desde).toBe("Desde");
-    expect(DESGLOSE_TIENDA_FILTRO_LABEL.hasta).toBe("Hasta");
+  it("el periodo se filtra con «Desde» y «Hasta» (R16/R24)", () => {
+    expect(ESTADO_CUENTA_TEXTO.desde).toBe("Desde");
+    expect(ESTADO_CUENTA_TEXTO.hasta).toBe("Hasta");
   });
 
   it("el vacío y el error se explican, no se quedan mudos (R21/R5)", () => {
-    expect(DESGLOSE_TIENDA_VACIO.length).toBeGreaterThan(0);
-    expect(DESGLOSE_TIENDA_ERROR.length).toBeGreaterThan(0);
-    expect(DESGLOSE_TIENDA_ERROR).toMatch(/desglose/i);
+    expect(ESTADO_CUENTA_TEXTO.vacio.length).toBeGreaterThan(0);
+    expect(ESTADO_CUENTA_TEXTO.error).toMatch(/estado de cuenta/i);
   });
 });
 
-describe("nombres accesibles del desglose (R4/R38)", () => {
-  it("TODOS llevan el nombre de la tienda dentro", () => {
-    for (const construir of Object.values(DESGLOSE_TIENDA_NOMBRE)) {
+describe("nombres accesibles del estado de cuenta (R4/R38; 458-D)", () => {
+  const NOMBRES = [
+    ESTADO_CUENTA_TEXTO.tabla,
+    ESTADO_CUENTA_TEXTO.chips,
+    ESTADO_CUENTA_TEXTO.paginacion,
+    ESTADO_CUENTA_TEXTO.tarjetas,
+    ESTADO_CUENTA_TEXTO.periodo,
+    ESTADO_CUENTA_TEXTO.acciones,
+  ];
+
+  it("TODOS llevan el nombre de la cuenta dentro", () => {
+    for (const construir of NOMBRES) {
       expect(construir("Tienda Norte")).toContain("Tienda Norte");
     }
   });
 
-  it("dos tiendas distintas nunca comparten un nombre accesible", () => {
-    for (const construir of Object.values(DESGLOSE_TIENDA_NOMBRE)) {
+  it("dos cuentas distintas nunca comparten un nombre accesible", () => {
+    for (const construir of NOMBRES) {
       expect(construir("Tienda Norte")).not.toBe(construir("Tienda Sur"));
     }
   });

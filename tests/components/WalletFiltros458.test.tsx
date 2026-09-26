@@ -6,34 +6,38 @@
 //    miran —cada uno con SU libro, y `/mi-wallet` sin ningún id— y conservan el elegido con 0.
 //  - TA.4 (R2, R10–R12): el cierre de `/wallet/tiendas` y `/wallet/mensajeros` se ELIGE en un
 //    selector con búsqueda (leído al abrirlo), ya no se teclea: ningún campo pide un identificador.
+//
+// FICHA 458-D (T D.8, D14): los dos desgloses que montaban el selector se retiraron y el estado de
+// cuenta que los sustituye todavía NO filtra por cierre (su borde no lo acepta: pendiente de servidor,
+// `progress/impl_458-D.md`). Para no perder la red, los casos del selector se conservan sobre la MISMA
+// composición que usaban los desgloses (`SelectorBuscable` + `useCierresDeLaCuenta` +
+// `CIERRE_SELECTOR_TEXTOS`), montada aquí; y el estado de cuenta se mide por R2 (ningún control pide
+// un id).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, within, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import type { ReactNode } from "react";
 
-import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
-import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 
-const { conceptosMock, cierresMock, desgloseTiendaMock, desgloseMensajeroMock } = vi.hoisted(() => ({
+const { conceptosMock, cierresMock, desgloseTiendaMock } = vi.hoisted(() => ({
   conceptosMock: vi.fn(),
   cierresMock: vi.fn(),
   desgloseTiendaMock: vi.fn(),
-  desgloseMensajeroMock: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/wallet-filtros", () => ({
   conceptosConMovimientosAction: (...a: unknown[]) => conceptosMock(...a),
   cierresDeLaCuentaAction: (...a: unknown[]) => cierresMock(...a),
 }));
-vi.mock("@/lib/actions/wallet-tienda", () => ({
-  listarMovimientosDeTiendaAction: (...a: unknown[]) => desgloseTiendaMock(...a),
-  listarMovimientosDeTiendaCompletoAction: vi.fn(),
+vi.mock("@/lib/actions/estado-cuenta", () => ({
+  verEstadoCuentaAction: (...a: unknown[]) => desgloseTiendaMock(...a),
 }));
-vi.mock("@/lib/actions/wallet-mensajero", () => ({
-  listarPagosDeMensajeroAction: (...a: unknown[]) => desgloseMensajeroMock(...a),
-  listarPagosDeMensajeroCompletoAction: vi.fn(),
-}));
+vi.mock("@/lib/actions/como-quedo", () => ({ comoQuedoAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-anulacion", () => ({ anularMovimientoAction: vi.fn() }));
+vi.mock("@/lib/actions/usuarios-por-rol", () => ({ listarAdminTiendas: vi.fn(), listarMensajerosActivos: vi.fn() }));
+vi.mock("@/lib/actions/efecto-movimiento", () => ({ previsualizarMovimientoAction: vi.fn(async () => ({ status: "forbidden" })) }));
 vi.mock("@/lib/actions/liquidacion", () => ({
   previsualizarRepartoMensajeroAction: vi.fn(async () => ({ status: "forbidden" })),
   registrarRepartoMensajeroAction: vi.fn(),
@@ -45,28 +49,40 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: 
 
 import { WalletFiltros } from "@/app/(app)/wallet/_components/WalletFiltros";
 import { MiWalletFiltros } from "@/app/(app)/mi-wallet/_components/MiWalletFiltros";
-import { DesgloseMovimientosTienda } from "@/app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda";
-import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
+import { useState } from "react";
+import { SelectorBuscable } from "@/components/shared/SelectorBuscable";
+import { CIERRE_SELECTOR_TEXTOS } from "@/components/shared/wallet/cierres-selector";
+import { useCierresDeLaCuenta, type CuentaDelSelector } from "@/components/shared/wallet/use-cierres-de-la-cuenta";
+import { EstadoCuentaTienda } from "@/app/(app)/wallet/tiendas/_components/EstadoCuentaTienda";
+import { EstadoCuentaMensajero } from "@/app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero";
+import { estado } from "@/tests/fixtures/estado-cuenta";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 const TIENDA = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const MENSAJERO = "1e2d3c4b-5a69-4788-9900-aabbccddeeff";
 const CIERRE = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
 
-const RESUMEN_TIENDA: SaldoTiendaResumenDTO = {
-  tiendaId: TIENDA,
-  tiendaNombre: "Tania Tienda",
-  saldo: "1000.00",
-  signo: "positivo",
-};
-const RESUMEN_MENSAJERO: CuentaPorPagarResumenDTO = {
-  mensajeroId: MENSAJERO,
-  mensajeroNombre: "Juan Pérez Mora",
-  devengado: "100.00",
-  pagado: "0.00",
-  cuentaPorPagar: "100.00",
-  signo: "positivo",
-};
+/** La composición que montaban los dos desgloses retirados: el selector con la lectura perezosa. */
+function SelectorDeCierre({ cuenta, onElegido }: { cuenta: CuentaDelSelector; onElegido?: (v: string | null) => void }) {
+  const cierres = useCierresDeLaCuenta(cuenta);
+  const [valor, setValor] = useState<string | null>(null);
+  return (
+    <SelectorBuscable
+      id="selector-cierre"
+      etiqueta="Cierre"
+      opciones={cierres.opciones}
+      valor={valor}
+      onCambiar={(v) => {
+        setValor(v);
+        onElegido?.(v);
+      }}
+      onBuscar={cierres.buscar}
+      estado={cierres.estado}
+      hayMas={cierres.hayMas}
+      textos={CIERRE_SELECTOR_TEXTOS}
+    />
+  );
+}
 
 function conSWR(ui: ReactNode) {
   return render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>{ui}</SWRConfig>);
@@ -87,27 +103,7 @@ beforeEach(() => {
     opciones: [{ cierreId: CIERRE, dia: "2026-09-12", hora: "17:05", mensajero: "Juan Pérez Mora", movimientos: 3 }],
     hayMas: true,
   });
-  desgloseTiendaMock.mockResolvedValue({
-    status: "ok",
-    data: {
-      tiendaId: TIENDA,
-      movimientos: [],
-      total: 0,
-      page: 1,
-      pageSize: 20,
-      desglose: { aFavor: "0.00", cargos: "0.00", pagado: "0.00", saldo: "0.00", signo: "cero" },
-    },
-  });
-  desgloseMensajeroMock.mockResolvedValue({
-    status: "ok",
-    data: {
-      movimientos: [],
-      total: 0,
-      page: 1,
-      pageSize: 20,
-      cuenta: { devengado: "0.00", pagado: "0.00", cuentaPorPagar: "0.00", signo: "cero" },
-    },
-  });
+  desgloseTiendaMock.mockResolvedValue({ status: "forbidden" });
 });
 afterEach(cleanup);
 
@@ -175,16 +171,10 @@ describe("TA.3 — `/mi-wallet`: el filtro de concepto de la tienda", () => {
   });
 });
 
-describe("TA.3 + TA.4 — `/wallet/tiendas`: el desglose de una tienda", () => {
-  it("R2: ningún campo de texto pide el cierre; el selector se lee AL ABRIRLO y busca por día o nombre", async () => {
+describe("TA.4 — el selector de cierre de una cuenta (la composición de los desgloses retirados)", () => {
+  it("R2/R10: se lee AL ABRIRLO, rotula por día y mensajero y busca por día o nombre", async () => {
     const user = userEvent.setup();
-    conSWR(<DesgloseMovimientosTienda resumen={RESUMEN_TIENDA} />);
-    await waitFor(() => expect(desgloseTiendaMock).toHaveBeenCalledTimes(1));
-
-    expect(screen.queryByPlaceholderText(/ID|identificador/i)).toBeNull();
-    // Ningún campo de texto: los únicos campos que se escriben son las dos fechas.
-    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
-    // Desplegar la fila no lee los cierres (R32/R33 de la 171: una lectura, la del desglose).
+    conSWR(<SelectorDeCierre cuenta={{ cuenta: "tienda", tiendaId: TIENDA }} />);
     expect(cierresMock).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Cierre: Todos los cierres" }));
@@ -201,66 +191,40 @@ describe("TA.3 + TA.4 — `/wallet/tiendas`: el desglose de una tienda", () => {
     );
   });
 
-  it("R10/R12: el cierre ELEGIDO viaja como `cierreId` al listado y al conteo de conceptos; en pantalla, su rótulo", async () => {
+  it("R10/R12: el valor elegido es el cierre (viaja); en pantalla, su rótulo y ningún uuid", async () => {
     const user = userEvent.setup();
-    conSWR(<DesgloseMovimientosTienda resumen={RESUMEN_TIENDA} />);
-    await waitFor(() => expect(desgloseTiendaMock).toHaveBeenCalledTimes(1));
-
+    const elegido = vi.fn();
+    conSWR(<SelectorDeCierre cuenta={{ cuenta: "mensajero", mensajeroId: MENSAJERO }} onElegido={elegido} />);
     await user.click(screen.getByRole("button", { name: "Cierre: Todos los cierres" }));
+    await waitFor(() => expect(cierresMock).toHaveBeenCalledWith({ cuenta: "mensajero", mensajeroId: MENSAJERO }));
     await user.click(await screen.findByRole("option", { name: /Cierre del 2026-09-12/ }));
-    await waitFor(() =>
-      expect(conceptosMock).toHaveBeenLastCalledWith({ libro: "tienda", tiendaId: TIENDA, cierreId: CIERRE }),
-    );
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
-    await waitFor(() =>
-      expect(desgloseTiendaMock).toHaveBeenLastCalledWith({ tiendaId: TIENDA, page: 1, pageSize: 20, cierreId: CIERRE }),
-    );
+    expect(elegido).toHaveBeenLastCalledWith(CIERRE);
     expect(
       screen.getByRole("button", { name: "Cierre: Cierre del 2026-09-12 · Juan Pérez Mora · 3 movimientos" }),
     ).toBeInTheDocument();
     expect(document.body.textContent ?? "").not.toMatch(UUID);
   });
 
-  it("R13: el concepto se puebla de los conceptos de ESTA tienda, rotulados desde Ordenex", async () => {
-    conSWR(<DesgloseMovimientosTienda resumen={RESUMEN_TIENDA} />);
-    await waitFor(() => expect(conceptosMock).toHaveBeenCalledWith({ libro: "tienda", tiendaId: TIENDA }));
-    const opciones = await opcionesDe(
-      screen.getByRole("combobox", { name: "Filtrar por concepto del desglose de Tania Tienda" }),
-    );
-    expect(opciones).toContain("Ordenex le cobra a la tienda (1)");
-  });
-});
-
-describe("TA.4 — `/wallet/mensajeros`: el desglose de un mensajero", () => {
-  it("R2: sin «Pegá el identificador» ni su ayuda; el cierre se elige de los de ESTE mensajero y viaja al listado", async () => {
-    const user = userEvent.setup();
-    conSWR(<DesglosePagosMensajero resumen={RESUMEN_MENSAJERO} />);
-    await waitFor(() => expect(desgloseMensajeroMock).toHaveBeenCalledTimes(1));
-
-    const texto = document.body.textContent ?? "";
-    expect(texto).not.toMatch(/identificador|pegá|copiá su dirección/i);
-    expect(screen.queryByPlaceholderText(/identificador/i)).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: "Cierre: Todos los cierres" }));
-    await waitFor(() => expect(cierresMock).toHaveBeenCalledWith({ cuenta: "mensajero", mensajeroId: MENSAJERO }));
-    await user.click(await screen.findByRole("option", { name: /Cierre del 2026-09-12/ }));
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
-    await waitFor(() =>
-      expect(desgloseMensajeroMock).toHaveBeenLastCalledWith({
-        mensajeroId: MENSAJERO,
-        page: 1,
-        pageSize: 20,
-        cierreId: CIERRE,
-      }),
-    );
-    expect(document.body.textContent ?? "").not.toMatch(UUID);
-  });
-
   it("si la lectura de cierres falla, el selector lo dice", async () => {
     const user = userEvent.setup();
     cierresMock.mockResolvedValue({ status: "forbidden" });
-    conSWR(<DesglosePagosMensajero resumen={RESUMEN_MENSAJERO} />);
+    conSWR(<SelectorDeCierre cuenta={{ cuenta: "mensajero", mensajeroId: MENSAJERO }} />);
     await user.click(screen.getByRole("button", { name: "Cierre: Todos los cierres" }));
     expect(await screen.findByText("No pudimos cargar los cierres. Probá de nuevo.")).toHaveAttribute("role", "alert");
+  });
+});
+
+describe("458-D — los estados de cuenta de tienda y mensajero: ningún control pide un id (R2)", () => {
+  it.each([
+    ["tienda", () => <EstadoCuentaTienda inicial={estado({ id: TIENDA, nombre: "Tania Tienda" })} puedeRegistrar />],
+    ["mensajero", () => <EstadoCuentaMensajero inicial={estado({ tipo: "mensajero", id: MENSAJERO, nombre: "Juan Pérez Mora" })} puedeRegistrar={false} />],
+  ])("%s: sin campo de texto, sin «ID», «identificador», «pegá» ni «copiá su dirección»; los únicos campos son las fechas", (_c, montar) => {
+    conSWR(montar());
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryByPlaceholderText(/ID|identificador/i)).toBeNull();
+    expect(document.body.textContent ?? "").not.toMatch(/\bID\b|identificador|pegá|copiá su dirección/i);
+    expect(document.body.textContent ?? "").not.toMatch(UUID);
+    expect(screen.getByLabelText("Desde")).toHaveAttribute("type", "date");
+    expect(screen.getByLabelText("Hasta")).toHaveAttribute("type", "date");
   });
 });

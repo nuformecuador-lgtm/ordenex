@@ -29,6 +29,7 @@ export interface CierresDeLaCuenta {
   buscar: (texto: string) => void;
 }
 
+/** @sin-superficie FICHA 458-D (T D.8, pendiente de servidor anotado en `progress/impl_458-D.md`): lo montaban los desgloses de `/wallet/tiendas` y `/wallet/mensajeros`, retirados (D14); el estado de cuenta no filtra por cierre hasta que su borde lo acepte (R10). Esta anotacion CADUCA con eso. */
 export function useCierresDeLaCuenta(cuenta: CuentaDelSelector): CierresDeLaCuenta {
   /** `null` = el selector aun no se abrio: no se lee. */
   const [busqueda, setBusqueda] = useState<string | null>(null);

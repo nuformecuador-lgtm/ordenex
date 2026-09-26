@@ -24,10 +24,6 @@ import { descargarBlob } from "@/components/shared/descargar-blob";
 import { buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
-import type {
-  CuentaPorPagarResumenDTO,
-  PagoMensajeroMovimientoDTO,
-} from "@/lib/types/wallet-mensajero";
 
 const listarMovimientosMock = vi.fn();
 const listarMovimientosCompletoMock = vi.fn();
@@ -51,13 +47,6 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
     listarMisMovimientosCompletoMock(...a),
 }));
 
-const listarPagosDeMensajeroMock = vi.fn();
-const listarPagosDeMensajeroCompletoMock = vi.fn();
-vi.mock("@/lib/actions/wallet-mensajero", () => ({
-  listarPagosDeMensajeroAction: (...a: unknown[]) => listarPagosDeMensajeroMock(...a),
-  listarPagosDeMensajeroCompletoAction: (...a: unknown[]) =>
-    listarPagosDeMensajeroCompletoMock(...a),
-}));
 
 vi.mock("@/lib/actions/wallet-egresos", () => ({
   reversarEgresoAdministrativoAction: vi.fn(),
@@ -112,7 +101,6 @@ vi.mock("@/hooks/useToast", () => ({
 
 import { WalletModule } from "@/app/(app)/wallet/_components/WalletModule";
 import { MiWalletModule } from "@/app/(app)/mi-wallet/_components/MiWalletModule";
-import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
 // Feature 173 (T G.2/T G.3, R61/R62) — el filtro y la descarga del libro de caja.
 import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import {
@@ -158,27 +146,11 @@ function movimientoTienda(i: number): WalletTiendaMovimientoDTO {
   };
 }
 
-function pagoMensajero(i: number): PagoMensajeroMovimientoDTO {
-  return {
-    id: `p-${i}`,
-    mensajeroId: "mensajero-1",
-    tipo: "devengo",
-    categoria: "pago_devengado",
-    monto: `${300 + i}.50`,
-    origenTipo: "cierre_dia",
-    origenId: `o-${i}`,
-    cierreId: `o-${i}`, // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
-    descripcion: `Devengo ${i}`,
-    fechaMovimiento: `2026-07-${String(10 + i).padStart(2, "0")}T14:00:00.000Z`,
-  };
-}
 
 const CAJA_PAGINA = [movimientoCaja(1), movimientoCaja(2)];
 const CAJA_TODOS = Array.from({ length: 5 }, (_, i) => movimientoCaja(i + 1));
 const TIENDA_PAGINA = [movimientoTienda(1)];
 const TIENDA_TODOS = Array.from({ length: 4 }, (_, i) => movimientoTienda(i + 1));
-const PAGOS_PAGINA = [pagoMensajero(1)];
-const PAGOS_TODOS = Array.from({ length: 4 }, (_, i) => pagoMensajero(i + 1));
 
 // Feature 173 (T G.3): la cabecera del libro de caja pasa a las DOS cifras. Este archivo mide
 // la DESCARGA y el FILTRO, no la cabecera; el dato se adapta para que el módulo monte.
@@ -260,20 +232,6 @@ const DESGLOSE_TIENDA = {
   saldo: "500.25",
   signo: "positivo" as const,
 };
-const CUENTA = {
-  devengado: "300.50",
-  pagado: "0.00",
-  cuentaPorPagar: "300.50",
-  signo: "positivo" as const,
-};
-const RESUMEN_MENSAJERO: CuentaPorPagarResumenDTO = {
-  mensajeroId: "mensajero-1",
-  mensajeroNombre: "Ana Mensajera",
-  devengado: "300.50",
-  pagado: "0.00",
-  cuentaPorPagar: "300.50",
-  signo: "positivo",
-};
 
 function envolver(ui: ReactElement) {
   return render(
@@ -330,9 +288,6 @@ function renderMiWallet() {
   );
 }
 
-function renderDesgloseMensajero() {
-  return envolver(<DesglosePagosMensajero resumen={RESUMEN_MENSAJERO} />);
-}
 
 /**
  * Los ledgers: cómo se montan, cómo se llama su control y qué acción usan.
@@ -341,6 +296,11 @@ function renderDesgloseMensajero() {
  * decisión humana— con su `renderMisPagos`, sus dos mocks y su ruta de la lista de módulos de
  * presentación de más abajo (que se lee con `readFileSync`: dejarla habría reventado el archivo
  * ENTERO con ENOENT, no un caso). Quedan TRES.
+ *
+ * FICHA 458-D (T D.8, D14) — y quedan DOS: el desglose por cierre de un mensajero se retiró con su
+ * desplegable. Su sustituto es el estado de cuenta del mensajero, cuya descarga (periodo entero, saldo
+ * corrido, saldo inicial, sin ids) cubre `tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts`
+ * (R32/R3).
  */
 const LEDGERS = [
   {
@@ -358,16 +318,6 @@ const LEDGERS = [
     completo: listarMisMovimientosCompletoMock,
     todos: TIENDA_TODOS,
     pagina: TIENDA_PAGINA,
-  },
-  {
-    titulo: `Desglose de ${RESUMEN_MENSAJERO.mensajeroNombre}`,
-    // El nombre accesible de la TABLA no es el del control: la tabla se llama "Desglose por
-    // cierre de X" desde la 44 y esta feature no le cambia el nombre a ninguna pantalla.
-    tabla: `Desglose por cierre de ${RESUMEN_MENSAJERO.mensajeroNombre}`,
-    montar: renderDesgloseMensajero,
-    completo: listarPagosDeMensajeroCompletoMock,
-    todos: PAGOS_TODOS,
-    pagina: PAGOS_PAGINA,
   },
 ] as const;
 
@@ -387,10 +337,6 @@ function cebarDobles() {
     status: "ok",
     data: { movimientos: TIENDA_PAGINA, total: 60, page: 1, saldo: SALDO_TIENDA },
   });
-  listarPagosDeMensajeroMock.mockResolvedValue({
-    status: "ok",
-    data: { movimientos: PAGOS_PAGINA, total: 60, page: 1, pageSize: 20, cuenta: CUENTA },
-  });
   listarMovimientosCompletoMock.mockResolvedValue({
     status: "ok",
     items: CAJA_TODOS,
@@ -400,11 +346,6 @@ function cebarDobles() {
     status: "ok",
     items: TIENDA_TODOS,
     total: TIENDA_TODOS.length,
-  });
-  listarPagosDeMensajeroCompletoMock.mockResolvedValue({
-    status: "ok",
-    items: PAGOS_TODOS,
-    total: PAGOS_TODOS.length,
   });
   buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
 }

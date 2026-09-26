@@ -162,6 +162,8 @@ export async function listarCuentasPorPagarCompletoAction(
  * `mensajeroId` (REQUERIDO por
  * `listarPagosDeMensajeroSchema`) viaja en el input y el service gatea a maestro. `mensajeroId`
  * faltante/vacio -> validation_error. Montos STRING.
+ *
+ * @sin-superficie FICHA 458-D (T D.8, D14): el desglose por cierre de un mensajero. Su superficie era `DesglosePagosMensajero`, el desplegable de `/wallet/mensajeros`, retirado; lo sustituye el estado de cuenta (`verEstadoCuentaAction`). Retirar la accion es cambio de servidor, anotado como pendiente en `progress/impl_458-D.md`.
  */
 export async function listarPagosDeMensajeroAction(
   input: unknown,
@@ -183,6 +185,8 @@ export async function listarPagosDeMensajeroAction(
  * la descarga. Calcado de `listarPagosDeMensajeroAction`: `mensajeroId` sigue siendo
  * REQUERIDO (ausente -> `validation_error` sin tocar la base) y el guard de acceso total lo
  * pone el service (R17). Ninguna rama devuelve filas junto a un error (R16/R17/R18).
+ *
+ * @sin-superficie FICHA 458-D (T D.8, D14): la descarga del desglose por cierre de un mensajero. Su superficie era la descarga de `DesglosePagosMensajero`, retirado; lo sustituye el estado de cuenta (`verEstadoCuentaAction`). Retirar la accion es cambio de servidor, anotado como pendiente en `progress/impl_458-D.md`.
  */
 export async function listarPagosDeMensajeroCompletoAction(
   input: unknown,
