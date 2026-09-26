@@ -344,3 +344,12 @@ la ayuda nueva.
 
 **Primer gate rápido de los tests:** la guardia `ancla-de-carga` rechazó tres esperas ancladas a un
 conteo en el test nuevo → anclas de contenido (`6c773e73`).
+
+**Verificación del cierre.** `pnpm run build`: `BUILD_EXIT=0` (`progress/build_458E_cierre.log`). Gate
+completo `./init.sh` contra `ordenex_458ec`, log sin `tail` con `INIT_EXIT` dentro:
+1. `progress/gate_458E_cierre_1.log` — `INIT_EXIT=1`: 1 rojo, `tests/integration/db/caja-backfill.test.ts`
+   («R42: simular y comprobar no dejan NI UNA fila», 45 → 43: cuenta la tabla entera mientras otro
+   archivo en paralelo escribe y revierte); ajeno a la pantalla. Aislado 3/3 verde
+   (`progress/rerun_458E_cierre_backfill_aislado.log`).
+2. `progress/gate_458E_cierre.log` — **`INIT_EXIT=0`**: 2313/2313 archivos, 32.257 tests verdes, 26
+   skipped (los de `AnaliticaPage`/`AnaliticaShell`, previos); **`integration/db`: 404 archivos, 0 skipped**.
