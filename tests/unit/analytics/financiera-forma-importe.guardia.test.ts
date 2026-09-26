@@ -67,9 +67,11 @@ const DATOS = {
 const FORMA_ESPERADA: Readonly<Record<string, "solo_bruto" | "bruto_y_neto" | "sin_importes">> = {
   // Q1 ⟨D12⟩ — listas homogeneas de prefijo `ingreso_*`: con el CHECK de la 173 admiten un solo
   // `tipo`, luego `Σ egreso = 0` y el neto no informaria de nada.
-  ingreso_flete: "solo_bruto",
   ingreso_comision_cod: "solo_bruto",
-  ingreso_iva: "solo_bruto",
+  // FICHA 458-B (revision B2, 2026-09-26): ganan el reverso de la anulacion de un cobro por
+  // rechazo; sus listas dejan de ser homogeneas y el neto informa (mismo caso que `egresos`).
+  ingreso_flete: "bruto_y_neto",
+  ingreso_iva: "bruto_y_neto",
   // Q2 ⟨D12⟩ — gana `ingreso_ajuste`: su lista deja de ser homogenea y el neto pasa a significar
   // lo que de verdad salio de caja.
   egresos: "bruto_y_neto",

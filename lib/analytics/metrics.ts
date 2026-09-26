@@ -558,7 +558,7 @@ const CATALOGO = [
     id: "ingreso_flete",
     etiqueta: "Ingreso por flete",
     descripcion:
-      "Ingreso de Ordenex por flete y por flete de devolucion segun el libro append-only de la wallet; se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "Ingreso de Ordenex por flete y por flete de devolucion segun el libro append-only de la wallet; DESDE LA FICHA 458-B la ANULACION de un cobro por rechazo se DESCUENTA de esta cifra: su reverso (egreso_reverso_flete_devolucion) entra en la definicion, de modo que el bruto cuenta los DOS movimientos y el neto es el flete que Ordenex de verdad cobro. Se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -567,7 +567,18 @@ const CATALOGO = [
     granos: ["fecha"],
     fuente: { tipo: "ledger", tablas: ["wallet_movimiento"] },
     alcance: ALCANCE_FINANCIERA,
-    definicion: { categorias: ["ingreso_flete", "ingreso_flete_devolucion"] },
+    definicion: {
+      categorias: [
+        "ingreso_flete",
+        "ingreso_flete_devolucion",
+        // FICHA 458-B (revision B2, decision del leader 2026-09-26): el reverso del flete que emite
+        // la ANULACION de un cobro por rechazo. Mismo patron que `ingreso_ajuste` en `egresos`
+        // (⟨D12⟩ de la 183): la lista deja de ser homogenea de prefijo y la metrica publica NETO
+        // (`bruto_y_neto`), que es lo que D7 de la 458 protege —flete e IVA por separado, para que
+        // la analitica cuadre con la ganancia—. Sin esta linea, anular dejaba el flete inflado.
+        "egreso_reverso_flete_devolucion",
+      ],
+    },
   },
   {
     id: "ingreso_comision_cod",
@@ -588,7 +599,7 @@ const CATALOGO = [
     id: "ingreso_iva",
     etiqueta: "Ingreso por IVA",
     descripcion:
-      "IVA facturado sobre flete, flete de devolucion y comision COD segun el libro append-only de la wallet; se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "IVA facturado sobre flete, flete de devolucion y comision COD segun el libro append-only de la wallet; DESDE LA FICHA 458-B la ANULACION de un cobro por rechazo se DESCUENTA de esta cifra: el reverso de su IVA (egreso_reverso_iva_flete_devolucion) entra en la definicion, de modo que el bruto cuenta los DOS movimientos y el neto es el IVA que de verdad se facturo. Se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -598,7 +609,14 @@ const CATALOGO = [
     fuente: { tipo: "ledger", tablas: ["wallet_movimiento"] },
     alcance: ALCANCE_FINANCIERA,
     definicion: {
-      categorias: ["ingreso_iva_flete", "ingreso_iva_flete_devolucion", "ingreso_iva_comision_cod"],
+      categorias: [
+        "ingreso_iva_flete",
+        "ingreso_iva_flete_devolucion",
+        "ingreso_iva_comision_cod",
+        // FICHA 458-B (revision B2): el reverso del IVA del flete por rechazo. Mismo motivo que en
+        // `ingreso_flete`: la metrica pasa a publicar NETO (`bruto_y_neto`).
+        "egreso_reverso_iva_flete_devolucion",
+      ],
     },
   },
   {

@@ -71,9 +71,12 @@ describe("R51 · las tres metricas de ingreso de Ordenex no ven el dinero de ter
 
   it("y siguen declarando exactamente las categorias con las que la 127 las publico", () => {
     // La otra mitad: "no gano ninguna de terceros" es compatible con "perdio una propia".
+    // FICHA 458-B (revision B2): `ingreso_flete` e `ingreso_iva` ganan, AL FINAL, el reverso que
+    // emite la anulacion de un cobro por rechazo (propio, no terceros: el caso de arriba sigue).
     expect(getMetrica("ingreso_flete")?.definicion.categorias).toEqual([
       "ingreso_flete",
       "ingreso_flete_devolucion",
+      "egreso_reverso_flete_devolucion",
     ]);
     expect(getMetrica("ingreso_comision_cod")?.definicion.categorias).toEqual([
       "ingreso_comision_cod",
@@ -82,6 +85,7 @@ describe("R51 · las tres metricas de ingreso de Ordenex no ven el dinero de ter
       "ingreso_iva_flete",
       "ingreso_iva_flete_devolucion",
       "ingreso_iva_comision_cod",
+      "egreso_reverso_iva_flete_devolucion",
     ]);
   });
 

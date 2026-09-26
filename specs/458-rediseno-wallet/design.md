@@ -203,13 +203,27 @@ ganancia −M; «De las tiendas» +M; saldo de la tienda +M. Se tocan: `WALLET_M
 `WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED`, `WALLET_EGRESO_NOMBRADO_SEED`, `NATURALEZA_POR_CATEGORIA`,
 `LIQUIDEZ_POR_CATEGORIA`, `TIPO_POR_CATEGORIA_TIENDA`, `CONTRAPARTIDA_EN_CAJA`, `CUBETA_POR_CATEGORIA`,
 `FUENTE_CAJA`/`FUENTE_TIENDA`, `metrics.ts` (`dinero_en_caja` y `ganancia_ordenex` +2; `egresos` **no**;
-`cuenta_por_pagar_tienda` +2 créditos), `finanzas-diarias.ts` (salidas solo efectivo: ya lo hace la 461),
+`cuenta_por_pagar_tienda` +2 créditos; **`ingreso_flete` +`egreso_reverso_flete_devolucion` e
+`ingreso_iva` +`egreso_reverso_iva_flete_devolucion`**, ver abajo), `finanzas-diarias.ts` (salidas solo efectivo: ya lo hace la 461),
 `CATEGORIA_LABEL` («Flete por rechazo cobrado a la tienda anulado», «IVA del flete por rechazo cobrado a
 la tienda anulado»), `CATEGORIA_TIENDA_LABEL` («Cobro por rechazo anulado», «IVA del cobro por rechazo
 anulado»), `CATEGORIA_MI_WALLET_LABEL` («Ordenex anuló el flete por rechazo y te lo devolvió», «Ordenex
 anuló el IVA del flete por rechazo y te lo devolvió»), `ESCRIBEN_EN_LA_TIENDA`, conteos de las guardias
 (`caja-composicion-exhaustiva` nombrados 3→5; `metrics-caja-naturaleza` 23→25, 16→18;
 `caja-clasificacion-459` (4) cargos +2). Los literales se escriben a mano y se anotan en el informe.
+
+**Analítica (añadido en el cierre de la 458-B, revisión B2, decisión del leader 2026-09-26):** la
+anulación del cobro por rechazo DESCUENTA en `/analitica`. «Ingreso por flete» e «Ingreso por IVA»
+declaran cada una SU reverso, con el mismo patrón que `ingreso_ajuste` en `egresos` (⟨D12⟩ de la 183):
+la lista deja de ser homogénea de prefijo y la métrica pasa de `solo_bruto` a `bruto_y_neto`
+(`AnaliticaFinancieraService`: `cajaConNeto`). El NETO es lo cobrado de verdad (anular deja flete e
+IVA como antes del cobro); el BRUTO es volumen movido y sube (cobro + reverso). `ingreso_comision_cod`
+sigue `solo_bruto` (ningún reverso suyo existe). Así se cumple D7: flete e IVA por separado y la
+ganancia (−M) cuadra con lo que bajan las dos. Revisadas las demás métricas y descargas: `dinero_en_caja`,
+`ganancia_ordenex` y `cuenta_por_pagar_tienda` ya los incluían; `egresos`, `cod_recaudado`,
+`cuenta_por_pagar_mensajero` y `conciliacion_cierres` no los nombran por definición (no son salida de
+caja, ni recaudo, ni del mensajero, ni de un cierre); la descarga CSV de `/analitica` sale del mismo
+servicio y ramifica por `forma`. Test: `tests/integration/db/analitica-anulacion-rechazo-458.test.ts`.
 
 El reverso de la indemnización (D8) NO añade concepto: `ingreso_ajuste` con `origen_tipo =
 orden_incidente`, `origen_id = incidenteId` (idempotente por `wallet_movimiento_origen_categoria_uq`).

@@ -585,9 +585,12 @@ const LIBRO_R15: Partial<DatosFinancieros> = {
  *   ganancia = (1000+130) − 400, sin el dinero de terceros          =  730.00.
  */
 const TOTALES_ESPERADOS: Readonly<Record<string, ImporteAnalitico>> = {
-  ingreso_flete: { forma: "solo_bruto", bruto: "9730.00", moneda: MONEDA },
+  // FICHA 458-B (revision B2): `ingreso_flete` e `ingreso_iva` publican neto (ganan el reverso de la
+  // anulacion del cobro por rechazo). El doble no filtra por categoria, asi que su neto es el
+  // mismo Σ ingreso − Σ egreso de `egresos` sobre el libro entero: 2930.00.
+  ingreso_flete: { forma: "bruto_y_neto", bruto: "9730.00", neto: "2930.00", moneda: MONEDA },
   ingreso_comision_cod: { forma: "solo_bruto", bruto: "9730.00", moneda: MONEDA },
-  ingreso_iva: { forma: "solo_bruto", bruto: "9730.00", moneda: MONEDA },
+  ingreso_iva: { forma: "bruto_y_neto", bruto: "9730.00", neto: "2930.00", moneda: MONEDA },
   egresos: { forma: "bruto_y_neto", bruto: "9730.00", neto: "2930.00", moneda: MONEDA },
   dinero_en_caja: { forma: "bruto_y_neto", bruto: "9730.00", neto: "1800.00", moneda: MONEDA },
   ganancia_ordenex: { forma: "bruto_y_neto", bruto: "9730.00", neto: "730.00", moneda: MONEDA },
@@ -735,9 +738,11 @@ describe("el importe de cada fila sale de la misma funcion que el total de su vi
       .toBeGreaterThan(50);
   });
 
-  it("R27 · `ingreso_flete` publica TODA su serie como solo_bruto", async () => {
-    const cubos = cubosDe("ingreso_flete", RANGO_CINCO_DIAS).length;
-    const vista = await vistaUnicaDe(libroDenso(cubos), "ingreso_flete", RANGO_CINCO_DIAS);
+  // FICHA 458-B (revision B2): era `ingreso_flete`, que ahora publica neto; la unica lista
+  // homogenea que queda es `ingreso_comision_cod`.
+  it("R27 · `ingreso_comision_cod` publica TODA su serie como solo_bruto", async () => {
+    const cubos = cubosDe("ingreso_comision_cod", RANGO_CINCO_DIAS).length;
+    const vista = await vistaUnicaDe(libroDenso(cubos), "ingreso_comision_cod", RANGO_CINCO_DIAS);
     expect(vista.total.forma).toBe("solo_bruto");
     expect(vista.filas.map((f) => f.importe.forma)).toEqual(Array(cubos).fill("solo_bruto"));
     // Y ni una fila lleva `neto` escondido en el objeto serializado.

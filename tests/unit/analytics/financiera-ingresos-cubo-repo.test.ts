@@ -167,7 +167,12 @@ describe("las categorias de la consulta por cubo salen del catalogo, no de un ar
 
     const { valores } = sqlEmitido(fake);
     expect(valores.at(-1)).toEqual([...(consulta.metrica.definicion.categorias ?? [])]);
-    expect(valores.at(-1)).toEqual(["ingreso_flete", "ingreso_flete_devolucion"]);
+    // FICHA 458-B (revision B2): + el reverso de la anulacion del cobro por rechazo.
+    expect(valores.at(-1)).toEqual([
+      "ingreso_flete",
+      "ingreso_flete_devolucion",
+      "egreso_reverso_flete_devolucion",
+    ]);
   });
 
   it("alterar `definicion.categorias` en memoria CAMBIA el parametro emitido", async () => {
