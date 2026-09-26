@@ -7,16 +7,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 
-import { CATEGORIA_OPTIONS, TIPO_OPTIONS } from "./wallet-labels";
+import { CONCEPTOS_FILTRO_AVISO, opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
+import { useConceptosConMovimientos } from "@/components/shared/wallet/use-conceptos-con-movimientos";
+import type { WalletMovimientoTipo } from "@/lib/types/wallet";
 
-// Feature 42 (T12, R20) — filtros del libro: tipo, categoría (poblada desde el SEED) y
-// rango de fechas (desde/hasta). Mantiene un BORRADOR local; al pulsar "Aplicar" emite
-// los filtros al módulo, que recarga libro + cifras de la caja por Server Action (la
-// cabecera refleja el conjunto filtrado, R20). "Limpiar" resetea a sin filtros.
+import { CATEGORIA_LABEL, CATEGORIA_TODAS_OPTION, TIPO_OPTIONS } from "./wallet-labels";
+
+// Feature 42 (T12, R20) — filtros del libro: tipo, categoría y rango de fechas (desde/hasta).
+// Mantiene un BORRADOR local; al pulsar "Aplicar" emite los filtros al módulo, que recarga
+// libro + cifras de la caja por Server Action (la cabecera refleja el conjunto filtrado, R20).
+// "Limpiar" resetea a sin filtros.
 //
-// Feature 173 (T G.2, R61): este `Select` de categoría se puebla del SEED desde la 42, así
-// que las dos categorías de tesorería entraron SOLAS. No hay una línea que las nombre aquí
-// —y no debe haberla—: lo que hay es un test que afirma que la lista sigue siendo el SEED.
+// Ficha 458-A (TA.3, R13–R15): la categoría ofrece SOLO los conceptos con movimientos en el
+// periodo y el tipo del borrador, cada uno con su número, leídos del servidor
+// (`conceptosConMovimientosAction`). Ninguna categoría se nombra aquí: la lista es la del
+// servidor, con los rótulos de `CATEGORIA_LABEL`. La elegida se conserva con 0 si el periodo
+// cambia y se queda sin movimientos (R15).
 //
 // Feature 200 (tanda 3) — de BLOQUE a BARRA. Antes eran cuatro campos con su rótulo encima
 // y dos botones en `flex-wrap items-end gap-4`: dos alturas de pantalla para cuatro
@@ -75,6 +81,20 @@ export function WalletFiltros({ onAplicar, onLimpiar, disabled = false }: Wallet
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
+  // R13: los conceptos del periodo y del tipo que se están eligiendo (el borrador), no del SEED.
+  const conceptos = useConceptosConMovimientos({
+    libro: "caja",
+    tipo: (draft.tipo || undefined) as WalletMovimientoTipo | undefined,
+    desde: draft.desde || undefined,
+    hasta: draft.hasta || undefined,
+  });
+  const opcionesCategoria = opcionesDeConceptos(
+    conceptos.conceptos,
+    CATEGORIA_LABEL,
+    draft.categoria,
+    CATEGORIA_TODAS_OPTION,
+  );
+
   return (
     <form
       aria-label="Filtros del libro"
@@ -115,11 +135,14 @@ export function WalletFiltros({ onAplicar, onLimpiar, disabled = false }: Wallet
         aria-label="Filtrar por categoría"
         value={draft.categoria}
         onValueChange={(v) => set("categoria", v)}
-        options={CATEGORIA_OPTIONS}
-        placeholder="Todas las categorías"
+        options={opcionesCategoria}
+        placeholder={CATEGORIA_TODAS_OPTION.label}
         disabled={disabled}
         className="h-9 w-full sm:w-56"
       />
+      {conceptos.error ? (
+        <span className="text-xs text-destructive">{CONCEPTOS_FILTRO_AVISO.error}</span>
+      ) : null}
 
       {/* Las dos fechas NO tienen placeholder que las nombre (`input[type=date]` pinta su
           propio `dd/mm/aaaa`), así que conservan un rótulo CORTO y visible pegado al campo.

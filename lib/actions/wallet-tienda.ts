@@ -10,6 +10,14 @@ import { CajaCobroTiendaFeedService } from "@/lib/services/CajaCobroTiendaFeedSe
 import { CobroTiendaService } from "@/lib/services/CobroTiendaService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { WalletTiendaService } from "@/lib/services/WalletTiendaService";
+import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleRepository";
+import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
+import {
+  origenEnItems,
+  origenEnPagina,
+  type ConOrigenEnPagina,
+} from "@/lib/services/origen-en-resultado";
+import type { IOrigenLegibleService } from "@/lib/interfaces/services/IOrigenLegibleService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -63,7 +71,8 @@ export type VerMiSaldoActionResult =
   | { status: "unauthenticated" };
 
 export type ListarMisMovimientosActionResult =
-  | ListarMisMovimientosServiceResult
+  // Ficha 458-A (TA.2, R5–R8): cada fila baja con su origen legible (`origen`).
+  | ConOrigenEnPagina<ListarMisMovimientosServiceResult>
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -92,7 +101,7 @@ export type ListarSaldosTiendasPaginadoActionResult =
 // Feature 171 — desglose de UNA tienda elegida. `forbidden` lo decide el servicio (dominio);
 // `unauthenticated` y `validation_error` los decide este borde, antes de llamarlo.
 export type ListarMovimientosDeTiendaActionResult =
-  | ListarMovimientosDeTiendaServiceResult
+  | ConOrigenEnPagina<ListarMovimientosDeTiendaServiceResult>
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -167,6 +176,13 @@ function buildCobroTiendaService(): ICobroTiendaService {
 export interface WalletTiendaDeps {
   service?: IWalletTiendaService;
   getActor?: () => Promise<Actor | null>;
+  /** Ficha 458-A (TA.2): el origen legible de las filas; en produccion, el real sobre Prisma. */
+  origenes?: IOrigenLegibleService;
+}
+
+/** Ficha 458-A (TA.2) — composition root del origen legible (una consulta por tipo presente). */
+function buildOrigenes(): IOrigenLegibleService {
+  return new OrigenLegibleService(new OrigenLegibleRepository(getPrismaClient()));
 }
 
 /** Las dependencias del cobro, inyectables en test igual que las del ledger. */
@@ -231,7 +247,8 @@ export async function listarMisMovimientosAction(
     if (!actor) throw new UnauthenticatedError();
     const data = listarMovimientosTiendaSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarMisMovimientos(data, actor);
+    const r = await service.listarMisMovimientos(data, actor);
+    return origenEnPagina(deps.origenes ?? buildOrigenes(), "tienda", r, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }
@@ -251,7 +268,8 @@ export async function listarMisMovimientosCompletoAction(
     if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
     const data = listarMovimientosTiendaCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarMisMovimientosCompleto(data, actor);
+    const r = await service.listarMisMovimientosCompleto(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "tienda", r, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }
@@ -385,7 +403,8 @@ export async function listarMovimientosDeTiendaAction(
     if (!actor) throw new UnauthenticatedError(); // R29: antes del schema y del service
     const data = listarMovimientosDeTiendaSchema.parse(input); // R25: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarMovimientosDeTienda(data, actor);
+    const r = await service.listarMovimientosDeTienda(data, actor);
+    return origenEnPagina(deps.origenes ?? buildOrigenes(), "tienda", r, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }
@@ -405,7 +424,8 @@ export async function listarMovimientosDeTiendaCompletoAction(
     if (!actor) throw new UnauthenticatedError(); // R29: antes de tocar el service
     const data = listarMovimientosDeTiendaCompletoSchema.parse(input); // R25
     const service = deps.service ?? buildService();
-    return service.listarMovimientosDeTiendaCompleto(data, actor);
+    const r = await service.listarMovimientosDeTiendaCompleto(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "tienda", r, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

@@ -6,6 +6,7 @@ import {
   type Column,
   type DescargaFilasResult,
 } from "@/components/shared/DataTable";
+import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 
 import { DetalleMiMovimientoCierre } from "./DetalleMiMovimientoCierre";
@@ -16,8 +17,8 @@ import { COLUMNAS_DESCARGA_MI_WALLET } from "./mi-wallet-descarga-columnas";
 import {
   CATEGORIA_MI_WALLET_LABEL,
   TIPO_TIENDA_LABEL,
+  ORIGEN_TIENDA_LABEL,
   money,
-  origenLabel,
 } from "./mi-wallet-labels";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
@@ -35,11 +36,6 @@ function TipoBadge({ tipo }: { tipo: WalletTiendaMovimientoDTO["tipo"] }) {
   );
 }
 
-/** Origen legible: tipo de origen + descripcion si la hay. */
-function origenTexto(m: WalletTiendaMovimientoDTO): string {
-  const base = origenLabel(m.origenTipo);
-  return m.descripcion ? `${base} · ${m.descripcion}` : base;
-}
 
 const COLUMNS: Column<WalletTiendaMovimientoDTO>[] = [
   {
@@ -66,7 +62,8 @@ const COLUMNS: Column<WalletTiendaMovimientoDTO>[] = [
   {
     id: "origen",
     value: "Origen",
-    render: (m) => origenTexto(m),
+    // 458-A (R5–R8): el origen con su entidad, leido desde la tienda (sin el mensajero).
+    render: (m) => <OrigenMovimiento fila={m} rotulos={ORIGEN_TIENDA_LABEL} />,
   },
 ];
 

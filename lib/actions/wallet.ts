@@ -12,6 +12,14 @@ import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiend
 import { AjusteCajaService } from "@/lib/services/AjusteCajaService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { WalletService } from "@/lib/services/WalletService";
+import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleRepository";
+import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
+import {
+  origenEnItems,
+  origenEnPagina,
+  type ConOrigenEnPagina,
+} from "@/lib/services/origen-en-resultado";
+import type { IOrigenLegibleService } from "@/lib/interfaces/services/IOrigenLegibleService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -51,7 +59,8 @@ import type { AppErrorShape } from "@/lib/errors";
 // exponen montos como STRING (R21/R25); el cliente nunca recibe Prisma.Decimal.
 
 export type ListarMovimientosActionResult =
-  | ListarMovimientosServiceResult
+  // Ficha 458-A (TA.2, R5–R8): cada fila baja con su origen legible (`origen`).
+  | ConOrigenEnPagina<ListarMovimientosServiceResult>
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -62,7 +71,7 @@ export type ListarMovimientosActionResult =
  * resuelven aqui. **Ninguna rama de error viaja con movimientos** (R32/R38).
  */
 export type ListarMovimientosDeFilaActionResult =
-  | ListarMovimientosDeFilaServiceResult
+  | ConOrigenEnPagina<ListarMovimientosDeFilaServiceResult>
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -146,6 +155,13 @@ function buildDetalleService(): IDetalleMovimientoService {
 export interface WalletDeps {
   service?: IWalletService;
   getActor?: () => Promise<Actor | null>;
+  /** Ficha 458-A (TA.2): el origen legible de las filas; en produccion, el real sobre Prisma. */
+  origenes?: IOrigenLegibleService;
+}
+
+/** Ficha 458-A (TA.2) — composition root del origen legible (una consulta por tipo presente). */
+function buildOrigenes(): IOrigenLegibleService {
+  return new OrigenLegibleService(new OrigenLegibleRepository(getPrismaClient()));
 }
 
 /** Ficha 461 (R69): las dependencias de la anulacion de una correccion, inyectables en test. */
@@ -186,7 +202,8 @@ export async function listarMovimientosAction(
     if (!actor) throw new UnauthenticatedError(); // R19: antes de tocar el service
     const data = listarMovimientosSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarMovimientos(data, actor);
+    const r = await service.listarMovimientos(data, actor);
+    return origenEnPagina(deps.origenes ?? buildOrigenes(), "caja", r, actor);
   });
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }
@@ -206,7 +223,8 @@ export async function listarMovimientosCompletoAction(
     if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
     const data = listarMovimientosCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarMovimientosCompleto(data, actor);
+    const r = await service.listarMovimientosCompleto(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
   });
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }
@@ -235,7 +253,8 @@ export async function listarMovimientosDeFilaAction(
     if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
     const data = listarMovimientosDeFilaSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarMovimientosDeFila(data, actor);
+    const r = await service.listarMovimientosDeFila(data, actor);
+    return origenEnPagina(deps.origenes ?? buildOrigenes(), "caja", r, actor);
   });
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }

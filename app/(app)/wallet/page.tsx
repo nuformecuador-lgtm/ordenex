@@ -107,7 +107,7 @@ export default async function WalletPage() {
       title="Wallet"
       // R59: la descripción tampoco puede rotular ninguna cifra con la palabra que mentía.
       // Nombra las DOS que la pantalla enseña, con los mismos nombres que la tarjeta.
-      description="Caja principal de Ordenex: libro de movimientos, dinero en caja y ganancia de Ordenex"
+      description="Caja principal de Ordenex: libro de movimientos, cifras de la caja y ganancia de Ordenex"
     >
       <WalletModule
         movimientos={movimientosResult.data.movimientos}

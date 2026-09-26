@@ -11,6 +11,7 @@ import type { EstadoDocumentoCaja } from "@/lib/interfaces/services/IWalletServi
 import { esP2002, textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
 import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
+import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 
 type CobroTiendaAnulacionPrismaClient = Pick<PrismaClient, "cobroTiendaAnulacion" | "$queryRaw">;
 
@@ -49,7 +50,7 @@ export class CobroTiendaAnulacionRepository implements ICobroTiendaAnulacionRepo
       });
       const cobro = await tx.walletTiendaMovimiento.findUnique({
         where: { id: input.cobroId },
-        select: { monto: true, tienda: { select: { nombre: true } } },
+        select: { monto: true, tienda: { select: CUENTA_USUARIO_SELECT } },
       });
       const actor = await resolverActorCongelado(tx, input.anuladoPor);
       await appendAccion(tx, [
@@ -57,9 +58,11 @@ export class CobroTiendaAnulacionRepository implements ICobroTiendaAnulacionRepo
           accion: "cobro_tienda_anulado",
           entidadTipo: "wallet_tienda_movimiento",
           entidadId: input.cobroId,
-          // La MISMA etiqueta que la fila del registro del cobro (381): el nombre de la tienda.
+          // La MISMA etiqueta que la fila del registro del cobro (381): el nombre de la tienda con
+          // `etiquetaDeCuenta`, como el registro (458-A, R33). Si la relectura no resuelve, `null`
+          // y la fila sale «(sin identificar)», igual que el registro.
           entidadEtiqueta: etiquetaDeEntidad("wallet_tienda_movimiento", {
-            tiendaNombre: cobro?.tienda.nombre ?? null,
+            tiendaNombre: cobro == null ? null : etiquetaDeCuenta(cobro.tienda),
           }),
           monto: cobro?.monto ?? null,
           ...actor,

@@ -5,16 +5,10 @@ import type {
   ModoComposicionCaja,
   NaturalezaMovimiento,
   TipoEgresoManual,
-  WalletMovimientoCategoria,
   WalletMovimientoDTO,
   WalletMovimientoTipo,
-  WalletOrigenTipo,
 } from "@/lib/types/wallet";
-import {
-  TIPO_EGRESO_MANUAL_SEED,
-  WALLET_MOVIMIENTO_CATEGORIA_SEED,
-  WALLET_MOVIMIENTO_TIPO_SEED,
-} from "@/lib/types/wallet";
+import { TIPO_EGRESO_MANUAL_SEED, WALLET_MOVIMIENTO_TIPO_SEED } from "@/lib/types/wallet";
 import type { MotivoNoAnulable } from "@/lib/types/wallet-tienda";
 import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
 import { proximoCobro, type PeriodicidadUnidad } from "@/lib/utils/periodicidad";
@@ -46,54 +40,7 @@ export const TIPO_LABEL: Record<WalletMovimientoTipo, string> = {
   egreso: "Egreso",
 };
 
-/**
- * Etiqueta legible de cada categoría (concepto) del libro.
- *
- * Ficha 461 (HD3, design §7.2, R42) — TODOS los conceptos se dicen DESDE ORDENEX y diciendo QUIÉN
- * LE PAGA A QUIÉN: «Ordenex le paga a una tienda», «Flete cobrado a la tienda», «Ordenex le cobra
- * a una tienda». Sin siglas («contra-entrega», no «COD»; P9) y sin jerga («corrección», no
- * «ajuste»). Los nombres que estos sustituyen quedan RETIRADOS (design §7.9) y una guardia
- * (`tests/unit/guards/nombres-wallet-461.guardia.test.ts`) impide que vuelvan. `Record` total:
- * una categoría nueva no compila hasta que alguien decida cómo se llama en pantalla.
- *
- * Los mismos textos rotulan la tabla, el filtro por concepto y la descarga del libro (R42): salen
- * de aquí y de ningún otro sitio.
- */
-export const CATEGORIA_LABEL: Record<WalletMovimientoCategoria, string> = {
-  // Los seis cargos del cierre dicen a quién se le cobran.
-  ingreso_flete: "Flete cobrado a la tienda",
-  ingreso_flete_devolucion: "Flete por rechazo cobrado a la tienda",
-  ingreso_comision_cod: "Comisión de contra-entrega cobrada a la tienda",
-  ingreso_iva_flete: "IVA del flete cobrado a la tienda",
-  ingreso_iva_flete_devolucion: "IVA del flete por rechazo cobrado a la tienda",
-  ingreso_iva_comision_cod: "IVA de la comisión cobrado a la tienda",
-  // El cobro de Ordenex a una tienda (cargo, liquidez «cargo») y su reverso.
-  ingreso_cobro_tienda: "Ordenex le cobra a una tienda",
-  egreso_reverso_cobro_tienda: "Cobro a una tienda anulado",
-  // El dinero de las tiendas que pasa por la caja.
-  ingreso_cod_recaudado: "Contra-entrega cobrado a los clientes de la tienda",
-  egreso_pago_tienda: "Ordenex le paga a una tienda",
-  ingreso_reverso_pago_tienda: "Pago a una tienda anulado",
-  egreso_pago_por_cuenta_tienda: "Ordenex paga un gasto de una tienda",
-  ingreso_reverso_pago_por_cuenta_tienda: "Pago de un gasto de una tienda anulado",
-  // Ficha 457 (design §2, DH7): el pago de una tienda a Ordenex (nombre reservado por la 461 §7.8,
-  // tomado aqui) y su anulacion.
-  ingreso_abono_tienda: "Una tienda le paga a Ordenex",
-  egreso_reverso_abono_tienda: "Pago de una tienda a Ordenex anulado",
-  // Lo que Ordenex gasta.
-  egreso_pago_mensajero: "Ordenex le paga a un mensajero",
-  egreso_sueldo: "Sueldo",
-  egreso_gasto_variable: "Gasto de Ordenex",
-  egreso_gasto_fijo: "Gasto fijo de Ordenex",
-  // Categoría RESERVADA, sin escritor en el árbol: si aparece, alguien empezó a escribirla.
-  egreso_gasto: "Otro gasto de Ordenex",
-  egreso_indemnizacion: "Indemnización que Ordenex paga por un incidente",
-  // Las correcciones de caja (antes «ajustes») y el capital de Ordenex.
-  ingreso_ajuste: "Corrección de caja (suma)",
-  egreso_ajuste: "Corrección de caja (resta)",
-  ingreso_aporte_capital: "Aporte de dinero a la caja",
-  egreso_reverso_aporte_capital: "Aporte de dinero a la caja anulado",
-};
+export { CATEGORIA_LABEL } from "@/lib/constants/wallet-rotulos";
 
 // ── Feature 173 (T G.1/T G.2, design §8) — las DOS cifras de la caja ──
 
@@ -321,37 +268,7 @@ export const DUENO_LABEL: Record<NaturalezaMovimiento, string> = {
   capital: "Ordenex (capital)",
 };
 
-/**
- * Etiqueta legible del origen de un movimiento.
- *
- * Ficha 461 (design §7.3, R42): los origenes tambien se dicen desde Ordenex y diciendo quien le paga a
- * quien («Pago de Ordenex a una tienda»); los rotulos de una sola palabra de antes quedan retirados
- * porque no decian que fue una PERSONA quien lo registro. `ORIGEN_TIENDA_LABEL` (el libro de la tienda) usa los MISMOS
- * textos para los origenes que comparte. `Record` total: un origen nuevo no compila sin su nombre.
- */
-export const ORIGEN_LABEL: Record<WalletOrigenTipo, string> = {
-  cierre_dia: "Cierre del día",
-  gestion_orden: "Gestión de orden",
-  manual: "Registrado a mano",
-  pago_tienda: "Pago de Ordenex a una tienda",
-  pago_mensajero: "Pago de Ordenex a un mensajero",
-  gasto: "Gasto o sueldo registrado a mano",
-  // Feature 158/R37: origen del egreso de indemnizacion del camino del ADMIN. Sigue la forma
-  // del hermano `gestion_orden` ("Gestión de orden"): nombra la ENTIDAD que origina el
-  // movimiento, no la accion.
-  orden_incidente: "Incidente de orden",
-  // Feature 293 (T1.6, R20/R34): origen del egreso de caja del premio del ranking y de su
-  // reverso — la FILA DEL PODIO del dia congelado.
-  ranking_snapshot_fila: "Premio del ranking",
-  pago_por_cuenta_tienda: "Pago de un gasto de una tienda",
-  aporte_capital: "Aporte de dinero a la caja",
-  cobro_manual_reclasificado: "Cobro reclasificado como pago de un gasto de la tienda",
-  // El cargo del cobro y su reverso (servicio) y la linea completada por la migracion de datos (R37).
-  cobro_tienda: "Cobro de Ordenex a una tienda",
-  cobro_tienda_completado: "Cobro de Ordenex a una tienda (línea de caja completada al corregir)",
-  // Ficha 457 (design §2): el documento del pago de una tienda a Ordenex.
-  abono_tienda: "Pago de una tienda a Ordenex",
-};
+export { ORIGEN_LABEL } from "@/lib/constants/wallet-rotulos";
 
 // ── Ficha 459 (design §9.4, R66/R67) — las acciones del libro sobre un DOCUMENTO ──
 //
@@ -449,14 +366,12 @@ export const TIPO_OPTIONS = [
   })),
 ];
 
-/** Opciones del `Select` de categoría, pobladas desde el SEED (con opción "todas"). */
-export const CATEGORIA_OPTIONS = [
-  { value: "", label: "Todas las categorías" },
-  ...WALLET_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({
-    value: categoria,
-    label: CATEGORIA_LABEL[categoria],
-  })),
-];
+/**
+ * La opción «todas» del `Select` de categoría del libro. El resto de opciones ya NO sale del
+ * catálogo completo (458-A, R13/R14): son los conceptos con movimientos del periodo, que lee
+ * `WalletFiltros` del servidor y rotula con `CATEGORIA_LABEL` (`opcionesDeConceptos`).
+ */
+export const CATEGORIA_TODAS_OPTION = { value: "", label: "Todas las categorías" } as const;
 
 // ── Feature 45 — egresos administrativos (manual) ──
 

@@ -3,9 +3,14 @@ titulo: Wallet · Tiendas
 modulo: wallet
 pantalla: /wallet/tiendas
 roles: [maestro, admin]
-actualizado: 2026-09-25
+actualizado: 2026-09-26
 fuentes:
   - app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx
+  - components/shared/SelectorBuscable.tsx
+  - components/shared/wallet/cierres-selector.ts
+  - components/shared/wallet/conceptos-filtro.ts
+  - components/shared/wallet/OrigenMovimiento.tsx
+  - lib/services/OrigenLegibleService.ts
   - app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts
   - app/(app)/mi-wallet/_components/mi-wallet-labels.ts
   - lib/utils/descripcion-pago-por-cuenta.ts
@@ -51,6 +56,25 @@ Arriba del desglose, cuatro cifras: **A favor de la tienda** (contra-entrega cob
 favor, pagos de la tienda a Ordenex y devoluciones por anulaciones), **Cargos de Ordenex** (fletes,
 comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados), **Pagado a la tienda** (lo que Ordenex le pagó a la tienda o pagó por ella) y
 **Saldo a favor**.
+
+## De dónde viene cada movimiento
+
+La columna **Origen** dice qué produjo cada movimiento, con nombre: «Cierre del día · 2026-09-12 ·
+Juan Pérez Mora», «Gestión de orden · cobro por rechazo · guía 4321», «Pago de Ordenex a una tienda ·
+Tania Tienda · 2026-09-12 · SINPE». Cuando ese origen tiene pantalla propia, al lado aparece **Ver**,
+que te lleva al cierre, a la orden o al ranking de ese día. La descarga lleva el mismo texto.
+
+## Filtrar el desglose
+
+- **Cierre**: se elige de la lista de cierres **de esta tienda** que tienen movimientos, cada uno con
+  su día, el mensajero y cuántos movimientos trajo. Podés buscar **por día (2026-09-12) o por el nombre
+  del mensajero**. Si la lista dice «Mostramos los cierres más recientes», buscá para ver los demás.
+  No hace falta copiar ni pegar nada.
+- **Concepto**: solo aparecen los conceptos que **tienen movimientos** de esta tienda en el periodo
+  (y el cierre) que elegiste, cada uno con su número entre paréntesis, por ejemplo «Flete cobrado a la
+  tienda (12)». Si cambiás el periodo y el concepto elegido se queda sin movimientos, sigue elegido
+  con **(0)** hasta que lo quites.
+- **Desde** y **Hasta**: días completos de Costa Rica.
 
 ## Cómo se llama cada movimiento
 

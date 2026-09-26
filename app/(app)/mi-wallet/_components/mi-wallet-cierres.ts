@@ -1,4 +1,4 @@
-import { horaCostaRica } from "@/app/(app)/analitica/_components/operativo/textos";
+import { horaCostaRica } from "@/lib/utils/hora-cr";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 import type { SelectOption } from "@/components/ui/select";
 import type { CierreTiendaOpcionDTO } from "@/lib/types/wallet-tienda";

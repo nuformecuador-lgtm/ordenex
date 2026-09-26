@@ -18,6 +18,7 @@ import type { MiWalletModuleProps } from "@/app/(app)/mi-wallet/_components/MiWa
 // Ficha 335 (D5): la lista de roles DENEGADOS se deriva de esta constante, la misma que lee el
 // item de menu. Asi el dia que alguien la amplie, este archivo no se queda comprobando de mas.
 import { ROLES_MI_WALLET } from "@/lib/auth/menu-visibility";
+import { ORIGEN_TIENDA_LABEL } from "@/app/(app)/mi-wallet/_components/mi-wallet-labels";
 
 // Feature 43 (T14, R18/R19/R21) — la pagina `/mi-wallet` resuelve el rol SOLO server-side;
 // rol != adminTienda (o sin sesion) → `notFound` (R19). El backend acota SIEMPRE a
@@ -111,10 +112,12 @@ const MOVIMIENTOS_OK = {
         tipo: "credito" as const,
         categoria: "cod_recaudado" as const,
         monto: "5000.00",
-        origenTipo: "cierre_dia",
+        origenTipo: "cierre_dia" as const,
         origenId: "c1",
         descripcion: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
+        // Ficha 458-A (TA.2): el borde adjunta el origen legible a cada fila.
+        origen: { texto: "Cierre del día · 2026-07-12", enlace: null },
       },
       {
         id: "m2",
@@ -122,10 +125,11 @@ const MOVIMIENTOS_OK = {
         tipo: "debito" as const,
         categoria: "flete" as const,
         monto: "1000.00",
-        origenTipo: "cierre_dia",
+        origenTipo: "cierre_dia" as const,
         origenId: "c1",
         descripcion: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
+        origen: { texto: "Cierre del día · 2026-07-12", enlace: null },
       },
     ],
     total: 2,
@@ -329,7 +333,9 @@ function sembrarTienda(movs: WalletTiendaMovimientoDTO[], debitos: string) {
   listarMock.mockResolvedValue({
     status: "ok",
     data: {
-      movimientos: movs,
+      // Ficha 458-A (TA.2): el borde adjunta el origen legible; aqui, el rotulo de SU origen desde la
+      // tienda (sin entidad). Antes era «Registrado a mano» para toda fila, y la pantalla ya lo pinta.
+      movimientos: movs.map((m) => ({ ...m, origen: { texto: ORIGEN_TIENDA_LABEL[m.origenTipo], enlace: null } })),
       total: movs.length,
       page: 1,
       pageSize: 20,

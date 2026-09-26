@@ -9,7 +9,7 @@ import type {
 } from "@/lib/types/conciliacion-satelites";
 import { saldoDe } from "@/lib/utils/conciliacion-satelite";
 import { diasNaturalesCRDesde, inicioDelMesCREnUtc } from "@/lib/utils/fecha-cr";
-import { nombreCompletoUsuario, NOMBRE_USUARIO_SELECT } from "@/lib/utils/nombre-usuario";
+import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 /**
@@ -48,7 +48,7 @@ const CONSOLIDACION_SELECT = {
   montoRecibido: true,
   conciliadoAt: true,
   conciliadoNota: true,
-  conciliadoPorUsuario: { select: NOMBRE_USUARIO_SELECT },
+  conciliadoPorUsuario: { select: CUENTA_USUARIO_SELECT },
   _count: { select: { cierresDia: true } },
 } as const;
 
@@ -78,7 +78,7 @@ function toConsolidacionDTO(r: ConsolidacionRow): ConsolidacionSateliteDTO {
     conciliado: r.conciliadoAt !== null,
     conciliadoAt: r.conciliadoAt === null ? null : r.conciliadoAt.toISOString(),
     conciliadoPorNombre:
-      r.conciliadoPorUsuario === null ? null : nombreCompletoUsuario(r.conciliadoPorUsuario),
+      r.conciliadoPorUsuario === null ? null : etiquetaDeCuenta(r.conciliadoPorUsuario),
     nota: r.conciliadoNota,
     cantidadCierres: r._count.cierresDia,
   };
@@ -175,7 +175,7 @@ export class SaldosSatelitesRepository implements ISaldosSatelitesRepository {
 
       return {
         zonaId: zona.id,
-        zonaNombre: zona.nombre,
+        zonaNombre: etiquetaDeCuenta(zona),
         saldoSinConciliar: saldoDe(efectivo, recibido).toFixed(2),
         totalEfectivo: efectivo.toFixed(2),
         totalConsolidado: general.toFixed(2),

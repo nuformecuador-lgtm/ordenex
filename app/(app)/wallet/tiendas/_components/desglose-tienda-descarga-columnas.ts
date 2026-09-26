@@ -18,6 +18,7 @@
  * NOMBRE de la tienda tampoco es columna (P4): identifica al archivo entero —es el desglose
  * de UNA tienda— y su sitio es el título de la descarga, igual que en el del mensajero.
  */
+import { textoDeOrigen } from "@/components/shared/wallet/origen-movimiento";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
@@ -44,8 +45,8 @@ export const COLUMNAS_DESCARGA_DESGLOSE_TIENDA: DescargaColumna[] = [
 
 /** Origen legible: la MISMA composición que pinta la tabla (etiqueta · descripción). */
 function origen(movimiento: WalletTiendaMovimientoDTO): string {
-  const base = ORIGEN_TIENDA_LABEL[movimiento.origenTipo] ?? movimiento.origenTipo;
-  return movimiento.descripcion ? `${base} · ${movimiento.descripcion}` : base;
+  // 458-A (R5/R6, R3): el origen con su entidad que adjunta el servidor, el MISMO texto de la celda.
+  return textoDeOrigen(movimiento, ORIGEN_TIENDA_LABEL);
 }
 
 /**

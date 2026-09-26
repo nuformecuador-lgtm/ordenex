@@ -3,6 +3,7 @@ import { listarMovimientosCompletoAction } from "@/lib/actions/wallet";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IWalletService } from "@/lib/interfaces/services/IWalletService";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
+import { ORIGENES_FALSOS, conOrigenFalso } from "@/tests/fixtures/origenes-falsos";
 
 // Feature 170 / T C.2 (R16/R18 + refuerzo R9/R17/R27) — borde del libro de caja completo.
 
@@ -38,7 +39,7 @@ describe("listarMovimientosCompletoAction (borde)", () => {
       total: 1,
     });
 
-    const r = await listarMovimientosCompletoAction({}, { service, getActor: async () => null });
+    const r = await listarMovimientosCompletoAction({}, { service, origenes: ORIGENES_FALSOS, getActor: async () => null });
 
     expect(r.status).toBe("unauthenticated");
     expect(r).not.toHaveProperty("items");
@@ -54,7 +55,7 @@ describe("listarMovimientosCompletoAction (borde)", () => {
 
     const r = await listarMovimientosCompletoAction(
       { tipo: "ingreso", tiendaId: "otra-tienda" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r.status).toBe("validation_error");
@@ -67,7 +68,7 @@ describe("listarMovimientosCompletoAction (borde)", () => {
 
     const r = await listarMovimientosCompletoAction(
       { page: 1, pageSize: 20 },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r.status).toBe("validation_error");
@@ -79,7 +80,7 @@ describe("listarMovimientosCompletoAction (borde)", () => {
 
     const r = await listarMovimientosCompletoAction(
       { tipo: "egreso" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r).toEqual({ status: "limite_excedido", total: 18_902, limite: 5000 });
@@ -91,7 +92,7 @@ describe("listarMovimientosCompletoAction (borde)", () => {
 
     const r = await listarMovimientosCompletoAction(
       {},
-      { service, getActor: async () => ({ usuarioId: "g1", rol: "mensajero" }) },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => ({ usuarioId: "g1", rol: "mensajero" }) },
     );
 
     expect(r).toEqual({ status: "forbidden" });
@@ -107,10 +108,11 @@ describe("listarMovimientosCompletoAction (borde)", () => {
 
     const r = await listarMovimientosCompletoAction(
       { tipo: "ingreso", categoria: "ingreso_flete" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
-    expect(r).toEqual({ status: "ok", items: [ITEM], total: 1 });
+    // Ficha 458-A (TA.2): el borde adjunta el origen legible a cada fila.
+    expect(r).toEqual({ status: "ok", items: [conOrigenFalso(ITEM)], total: 1 });
     const [data, actor] = listarMovimientosCompleto.mock.calls[0];
     expect(actor).toEqual(MAESTRO);
     expect(data).toEqual({ tipo: "ingreso", categoria: "ingreso_flete" });

@@ -45,7 +45,7 @@ export type CobroTiendaTxClient = Pick<
 export interface CobroTiendaRegistro {
   id: string;
   tiendaId: string;
-  /** Nombre y primer apellido de la tienda (`etiquetaDePersona`), como lo compone la caja. */
+  /** El nombre de la tienda con `etiquetaDeCuenta` (458-A, R33), como el resto de la wallet. */
   tiendaNombre: string;
   monto: string; // STRING escala 2
   descripcion: string | null;
@@ -290,11 +290,11 @@ export interface IWalletTiendaMovimientoRepository {
     input: RegistrarCobroEnHistorialInput,
   ): Promise<void>;
   /**
-   * FICHA 461 (R7) — el nombre de una tienda tal como lo compone la caja (nombre y primer apellido,
-   * `etiquetaDePersona`), leido DENTRO de la transaccion del cobro para describir su linea de caja
-   * («{Tienda} · {descripcion}») sin ningun id en el texto. Misma composicion que la migracion de datos
-   * (`concat_ws(' ', nombre, primer_apellido)`), asi que una linea completada y una del servicio se
-   * leen igual. Sin nombre resoluble devuelve `""` (la descripcion queda sola).
+   * FICHA 461 (R7) — el nombre de una tienda con `etiquetaDeCuenta` (458-A, R33: nombre y apellidos
+   * presentes), leido DENTRO de la transaccion del cobro para describir su linea de caja
+   * («{Tienda} · {descripcion}») sin ningun id en el texto. La migracion de datos de la 461 compuso
+   * `concat_ws(' ', nombre, primer_apellido)`: para una tienda sin segundo apellido es el mismo texto.
+   * Sin nombre resoluble devuelve «Cuenta sin nombre» (`CUENTA_SIN_NOMBRE`), nunca un id.
    */
   nombreDeTienda(tx: WalletTiendaHistorialTxClient, tiendaId: string): Promise<string>;
   /**

@@ -132,10 +132,12 @@ describe("461 R58 — cada documento tocado declara su fecha y las fuentes de lo
     ["oficina/wallet-caja", ["lib/services/CobroTiendaService.ts", "lib/services/CajaCobroTiendaFeedService.ts", "lib/utils/descripcion-cobro-tienda.ts", "app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts"]],
     ["oficina/wallet-tiendas", ["lib/services/CobroTiendaService.ts", "lib/utils/descripcion-cobro-tienda.ts", "app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts"]],
     ["tienda/mi-wallet", ["lib/services/CobroTiendaService.ts", "app/(app)/mi-wallet/_components/mi-wallet-labels.ts"]],
-  ] as const)("%s: actualizado el 2026-09-25 y con las fuentes del cobro", (slug, fuentes) => {
+  ] as const)("%s: actualizado el 2026-09-25 o después y con las fuentes del cobro", (slug, fuentes) => {
     const doc = docs.find((d) => d.slug === slug);
     expect(doc).toBeDefined();
-    expect(doc?.actualizado).toBe("2026-09-25");
+    // 458-A (R102): un documento tocado por una ficha POSTERIOR actualiza su fecha; lo que esta
+    // ficha fija es que se actualizó al menos con ella, no que nadie lo vuelva a tocar.
+    expect((doc?.actualizado ?? "") >= "2026-09-25").toBe(true);
     // `fuentes` no viaja en el catálogo a propósito (es para auditar, no para leer): se lee del
     // frontmatter crudo, como hace la guardia `asistente-sin-frontmatter`.
     const crudo = readFileSync(path.join(DIR_AYUDA, `${slug}.md`), "utf8");

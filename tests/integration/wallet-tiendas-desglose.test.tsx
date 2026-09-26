@@ -11,6 +11,7 @@
 // La caché de SWR se aísla por render (`provider` nuevo + `dedupingInterval: 0`) para que
 // cada test observe SUS propias llamadas a la Server Action, que va doblada.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { CIERRES_C1, elegirCierreC1 } from "@/tests/fixtures/selector-buscable";
 import {
   render,
   screen,
@@ -56,6 +57,15 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
   listarSaldosTiendasAction: (...a: unknown[]) => listarSaldosCompletoMock(...a),
 }));
 
+
+// Ficha 458-A (TA.3/TA.4): los filtros leen del servidor los conceptos con movimientos y los cierres
+// de la cuenta. Aqui, un cierre (`c1`) y los conceptos que el caso necesita.
+const conceptosFiltroMock = vi.fn();
+const cierresFiltroMock = vi.fn();
+vi.mock("@/lib/actions/wallet-filtros", () => ({
+  conceptosConMovimientosAction: (...a: unknown[]) => conceptosFiltroMock(...a),
+  cierresDeLaCuentaAction: (...a: unknown[]) => cierresFiltroMock(...a),
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
@@ -278,6 +288,20 @@ afterEach(() => {
 });
 
 // -------------------------------------------------------------------------
+
+
+beforeEach(() => {
+  conceptosFiltroMock.mockResolvedValue({
+    status: "ok",
+    conceptos: [
+      { categoria: "cod_recaudado", movimientos: 4 },
+      { categoria: "iva_comision_cod", movimientos: 2 },
+      { categoria: "cobro_manual", movimientos: 1 },
+      { categoria: "pago_tienda", movimientos: 1 },
+    ],
+  });
+  cierresFiltroMock.mockResolvedValue(CIERRES_C1);
+});
 
 describe("R32/R33 — la lectura se paga al ABRIR, no al listar", () => {
   it("con la tabla pintada y ninguna fila abierta NO se lee ningún desglose", async () => {
@@ -567,9 +591,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     );
     await waitFor(() => expect(listarDesgloseMock).toHaveBeenCalledTimes(2));
 
-    fireEvent.change(within(region).getByLabelText("Cierre"), {
-      target: { value: "c1" },
-    });
+    await elegirCierreC1(within(region).getByRole("button", { name: /^Cierre:/ }));
     fireEvent.change(within(region).getByLabelText("Desde"), {
       target: { value: "2026-07-01" },
     });
@@ -596,9 +618,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     const region = await desplegar("Tienda Norte");
     await waitFor(() => expect(listarDesgloseMock).toHaveBeenCalledTimes(1));
 
-    fireEvent.change(within(region).getByLabelText("Cierre"), {
-      target: { value: "c1" },
-    });
+    await elegirCierreC1(within(region).getByRole("button", { name: /^Cierre:/ }));
     fireEvent.submit(
       screen.getByRole("form", { name: "Filtros del desglose de Tienda Norte" }),
     );
@@ -622,9 +642,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     );
 
     listarDesgloseMock.mockResolvedValueOnce({ status: "ok", data: DESGLOSE_FILTRADO });
-    fireEvent.change(within(region).getByLabelText("Cierre"), {
-      target: { value: "c1" },
-    });
+    await elegirCierreC1(within(region).getByRole("button", { name: /^Cierre:/ }));
     fireEvent.submit(
       screen.getByRole("form", { name: "Filtros del desglose de Tienda Norte" }),
     );
@@ -650,7 +668,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     listarDesgloseMock.mockImplementationOnce(
       () => new Promise((res) => { resolver = res; }),
     );
-    fireEvent.change(within(region).getByLabelText("Cierre"), { target: { value: "c1" } });
+    await elegirCierreC1(within(region).getByRole("button", { name: /^Cierre:/ }));
     fireEvent.submit(
       screen.getByRole("form", { name: "Filtros del desglose de Tienda Norte" }),
     );
@@ -681,9 +699,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
       ([i]) => i.tiendaId === "t2",
     ).length;
 
-    fireEvent.change(screen.getByLabelText("Cierre", { selector: "#desglose-tienda-t1-cierre" }), {
-      target: { value: "c1" },
-    });
+    await elegirCierreC1(document.getElementById("desglose-tienda-t1-cierre") as HTMLElement);
     fireEvent.submit(
       screen.getByRole("form", { name: "Filtros del desglose de Tienda Norte" }),
     );
@@ -712,13 +728,17 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
       }),
     );
     const listbox = await screen.findByRole("listbox");
-    // Está hoy, sin que nadie la haya escrito a mano: la lista se puebla del catálogo.
+    // 458-A (TA.3, R13/R14): la lista es la de los conceptos CON movimientos de esta tienda que
+    // devuelve el servidor, cada uno con su número; la corrección en contra (`ajuste_debito`,
+    // sin movimientos) NO se ofrece. Antes se poblaba del catálogo completo.
     expect(
-      within(listbox).getByRole("option", { name: "Ordenex le paga a la tienda" }),
+      await within(listbox).findByRole("option", { name: "Ordenex le paga a la tienda (1)" }),
     ).toBeInTheDocument();
     expect(
-      within(listbox).getByRole("option", { name: "IVA de la comisión cobrado a la tienda" }),
+      within(listbox).getByRole("option", { name: "IVA de la comisión cobrado a la tienda (2)" }),
     ).toBeInTheDocument();
+    expect(within(listbox).queryByRole("option", { name: /Corrección en contra/ })).toBeNull();
+    expect(conceptosFiltroMock).toHaveBeenCalledWith({ libro: "tienda", tiendaId: "t1" });
   });
 });
 
@@ -755,9 +775,7 @@ describe("R37 — la descarga se lleva el conjunto filtrado entero", () => {
     const region = await desplegar("Tienda Norte");
     await waitFor(() => expect(listarDesgloseMock).toHaveBeenCalledTimes(1));
 
-    fireEvent.change(within(region).getByLabelText("Cierre"), {
-      target: { value: "c1" },
-    });
+    await elegirCierreC1(within(region).getByRole("button", { name: /^Cierre:/ }));
     fireEvent.submit(
       screen.getByRole("form", { name: "Filtros del desglose de Tienda Norte" }),
     );

@@ -1,0 +1,549 @@
+{
+  "resultados": [
+    {
+      "rol": "maestro",
+      "paso": "1 /wallet filtro de concepto",
+      "ok": true,
+      "detalle": {
+        "opciones": [
+          "Todas las categorías",
+          "Flete cobrado a la tienda (5)",
+          "Flete por rechazo cobrado a la tienda (1)",
+          "Comisión de contra-entrega cobrada a la tienda (5)",
+          "IVA del flete cobrado a la tienda (5)",
+          "IVA del flete por rechazo cobrado a la tienda (1)",
+          "IVA de la comisión cobrado a la tienda (5)",
+          "Corrección de caja (suma) (2)",
+          "Ordenex le paga a un mensajero (4)",
+          "Corrección de caja (resta) (1)",
+          "Indemnización que Ordenex paga por un incidente (2)",
+          "Contra-entrega cobrado a los clientes de la tienda (5)"
+        ]
+      }
+    },
+    {
+      "rol": "maestro",
+      "paso": "1 /wallet sin uuid ni código crudo",
+      "ok": true,
+      "detalle": "0 hallazgos"
+    },
+    {
+      "rol": "maestro",
+      "paso": "8 /wallet/tiendas ningún control pide un ID",
+      "ok": false,
+      "detalle": {
+        "textboxes": 1,
+        "pideId": []
+      }
+    },
+    {
+      "rol": "maestro",
+      "paso": "8 /wallet/tiendas selector: cierres con día y mensajero; búsqueda por nombre y por día",
+      "ok": true,
+      "detalle": {
+        "todas": [
+          "Todos los cierres",
+          "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+          "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-12 · Marco Mensajero · 5 movimientos"
+        ],
+        "porNombre": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-12 · Marco Mensajero · 5 movimientos"
+        ],
+        "dia": "2026-09-24",
+        "porDia": [
+          "Todos los cierres",
+          "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+          "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos"
+        ]
+      }
+    },
+    {
+      "rol": "maestro",
+      "paso": "8 /wallet/tiendas elegido con teclado y aplicado",
+      "ok": true,
+      "detalle": {
+        "disparador": "Cierre: Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+        "filas": 8
+      }
+    },
+    {
+      "rol": "maestro",
+      "paso": "8 /wallet/tiendas sin uuid ni código crudo",
+      "ok": true,
+      "detalle": "0 hallazgos"
+    },
+    {
+      "rol": "maestro",
+      "paso": "8 /wallet/mensajeros sin «Pegá»/«identificador»",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "rol": "maestro",
+      "paso": "8 /wallet/mensajeros selector por día y filtro aplicado",
+      "ok": true,
+      "detalle": {
+        "todas": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-12 · Marco Mensajero · 2 movimientos"
+        ],
+        "dia": "2026-08-13",
+        "porDia": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 1 movimiento"
+        ],
+        "filas": 3
+      }
+    },
+    {
+      "rol": "maestro",
+      "paso": "12 «Ver el cierre» sin uuid en el árbol de accesibilidad",
+      "ok": true,
+      "detalle": {
+        "enlaces": [
+          "Ver",
+          "Ver el cierre de Marco Mensajero: Pago devengado del 2026-08-13",
+          "Ver el cierre de Marco Mensajero: Ajuste (devengo) del 2026-08-13",
+          "Ver el cierre de Marco Mensajero: Liquidación del 2026-08-13"
+        ],
+        "lineasDeNombreConUuid": 0,
+        "urlsConId": 4
+      }
+    },
+    {
+      "rol": "maestro",
+      "paso": "8 /wallet/mensajeros sin uuid ni código crudo",
+      "ok": true,
+      "detalle": "0 hallazgos"
+    },
+    {
+      "rol": "maestro",
+      "paso": "12 /analitica panel mensual «Movimiento neto del periodo»",
+      "ok": "NO-VISIBLE",
+      "detalle": {
+        "regionTableroFinanciero": 0,
+        "malosPresentes": []
+      }
+    },
+    {
+      "rol": "maestro",
+      "paso": "a11y selector: foco visible opaco, foco al buscador, ↓ anuncia, Escape devuelve el foco",
+      "ok": true,
+      "detalle": {
+        "anillo": {
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(212, 83, 13) 0px 0px 0px 3px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "outline": "none",
+          "enfocado": true
+        },
+        "foco": {
+          "role": "combobox",
+          "label": "Buscar un cierre"
+        },
+        "activa": "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+        "vuelve": true
+      }
+    },
+    {
+      "rol": "maestro",
+      "paso": "asistente",
+      "ruta": "/wallet/tiendas",
+      "pregunta": "¿Cómo filtro el desglose de una tienda por un cierre? ¿Tengo que pegar algún identificador?",
+      "respuesta": "¿Cómo filtro el desglose de una tienda por un cierre? ¿Tengo que pegar algún identificador?\n\nNo, no hace falta que pegués nada.\n\nEn el desglose de la tienda (Wallet · Tiendas), el filtro Cierre se elige de una lista de los cierres de esa tienda que tienen movimientos, y cada uno se muestra con su día, el mensajero y cuántos movimientos trajo. Podés buscar dentro de esa lista por día (por ejemplo 2026-09-12) o por el nombre del mensajero, elegís el que corresponda y listo.\n\nSi la lista te dice «Mostramos los cierres más recientes», es porque hay más de los que se ven de entrada — usá la búsqueda por día para encontrar uno anterior.\nWallet · Tiendas"
+    },
+    {
+      "rol": "maestro",
+      "paso": "asistente",
+      "ruta": "/wallet/tiendas",
+      "pregunta": "¿Por qué el filtro de concepto no me muestra todas las categorías y qué es el número entre paréntesis?",
+      "respuesta": "¿Por qué el filtro de concepto no me muestra todas las categorías y qué es el número entre paréntesis?\n\nEl filtro de Concepto en el desglose de una tienda (dentro de Wallet · Tiendas) no te muestra todo el catálogo de conceptos posibles: solo aparecen los que tienen movimientos de esa tienda en el periodo (y el cierre, si elegiste uno) que estás mirando. Por eso, si cambiás de tienda o de rango de fechas, la lista de conceptos disponibles cambia con vos.\n\nEl número entre paréntesis, por ejemplo «Flete cobrado a la tienda (12)», es cuántos movimientos de ese concepto hay dentro del periodo filtrado.\n\nUn detalle: si tenías un concepto elegido y cambiás el periodo de forma que ese concepto se queda sin movimientos, no desaparece del filtro — se queda seleccionado pero marcado con (0), hasta que vos mismo lo quites.\nWallet · Tiendas"
+    },
+    {
+      "rol": "admin",
+      "paso": "1 /wallet filtro de concepto",
+      "ok": true,
+      "detalle": {
+        "opciones": [
+          "Todas las categorías",
+          "Flete cobrado a la tienda (5)",
+          "Flete por rechazo cobrado a la tienda (1)",
+          "Comisión de contra-entrega cobrada a la tienda (5)",
+          "IVA del flete cobrado a la tienda (5)",
+          "IVA del flete por rechazo cobrado a la tienda (1)",
+          "IVA de la comisión cobrado a la tienda (5)",
+          "Corrección de caja (suma) (2)",
+          "Ordenex le paga a un mensajero (4)",
+          "Corrección de caja (resta) (1)",
+          "Indemnización que Ordenex paga por un incidente (2)",
+          "Contra-entrega cobrado a los clientes de la tienda (5)"
+        ]
+      }
+    },
+    {
+      "rol": "admin",
+      "paso": "1 /wallet sin uuid ni código crudo",
+      "ok": true,
+      "detalle": "0 hallazgos"
+    },
+    {
+      "rol": "admin",
+      "paso": "8 /wallet/tiendas ningún control pide un ID",
+      "ok": false,
+      "detalle": {
+        "textboxes": 1,
+        "pideId": []
+      }
+    },
+    {
+      "rol": "admin",
+      "paso": "8 /wallet/tiendas selector: cierres con día y mensajero; búsqueda por nombre y por día",
+      "ok": true,
+      "detalle": {
+        "todas": [
+          "Todos los cierres",
+          "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+          "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-12 · Marco Mensajero · 5 movimientos"
+        ],
+        "porNombre": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-12 · Marco Mensajero · 5 movimientos"
+        ],
+        "dia": "2026-09-24",
+        "porDia": [
+          "Todos los cierres",
+          "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+          "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos"
+        ]
+      }
+    },
+    {
+      "rol": "admin",
+      "paso": "8 /wallet/tiendas elegido con teclado y aplicado",
+      "ok": true,
+      "detalle": {
+        "disparador": "Cierre: Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+        "filas": 8
+      }
+    },
+    {
+      "rol": "admin",
+      "paso": "8 /wallet/tiendas sin uuid ni código crudo",
+      "ok": true,
+      "detalle": "0 hallazgos"
+    },
+    {
+      "rol": "admin",
+      "paso": "8 /wallet/mensajeros sin «Pegá»/«identificador»",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "rol": "admin",
+      "paso": "8 /wallet/mensajeros selector por día y filtro aplicado",
+      "ok": true,
+      "detalle": {
+        "todas": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-12 · Marco Mensajero · 2 movimientos"
+        ],
+        "dia": "2026-08-13",
+        "porDia": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 1 movimiento"
+        ],
+        "filas": 3
+      }
+    },
+    {
+      "rol": "admin",
+      "paso": "12 «Ver el cierre» sin uuid en el árbol de accesibilidad",
+      "ok": true,
+      "detalle": {
+        "enlaces": [
+          "Ver",
+          "Ver el cierre de Marco Mensajero: Pago devengado del 2026-08-13",
+          "Ver el cierre de Marco Mensajero: Ajuste (devengo) del 2026-08-13",
+          "Ver el cierre de Marco Mensajero: Liquidación del 2026-08-13"
+        ],
+        "lineasDeNombreConUuid": 0,
+        "urlsConId": 4
+      }
+    },
+    {
+      "rol": "admin",
+      "paso": "8 /wallet/mensajeros sin uuid ni código crudo",
+      "ok": true,
+      "detalle": "0 hallazgos"
+    },
+    {
+      "rol": "admin",
+      "paso": "12 /analitica panel mensual «Movimiento neto del periodo»",
+      "ok": "NO-VISIBLE",
+      "detalle": {
+        "regionTableroFinanciero": 0,
+        "malosPresentes": []
+      }
+    },
+    {
+      "rol": "admin",
+      "paso": "a11y selector: foco visible opaco, foco al buscador, ↓ anuncia, Escape devuelve el foco",
+      "ok": true,
+      "detalle": {
+        "anillo": {
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(212, 83, 13) 0px 0px 0px 3px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "outline": "none",
+          "enfocado": true
+        },
+        "foco": {
+          "role": "combobox",
+          "label": "Buscar un cierre"
+        },
+        "activa": "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+        "vuelve": true
+      }
+    },
+    {
+      "rol": "admin",
+      "paso": "asistente",
+      "ruta": "/wallet/mensajeros",
+      "pregunta": "¿Qué significa «Ver» al lado del origen de un movimiento y cómo busco un cierre de hace dos semanas?",
+      "respuesta": "¿Qué significa «Ver» al lado del origen de un movimiento y cómo busco un cierre de hace dos semanas?\n\n«Ver» aparece en la columna Origen del libro de movimientos (en Wallet · Mensajeros y en Wallet · Tiendas). Cuando ese origen tiene una pantalla propia —un cierre, una orden, el ranking—, el botón Ver te lleva directo ahí, para no tener que buscarlo por separado.\n\nPara encontrar un cierre de hace dos semanas, depende de dónde estés:\n\n- Si estás dentro del desglose de un mensajero o de una tienda (en Wallet), usá el filtro Cierre: se elige de una lista de los cierres de esa persona/tienda que tienen movimientos, y podés buscar por día (por ejemplo 2026-09-12) o por nombre. Si la lista te muestra solo los más recientes, buscá por la fecha para que aparezca el de hace dos semanas.\n- Si querés ir directo a la pantalla de Cierres (para aprobar, rechazar o revisar uno), ahí se filtra por fecha de solicitud, bodega, mensajero y estado — el campo de texto libre no aplica, se bus"
+    },
+    {
+      "rol": "tienda",
+      "paso": "1 /mi-wallet filtro de concepto con su número (desde la tienda)",
+      "ok": true,
+      "detalle": {
+        "opciones": [
+          "Todos los conceptos",
+          "Cobrado a tus clientes en contra-entrega (5)",
+          "Ordenex te cobró el flete (5)",
+          "Ordenex te cobró el flete por rechazo (1)",
+          "Ordenex te cobró la comisión de contra-entrega (5)",
+          "Ordenex te cobró el IVA del flete (5)",
+          "Ordenex te cobró el IVA del flete por rechazo (1)",
+          "Ordenex te cobró el IVA de la comisión (5)"
+        ]
+      }
+    },
+    {
+      "rol": "tienda",
+      "paso": "/mi-wallet origen con entidad",
+      "ok": true,
+      "detalle": {
+        "origenes": [
+          "Cierre del día · 2026-09-24",
+          "Cierre del día · 2026-09-24",
+          "Cierre del día · 2026-09-24",
+          "Cierre del día · 2026-09-24",
+          "Cierre del día · 2026-09-24"
+        ]
+      }
+    },
+    {
+      "rol": "tienda",
+      "paso": "/mi-wallet sin uuid ni código crudo",
+      "ok": true,
+      "detalle": "0 hallazgos"
+    },
+    {
+      "rol": "tienda",
+      "paso": "/wallet → no encontrado",
+      "ok": true,
+      "detalle": {
+        "status": 404
+      }
+    },
+    {
+      "rol": "tienda",
+      "paso": "asistente",
+      "ruta": "/mi-wallet",
+      "pregunta": "¿Qué significa el número entre paréntesis en el filtro de concepto?",
+      "respuesta": "¿Qué significa el número entre paréntesis en el filtro de concepto?\n\nEn Mi wallet, cuando filtrás el desglose por concepto, cada concepto aparece con un número entre paréntesis que indica cuántos movimientos tuyos hay de ese concepto en el periodo (y cierre) que elegiste. Por ejemplo, «Ordenex te cobró el flete (8)» significa que hay 8 movimientos de ese tipo.\n\nUn detalle: si cambiás el periodo y el concepto que tenías elegido se queda sin movimientos, no desaparece de la lista — sigue apareciendo, pero con (0), hasta que lo quitás vos.\nMi wallet"
+    }
+  ],
+  "datos": {
+    "maestro": {
+      "paso1": {
+        "opciones": [
+          "Todas las categorías",
+          "Flete cobrado a la tienda (5)",
+          "Flete por rechazo cobrado a la tienda (1)",
+          "Comisión de contra-entrega cobrada a la tienda (5)",
+          "IVA del flete cobrado a la tienda (5)",
+          "IVA del flete por rechazo cobrado a la tienda (1)",
+          "IVA de la comisión cobrado a la tienda (5)",
+          "Corrección de caja (suma) (2)",
+          "Ordenex le paga a un mensajero (4)",
+          "Corrección de caja (resta) (1)",
+          "Indemnización que Ordenex paga por un incidente (2)",
+          "Contra-entrega cobrado a los clientes de la tienda (5)"
+        ],
+        "extracto": "Wallet\n\nCaja principal de Ordenex: libro de movimientos, cifras de la caja y ganancia de Ordenex\n\n26/09/2026\nAyuda\nClaro\nTema claro activado.\n4 por hacer\nSalir\nRegistrar movimiento\nFlujo de dinero registrado\nPositivo\n₡13.483.932,72\nLo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex.\nEntró\n₡13.524.733,22\nSalió\n₡40.800,50\nMovimientos\n36\nRegistros del periodo que estás viendo\nDe las tiendas\n₡147.670,10\nLo que Ordenex les debe a las tiendas\n\nEs la suma de los saldos de todas las tiendas, ya descontados el flete, "
+      },
+      "paso8tiendas": {
+        "todas": [
+          "Todos los cierres",
+          "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+          "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-12 · Marco Mensajero · 5 movimientos"
+        ],
+        "porNombre": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-12 · Marco Mensajero · 5 movimientos"
+        ],
+        "porDia": [
+          "Todos los cierres",
+          "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+          "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos"
+        ],
+        "disparador": "Cierre: Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+        "filas": 8
+      },
+      "paso8mensajeros": {
+        "todas": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-12 · Marco Mensajero · 2 movimientos"
+        ],
+        "porDia": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 1 movimiento"
+        ],
+        "filas": 3,
+        "enlaces": [
+          "Ver",
+          "Ver el cierre de Marco Mensajero: Pago devengado del 2026-08-13",
+          "Ver el cierre de Marco Mensajero: Ajuste (devengo) del 2026-08-13",
+          "Ver el cierre de Marco Mensajero: Liquidación del 2026-08-13"
+        ]
+      },
+      "paso12analitica": {
+        "tiene": false,
+        "malos": []
+      }
+    },
+    "admin": {
+      "paso1": {
+        "opciones": [
+          "Todas las categorías",
+          "Flete cobrado a la tienda (5)",
+          "Flete por rechazo cobrado a la tienda (1)",
+          "Comisión de contra-entrega cobrada a la tienda (5)",
+          "IVA del flete cobrado a la tienda (5)",
+          "IVA del flete por rechazo cobrado a la tienda (1)",
+          "IVA de la comisión cobrado a la tienda (5)",
+          "Corrección de caja (suma) (2)",
+          "Ordenex le paga a un mensajero (4)",
+          "Corrección de caja (resta) (1)",
+          "Indemnización que Ordenex paga por un incidente (2)",
+          "Contra-entrega cobrado a los clientes de la tienda (5)"
+        ],
+        "extracto": "Wallet\n\nCaja principal de Ordenex: libro de movimientos, cifras de la caja y ganancia de Ordenex\n\n26/09/2026\nAyuda\nClaro\nTema claro activado.\n4 por hacer\nSalir\nRegistrar movimiento\nFlujo de dinero registrado\nPositivo\n₡13.483.932,72\nLo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex.\nEntró\n₡13.524.733,22\nSalió\n₡40.800,50\nMovimientos\n36\nRegistros del periodo que estás viendo\nDe las tiendas\n₡147.670,10\nLo que Ordenex les debe a las tiendas\n\nEs la suma de los saldos de todas las tiendas, ya descontados el flete, "
+      },
+      "paso8tiendas": {
+        "todas": [
+          "Todos los cierres",
+          "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+          "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-12 · Marco Mensajero · 5 movimientos"
+        ],
+        "porNombre": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos",
+          "Cierre del 2026-08-12 · Marco Mensajero · 5 movimientos"
+        ],
+        "porDia": [
+          "Todos los cierres",
+          "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+          "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos"
+        ],
+        "disparador": "Cierre: Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+        "filas": 8
+      },
+      "paso8mensajeros": {
+        "todas": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-12 · Marco Mensajero · 2 movimientos"
+        ],
+        "porDia": [
+          "Todos los cierres",
+          "Cierre del 2026-08-13 14:22 · Marco Mensajero · 1 movimiento",
+          "Cierre del 2026-08-13 08:59 · Marco Mensajero · 1 movimiento"
+        ],
+        "filas": 3,
+        "enlaces": [
+          "Ver",
+          "Ver el cierre de Marco Mensajero: Pago devengado del 2026-08-13",
+          "Ver el cierre de Marco Mensajero: Ajuste (devengo) del 2026-08-13",
+          "Ver el cierre de Marco Mensajero: Liquidación del 2026-08-13"
+        ]
+      },
+      "paso12analitica": {
+        "tiene": false,
+        "malos": []
+      }
+    },
+    "tienda": {
+      "opciones": [
+        "Todos los conceptos",
+        "Cobrado a tus clientes en contra-entrega (5)",
+        "Ordenex te cobró el flete (5)",
+        "Ordenex te cobró el flete por rechazo (1)",
+        "Ordenex te cobró la comisión de contra-entrega (5)",
+        "Ordenex te cobró el IVA del flete (5)",
+        "Ordenex te cobró el IVA del flete por rechazo (1)",
+        "Ordenex te cobró el IVA de la comisión (5)"
+      ],
+      "origenes": [
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-09-24",
+        "Cierre del día · 2026-08-13",
+        "Cierre del día · 2026-08-13",
+        "Cierre del día · 2026-08-13",
+        "Cierre del día · 2026-08-13",
+        "Cierre del día · 2026-08-13",
+        "Cierre del día · 2026-08-13",
+        "Cierre del día · 2026-08-13",
+        "Cierre del día · 2026-08-13"
+      ]
+    }
+  }
+}

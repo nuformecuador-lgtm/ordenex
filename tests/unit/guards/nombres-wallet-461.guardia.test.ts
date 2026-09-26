@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -26,6 +26,7 @@ import {
   ORIGEN_TIENDA_LABEL,
 } from "@/app/(app)/mi-wallet/_components/mi-wallet-labels";
 import { ACCION_LABELS, ENTIDAD_LABELS } from "@/lib/types/historial-accion";
+import { ORIGEN_PAGO_LABEL } from "@/app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels";
 
 // =================================================================================================
 // GUARDIA — FICHA 461 (T C.6, design §7.8/§7.9/§14.3; R47/R48/R50) — LOS NOMBRES RETIRADOS NO VUELVEN
@@ -140,8 +141,8 @@ const EN_DOC = new RegExp(`(?:«|\\*\\*|"|“|\`)(${ALTERNATIVA})(?:»|\\*\\*|"|
 
 /** ⏳ Lo que hoy sigue fuera del alcance de la ficha, archivo por archivo y con su número exacto. */
 const PENDIENTES: Record<string, number> = {
-  // El origen «Manual» del libro del mensajero (458). No es una superficie de la 461.
-  "app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels.ts": 1,
+  // Ficha 458-A (TA.2): el origen «Manual» del libro del mensajero —la unica entrada que habia— se
+  // renombro «Registrado a mano» (461 §7.3) al volver total `ORIGEN_PAGO_LABEL`. Sin pendientes.
 };
 
 // ── Detectores (exportados para las contrapruebas) ─────────────────────────────────────────────
@@ -192,11 +193,30 @@ function listar(dir: string, patron: RegExp, acc: string[] = []): string[] {
 
 const rel = (f: string) => path.relative(RAIZ, f).split(path.sep).join("/");
 
+/**
+ * Ficha 458 (TA.6, R97): las carpetas compartidas que nacen en 458-C/458-D. Hoy pueden no existir o
+ * estar vacias: el control de no-vacuidad de ESTAS es «≥ 0 archivos hoy» y la guardia falla en
+ * cuanto aparezca un nombre retirado en cualquiera de ellas (contraprueba abajo).
+ */
+export const CARPETAS_COMPARTIDAS_458 = [
+  path.join("components", "shared", "estado-cuenta"),
+  path.join("components", "shared", "wallet"),
+] as const;
+
+function archivosCompartidos458(): string[] {
+  return CARPETAS_COMPARTIDAS_458.map((c) => path.join(RAIZ, c))
+    .filter((c) => existsSync(c))
+    .flatMap((c) => listar(c, /\.tsx?$/));
+}
+
 function archivosDeCodigo(): string[] {
   return [
     ...listar(path.join(RAIZ, "app", "(app)", "wallet"), /\.tsx?$/),
     ...listar(path.join(RAIZ, "app", "(app)", "mi-wallet"), /\.tsx?$/),
+    ...archivosCompartidos458(),
     ...listar(path.join(RAIZ, "lib", "types"), /^historial-accion.*\.ts$/),
+    // Revision 458-A (m2): los rotulos que lee el servidor se mudaron a `lib/constants/`.
+    ...listar(path.join(RAIZ, "lib", "constants"), /^(wallet-rotulos|origen-legible-rotulos)\.ts$/),
   ];
 }
 
@@ -221,13 +241,16 @@ const DICCIONARIOS: ReadonlyArray<readonly [nombre: string, valores: readonly st
   ["CATEGORIA_MI_WALLET_LABEL", Object.values(CATEGORIA_MI_WALLET_LABEL)],
   ["DESGLOSE_MI_WALLET_LABEL", Object.values(DESGLOSE_MI_WALLET_LABEL)],
   ["ORIGEN_TIENDA_LABEL", Object.values(ORIGEN_TIENDA_LABEL)],
+  // Ficha 458-A (TA.2): total desde la 458-A y ya sin «Manual»; entra en el barrido de diccionarios.
+  ["ORIGEN_PAGO_LABEL", Object.values(ORIGEN_PAGO_LABEL)],
   ["ACCION_LABELS", Object.values(ACCION_LABELS)],
   ["ENTIDAD_LABELS", Object.values(ENTIDAD_LABELS)],
 ];
 
 describe("461/R47/R48 — ningún diccionario de la wallet ni del historial usa un nombre retirado o reservado", () => {
-  it("el barrido mira algo: dieciséis diccionarios y más de 150 valores", () => {
-    expect(DICCIONARIOS).toHaveLength(16);
+  it("el barrido mira algo: diecisiete diccionarios y más de 150 valores", () => {
+    // Ficha 458-A: 16 → 17 (+ `ORIGEN_PAGO_LABEL`).
+    expect(DICCIONARIOS).toHaveLength(17);
     const total = DICCIONARIOS.reduce((n, [, v]) => n + v.length, 0);
     expect(total).toBeGreaterThan(150);
   });
@@ -326,9 +349,26 @@ describe("461/R47/R48 — los archivos de la wallet y del historial no citan un 
       "app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts",
       "app/(app)/mi-wallet/_components/mi-wallet-labels.ts",
       "lib/types/historial-accion.ts",
+      "lib/constants/wallet-rotulos.ts",
+      "lib/constants/origen-legible-rotulos.ts",
     ]) {
       expect(archivos.map(rel)).toContain(esperado);
     }
+  });
+
+  it("458-A R97: las carpetas compartidas de la 458 entran en el barrido (≥ 0 archivos hoy)", () => {
+    expect(CARPETAS_COMPARTIDAS_458.map((c) => c.split(path.sep).join("/"))).toEqual([
+      "components/shared/estado-cuenta",
+      "components/shared/wallet",
+    ]);
+    const compartidos = archivosCompartidos458().map(rel);
+    expect(compartidos.length).toBeGreaterThanOrEqual(0);
+    for (const f of compartidos) expect(archivos.map(rel)).toContain(f);
+  });
+
+  it("458-A R97 CONTRAPRUEBA: un archivo nuevo de esas carpetas con un nombre retirado la pone roja", () => {
+    const falso = `export const X = { a: "Manual" };`;
+    expect(hallazgosEnCodigo(falso, "components/shared/wallet/Nuevo.tsx").length).toBeGreaterThan(0);
   });
 
   it("ninguno, salvo lo declarado como pendiente con su número exacto", () => {

@@ -11,6 +11,7 @@
  * Lo que NO sale: `id`, `origenId` y `tiendaId` (uuid internos, R23; el `tiendaId` además es
  * el mismo para todo el archivo — es el ledger de UNA tienda) ni `registradoPor`.
  */
+import { textoDeOrigen } from "@/components/shared/wallet/origen-movimiento";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
@@ -33,8 +34,8 @@ export const COLUMNAS_DESCARGA_MI_WALLET: DescargaColumna[] = [
 
 /** Origen legible: la MISMA composición que pinta la tabla (etiqueta · descripción). */
 function origen(movimiento: WalletTiendaMovimientoDTO): string {
-  const base = ORIGEN_TIENDA_LABEL[movimiento.origenTipo] ?? movimiento.origenTipo;
-  return movimiento.descripcion ? `${base} · ${movimiento.descripcion}` : base;
+  // 458-A (R5/R6, R3): el origen con su entidad que adjunta el servidor, el MISMO texto de la celda.
+  return textoDeOrigen(movimiento, ORIGEN_TIENDA_LABEL);
 }
 
 /**

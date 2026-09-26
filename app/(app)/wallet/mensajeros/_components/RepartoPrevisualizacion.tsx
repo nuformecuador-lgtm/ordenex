@@ -94,6 +94,12 @@ export async function leerPrevisualizacionReparto(
 export interface EnlaceCierreProps {
   /** El cierre al que se va. Es el ÚNICO identificador que estos contratos emiten (R48). */
   cierreId: string;
+  /**
+   * Ficha 458-A (TA.5, R1) — lo que distingue este cierre de los demás enlaces de la pantalla,
+   * dicho con datos legibles (día, mensajero, concepto o monto; ver `CIERRE_ENLACE`). Es lo que
+   * se añade al nombre accesible: el identificador va SOLO en `href`.
+   */
+  nombre: string;
 }
 
 /**
@@ -104,19 +110,20 @@ export interface EnlaceCierreProps {
  * tres copias serían tres formas de que uno se quedara sin nombre accesible o apuntando a otro
  * parámetro.
  *
- * El identificador va en un texto SOLO PARA LECTORES DE PANTALLA: una página puede tener veinte
- * enlaces «Ver el cierre» y sin él sonarían todos igual. Como se AÑADE al texto visible (no lo
- * sustituye), el nombre accesible sigue conteniendo lo que se ve, que es lo que exige «Label in
- * Name»; con un `aria-label` que lo reemplazara, quien dicta por voz no podría activarlo.
+ * Lo que distingue un enlace de otro va en un texto SOLO PARA LECTORES DE PANTALLA: una página
+ * puede tener veinte enlaces «Ver el cierre» y sin él sonarían todos igual. Como se AÑADE al texto
+ * visible (no lo sustituye), el nombre accesible sigue conteniendo lo que se ve («Label in Name»).
+ *
+ * Ficha 458-A (TA.5, R1): ese texto era el IDENTIFICADOR del cierre; ahora es `nombre`, legible.
  */
-export function EnlaceCierre({ cierreId }: Readonly<EnlaceCierreProps>) {
+export function EnlaceCierre({ cierreId, nombre }: Readonly<EnlaceCierreProps>) {
   return (
     <Link
       href={hrefDetalleCierre(cierreId)}
-      className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
     >
       {CIERRE_ENLACE.ver}
-      <span className="sr-only">{CIERRE_ENLACE.identificacion(cierreId)}</span>
+      <span className="sr-only">{nombre}</span>
     </Link>
   );
 }
@@ -194,7 +201,7 @@ function contenidoDe(
   return (
     <>
       {hayMonto ? (
-        <ImputacionesPrevistas imputaciones={data.imputaciones} />
+        <ImputacionesPrevistas imputaciones={data.imputaciones} mensajero={data.mensajeroNombre} />
       ) : (
         <p className="text-sm text-muted-foreground">{REPARTO_PREVISUALIZACION.sinMonto}</p>
       )}
@@ -206,7 +213,8 @@ function contenidoDe(
 /** R32/R33 — a qué cierres se aplicaría el monto y cuánto a cada uno. */
 function ImputacionesPrevistas({
   imputaciones,
-}: Readonly<{ imputaciones: PrevisualizacionRepartoDTO["imputaciones"] }>) {
+  mensajero,
+}: Readonly<{ imputaciones: PrevisualizacionRepartoDTO["imputaciones"]; mensajero: string }>) {
   if (imputaciones.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -231,7 +239,10 @@ function ImputacionesPrevistas({
             {imputacion.parcial ? (
               <Badge variant="warning">{REPARTO_PREVISUALIZACION.parcial}</Badge>
             ) : null}
-            <EnlaceCierre cierreId={imputacion.cierreId} />
+            <EnlaceCierre
+              cierreId={imputacion.cierreId}
+              nombre={CIERRE_ENLACE.delDia(fechaDiaMovimientoCR(imputacion.solicitadoAt), mensajero)}
+            />
           </div>
           <p className="text-sm font-medium text-warning-strong">
             {REPARTO_PREVISUALIZACION.seAplica(imputacion.monto)}

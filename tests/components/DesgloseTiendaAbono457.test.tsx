@@ -29,16 +29,25 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
 
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import { DesgloseMovimientosTienda } from "@/app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda";
+
+/** 458-A: lo que devolveria `conceptosConMovimientosAction` para una tienda con los dos. */
+const CON_MOVIMIENTOS = [
+  { categoria: "abono_tienda", movimientos: 2 },
+  { categoria: "abono_tienda_anulado", movimientos: 1 },
+];
 import { DesgloseTiendaLedger } from "@/app/(app)/mi-wallet/_components/DesgloseTiendaLedger";
 import { filaDescargaDesgloseTienda } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-descarga-columnas";
 import { filaDescargaMiWallet } from "@/app/(app)/mi-wallet/_components/mi-wallet-descarga-columnas";
 import {
-  CATEGORIA_TIENDA_OPTIONS,
+  CATEGORIA_TIENDA_LABEL,
+  CONCEPTO_TIENDA_TODOS_OPTION,
   DESGLOSE_TIENDA_LABEL,
 } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-labels";
 import {
-  CATEGORIA_MI_WALLET_OPTIONS,
+  CATEGORIA_MI_WALLET_LABEL,
+  CONCEPTO_MI_WALLET_TODOS_OPTION,
   DESGLOSE_MI_WALLET_LABEL,
 } from "@/app/(app)/mi-wallet/_components/mi-wallet-labels";
 
@@ -128,9 +137,11 @@ describe("457/R46/R48/R49/R51 — `/wallet/tiendas`: el desglose lo dice desde O
   });
 
   it("filtro por concepto: los dos, con su nombre desde Ordenex", () => {
-    const opciones = new Map(CATEGORIA_TIENDA_OPTIONS.map((o) => [o.value, o.label]));
-    expect(opciones.get("abono_tienda")).toBe("La tienda le paga a Ordenex");
-    expect(opciones.get("abono_tienda_anulado")).toBe("Pago de la tienda a Ordenex anulado");
+    // 458-A (TA.3): las opciones son los conceptos CON movimientos, con su número.
+    const lista = opcionesDeConceptos(CON_MOVIMIENTOS, CATEGORIA_TIENDA_LABEL, "", CONCEPTO_TIENDA_TODOS_OPTION);
+    const opciones = new Map(lista.map((o) => [o.value, o.label]));
+    expect(opciones.get("abono_tienda")).toBe("La tienda le paga a Ordenex (2)");
+    expect(opciones.get("abono_tienda_anulado")).toBe("Pago de la tienda a Ordenex anulado (1)");
   });
 
   it("R50: las pistas de la cabecera nombran el pago y su anulación, literales", () => {
@@ -171,9 +182,11 @@ describe("457/R47/R48/R51 — `/mi-wallet`: la tienda lo lee desde su lado", () 
   });
 
   it("filtro por concepto: los dos, con la lectura de la tienda", () => {
-    const opciones = new Map(CATEGORIA_MI_WALLET_OPTIONS.map((o) => [o.value, o.label]));
-    expect(opciones.get("abono_tienda")).toBe("Le pagaste a Ordenex");
-    expect(opciones.get("abono_tienda_anulado")).toBe("Ordenex anuló el pago que le hiciste");
+    // 458-A (TA.3): las opciones son los conceptos CON movimientos, con su número.
+    const lista = opcionesDeConceptos(CON_MOVIMIENTOS, CATEGORIA_MI_WALLET_LABEL, "", CONCEPTO_MI_WALLET_TODOS_OPTION);
+    const opciones = new Map(lista.map((o) => [o.value, o.label]));
+    expect(opciones.get("abono_tienda")).toBe("Le pagaste a Ordenex (2)");
+    expect(opciones.get("abono_tienda_anulado")).toBe("Ordenex anuló el pago que le hiciste (1)");
   });
 
   it("R50: las pistas de la cabecera nombran el pago y su anulación, literales", () => {

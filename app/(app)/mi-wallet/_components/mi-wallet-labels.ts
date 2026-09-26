@@ -1,8 +1,9 @@
+import { ORIGEN_TIENDA_LABEL } from "@/lib/constants/wallet-rotulos";
+import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import type {
   WalletTiendaMovimientoCategoria,
   WalletTiendaMovimientoTipo,
 } from "@/lib/types/wallet-tienda";
-import { WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet-tienda";
 
 // Feature 43 (T15) — etiquetas i18n-ready y helper de moneda del ledger POR TIENDA,
 // separados de la logica (docs/conventions: textos de UI fuera del componente).
@@ -123,43 +124,16 @@ export const CATEGORIA_MI_WALLET_LABEL: Record<WalletTiendaMovimientoCategoria, 
   ajuste_debito: "Corrección en tu contra",
 };
 
-/**
- * Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 43).
- *
- * `Record<string, string>` con caida al valor crudo: el compilador NO avisa si falta un origen.
- * Por eso un test recorre `WALLET_ORIGEN_TIPO_SEED` y exige rotulo aqui para cada origen que
- * escribe en el libro de la tienda (`tests/unit/components/mi-wallet-labels.test.ts`).
- *
- * Ficha 461 (design §7.3): los MISMOS textos que `ORIGEN_LABEL` en el libro de la caja para los
- * origenes que comparten («Registrado a mano», «Pago de Ordenex a una tienda», «Pago de un gasto de
- * una tienda»); y + `cobro_tienda`, el credito de la anulacion de un cobro. Los lee tambien la
- * oficina en `/wallet/tiendas` (que reexporta este objeto).
- */
-export const ORIGEN_TIENDA_LABEL: Record<string, string> = {
-  cierre_dia: "Cierre del día",
-  pago_tienda: "Pago de Ordenex a una tienda",
-  manual: "Registrado a mano",
-  gestion_orden: "Gestión de orden",
-  pago_por_cuenta_tienda: "Pago de un gasto de una tienda",
-  cobro_tienda: "Cobro de Ordenex a una tienda",
-  // Ficha 457 (design §2/§4.2): el compilador NO avisa aqui (`Record<string, string>`); sin esta
-  // clave, tabla y descargas pintarian `abono_tienda`. El MISMO texto que `ORIGEN_LABEL` en la caja.
-  abono_tienda: "Pago de una tienda a Ordenex",
-};
+export { ORIGEN_TIENDA_LABEL };
 
-/** Origen legible con fallback al valor crudo si no hay etiqueta conocida. */
-export function origenLabel(origenTipo: string): string {
-  return ORIGEN_TIENDA_LABEL[origenTipo] ?? origenTipo;
+/** Origen legible (458-A: sin caida al valor tecnico; el `Record` es total). */
+export function origenLabel(origenTipo: WalletOrigenTipo): string {
+  return ORIGEN_TIENDA_LABEL[origenTipo];
 }
 
 /**
- * Opciones del `Select` de concepto de `/mi-wallet`, pobladas desde el SEED (con opcion "todos") y
- * rotuladas con la lectura desde la tienda (R44).
+ * La opcion «todos» del `Select` de concepto de `/mi-wallet`. El resto ya NO sale del catalogo
+ * completo (458-A, R13/R14): son los conceptos con movimientos de la tienda en el periodo, con su
+ * numero, rotulados desde la tienda con `CATEGORIA_MI_WALLET_LABEL` (R44 de la 461).
  */
-export const CATEGORIA_MI_WALLET_OPTIONS = [
-  { value: "", label: "Todos los conceptos" },
-  ...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({
-    value: categoria,
-    label: CATEGORIA_MI_WALLET_LABEL[categoria],
-  })),
-];
+export const CONCEPTO_MI_WALLET_TODOS_OPTION = { value: "", label: "Todos los conceptos" } as const;
