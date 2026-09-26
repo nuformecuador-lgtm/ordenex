@@ -453,3 +453,133 @@ existe (459). `origin/dev` avanzó a `27c6dce7` (solo docs) desde la base de est
 ### Veredicto
 458-B implementada entera (TB.0–TB.15), gate completo verde con `INIT_EXIT=0` y 0 saltados en
 integration/db; lista para revisión.
+
+## Cierre tras la revisión (2026-09-26) — `progress/review_458-B.md` RECHAZADA → arreglado
+
+**Rama:** `wt/458-B-fix` = `origin/feature/458-B` (`fa481a6d`) + merge de `origin/review/458-B`
+(`c5fc7ea6`), empujada a `feature/458-B` tras cada paso. **Base:** clon propio `ordenex_458bx`
+(`CREATE DATABASE … TEMPLATE ordenex`, 0 conexiones a la plantilla; `prisma migrate deploy`: las dos
+migraciones de la 458-B aplicadas). `.env` del checkout principal con la base cambiada y sin
+`DATABASE_URL_PREVIEW`, copiado sin imprimirlo. `pnpm install --frozen-lockfile` propio, sin junction.
+La base `ordenex` solo como plantilla. **Búsqueda:** los símbolos se leyeron en los archivos reales
+(`grep`/lectura); el grafo no se usó en esta vuelta.
+
+### Qué se arregló (cada punto con su test; lo de dinero, con su mutación en rojo)
+
+| Punto | Commit | Arreglo | Test |
+| --- | --- | --- | --- |
+| **B1** | `3ce43946` | TB.0–TB.15 marcadas `[x]` con su evidencia (commit, test, log) y las desviaciones que ya estaban en esta bitácora (TB.7, TB.8, TB.9, TB.13; D5 NO cumplido en el servidor). | — |
+| **B2** (decisión del leader) | `eac03a6f` | `ingreso_flete` declara `egreso_reverso_flete_devolucion` e `ingreso_iva` declara `egreso_reverso_iva_flete_devolucion` (al final de su lista, descripción actualizada). Mismo patrón que `ingreso_ajuste` en `egresos` (⟨D12⟩ de la 183): la lista deja de ser homogénea y las dos publican `bruto_y_neto` (`AnaliticaFinancieraService`: `cajaConNeto`). El NETO es lo cobrado de verdad; el BRUTO es volumen movido y sube. `ingreso_comision_cod` sigue `solo_bruto`. Design §2.3 actualizado. | `tests/integration/db/analitica-anulacion-rechazo-458.test.ts` (4, Postgres, servicio real de la analítica sobre repos reales; el cobro 1 000,00 + 130,00 del escenario 459 anulado por `RechazoTiendaCobroService.anular`): neto de flete = el de antes − 1 000,00, neto de IVA = el de antes − 130,00, brutos +1 000,00 / +130,00, ganancia −1 130,00 = baja de flete + baja de IVA. Unit: bloque «458-B B2» de `analitica-financiera-derivacion.test.ts` (neto 0,00 con el reverso; neto = bruto sin él). |
+| **M1** | `dabba7d4` | `AjusteCajaAnulacionRepository.estadoDeDocumentos` y `CobroTiendaAnulacionRepository.estadoDeDocumentos` leen `wallet_comprobante` (`caja_movimiento_id` / `tienda_movimiento_id`) en lote. | `tests/integration/db/wallet-documento-comprobante-458.test.ts`: corrección y cobro CON y SIN comprobante registrados por sus actions con `FormData`; el lector (WHERE donde vive) y `WalletService.listarMovimientos` (lo que ve la pantalla) dan `true`/`false`. |
+| **M2** | `f13f01ad` | `IEstadoCuentaRepository.enLecturaConsistente` (molde `IngresosAnaliticaRepository`, feature 187): `EstadoCuentaService.leer` hace la página, el saldo actual, el inicial, el periodo y los estados de documento dentro de UNA transacción `RepeatableRead` (tiempos en `lib/config/estado-cuenta.ts`, por env). | `tests/integration/db/estado-cuenta-concurrencia-458.test.ts`: filas COMMITEADAS; entre el saldo actual y el periodo, OTRA conexión commitea lo que la aprobación de un cierre escribe en el libro de la tienda (crédito `cod_recaudado` 500,00 + débito `flete` 50,00, origen `cierre_dia`) → la lectura responde `ok` con la foto de antes (1 000,00) y cuadra; la siguiente ve 1 450,00. |
+| **m2** «Cómo quedó» | `a69b453b` | `ComoQuedoRepository.cajaDeFila`: desempate por la posición MÁXIMA `(fecha, created_at, id) DESC`, no por el menor `id`. | `como-quedo.test.ts` +1 caso: desde el débito del flete y desde el del IVA del rechazo, la caja tras la ÚLTIMA de las dos líneas (empate en `created_at` afirmado). Rojo antes del arreglo. |
+| **m3** superficie visible | `baca1b30` | Test de componente del «Anular…» que ya sale en `/wallet`; ayuda `docs/ayuda/oficina/wallet-caja.md` (anulación del cobro por rechazo y de la indemnización; analítica); `contexto-458.test.ts` bloque B. | `tests/components/WalletLedgerAcciones458.test.tsx` (6): qué filas ofrecen «Anular…»/«Anulado»; acción única con `{ libro: "caja", movimientoId: id de la PROPIA fila }` sin monto; las dos líneas del rechazo; `ya_anulado`; `no_anulable` dentro del diálogo. |
+| **m4** créditos espejo | `f746c9bd` | `RechazoTiendaCobroService.anular` exige `crearMovimientos(…) === creditos.length` (como la caja); si no, lanza y la transacción revierte todo. | `rechazo-tienda-cobro-anulacion.test.ts` +1 (el repo dice 1 de 2 → lanza). |
+| **m6** adjuntar a lo anulado | `4fe5d93e`, `c54da928` | `IWalletComprobanteRepository.estaAnulado(camino, id)` (egreso: contra-asiento o constancia; corrección: constancia; cobro: `cobro_tienda_anulacion`; pago de la 172: `liquidacion_anulacion`); `adjuntar` responde `no_admite` con el motivo nuevo `anulado` antes de subir nada. | Unit `wallet-comprobante-service.test.ts` +1; Postgres `wallet-documento-comprobante-458.test.ts` (sueldo, corrección, cobro y pago anulados → `no_admite: anulado`; un sueldo sin anular → `ok`). |
+| **m1 / D5** | `3ce43946` | Anotado en `tasks.md` TC.1: la 458-C exige «a quién» en el diálogo para sueldo y gasto y, al retirarse `RegistrarMovimientoCajaDialog`, también el servidor. | — |
+
+**Revisión de «el mismo hueco» en el resto de la analítica (B2):** `dinero_en_caja` y `ganancia_ordenex`
+ya declaraban los dos reversos; `cuenta_por_pagar_tienda`, los dos créditos espejo. `egresos` no los
+nombra por definición (un reverso de cargo no es una salida de caja; tampoco nombra
+`egreso_reverso_cobro_tienda`); `cod_recaudado`, `cuenta_por_pagar_mensajero` y `conciliacion_cierres`
+no tocan esas categorías (los créditos espejo llevan origen `gestion_orden`, no un cierre). La descarga
+CSV de `/analitica` sale del mismo servicio y ramifica por `forma`
+(`analitica-financiera-descarga-columnas.ts`): no hay lista por métrica que tocar. `FUENTE_CAJA`,
+`CRITERIO_DE_APORTE` y los demás `Record` son totales: el compilador ya los cubría.
+
+**Créditos espejo escritos (m4, contados):** la anulación escribe UN crédito espejo por cada débito
+que existe en la tienda: 2 (flete + IVA) con el interruptor `TIENDA_DEBITA_FLETE_DEVOLUCION` encendido
+al aprobar, 1 si el IVA era 0,00 (no hay línea), 0 si el interruptor estaba apagado. En el escenario
+459 (tienda A): 2 créditos, 1 000,00 y 130,00 (`wallet-anulacion-458.test.ts` R64). Ahora el servicio
+exige que el repositorio diga haber escrito exactamente esos.
+
+### Mutaciones de esta vuelta (arnés con autocomprobación: `aplicado=True`, `restaurado=True` en todas)
+
+| # | Mutación | Test | Rojos |
+| --- | --- | --- | --- |
+| B2-a | quitar `egreso_reverso_flete_devolucion` de `ingreso_flete` | `analitica-anulacion-rechazo-458` | 2/4 (flete y «la ganancia cuadra») |
+| B2-b | quitar `egreso_reverso_iva_flete_devolucion` de `ingreso_iva` | ídem | 2/4 (IVA y «la ganancia cuadra») |
+| B2-c | `ingreso_flete` vuelve a `cajaSoloBruto` | ídem + guardia de forma + derivación | 8/25 |
+| M1-a | corrección: `tieneComprobante: false` fijo | `wallet-documento-comprobante-458` | 2/4 |
+| M1-b | cobro: `tieneComprobante: false` fijo | ídem | 2/4 |
+| M2 | `enLecturaConsistente` llama `fn(this)` sin transacción | `estado-cuenta-concurrencia-458` | 1/1 («R22 no cuadra — inicial 0.00, abonos 1500.00, cargos 50.00, final 1450.00, actual 1000.00»: el error de la revisión, reproducido) |
+| m2 | desempate por `m.id` (el de antes) | `como-quedo` | 1/8 |
+| m4 | la comprobación del `count` nunca dispara | `rechazo-tienda-cobro-anulacion` | 1/12 |
+| m6-a | `adjuntar` no mira si está anulado | unit + Postgres | 2/27 |
+| m6-b | `estaAnulado` del pago de la 172 siempre `false` | `wallet-documento-comprobante-458` | 1/5 |
+| m3 | la indemnización se anula con el `origenId` (el incidente) | `WalletLedgerAcciones458` | 1/6 |
+
+### Tests reescritos (contrato nuevo de B2, listados con lo que los sustituye)
+
+- `analitica-financiera-derivacion.test.ts`: «R1 · las tres homogéneas no publican neto» → solo
+  `ingreso_comision_cod`; flete/IVA pasan al bloque «458-B B2» (neto con y sin reverso). R8 (no llamar a
+  `derivarBalance`) se mide sobre `ingreso_comision_cod`. «0.10 + 0.20» de `ingreso_flete` afirma
+  bruto y neto.
+- `analitica-financiera-serie.test.ts`: `TOTALES_ESPERADOS` de `ingreso_flete`/`ingreso_iva` pasan a
+  `bruto_y_neto` (neto 2 930,00, el mismo Σ ingreso − Σ egreso de `egresos`: el doble no filtra
+  categorías); «R27 · serie `solo_bruto`» se mide sobre `ingreso_comision_cod`.
+- `financiera-forma-importe.guardia.test.ts`: `FORMA_ESPERADA` de flete/IVA → `bruto_y_neto`.
+- `metrics-caja-naturaleza.guardia.test.ts` y `financiera-ingresos-cubo-repo.test.ts`: la lista de
+  categorías de flete/IVA gana el reverso al final.
+- `tests/integration/actions/analitica-financiera-action.test.ts` F.1: `ingreso_flete` con `conNeto`
+  (bruto = neto = 1 500,00 sin reverso); `soloBruto` pasa a F.2 (`ingreso_comision_cod`, la única que
+  queda `solo_bruto`, afirmada contra Postgres).
+- `wallet-comprobante-alcance.test.ts` (m6): el escenario 459 reversa su sueldo y anula el pago a la
+  tienda A; el test registra un sueldo y un pago NUEVOS por sus caminos reales. Lo que mide (destino y
+  alcance) no cambia.
+- `contexto-457.test.ts` / `contexto-461.test.ts`: `actualizado` de `oficina/wallet-caja` pasa de
+  «igual a 2026-09-25» a «no anterior a 2026-09-25» (esta ficha lo movió al 2026-09-26; las frases que
+  pinan siguen literales).
+
+### Anotado (no se arregla aquí)
+
+- **Contrato para la 458-C (anotado en `tasks.md` TC.3):** `DocumentoCajaAcciones` responde «sin
+  comprobante» SIN ir al servidor para `egreso_caja`, `ajuste_caja` y `cobro_tienda`; ahora que el
+  servidor dice la verdad (M1), «Ver comprobante» tendrá que llamar a `verComprobanteAction` cuando
+  esos registros puedan llevar archivo desde la pantalla (hoy ningún diálogo lo manda: no se ve).
+  Y `no_admite: anulado` (m6) tiene que traducirse.
+- **M2, alcance:** el lector de rechazos (`RechazoTiendaCobroAnulacionRepository.estadoPorGestion`)
+  sigue por el cliente global: solo aporta el texto de la anulación, no entra en R22.
+- **m5, m7–m10** de la revisión: sin cambio (anotaciones de la revisión; m7 y m9 son contratos de la
+  458-D).
+- **Recorrido en navegador del «Anular…»** (m3): no hecho (sin dev server propio en este worktree);
+  cubierto por el test de componente sobre `WalletLedger` real.
+- **Riesgo de merge con la 458-A:** `tests/unit/asistente/contexto-458.test.ts` lo crea esta hija
+  (bloque B); si la 458-A crea el suyo (bloque A), es un add/add a resolver juntando los dos bloques.
+
+### Mapa R → test (añadidos de esta vuelta; el resto, en §TB.15)
+
+| R / punto | Test |
+| --- | --- |
+| R68 + D7 en la analítica (B2) | `tests/integration/db/analitica-anulacion-rechazo-458.test.ts`, `analitica-financiera-derivacion.test.ts` (bloque 458-B B2) |
+| R22 bajo concurrencia (M2) | `tests/integration/db/estado-cuenta-concurrencia-458.test.ts` |
+| R71/R79/R80 `tieneComprobante` (M1) | `tests/integration/db/wallet-documento-comprobante-458.test.ts` |
+| R79 «movimiento anulable» (m6) | `wallet-documento-comprobante-458.test.ts`, `wallet-comprobante-service.test.ts` |
+| R58 desempate (m2) | `como-quedo.test.ts` (caso 458-B m2) |
+| R64/R68 créditos espejo contados (m4) | `rechazo-tienda-cobro-anulacion.test.ts` (caso 458-B m4) |
+| R63/R65 superficie visible (m3) | `tests/components/WalletLedgerAcciones458.test.tsx`, `tests/unit/asistente/contexto-458.test.ts` |
+
+### Salidas reales (gate completo, `progress/gate_458B_cierre.log`, árbol `55bef29a`, base `ordenex_458bx`)
+
+- `pnpm run typecheck`: `✓ typecheck paso`.
+- `pnpm run lint`: `✖ 218 problems (0 errors, 218 warnings)` — la misma línea base.
+- `pnpm test`: `Test Files 2283 passed (2283)` · `Tests 31989 passed | 26 skipped (32015)`; los 26 saltados
+  son de `tests/components/AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (9), ajenos;
+  **0 saltados en `tests/integration/db`**.
+- `✓ tests: sin rojos nuevos` · `INIT_EXIT=0` (escrito dentro del log, sin `tail`).
+
+**Dos corridas anteriores, rojas, y por qué:** la 1.ª cayó en `lint` por un script auxiliar mío sin
+commitear en la raíz del worktree (`.mkdb.cjs`, el que crea/borra la base clon; `require()` prohibido):
+se movió fuera del árbol. La 2.ª dio 4 rojos: (a) `financiera-fuente.guardia` — PROPIO: dos comentarios
+de M2 nombraban el repositorio de ingresos de la analítica y la guardia de la 127 censó por esa huella
+`EstadoCuentaRepository`, que consulta `usuario`; arreglado en `55bef29a` reescribiendo los comentarios;
+(b) `analitica-financiera-action` R21 (+1,00 en N/V), `abono-tienda-457-concurrencia` (deadlock 40P01)
+y `ajuste-caja-anulacion-461` (la caja movida por escrituras commiteadas de otro archivo en paralelo) —
+AJENOS, modos de flake conocidos: aislados y en serie, **3 de 3 verdes** (28/28 cada vez,
+`progress/rerun_458B_cierre_aislado.log`). La 3.ª es la de arriba, verde.
+
+### Veredicto
+
+458-B cerrada tras la revisión: B1, B2, M1, M2 y los menores pedidos arreglados con su test (y su
+mutación en rojo donde toca dinero), gate completo verde con `INIT_EXIT=0` y 0 saltados en
+integration/db; lista para re-revisión.
