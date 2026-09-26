@@ -65,7 +65,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R17: rol no autorizado -> forbidden (lo decide el service)", async () => {
     const service = fakeService({ registrarEgreso: vi.fn(async () => ({ status: "forbidden" as const })) });
     const r = await registrarEgresoAdministrativoAction(
-      { claveIdempotencia: randomUUID(), tipoEgreso: "sueldo", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "sueldo", monto: "100.00", descripcion: "x", contraparteNombre: "Ana" },
       { service, getActor: async () => OTRO },
     );
     expect(r).toEqual({ status: "forbidden" });
@@ -121,7 +121,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("maestro con egreso valido -> ok, movimiento con monto STRING", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria", contraparteNombre: "Librería Central" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
@@ -207,6 +207,7 @@ describe("registrarEgresoAdministrativoAction — la fecha del egreso (R20/R21)"
       tipoEgreso: "gasto_variable",
       monto: "1500.00",
       descripcion: "Papeleria",
+      contraparteNombre: "Librería Central", // ficha 458-C (D5): obligatorio en el gasto
       fecha,
     };
   }
@@ -278,11 +279,68 @@ describe("registrarEgresoAdministrativoAction — la fecha del egreso (R20/R21)"
     conRelojEnAhora();
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { claveIdempotencia: randomUUID(), tipoEgreso: "sueldo", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "sueldo", monto: "100.00", descripcion: "x", contraparteNombre: "Ana" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
     const entrada = (service.registrarEgreso as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(Object.keys(entrada)).not.toContain("fecha");
+  });
+});
+
+// ── FICHA 458-C (TC.1, D5 heredado de la 458-B, revisión m1) — «a quién» OBLIGATORIO en el borde ──
+//
+// Con `RegistrarMovimientoCajaDialog` retirado, el servidor exige «a quién» en sueldo y gasto de
+// Ordenex. Se mide el BORDE (la action con su schema real) y no el servicio: ausente, en blanco o
+// con solo espacios → `validation_error` en `contraparteNombre` SIN tocar el servicio; presente →
+// llega al servicio recortado. La corrección de caja lo sigue teniendo opcional (lo mide
+// `wallet-registro-comprobante-458.test.ts` contra Postgres).
+
+describe("458-C D5 — registrarEgresoAdministrativoAction exige «a quién» en sueldo y gasto", () => {
+  const base = { tipoEgreso: "sueldo", monto: "100.00", descripcion: "Sueldo de septiembre" };
+
+  for (const [caso, extra] of [
+    ["ausente", {}],
+    ["vacío", { contraparteNombre: "" }],
+    ["solo espacios", { contraparteNombre: "   " }],
+  ] as const) {
+    for (const tipoEgreso of ["sueldo", "gasto_variable"] as const) {
+      it(`${tipoEgreso} con «a quién» ${caso} → validation_error en contraparteNombre, sin tocar el servicio`, async () => {
+        const service = fakeService();
+        const r = await registrarEgresoAdministrativoAction(
+          { ...base, tipoEgreso, claveIdempotencia: randomUUID(), ...extra },
+          { service, getActor: async () => MAESTRO },
+        );
+        expect(r.status).toBe("validation_error");
+        if (r.status !== "validation_error") throw new Error("esperado validation_error");
+        expect(r.fieldErrors.contraparteNombre).toEqual(["Escribí a quién se le pagó."]);
+        expect(service.registrarEgreso).not.toHaveBeenCalled();
+      });
+    }
+  }
+
+  it("con FormData y sin «a quién» también cae en el borde (la vía del diálogo)", async () => {
+    const service = fakeService();
+    const fd = new FormData();
+    fd.set("claveIdempotencia", randomUUID());
+    fd.set("tipoEgreso", "gasto_variable");
+    fd.set("monto", "100.00");
+    fd.set("descripcion", "Tinta");
+    const r = await registrarEgresoAdministrativoAction(fd, { service, getActor: async () => MAESTRO });
+    expect(r.status).toBe("validation_error");
+    expect(service.registrarEgreso).not.toHaveBeenCalled();
+  });
+
+  it("CONTROL: con «a quién» llega al servicio, recortado", async () => {
+    const service = fakeService();
+    const r = await registrarEgresoAdministrativoAction(
+      { ...base, claveIdempotencia: randomUUID(), contraparteNombre: "  María Solano  " },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("ok");
+    expect(service.registrarEgreso).toHaveBeenCalledWith(
+      expect.objectContaining({ contraparteNombre: "María Solano" }),
+      MAESTRO,
+    );
   });
 });

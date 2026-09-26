@@ -160,11 +160,11 @@ describeSiHayBase("458-B/M1 — «tiene comprobante» de la correccion y del cob
         const anulaciones: Record<string, string> = {};
         const egresos = new WalletEgresoService(cajaRepo, c, puerto);
         const sueldo = await registrarEgresoAdministrativoAction(
-          { tipoEgreso: "sueldo", monto: "30.00", descripcion: "Sueldo m6", claveIdempotencia: clave("sueldo") },
+          { tipoEgreso: "sueldo", monto: "30.00", descripcion: "Sueldo m6", claveIdempotencia: clave("sueldo"), contraparteNombre: "Ana" },
           { getActor, service: egresos },
         );
         const control = await registrarEgresoAdministrativoAction(
-          { tipoEgreso: "sueldo", monto: "31.00", descripcion: "Sueldo control m6", claveIdempotencia: clave("control") },
+          { tipoEgreso: "sueldo", monto: "31.00", descripcion: "Sueldo control m6", claveIdempotencia: clave("control"), contraparteNombre: "Ana" },
           { getActor, service: egresos },
         );
         status.sueldo = sueldo.status;
