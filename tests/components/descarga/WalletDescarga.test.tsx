@@ -45,13 +45,19 @@ vi.mock("@/lib/actions/wallet", () => ({
 
 // FICHA 458-E (T E.1, R56/R57): el módulo del libro lee «A quién» y «Registró» por los ids de la
 // página (y la descarga, por los del libro entero). Doble determinista: cada id se nombra por sí
-// mismo, sin exponerlo (el nombre es «Cuenta N» a partir del sufijo del id del fixture).
+// mismo, sin exponerlo: «Cuenta N» por orden de primera aparicion (revision m5 de la 458-E: antes el
+// nombre llevaba el ultimo bloque del uuid, y un trozo de id en una celda pasaba la comprobacion R3).
+const NOMBRE_DE_CUENTA = new Map<string, string>();
+function nombreDeCuenta(id: string): string {
+  if (!NOMBRE_DE_CUENTA.has(id)) NOMBRE_DE_CUENTA.set(id, `Cuenta ${NOMBRE_DE_CUENTA.size + 1}`);
+  return NOMBRE_DE_CUENTA.get(id) as string;
+}
 const autoriaMock = vi.fn(async (input: { movimientoIds: string[] }) => ({
   status: "ok" as const,
   filas: input.movimientoIds.map((id) => ({
     movimientoId: id,
     aQuien: {
-      nombre: `Cuenta ${id.split("-").pop()}`,
+      nombre: nombreDeCuenta(id),
       beneficiario: null,
       cuenta: null,
       esOrdenex: false,
@@ -854,10 +860,14 @@ describe("458-E · el libro de la caja con las columnas de la maqueta", () => {
     expect(
       filas.map((f) => ({ dueno: f.dueno, aQuien: f.aQuien, registro: f.registro })),
     ).toEqual(enPantalla);
-    // R3: ningún id en ninguna celda del archivo.
+    // R3: ningún id en ninguna celda del archivo — ni entero ni DENTRO de un texto (revisión m5).
+    const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
     for (const fila of filas) {
-      for (const id of [propio.id, terceros.id, propio.origenId, terceros.origenId]) {
-        expect(Object.values(fila)).not.toContain(id);
+      for (const valor of Object.values(fila)) {
+        expect(String(valor)).not.toMatch(UUID);
+        for (const id of [propio.id, terceros.id, propio.origenId, terceros.origenId]) {
+          if (id !== null) expect(String(valor)).not.toContain(id);
+        }
       }
     }
   });

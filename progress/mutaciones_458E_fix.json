@@ -159,5 +159,17 @@
     "total": 26,
     "suitesRojas": 2,
     "restaurado": true
+  },
+  {
+    "id": "m5-a",
+    "mutacion": "la descarga mete el id DENTRO del texto de «A quién»",
+    "archivo": "app/(app)/wallet/_components/wallet-ledger-descarga-columnas.ts",
+    "tests": [
+      "tests/components/descarga/WalletDescarga.test.tsx"
+    ],
+    "rojos": 1,
+    "total": 12,
+    "suitesRojas": 2,
+    "restaurado": true
   }
 ]

@@ -249,6 +249,10 @@ describe("458-E (bloque E) — la oficina puede preguntar por el libro de la caj
     expect(caja).toContain("Una fila anulada dice **Anulado** y se ve **tachada**.");
     expect(caja).toContain("| **Ver** | Abre el detalle del movimiento. En una fila anulada, al lado dice **Anulado** |");
     expect(caja).toContain("**Anulado** con el día, quién lo anuló, el motivo y cómo se anuló");
+    // Revisión de la 458-E: B1 (R58, cuándo se registró) y M2 («A quién» por nombre con anulados).
+    expect(caja).toContain("y **cuándo**: el día y la hora de Costa Rica en que se tecleó");
+    expect(caja).toContain("dos filas —el anulado y su anulación, que también dice ese nombre en **A quién**— y se compensan");
+    expect(caja).toContain("su **A quién** es el **mensajero**, no la tienda");
   });
 
   it("el libro de la caja y su filtro «A quién» NO llegan a la tienda, al mensajero ni a la bodega", () => {

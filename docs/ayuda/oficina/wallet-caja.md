@@ -324,7 +324,8 @@ reparto. Si se anula, vuelve a **Flujo de dinero registrado**. La ganancia no ca
 **Ver**, en cada fila del libro, abre su detalle a un costado: **a quién** (la tienda, el mensajero, la
 persona o el proveedor), **por qué** (el motivo), **de dónde sale**, **cómo** se pagó (el método y la
 referencia, si los tiene), el **comprobante**, **quién lo registró** —o **Automático** y qué lo produjo,
-como «Aprobación del cierre»—, su **estado** (**Vigente**, o **Anulado** con el día, quién lo anuló, el
+como «Aprobación del cierre»— y **cuándo**: el día y la hora de Costa Rica en que se tecleó («Ana · el
+2026-09-26 a las 21:30»), que puede no ser la fecha del movimiento (un sueldo del 1 registrado el 26), su **estado** (**Vigente**, o **Anulado** con el día, quién lo anuló, el
 motivo y cómo se anuló) y **Cómo quedó**: la cifra grande, la ganancia, lo que Ordenex les debe a las tiendas y el
 saldo inicial y aportes **justo después** de ese movimiento, y el saldo de la cuenta que tocó.
 
@@ -418,7 +419,13 @@ Arriba del libro hay una barra de filtros:
 
 **Limpiar** quita todos los filtros. **Las tarjetas de arriba, la composición de la ganancia y el
 desglose de egresos cuentan solo lo filtrado**: si elegís una tienda en **A quién**, lo que entró y lo
-que salió son los de esa tienda y la cifra grande pasa a llamarse **Movimiento neto del periodo**.
+que salió son los movimientos cuyo **A quién** es esa tienda y la cifra grande pasa a llamarse
+**Movimiento neto del periodo**. Ojo: el contra-entrega que cobró el mensajero a los clientes de esa
+tienda nace del cierre y su **A quién** es el **mensajero**, no la tienda; para verlo, elegí al mensajero.
+
+Si elegís un **nombre anotado** y alguno de sus sueldos, gastos o correcciones se **anuló**, aparecen las
+dos filas —el anulado y su anulación, que también dice ese nombre en **A quién**— y se compensan: un
+sueldo anulado no cuenta como dinero que salió.
 
 Y se puede **descargar** el libro, con los mismos filtros y las mismas columnas que la tabla (**A
 quién** y **Registró** incluidas), para cuadrar fuera.
