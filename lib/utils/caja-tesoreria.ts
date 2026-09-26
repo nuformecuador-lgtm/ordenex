@@ -97,6 +97,11 @@ export const NATURALEZA_POR_CATEGORIA: Record<WalletMovimientoCategoria, Natural
   // la devuelve. Los dos DE TERCEROS. La guardia `caja-clasificacion-459` pone rojo `propio` aqui.
   ingreso_abono_tienda: "terceros",
   egreso_reverso_abono_tienda: "terceros",
+  // Ficha 458-B (design §2.3, D7): la anulacion de un cobro por rechazo aprobado. Los dos reversos
+  // son PROPIOS —el flete y su IVA eran ganancia de Ordenex; anularlos la baja—, igual que el
+  // reverso del cobro de la 461.
+  egreso_reverso_flete_devolucion: "propio",
+  egreso_reverso_iva_flete_devolucion: "propio",
 };
 
 /**
@@ -134,6 +139,11 @@ export const LIQUIDEZ_POR_CATEGORIA: Record<WalletMovimientoCategoria, LiquidezM
   // toma del saldo de la tienda y no entra dinero nuevo— y su anulacion es el REVERSO de un cargo.
   ingreso_cobro_tienda: "cargo_a_tienda",
   egreso_reverso_cobro_tienda: "cargo_a_tienda",
+  // Ficha 458-B (design §2.3, D7): los reversos del flete por rechazo y de su IVA son REVERSOS DE
+  // CARGO: no sale dinero (no suman a «Salio»), baja la ganancia y SUBE «De las tiendas». Como
+  // `efectivo` subirian «Salio» sin que saliera dinero (mutacion 4 de design §8.2).
+  egreso_reverso_flete_devolucion: "cargo_a_tienda",
+  egreso_reverso_iva_flete_devolucion: "cargo_a_tienda",
   // EFECTIVO: todo lo demas entra o sale de verdad.
   ingreso_ajuste: "efectivo",
   ingreso_cod_recaudado: "efectivo",

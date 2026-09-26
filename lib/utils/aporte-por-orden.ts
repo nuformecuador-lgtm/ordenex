@@ -84,6 +84,9 @@ export const FUENTE_CAJA: Record<WalletMovimientoCategoria, FuenteDeAporte> = {
   // FICHA 457 (design §4, R51): el pago de una tienda a Ordenex y su anulacion los decide una persona.
   ingreso_abono_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   egreso_reverso_abono_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 458-B (design §2.3): la anulacion de un cobro por rechazo la decide una persona.
+  egreso_reverso_flete_devolucion: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  egreso_reverso_iva_flete_devolucion: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
 };
 
 /**
@@ -124,6 +127,9 @@ export const FUENTE_TIENDA: Record<WalletTiendaMovimientoCategoria, FuenteDeApor
   // FICHA 457 (design §4, R51): el pago de la tienda a Ordenex y su anulacion no nacen de un cierre.
   abono_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   abono_tienda_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 458-B (design §2.3): los creditos espejo de la anulacion de un cobro por rechazo.
+  flete_devolucion_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  iva_flete_devolucion_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
 };
 
 /**

@@ -48,6 +48,9 @@ const LECTURA_DESDE_LA_TIENDA: Record<WalletTiendaMovimientoCategoria, string> =
   // Ficha 457 (design §2, D10, R47): la lectura desde la tienda del pago que ELLA le hizo a Ordenex.
   abono_tienda: "Le pagaste a Ordenex",
   abono_tienda_anulado: "Ordenex anuló el pago que le hiciste",
+  // Ficha 458-B (design 458 §2.3): la anulacion de un cobro por rechazo, desde la tienda.
+  flete_devolucion_anulado: "Ordenex anuló el flete por rechazo y te lo devolvió",
+  iva_flete_devolucion_anulado: "Ordenex anuló el IVA del flete por rechazo y te lo devolvió",
   ajuste_credito: "Corrección a tu favor",
   ajuste_debito: "Corrección en tu contra",
 };
@@ -72,17 +75,20 @@ const UNA_PARTE_ACTUA_SOBRE_LA_OTRA: readonly WalletTiendaMovimientoCategoria[] 
   // Ficha 457: la tienda paga y Ordenex anula: las dos partes actuan.
   "abono_tienda",
   "abono_tienda_anulado",
+  // Ficha 458-B: Ordenex anula y la tienda recibe.
+  "flete_devolucion_anulado",
+  "iva_flete_devolucion_anulado",
   "ajuste_credito",
   "ajuste_debito",
 ];
 
 describe("461 — CATEGORIA_MI_WALLET_LABEL: la lectura desde la tienda (R44, design §7.5)", () => {
-  it("dice exactamente los 16 textos aprobados (14 de la 461 + 2 de la 457), y el seed es exactamente esas 16 claves", () => {
+  it("dice exactamente los 18 textos aprobados (14 de la 461 + 2 de la 457 + 2 de la 458-B), y el seed es exactamente esas 18 claves", () => {
     expect(CATEGORIA_MI_WALLET_LABEL).toEqual(LECTURA_DESDE_LA_TIENDA);
     expect([...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED].sort()).toEqual(
       Object.keys(LECTURA_DESDE_LA_TIENDA).sort(),
     );
-    expect(WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED).toHaveLength(16);
+    expect(WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED).toHaveLength(18);
   });
 
   it("⭑ 457 (R46/R47): el pago de la tienda a Ordenex y su anulacion se leen distinto desde cada lado", () => {
@@ -107,8 +113,8 @@ describe("461 — CATEGORIA_MI_WALLET_LABEL: la lectura desde la tienda (R44, de
         CATEGORIA_TIENDA_LABEL[categoria],
       );
     }
-    // Anti-vacuidad: la lista de conceptos con actor cubre 15 de los 16 (ficha 457: + 2).
-    expect(UNA_PARTE_ACTUA_SOBRE_LA_OTRA).toHaveLength(15);
+    // Anti-vacuidad: la lista de conceptos con actor cubre 17 de los 18 (ficha 457: + 2; 458-B: + 2).
+    expect(UNA_PARTE_ACTUA_SOBRE_LA_OTRA).toHaveLength(17);
   });
 
   it("el cobro y lo que Ordenex paga se leen en segunda persona, con Ordenex como sujeto", () => {

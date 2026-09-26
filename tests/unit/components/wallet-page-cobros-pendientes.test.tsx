@@ -147,6 +147,8 @@ const RESUMEN_OK = {
       egreso_pago_mensajero: "0.00",
       egreso_ajuste: "0.00",
       egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
+      egreso_reverso_flete_devolucion: "0.00", // ficha 458-B: la exige el `Record` total
+      egreso_reverso_iva_flete_devolucion: "0.00", // ficha 458-B
     },
     otrosEgresos: "0.00",
     hayOtrosEgresos: false,

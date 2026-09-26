@@ -40,3 +40,82 @@ indemnización: `movimiento_id` = la fila ORIGINAL del egreso. **No se crea
   método).
 - `AjusteCajaService` (la corrección) no cambia: sigue exigiendo `ingreso_ajuste`/`egreso_ajuste`
   con origen `manual`, así que no puede anular un sueldo por esa vía ni al revés.
+
+## TB.1 — Fase 0
+
+Ver `progress/fase0_458-B.md` (fotografías 459 e invariante verdes: 27/27; fotografía nueva
+`wallet-caracterizacion-458.test.ts`: 6/6; tres mutaciones medibles hoy en rojo con autocomprobación).
+
+## TB.2 / TB.3 — Migraciones (orden y ciclo medido en el clon)
+
+1. `20260928120000_wallet_458_enums` — seis `ADD VALUE IF NOT EXISTS` (2 caja, 2 tienda, 2 historial).
+   `down.sql` = función dinámica de la 459/461 renombrada `_458` (lee `pg_enum`, RAISE si una fila usa
+   un valor, recrea CHECK/índices que nombran el tipo).
+2. `20260928120100_wallet_458_tablas` — `wallet_anotacion`, `rechazo_tienda_cobro_anulacion`,
+   `wallet_comprobante` (CHECK `num_nonnulls = 1`, UNIQUE por destino, CHECK de `content_type`), los dos
+   CHECK tipo↔categoría ampliados, RLS en las tres. `down.sql`: `DO` con RAISE si hay filas en las tres
+   tablas o movimientos con las categorías nuevas; CHECK a las listas EXACTAS de la 457; `DROP TABLE`.
+   D13: **no** se crea `wallet_movimiento_anulacion`.
+
+Catálogos (caja / tienda / origen / historial tipos / historial entidades), medidos en `ordenex_458b`:
+
+| Momento | Catálogos | Tablas nuevas | CHECK (md5, 8) |
+| --- | --- | --- | --- |
+| Antes (457) | 25 / 16 / 14 / 63 / 24 | 0 | `2182276a`, `d1a65d24` |
+| Después de `migrate deploy` | 27 / 18 / 14 / 65 / 24 | 3 | `cd688cd4`, `c779ba9d` |
+| `db:rollback` con 1 fila en `wallet_anotacion` | falla: «rollback 458: hay 1 filas … se aborta sin borrar nada»; la fila sigue | 3 | sin cambio |
+| `db:rollback` (migración 2) sin filas | 27 / 18 / 14 / 65 / 24 | 0 | `2182276a`, `d1a65d24` (= 457) |
+| `down.sql` de la 1 con 1 fila de historial `egreso_caja_anulado` | falla: «rollback 458: 1 filas de historial_accion.accion usan …»; los 6 valores siguen | — | — |
+| `down.sql` de la 1 sin filas | 25 / 16 / 14 / 63 / 24 | 0 | `2182276a`, `d1a65d24` |
+| `migrate deploy` otra vez | 27 / 18 / 14 / 65 / 24 | 3 | `cd688cd4`, `c779ba9d` |
+
+`prisma migrate diff --from-config-datasource --to-schema db/schema.prisma --script` tras aplicar:
+«This is an empty migration» (sin drift; el índice de expresión `lower(contraparte_nombre)` no aparece).
+`prisma format` realineó columnas del schema (diff `-w`: solo inserciones).
+
+Test: `tests/integration/db/wallet-458-migration.test.ts` (8 casos: catálogos valor a valor, CHECK
+admiten/rechazan, RLS y restricciones de las tres tablas, `rechazo_tienda_cobro_anulacion` sobre un
+cobro real de la 459, `down` de la 2 aborta con filas y devuelve los CHECK de la 457, función del
+`down` de la 1 igual a la de la 461 salvo el sufijo, `TIPO_POR_CATEGORIA_TIENDA` = CHECK del motor,
+R89 sin sentencias sobre filas).
+
+## TB.4 — `Record` totales y literales de guardias (reescritos a mano)
+
+Código: `WALLET_MOVIMIENTO_CATEGORIA_SEED` (+2), `WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED` (+2),
+`WALLET_EGRESO_NOMBRADO_SEED` (3→5), `NATURALEZA_POR_CATEGORIA` (propio ×2), `LIQUIDEZ_POR_CATEGORIA`
+(`cargo_a_tienda` ×2), `FUENTE_CAJA`/`FUENTE_TIENDA` (`sin_reparto/no_nace_de_un_cierre` ×4),
+`CUBETA_POR_CATEGORIA` (`aFavor` ×2), `TIPO_POR_CATEGORIA_TIENDA` (`credito` ×2),
+`CONTRAPARTIDA_EN_CAJA` (+2), `metrics.ts` (`dinero_en_caja` y `ganancia_ordenex` +2; `egresos` no;
+`cuenta_por_pagar_tienda` +2), `CATEGORIA_LABEL`, `CATEGORIA_TIENDA_LABEL`, `CATEGORIA_MI_WALLET_LABEL`
+(textos de design §2.3), `EGRESO_NOMBRADO_LABEL` y su icono (dos filas nombradas nuevas: «Fletes por
+rechazo cobrados a una tienda anulados», «IVA de fletes por rechazo cobrados a una tienda anulados»),
+`HISTORIAL_ACCION_TIPOS` + categoría + etiqueta («Anuló un cobro por rechazo a una tienda», «Anuló un
+gasto de la caja»). `ESCRIBEN_EN_LA_TIENDA` no cambia (los créditos nuevos llevan origen
+`gestion_orden`, que ya estaba). `finanzas-diarias.ts` no cambia (lee `LIQUIDEZ_POR_CATEGORIA`).
+
+Literales de tests cambiados (ninguno es un importe de dinero; son conteos, listas de catálogo o
+filas nuevas con ₡0):
+
+| Test | Antes → después |
+| --- | --- |
+| `metrics-caja-naturaleza.guardia` | 25→27 (dinero_en_caja), 16→18 (ganancia) |
+| `caja-clasificacion-459.guardia` (4) | 8→10 cargos (+ los dos reversos); detector y dos casos nuevos (R68/R91 y contraprueba de la mutación 4) |
+| `caja-composicion-exhaustiva.guardia` | nombrados 3→5 |
+| `catalogo-y-choke-point` | 63→65 tipos; `mueve_dinero` 41→43 |
+| `financiera-ingresos-repo` | 16→18 categorías del WHERE de la ganancia |
+| `wallet-labels.test` | 25→27 textos + 2 literales nuevos; nombrados +2 |
+| `mi-wallet-labels.test` / `desglose-tienda-labels.test` | 16→18 textos + 2 literales nuevos; actores 15→17 |
+| `desglose-tienda.test` | `CREDITO_SEED` +2 |
+| `caja-derivacion-457.test` | POOL +2 filas (1 000,00 y 130,00); título 25→27 |
+| `ComposicionGananciaCard.test` / `DetalleFilaComposicion.test` | dos filas nuevas con ₡0 en las listas-contrato; controles 16→18 |
+| fixtures de composición (6 tests) | `egresos` +2 claves en `"0.00"` (lo exige el `Record`) |
+| `api-key-dependencias-usuario` (censo) | +2 relaciones a `usuario` (`SOLO_OPERADOR`) |
+| migraciones previas (`caja-459`, `cobro-tienda-461`, `wallet-461`, `abono-tienda-457`, `caja-tesoreria`) | los tramos `slice` corren 2 posiciones; conteos 25→27, 16→18, 63→65; rama crédito 5→7 |
+
+**Reescritura de una aserción (no literal):** `caja-composicion.test.ts` R26 afirmaba «el pago a la
+tienda no entra en la columna» con `salidas > totalEgresos`, que dependía de los importes del conjunto;
+con los dos reversos (propios, fuera de «Salió», importes mayores del catálogo) dejó de valer. Se afirma
+ahora directamente: quitar el pago a la tienda no mueve `totalEgresos` y sí baja `salidas`.
+
+**Queda rojo hasta TB.9:** `historial-accion-escrituras-cubiertas.guardia` (los dos tipos nuevos aún no
+tienen productor; sus métodos nacen en TB.9).

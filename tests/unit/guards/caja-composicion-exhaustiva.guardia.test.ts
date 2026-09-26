@@ -218,11 +218,13 @@ describe("R23/R26 — la particion de la ganancia cubre TODAS las categorias pro
     expect(derivados).toContain("ingreso_cobro_tienda");
   });
 
-  it("⭑ 461 (R27): el reverso del cobro es el TERCER egreso nombrado; «otros» sigue siendo solo `egreso_gasto`", () => {
+  it("⭑ 461 (R27) + 458-B: el reverso del cobro es el TERCER egreso nombrado y los dos del cobro por rechazo el cuarto y el quinto (3→5); «otros» sigue siendo solo `egreso_gasto`", () => {
     expect([...WALLET_EGRESO_NOMBRADO_SEED]).toEqual([
       "egreso_pago_mensajero",
       "egreso_ajuste",
       "egreso_reverso_cobro_tienda",
+      "egreso_reverso_flete_devolucion", // ficha 458-B
+      "egreso_reverso_iva_flete_devolucion", // ficha 458-B
     ]);
     expect(NATURALEZA_POR_CATEGORIA.egreso_reverso_cobro_tienda).toBe("propio");
     expect(OTROS_EGRESOS_DE_ORDENEX).toEqual(["egreso_gasto"]);

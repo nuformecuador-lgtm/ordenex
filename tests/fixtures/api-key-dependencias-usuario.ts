@@ -228,6 +228,10 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
   },
   "AbonoTienda.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "AbonoTiendaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // ⭑ FICHA 458-B — quien anulo un cobro por rechazo y quien subio un comprobante de la wallet. Las
+  // dos acciones son solo de acceso total (R82); las dos FK son `Restrict`.
+  "RechazoTiendaCobroAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "WalletComprobante.subidor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "GastoFijoCobro.decisor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "RechazoTiendaCobro.decisor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "ApiKey.createdBy": {

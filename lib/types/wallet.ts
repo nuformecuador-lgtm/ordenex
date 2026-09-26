@@ -72,6 +72,11 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   // ganancia. Su anulacion es el egreso de terceros que lo devuelve.
   "ingreso_abono_tienda",
   "egreso_reverso_abono_tienda",
+  // Ficha 458-B (design §2.1/§2.3, D7): la anulacion de un cobro por rechazo aprobado (337). DOS
+  // reversos de CARGO —flete e IVA por separado—, como el reverso del cobro de la 461: propios,
+  // liquidez «cargo»; bajan la ganancia y suben «De las tiendas» sin tocar «Entro» ni «Salio».
+  "egreso_reverso_flete_devolucion",
+  "egreso_reverso_iva_flete_devolucion",
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -190,10 +195,15 @@ export type WalletEgresoDesglosado = (typeof WALLET_EGRESO_DESGLOSADO_SEED)[numb
 //
 // Ficha 461 (design §4, R27): + `egreso_reverso_cobro_tienda`, el TERCER egreso nombrado. La
 // anulacion de un cobro baja la ganancia y tiene que verse con su nombre, no dentro de «Otros».
+//
+// Ficha 458-B (design §2.3): + los dos reversos del cobro por rechazo (flete e IVA). Bajan la
+// ganancia igual que el reverso del cobro de la 461 y, por el mismo motivo, se ven con su nombre.
 export const WALLET_EGRESO_NOMBRADO_SEED = [
   "egreso_pago_mensajero",
   "egreso_ajuste",
   "egreso_reverso_cobro_tienda",
+  "egreso_reverso_flete_devolucion",
+  "egreso_reverso_iva_flete_devolucion",
 ] as const satisfies readonly WalletMovimientoCategoria[];
 
 export type WalletEgresoNombrado = (typeof WALLET_EGRESO_NOMBRADO_SEED)[number];

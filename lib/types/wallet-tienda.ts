@@ -65,6 +65,11 @@ export const WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED = [
   // caja: `ingreso_abono_tienda` / `egreso_reverso_abono_tienda` (terceros, efectivo).
   "abono_tienda",
   "abono_tienda_anulado",
+  // FICHA 458-B (design §2.1/§2.3, D7): los CREDITOS ESPEJO de la anulacion de un cobro por rechazo
+  // aprobado: le devuelven a la tienda el flete y el IVA. Contrapartida en la caja:
+  // `egreso_reverso_flete_devolucion` / `egreso_reverso_iva_flete_devolucion`.
+  "flete_devolucion_anulado",
+  "iva_flete_devolucion_anulado",
 ] as const satisfies readonly PrismaWalletTiendaMovimientoCategoria[];
 
 export type WalletTiendaMovimientoCategoria =

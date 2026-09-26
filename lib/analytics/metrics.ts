@@ -713,6 +713,10 @@ const CATALOGO = [
         // 25. Los dos SI mueven la cifra (efectivo de terceros: entra y sale de verdad).
         "ingreso_abono_tienda",
         "egreso_reverso_abono_tienda",
+        // FICHA 458-B (design §2.3): los dos reversos de cargo del cobro por rechazo. La caja entera,
+        // ahora 27. La cifra NO cambia con ellos (son reversos de cargo: no sale dinero).
+        "egreso_reverso_flete_devolucion",
+        "egreso_reverso_iva_flete_devolucion",
       ],
     },
   },
@@ -751,6 +755,10 @@ const CATALOGO = [
         // anulacion la devuelve; los dos son propios en `NATURALEZA_POR_CATEGORIA`.
         "ingreso_cobro_tienda",
         "egreso_reverso_cobro_tienda",
+        // FICHA 458-B (design §2.3): DIECIOCHO. La anulacion de un cobro por rechazo baja la ganancia
+        // (flete e IVA por separado); los dos son propios en `NATURALEZA_POR_CATEGORIA`.
+        "egreso_reverso_flete_devolucion",
+        "egreso_reverso_iva_flete_devolucion",
       ],
     },
   },
@@ -793,6 +801,10 @@ const CATALOGO = [
         // motivo: `string[]`, el compilador no obliga.
         "abono_tienda",
         "abono_tienda_anulado",
+        // FICHA 458-B (design §2.3): los dos creditos espejo de la anulacion de un cobro por rechazo.
+        // Mismo motivo: `string[]`, el compilador no obliga.
+        "flete_devolucion_anulado",
+        "iva_flete_devolucion_anulado",
       ],
     },
   },

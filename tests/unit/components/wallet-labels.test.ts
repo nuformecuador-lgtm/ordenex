@@ -59,6 +59,9 @@ const CONCEPTOS_ESPERADOS: Record<WalletMovimientoCategoria, string> = {
   // Ficha 457 (design §2, DH7): el pago de una tienda a Ordenex toma el nombre que la 461 reservo.
   ingreso_abono_tienda: "Una tienda le paga a Ordenex",
   egreso_reverso_abono_tienda: "Pago de una tienda a Ordenex anulado",
+  // Ficha 458-B (design 458 §2.3): la anulacion de un cobro por rechazo, flete e IVA por separado.
+  egreso_reverso_flete_devolucion: "Flete por rechazo cobrado a la tienda anulado",
+  egreso_reverso_iva_flete_devolucion: "IVA del flete por rechazo cobrado a la tienda anulado",
 };
 
 /** design §7.3 — los 13 origenes del libro de la caja (+ el de la 457: 14). */
@@ -81,14 +84,14 @@ const ORIGENES_ESPERADOS: Record<WalletOrigenTipo, string> = {
 };
 
 describe("461 — CATEGORIA_LABEL: cada concepto de la caja, desde Ordenex (R42, design §7.2)", () => {
-  it("dice exactamente los 25 textos aprobados (23 de la 461 + 2 de la 457), y el seed es exactamente esas 25 claves", () => {
+  it("dice exactamente los 27 textos aprobados (23 de la 461 + 2 de la 457 + 2 de la 458-B), y el seed es exactamente esas 27 claves", () => {
     expect(CATEGORIA_LABEL).toEqual(CONCEPTOS_ESPERADOS);
     // Anti-vacuidad: la igualdad de arriba compara contra una lista escrita a mano; esta linea
     // afirma que esa lista cubre el catalogo ENTERO y no un subconjunto que casara por casualidad.
     expect([...WALLET_MOVIMIENTO_CATEGORIA_SEED].sort()).toEqual(
       Object.keys(CONCEPTOS_ESPERADOS).sort(),
     );
-    expect(WALLET_MOVIMIENTO_CATEGORIA_SEED).toHaveLength(25);
+    expect(WALLET_MOVIMIENTO_CATEGORIA_SEED).toHaveLength(27);
   });
 
   it("⭑ 457 (R45/R53): el pago de una tienda a Ordenex y su anulacion, con los nombres reservados por la 461", () => {
@@ -125,10 +128,10 @@ describe("461 — CATEGORIA_LABEL: cada concepto de la caja, desde Ordenex (R42,
     );
   });
 
-  it("el filtro por concepto ofrece los 25 con SU nombre (R42; 457/R45), tras la opcion «todas»", () => {
+  it("el filtro por concepto ofrece los 27 con SU nombre (R42; 457/R45; 458-B), tras la opcion «todas»", () => {
     expect(CATEGORIA_OPTIONS[0]).toEqual({ value: "", label: "Todas las categorías" });
     const opciones = new Map(CATEGORIA_OPTIONS.slice(1).map((o) => [o.value, o.label]));
-    expect(opciones.size).toBe(25);
+    expect(opciones.size).toBe(27);
     for (const [clave, texto] of Object.entries(CONCEPTOS_ESPERADOS)) {
       expect(opciones.get(clave), clave).toBe(texto);
     }
@@ -198,6 +201,9 @@ describe("461 — el resto de textos de la caja que esta ficha toca (R42/R50, de
       egreso_pago_mensajero: "Pagos de Ordenex a mensajeros",
       egreso_ajuste: "Correcciones de caja (resta)",
       egreso_reverso_cobro_tienda: "Cobros a una tienda anulados",
+      // Ficha 458-B (design 458 §2.3): las dos filas de la anulacion de un cobro por rechazo.
+      egreso_reverso_flete_devolucion: "Fletes por rechazo cobrados a una tienda anulados",
+      egreso_reverso_iva_flete_devolucion: "IVA de fletes por rechazo cobrados a una tienda anulados",
     });
   });
 });

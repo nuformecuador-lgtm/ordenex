@@ -64,6 +64,8 @@ const COMPOSICION: ComposicionGananciaDTO = {
     egreso_pago_mensajero: "700.00",
     egreso_ajuste: "45.75",
     egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
+    egreso_reverso_flete_devolucion: "0.00", // ficha 458-B: la exige el `Record` total
+    egreso_reverso_iva_flete_devolucion: "0.00", // ficha 458-B
   },
   otrosEgresos: "194.25",
   hayOtrosEgresos: true,
@@ -350,10 +352,11 @@ describe("Ficha 339 — el nombre de cada control y sus estados (R24/R25/R26)", 
     const controles = screen.getAllByRole("button", { name: /^Ver los movimientos de / });
     // Las dieciséis filas del catálogo: 8 de ingreso + 7 de egreso + «Otros», que aquí se pinta.
     // (Ficha 461, R27: + «Ordenex le cobra a una tienda» y + «Cobros a una tienda anulados».)
-    expect(controles).toHaveLength(16);
+    // (Ficha 458-B: + las dos filas de la anulacion de un cobro por rechazo: 18.)
+    expect(controles).toHaveLength(18);
 
     const nombres = controles.map((b) => b.getAttribute("aria-label") ?? "");
-    expect(new Set(nombres).size).toBe(16);
+    expect(new Set(nombres).size).toBe(18);
     // Y cada nombre CONTIENE el rótulo visible de su fila («Label in Name»).
     expect(nombres).toContain(ABRIR_MENSAJEROS);
     expect(nombres).toContain(ABRIR_AJUSTES);

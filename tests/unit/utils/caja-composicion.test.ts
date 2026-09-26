@@ -355,7 +355,14 @@ describe("derivarComposicionGanancia — la ganancia concepto por concepto (R23/
     expect(new Prisma.Decimal(composicion.otrosEgresos).gt(0)).toBe(true);
     expect(nombrados.gt(0)).toBe(true);
     // El pago a la tienda es de TERCEROS: nunca entra en la columna de egresos de la ganancia.
-    expect(new Prisma.Decimal(caja.salidas).gt(composicion.totalEgresos)).toBe(true);
+    // Ficha 458-B: antes se decia con `salidas > totalEgresos`, que solo valia por los importes del
+    // conjunto; con los dos reversos de cargo del cobro por rechazo (propios, fuera de «Salio», y con
+    // los importes MAYORES del catalogo) dejo de valer sin que nada cambiara en el pago a la tienda.
+    // Se dice ahora directamente: quitar el pago a la tienda no mueve la columna ni un centimo.
+    const sinPagoATienda = filas.filter((f) => f.categoria !== "egreso_pago_tienda");
+    expect(sinPagoATienda).toHaveLength(filas.length - 1);
+    expect(derivarComposicionGanancia(sinPagoATienda).totalEgresos).toBe(composicion.totalEgresos);
+    expect(new Prisma.Decimal(derivarCaja(sinPagoATienda).salidas).lt(caja.salidas)).toBe(true);
   });
 
   it("R23/R26: la identidad se conserva en VARIOS conjuntos, no solo en el que los tiene todos", () => {

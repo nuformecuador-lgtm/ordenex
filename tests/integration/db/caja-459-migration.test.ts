@@ -77,12 +77,15 @@ describeSiHayBase("459/B.5 — las migraciones de la 459 contra Postgres", () =>
     // de esta ficha, contiguos y al final de lo que habia antes— es lo que se afirma.
     // Ficha 457 (2026-09-25): sus valores van DESPUES de los de la 461 (`20260927120000`): dos en la
     // caja, dos en la tienda, uno en el origen. El orden relativo se afirma igual, un tramo mas atras.
-    expect(caja.slice(-8, -4)).toEqual(VALORES_CAJA_459);
-    expect(caja.slice(-4, -2)).toEqual(["ingreso_cobro_tienda", "egreso_reverso_cobro_tienda"]);
-    expect(caja.slice(-2)).toEqual(["ingreso_abono_tienda", "egreso_reverso_abono_tienda"]);
-    expect(tienda.slice(-5, -3)).toEqual(["pago_por_cuenta", "pago_por_cuenta_anulado"]);
-    expect(tienda.slice(-3, -2)).toEqual(["cobro_tienda_anulado"]);
-    expect(tienda.slice(-2)).toEqual(["abono_tienda", "abono_tienda_anulado"]);
+    // Ficha 458-B (2026-09-26): dos valores mas en la caja y dos en la tienda (`20260928120000`).
+    expect(caja.slice(-10, -6)).toEqual(VALORES_CAJA_459);
+    expect(caja.slice(-6, -4)).toEqual(["ingreso_cobro_tienda", "egreso_reverso_cobro_tienda"]);
+    expect(caja.slice(-4, -2)).toEqual(["ingreso_abono_tienda", "egreso_reverso_abono_tienda"]);
+    expect(caja.slice(-2)).toEqual(["egreso_reverso_flete_devolucion", "egreso_reverso_iva_flete_devolucion"]);
+    expect(tienda.slice(-7, -5)).toEqual(["pago_por_cuenta", "pago_por_cuenta_anulado"]);
+    expect(tienda.slice(-5, -4)).toEqual(["cobro_tienda_anulado"]);
+    expect(tienda.slice(-4, -2)).toEqual(["abono_tienda", "abono_tienda_anulado"]);
+    expect(tienda.slice(-2)).toEqual(["flete_devolucion_anulado", "iva_flete_devolucion_anulado"]);
     expect(origen.slice(-6, -3)).toEqual(["pago_por_cuenta_tienda", "aporte_capital", "cobro_manual_reclasificado"]);
     expect(origen.slice(-3, -1)).toEqual(["cobro_tienda", "cobro_tienda_completado"]);
     expect(origen.slice(-1)).toEqual(["abono_tienda"]);
@@ -94,14 +97,16 @@ describeSiHayBase("459/B.5 — las migraciones de la 459 contra Postgres", () =>
     // Ficha 461: DOS tipos detras de los de la 459 (`cobro_tienda_anulado` y, con la auditoria D3,
     // `wallet_movimiento_manual_anulado`).
     // Ficha 457: DOS tipos y UNA entidad detras de los de la 461.
-    expect(tipos.slice(-8, -4)).toEqual([
+    // Ficha 458-B: DOS tipos mas detras de los de la 457 (ninguna entidad).
+    expect(tipos.slice(-10, -6)).toEqual([
       "pago_por_cuenta_tienda_registrado",
       "pago_por_cuenta_tienda_anulado",
       "aporte_capital_registrado",
       "aporte_capital_anulado",
     ]);
-    expect(tipos.slice(-4, -2)).toEqual(["cobro_tienda_anulado", "wallet_movimiento_manual_anulado"]);
-    expect(tipos.slice(-2)).toEqual(["abono_tienda_registrado", "abono_tienda_anulado"]);
+    expect(tipos.slice(-6, -4)).toEqual(["cobro_tienda_anulado", "wallet_movimiento_manual_anulado"]);
+    expect(tipos.slice(-4, -2)).toEqual(["abono_tienda_registrado", "abono_tienda_anulado"]);
+    expect(tipos.slice(-2)).toEqual(["cobro_rechazo_tienda_anulado", "egreso_caja_anulado"]);
     expect(entidades.slice(-3, -1)).toEqual(["pago_por_cuenta_tienda", "aporte_capital"]);
     expect(entidades.slice(-1)).toEqual(["abono_tienda"]);
   });

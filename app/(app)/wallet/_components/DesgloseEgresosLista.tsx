@@ -137,6 +137,9 @@ const NOMBRADO_ICONO: Record<WalletEgresoNombrado, LucideIcon> = {
   // nombrado. `Undo2` —una flecha que vuelve— porque es eso: el cobro que se DESHACE y vuelve al
   // saldo de la tienda. Es decoracion (`aria-hidden`); el rotulo ya lo dice.
   egreso_reverso_cobro_tienda: Undo2,
+  // Ficha 458-B (design §2.3): los dos reversos del cobro por rechazo, el mismo gesto que el anterior.
+  egreso_reverso_flete_devolucion: Undo2,
+  egreso_reverso_iva_flete_devolucion: Undo2,
 };
 
 export interface DesgloseEgresosListaProps {

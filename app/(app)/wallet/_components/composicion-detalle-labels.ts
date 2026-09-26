@@ -73,6 +73,10 @@ export const EGRESO_NOMBRADO_LABEL: Record<WalletEgresoNombrado, string> = {
   // La fila de la anulacion de un cobro de Ordenex a una tienda (R27); en el libro, cada fila se
   // rotula «Cobro a una tienda anulado».
   egreso_reverso_cobro_tienda: "Cobros a una tienda anulados",
+  // Ficha 458-B (design §2.3): las filas de la anulación de un cobro por rechazo; en el libro, cada
+  // fila se rotula «Flete por rechazo cobrado a la tienda anulado» / «IVA del flete…».
+  egreso_reverso_flete_devolucion: "Fletes por rechazo cobrados a una tienda anulados",
+  egreso_reverso_iva_flete_devolucion: "IVA de fletes por rechazo cobrados a una tienda anulados",
 };
 
 /**
