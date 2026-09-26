@@ -1,0 +1,304 @@
+{
+  "resultados": [
+    {
+      "id": "MB1-a",
+      "que": "ya_registrado del gasto/sueldo pasa a error",
+      "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "tests": [
+        "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+      ],
+      "cambio": true,
+      "total": 57,
+      "rojos": 2,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "MB1-b",
+      "que": "ya_registrado del abono pasa a error",
+      "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "tests": [
+        "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+      ],
+      "cambio": true,
+      "total": 57,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "MB1-c",
+      "que": "sin_deuda bajo el monto (no bajo la tienda)",
+      "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "tests": [
+        "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+      ],
+      "cambio": true,
+      "total": 57,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "MB1-d",
+      "que": "excede del abono bajo la tienda (no bajo el monto)",
+      "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "tests": [
+        "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+      ],
+      "cambio": true,
+      "total": 57,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "MB1-e",
+      "que": "ya_hay_saldo_inicial deja de decirse bajo la clase",
+      "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "tests": [
+        "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+      ],
+      "cambio": true,
+      "total": 57,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "MB1-f",
+      "que": "el pago de un gasto avisa con el texto del abono",
+      "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "tests": [
+        "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+      ],
+      "cambio": true,
+      "total": 57,
+      "rojos": 2,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "MB1-g",
+      "que": "sin_saldo del mensajero bajo el monto",
+      "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "tests": [
+        "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+      ],
+      "cambio": true,
+      "total": 57,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "MB1-h",
+      "que": "el aviso del aporte ignora la clase del servidor",
+      "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "tests": [
+        "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+      ],
+      "cambio": true,
+      "total": 57,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "M3-a",
+      "que": "el fallo de red se calla",
+      "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "tests": [
+        "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+      ],
+      "cambio": true,
+      "total": 57,
+      "rojos": 3,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "M3-b",
+      "que": "la clave no cambia al cambiar de concepto",
+      "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "tests": [
+        "tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx"
+      ],
+      "cambio": true,
+      "total": 57,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "B2-a",
+      "que": "la fila anulada deja de decir «Anulado»",
+      "archivo": "app/(app)/wallet/_components/WalletLedger.tsx",
+      "tests": [
+        "tests/components/WalletLedgerVer458C.test.tsx",
+        "tests/components/DetalleMovimientoPanel.test.tsx"
+      ],
+      "cambio": true,
+      "total": 47,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "B2-b",
+      "que": "el nombre accesible de «Ver» no dice «Anulado»",
+      "archivo": "app/(app)/wallet/_components/VerMovimientoCaja.tsx",
+      "tests": [
+        "tests/components/WalletLedgerVer458C.test.tsx",
+        "tests/components/DetalleMovimientoPanel.test.tsx"
+      ],
+      "cambio": true,
+      "total": 47,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "B3-a",
+      "que": "sin documento el panel vuelve a decir «Vigente»",
+      "archivo": "app/(app)/wallet/_components/VerMovimientoCaja.tsx",
+      "tests": [
+        "tests/components/WalletLedgerVer458C.test.tsx",
+        "tests/components/DetalleMovimientoPanel.test.tsx"
+      ],
+      "cambio": true,
+      "total": 47,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "B3-b",
+      "que": "servidor: el pago a una tienda sin documento",
+      "archivo": "lib/services/WalletService.ts",
+      "tests": [
+        "tests/integration/db/libro-caja-revision-458c.test.ts"
+      ],
+      "cambio": true,
+      "total": 8,
+      "rojos": 2,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "B3-c",
+      "que": "servidor: el premio no ve su reverso",
+      "archivo": "lib/repositories/EgresoCajaDocumentosRepository.ts",
+      "tests": [
+        "tests/integration/db/libro-caja-revision-458c.test.ts"
+      ],
+      "cambio": true,
+      "total": 8,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "B3-d",
+      "que": "servidor: el pago a una tienda nunca sale anulado",
+      "archivo": "lib/repositories/EgresoCajaDocumentosRepository.ts",
+      "tests": [
+        "tests/integration/db/libro-caja-revision-458c.test.ts"
+      ],
+      "cambio": true,
+      "total": 8,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "M1-a",
+      "que": "el panel no pinta quién/cuándo/motivo",
+      "archivo": "app/(app)/wallet/_components/VerMovimientoCaja.tsx",
+      "tests": [
+        "tests/components/WalletLedgerVer458C.test.tsx",
+        "tests/components/DetalleMovimientoPanel.test.tsx"
+      ],
+      "cambio": true,
+      "total": 47,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "M1-b",
+      "que": "el panel no pinta el «cómo»",
+      "archivo": "app/(app)/wallet/_components/VerMovimientoCaja.tsx",
+      "tests": [
+        "tests/components/WalletLedgerVer458C.test.tsx",
+        "tests/components/DetalleMovimientoPanel.test.tsx"
+      ],
+      "cambio": true,
+      "total": 47,
+      "rojos": 3,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "M1-c",
+      "que": "servidor: un contra-asiento dice «anulado por»",
+      "archivo": "lib/services/LibroCajaAutoriaService.ts",
+      "tests": [
+        "tests/integration/db/libro-caja-revision-458c.test.ts"
+      ],
+      "cambio": true,
+      "total": 8,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "M1-d",
+      "que": "servidor: el egreso no lee su constancia",
+      "archivo": "lib/services/LibroCajaAutoriaService.ts",
+      "tests": [
+        "tests/integration/db/libro-caja-revision-458c.test.ts"
+      ],
+      "cambio": true,
+      "total": 8,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    },
+    {
+      "id": "M1-e",
+      "que": "servidor: el «cómo» del pago pierde la referencia",
+      "archivo": "lib/repositories/LibroCajaAutoriaRepository.ts",
+      "tests": [
+        "tests/integration/db/libro-caja-revision-458c.test.ts"
+      ],
+      "cambio": true,
+      "total": 8,
+      "rojos": 1,
+      "saltados": 0,
+      "restaurado": true,
+      "muere": true
+    }
+  ],
+  "gitStatusTras": " M progress/impl_458-C.md\n M specs/458-rediseno-wallet/tasks.md\n"
+}
