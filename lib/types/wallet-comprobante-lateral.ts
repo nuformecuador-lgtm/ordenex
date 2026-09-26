@@ -45,7 +45,11 @@ export type VerComprobanteInput = z.infer<typeof verComprobanteSchema>;
  * no llevan comprobante; el pago de un gasto, el aporte y el pago de una tienda a Ordenex lo llevan
  * en SU documento y se adjunta al registrarlos (459/457).
  */
-export type MotivoSinComprobanteLateral = "no_admite" | "en_su_documento";
+export type MotivoSinComprobanteLateral =
+  | "no_admite"
+  | "en_su_documento"
+  /** FICHA 458-B (revision m6): el movimiento ya esta ANULADO (R79 dice «movimiento anulable»). */
+  | "anulado";
 
 export type AdjuntarComprobanteResult =
   | { status: "ok" }

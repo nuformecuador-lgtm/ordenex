@@ -3,6 +3,7 @@ import { walletComprobanteConfig, type WalletComprobanteConfig } from "@/lib/con
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type {
+  CaminoConComprobanteLateral,
   ComprobanteGuardado,
   DestinoLateral,
   DuenoDeDestino,
@@ -30,7 +31,7 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 const ROL_TIENDA = "adminTienda";
 
 type Fuente =
-  | { tipo: "lateral"; libro: "caja" | "tienda" | "pago" }
+  | { tipo: "lateral"; libro: "caja" | "tienda" | "pago"; camino: CaminoConComprobanteLateral }
   | { tipo: "documento"; documento: "pago_por_cuenta_tienda" | "aporte_capital" | "abono_tienda" }
   | { tipo: "ninguna" };
 
@@ -41,10 +42,10 @@ type Fuente =
  * registrarlos); el cobro por rechazo y el premio no llevan comprobante.
  */
 const FUENTE_POR_CAMINO: Record<CaminoAnulacion, Fuente> = {
-  egreso_caja: { tipo: "lateral", libro: "caja" },
-  ajuste_caja: { tipo: "lateral", libro: "caja" },
-  cobro_tienda: { tipo: "lateral", libro: "tienda" },
-  liquidacion_pago: { tipo: "lateral", libro: "pago" },
+  egreso_caja: { tipo: "lateral", libro: "caja", camino: "egreso_caja" },
+  ajuste_caja: { tipo: "lateral", libro: "caja", camino: "ajuste_caja" },
+  cobro_tienda: { tipo: "lateral", libro: "tienda", camino: "cobro_tienda" },
+  liquidacion_pago: { tipo: "lateral", libro: "pago", camino: "liquidacion_pago" },
   pago_por_cuenta_tienda: { tipo: "documento", documento: "pago_por_cuenta_tienda" },
   aporte_capital: { tipo: "documento", documento: "aporte_capital" },
   abono_tienda: { tipo: "documento", documento: "abono_tienda" },
@@ -150,6 +151,10 @@ export class WalletComprobanteService implements IWalletComprobanteService {
 
     const objetivo = lateral(fuente.libro, clase.id);
     if ((await this.repo.duenoDeLateral(objetivo)) === null) return { status: "no_encontrado" };
+    // FICHA 458-B (revision m6): R79 admite adjuntar a un movimiento ANULABLE; uno ya anulado no.
+    if (await this.repo.estaAnulado(fuente.camino, clase.id)) {
+      return { status: "no_admite", motivo: "anulado" };
+    }
     if ((await this.repo.lateralDe(objetivo)) !== null) return { status: "ya_tiene" };
 
     const subida = await this.subir(CARPETA_POR_LIBRO[fuente.libro], comprobante);

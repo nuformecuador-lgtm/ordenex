@@ -55,4 +55,14 @@ export interface IWalletComprobanteRepository {
   ): Promise<(DuenoDeDestino & { comprobante: ObjetoComprobante | null }) | null>;
   /** La tienda de una fila del libro de las tiendas (el alcance de la tienda, R77); `null` = no existe. */
   tiendaDeFila(movimientoId: string): Promise<string | null>;
+  /**
+   * FICHA 458-B (revision m6) — ¿esta ANULADO el movimiento de un camino con comprobante lateral?
+   * Egreso de caja: su contra-asiento (`ingreso_ajuste` con origen `gasto`) o su constancia
+   * (`ajuste_caja_anulacion`, que cubre la indemnizacion, D8); correccion: su constancia; cobro de
+   * Ordenex: `cobro_tienda_anulacion`; pago de la 172: `liquidacion_anulacion`.
+   */
+  estaAnulado(camino: CaminoConComprobanteLateral, id: string): Promise<boolean>;
 }
+
+/** Los caminos cuyo comprobante vive en `wallet_comprobante` (los que `adjuntar` admite). */
+export type CaminoConComprobanteLateral = "egreso_caja" | "ajuste_caja" | "cobro_tienda" | "liquidacion_pago";

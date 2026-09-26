@@ -25,13 +25,16 @@ const RUTA = "movimientos-caja/aleatorio.png";
 
 type Clase = Exclude<RutaAnulacion, { status: "forbidden" }>;
 
-function montar(opts: { clase?: Clase; ya?: boolean; upload?: () => Promise<string>; crear?: () => Promise<"creado" | "ya_tiene"> } = {}) {
+function montar(
+  opts: { clase?: Clase; ya?: boolean; anulado?: boolean; upload?: () => Promise<string>; crear?: () => Promise<"creado" | "ya_tiene"> } = {},
+) {
   const repo = {
     crear: vi.fn(opts.crear ?? (async () => "creado" as const)),
     lateralDe: vi.fn(async () => (opts.ya ? { storagePath: "movimientos-caja/viejo.pdf", contentType: "application/pdf" } : null)),
     duenoDeLateral: vi.fn(async () => ({ tiendaId: null, categoria: "egreso_sueldo", fecha: new Date("2026-09-12T18:00:00Z") })),
     documento: vi.fn(async () => null),
     tiendaDeFila: vi.fn(async () => null as string | null),
+    estaAnulado: vi.fn(async () => opts.anulado ?? false),
   } satisfies IWalletComprobanteRepository;
   const clasificador: Pick<IWalletAnulacionService, "clasificar"> = {
     clasificar: vi.fn(async () => opts.clase ?? ({ status: "ruta", camino: "egreso_caja", id: CAJA_ID } as Clase)),
@@ -104,6 +107,14 @@ describe("458-B/TB.10 — adjuntar (D6, R75, R76, R79)", () => {
     const t = montar({ crear: async () => "ya_tiene" });
     expect(await t.servicio.adjuntar(DESTINO, PNG, MAESTRO)).toEqual({ status: "ya_tiene" });
     expect(t.storage.remove).toHaveBeenCalledWith([RUTA]);
+  });
+
+  it("458-B m6: un movimiento ANULADO no admite comprobante (`no_admite: anulado`), sin subir ni escribir", async () => {
+    const t = montar({ anulado: true });
+    expect(await t.servicio.adjuntar(DESTINO, PNG, MAESTRO)).toEqual({ status: "no_admite", motivo: "anulado" });
+    expect(t.repo.estaAnulado).toHaveBeenCalledWith("egreso_caja", CAJA_ID);
+    expect(t.storage.upload).not.toHaveBeenCalled();
+    expect(t.repo.crear).not.toHaveBeenCalled();
   });
 
   it("R79: si ya tenia uno ni se sube el nuevo (pre-chequeo)", async () => {

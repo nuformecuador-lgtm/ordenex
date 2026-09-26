@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 
 import { registrarMovimientoManualAction } from "@/lib/actions/wallet";
+import { registrarEgresoAdministrativoAction } from "@/lib/actions/wallet-egresos";
 import { registrarCobroTiendaAction } from "@/lib/actions/wallet-tienda";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
@@ -15,7 +16,9 @@ import { WalletComprobanteRepository } from "@/lib/repositories/WalletComprobant
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { CajaCobroTiendaFeedService } from "@/lib/services/CajaCobroTiendaFeedService";
+import { AjusteCajaService } from "@/lib/services/AjusteCajaService";
 import { CobroTiendaService } from "@/lib/services/CobroTiendaService";
+import { WalletEgresoService } from "@/lib/services/WalletEgresoService";
 import { WalletAnulacionService } from "@/lib/services/WalletAnulacionService";
 import { WalletComprobanteService } from "@/lib/services/WalletComprobanteService";
 import { WalletService } from "@/lib/services/WalletService";
@@ -48,6 +51,9 @@ interface Medida {
   lector: { ajustes: EstadoDocumentoCaja[]; cobros: EstadoDocumentoCaja[] };
   libro: Record<string, WalletMovimientoDTO["documento"] | null>;
   ids: Record<string, string>;
+  /** m6: `adjuntar` sobre movimientos anulados (y un control sin anular). */
+  adjuntar: Record<string, unknown>;
+  anulaciones: Record<string, string>;
 }
 
 describeSiHayBase("458-B/M1 — «tiene comprobante» de la correccion y del cobro lo decide la base (Postgres real)", () => {
@@ -150,7 +156,42 @@ describeSiHayBase("458-B/M1 — «tiene comprobante» de la correccion y del cob
         for (const n of ["cobroCon", "cobroSin"]) {
           libro[n] = cargos.data.movimientos.find((x) => x.origenId === ids[n])?.documento ?? null;
         }
-        return { status, lector, libro, ids };
+        // ── m6: `adjuntar` rechaza un movimiento ANULADO, en los cuatro caminos laterales ─────────
+        const anulaciones: Record<string, string> = {};
+        const egresos = new WalletEgresoService(cajaRepo, c, puerto);
+        const sueldo = await registrarEgresoAdministrativoAction(
+          { tipoEgreso: "sueldo", monto: "30.00", descripcion: "Sueldo m6", claveIdempotencia: clave("sueldo") },
+          { getActor, service: egresos },
+        );
+        const control = await registrarEgresoAdministrativoAction(
+          { tipoEgreso: "sueldo", monto: "31.00", descripcion: "Sueldo control m6", claveIdempotencia: clave("control") },
+          { getActor, service: egresos },
+        );
+        status.sueldo = sueldo.status;
+        status.control = control.status;
+        ids.sueldo = (await tx.walletMovimiento.findFirstOrThrow({ where: { claveIdempotencia: claves.sueldo }, select: { id: true } })).id;
+        ids.control = (await tx.walletMovimiento.findFirstOrThrow({ where: { claveIdempotencia: claves.control }, select: { id: true } })).id;
+        anulaciones.sueldo = (await s.egresoAnulacion.anular({ movimientoId: ids.sueldo, motivo: "m6" }, actor)).status;
+        anulaciones.correccion = (
+          await new AjusteCajaService(cajaRepo, new AjusteCajaAnulacionRepository(c), runTx).anular(
+            { movimientoId: ids.correccionSin, motivo: "m6" },
+            actor,
+          )
+        ).status;
+        anulaciones.cobro = (await cobro.anular({ cobroId: ids.cobroSin, motivo: "m6" }, actor)).status;
+        const pagoAnulado = await tx.liquidacionAnulacion.findFirstOrThrow({
+          where: { pago: { tiendaId: { in: [esc.tiendaA, esc.tiendaB] } } },
+          select: { pagoId: true },
+        });
+        const archivo = { contentType: "image/png", bytes: new Uint8Array([137, 80, 78, 71]) };
+        const adjuntar = {
+          sueldo: await puerto.adjuntar({ libro: "caja", movimientoId: ids.sueldo }, archivo, actor),
+          correccion: await puerto.adjuntar({ libro: "caja", movimientoId: ids.correccionSin }, archivo, actor),
+          cobro: await puerto.adjuntar({ libro: "tienda", movimientoId: ids.cobroSin }, archivo, actor),
+          pago: await puerto.adjuntar({ documento: "liquidacion_pago", id: pagoAnulado.pagoId }, archivo, actor),
+          control: await puerto.adjuntar({ libro: "caja", movimientoId: ids.control }, archivo, actor),
+        };
+        return { status, lector, libro, ids, adjuntar, anulaciones };
       });
     } catch (error) {
       fallo = error;
@@ -161,8 +202,21 @@ describeSiHayBase("458-B/M1 — «tiene comprobante» de la correccion y del cob
     await prisma?.$disconnect();
   });
 
-  it("los cuatro registros responden ok", () => {
-    expect(m().status).toEqual({ correccionCon: "ok", correccionSin: "ok", cobroCon: "ok", cobroSin: "ok" });
+  it("los registros responden ok", () => {
+    expect(m().status).toEqual({
+      correccionCon: "ok",
+      correccionSin: "ok",
+      cobroCon: "ok",
+      cobroSin: "ok",
+      sueldo: "ok",
+      control: "ok",
+    });
+  });
+
+  it("m6: `adjuntar` sobre un movimiento ANULADO responde `no_admite: anulado` en los cuatro caminos; sin anular, ok", () => {
+    expect(m().anulaciones).toEqual({ sueldo: "ok", correccion: "ok", cobro: "ok" });
+    const anulado = { status: "no_admite", motivo: "anulado" };
+    expect(m().adjuntar).toEqual({ sueldo: anulado, correccion: anulado, cobro: anulado, pago: anulado, control: { status: "ok" } });
   });
 
   it("el lector de las correcciones: la que lleva comprobante `true`, la otra `false`", () => {

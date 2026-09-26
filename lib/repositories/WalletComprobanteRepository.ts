@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 import type {
+  CaminoConComprobanteLateral,
   ComprobanteGuardado,
   DestinoLateral,
   DocumentoConComprobantePropio,
@@ -19,6 +20,9 @@ type Cliente = Pick<
   | "pagoPorCuentaTienda"
   | "aporteCapital"
   | "abonoTienda"
+  | "ajusteCajaAnulacion"
+  | "cobroTiendaAnulacion"
+  | "liquidacionAnulacion"
 >;
 
 /** La columna del UNIQUE de cada destino (R79). */
@@ -133,5 +137,23 @@ export class WalletComprobanteRepository implements IWalletComprobanteRepository
       select: { tiendaId: true },
     });
     return f?.tiendaId ?? null;
+  }
+
+  /** FICHA 458-B (revision m6) — ver la interfaz. UNA consulta por camino (dos en el egreso). */
+  async estaAnulado(camino: CaminoConComprobanteLateral, id: string): Promise<boolean> {
+    if (camino === "egreso_caja") {
+      const reverso = await this.prisma.walletMovimiento.count({
+        where: { categoria: "ingreso_ajuste", origenTipo: "gasto", origenId: id },
+      });
+      if (reverso > 0) return true;
+      return (await this.prisma.ajusteCajaAnulacion.count({ where: { movimientoId: id } })) > 0;
+    }
+    if (camino === "ajuste_caja") {
+      return (await this.prisma.ajusteCajaAnulacion.count({ where: { movimientoId: id } })) > 0;
+    }
+    if (camino === "cobro_tienda") {
+      return (await this.prisma.cobroTiendaAnulacion.count({ where: { cobroId: id } })) > 0;
+    }
+    return (await this.prisma.liquidacionAnulacion.count({ where: { pagoId: id } })) > 0;
   }
 }
