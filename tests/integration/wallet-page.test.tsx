@@ -6,8 +6,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("@/app/_components/LogoutButton", () => ({
   LogoutButton: () => <button data-testid="logout-stub">Salir</button>,
 }));
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import type { RolValue } from "@prisma/client";
+
+import { SWRConfig } from "swr";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 
@@ -77,6 +79,24 @@ vi.mock("@/lib/actions/rechazo-tienda-cobro", () => ({
   rechazarCobroRechazoTiendaAction: vi.fn(),
 }));
 
+// FICHA 458-E (T E.1/T E.2): el libro nuevo lee «A quién» y «Registró» de la página y el filtro de
+// concepto pide los conceptos del periodo. Con el módulo REAL montado, sin estos dobles las dos
+// lecturas correrían contra la base.
+vi.mock("@/lib/actions/libro-caja-autoria", () => ({
+  autoriaDelLibroCajaAction: vi.fn(async ({ movimientoIds }: { movimientoIds: string[] }) => ({
+    status: "ok",
+    filas: movimientoIds.map((id) => ({
+      movimientoId: id,
+      aQuien: { nombre: "Mario Mensajero", beneficiario: null, cuenta: null, esOrdenex: false },
+      registro: { nombre: null, automatico: { accion: "aprobacion_cierre", por: "Ana Maestra" } },
+    })),
+  })),
+}));
+vi.mock("@/lib/actions/wallet-filtros", () => ({
+  conceptosConMovimientosAction: vi.fn(async () => ({ status: "ok", conceptos: [] })),
+  cierresDeLaCuentaAction: vi.fn(),
+}));
+
 class NotFoundError extends Error {
   constructor() {
     super("NEXT_NOT_FOUND");
@@ -117,6 +137,8 @@ import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { listarPlantillasPaginadoAction } from "@/lib/actions/gasto-fijo-plantilla";
 import { listarCobrosPendientesAction } from "@/lib/actions/gasto-fijo-cobro";
 import { listarCobrosRechazoTiendaAction } from "@/lib/actions/rechazo-tienda-cobro";
+import { autoriaDelLibroCajaAction } from "@/lib/actions/libro-caja-autoria";
+import { money } from "@/app/(app)/wallet/_components/wallet-labels";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarMovimientosAction);
@@ -569,3 +591,50 @@ describe("WalletPage — un solo control para mover dinero a mano (R1/R2)", () =
     ]);
   });
 });
+
+// =================================================================================================
+// FICHA 458-E (T E.1/T E.2, R53–R57) — LA PÁGINA MONTA EL LIBRO NUEVO
+// =================================================================================================
+//
+// Sobre las props que la página le pasa al módulo REAL: las tarjetas de la 459 con las cifras del
+// pre-fetch (R53), el filtro Todo / Entra / Sale en su sitio (R54) y «A quién» / «Registró» leídos
+// con los ids de la página pre-obtenida (R56/R57). El detalle de cada pieza vive en
+// `tests/components/WalletLibroCaja458E.test.tsx`.
+describe("WalletPage — el libro de caja de la 458-E (R53–R57)", () => {
+  it("R53/R54/R56/R57: tarjetas del pre-fetch, filtro Todo / Entra / Sale y autoría de la página", async () => {
+    montarModuloReal = true;
+    resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
+    const { default: WalletPage } = await import("@/app/(app)/wallet/page");
+    // Caché de SWR PROPIA: los casos de arriba montan el mismo módulo con la misma página y dejarían
+    // la autoría servida desde su caché (0 lecturas en este caso).
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ToastProvider>{await WalletPage()}</ToastProvider>
+      </SWRConfig>,
+    );
+
+    // R53: la ganancia de la tarjeta es la del resumen pre-obtenido (1 500), no la cifra de la caja.
+    const ganancia = screen.getByRole("region", { name: "Ganancia de Ordenex" });
+    expect(ganancia.textContent).toContain(money("1500.00"));
+    expect(ganancia.textContent).not.toContain(money("11500.00"));
+
+    // R54: el filtro segmentado, con «Todo» elegido al entrar.
+    const grupo = screen.getByRole("group", { name: "Filtrar por dirección del dinero" });
+    expect(
+      within(grupo).getAllByRole("button").map((b) => [b.textContent, b.getAttribute("aria-pressed")]),
+    ).toEqual([
+      ["Todo", "true"],
+      ["Entra", "false"],
+      ["Sale", "false"],
+    ]);
+
+    // R56/R57: UNA lectura de la autoría con los ids de la página pre-obtenida.
+    const autoria = vi.mocked(autoriaDelLibroCajaAction);
+    await waitFor(() => expect(autoria).toHaveBeenCalledTimes(1));
+    expect(autoria).toHaveBeenCalledWith({ movimientoIds: ["m1", "m2"] });
+    expect(
+      await screen.findAllByText("Automático · Aprobación del cierre por Ana Maestra"),
+    ).toHaveLength(2);
+  });
+});
+

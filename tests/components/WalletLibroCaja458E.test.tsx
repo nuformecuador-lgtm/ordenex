@@ -427,3 +427,62 @@ describe("458-E T E.1 — el módulo lee la autoría de la página (R56/R57)", (
     await waitFor(() => expect(celdasDe(PAGINA, SUELDO)["A quién"].textContent).toBe("No se pudo leer"));
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe("458-E T E.2 — filtros Todo / Entra / Sale, concepto y periodo; tarjetas del conjunto (R53, R54)", () => {
+  it("R53: las tarjetas pintan el resumen que llegó del servidor", () => {
+    pintarModulo();
+    const ganancia = screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.ganancia });
+    expect(ganancia.textContent).toContain(money("20000.00"));
+  });
+
+  it("R54: «Entra» se aplica al pulsarlo y viaja como `tipo` a libro, tarjetas y desglose; las tarjetas cambian", async () => {
+    const user = pintarModulo();
+    resumenMock.mockResolvedValue({ status: "ok", resumen: RESUMEN_ENTRA, composicion: COMPOSICION });
+
+    const grupo = screen.getByRole("group", { name: "Filtrar por dirección del dinero" });
+    expect(within(grupo).getByRole("button", { name: "Todo" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(grupo).getByRole("button", { name: "Entra" }));
+
+    const esperado = { tipo: "ingreso", page: 1, pageSize: 20 };
+    await waitFor(() => expect(listarMock).toHaveBeenCalledWith(esperado));
+    expect(resumenMock).toHaveBeenCalledWith(esperado);
+    expect(desgloseMock).toHaveBeenCalledWith(esperado);
+    expect(within(grupo).getByRole("button", { name: "Entra" })).toHaveAttribute("aria-pressed", "true");
+    // La tarjeta de la ganancia refleja el conjunto filtrado (el resumen NUEVO del servidor).
+    await waitFor(() =>
+      expect(screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.ganancia }).textContent).toContain(money("5000.00")),
+    );
+    // R13 con la dirección: los conceptos del filtro se piden para lo que ENTRA.
+    await waitFor(() => expect(conceptosMock).toHaveBeenCalledWith({ libro: "caja", tipo: "ingreso" }));
+
+    await user.click(within(grupo).getByRole("button", { name: "Sale" }));
+    await waitFor(() => expect(listarMock).toHaveBeenLastCalledWith({ tipo: "egreso", page: 1, pageSize: 20 }));
+
+    await user.click(within(grupo).getByRole("button", { name: "Todo" }));
+    await waitFor(() => expect(listarMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 20 }));
+  });
+
+  it("R54: el periodo se suma a la dirección elegida y la descarga lleva los mismos filtros", async () => {
+    const user = pintarModulo();
+    await user.click(screen.getByRole("button", { name: "Sale" }));
+    await waitFor(() => expect(listarMock).toHaveBeenCalledTimes(1));
+
+    await user.type(screen.getByLabelText("Desde"), "2026-09-01");
+    await user.type(screen.getByLabelText("Hasta"), "2026-09-30");
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+    const esperado = { tipo: "egreso", desde: "2026-09-01", hasta: "2026-09-30" };
+    await waitFor(() => expect(listarMock).toHaveBeenLastCalledWith({ ...esperado, page: 1, pageSize: 20 }));
+    expect(resumenMock).toHaveBeenLastCalledWith({ ...esperado, page: 1, pageSize: 20 });
+    await waitFor(() => expect(conceptosMock).toHaveBeenCalledWith({ libro: "caja", ...esperado }));
+
+    await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
+    await waitFor(() => expect(completoMock).toHaveBeenCalledWith(esperado));
+  });
+
+  it("ya no hay `Select` de tipo: la dirección es el filtro segmentado", () => {
+    pintarModulo();
+    expect(screen.queryByRole("combobox", { name: "Filtrar por tipo" })).toBeNull();
+    expect(screen.queryByText("Todos los tipos")).toBeNull();
+  });
+});

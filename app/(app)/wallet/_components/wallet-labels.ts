@@ -8,7 +8,7 @@ import type {
   WalletMovimientoDTO,
   WalletMovimientoTipo,
 } from "@/lib/types/wallet";
-import { TIPO_EGRESO_MANUAL_SEED, WALLET_MOVIMIENTO_TIPO_SEED } from "@/lib/types/wallet";
+import { TIPO_EGRESO_MANUAL_SEED } from "@/lib/types/wallet";
 import type { MotivoNoAnulable } from "@/lib/types/wallet-tienda";
 import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
 import { proximoCobro, type PeriodicidadUnidad } from "@/lib/utils/periodicidad";
@@ -355,14 +355,8 @@ export const VER_COMPROBANTE_RESPUESTA = {
   fallo: "No se pudo abrir el comprobante ahora. Probá de nuevo.",
 } as const;
 
-/** Opciones del `Select` de tipo (con opción "todos" = value ""). */
-export const TIPO_OPTIONS = [
-  { value: "", label: "Todos los tipos" },
-  ...WALLET_MOVIMIENTO_TIPO_SEED.map((tipo) => ({
-    value: tipo,
-    label: TIPO_LABEL[tipo],
-  })),
-];
+// FICHA 458-E (TE.2): el `Select` de tipo (`TIPO_OPTIONS`) sale; lo sustituye el filtro Todo / Entra / Sale
+// (`FILTRO_DIRECCION` en `libro-caja-labels.ts`).
 
 /**
  * La opción «todas» del `Select` de categoría del libro. El resto de opciones ya NO sale del

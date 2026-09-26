@@ -7,16 +7,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 
+import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
 import { CONCEPTOS_FILTRO_AVISO, opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import { useConceptosConMovimientos } from "@/components/shared/wallet/use-conceptos-con-movimientos";
 import type { WalletMovimientoTipo } from "@/lib/types/wallet";
 
-import { CATEGORIA_LABEL, CATEGORIA_TODAS_OPTION, TIPO_OPTIONS } from "./wallet-labels";
+import { FILTRO_DIRECCION, type DireccionFiltro } from "./libro-caja-labels";
+import { CATEGORIA_LABEL, CATEGORIA_TODAS_OPTION } from "./wallet-labels";
 
 // Feature 42 (T12, R20) — filtros del libro: tipo, categoría y rango de fechas (desde/hasta).
 // Mantiene un BORRADOR local; al pulsar "Aplicar" emite los filtros al módulo, que recarga
 // libro + cifras de la caja por Server Action (la cabecera refleja el conjunto filtrado, R20).
 // "Limpiar" resetea a sin filtros.
+//
+// FICHA 458-E (TE.2, design §5.2, R54): el `Select` de tipo pasa a un filtro SEGMENTADO Todo / Entra
+// / Sale (`SegmentedToggle`). Es un conmutador, así que se APLICA al pulsarlo —con el resto del
+// borrador— y no espera a «Aplicar»; el valor sigue siendo el mismo `tipo` del borde (`ingreso` /
+// `egreso`, vacío = todo), así que el servidor, las tarjetas y la descarga no cambian (R54: «como hoy»).
 //
 // Ficha 458-A (TA.3, R13–R15): la categoría ofrece SOLO los conceptos con movimientos en el
 // periodo y el tipo del borrador, cada uno con su número, leídos del servidor
@@ -74,11 +81,24 @@ export interface WalletFiltrosProps {
   disabled?: boolean;
 }
 
+/** El `tipo` del borrador ↔ la opción del filtro segmentado («» = todo). */
+function direccionDe(tipo: string): DireccionFiltro {
+  return tipo === "ingreso" || tipo === "egreso" ? tipo : "todo";
+}
+
 export function WalletFiltros({ onAplicar, onLimpiar, disabled = false }: WalletFiltrosProps) {
   const [draft, setDraft] = useState<WalletFiltrosValue>(FILTROS_VACIOS);
 
   function set<K extends keyof WalletFiltrosValue>(key: K, value: string) {
     setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  /** R54 — Todo / Entra / Sale se aplica al pulsarlo (con el resto del borrador). */
+  function elegirDireccion(direccion: DireccionFiltro) {
+    if (disabled) return;
+    const siguiente = { ...draft, tipo: direccion === "todo" ? "" : direccion };
+    setDraft(siguiente);
+    onAplicar(siguiente);
   }
 
   // R13: los conceptos del periodo y del tipo que se están eligiendo (el borrador), no del SEED.
@@ -104,29 +124,18 @@ export function WalletFiltros({ onAplicar, onLimpiar, disabled = false }: Wallet
         onAplicar(draft);
       }}
     >
-      {/* Los dos `Select` ya dicen su nombre en el PLACEHOLDER («Todos los tipos», «Todas las
-          categorías»), que además informa mejor que el rótulo: dice qué se está viendo ahora,
-          no cómo se llama el campo. Por eso el rótulo pasa a `sr-only` en vez de desaparecer.
-
-          El `id` es NUEVO y arregla un defecto real: estos dos `htmlFor` apuntaban a
-          `wallet-filtro-tipo` / `wallet-filtro-categoria`, ids que NO existían en el
-          documento —la primitiva `Select` acepta `id` pero nadie se lo pasaba—, así que las
-          dos etiquetas colgaban de la nada. El nombre accesible del control lo sigue dando su
-          `aria-label`, que tiene precedencia sobre la etiqueta nativa: no se mueve. */}
-      <Label htmlFor="wallet-filtro-tipo" className="sr-only">
-        Tipo
-      </Label>
-      <Select
-        id="wallet-filtro-tipo"
-        aria-label="Filtrar por tipo"
-        value={draft.tipo}
-        onValueChange={(v) => set("tipo", v)}
-        options={TIPO_OPTIONS}
-        placeholder="Todos los tipos"
-        disabled={disabled}
-        className="h-9 w-full sm:w-44"
+      {/* FICHA 458-E (R54): Todo / Entra / Sale. El grupo se nombra por su `aria-label` y cada
+          opción anuncia si está elegida con `aria-pressed` (primitiva `SegmentedToggle`). */}
+      <SegmentedToggle
+        options={FILTRO_DIRECCION.opciones}
+        valor={direccionDe(draft.tipo)}
+        onChange={elegirDireccion}
+        ariaLabel={FILTRO_DIRECCION.nombre}
       />
 
+      {/* El `Select` de categoría dice su nombre en el PLACEHOLDER («Todas las categorías»), que
+          informa mejor que el rótulo: dice qué se está viendo ahora. Por eso el rótulo pasa a
+          `sr-only` en vez de desaparecer; el nombre accesible lo da su `aria-label`. */}
       <Label htmlFor="wallet-filtro-categoria" className="sr-only">
         Categoría
       </Label>
