@@ -129,3 +129,13 @@ cliente global mientras tenía el candado de la tienda. Ahora le pasa el `tx` (t
 `tests/unit/services/liquidacion-service.test.ts` R29 (`toHaveBeenCalledWith("t1", {}, d.tx)`).
 Mutación (quitar el `tx`): **3 rojos de 91** (los dos de Postgres, por la transacción que caduca a los
 10 s, y el unitario), `aplicado=true`, `restaurado=true`.
+
+## TB.5 — Orden estable (R23)
+
+`listarPorTienda` y `listarPorMensajero`: `orderBy [fechaMovimiento desc, createdAt desc, id desc]`
+(el de la caja desde la 334). Test: `tests/integration/db/wallet-orden-estable-458.test.ts` (14 filas
+del mismo instante en dos tandas de `created_at`, páginas de 4: 0 duplicadas, 0 faltantes, orden
+esperado calculado a mano, dos lecturas iguales; tienda y mensajero). Tests reescritos (contrato
+nuevo, R23): `wallet-tienda-movimiento-repository.test.ts` R19 y `pago-mensajero-movimiento-repository
+.test.ts` R20 (`orderBy` = la lista de tres). Mutaciones: tienda solo por fecha → rojo (1/2);
+mensajero sin `createdAt` → rojo (1/2).

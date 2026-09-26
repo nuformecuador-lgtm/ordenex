@@ -111,7 +111,11 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
     const [rows, total] = await Promise.all([
       this.prisma.walletTiendaMovimiento.findMany({
         where,
-        orderBy: { fechaMovimiento: "desc" },
+        // Ficha 458-B (R23, m4 de la auditoria): orden TOTAL, como la caja (`WalletMovimientoRepository
+        // .listar`, ficha 334). Solo por fecha, las filas del MISMO instante (todo lo que escribe un
+        // cierre, un pago y su debito) quedaban en orden indefinido y la paginacion podia repetir u
+        // omitir filas. `createdAt` desempata por creacion real; `id` cierra el orden.
+        orderBy: [{ fechaMovimiento: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         skip,
         take: filtros.pageSize,
       }),
