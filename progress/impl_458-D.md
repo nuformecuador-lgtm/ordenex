@@ -450,3 +450,115 @@ Cada una: el archivo cambia, se corren > 0 tests, se restaura byte a byte y el `
 Los pendientes de servidor 1–6 de la 458-D quedan hechos con sus contratos para el frontend, probados contra
 Postgres y con 12/12 mutaciones muertas; el 7 (retirada) se evaluó y no se borra nada porque todas las candidatas
 tienen llamadores en tests de otras fichas; build y gate completo en verde.
+
+---
+
+# §Pantalla — cierre de la parte de pantalla de la 458-D (frontend_dev, 2026-09-26)
+
+**Rama:** `wt/458-D-cierre` desde `origin/feature/458-D` en `161236e2`, con `git merge origin/dev` (sin
+conflictos: solo entró `progress/gate_dev_tras_831.log`), empujada a `feature/458-D` tras cada paso.
+**Base:** clon `ordenex_458dc` (`CREATE DATABASE … TEMPLATE ordenex`, 0 conexiones a la plantilla medidas antes;
+`migrate deploy`: «No pending migrations»). `.env` copiado del checkout principal sin imprimirlo, con la base
+cambiada y sin `DATABASE_URL_PREVIEW`. `pnpm install --frozen-lockfile` propio. Ni la base `ordenex` ni
+`feature_list.json` se tocaron. **Solo pantalla:** en `lib/` el diff es de comentarios (las anotaciones de
+superficie); ningún servicio, repositorio, tipo, migración ni dinero.
+**Búsqueda — lo digo explícitamente:** probé el MCP `codebase-memory` (`search_graph` por
+`verOrdenesDeFilaAction|verMiEstadoCuentaAction|EstadoCuenta`) y devolvió 0 nodos: el índice no tiene la 458.
+Todo se localizó con `grep` y lectura del archivo real.
+
+## Qué se hizo (alcance 1–7 del encargo)
+
+| # | Pieza | Archivos |
+| --- | --- | --- |
+| 1 | **Filtro por cierre (R10–R12)** en tienda y mensajero: `SelectorBuscable` + `useCierresDeLaCuenta` (lectura perezosa, búsqueda por día o mensajero); el elegido viaja como `cierreId` a `verEstadoCuentaAction` y entra en la clave SWR | `components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx`, `EstadoCuenta.tsx` (`selectorCierre`, `filtrosDeLectura`), `estado-cuenta-clave.ts` |
+| 2 | **Origen con entidad y enlace (R6–R8)** en la fila, el panel y la descarga (`fila.origen.texto`; enlace «Ver» con la etiqueta del servidor, id solo en `href`); **método y referencia** («Cómo se pagó: SINPE · referencia …») en la fila, en el panel («Cómo») y en una columna nueva de la descarga | `EstadoCuenta.tsx` (`OrigenDeFila`), `estado-cuenta-lineas.ts` (`origenDeFila`, `pagoDeFila`), `estado-cuenta-descarga-columnas.ts` |
+| 3 | **Órdenes de una fila de cierre (R19)**: el MISMO panel de la 344 con otra fuente (`fuenteOrdenesDeFila`, cuenta de la página + movimiento de la fila); la descarga del panel lee todas las páginas y pasa por `filasLocales` (tope único). El mensajero responde siempre `snapshot_del_cierre` y el panel lo dice en palabras | `app/(app)/wallet/_components/DetalleMovimientoCierre.tsx` (prop `fuente`), `ordenes-de-fila-cuenta.ts`, `EstadoCuentaTienda.tsx`, `EstadoCuentaMensajero.tsx` |
+| 4 | **`/mi-wallet` = estado de cuenta en solo lectura con saldo corrido (R34–R36)**: el módulo compartido en vista «tienda» (frase en segunda persona, sin «Registró», sin «Ver»/«Anular…»), leído por `verMiEstadoCuentaAction` sin ninguna clave de cuenta; «Ver comprobante» por fila (R78); su selector de cierre de la 335; sus órdenes con `DetalleMiMovimientoCierre`. **TD.5 completa.** | `app/(app)/mi-wallet/page.tsx`, `_components/MiEstadoCuenta.tsx`, `mi-estado-cuenta-labels.ts`, `TarjetasEstadoCuenta.tsx` (`vista`) |
+| 5 | **Descarga completa** (`verEstadoCuentaCompletoAction` / `verMiEstadoCuentaCompletoAction`) con periodo, chip y cierre; `limite_excedido` → «El estado de cuenta tiene N movimientos con estos filtros y la descarga admite hasta L. Elegí un periodo más corto, un chip o un cierre y volvé a descargar.» | `EstadoCuenta.tsx` (`filasDelPeriodo(lector, …)`), `estado-cuenta-labels.ts` |
+| 6 | Fuera los `@sin-superficie` de las cuatro actions de `lib/actions/estado-cuenta.ts`, de `cierresDeLaCuentaAction` y de `cierres-selector.ts` / `use-cierres-de-la-cuenta.ts` (con su «pendiente de servidor»). Entran, anotados, los de `verMiSaldoAction` y `listarMisMovimientos{,Completo}Action`, que se quedan sin pantalla | `lib/actions/{estado-cuenta,wallet-filtros,wallet-tienda}.ts` (solo comentarios) |
+| 7 | **Ayuda y asistente (TD.9):** `wallet-tiendas.md`, `wallet-mensajeros.md`, `tienda/mi-wallet.md` (reescrita como estado de cuenta); `contexto-458.test.ts` bloque D con frases literales (filtro por cierre, enlace del origen, «Cómo se pagó», órdenes de un cierre, sin reparto del mensajero, Mi wallet como estado de cuenta) y el bloque A de Mi wallet ajustado (el filtro por concepto se fue) | `docs/ayuda/**`, `tests/unit/asistente/contexto-458.test.ts` |
+
+**Extra, medido:** SWR volvía a pedir la primera página al montar aunque ya la había leído el servidor (una lectura
+de más por visita, y si esa segunda lectura fallaba la tabla cambiaba las filas buenas por el aviso de error).
+`revalidateIfStale: false` en el extracto; test «al montar NO se vuelve a pedir» (mutación M12).
+
+## Retirado de `/mi-wallet` y sus redes (ningún test borrado: los MISMOS archivos, reescritos sobre el módulo nuevo)
+
+| Retirado | Test (mismo archivo) | R que conserva |
+| --- | --- | --- |
+| `MiWalletModule.tsx`, `SaldoTiendaCard.tsx` | `tests/integration/mi-wallet-page.test.tsx` (gate por rol, pre-fetch sin clave de cuenta, STRING, negativo, 335 R12–R15/R28–R30, 459 R44), `tests/unit/components/saldo-tienda-card.negativo.test.tsx` (381 R29/R30 sobre `TarjetasEstadoCuenta` vista tienda) | 43 R18–R21, 335, 381 R29/R30, 459 R44, 458 R34–R36 |
+| `DesgloseTiendaLedger.tsx` | `tests/unit/components/desglose-tienda-ledger.test.tsx` (381 R32/R35: el cobro en la tabla; el filtro es el chip «Cobros»), `DetalleMiMovimientoCierre.test.tsx` (344), `MiWalletComprobante458.test.tsx` (R78) | 381, 344, R78 |
+| `MiWalletFiltros.tsx` | `tests/components/MiWalletFiltros.test.tsx` (335 R20/R22/R25–R30 sobre el selector del estado de cuenta; «Limpiar» → «Todos los cierres»), `WalletFiltros458.test.tsx` (TA.3 → chip sin id de tienda) | 335, 458-A TA.3 |
+| `mi-wallet-descarga-columnas.ts` | `tests/unit/descarga/wallet-tienda-descarga-columnas.test.ts` (170 R5/R7/R8/R23, 381 R39, 461 R44 sobre `COLUMNAS_DESCARGA_MI_ESTADO_CUENTA`), `OrigenMovimiento.test.tsx` (R3), `WalletDescarga.test.tsx` (170 R9: el archivo trae el periodo ENTERO) | 170, 381, 461, R3 |
+| **Sin sustituto, a decidir:** la cabecera de tres importes de la 172 (R55: «A tu favor · Cargos de Ordenex · Ya pagado») y su salvedad N1 | la tienda distingue el pago del cargo por su fila («Ordenex te pagó», chip «Pagos») y las cifras son NETAS (D3); `mi-wallet-page.test.tsx` lo afirma. Los textos (`DESGLOSE_MI_WALLET_LABEL`/`_AVISO`) quedan en `mi-wallet-labels.ts` con sus tests | 172 R55/N1, 457 R50 |
+
+Guardias y censos ajustados con su motivo: `cobertura-tablas` (37→36 archivos/instancias, 24→23 con descarga,
+`MiEstadoCuenta` 4.º montaje del extracto), `ControlDescargaTransversal` (proveedores 3→2), `liquidacion-money-safe`,
+`mi-wallet-335` (lee `verMiEstadoCuentaAction`), `wallet-conceptos-sin-seed` (queda el filtro de la caja),
+`wallet-textos-458` (T5-mi-wallet vigila `MiEstadoCuenta.tsx`), `wallet-sin-uuid` (superficie `/mi-wallet` nueva),
+`mi-wallet-desglose` (R55 barre los archivos nuevos). El fixture `tests/fixtures/estado-cuenta.ts` pasa a
+`origen: null` por defecto (la fila cae al diccionario, como antes); los casos de R6–R8 lo dan explícito.
+
+## Tests nuevos
+
+- `tests/components/EstadoCuenta458DPantalla.test.tsx` (10): primera página sin relectura; filtro por cierre en
+  tienda y mensajero; R6/R7/R8; «Cómo se pagó» en fila y panel; R19 (solo filas de cierre, UNA lectura con la
+  cuenta, contra-asiento sin desplegar, `snapshot_del_cierre` legible).
+- `tests/unit/descarga/ordenes-de-fila-cuenta.test.ts` (7): la fuente del panel (cuenta, `sin_reparto`,
+  `not_found`, caché por cuenta, descarga por páginas, tope, sin reparto).
+
+## Mutaciones — 17/17 muertas (arnés con autocomprobación: el archivo cambia, corren > 0 tests, se restaura byte a byte y el `git diff` del archivo queda igual) — `progress/mutaciones_458-D_pantalla.json`
+
+| # | Mutación | Rojos |
+| --- | --- | --- |
+| M1 | el cierre elegido no viaja a la lectura (R10) | 4/23 |
+| M2 | el selector del mensajero lee los cierres de una tienda (R11) | 1/10 |
+| M3 | el origen no ofrece el enlace aunque el servidor lo mande (R7) | 1/10 |
+| M4 | el origen ignora la entidad y cae al diccionario (R6) | 4/18 |
+| M5 | el método y la referencia no se dicen | 4/52 |
+| M6 | toda fila despliega órdenes (R19) | 4/50 |
+| M7 | las órdenes se piden con otra cuenta (R19/R12) | 1/17 |
+| M8 | `limite_excedido` sin su aviso (TD.6) | 1/8 |
+| M9 | la descarga lee la página y no el completo (R32) | 4/19 |
+| M10 | `/mi-wallet` en vista de la oficina (R34/R35) | 5/42 |
+| M11 | `/mi-wallet` manda una clave de tienda (R36) | 3/28 |
+| M12 | la primera página se relee al montar | 1/23 |
+| M13 | la frase del saldo de la tienda en tercera persona (R34) | 9/42 |
+| M14 | la descarga de `/mi-wallet` lleva «Registró» (R35) | 2/19 |
+| M15 | «Ver comprobante» en todas las filas (R78) | 2/39 |
+| M16 | la descarga de las órdenes no mira el tope | 1/7 |
+| M17 | `sin_reparto` como fallo (R19) | 2/17 |
+
+## Recorrido
+
+`progress/recorrido_458-D/recorrido.md` §«Cierre de PANTALLA»: maestro y admin (filtro por cierre, enlaces del
+origen que abren con 200, desplegar órdenes, descarga con cierre y completa con 0 uuid, pago SINPE con referencia
+en la fila y el panel, mensajero `snapshot_del_cierre`), tienda (`/mi-wallet` con saldo corrido de la última fila =
+tarjeta = base = 147.670,10, sin «Registró» ni escritura, selector de cierre, descarga sin «Registró»). **R7 = R8 =
+0,00** antes y después con `c458c-1.sql`.
+
+## Mapa R → test (pantalla)
+
+| R | Test |
+| --- | --- |
+| R6, R7, R8 | `EstadoCuenta458DPantalla.test.tsx` («R6/R7…», «R8…»), `estado-cuenta-descarga-columnas.test.ts`, `wallet-sin-uuid.guardia` |
+| R10, R11, R12 | `EstadoCuenta458DPantalla.test.tsx` («R10–R12…»), `MiWalletFiltros.test.tsx` (R26), `WalletFiltros458.test.tsx` (TA.4) |
+| R19 | `EstadoCuenta458DPantalla.test.tsx` («R19…»), `ordenes-de-fila-cuenta.test.ts`, `DetalleMiMovimientoCierre.test.tsx` |
+| R32 / TD.6 | `estado-cuenta-descarga-columnas.test.ts`, `WalletDescarga.test.tsx` |
+| R34 | `mi-wallet-page.test.tsx` («458-D R34…»), `saldo-tienda-card.negativo.test.tsx`, recorrido |
+| R35 | `mi-wallet-page.test.tsx` («458-D R35…»), `MiWalletComprobante458.test.tsx`, `mi-wallet-335.guardia` |
+| R36 | `mi-wallet-page.test.tsx` (entrada `{}`), `MiWalletFiltros.test.tsx`, `WalletFiltros458.test.tsx` |
+| R78 | `MiWalletComprobante458.test.tsx`, `mi-wallet-page.test.tsx` |
+| R102, R103 | `contexto-458.test.ts` bloque D (y A) |
+| R104 | `progress/recorrido_458-D/` (cierre-*) |
+
+## Pendientes (ninguno de pantalla)
+
+1. **Decisión de producto:** la cabecera de tres importes de la 172 (R55) no existe en `/mi-wallet`; ¿se conserva
+   así (estado de cuenta neto) o se vuelve a poner encima? Sus textos siguen en `mi-wallet-labels.ts`.
+2. **Servidor:** retirar `verMiSaldoAction` y `listarMisMovimientos{,Completo}Action` (hoy `@sin-superficie`, con
+   sus tests de borde) y las del §Retirada.
+3. **Servidor (observación del recorrido):** la comisión de contra-entrega del cierre 2026-08-12 despliega «0 de 12
+   órdenes aportan».
+4. `PagosTiendaEstadoCuenta` (lista de pagos de la 172 bajo el extracto) duplica ahora el método y la referencia que
+   ya dice la fila: retirarla o no es decisión aparte.

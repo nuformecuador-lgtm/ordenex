@@ -1,0 +1,370 @@
+[
+ {
+  "id": "M1",
+  "que": "el cierre elegido no viaja a la lectura (R10)",
+  "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+  "tests": [
+   "tests/components/EstadoCuenta458DPantalla.test.tsx",
+   "tests/components/MiWalletFiltros.test.tsx"
+  ],
+  "cambio": true,
+  "corridos": 23,
+  "rojos": 4,
+  "rojosNombres": [
+   "tienda: el selector lee los cierres de ESTA tienda al abrirlo y el elegido viaja como `cierreId`",
+   "mensajero: el selector lee los cierres de ESE mensajero",
+   "R26: al elegir un cierre se lee el estado de cuenta con SU `cierreId`, sin ninguna clave de cuenta (R36)",
+   "R26: cada opción emite SU identificador, no siempre el primero"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M2",
+  "que": "el selector de cierre del mensajero lee los cierres de una TIENDA (R11)",
+  "archivo": "app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero.tsx",
+  "tests": [
+   "tests/components/EstadoCuenta458DPantalla.test.tsx"
+  ],
+  "cambio": true,
+  "corridos": 10,
+  "rojos": 1,
+  "rojosNombres": [
+   "mensajero: el selector lee los cierres de ESE mensajero"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M3",
+  "que": "el origen no ofrece el enlace aunque el servidor lo mande (R7)",
+  "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+  "tests": [
+   "tests/components/EstadoCuenta458DPantalla.test.tsx"
+  ],
+  "cambio": true,
+  "corridos": 10,
+  "rojos": 1,
+  "rojosNombres": [
+   "R6/R7: se lee la entidad; el enlace lleva el id SOLO en `href` y su nombre accesible no lo dice"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M4",
+  "que": "el origen ignora la entidad del servidor y cae al diccionario (R6)",
+  "archivo": "components/shared/estado-cuenta/estado-cuenta-lineas.ts",
+  "tests": [
+   "tests/components/EstadoCuenta458DPantalla.test.tsx",
+   "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts"
+  ],
+  "cambio": true,
+  "corridos": 18,
+  "rojos": 4,
+  "rojosNombres": [
+   "R6/R7: se lee la entidad; el enlace lleva el id SOLO en `href` y su nombre accesible no lo dice",
+   "R8: sin enlace del servidor, el nombre del origen sin enlace",
+   "pide el completo con periodo, chip y cierre vigentes; la primera fila es el saldo inicial",
+   "R36 — `/mi-wallet` lee SU completo sin ninguna clave de cuenta; lo lee desde la tienda"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M5",
+  "que": "el método y la referencia del pago no se dicen",
+  "archivo": "components/shared/estado-cuenta/estado-cuenta-lineas.ts",
+  "tests": [
+   "tests/components/EstadoCuenta458DPantalla.test.tsx",
+   "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts",
+   "tests/integration/mi-wallet-page.test.tsx"
+  ],
+  "cambio": true,
+  "corridos": 52,
+  "rojos": 4,
+  "rojosNombres": [
+   "la fila dice cómo se pagó; una fila que no es un pago, no",
+   "el panel «Ver» de ese pago tiene la línea «Cómo»",
+   "el pago se lee «Ordenex te pagó», con cómo se pagó; el flete, «Ordenex te cobró el flete»",
+   "pide el completo con periodo, chip y cierre vigentes; la primera fila es el saldo inicial"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M6",
+  "que": "toda fila despliega órdenes, no solo las que nacen de un cierre (R19)",
+  "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+  "tests": [
+   "tests/components/EstadoCuenta458DPantalla.test.tsx",
+   "tests/unit/components/desglose-tienda-ledger.test.tsx",
+   "tests/integration/mi-wallet-page.test.tsx"
+  ],
+  "cambio": true,
+  "corridos": 50,
+  "rojos": 4,
+  "rojosNombres": [
+   "tienda: solo la fila de cierre ofrece desplegar; al abrirla, UNA lectura con la cuenta de la página",
+   "un contra-asiento no despliega: sus órdenes son las de su original",
+   "R19: la fila del cierre despliega SUS órdenes; el pago, no",
+   "la fila del cobro no ofrece abrirse: no nace de un cierre y no hay órdenes detrás"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M7",
+  "que": "las órdenes de la fila se piden sin la cuenta de la página (R19/R12)",
+  "archivo": "app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts",
+  "tests": [
+   "tests/components/EstadoCuenta458DPantalla.test.tsx",
+   "tests/unit/descarga/ordenes-de-fila-cuenta.test.ts"
+  ],
+  "cambio": true,
+  "corridos": 17,
+  "rojos": 1,
+  "rojosNombres": [
+   "mensajero: `sin_reparto: snapshot_del_cierre` se dice con un texto legible, no como un fallo"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M8",
+  "que": "`limite_excedido` no se dice con el aviso claro (TD.6)",
+  "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+  "tests": [
+   "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts"
+  ],
+  "cambio": true,
+  "corridos": 8,
+  "rojos": 1,
+  "rojosNombres": [
+   "`limite_excedido`: NO hay archivo y el aviso dice cuántos movimientos hay, el tope y qué hacer"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M9",
+  "que": "la descarga lee la página y no el completo del servidor (TD.6/R32)",
+  "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+  "tests": [
+   "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts",
+   "tests/components/descarga/WalletDescarga.test.tsx"
+  ],
+  "cambio": true,
+  "corridos": 19,
+  "rojos": 4,
+  "rojosNombres": [
+   "el archivo trae el ledger ENTERO, no la página pintada",
+   "pide el completo con periodo, chip y cierre vigentes; la primera fila es el saldo inicial",
+   "`limite_excedido`: NO hay archivo y el aviso dice cuántos movimientos hay, el tope y qué hacer",
+   "R36 — `/mi-wallet` lee SU completo sin ninguna clave de cuenta; lo lee desde la tienda"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M10",
+  "que": "`/mi-wallet` se pinta en la vista de la oficina (nombres de Ordenex, tercera persona) (R34/R35)",
+  "archivo": "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+  "tests": [
+   "tests/integration/mi-wallet-page.test.tsx",
+   "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts"
+  ],
+  "cambio": true,
+  "corridos": 42,
+  "rojos": 5,
+  "rojosNombres": [
+   "lee SU estado de cuenta SIN ninguna clave de cuenta y lo pinta con los STRING del servidor",
+   "el saldo puede ser NEGATIVO (la tienda le debe a Ordenex) y se lee con su signo y en palabras",
+   "los chips de la tienda y el periodo; ningún nombre de la gente de Ordenex («Registró»)",
+   "R29: si la lectura de cierres no responde ok, el estado de cuenta sigue en pantalla y NO hay notFound",
+   "R29: el estado `unauthenticated` de esa lectura tampoco tumba la pantalla"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M11",
+  "que": "`/mi-wallet` manda una clave de tienda a su lectura (R36)",
+  "archivo": "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+  "tests": [
+   "tests/components/MiWalletFiltros.test.tsx",
+   "tests/unit/components/desglose-tienda-ledger.test.tsx",
+   "tests/components/WalletFiltros458.test.tsx"
+  ],
+  "cambio": true,
+  "corridos": 28,
+  "rojos": 3,
+  "rojosNombres": [
+   "R26: al elegir un cierre se lee el estado de cuenta con SU `cierreId`, sin ninguna clave de cuenta (R36)",
+   "R13/R36: el chip «Cobros» lee SU estado de cuenta sin `tiendaId` ni `cuenta`, y rotula desde la tienda",
+   "el chip «Cobros» pide SU estado de cuenta con `chip: cobros`, sin ninguna clave de tienda"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M12",
+  "que": "la primera página del servidor se vuelve a leer al montar",
+  "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+  "tests": [
+   "tests/components/EstadoCuenta458DPantalla.test.tsx",
+   "tests/components/MiWalletFiltros.test.tsx"
+  ],
+  "cambio": true,
+  "corridos": 23,
+  "rojos": 1,
+  "rojosNombres": [
+   "al montar NO se vuelve a pedir (una lectura de más, y un fallo que taparía las filas buenas)"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M13",
+  "que": "la frase del saldo de `/mi-wallet` en tercera persona (R34)",
+  "archivo": "components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx",
+  "tests": [
+   "tests/unit/components/saldo-tienda-card.negativo.test.tsx",
+   "tests/integration/mi-wallet-page.test.tsx"
+  ],
+  "cambio": true,
+  "corridos": 42,
+  "rojos": 9,
+  "rojosNombres": [
+   "lee SU estado de cuenta SIN ninguna clave de cuenta y lo pinta con los STRING del servidor",
+   "el saldo puede ser NEGATIVO (la tienda le debe a Ordenex) y se lee con su signo y en palabras",
+   "R29: si la lectura de cierres no responde ok, el estado de cuenta sigue en pantalla y NO hay notFound",
+   "R29: el estado `unauthenticated` de esa lectura tampoco tumba la pantalla",
+   "conserva los CÉNTIMOS del negativo, que en un libro de dinero no son decoración",
+   "signo `negativo` → «cuenta_debe»"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M14",
+  "que": "la descarga de `/mi-wallet` lleva la columna «Registró» (R35)",
+  "archivo": "components/shared/estado-cuenta/estado-cuenta-descarga-columnas.ts",
+  "tests": [
+   "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts",
+   "tests/unit/descarga/wallet-tienda-descarga-columnas.test.ts"
+  ],
+  "cambio": true,
+  "corridos": 19,
+  "rojos": 2,
+  "rojosNombres": [
+   "R34/R35 — `/mi-wallet`: las mismas SIN «Registró» (la tienda no ve los nombres de Ordenex)",
+   "declara sus columnas ENUMERADAS, en el orden de la pantalla (R5)"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M15",
+  "que": "«Ver comprobante» en TODAS las filas de `/mi-wallet` (R78)",
+  "archivo": "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+  "tests": [
+   "tests/components/MiWalletComprobante458.test.tsx",
+   "tests/integration/mi-wallet-page.test.tsx"
+  ],
+  "cambio": true,
+  "corridos": 39,
+  "rojos": 2,
+  "rojosNombres": [
+   "cobro, pago de Ordenex, pago de un gasto y pago de la tienda: sí; lo del cierre: no",
+   "R78: «Ver comprobante» SOLO en las filas que pueden llevarlo (el pago sí; lo del cierre, no)"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M16",
+  "que": "la descarga de las órdenes de una fila no mira el tope",
+  "archivo": "app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts",
+  "tests": [
+   "tests/unit/descarga/ordenes-de-fila-cuenta.test.ts"
+  ],
+  "cambio": true,
+  "corridos": 7,
+  "rojos": 1,
+  "rojosNombres": [
+   "por encima del tope de las descargas NO hay archivo y no se leen las demás páginas"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ },
+ {
+  "id": "M17",
+  "que": "`sin_reparto` del mensajero se trata como un fallo (R19)",
+  "archivo": "app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts",
+  "tests": [
+   "tests/components/EstadoCuenta458DPantalla.test.tsx",
+   "tests/unit/descarga/ordenes-de-fila-cuenta.test.ts"
+  ],
+  "cambio": true,
+  "corridos": 17,
+  "rojos": 2,
+  "rojosNombres": [
+   "mensajero: `sin_reparto: snapshot_del_cierre` se dice con un texto legible, no como un fallo",
+   "`sin_reparto` es una RESPUESTA con su motivo, no un fallo"
+  ],
+  "errorDeArchivo": [],
+  "exit": 1,
+  "restaurado": true,
+  "diffIgual": true,
+  "muerta": true
+ }
+]

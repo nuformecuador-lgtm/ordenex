@@ -76,3 +76,42 @@ Ninguna nombra un identificador ni el desglose retirado. Capturas `asistente-1..
    `sin_comprobante`) y `wallet-comprobante-alcance.test.ts` de la 458-B.
 2. Los datos que el recorrido dejó en el clon (cobros, pagos de un gasto, anulaciones, marcas y las dos
    consolidaciones sembradas) mueren con el clon, que se borra al terminar.
+
+---
+
+# Cierre de PANTALLA de la 458-D (frontend, 2026-09-26) — recorrido
+
+Playwright ad hoc (`chromium` de `@playwright/test`, script en el scratchpad, fuera del árbol) contra UN dev
+server (`next dev -p 3491`, `AUTH_RISK_THRESHOLD=999` solo en la línea de comando; apagado al terminar) sobre
+el clon `ordenex_458dc` (0 conexiones a la plantilla al clonar; `migrate deploy`: «No pending migrations»).
+Usuarios `maestro.qa`, `admin.qa`, `tienda.qa` (Tania), con la contraseña QA rotada SOLO en el clon
+(`seed-usuarios-qa`, `seed-maestro` con `MAESTRO_EMAIL=maestro.qa@ordenex.test`). Salida cruda:
+`cierre-maestro.json`, `cierre-admin.json`, `cierre-tienda.json`; capturas y xlsx `cierre-*`.
+
+| Rol | Paso | Resultado | Números |
+| --- | --- | --- | --- |
+| maestro / admin | estado de cuenta de Tania | OK | «Saldo actual ₡147.670,10 · Ordenex le debe ₡147.670,10 a Tania Tienda · Saldo inicial ₡0 · Abonos ₡191.400 · Cargos ₡43.729,90 · Saldo al final ₡147.670,10»; 0 uuid en texto ni nombres accesibles (`cierre-*-01`) |
+| maestro / admin | **origen con entidad y enlace (R6/R7)** | OK | 20 enlaces en la página 1; texto visible «Ver», nombre accesible «Ver el cierre del 2026-08-12 de Marco Mensajero», uuid SOLO en `href` (`/cierres-admin?cierre=…`), que responde 200; la fila dice «Cierre del día · 2026-08-12 · Marco Mensajero» |
+| maestro / admin | **desplegar órdenes de una fila de cierre (R19)** | OK | «Ver las órdenes que componen Contra-entrega cobrado a los clientes de la tienda del 2026-08-12» → panel «Cierre del día 2026-08-12 · Mensajero: Marco Mensajero · 6 de 12 órdenes del cierre aportan · Importe ₡124.100», seis guías (990001 … 990009) con su aporte; 0 uuid (`cierre-*-03`) |
+| maestro / admin | **filtro por cierre (R10/R11)** | OK | opciones «Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos», «… · Rita Recorrido · 5 movimientos», «Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos»…; buscar «Quino QUEPOS» → 2 opciones; buscar «2026-09-24» → 3; elegido el de Quino → 8 filas (saldo inicial + 7), todas del 2026-09-24; el disparador dice el rótulo, ningún uuid (`cierre-*-04`) |
+| maestro / admin | **descarga completa (TD.6)** | OK | con el cierre: 9 filas (saldo inicial + 7), columnas Fecha · Movimiento · Motivo · Origen · Cómo se pagó · Registró · Cargo · Abono · Saldo · Estado; sin cierre: 29 filas (maestro) / 31 (admin, tras el pago del maestro y su anulación); última fila del archivo = última de la pantalla = tarjeta = **147.670,10**; **0 uuid** (`cierre-*-05*.xlsx`) |
+| maestro / admin | **método y referencia** | OK | «Ordenex le paga a la tienda» 1.000 por SINPE con referencia `REC458D-<rol>` → la fila dice «Cómo se pagó: SINPE · referencia REC458D-<rol>» y el panel «Ver» la línea **Cómo** igual; tarjeta 147.670,10 → 146.670,10; anulado desde el panel → 147.670,10 (`cierre-*-07*`) |
+| maestro / admin | mensajero Marco | OK | «Ordenex le debe ₡5.100 a Marco Mensajero»; la fila de cierre se abre y dice «Este importe es el total que el cierre del día dejó anotado para pagarle al mensajero. No se acumula orden por orden…» (`snapshot_del_cierre` en palabras); 4 enlaces de origen al cierre; su selector ofrece SUS 3 cierres («… · 1 movimiento», «… · 2 movimientos») y filtra a 2 filas (`cierre-*-06*`) |
+| adminTienda | **/mi-wallet = su estado de cuenta (R34/R35)** | OK | «Saldo actual ₡147.670,10 · **Ordenex te debe ₡147.670,10** · …»; primera fila «— Saldo inicial ₡0»; **sin «Registró»**; **0 botones de registrar/anular/adjuntar/cobrar/pagar**; 0 enlaces de origen al cierre (R8); 20 filas que despliegan SUS órdenes, sin el mensajero; 0 uuid (`cierre-tienda-01`, `-05`) |
+| adminTienda | selector de cierre de siempre | OK | «Cierre del 2026-09-24 · 7 movimientos» (sin mensajero) → 8 filas; descarga 9 filas SIN la columna «Registró», 0 uuid (`cierre-tienda-02`, `-03`) |
+| adminTienda | **saldo corrido = tarjeta** | OK | última fila de la última página «₡147.670,10» = tarjeta = saldo de Tania en la base (147.670,10) |
+
+**`limite_excedido`:** el clon no tiene una cuenta con más de 5.000 movimientos; el aviso («El estado de cuenta
+tiene N movimientos con estos filtros y la descarga admite hasta 5000…») lo mide
+`tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts` (literal) y su mutación M8.
+
+**Observación (servidor, no tocado):** la fila «Comisión de contra-entrega cobrada a la tienda del 2026-08-12»
+(₡4.343,50) despliega «0 de 12 órdenes del cierre aportan a este concepto» en la oficina y en `/mi-wallet`: la
+derivación de la 344 no encuentra aporte por orden para esa comisión en los datos del clon. No es de pantalla.
+
+## R7 / R8 — `c458c-1.sql` (cierre de pantalla)
+
+| Momento | entró | salió | cifra | ganancia | De las tiendas | Σ saldos tiendas | R8 | R7 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| antes (`cierre-r7r8-antes.json`) | 13.524.733,22 | 40.800,50 | 13.483.932,72 | 13.336.262,62 | 147.670,10 | 147.670,10 | **0,00** | **0,00** |
+| después (`cierre-r7r8-despues.json`; 2 pagos a Tania y sus 2 anulaciones) | 13.526.733,22 | 42.800,50 | 13.483.932,72 | 13.336.262,62 | 147.670,10 | 147.670,10 | **0,00** | **0,00** |
