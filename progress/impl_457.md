@@ -18,7 +18,8 @@ todo se leyó con `grep`/lectura directa de los archivos reales.
 | `c88c4eb9` | WIP: tests nuevos y reescrituras a medio aplicar |
 | `6fe2acd0` | **fix R25** (la clave manda sobre la regla del dinero) + la guardia de alcance compila |
 | `eb36c2dc` | tests: repositorio contra Postgres, puerto de caja, carpeta del comprobante, R25 concurrente |
-| (este) | bitácora, mutaciones y gate |
+| `a7bd1186` | bitácora y mutaciones |
+| `8bcab3ab` | los cinco rojos del primer gate completo (§9) |
 
 ## 2. Timestamps y migraciones (T1.1–T1.4)
 
@@ -273,12 +274,48 @@ verde (27/27) y el arnés se repitió entero: la tabla de arriba es esa repetici
 
 ## 9. Verificación
 
-PLACEHOLDER_VERIFICACION
+Gate COMPLETO `./init.sh` sobre `8bcab3ab`, log `progress/gate_457_backend.log` (sin `tail`, con
+`INIT_EXIT=$?` escrito dentro):
+
+```
+✓ typecheck paso
+✓ lint paso                      (0 errores; 218 avisos, ninguno en archivos de la 457)
+✓ DATABASE_URL resuelta: los 295 archivos de tests contra Postgres SI se ejecutan
+ Test Files  2252 passed (2252)
+      Tests  31715 passed | 26 skipped (31741)
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 2252 ejecutado(s), todos en el baseline conocido)
+! migraciones sin down.sql: 20260814120000_… 20260814140000_… 20260814160000_…   (previo, ajeno)
+== init OK ==
+INIT_EXIT=0
+```
+
+**`tests/integration/db`: 0 saltados** (383 archivos `✓`, ninguno `↓`; los 26 `skipped` son
+`tests/components/AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (9), ajenos).
+
+**La primera corrida del gate (sobre `a7bd1186`) fue ROJA: 5 archivos, 10 tests, todos de esta
+ficha**, y se arreglaron en `8bcab3ab`:
+
+| Rojo | Causa | Arreglo |
+| --- | --- | --- |
+| `orden-incidente-migration` (R40 del down) | censo de orígenes POSTERIORES sin `abono_tienda` (el WIP no lo alineó) | `+ "abono_tienda"` |
+| `premio-ranking-devengo-migration` | ídem | ídem |
+| `api-key-dependencias-usuario.guardia` (×6) | tres FK nuevas hacia `usuario` sin clasificar | `AbonoTienda.tienda` (R10: rol `adminTienda`), `.registrador` y `AbonoTiendaAnulacion.anulador` (solo operador), `no_alcanzable` |
+| `catalogo-postgres-acota-esquema.guardia` | el test (f) de migración leía `pg_constraint` sin acotar el esquema | `JOIN pg_namespace … nspname = 'public'` |
+| `superficie-de-uso.guardia` | `registrarAbonoTiendaAction` aún no tiene pantalla (Fase 6) | `@sin-superficie` TRANSITORIA con su motivo; **la T6.4 del frontend la borra** |
+
+Los cinco archivos, aislados tras el arreglo: 6/6 archivos, 99/99 tests.
+
+Antes del gate, fuera de él: `pnpm run typecheck` → exit 0; `pnpm run lint` → exit 0 (0 errores).
+Fotografía `caja-caracterizacion-459.test.ts` e invariante: verdes (27/27) sin tocar los literales de
+la fotografía.
 
 ## 10. Pendiente
 
 - **Frontend (Fase 6 y 7 de `tasks.md`):** concepto en el diálogo, botón del desglose, pistas de
   cabecera (R50), descargas, historial en pantalla, ayuda y asistente (R68/R69), y apretar la guardia
   de alcance (3) a «exactamente uno». Mutaciones 9 y 13 (y la 11 sobre tablas/descargas).
+  **Y borrar el `@sin-superficie` transitorio de `registrarAbonoTiendaAction`** al cablear el diálogo.
 - **Leader:** R78 (contraste en producción antes/después), R79 (recorrido por rol).
 - El `design.md` §5.1 debería reflejar el orden nuevo de la clave (R25) —anotado aquí, no lo toco—.
+
+**Veredicto:** backend de la 457 completo y verde (gate completo `INIT_EXIT=0`, 0 saltados en `integration/db`, 12/12 mutaciones del dinero rojas); falta la UI (Fase 6-7) y R78/R79 del leader.
