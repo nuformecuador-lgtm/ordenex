@@ -56,9 +56,12 @@ const CONCEPTOS_ESPERADOS: Record<WalletMovimientoCategoria, string> = {
   egreso_ajuste: "Corrección de caja (resta)",
   ingreso_aporte_capital: "Aporte de dinero a la caja",
   egreso_reverso_aporte_capital: "Aporte de dinero a la caja anulado",
+  // Ficha 457 (design §2, DH7): el pago de una tienda a Ordenex toma el nombre que la 461 reservo.
+  ingreso_abono_tienda: "Una tienda le paga a Ordenex",
+  egreso_reverso_abono_tienda: "Pago de una tienda a Ordenex anulado",
 };
 
-/** design §7.3 — los 13 origenes del libro de la caja. */
+/** design §7.3 — los 13 origenes del libro de la caja (+ el de la 457: 14). */
 const ORIGENES_ESPERADOS: Record<WalletOrigenTipo, string> = {
   cierre_dia: "Cierre del día",
   gestion_orden: "Gestión de orden",
@@ -73,17 +76,29 @@ const ORIGENES_ESPERADOS: Record<WalletOrigenTipo, string> = {
   cobro_manual_reclasificado: "Cobro reclasificado como pago de un gasto de la tienda",
   cobro_tienda: "Cobro de Ordenex a una tienda",
   cobro_tienda_completado: "Cobro de Ordenex a una tienda (línea de caja completada al corregir)",
+  // Ficha 457 (design §2): el documento del pago de una tienda a Ordenex.
+  abono_tienda: "Pago de una tienda a Ordenex",
 };
 
 describe("461 — CATEGORIA_LABEL: cada concepto de la caja, desde Ordenex (R42, design §7.2)", () => {
-  it("dice exactamente los 23 textos aprobados, y el seed es exactamente esas 23 claves", () => {
+  it("dice exactamente los 25 textos aprobados (23 de la 461 + 2 de la 457), y el seed es exactamente esas 25 claves", () => {
     expect(CATEGORIA_LABEL).toEqual(CONCEPTOS_ESPERADOS);
     // Anti-vacuidad: la igualdad de arriba compara contra una lista escrita a mano; esta linea
     // afirma que esa lista cubre el catalogo ENTERO y no un subconjunto que casara por casualidad.
     expect([...WALLET_MOVIMIENTO_CATEGORIA_SEED].sort()).toEqual(
       Object.keys(CONCEPTOS_ESPERADOS).sort(),
     );
-    expect(WALLET_MOVIMIENTO_CATEGORIA_SEED).toHaveLength(23);
+    expect(WALLET_MOVIMIENTO_CATEGORIA_SEED).toHaveLength(25);
+  });
+
+  it("⭑ 457 (R45/R53): el pago de una tienda a Ordenex y su anulacion, con los nombres reservados por la 461", () => {
+    expect(CATEGORIA_LABEL.ingreso_abono_tienda).toBe("Una tienda le paga a Ordenex");
+    expect(CATEGORIA_LABEL.egreso_reverso_abono_tienda).toBe("Pago de una tienda a Ordenex anulado");
+    // Distintos del cobro (Ordenex le cobra) y del pago de Ordenex a la tienda: la direccion del dinero
+    // es la contraria y el nombre lo dice.
+    expect(CATEGORIA_LABEL.ingreso_abono_tienda).not.toBe(CATEGORIA_LABEL.ingreso_cobro_tienda);
+    expect(CATEGORIA_LABEL.ingreso_abono_tienda).not.toBe(CATEGORIA_LABEL.egreso_pago_tienda);
+    expect(ORIGEN_LABEL.abono_tienda).toBe("Pago de una tienda a Ordenex");
   });
 
   it("ningun nombre se repite: dos conceptos con el mismo texto serian indistinguibles en la tabla", () => {
@@ -110,10 +125,10 @@ describe("461 — CATEGORIA_LABEL: cada concepto de la caja, desde Ordenex (R42,
     );
   });
 
-  it("el filtro por concepto ofrece los 23 con SU nombre (R42), tras la opcion «todas»", () => {
+  it("el filtro por concepto ofrece los 25 con SU nombre (R42; 457/R45), tras la opcion «todas»", () => {
     expect(CATEGORIA_OPTIONS[0]).toEqual({ value: "", label: "Todas las categorías" });
     const opciones = new Map(CATEGORIA_OPTIONS.slice(1).map((o) => [o.value, o.label]));
-    expect(opciones.size).toBe(23);
+    expect(opciones.size).toBe(25);
     for (const [clave, texto] of Object.entries(CONCEPTOS_ESPERADOS)) {
       expect(opciones.get(clave), clave).toBe(texto);
     }
@@ -121,10 +136,10 @@ describe("461 — CATEGORIA_LABEL: cada concepto de la caja, desde Ordenex (R42,
 });
 
 describe("461 — ORIGEN_LABEL: cada origen de la caja, desde Ordenex (R42, design §7.3)", () => {
-  it("dice exactamente los 13 textos aprobados, y el seed es exactamente esas 13 claves", () => {
+  it("dice exactamente los 14 textos aprobados (13 de la 461 + 1 de la 457), y el seed es exactamente esas 14 claves", () => {
     expect(ORIGEN_LABEL).toEqual(ORIGENES_ESPERADOS);
     expect([...WALLET_ORIGEN_TIPO_SEED].sort()).toEqual(Object.keys(ORIGENES_ESPERADOS).sort());
-    expect(WALLET_ORIGEN_TIPO_SEED).toHaveLength(13);
+    expect(WALLET_ORIGEN_TIPO_SEED).toHaveLength(14);
   });
 
   it("las dos lineas del cobro se distinguen: la completada dice que se completo al corregir (R37)", () => {
@@ -155,12 +170,13 @@ describe("461 — el resto de textos de la caja que esta ficha toca (R42/R50, de
     expect(TIPO_EGRESO_MANUAL_LABEL.gasto_variable).toBe(CATEGORIA_LABEL.egreso_gasto_variable);
   });
 
-  it("los cuatro documentos anulables se nombran desde Ordenex dentro de «Anular …»", () => {
+  it("los cinco documentos anulables se nombran desde Ordenex dentro de «Anular …»", () => {
     expect(DOCUMENTO_CAJA_NOMBRE).toEqual({
       pago_por_cuenta_tienda: "el pago de un gasto de una tienda",
       aporte_capital: "el aporte de dinero a la caja",
       cobro_tienda: "el cobro de Ordenex a una tienda",
       ajuste_caja: "la corrección de caja",
+      abono_tienda: "el pago de una tienda a Ordenex", // ficha 457 (design §8.5)
     });
   });
 

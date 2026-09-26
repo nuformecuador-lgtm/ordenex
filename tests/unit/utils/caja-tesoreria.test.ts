@@ -66,9 +66,12 @@ describe("NATURALEZA_POR_CATEGORIA — clasificacion exhaustiva (R2/R3)", () => 
       (c) => NATURALEZA_POR_CATEGORIA[c] === "terceros",
     );
     // Ficha 459 (design §5): + el pago por cuenta de una tienda y su anulacion.
+    // Ficha 457 (design §4, DH1): + el pago de una tienda a Ordenex y su anulacion.
     expect([...terceros].sort()).toEqual([
       "egreso_pago_por_cuenta_tienda",
       "egreso_pago_tienda",
+      "egreso_reverso_abono_tienda",
+      "ingreso_abono_tienda",
       "ingreso_cod_recaudado",
       "ingreso_reverso_pago_por_cuenta_tienda",
       "ingreso_reverso_pago_tienda",

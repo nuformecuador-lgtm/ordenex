@@ -269,6 +269,47 @@ describe("459 — guardia de la clasificacion de la caja y del libro de las tien
       expect(p).toContain("cobro_tienda_anulado (1) ↔ egreso_reverso_cobro_tienda (-1): no mueven igual");
     });
 
+    it("⭑ 457 (R24, DH1): el pago de una tienda a Ordenex clasificado como PROPIO → rojo", () => {
+      // La mutacion 2 de design §13 de la 457: `ingreso_abono_tienda: "propio"`. Como propio efectivo
+      // no mueve «De las tiendas» (0) mientras el credito de la tienda la sube (+1): la ganancia
+      // subiria al cobrar lo que ya se conto al aprobar el cierre, y R8 se romperia en cuanto la
+      // tienda pagara. Es DH1 convertida en algo que se rompe.
+      const comoPropio: Tablas = {
+        ...REALES,
+        naturaleza: { ...NATURALEZA_POR_CATEGORIA, ingreso_abono_tienda: "propio" },
+      };
+      expect(problemasDeClasificacion(comoPropio)).toContain(
+        "abono_tienda (1) ↔ ingreso_abono_tienda (0): no mueven igual",
+      );
+    });
+
+    it("⭑ 457 (R24): el pago de una tienda a Ordenex clasificado como CARGO → rojo", () => {
+      // La mutacion 3 de design §13 de la 457: `LIQUIDEZ.ingreso_abono_tienda = "cargo_a_tienda"`. Un
+      // cargo `ingreso_` BAJA «De las tiendas» (−1) mientras el credito la sube (+1); y la lista de los
+      // ocho cargos deja de ser la del contrato.
+      const comoCargo: Tablas = {
+        ...REALES,
+        liquidez: { ...LIQUIDEZ_POR_CATEGORIA, ingreso_abono_tienda: "cargo_a_tienda" },
+      };
+      const p = problemasDeClasificacion(comoCargo);
+      expect(p).toContain("abono_tienda (1) ↔ ingreso_abono_tienda (-1): no mueven igual");
+      expect(p.some((x) => x.startsWith("cargos a tienda = "))).toBe(true);
+      expect(p).toContain("ingreso_abono_tienda: cargo que no es propio");
+    });
+
+    it("⭑ 457 (R24): las dos parejas del pago de una tienda a Ordenex, declaradas y en el mismo sentido", () => {
+      expect(CONTRAPARTIDA_EN_CAJA.abono_tienda).toBe("ingreso_abono_tienda");
+      expect(CONTRAPARTIDA_EN_CAJA.abono_tienda_anulado).toBe("egreso_reverso_abono_tienda");
+      expect(TIPO_POR_CATEGORIA_TIENDA.abono_tienda).toBe("credito");
+      expect(TIPO_POR_CATEGORIA_TIENDA.abono_tienda_anulado).toBe("debito");
+      expect(NATURALEZA_POR_CATEGORIA.ingreso_abono_tienda).toBe("terceros");
+      expect(NATURALEZA_POR_CATEGORIA.egreso_reverso_abono_tienda).toBe("terceros");
+      expect(LIQUIDEZ_POR_CATEGORIA.ingreso_abono_tienda).toBe("efectivo");
+      expect(LIQUIDEZ_POR_CATEGORIA.egreso_reverso_abono_tienda).toBe("efectivo");
+      expect(efectoEnDeLasTiendas(REALES, "ingreso_abono_tienda")).toBe(1);
+      expect(efectoEnDeLasTiendas(REALES, "egreso_reverso_abono_tienda")).toBe(-1);
+    });
+
     it("un cargo clasificado como EFECTIVO → rojo (el doble conteo de F2)", () => {
       const cargoComoEfectivo: Tablas = {
         ...REALES,

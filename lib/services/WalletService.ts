@@ -75,6 +75,11 @@ function tipoDeDocumentoOriginal(m: WalletMovimientoDTO): DocumentoCajaDTO["tipo
   ) {
     return "cobro_tienda";
   }
+  // Ficha 457 (design §8.5, R41): la ENTRADA del pago de una tienda a Ordenex es la original; su
+  // reverso (`egreso_reverso_abono_tienda`, mismo origen) queda en `null` y no se anula.
+  if (m.categoria === "ingreso_abono_tienda" && m.origenTipo === "abono_tienda") {
+    return "abono_tienda";
+  }
   // Ficha 461 (R71, auditoria D3): la CORRECCION de caja original —origen `manual` y SIN `origen_id`—.
   // Su contra-asiento comparte categoria y origen pero lleva `origen_id` = la correccion: no es
   // original y no se anula. El reverso de un egreso (`ingreso_ajuste`, origen `gasto`) tampoco.
@@ -145,18 +150,21 @@ export class WalletService implements IWalletService {
     const idsAportes = idsDe("aporte_capital");
     const idsCobros = idsDe("cobro_tienda");
     const idsAjustes = idsDe("ajuste_caja");
+    const idsAbonos = idsDe("abono_tienda");
 
-    const [pagos, aportes, cobros, ajustes] = await Promise.all([
+    const [pagos, aportes, cobros, ajustes, abonos] = await Promise.all([
       idsPagos.length > 0 ? this.documentos.pagosPorCuenta.estadoDeDocumentos(idsPagos) : [],
       idsAportes.length > 0 ? this.documentos.aportes.estadoDeDocumentos(idsAportes) : [],
       idsCobros.length > 0 ? this.documentos.cobros.estadoDeDocumentos(idsCobros) : [],
       idsAjustes.length > 0 ? this.documentos.ajustes.estadoDeDocumentos(idsAjustes) : [],
+      idsAbonos.length > 0 ? this.documentos.abonos.estadoDeDocumentos(idsAbonos) : [],
     ]);
     const estado = {
       pago_por_cuenta_tienda: new Map(pagos.map((e) => [e.id, e])),
       aporte_capital: new Map(aportes.map((e) => [e.id, e])),
       cobro_tienda: new Map(cobros.map((e) => [e.id, e])),
       ajuste_caja: new Map(ajustes.map((e) => [e.id, e])),
+      abono_tienda: new Map(abonos.map((e) => [e.id, e])),
     };
 
     return movimientos.map((m) => {

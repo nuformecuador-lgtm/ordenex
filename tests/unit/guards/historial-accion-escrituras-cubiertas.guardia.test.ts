@@ -372,6 +372,23 @@ const CENSO: EntradaCenso[] = [
     forma: "recibe_tx",
     mutacion: /tx\.cobroTiendaAnulacion\.create\(/,
   },
+  // ⭑ FICHA 457 (R61/R62) — el PAGO DE UNA TIENDA A ORDENEX. UN TIPO POR METODO, forma `recibe_tx`
+  // (el servicio abre la transaccion y el repositorio escribe el documento y su historial en ella,
+  // molde de las de la 459). La mutacion exigida es la escritura DEL DOCUMENTO (y de la CONSTANCIA).
+  {
+    tipos: ["abono_tienda_registrado"],
+    archivo: "lib/repositories/AbonoTiendaRepository.ts",
+    metodo: "crear",
+    forma: "recibe_tx",
+    mutacion: /tx\.abonoTienda\.create\(/,
+  },
+  {
+    tipos: ["abono_tienda_anulado"],
+    archivo: "lib/repositories/AbonoTiendaRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.abonoTiendaAnulacion\.create\(/,
+  },
   {
     // ⭑ FICHA 461 (R69, auditoria D3) — la ANULACION de una correccion de caja. Misma forma y mismo
     // molde que la del cobro: `recibe_tx`, metodo propio, y la mutacion exigida es la escritura de
@@ -930,7 +947,9 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     // 59 desde la ficha 459 (los cuatro del pago por cuenta y del saldo inicial o aporte).
     // 60 desde la ficha 461 (`cobro_tienda_anulado`, con su productor propio); 61 con la anulacion
     // de una correccion de caja (`wallet_movimiento_manual_anulado`, auditoria D3, tambien propio).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(61);
+    // 63 desde la ficha 457 (`abono_tienda_registrado` y `abono_tienda_anulado`, un tipo por metodo
+    // de `AbonoTiendaRepository`).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(63);
   });
 });
 

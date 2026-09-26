@@ -192,6 +192,14 @@ export const HISTORIAL_ACCION_TIPOS = [
   // importe y la CATEGORIA de la correccion; NUNCA el motivo (texto libre, R5 de la 362). Entidad:
   // `wallet_movimiento` (la correccion original).
   "wallet_movimiento_manual_anulado", // AjusteCajaAnulacionRepository.anular
+  // ⭑ FICHA 457 (R61/R62) — alguien REGISTRO un pago de una tienda a Ordenex, o lo ANULO. Los dos
+  // «mueven dinero» en el sentido mas directo: entra (o vuelve a salir) dinero de la tienda y su saldo
+  // sube (o baja). UN TIPO POR METODO (la guardia del censo mide por metodo). La fila lleva el importe
+  // y el NOMBRE de la tienda; NUNCA el motivo, la referencia ni la ruta del comprobante (R63).
+  // Reabre a proposito la D3 de la 381 (2026-09-24, ficha 457): este credito SI tiene dinero real y
+  // su contrapartida en la caja en la misma transaccion; lo protege la guardia de alcance de la 457.
+  "abono_tienda_registrado", // AbonoTiendaRepository.crear
+  "abono_tienda_anulado", // AbonoTiendaRepository.anular
   // ⭑ FICHA 398 — UN MAESTRO/ADMIN CORRIGIO EL RESULTADO de una gestion que ya estaba dentro de un
   // cierre ABIERTO: `entregada -> rechazada`. Entra en DINERO y no admite discusion — la fila
   // documenta que del cierre SALIO un cobro que nadie recaudo (baja `total_general` y el balde de
@@ -357,6 +365,8 @@ export const HISTORIAL_ACCION_ENTIDADES = [
   // ⭑ FICHA 459 — los dos documentos nuevos, 1:1 con sus tablas (criterio de la 381/457).
   "pago_por_cuenta_tienda",
   "aporte_capital",
+  // ⭑ FICHA 457 — el documento del pago de una tienda a Ordenex, 1:1 con su tabla.
+  "abono_tienda",
 ] as const satisfies readonly PrismaHistorialAccionEntidad[];
 
 export type HistorialAccionEntidad = (typeof HISTORIAL_ACCION_ENTIDADES)[number];
@@ -424,6 +434,9 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   cobro_tienda_anulado: "mueve_dinero",
   // FICHA 461 (R69): anular una correccion de caja deshace su efecto en la ganancia.
   wallet_movimiento_manual_anulado: "mueve_dinero",
+  // FICHA 457 (R61/R62): entra dinero de una tienda y su saldo sube; la anulacion lo deshace.
+  abono_tienda_registrado: "mueve_dinero",
+  abono_tienda_anulado: "mueve_dinero",
   // FICHA 398: la correccion saca del cierre un cobro que nadie recaudo y pone en cero el pago
   // de esa gestion al mensajero. No hay lectura mas directa de «mueve dinero», y R17 exige
   // exactamente una categoria por tipo.
@@ -500,6 +513,9 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   pago_por_cuenta_tienda_anulado: "Anuló el pago de un gasto de una tienda",
   aporte_capital_registrado: "Registró un aporte de dinero a la caja",
   aporte_capital_anulado: "Anuló un aporte de dinero a la caja",
+  // Ficha 457 (design §2/§9): desde Ordenex, diciendo quien le paga a quien (HD3 de la 461).
+  abono_tienda_registrado: "Registró un pago de una tienda a Ordenex",
+  abono_tienda_anulado: "Anuló un pago de una tienda a Ordenex",
   cierre_dia_gestion_corregida: "Corrigió el resultado de una gestión",
   cierre_bodega_conciliado: "Marcó recibida una consolidación de bodega",
   cierre_bodega_conciliacion_revertida: "Revirtió la conciliación de una consolidación de bodega",
@@ -560,6 +576,8 @@ export const ENTIDAD_LABELS: Record<HistorialAccionEntidad, string> = {
   // Ficha 461 (design §7.7): las dos etiquetas de entidad con el nombre nuevo.
   pago_por_cuenta_tienda: "Pago de un gasto de una tienda",
   aporte_capital: "Aporte de dinero a la caja",
+  // Ficha 457 (design §2): el documento del pago de una tienda a Ordenex.
+  abono_tienda: "Pago de una tienda a Ordenex",
 };
 
 /** Los tipos de UNA categoria. Es la traduccion `categoria -> accion IN (…)` del borde (R17). */

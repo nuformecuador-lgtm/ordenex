@@ -175,6 +175,10 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       "20260926120300_wallet_461_enum_anulacion_correccion",
       "20260926120400_wallet_461_idempotencia_y_anulacion_correccion",
       "20260926120500_wallet_461_fechas_cr_pagos",
+      // Ficha 457 (2026-09-25): los ocho valores de enum del pago de una tienda a Ordenex (down dinamico)
+      // y sus dos tablas con los dos CHECK de los libros ampliados. Ninguna toca `orden_traspaso_mensajero`.
+      "20260927120000_abono_tienda_457_enums",
+      "20260927120100_abono_tienda_457_tablas_y_checks",
     ]);
   });
 });

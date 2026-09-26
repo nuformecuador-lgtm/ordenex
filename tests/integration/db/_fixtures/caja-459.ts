@@ -25,7 +25,11 @@ import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoR
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnulacionRepository";
+import { AbonoTiendaRepository } from "@/lib/repositories/AbonoTiendaRepository";
 import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
+import type { AbonoTiendaTxRunner } from "@/lib/interfaces/services/IAbonoTiendaService";
+import { AbonoTiendaService } from "@/lib/services/AbonoTiendaService";
+import { CajaAbonoTiendaFeedService } from "@/lib/services/CajaAbonoTiendaFeedService";
 import { AporteCapitalService } from "@/lib/services/AporteCapitalService";
 import { CajaAporteCapitalFeedService } from "@/lib/services/CajaAporteCapitalFeedService";
 import { CajaCobroTiendaFeedService } from "@/lib/services/CajaCobroTiendaFeedService";
@@ -286,6 +290,7 @@ export function montarServicios459(tx: TxDeTest) {
       aportes: new AporteCapitalRepository(c),
       cobros: new CobroTiendaAnulacionRepository(c),
       ajustes: new AjusteCajaAnulacionRepository(c),
+      abonos: new AbonoTiendaRepository(c), // ficha 457 (R41)
     }),
     // Ficha 459 (T B.14) — los dos escritores nuevos, cableados como su `buildService()`.
     pagoPorCuenta: new PagoPorCuentaTiendaService(
@@ -307,6 +312,19 @@ export function montarServicios459(tx: TxDeTest) {
       URLS_NO_USADAS,
       ((fn: (t: never) => Promise<unknown>) =>
         c.$transaction((t) => fn(t as never))) as unknown as AporteCapitalTxRunner,
+    ),
+    // Ficha 457 (T5.4) — el pago de una tienda a Ordenex, cableado como su `buildService()`: el puerto
+    // de caja REAL, el MISMO candado (`LiquidacionPagoRepository`) y el repositorio del documento.
+    abonoTienda: new AbonoTiendaService(
+      new AbonoTiendaRepository(c),
+      tiendaRepo,
+      new LiquidacionPagoRepository(c),
+      new UserRepository(c),
+      new CajaAbonoTiendaFeedService(cajaRepo),
+      STORAGE_NO_USADO,
+      URLS_NO_USADAS,
+      ((fn: (t: never) => Promise<unknown>) =>
+        c.$transaction((t) => fn(t as never))) as unknown as AbonoTiendaTxRunner,
     ),
     walletTienda: new WalletTiendaService(tiendaRepo),
     walletMensajero: new WalletMensajeroService(mensajeroRepo),

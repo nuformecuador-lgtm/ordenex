@@ -112,6 +112,11 @@ export interface FuentesEtiqueta {
   pago_por_cuenta_tienda: { tiendaNombre: string | null };
   /** FICHA 459 (R78) — el saldo inicial o aporte se etiqueta por su CLASE. Nunca el motivo. */
   aporte_capital: { clase: "saldo_inicial" | "aporte" };
+  /**
+   * FICHA 457 (R61–R63) — el pago de una tienda a Ordenex se etiqueta por el NOMBRE de la tienda y
+   * nada mas: ni el motivo, ni la referencia, ni la ruta del comprobante (texto libre o ubicacion).
+   */
+  abono_tienda: { tiendaNombre: string | null };
   orden_incidente: FuenteEnvio;
   /**
    * El cobro de gasto fijo se etiqueta por su CONCEPTO y su PERIODO («Alquiler bodega · 2026-09»).
@@ -212,6 +217,8 @@ const CONSTRUCTORES: {
   pago_por_cuenta_tienda: (f) => unir(f?.tiendaNombre),
   aporte_capital: (f) =>
     f?.clase === "saldo_inicial" ? "Saldo inicial" : f?.clase === "aporte" ? "Aporte de capital" : limpiar(null),
+  // FICHA 457: el nombre de la tienda que pago, y nada mas. Nunca texto libre.
+  abono_tienda: (f) => unir(f?.tiendaNombre),
   orden_incidente: etiquetaDeEnvio,
   gasto_fijo_cobro: (f) => unir(f?.concepto, f?.periodo),
   rechazo_tienda_cobro: etiquetaDeEnvio,

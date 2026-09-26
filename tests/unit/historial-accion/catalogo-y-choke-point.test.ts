@@ -89,10 +89,12 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // llevaba 17 desde la 362. Ni la 375, ni la 376, ni la 380 lo amplian: `zona` ya estaba entre
     // los 17 originales (la usa `zona_borrada`).
     // 61 desde la ficha 461: `cobro_tienda_anulado` y `wallet_movimiento_manual_anulado` (auditoria D3).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(61);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(61);
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23);
-    expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(23);
+    // 63 desde la ficha 457: `abono_tienda_registrado` y `abono_tienda_anulado` (un tipo por metodo); y
+    // 24 entidades: `abono_tienda`, la TERCERA ampliacion del enum (1:1 con su tabla).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(63);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(63);
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(24); // 24 desde la ficha 457
+    expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(24);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
   });
 
@@ -248,7 +250,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     ).toBe(false);
     // La 375 NO amplia el enum de entidades: los tres niveles ya entraron con la 374. (El total es
     // 21 desde la 381, que si lo amplio con `wallet_tienda_movimiento`.)
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23); // 23 desde la ficha 459
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(24); // 24 desde la ficha 457
   });
 
   it("⭑ FICHA 376: `zona_central_cambiada` es DINERO, y su entidad `zona` ya existia", () => {
@@ -274,7 +276,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // La 376 NO amplia el enum de entidades: `zona` esta ahi desde los 17 originales de la 362.
     // (El total es 21 desde la 381, que si lo amplio con `wallet_tienda_movimiento`.)
     expect(HISTORIAL_ACCION_ENTIDADES).toContain("zona");
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23); // 23 desde la ficha 459
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(24); // 24 desde la ficha 457
   });
 
   it("⭑ FICHA 380: `zona_pago_mensajero_cambiado` es DINERO, y NO se reutilizo ningun `tarifa_*`", () => {
@@ -312,7 +314,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // La 380 NO amplia el enum de entidades: `zona` esta ahi desde los 17 originales de la 362.
     // (El total es 21 desde la 381, que si lo amplio con `wallet_tienda_movimiento`.)
     expect(HISTORIAL_ACCION_ENTIDADES).toContain("zona");
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23); // 23 desde la ficha 459
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(24); // 24 desde la ficha 457
   });
 
   it("⭑ FICHA 429 (R22): `zona_sinpe_cambiado` es DINERO, y no se reutilizo ninguna accion de zona", () => {
@@ -348,7 +350,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(HISTORIAL_ACCION_TIPOS).not.toContain("zona_sinpe_confirmado");
     // La 429 NO amplia el enum de entidades: `zona` esta ahi desde los 17 originales de la 362.
     expect(HISTORIAL_ACCION_ENTIDADES).toContain("zona");
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23); // 23 desde la ficha 459
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(24); // 24 desde la ficha 457
   });
 
   it("⭑ FICHA 381: `cobro_tienda_registrado` es DINERO, con entidad NUEVA y sin reusar la caja", () => {
@@ -386,9 +388,33 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // Y es DISTINTA de la de la caja: son dos libros, y confundirlos es exactamente lo que D1
     // prohibe.
     expect(ENTIDAD_LABELS.wallet_tienda_movimiento).not.toBe(ENTIDAD_LABELS.wallet_movimiento);
-    // ⭑ D3, FIRMADA POR EL HUMANO EL 2026-09-07: el ABONO manual NO entra. No existe —ni debe
-    // existir— un tipo para acreditarle dinero a una tienda a mano. Es alcance firmado, no olvido.
-    expect(HISTORIAL_ACCION_TIPOS).not.toContain("abono_tienda_registrado");
+    // ⭑ D3, FIRMADA POR EL HUMANO EL 2026-09-07, y REABIERTA POR EL HUMANO EL 2026-09-24 (ficha 457):
+    // el credito manual SIN dinero detras sigue prohibido; lo que entra es el PAGO DE UNA TIENDA A
+    // ORDENEX, dinero REAL con documento, tope en la deuda y su entrada en la caja en la misma
+    // transaccion. Lo que D3 protegia lo vigila `abono-tienda-alcance.guardia.test.ts` (R65/R67).
+    expect(HISTORIAL_ACCION_TIPOS).toContain("abono_tienda_registrado");
+  });
+
+  it("⭑ FICHA 457 (R61–R64): los dos tipos del pago de una tienda a Ordenex son DINERO, con entidad propia y sus textos", () => {
+    expect(HISTORIAL_ACCION_TIPOS).toContain("abono_tienda_registrado");
+    expect(HISTORIAL_ACCION_TIPOS).toContain("abono_tienda_anulado");
+    expect(CATEGORIA_POR_ACCION.abono_tienda_registrado).toBe("mueve_dinero");
+    expect(CATEGORIA_POR_ACCION.abono_tienda_anulado).toBe("mueve_dinero");
+    // Literales a proposito (design §2/§9): el texto ES el contrato de la pantalla.
+    expect(ACCION_LABELS.abono_tienda_registrado).toBe("Registró un pago de una tienda a Ordenex");
+    expect(ACCION_LABELS.abono_tienda_anulado).toBe("Anuló un pago de una tienda a Ordenex");
+    // Distintos entre si (R62) y de los tipos de anulacion que ya existen.
+    expect(ACCION_LABELS.abono_tienda_anulado).not.toBe(ACCION_LABELS.abono_tienda_registrado);
+    expect(ACCION_LABELS.abono_tienda_anulado).not.toBe(ACCION_LABELS.pago_anulado);
+    expect(ACCION_LABELS.abono_tienda_anulado).not.toBe(ACCION_LABELS.pago_por_cuenta_tienda_anulado);
+    expect(ACCION_LABELS.abono_tienda_anulado).not.toBe(ACCION_LABELS.cobro_tienda_anulado);
+    // La entidad es el DOCUMENTO, 1:1 con su tabla (criterio de la 381/459), con su texto.
+    expect(HISTORIAL_ACCION_ENTIDADES).toContain("abono_tienda");
+    expect(ENTIDAD_LABELS.abono_tienda).toBe("Pago de una tienda a Ordenex");
+    // Se admiten como valor de filtro del listado (R64), y un inventado NO.
+    expect(filtroHistorialAccionSchema.safeParse({ accion: ["abono_tienda_registrado"] }).success).toBe(true);
+    expect(filtroHistorialAccionSchema.safeParse({ accion: ["abono_tienda_anulado"] }).success).toBe(true);
+    expect(filtroHistorialAccionSchema.safeParse({ accion: ["abono_tienda_editado"] }).success).toBe(false);
   });
 
   it("el reparto por categoria es el del Anexo A: 37 dinero, 10 desaparicion, 12 permisos", () => {
@@ -421,7 +447,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // 38 y no 37 desde la ficha 461: `cobro_tienda_anulado` devuelve dinero a la tienda y baja la
     // ganancia. 39 con `wallet_movimiento_manual_anulado` (auditoria D3): el contra-asiento de una
     // correccion de caja deshace su efecto en la ganancia.
-    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(39);
+    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(41);
     expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(10);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
   });
@@ -451,7 +477,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(filtroHistorialAccionSchema.safeParse({ accion: ["cobro_tienda_anulada"] }).success).toBe(false);
     // Sin entidad nueva: el cobro ES la fila del libro de la tienda (381/D2).
     expect(HISTORIAL_ACCION_ENTIDADES).not.toContain("cobro_tienda");
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(23);
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(24); // 24 desde la ficha 457
   });
 });
 

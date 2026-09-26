@@ -46,12 +46,13 @@ export function problemaDeComprobante(
 }
 
 /**
- * Carpeta del objeto dentro del bucket, por tipo de documento. La 457 anade la suya
- * (`abonos-tienda`) aqui mismo.
+ * Carpeta del objeto dentro del bucket, por tipo de documento. La 457 añadio la suya
+ * (`abonos-tienda`, R27): el mismo bucket privado compartido, una carpeta propia del documento.
  */
 export const PREFIJO_COMPROBANTE = {
   pago_por_cuenta_tienda: "pagos-por-cuenta",
   aporte_capital: "aportes-capital",
+  abono_tienda: "abonos-tienda",
 } as const;
 export type DocumentoConComprobante = keyof typeof PREFIJO_COMPROBANTE;
 

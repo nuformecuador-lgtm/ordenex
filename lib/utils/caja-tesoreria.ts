@@ -91,6 +91,12 @@ export const NATURALEZA_POR_CATEGORIA: Record<WalletMovimientoCategoria, Natural
   // del saldo que le guardaba a la tienda), y su anulacion la devuelve. Los dos PROPIOS.
   ingreso_cobro_tienda: "propio",
   egreso_reverso_cobro_tienda: "propio",
+  // Ficha 457 (design §4, DH1): el PAGO DE UNA TIENDA A ORDENEX es dinero DE LA TIENDA que entra a la
+  // caja —los fletes que debia ya se contaron como ganancia al aprobar cada cierre; contarlos otra
+  // vez al cobrarlos la duplicaria—. Sube «De las tiendas» (la deuda de la tienda baja); su anulacion
+  // la devuelve. Los dos DE TERCEROS. La guardia `caja-clasificacion-459` pone rojo `propio` aqui.
+  ingreso_abono_tienda: "terceros",
+  egreso_reverso_abono_tienda: "terceros",
 };
 
 /**
@@ -144,6 +150,11 @@ export const LIQUIDEZ_POR_CATEGORIA: Record<WalletMovimientoCategoria, LiquidezM
   ingreso_reverso_pago_por_cuenta_tienda: "efectivo",
   ingreso_aporte_capital: "efectivo",
   egreso_reverso_aporte_capital: "efectivo",
+  // Ficha 457 (design §4, R19/R24): el pago de una tienda a Ordenex entra DE VERDAD (suma a «Entro»)
+  // y su anulacion sale de verdad (suma a «Salio»). Como `cargo_a_tienda` no subiria «Entro» aunque
+  // el dinero entro: rompe R7/R8 en cuanto la tienda paga (A6 descartada).
+  ingreso_abono_tienda: "efectivo",
+  egreso_reverso_abono_tienda: "efectivo",
 };
 
 /**

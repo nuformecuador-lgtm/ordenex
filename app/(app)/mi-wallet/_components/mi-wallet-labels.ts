@@ -113,6 +113,10 @@ export const CATEGORIA_MI_WALLET_LABEL: Record<WalletTiendaMovimientoCategoria, 
   // P5: el beneficiario («A Facebook…») vive en la descripcion, que la columna de origen añade.
   pago_por_cuenta: "Ordenex pagó un gasto por ti",
   pago_por_cuenta_anulado: "Ordenex anuló un pago hecho por ti",
+  // Ficha 457 (design §2, D10, R47): la lectura DESDE LA TIENDA, distinta de la de Ordenex
+  // (`CATEGORIA_TIENDA_LABEL`). «Le pagaste a Ordenex» es el nombre reservado por la 461 §7.8.
+  abono_tienda: "Le pagaste a Ordenex",
+  abono_tienda_anulado: "Ordenex anuló el pago que le hiciste",
   ajuste_credito: "Corrección a tu favor",
   ajuste_debito: "Corrección en tu contra",
 };
@@ -136,6 +140,9 @@ export const ORIGEN_TIENDA_LABEL: Record<string, string> = {
   gestion_orden: "Gestión de orden",
   pago_por_cuenta_tienda: "Pago de un gasto de una tienda",
   cobro_tienda: "Cobro de Ordenex a una tienda",
+  // Ficha 457 (design §2/§4.2): el compilador NO avisa aqui (`Record<string, string>`); sin esta
+  // clave, tabla y descargas pintarian `abono_tienda`. El MISMO texto que `ORIGEN_LABEL` en la caja.
+  abono_tienda: "Pago de una tienda a Ordenex",
 };
 
 /** Origen legible con fallback al valor crudo si no hay etiqueta conocida. */

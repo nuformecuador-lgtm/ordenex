@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/shared/FormField";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
+import { anularAbonoTiendaAction, obtenerComprobanteAbonoAction } from "@/lib/actions/abono-tienda";
 import {
   anularAporteCapitalAction,
   obtenerComprobanteAporteCapitalAction,
@@ -100,6 +101,13 @@ const ACCIONES: Record<
   ajuste_caja: {
     anular: (movimientoId, motivo) => anularAjusteCajaAction({ movimientoId, motivo }),
     comprobante: async () => ({ status: "sin_comprobante" as const }),
+  },
+  // Ficha 457 (design §8.5, R41): el pago de una tienda a Ordenex. `anular` llama a la action real con
+  // el id del DOCUMENTO (el `origenId` de la entrada) y SIN monto (R34); `comprobante` pide el enlace
+  // temporal (el pago SÍ puede llevarlo, R42).
+  abono_tienda: {
+    anular: (abonoId, motivo) => anularAbonoTiendaAction({ abonoId, motivo }),
+    comprobante: (abonoId) => obtenerComprobanteAbonoAction({ abonoId }),
   },
 };
 

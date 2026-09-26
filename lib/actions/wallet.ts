@@ -1,6 +1,7 @@
 "use server";
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { AbonoTiendaRepository } from "@/lib/repositories/AbonoTiendaRepository";
 import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnulacionRepository";
 import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
 import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
@@ -102,11 +103,13 @@ function buildService(): IWalletService {
   // Ficha 459 (design §7.3, R66/R67): los lectores REALES del estado de los documentos del libro.
   // Ficha 461 (design §5.4, R20/R37): + el de los cobros de Ordenex a una tienda.
   // Ficha 461 (R71, auditoria D3): + el de las correcciones de caja.
+  // Ficha 457 (design §8.5, R41): + el de los pagos de una tienda a Ordenex.
   return new WalletService(repo, prisma, aportes, {
     pagosPorCuenta: new PagoPorCuentaTiendaRepository(prisma),
     aportes,
     cobros: new CobroTiendaAnulacionRepository(prisma),
     ajustes: new AjusteCajaAnulacionRepository(prisma),
+    abonos: new AbonoTiendaRepository(prisma),
   });
 }
 

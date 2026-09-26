@@ -409,6 +409,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.7 (b) — el down recrea 50 tipos y 2
       // 461) y la anulacion de una correccion de caja (migracion 4, auditoria D3).
       "cobro_tienda_anulado",
       "wallet_movimiento_manual_anulado",
+      // Ficha 457 (2026-09-25): el pago de una tienda a Ordenex, registrar y anular (la guardia del censo
+      // mide por metodo). Su archivo: `abono-tienda-457-migration.test.ts`.
+      "abono_tienda_registrado",
+      "abono_tienda_anulado",
     ];
     expect([...tiposAntes].sort()).toEqual(
       [...HISTORIAL_ACCION_TIPOS]
@@ -418,7 +422,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.7 (b) — el down recrea 50 tipos y 2
     expect([...entidadesAntes].sort()).toEqual(
       [...HISTORIAL_ACCION_ENTIDADES]
         // ficha 459: las dos entidades de sus documentos, apendidas despues.
-        .filter((e) => e !== ENTIDAD_NUEVA && !["pago_por_cuenta_tienda", "aporte_capital"].includes(e))
+        .filter((e) => e !== ENTIDAD_NUEVA && !["pago_por_cuenta_tienda", "aporte_capital", "abono_tienda"].includes(e))
         .sort(),
     );
   });

@@ -669,7 +669,7 @@ const CATALOGO = [
     id: "dinero_en_caja",
     etiqueta: "Dinero en caja",
     descripcion:
-      "TESORERIA: el flujo de dinero registrado de la caja principal — el dinero que entro de verdad menos todo lo que salio, sin distinguir de quien es: incluye el contra-entrega cobrado a nombre de las tiendas, los reversos y los ajustes. NO suma aparte el flete, la comision ni sus impuestos: son la parte de Ordenex que se descuenta del contra-entrega de la tienda (o una deuda de la tienda), no dinero que entre a la caja; ni el cobro de Ordenex a una tienda ni su anulacion, que tampoco son dinero que entre o salga (se toman del saldo de la tienda y se le devuelven). Es la misma cifra principal de la tarjeta de la caja; solo es el saldo real si hay un saldo inicial registrado. NO es lo que Ordenex gano (eso es ganancia_ordenex). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "TESORERIA: el flujo de dinero registrado de la caja principal — el dinero que entro de verdad menos todo lo que salio, sin distinguir de quien es: incluye el contra-entrega cobrado a nombre de las tiendas, lo que las tiendas le pagan a Ordenex y su anulacion, los reversos y los ajustes. NO suma aparte el flete, la comision ni sus impuestos: son la parte de Ordenex que se descuenta del contra-entrega de la tienda (o una deuda de la tienda), no dinero que entre a la caja; ni el cobro de Ordenex a una tienda ni su anulacion, que tampoco son dinero que entre o salga (se toman del saldo de la tienda y se le devuelven). Es la misma cifra principal de la tarjeta de la caja; solo es el saldo real si hay un saldo inicial registrado. NO es lo que Ordenex gano (eso es ganancia_ordenex). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -709,6 +709,10 @@ const CATALOGO = [
         // entera» y la guardia la compara con el seed.
         "ingreso_cobro_tienda",
         "egreso_reverso_cobro_tienda",
+        // FICHA 457 (R52): lo que las tiendas le pagan a Ordenex y su anulacion. La caja entera, ahora
+        // 25. Los dos SI mueven la cifra (efectivo de terceros: entra y sale de verdad).
+        "ingreso_abono_tienda",
+        "egreso_reverso_abono_tienda",
       ],
     },
   },
@@ -785,6 +789,10 @@ const CATALOGO = [
         "pago_por_cuenta_anulado",
         // FICHA 461 (R29): el credito de la anulacion de un cobro de Ordenex (mismo motivo).
         "cobro_tienda_anulado",
+        // FICHA 457 (R52): el pago de la tienda a Ordenex (credito) y su anulacion (debito). Mismo
+        // motivo: `string[]`, el compilador no obliga.
+        "abono_tienda",
+        "abono_tienda_anulado",
       ],
     },
   },

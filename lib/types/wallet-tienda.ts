@@ -60,6 +60,11 @@ export const WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED = [
   // FICHA 461 (design §2.1, HD1): la ANULACION de un cobro de Ordenex a la tienda (credito). Le
   // devuelve el monto del cobro; su contrapartida en la caja es `egreso_reverso_cobro_tienda`.
   "cobro_tienda_anulado",
+  // FICHA 457 (design §0/§4, DH1): el PAGO DE UNA TIENDA A ORDENEX (credito: la tienda con saldo en
+  // contra le entrega dinero a Ordenex y su saldo sube) y su ANULACION (debito). Contrapartida en la
+  // caja: `ingreso_abono_tienda` / `egreso_reverso_abono_tienda` (terceros, efectivo).
+  "abono_tienda",
+  "abono_tienda_anulado",
 ] as const satisfies readonly PrismaWalletTiendaMovimientoCategoria[];
 
 export type WalletTiendaMovimientoCategoria =

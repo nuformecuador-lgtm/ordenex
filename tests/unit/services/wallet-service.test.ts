@@ -818,6 +818,7 @@ const SIN_DOCUMENTOS_459 = {
   pagosPorCuenta: { estadoDeDocumentos: async () => [] },
   aportes: { estadoDeDocumentos: async () => [] },
   cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] }, // ficha 461
+  abonos: { estadoDeDocumentos: async () => [] }, // ficha 457: lo exige `LectoresDocumentosCaja`; esta suite no lee pagos de una tienda a Ordenex
 };
 
 // ─── FICHA 459 (T B.16, design §7.3) — el DOCUMENTO de cada fila, resuelto en lote ───
@@ -872,6 +873,12 @@ describe("WalletService.listarMovimientos — el documento de las filas original
       ajustes: {
         estadoDeDocumentos: vi.fn(async (ids: readonly string[]) =>
           ids.map((id) => ({ id, anulado: false, tieneComprobante: false })),
+        ),
+      },
+      // Ficha 457 (R41): los pagos de una tienda a Ordenex; el de esta pagina lleva comprobante.
+      abonos: {
+        estadoDeDocumentos: vi.fn(async (ids: readonly string[]) =>
+          ids.map((id) => ({ id, anulado: false, tieneComprobante: true })),
         ),
       },
     };
