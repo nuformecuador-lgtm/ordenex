@@ -10,8 +10,6 @@
  * Que el archivo descargado y la pantalla digan lo mismo (R8/R24) es cierto porque leen del
  * MISMO sitio, no porque hoy coincidan dos literales escritos en dos archivos.
  */
-import type { MetodoPagoValue } from "@prisma/client";
-
 import type { CierreResultado } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 // FICHA 408 — los dos módulos del vocabulario de la causa de devolución. Los DOS son PUROS
@@ -72,11 +70,8 @@ export const RESULTADO_VACIO: Readonly<Record<CierreResultado, string>> = {
   incidente: textoResultadoVacio("incidente"),
 };
 
-export const METODO_LABEL: Record<MetodoPagoValue, string> = {
-  efectivo: "Efectivo",
-  SINPE: "SINPE",
-  transferencia: "Transferencia",
-};
+/** Vive en `lib/constants/metodo-pago-label.ts` desde la 458-A (lo lee tambien un servicio). */
+export { METODO_LABEL } from "@/lib/constants/metodo-pago-label";
 
 export const ESTADO_LABEL: Record<CierreEstado, string> = {
   solicitado: "Solicitado",

@@ -29,11 +29,7 @@
 // correspondencia de la 127 compara contra el catalogo.
 
 import { consultarMetricaFinanciera } from "@/lib/actions/analitica-financiera";
-import { verResumenCajaAction } from "@/lib/actions/wallet";
-import {
-  CAJA_RESUMEN_LABEL,
-  rotuloCifraPrincipal,
-} from "@/app/(app)/wallet/_components/wallet-labels";
+import { rotuloCifraPrincipal } from "@/app/(app)/wallet/_components/wallet-labels";
 import {
   IDS_FINANCIERAS_SERVIDAS,
   type RespuestaFinanciera,
@@ -102,34 +98,28 @@ export async function cargarTableroFinanciero(): Promise<readonly PanelFinancier
     ),
   );
 
-  const [paneles, rotuloCaja] = await Promise.all([Promise.all(pendientes), rotuloDeLaCaja()]);
+  const paneles = await Promise.all(pendientes);
   // Diccionario por CLAVE de metrica (censo (f) de `tablero-financiero.guardia`: buscar un texto
   // por clave no ramifica QUE se pinta). Solo cambia el NOMBRE; ni una cifra.
-  const rotulos: Readonly<Record<string, string>> = { dinero_en_caja: rotuloCaja };
+  const rotulos: Readonly<Record<string, string>> = { dinero_en_caja: ROTULO_CAJA_DEL_PERIODO };
   return paneles.map((panel) => conRotulo(panel, rotulos));
 }
 
 /**
- * Ficha 459 (revision, m3) — el NOMBRE de la cifra de la caja en `/analitica`.
+ * Ficha 459 (revision, m3) → 458-A (TA.7, R62) — el NOMBRE de la cifra de la caja en `/analitica`.
  *
- * El catalogo la llama «Dinero en caja», y mientras nadie haya registrado un saldo inicial esa
- * cifra es el flujo registrado, no el dinero que hay (R16, HF4). El nombre sale de la MISMA
- * funcion que la tarjeta de `/wallet` (`rotuloCifraPrincipal`), con el estado que decide el
- * servidor (`verResumenCajaAction`, sin filtros: el estado de la caja HOY). Si esa lectura no
- * responde `ok` (o se cae), el estado no se conoce y se dice el de «flujo», igual que los KPIs
- * de `cargar-kpis.ts`: «Dinero en caja» nunca se afirma sin saberlo. No se silencia ningun dato:
- * la cifra del panel sigue llegando entera de su metrica.
+ * El catalogo la llama «Dinero en caja». Este panel es MENSUAL: su cifra es la de un periodo (la
+ * ventana de `FILTRO_FINANCIERO_POR_DEFECTO`), no la caja de hoy. Por eso se nombra con la MISMA
+ * funcion que la tarjeta de `/wallet` (`rotuloCifraPrincipal`) diciendole que HAY periodo:
+ * «Movimiento neto del periodo», nunca «Dinero en caja» ni «Flujo de dinero registrado» sobre una
+ * cifra recortada. No se silencia ningun dato: la cifra del panel sigue llegando entera de su metrica.
+ *
+ * Revision 458-A (m5): con periodo, `rotuloCifraPrincipal` NO mira el estado de la caja («saldo» o
+ * «flujo» dan el mismo nombre), asi que ya no se pide `verResumenCajaAction` en cada carga: era una
+ * lectura del resumen entero de la caja cuyo resultado no cambiaba nada. El `estado` de abajo es el
+ * que la firma exige, no una decision.
  */
-async function rotuloDeLaCaja(): Promise<string> {
-  try {
-    const respuesta = await verResumenCajaAction({});
-    return respuesta.status === "ok"
-      ? rotuloCifraPrincipal(respuesta.resumen)
-      : CAJA_RESUMEN_LABEL.flujo;
-  } catch {
-    return CAJA_RESUMEN_LABEL.flujo;
-  }
-}
+const ROTULO_CAJA_DEL_PERIODO = rotuloCifraPrincipal({ periodoFiltrado: true, estado: "flujo" });
 
 /** El panel con su nombre de pantalla, si el diccionario tiene uno para su metrica. */
 function conRotulo(

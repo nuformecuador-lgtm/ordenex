@@ -1,3 +1,5 @@
+import { ORIGEN_PAGO_LABEL } from "@/lib/constants/wallet-rotulos";
+import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import { money, moneyTope } from "@/lib/config/moneda";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type {
@@ -169,20 +171,11 @@ export const CATEGORIA_PAGO_LABEL: Record<PagoMensajeroMovimientoCategoria, stri
   premio_ranking: "Premio del ranking",
 };
 
-/** Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 44). */
-export const ORIGEN_PAGO_LABEL: Record<string, string> = {
-  cierre_dia: "Cierre del día",
-  pago_mensajero: "Liquidación",
-  manual: "Manual",
-  // Feature 293 (T1.6): origen de las filas de CAJA del premio. No aparece en este libro
-  // —aqui el premio va con `cierre_dia`—, pero el mapa es de `WalletOrigenTipo` y dejarlo fuera
-  // haria que un dia se pintara el valor crudo.
-  ranking_snapshot_fila: "Premio del ranking",
-};
+export { ORIGEN_PAGO_LABEL };
 
-/** Origen legible con fallback al valor crudo si no hay etiqueta conocida. */
-export function origenLabel(origenTipo: string): string {
-  return ORIGEN_PAGO_LABEL[origenTipo] ?? origenTipo;
+/** Origen legible (458-A: sin caida al valor tecnico; el `Record` es total). */
+export function origenLabel(origenTipo: WalletOrigenTipo): string {
+  return ORIGEN_PAGO_LABEL[origenTipo];
 }
 
 /** Cabeceras de la tabla del desglose por cierre (mas reciente primero). */
@@ -197,23 +190,13 @@ export const DESGLOSE_COLUMNAS = {
 /**
  * Etiquetas de los filtros server-side del desglose por cierre (fecha/cierre, R22).
  *
- * Deuda 203 (cabo suelto) — el campo del cierre decía «ID del cierre», o sea le pedía a una
- * persona que tecleara un uuid de 36 caracteres. Comprobado en la app el 2026-08-12: ese
- * identificador NO se ve en ninguna parte de la pantalla. En el enlace «Ver el cierre» viaja en
- * un `sr-only`, solo para lectores de pantalla (`CIERRE_ENLACE.identificacion`), así que la
- * única forma de conseguirlo es copiar la DIRECCIÓN de ese enlace —o leerla de la barra del
- * navegador tras abrirlo—, y eso es exactamente lo que la ayuda dice ahora.
- *
- * El filtro NO se quita: el `cierreId` va al WHERE server-side (R22), viaja también en la
- * descarga del desglose completo (`buildInputCompleto`) y lo fijan dos casos de
- * `tests/integration/wallet-mensajeros-page.test.tsx`. Lo que se arregla es lo que la pantalla
- * PROMETE: se pega, no se teclea, y dice de dónde sale.
+ * Ficha 458-A (TA.4, R2/R10): el cierre se ELIGE de un selector con los cierres de este mensajero
+ * (rotulados por día y mensajero, con búsqueda por día o por nombre; textos en
+ * `CIERRE_SELECTOR_TEXTOS`). El `cierreId` elegido sigue yendo al WHERE server-side (R22) y a la
+ * descarga del desglose completo; lo que desaparece es el campo de texto donde había que pegarlo.
  */
 export const DESGLOSE_FILTRO_LABEL = {
   cierre: "Cierre",
-  cierrePlaceholder: "Pegá el identificador",
-  cierreAyuda:
-    "El identificador del cierre sale del enlace «Ver el cierre» de la tabla: copiá su dirección y pegala en «Cierre».",
   desde: "Desde",
   hasta: "Hasta",
   aplicar: "Aplicar",
@@ -239,12 +222,21 @@ export const CIERRE_ENLACE = {
    */
   ver: "Ver el cierre",
   /**
-   * Lo que se añade al nombre accesible, solo para lectores de pantalla. Existe porque una
-   * pantalla puede tener veinte enlaces «Ver el cierre» y un lector de pantalla los leería
-   * todos igual; con el identificador detrás, cada uno se nombra solo. El texto visible sigue
-   * contenido en el nombre accesible, que es lo que exige «Label in Name».
+   * Lo que se añade al nombre accesible, solo para lectores de pantalla: una pantalla puede tener
+   * veinte enlaces «Ver el cierre» y sin esto sonarían todos igual. El texto visible sigue
+   * contenido en el nombre accesible («Label in Name»).
+   *
+   * Ficha 458-A (TA.5, R1): se nombra con lo que la persona SABE del cierre —su día de Costa Rica,
+   * su mensajero, lo que se le aplicó—, NUNCA con el identificador interno, que antes iba aquí.
    */
-  identificacion: (cierreId: string) => ` (${cierreId})`,
+  /** El cierre por su día (CR) y su mensajero: la previsualización del reparto. */
+  delDia: (dia: string, mensajero: string) => ` del ${dia} de ${mensajero}`,
+  /** El cierre de una fila del desglose: por la fecha y el concepto de ESA fila. */
+  deLaFila: (fecha: string, concepto: string, mensajero: string) =>
+    ` de ${mensajero}: ${concepto} del ${fecha}`,
+  /** El cierre del reparto ya aplicado: por lo que se le aplicó (la respuesta no trae el día). */
+  delPago: (monto: string, mensajero: string) =>
+    ` de ${mensajero} al que se aplicaron ${money(monto)}`,
 } as const;
 
 /** La cabecera de la columna del desglose que lleva el enlace (R43). */

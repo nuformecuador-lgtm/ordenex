@@ -8,6 +8,8 @@ import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
 // FICHA 381: las dos piezas del borde del dinero manual, reutilizadas TAL CUAL desde el libro de la
 // caja. Ver `registrarCobroTiendaSchema` al final del archivo.
 import { claveIdempotenciaSchema, fechaMovimientoSchema, montoPositivoSchema } from "@/lib/types/wallet";
+import type { WalletOrigenTipo } from "@/lib/types/wallet";
+import type { ConOrigen } from "@/lib/types/wallet-origen";
 import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 
 // Feature 43 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del ledger POR
@@ -107,7 +109,8 @@ export type WalletTiendaMovimientoDTO = {
   tipo: WalletTiendaMovimientoTipo;
   categoria: WalletTiendaMovimientoCategoria;
   monto: string; // Decimal -> STRING 2 dec (R4/R27)
-  origenTipo: string; // cierre_dia | pago_tienda | manual (WalletOrigenTipo)
+  // Ficha 458-A (TA.2, R9): el catalogo, no `string`: un diccionario parcial ya no compila.
+  origenTipo: WalletOrigenTipo;
   origenId: string | null;
   descripcion: string | null;
   fechaMovimiento: string; // ISO
@@ -185,15 +188,22 @@ export type ListarSaldosTiendasCompletoResult = ListarCompletoResult<SaldoTienda
 // Listado del ledger de la tienda: paginado + filtros opcionales por cierre, concepto y
 // rango de fechas. El acotado por tienda NO viaja aqui (lo pone el service desde el actor,
 // R19); estos filtros son solo del desglose.
+// Ficha 458-A (TA.6, R36, m1 de la auditoria): `.strict()`. El paginado de `/mi-wallet` NO era
+// estricto: una clave que nombrara una tienda (`tiendaId`) se descartaba en silencio en vez de
+// rechazarse. El servicio acota igual por el actor, pero una peticion con una clave ajena es un
+// intento de ampliar el alcance y se responde `validation_error` sin leer nada. Las derivadas
+// (`.extend` del desglose, `.omit` del completo) heredan la misma politica.
 export const listarMovimientosTiendaSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
-  cierreId: z.string().min(1).optional(),
+  // Ficha 458-A (TA.4, R12): el cierre se elige en un selector y viaja su id; el borde rechaza todo
+  // valor que no tenga forma de identificador (antes `min(1)`: cualquier texto pegado).
+  cierreId: z.string().uuid().optional(),
   categoria: z.enum(WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED).optional(),
   // Ficha 461 (R72, auditoria T1): dias de Costa Rica; `hasta` exclusivo en el repositorio.
   desde: desdeDiaCRSchema.optional(),
   hasta: hastaDiaCRSchema.optional(),
-});
+}).strict();
 
 export type ListarMovimientosTiendaInput = z.infer<typeof listarMovimientosTiendaSchema>;
 
@@ -216,8 +226,9 @@ export type ListarMovimientosTiendaCompletoInput = z.infer<
 
 // Feature 170 (T C.2): resultado del modo completo en el BORDE. `limite_excedido` lleva SOLO
 // conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18).
+// Ficha 458-A (TA.2): cada fila de la descarga lleva su origen legible (R5, R94).
 export type ListarMovimientosTiendaCompletoResult =
-  ListarCompletoResult<WalletTiendaMovimientoDTO>;
+  ListarCompletoResult<ConOrigen<WalletTiendaMovimientoDTO>>;
 
 // ── Feature 171 — DESGLOSE del dinero de UNA tienda elegida (vista de ACCESO TOTAL) ──
 //
@@ -229,18 +240,20 @@ export type ListarMovimientosTiendaCompletoResult =
  * Feature 171 (design §2.1, R7/R8/R10) — cabecera del desglose: TRES cubetas exhaustivas
  * sobre el ledger + el saldo que se deriva de ellas.
  *
- * `pagado` esta separado de `cargos` a proposito: se lee de la categoria REAL del ledger
- * (`pago_tienda`, que emite la 172, y `pago_por_cuenta`, que emite la 459). Si «pagado» se plegara
- * dentro de «cargos», nadie podria distinguir *lo que te cobre* de *lo que ya te pague* mirando la
- * pantalla. La cubeta de CADA categoria la fija `CUBETA_POR_CATEGORIA` (`lib/utils/desglose-tienda.ts`),
- * un `Record` total: esa tabla es la fuente; los comentarios de abajo, un resumen (458-B, T2).
+ * `pagado` esta separado de `cargos` a proposito: es lo que Ordenex le pago a la tienda o pago
+ * por ella (`pago_tienda` de la 172, `pago_por_cuenta` de la 459), leido de las categorias REALES
+ * del ledger. Si «pagado» se plegara dentro de «cargos», nadie podria distinguir *lo que te
+ * cobre* de *lo que ya te pague* mirando la pantalla. (Ficha 458-A, T2: el comentario de la 171
+ * decia que valia siempre 0,00 hasta la 172; la 172 ya emite pagos.) La cubeta de CADA categoria
+ * la fija `CUBETA_POR_CATEGORIA` (`lib/utils/desglose-tienda.ts`), un `Record` total: esa tabla es
+ * la fuente; los comentarios de abajo, un resumen (458-B, T2).
  *
  * Money-safe (R23): los cuatro importes cruzan la frontera como STRING escala 2.
  */
 export type DesgloseTiendaDTO = {
-  aFavor: string; // Σ creditos (cod_recaudado, ajuste_credito, abono_tienda y los creditos espejo de las anulaciones)
-  cargos: string; // Σ debitos de Ordenex (fletes, comision, los tres IVA, ajuste_debito, cobro_manual, abono_tienda_anulado)
-  pagado: string; // Σ pagos a la tienda (pago_tienda de la 172, pago_por_cuenta de la 459)
+  aFavor: string; // Σ creditos en cubeta `aFavor` (CUBETA_POR_CATEGORIA: cod_recaudado, ajuste_credito, abono_tienda y los creditos espejo de las anulaciones)
+  cargos: string; // Σ debitos en cubeta `cargos` (CUBETA_POR_CATEGORIA: fletes, comision, los tres IVA, ajuste_debito, cobro_manual, abono_tienda_anulado)
+  pagado: string; // Σ debitos en cubeta `pagado` (CUBETA_POR_CATEGORIA: pago_tienda de la 172, pago_por_cuenta de la 459)
   saldo: string; // aFavor - cargos - pagado (puede venir "-123.45")
   signo: SaldoTiendaSigno;
 };
@@ -294,7 +307,7 @@ export type ListarMovimientosDeTiendaCompletoInput = z.infer<
 // Resultado del modo completo en el BORDE. `limite_excedido` lleva SOLO conteos y ninguna
 // rama de error viaja con filas (R39/R40).
 export type ListarMovimientosDeTiendaCompletoResult =
-  ListarCompletoResult<WalletTiendaMovimientoDTO>;
+  ListarCompletoResult<ConOrigen<WalletTiendaMovimientoDTO>>;
 
 // ── FICHA 335 — las opciones del selector de cierre de `/mi-wallet` ──
 

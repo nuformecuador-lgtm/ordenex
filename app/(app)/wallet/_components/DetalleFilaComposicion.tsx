@@ -5,6 +5,7 @@ import useSWR from "swr";
 
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
+import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { listarMovimientosDeFilaAction } from "@/lib/actions/wallet";
 import { composicionDetalleConfig } from "@/lib/config/composicion-detalle";
@@ -94,18 +95,9 @@ async function detalleFetcher(
   return res.data;
 }
 
-/**
- * R17 — el «Detalle» de un movimiento: su ORIGEN legible y, cuando la hay, su descripcion.
- *
- * No es cosmetica. Los pagos a mensajeros —el concepto que esta ficha existe para sacar a la
- * luz— se escriben con `descripcion: null` (lo pone `WalletMensajeroFeedService`), asi que una
- * columna que solo mostrara la descripcion enseñaria nueve renglones EN BLANCO justo en la fila
- * que mas falta hace abrir. La composicion es la misma que ya usa el desglose de una tienda.
- */
-function detalleTexto(m: WalletMovimientoDTO): string {
-  const origen = ORIGEN_LABEL[m.origenTipo];
-  return m.descripcion ? `${origen} · ${m.descripcion}` : origen;
-}
+// R17 — el «Detalle» de un movimiento es su ORIGEN legible y, cuando la hay, su descripcion (los
+// pagos a mensajeros llegan con `descripcion: null`: una columna solo de descripcion saldria en
+// blanco). Desde la 458-A lo pinta `OrigenMovimiento`, con la entidad que adjunta el servidor.
 
 /**
  * Ficha 339 (arreglo movil, 2026-08-31) — EL IMPORTE DE UNA FILA EN UN TELEFONO.
@@ -157,7 +149,8 @@ const COLUMNS: Column<WalletMovimientoDTO>[] = [
   {
     id: "detalle",
     value: COMPOSICION_DETALLE_COLUMNAS.detalle,
-    render: detalleTexto,
+    // 458-A (R5–R8): el origen con su entidad y, si el rol accede, su enlace.
+    render: (m) => <OrigenMovimiento fila={m} rotulos={ORIGEN_LABEL} />,
   },
   {
     id: "importe",
@@ -216,7 +209,9 @@ const COLUMNS_MOVIL: Column<WalletMovimientoDTO>[] = [
         {/* R5: la etiqueta legible del catalogo, nunca el valor del enum. */}
         <span className="font-medium">{CATEGORIA_LABEL[m.categoria]}</span>
         {/* R17: el origen legible y, cuando la hay, la descripcion. Ninguna celda muda. */}
-        <span className="text-xs text-muted-foreground">{detalleTexto(m)}</span>
+        <span className="text-xs text-muted-foreground">
+          <OrigenMovimiento fila={m} rotulos={ORIGEN_LABEL} />
+        </span>
       </div>
     ),
   },

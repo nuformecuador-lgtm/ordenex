@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { ReactElement } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { CIERRES_C1, elegirCierreC1 } from "@/tests/fixtures/selector-buscable";
 
 // Feature 57: el PageHeader del topbar monta el LogoutButton (client:
 // useRouter/useToast). Se stubbea para aislar el pre-fetch/props de la página.
@@ -25,8 +26,15 @@ import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_component
 import type { CuentasPorPagarTableProps } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
 import type {
   CuentaPorPagarResumenDTO,
-  ListarPagosDeMensajeroResult,
+  ListarPagosDeMensajeroResult as ListarPagosDeMensajeroResultBase,
+  PagoMensajeroMovimientoDTO,
 } from "@/lib/types/wallet-mensajero";
+import type { ConOrigen } from "@/lib/types/wallet-origen";
+
+// Ficha 458-A (TA.2): el borde adjunta el origen legible a cada fila del desglose.
+type ListarPagosDeMensajeroResult = Omit<ListarPagosDeMensajeroResultBase, "movimientos"> & {
+  movimientos: ConOrigen<PagoMensajeroMovimientoDTO>[];
+};
 
 // Feature 44 (T14, R18/R19/R21) — la pagina `/wallet/mensajeros` resuelve el rol SOLO
 // server-side; rol != maestro (o sin sesion) → `notFound` (R19). La tabla cliente se stubbea
@@ -60,6 +68,15 @@ class NotFoundError extends Error {
     this.name = "NotFoundError";
   }
 }
+
+// Ficha 458-A (TA.3/TA.4): los filtros leen del servidor los conceptos con movimientos y los cierres
+// de la cuenta. Aqui, un cierre (`c1`) y los conceptos que el caso necesita.
+const conceptosFiltroMock = vi.fn();
+const cierresFiltroMock = vi.fn();
+vi.mock("@/lib/actions/wallet-filtros", () => ({
+  conceptosConMovimientosAction: (...a: unknown[]) => conceptosFiltroMock(...a),
+  cierresDeLaCuentaAction: (...a: unknown[]) => cierresFiltroMock(...a),
+}));
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new NotFoundError();
@@ -147,6 +164,7 @@ const DESGLOSE_DATA: ListarPagosDeMensajeroResult = {
       cierreId: "c2", // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
       descripcion: null,
       fechaMovimiento: "2026-07-12T10:00:00.000Z",
+      origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
     },
     {
       id: "m1",
@@ -159,6 +177,7 @@ const DESGLOSE_DATA: ListarPagosDeMensajeroResult = {
       cierreId: "c1",
       descripcion: null,
       fechaMovimiento: "2026-07-05T10:00:00.000Z",
+      origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
     },
   ],
   total: 2,
@@ -188,6 +207,7 @@ const DESGLOSE_FILTRADO: ListarPagosDeMensajeroResult = {
       cierreId: "c1",
       descripcion: null,
       fechaMovimiento: "2026-07-05T10:00:00.000Z",
+      origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
     },
   ],
   total: 1,
@@ -231,6 +251,20 @@ async function renderPagina(pagina: ReactElement) {
 
 afterEach(() => {
   cleanup();
+});
+
+
+beforeEach(() => {
+  conceptosFiltroMock.mockResolvedValue({
+    status: "ok",
+    conceptos: [
+      { categoria: "cod_recaudado", movimientos: 4 },
+      { categoria: "iva_comision_cod", movimientos: 2 },
+      { categoria: "cobro_manual", movimientos: 1 },
+      { categoria: "pago_tienda", movimientos: 1 },
+    ],
+  });
+  cierresFiltroMock.mockResolvedValue(CIERRES_C1);
 });
 
 describe("WalletMensajerosPage — control de acceso por rol (R19)", () => {
@@ -539,9 +573,7 @@ describe("DesglosePagosMensajero — filtros server-side fecha/cierre (R22)", ()
     await screen.findByText("2026-07-12");
     expect(desgloseMock).toHaveBeenCalledTimes(1);
 
-    fireEvent.change(screen.getByLabelText("Cierre"), {
-      target: { value: "c1" },
-    });
+    await elegirCierreC1(screen.getByRole("button", { name: /^Cierre:/ }));
     fireEvent.change(screen.getByLabelText("Desde"), {
       target: { value: "2026-07-01" },
     });
@@ -578,9 +610,7 @@ describe("DesglosePagosMensajero — filtros server-side fecha/cierre (R22)", ()
     // La siguiente carga (al filtrar) devuelve el saldo del conjunto filtrado.
     desgloseMock.mockResolvedValueOnce({ status: "ok", data: DESGLOSE_FILTRADO });
 
-    fireEvent.change(screen.getByLabelText("Cierre"), {
-      target: { value: "c1" },
-    });
+    await elegirCierreC1(screen.getByRole("button", { name: /^Cierre:/ }));
     fireEvent.submit(
       screen.getByRole("form", { name: "Filtros del desglose de Ana Mensajera" }),
     );

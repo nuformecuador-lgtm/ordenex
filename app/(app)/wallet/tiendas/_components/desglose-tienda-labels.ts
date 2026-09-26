@@ -24,7 +24,6 @@
  * servicios), así que «Total devengado / Total pagado / Cuenta por pagar» no aplica.
  */
 import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
-import { WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet-tienda";
 
 export {
   ORIGEN_TIENDA_LABEL,
@@ -67,26 +66,20 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
 };
 
 /**
- * Opciones del `Select` de concepto del desglose, pobladas desde el SEED (con opción "todos") y
- * rotuladas desde Ordenex (R43). Por eso una categoría nueva del libro aparece aquí sin que nadie
- * se acuerde de añadirla (R44 de la 171).
+ * La opción «todos» del `Select` de concepto del desglose. El resto ya NO sale del catálogo
+ * completo (458-A, R13/R14): son los conceptos con movimientos de ESTA tienda en el periodo, con su
+ * número, rotulados desde Ordenex con `CATEGORIA_TIENDA_LABEL` (`opcionesDeConceptos`).
  */
-export const CATEGORIA_TIENDA_OPTIONS = [
-  { value: "", label: "Todos los conceptos" },
-  ...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({
-    value: categoria,
-    label: CATEGORIA_TIENDA_LABEL[categoria],
-  })),
-];
+export const CONCEPTO_TIENDA_TODOS_OPTION = { value: "", label: "Todos los conceptos" } as const;
 
 /**
  * Los CUATRO importes de la cabecera, en el orden de R7 — que es la fórmula leída de
  * izquierda a derecha: `saldo = a favor − cargos − pagado`.
  *
- * «Pagado a la tienda» hoy sale siempre en `0.00` porque ningún flujo emite `pago_tienda`
- * (lo emitirá la 172). Se muestra IGUAL: es un cero verdadero, leído de la categoría real
- * del libro, no un «no disponible». Si se plegara dentro de «cargos», el día que haya pagos
- * nadie podría distinguir *lo que te cobré* de *lo que ya te pagué* mirando esta pantalla.
+ * «Pagado a la tienda» es lo que Ordenex le pagó a la tienda o pagó por ella, leído de las
+ * categorías reales del libro. Va aparte de «cargos» para que se distinga *lo que te cobré* de
+ * *lo que ya te pagué* mirando esta pantalla. (Ficha 458-A, T1: aquí decía que salía siempre en
+ * 0,00 hasta la 172; la 172 ya emite pagos.)
  *
  * Ficha 461 (design §7.5, R45): las tres pistas nombran el cobro y su anulación con la MISMA
  * palabra con la que se rotula su fila en ESTA pantalla («los cobros de Ordenex a la tienda»,
@@ -121,7 +114,6 @@ export const DESGLOSE_TIENDA_COLUMNAS = {
  */
 export const DESGLOSE_TIENDA_FILTRO_LABEL = {
   cierre: "Cierre",
-  cierrePlaceholder: "ID del cierre",
   concepto: "Concepto",
   conceptoPlaceholder: "Todos los conceptos",
   desde: "Desde",

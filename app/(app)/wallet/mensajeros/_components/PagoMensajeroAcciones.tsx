@@ -23,6 +23,7 @@ import {
   leerPrevisualizacionReparto,
 } from "./RepartoPrevisualizacion";
 import {
+  CIERRE_ENLACE,
   PAGO_MENSAJERO_WALLET,
   REPARTO_APLICADO,
   money,
@@ -159,7 +160,7 @@ export function PagoMensajeroAcciones({
         </p>
       ) : null}
 
-      {aplicado ? <RepartoAplicado reparto={aplicado} /> : null}
+      {aplicado ? <RepartoAplicado reparto={aplicado} mensajero={mensajeroNombre} /> : null}
 
       {/* El formulario solo se monta si hay algo que pagar: sin imputable no hay nada que
           abrir, y montarlo acuñaría una clave de idempotencia para una solicitud imposible. */}
@@ -193,7 +194,10 @@ export function PagoMensajeroAcciones({
  * enseñarlo es la única forma de que la persona se entere. `restanteImputable` mayor que cero
  * después de un pago no es un error: es lo que dice que hace falta otro registro.
  */
-function RepartoAplicado({ reparto }: Readonly<{ reparto: RepartoAplicadoDTO }>) {
+function RepartoAplicado({
+  reparto,
+  mensajero,
+}: Readonly<{ reparto: RepartoAplicadoDTO; mensajero: string }>) {
   return (
     <section
       aria-label={REPARTO_APLICADO.titulo}
@@ -227,7 +231,10 @@ function RepartoAplicado({ reparto }: Readonly<{ reparto: RepartoAplicadoDTO }>)
             <span className="text-xs text-muted-foreground">
               {REPARTO_APLICADO.quedaPendiente(imputacion.pendienteDespues)}
             </span>
-            <EnlaceCierre cierreId={imputacion.cierreId} />
+            <EnlaceCierre
+              cierreId={imputacion.cierreId}
+              nombre={CIERRE_ENLACE.delPago(imputacion.monto, mensajero)}
+            />
           </li>
         ))}
       </ul>

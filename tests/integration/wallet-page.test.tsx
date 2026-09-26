@@ -142,6 +142,7 @@ const MOVIMIENTOS_OK = {
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
         dueno: "propio" as const, // feature 231 (R31): el flete es dinero de Ordenex
         documento: null, // ficha 459 (design §7.3): fila sin documento
+        origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
       },
       // Feature 173 (R62): un movimiento de una de las categorías NUEVAS viaja por el mismo
       // camino, con la misma forma y sin ningún campo de más.
@@ -157,6 +158,7 @@ const MOVIMIENTOS_OK = {
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
         dueno: "terceros" as const, // feature 231 (R31): el contra-entrega es de las tiendas
         documento: null, // ficha 459 (design §7.3): fila sin documento
+        origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
       },
     ],
     total: 2,
@@ -500,14 +502,18 @@ describe("WalletPage — la descripción de la página (R59)", () => {
     expect(document.body.textContent?.toLowerCase()).not.toContain("balance");
   });
 
-  it("R59: y nombra las dos cifras con los mismos nombres que la tarjeta", async () => {
+  // Ficha 458-A (TA.6, R101) REESCRIBE este caso de la 173: la tarjeta ya no se llama siempre «Dinero
+  // en caja» (la 459 la rotula «Flujo de dinero registrado» en estado «flujo»), así que el subtítulo
+  // —que no conoce el estado— deja de nombrarla. Sustituto: `wallet-textos-458.guardia` (T9).
+  it("R59/R101: nombra la ganancia y las cifras de la caja, y NO dice «dinero en caja» (estado flujo)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
     const { default: WalletPage } = await import("@/app/(app)/wallet/page");
 
     render(await WalletPage());
 
     const texto = (document.body.textContent ?? "").toLowerCase();
-    expect(texto).toContain("dinero en caja");
+    expect(texto).not.toContain("dinero en caja");
+    expect(texto).toContain("cifras de la caja");
     expect(texto).toContain("ganancia de ordenex");
   });
 });

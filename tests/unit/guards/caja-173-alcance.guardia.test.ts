@@ -236,6 +236,10 @@ const CATALOGOS_PREEXISTENTES = [
   // `cod_recaudado` y del `ajuste_credito` de la tienda. Es un `Record` TOTAL de dos columnas
   // (tipo y pareja), sin aritmetica: no calcula dinero, lo clasifica.
   "lib/utils/invariante-tiendas.ts",
+  // Revision 458-A (m2): `CATEGORIA_LABEL` (el nombre en pantalla de cada categoria de la caja) se
+  // mudo de `app/(app)/wallet/_components/wallet-labels.ts` a `lib/` porque lo lee un servicio. Es
+  // un `Record` TOTAL de textos, sin aritmetica: rotula, no calcula dinero.
+  "lib/constants/wallet-rotulos.ts",
 ];
 
 /**

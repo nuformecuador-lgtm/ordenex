@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
+import { SelectorBuscable } from "@/components/shared/SelectorBuscable";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
+import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
+import { CIERRE_SELECTOR_TEXTOS } from "@/components/shared/wallet/cierres-selector";
+import { useCierresDeLaCuenta } from "@/components/shared/wallet/use-cierres-de-la-cuenta";
 import {
   listarPagosDeMensajeroAction,
   listarPagosDeMensajeroCompletoAction,
@@ -30,6 +34,7 @@ import { PagoMensajeroAcciones } from "./PagoMensajeroAcciones";
 import { EnlaceCierre } from "./RepartoPrevisualizacion";
 import {
   CATEGORIA_PAGO_LABEL,
+  CIERRE_ENLACE,
   CUENTA_COLOR,
   DESGLOSE_COLUMNAS,
   DESGLOSE_COLUMNA_CIERRE,
@@ -37,10 +42,10 @@ import {
   DESGLOSE_LABEL,
   DESGLOSE_SIN_CIERRE,
   DESGLOSE_VACIO,
+  ORIGEN_PAGO_LABEL,
   SIGNO_BADGE,
   TIPO_PAGO_LABEL,
   money,
-  origenLabel,
 } from "./wallet-mensajeros-labels";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
@@ -144,13 +149,13 @@ function TipoBadge({ tipo }: { tipo: PagoMensajeroMovimientoDTO["tipo"] }) {
   );
 }
 
-/** Origen legible: tipo de origen + descripcion si la hay. */
-function origenTexto(m: PagoMensajeroMovimientoDTO): string {
-  const base = origenLabel(m.origenTipo);
-  return m.descripcion ? `${base} · ${m.descripcion}` : base;
-}
-
-const COLUMNS: Column<PagoMensajeroMovimientoDTO>[] = [
+/**
+ * Las columnas del desglose. Es una función del mensajero porque el enlace «Ver el cierre» se
+ * nombra con él (458-A, TA.5): el nombre accesible dice de quién es y qué fila es, sin el
+ * identificador interno.
+ */
+function columnasDe(mensajero: string): Column<PagoMensajeroMovimientoDTO>[] {
+  return [
   {
     id: "fecha",
     value: DESGLOSE_COLUMNAS.fecha,
@@ -175,7 +180,8 @@ const COLUMNS: Column<PagoMensajeroMovimientoDTO>[] = [
   {
     id: "origen",
     value: DESGLOSE_COLUMNAS.origen,
-    render: (m) => origenTexto(m),
+    // 458-A (R5–R8): el origen con su entidad y, si el rol accede, su enlace.
+    render: (m) => <OrigenMovimiento fila={m} rotulos={ORIGEN_PAGO_LABEL} />,
   },
   {
     // Feature 205 (T6.2, R43) — el enlace al detalle del cierre de esta fila. La fila que NO
@@ -188,10 +194,18 @@ const COLUMNS: Column<PagoMensajeroMovimientoDTO>[] = [
       m.cierreId === null ? (
         <span className="text-muted-foreground">{DESGLOSE_SIN_CIERRE}</span>
       ) : (
-        <EnlaceCierre cierreId={m.cierreId} />
+        <EnlaceCierre
+          cierreId={m.cierreId}
+          nombre={CIERRE_ENLACE.deLaFila(
+            fechaDiaMovimientoCR(m.fechaMovimiento),
+            CATEGORIA_PAGO_LABEL[m.categoria],
+            mensajero,
+          )}
+        />
       ),
   },
-];
+  ];
+}
 
 export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroProps) {
   const { mensajeroId, mensajeroNombre } = resumen;
@@ -241,7 +255,9 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
   }
 
   const cierreFiltroId = `desglose-${mensajeroId}-cierre`;
-  const cierreAyudaId = `${cierreFiltroId}-ayuda`;
+  // 458-A (TA.4) — los cierres de ESTE mensajero, leídos al abrir el selector.
+  const cierres = useCierresDeLaCuenta({ cuenta: "mensajero", mensajeroId });
+  const columnas = useMemo(() => columnasDe(mensajeroNombre), [mensajeroNombre]);
   const desdeFiltroId = `desglose-${mensajeroId}-desde`;
   const hastaFiltroId = `desglose-${mensajeroId}-hasta`;
 
@@ -325,16 +341,19 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
         }}
       >
         <div className="flex flex-wrap items-end gap-4">
-          <div className="flex min-w-56 flex-col gap-1.5">
+          {/* 458-A (R2, R10–R12): el cierre se ELIGE de los de este mensajero. */}
+          <div className="flex w-72 max-w-full flex-col gap-1.5">
             <Label htmlFor={cierreFiltroId}>{DESGLOSE_FILTRO_LABEL.cierre}</Label>
-            <Input
+            <SelectorBuscable
               id={cierreFiltroId}
-              type="text"
-              value={draft.cierreId}
-              onChange={(e) => set("cierreId", e.target.value)}
-              placeholder={DESGLOSE_FILTRO_LABEL.cierrePlaceholder}
-              aria-describedby={cierreAyudaId}
-              className="w-56"
+              etiqueta={DESGLOSE_FILTRO_LABEL.cierre}
+              opciones={cierres.opciones}
+              valor={draft.cierreId || null}
+              onCambiar={(v) => set("cierreId", v ?? "")}
+              onBuscar={cierres.buscar}
+              estado={cierres.estado}
+              hayMas={cierres.hayMas}
+              textos={CIERRE_SELECTOR_TEXTOS}
             />
           </div>
 
@@ -374,23 +393,12 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
             </Button>
           </div>
         </div>
-
-        {/*
-          Deuda 203 — de dónde sale el identificador que pide el campo «Cierre». Va DEBAJO de la
-          fila y no dentro de su columna para no descolgar ese campo de los otros dos (la fila
-          alinea por abajo); el vínculo con el campo lo hace `aria-describedby`, así que un
-          lector de pantalla lo anuncia al enfocarlo aunque en la pantalla esté una línea más
-          abajo.
-        */}
-        <p id={cierreAyudaId} className="text-xs text-muted-foreground">
-          {DESGLOSE_FILTRO_LABEL.cierreAyuda}
-        </p>
       </form>
 
       {/* Desglose por cierre (mas reciente primero: el backend lo devuelve ordenado). */}
       <div className="overflow-x-auto">
         <DataTable
-          columns={COLUMNS}
+          columns={columnas}
           data={movimientos}
           rowKey="id"
           ariaLabel={`Desglose por cierre de ${mensajeroNombre}`}

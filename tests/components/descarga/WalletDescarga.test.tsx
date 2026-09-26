@@ -114,9 +114,10 @@ import { WalletModule } from "@/app/(app)/wallet/_components/WalletModule";
 import { MiWalletModule } from "@/app/(app)/mi-wallet/_components/MiWalletModule";
 import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
 // Feature 173 (T G.2/T G.3, R61/R62) — el filtro y la descarga del libro de caja.
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import {
   CATEGORIA_LABEL,
-  CATEGORIA_OPTIONS,
+  CATEGORIA_TODAS_OPTION,
   DUENO_LABEL,
 } from "@/app/(app)/wallet/_components/wallet-labels";
 import {
@@ -583,20 +584,25 @@ const CAJA_CON_NUEVOS = [
 ];
 
 describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
-  it("T G.2 (R61): el filtro se puebla del SEED, no de una lista escrita a mano", () => {
-    // Esto es una VERIFICACIÓN, no una implementación: el `Select` de categoría ya se armaba
-    // del SEED desde la 42, así que las dos categorías nuevas entraron solas al añadirlas al
-    // catálogo. Lo que se afirma es justo eso —que sigue siendo así— porque el día que
-    // alguien sustituya el `map` por una lista literal, el filtro se quedará mudo ante la
-    // siguiente categoría y nadie se enterará hasta que falte una.
-    const valores = CATEGORIA_OPTIONS.map((o) => o.value);
+  it("T G.2 (R61) → 458-A (R13): el filtro ofrece las categorías CON movimientos, con su nombre", () => {
+    // Reescrito en la 458-A (TA.3): el `Select` ya NO se puebla del SEED (R95 lo prohíbe), sino
+    // de los conceptos con movimientos que devuelve el servidor. Lo que se conserva de la 173 es
+    // que ninguna categoría del catálogo pueda llegar al filtro sin nombre legible: se le pasan
+    // TODAS las del SEED como «con movimientos» y cada una sale rotulada, nunca con su valor.
+    const opcionesTodas = opcionesDeConceptos(
+      WALLET_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({ categoria, movimientos: 1 })),
+      CATEGORIA_LABEL,
+      "",
+      CATEGORIA_TODAS_OPTION,
+    );
+    const valores = opcionesTodas.map((o) => o.value);
     expect(valores).toEqual(["", ...WALLET_MOVIMIENTO_CATEGORIA_SEED]);
 
     for (const categoria of CATEGORIAS_173) {
-      const opcion = CATEGORIA_OPTIONS.find((o) => o.value === categoria);
+      const opcion = opcionesTodas.find((o) => o.value === categoria);
       expect(opcion, `el filtro no ofrece ${categoria}`).toBeDefined();
       // Y con nombre de persona, no con el valor del enum (R61).
-      expect(opcion?.label).toBe(CATEGORIA_LABEL[categoria]);
+      expect(opcion?.label).toBe(`${CATEGORIA_LABEL[categoria]} (1)`);
       expect(opcion?.label).not.toBe(categoria);
       expect(opcion?.label).not.toMatch(/_/);
     }
@@ -604,7 +610,7 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
     // Ninguna categoría del catálogo se queda sin etiqueta legible: el barrido es sobre el
     // SEED en RUNTIME, no sobre las dos que esta feature añadió.
     for (const categoria of WALLET_MOVIMIENTO_CATEGORIA_SEED) {
-      const opcion = CATEGORIA_OPTIONS.find((o) => o.value === categoria);
+      const opcion = opcionesTodas.find((o) => o.value === categoria);
       expect(opcion?.label, `sin etiqueta: ${categoria}`).toBeTruthy();
       expect(opcion?.label).not.toBe(categoria);
     }

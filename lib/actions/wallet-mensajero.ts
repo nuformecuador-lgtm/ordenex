@@ -3,6 +3,14 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletMensajeroService } from "@/lib/services/WalletMensajeroService";
+import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleRepository";
+import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
+import {
+  origenEnItems,
+  origenEnPagina,
+  type ConOrigenEnPagina,
+} from "@/lib/services/origen-en-resultado";
+import type { IOrigenLegibleService } from "@/lib/interfaces/services/IOrigenLegibleService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -42,7 +50,8 @@ export type ListarCuentasPorPagarActionResult =
   | { status: "unauthenticated" };
 
 export type ListarPagosDeMensajeroActionResult =
-  | ListarPagosDeMensajeroServiceResult
+  // Ficha 458-A (TA.2, R5–R8): cada fila baja con su origen legible (`origen`).
+  | ConOrigenEnPagina<ListarPagosDeMensajeroServiceResult>
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -74,6 +83,13 @@ function buildService(): IWalletMensajeroService {
 export interface WalletMensajeroDeps {
   service?: IWalletMensajeroService;
   getActor?: () => Promise<Actor | null>;
+  /** Ficha 458-A (TA.2): el origen legible de las filas; en produccion, el real sobre Prisma. */
+  origenes?: IOrigenLegibleService;
+}
+
+/** Ficha 458-A (TA.2) — composition root del origen legible (una consulta por tipo presente). */
+function buildOrigenes(): IOrigenLegibleService {
+  return new OrigenLegibleService(new OrigenLegibleRepository(getPrismaClient()));
 }
 
 /**
@@ -156,7 +172,8 @@ export async function listarPagosDeMensajeroAction(
     if (!actor) throw new UnauthenticatedError();
     const data = listarPagosDeMensajeroSchema.parse(input); // mensajeroId REQUERIDO -> ZodError si falta
     const service = deps.service ?? buildService();
-    return service.listarPagosDeMensajero(data, actor);
+    const r = await service.listarPagosDeMensajero(data, actor);
+    return origenEnPagina(deps.origenes ?? buildOrigenes(), "mensajero", r, actor);
   });
   return isAppErrorShape(r) ? toWalletMensajeroActionError(r) : r;
 }
@@ -176,7 +193,8 @@ export async function listarPagosDeMensajeroCompletoAction(
     if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
     const data = listarPagosDeMensajeroCompletoSchema.parse(input); // R18: mensajeroId REQUERIDO
     const service = deps.service ?? buildService();
-    return service.listarPagosDeMensajeroCompleto(data, actor);
+    const r = await service.listarPagosDeMensajeroCompleto(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "mensajero", r, actor);
   });
   return isAppErrorShape(r) ? toWalletMensajeroActionError(r) : r;
 }

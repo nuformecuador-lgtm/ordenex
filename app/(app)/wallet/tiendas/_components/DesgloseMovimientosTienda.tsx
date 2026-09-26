@@ -10,7 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
+import { SelectorBuscable } from "@/components/shared/SelectorBuscable";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
+import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
+import { CIERRE_SELECTOR_TEXTOS } from "@/components/shared/wallet/cierres-selector";
+import { CONCEPTOS_FILTRO_AVISO, opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
+import { useCierresDeLaCuenta } from "@/components/shared/wallet/use-cierres-de-la-cuenta";
+import { useConceptosConMovimientos } from "@/components/shared/wallet/use-conceptos-con-movimientos";
 import {
   listarMovimientosDeTiendaAction,
   listarMovimientosDeTiendaCompletoAction,
@@ -28,17 +34,17 @@ import {
 } from "./desglose-tienda-descarga-columnas";
 import {
   CATEGORIA_TIENDA_LABEL,
-  CATEGORIA_TIENDA_OPTIONS,
+  CONCEPTO_TIENDA_TODOS_OPTION,
   DESGLOSE_TIENDA_COLUMNAS,
   DESGLOSE_TIENDA_ERROR,
   DESGLOSE_TIENDA_FILTRO_LABEL,
   DESGLOSE_TIENDA_LABEL,
   DESGLOSE_TIENDA_NOMBRE,
   DESGLOSE_TIENDA_VACIO,
+  ORIGEN_TIENDA_LABEL,
   SALDO_SIGNO_LABEL,
   TIPO_TIENDA_LABEL,
   money,
-  origenLabel,
 } from "./desglose-tienda-labels";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
@@ -161,12 +167,6 @@ function TipoBadge({ tipo }: { tipo: WalletTiendaMovimientoDTO["tipo"] }) {
   );
 }
 
-/** Origen legible: tipo de origen + descripción si la hay (la misma composición del archivo). */
-function origenTexto(m: WalletTiendaMovimientoDTO): string {
-  const base = origenLabel(m.origenTipo);
-  return m.descripcion ? `${base} · ${m.descripcion}` : base;
-}
-
 /** R13: el estado del saldo se lee del MISMO mapa que la tabla de saldos; aquí solo el color. */
 const SIGNO_BADGE: Record<
   SaldoTiendaResumenDTO["signo"],
@@ -210,7 +210,8 @@ const COLUMNS: Column<WalletTiendaMovimientoDTO>[] = [
   {
     id: "origen",
     value: DESGLOSE_TIENDA_COLUMNAS.origen,
-    render: (m) => origenTexto(m),
+    // 458-A (R5–R8): el origen con su entidad (la misma composición del archivo) y su enlace.
+    render: (m) => <OrigenMovimiento fila={m} rotulos={ORIGEN_TIENDA_LABEL} />,
   },
 ];
 
@@ -306,6 +307,23 @@ export function DesgloseMovimientosTienda({
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
+  // 458-A (TA.4) — los cierres de ESTA tienda, leídos al abrir el selector.
+  const cierres = useCierresDeLaCuenta({ cuenta: "tienda", tiendaId });
+  // 458-A (TA.3) — los conceptos con movimientos del borrador (periodo y cierre), no del SEED.
+  const conceptos = useConceptosConMovimientos({
+    libro: "tienda",
+    tiendaId,
+    cierreId: draft.cierreId || undefined,
+    desde: draft.desde || undefined,
+    hasta: draft.hasta || undefined,
+  });
+  const opcionesConcepto = opcionesDeConceptos(
+    conceptos.conceptos,
+    CATEGORIA_TIENDA_LABEL,
+    draft.categoria,
+    CONCEPTO_TIENDA_TODOS_OPTION,
+  );
+
   function aplicarFiltros() {
     setFiltros(draft); // nuevos filtros → nueva clave SWR → re-obtiene SOLO esta tienda (R36)
     setPage(1); // R19: aplicar filtros vuelve a la primera página
@@ -344,10 +362,8 @@ export function DesgloseMovimientosTienda({
           pista={DESGLOSE_TIENDA_LABEL.cargosHint}
         />
         {/*
-          R43 — «Pagado a la tienda» hoy sale siempre en 0,00 porque ningún flujo emite
-          todavía un pago a tienda (lo cierra la 172). Se muestra IGUAL, y como la cifra que
-          es: el servidor la lee de la categoría real del libro, no devuelve un cero fijo, así
-          que el día que existan pagos aparecen aquí solos, sin tocar una línea.
+          R43 — «Pagado a la tienda»: el servidor la lee de las categorías reales del libro (los
+          pagos de la 172 y los gastos pagados por la tienda), no devuelve un cero fijo.
         */}
         <Importe
           rotulo={DESGLOSE_TIENDA_LABEL.pagado}
@@ -375,23 +391,29 @@ export function DesgloseMovimientosTienda({
           aplicarFiltros();
         }}
       >
-        <div className="flex min-w-56 flex-col gap-1.5">
+        {/*
+          458-A (R2, R10–R12) — el cierre se ELIGE de los de esta tienda (rotulados por día y
+          mensajero, con búsqueda por día o por nombre); nadie teclea un identificador.
+        */}
+        <div className="flex w-72 max-w-full flex-col gap-1.5">
           <Label htmlFor={cierreFiltroId}>{DESGLOSE_TIENDA_FILTRO_LABEL.cierre}</Label>
-          <Input
+          <SelectorBuscable
             id={cierreFiltroId}
-            type="text"
-            value={draft.cierreId}
-            onChange={(e) => set("cierreId", e.target.value)}
+            etiqueta={DESGLOSE_TIENDA_FILTRO_LABEL.cierre}
+            opciones={cierres.opciones}
+            valor={draft.cierreId || null}
+            onCambiar={(v) => set("cierreId", v ?? "")}
+            onBuscar={cierres.buscar}
+            estado={cierres.estado}
+            hayMas={cierres.hayMas}
+            textos={CIERRE_SELECTOR_TEXTOS}
             disabled={isLoading}
-            placeholder={DESGLOSE_TIENDA_FILTRO_LABEL.cierrePlaceholder}
-            className="w-56"
           />
         </div>
 
         {/*
-          R44 — las opciones se pueblan del SEED del enum, no de una lista escrita a mano:
-          por eso `pago_tienda` ya está entre ellas hoy, y por eso una categoría nueva del
-          libro aparecerá aquí sin que nadie se acuerde de añadirla.
+          458-A (R13–R15) — los conceptos con movimientos de ESTA tienda en el periodo (y el cierre)
+          del borrador, con su número; el elegido se conserva con 0.
         */}
         <div className="flex min-w-56 flex-col gap-1.5">
           <Label htmlFor={conceptoFiltroId}>{DESGLOSE_TIENDA_FILTRO_LABEL.concepto}</Label>
@@ -400,10 +422,13 @@ export function DesgloseMovimientosTienda({
             aria-label={DESGLOSE_TIENDA_NOMBRE.concepto(tiendaNombre)}
             value={draft.categoria}
             onValueChange={(v) => set("categoria", v)}
-            options={CATEGORIA_TIENDA_OPTIONS}
+            options={opcionesConcepto}
             placeholder={DESGLOSE_TIENDA_FILTRO_LABEL.conceptoPlaceholder}
             disabled={isLoading}
           />
+          {conceptos.error ? (
+            <span className="text-xs text-destructive">{CONCEPTOS_FILTRO_AVISO.error}</span>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-1.5">

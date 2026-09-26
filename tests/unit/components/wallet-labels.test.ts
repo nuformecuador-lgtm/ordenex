@@ -4,12 +4,13 @@ import {
   ANULAR_DOCUMENTO_CAJA_RESPUESTA,
   CAJA_RESUMEN_AVISO_TERCEROS,
   CATEGORIA_LABEL,
-  CATEGORIA_OPTIONS,
+  CATEGORIA_TODAS_OPTION,
   DOCUMENTO_CAJA_NOMBRE,
   MOTIVO_NO_ANULABLE_LABEL,
   ORIGEN_LABEL,
   TIPO_EGRESO_MANUAL_LABEL,
 } from "@/app/(app)/wallet/_components/wallet-labels";
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import { EGRESO_NOMBRADO_LABEL } from "@/app/(app)/wallet/_components/composicion-detalle-labels";
 import {
   WALLET_MOVIMIENTO_CATEGORIA_SEED,
@@ -129,11 +130,18 @@ describe("461 — CATEGORIA_LABEL: cada concepto de la caja, desde Ordenex (R42,
   });
 
   it("el filtro por concepto ofrece los 27 con SU nombre (R42; 457/R45; 458-B), tras la opcion «todas»", () => {
-    expect(CATEGORIA_OPTIONS[0]).toEqual({ value: "", label: "Todas las categorías" });
-    const opciones = new Map(CATEGORIA_OPTIONS.slice(1).map((o) => [o.value, o.label]));
+    // 458-A (TA.3): el filtro ofrece los conceptos CON movimientos; con los 27 presentes, los 27.
+    const lista = opcionesDeConceptos(
+      WALLET_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({ categoria, movimientos: 1 })),
+      CATEGORIA_LABEL,
+      "",
+      CATEGORIA_TODAS_OPTION,
+    );
+    expect(lista[0]).toEqual({ value: "", label: "Todas las categorías" });
+    const opciones = new Map(lista.slice(1).map((o) => [o.value, o.label]));
     expect(opciones.size).toBe(27);
     for (const [clave, texto] of Object.entries(CONCEPTOS_ESPERADOS)) {
-      expect(opciones.get(clave), clave).toBe(texto);
+      expect(opciones.get(clave), clave).toBe(`${texto} (1)`);
     }
   });
 });

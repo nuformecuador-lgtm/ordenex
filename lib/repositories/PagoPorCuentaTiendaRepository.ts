@@ -12,13 +12,14 @@ import type {
 } from "@/lib/interfaces/repositories/IPagoPorCuentaTiendaRepository";
 import { esP2002, textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
-import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
+import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 
 type PagoPorCuentaPrismaClient = Pick<PrismaClient, "pagoPorCuentaTienda">;
 
 /** Lo que el documento necesita para proyectarse: nombres, no ids (R100). */
 const INCLUDE_REGISTRO = {
-  tienda: { select: { nombre: true, primerApellido: true } },
+  tienda: { select: CUENTA_USUARIO_SELECT },
   registrador: { select: { nombre: true } },
   anulacion: { select: { id: true } },
 } as const;
@@ -30,7 +31,7 @@ function aRegistro(r: RegistroRow): PagoPorCuentaRegistro {
   return {
     id: r.id,
     tiendaId: r.tiendaId,
-    tiendaNombre: etiquetaDePersona(r.tienda),
+    tiendaNombre: etiquetaDeCuenta(r.tienda),
     beneficiario: r.beneficiario,
     monto: r.monto.toFixed(2),
     metodo: r.metodo,
@@ -104,7 +105,7 @@ export class PagoPorCuentaTiendaRepository implements IPagoPorCuentaTiendaReposi
           entidadTipo: "pago_por_cuenta_tienda",
           entidadId: row.id,
           entidadEtiqueta: etiquetaDeEntidad("pago_por_cuenta_tienda", {
-            tiendaNombre: etiquetaDePersona(row.tienda),
+            tiendaNombre: etiquetaDeCuenta(row.tienda),
           }),
           monto: row.monto,
           ...actor,
@@ -132,7 +133,7 @@ export class PagoPorCuentaTiendaRepository implements IPagoPorCuentaTiendaReposi
       });
       const anulado = await tx.pagoPorCuentaTienda.findUnique({
         where: { id: input.pagoId },
-        select: { monto: true, tienda: { select: { nombre: true, primerApellido: true } } },
+        select: { monto: true, tienda: { select: CUENTA_USUARIO_SELECT } },
       });
       const actor = await resolverActorCongelado(tx, input.anuladoPor);
       await appendAccion(tx, [
@@ -141,7 +142,7 @@ export class PagoPorCuentaTiendaRepository implements IPagoPorCuentaTiendaReposi
           entidadTipo: "pago_por_cuenta_tienda",
           entidadId: input.pagoId,
           entidadEtiqueta: etiquetaDeEntidad("pago_por_cuenta_tienda", {
-            tiendaNombre: etiquetaDePersona(anulado?.tienda),
+            tiendaNombre: etiquetaDeCuenta(anulado?.tienda),
           }),
           monto: anulado?.monto ?? null,
           ...actor,

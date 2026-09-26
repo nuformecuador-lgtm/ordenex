@@ -9,6 +9,7 @@
 // La caché de SWR se aísla por render (`provider` nuevo + `dedupingInterval: 0`) para que
 // cada test observe SUS propias llamadas a las Server Actions, que van dobladas.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { CIERRES_C1, elegirCierreC1 } from "@/tests/fixtures/selector-buscable";
 import {
   render,
   screen,
@@ -73,6 +74,15 @@ class NotFoundError extends Error {
     this.name = "NotFoundError";
   }
 }
+
+// Ficha 458-A (TA.3/TA.4): los filtros leen del servidor los conceptos con movimientos y los cierres
+// de la cuenta. Aqui, un cierre (`c1`) y los conceptos que el caso necesita.
+const conceptosFiltroMock = vi.fn();
+const cierresFiltroMock = vi.fn();
+vi.mock("@/lib/actions/wallet-filtros", () => ({
+  conceptosConMovimientosAction: (...a: unknown[]) => conceptosFiltroMock(...a),
+  cierresDeLaCuentaAction: (...a: unknown[]) => cierresFiltroMock(...a),
+}));
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new NotFoundError();
@@ -337,6 +347,20 @@ afterEach(() => {
 });
 
 // -------------------------------------------------------------------------
+
+
+beforeEach(() => {
+  conceptosFiltroMock.mockResolvedValue({
+    status: "ok",
+    conceptos: [
+      { categoria: "cod_recaudado", movimientos: 4 },
+      { categoria: "iva_comision_cod", movimientos: 2 },
+      { categoria: "cobro_manual", movimientos: 1 },
+      { categoria: "pago_tienda", movimientos: 1 },
+    ],
+  });
+  cierresFiltroMock.mockResolvedValue(CIERRES_C1);
+});
 
 describe("R4 + R1 — permisos por partida doble", () => {
   it("sin permiso NO se renderiza el control de pagar ni la lista de comprobantes", async () => {
@@ -867,7 +891,7 @@ describe("R34 — la 171 se conserva tal cual", () => {
     const region = await desplegar("Tienda Norte");
     await waitFor(() => expect(lecturasDe("t1")).toBe(1));
 
-    fireEvent.change(within(region).getByLabelText("Cierre"), { target: { value: "c1" } });
+    await elegirCierreC1(within(region).getByRole("button", { name: /^Cierre:/ }));
     fireEvent.submit(
       screen.getByRole("form", { name: "Filtros del desglose de Tienda Norte" }),
     );

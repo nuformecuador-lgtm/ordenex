@@ -7,7 +7,8 @@
 //
 // Misma composicion que la migracion de datos (`20260926120200_cobro_tienda_461_completar_caja`):
 // «{Tienda} · {descripcion}» con `concat_ws`, asi que una linea completada y una del servicio se leen
-// igual. El nombre de la tienda lo trae quien llama (nombre + primer apellido, `etiquetaDePersona`).
+// igual. El nombre de la tienda lo trae quien llama, con `etiquetaDeCuenta` (458-A, R33); para una
+// tienda sin segundo apellido coincide con el `concat_ws(nombre, primer_apellido)` de la migracion.
 
 const SEPARADOR = " · ";
 

@@ -1,5 +1,6 @@
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
-import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
+import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta, type FuenteCuenta } from "@/lib/utils/etiqueta-cuenta";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   AnularLiquidacionPagoInput,
@@ -41,8 +42,8 @@ type DocumentoRow = Prisma.LiquidacionPagoGetPayload<{ include: typeof INCLUDE_D
  */
 const INCLUDE_DOCUMENTO_CON_BENEFICIARIO = {
   ...INCLUDE_DOCUMENTO,
-  mensajero: { select: { nombre: true, primerApellido: true } },
-  tienda: { select: { nombre: true, primerApellido: true } },
+  mensajero: { select: CUENTA_USUARIO_SELECT },
+  tienda: { select: CUENTA_USUARIO_SELECT },
 } as const;
 
 type DocumentoConBeneficiarioRow = Prisma.LiquidacionPagoGetPayload<{
@@ -55,8 +56,17 @@ type DocumentoConBeneficiarioRow = Prisma.LiquidacionPagoGetPayload<{
  * admite pero el tipo si.
  */
 function nombreDelBeneficiario(row: DocumentoConBeneficiarioRow): string | null {
-  const persona = row.mensajero ?? row.tienda;
-  return persona === null ? null : etiquetaDePersona(persona);
+  return etiquetaDelBeneficiario(row.mensajero ?? row.tienda);
+}
+
+/**
+ * 458-A (R33): la cuenta se nombra como en el resto de la wallet (`etiquetaDeCuenta`), no con
+ * nombre + primer apellido: un mensajero con segundo apellido se leia distinto en el historial de
+ * su pago y en la tabla. Sin cuenta, `null` (y no «Cuenta sin nombre»): la etiqueta sale
+ * «(sin identificar)», como antes. La usan el registro y la anulacion, que asi no pueden divergir.
+ */
+function etiquetaDelBeneficiario(cuenta: FuenteCuenta | null | undefined): string | null {
+  return cuenta == null ? null : etiquetaDeCuenta(cuenta);
 }
 
 /**
@@ -401,8 +411,8 @@ export class LiquidacionPagoRepository implements ILiquidacionPagoRepository {
         select: {
           monto: true,
           repartoId: true,
-          mensajero: { select: { nombre: true, primerApellido: true } },
-          tienda: { select: { nombre: true, primerApellido: true } },
+          mensajero: { select: CUENTA_USUARIO_SELECT },
+          tienda: { select: CUENTA_USUARIO_SELECT },
         },
       });
       // ⚠️ SIMETRICO CON `crear`: un pago que pertenece a un REPARTO no produce fila propia. La
@@ -420,7 +430,8 @@ export class LiquidacionPagoRepository implements ILiquidacionPagoRepository {
               // El beneficiario es un OPERADOR (mensajero o tienda), nunca el destinatario de una
               // orden (R5). Si la relectura no resuelve, la etiqueta sale «(sin identificar)»: una
               // etiqueta pobre no puede tumbar la anulacion de un pago.
-              beneficiarioNombre: etiquetaDePersona(anulado?.mensajero ?? anulado?.tienda),
+              // 458-A (R33): la MISMA etiqueta que el registro del pago.
+              beneficiarioNombre: etiquetaDelBeneficiario(anulado?.mensajero ?? anulado?.tienda),
             }),
             monto: anulado?.monto ?? null,
             ...actorAnulacion,

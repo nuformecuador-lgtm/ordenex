@@ -3,9 +3,14 @@ titulo: Wallet · Mensajeros
 modulo: wallet
 pantalla: /wallet/mensajeros
 roles: [maestro, admin]
-actualizado: 2026-09-15
+actualizado: 2026-09-26
 fuentes:
   - app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx
+  - app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels.ts
+  - components/shared/SelectorBuscable.tsx
+  - components/shared/wallet/cierres-selector.ts
+  - components/shared/wallet/OrigenMovimiento.tsx
+  - lib/services/OrigenLegibleService.ts
   - app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx
   - app/(app)/wallet/mensajeros/_components/PagoMensajeroAcciones.tsx
   - app/(app)/wallet/mensajeros/_components/PremiosRankingPanel.tsx
@@ -27,6 +32,18 @@ Abriendo un mensajero ves **de dónde sale cada colón**: los pagos por entrega 
 aprobados, los premios y los ajustes, cada uno con su origen.
 
 Es el nivel donde se contesta *«¿por qué me pagaron esto?»* sin discutir de memoria.
+
+La columna **Origen** lo dice con nombre: «Cierre del día · 2026-09-12 · Juan Pérez Mora», «Pago de
+Ordenex a un mensajero · Juan Pérez Mora · 2026-09-12 · SINPE», «Premio del ranking · podio del
+2026-09-10». Cuando hay pantalla para ese origen, **Ver** te lleva a ella. La fila que viene de un
+cierre lleva además **Ver el cierre**.
+
+## Filtrar el desglose por cierre
+
+El filtro **Cierre** se elige de la lista de cierres **de este mensajero** que tienen movimientos,
+cada uno con su día y cuántos movimientos trajo. Podés buscar **por día (2026-09-12) o por nombre**.
+Ya no hay que copiar la dirección de ningún enlace ni pegar nada: elegís el cierre y **Aplicar**. Si la
+lista dice «Mostramos los cierres más recientes», buscá por día para encontrar uno anterior.
 
 ## Registrar un pago
 

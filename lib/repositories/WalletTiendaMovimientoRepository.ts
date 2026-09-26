@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
-import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
+import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 import type {
   CierreDeTiendaAgregadoRow,
   CobroTiendaRegistro,
@@ -264,9 +265,10 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
     const tiendaIds = [...porTienda.keys()];
     const usuarios = await this.prisma.usuario.findMany({
       where: { id: { in: tiendaIds } },
-      select: { id: true, nombre: true },
+      select: { id: true, ...CUENTA_USUARIO_SELECT },
     });
-    const nombrePorId = new Map(usuarios.map((u) => [u.id, u.nombre]));
+    // Ficha 458-A (R33): el nombre de la cuenta con LA funcion de la wallet, no `nombre` a secas.
+    const nombrePorId = new Map(usuarios.map((u) => [u.id, etiquetaDeCuenta(u)]));
 
     return tiendaIds.map((tiendaId) => {
       const acc = porTienda.get(tiendaId)!;
@@ -361,7 +363,7 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
   ): Promise<void> {
     const tienda = await tx.usuario.findUnique({
       where: { id: input.tiendaId },
-      select: { nombre: true },
+      select: CUENTA_USUARIO_SELECT,
     });
     const actor = await resolverActorCongelado(tx, input.actorUsuarioId);
     await appendAccion(tx, [
@@ -370,7 +372,7 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
         entidadTipo: "wallet_tienda_movimiento",
         entidadId: input.cobroId,
         entidadEtiqueta: etiquetaDeEntidad("wallet_tienda_movimiento", {
-          tiendaNombre: tienda?.nombre ?? null,
+          tiendaNombre: tienda === null ? null : etiquetaDeCuenta(tienda),
         }),
         // STRING money-safe -> `Decimal`, sin pasar por `number` (R18).
         monto: new Prisma.Decimal(input.monto),
@@ -381,15 +383,15 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
 
   /**
    * FICHA 461 (R7) — el nombre de la tienda para la linea de caja del cobro, compuesto como lo compone
-   * el resto de la caja y la migracion de datos (nombre + primer apellido, `etiquetaDePersona`).
+   * el resto de la wallet: `etiquetaDeCuenta` (ficha 458-A, R33; antes nombre + primer apellido).
    * Se lee DENTRO de la transaccion del cobro, con el `tx` que recibe.
    */
   async nombreDeTienda(tx: WalletTiendaHistorialTxClient, tiendaId: string): Promise<string> {
     const tienda = await tx.usuario.findUnique({
       where: { id: tiendaId },
-      select: { nombre: true, primerApellido: true },
+      select: CUENTA_USUARIO_SELECT,
     });
-    return etiquetaDePersona(tienda);
+    return etiquetaDeCuenta(tienda);
   }
 
   /**
@@ -412,14 +414,14 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
         monto: true,
         descripcion: true,
         fechaMovimiento: true,
-        tienda: { select: { nombre: true, primerApellido: true } },
+        tienda: { select: CUENTA_USUARIO_SELECT },
       },
     });
     if (fila === null) return null;
     return {
       id: fila.id,
       tiendaId: fila.tiendaId,
-      tiendaNombre: etiquetaDePersona(fila.tienda),
+      tiendaNombre: etiquetaDeCuenta(fila.tienda),
       monto: fila.monto.toFixed(2), // Decimal -> STRING escala 2 (money-safe)
       descripcion: fila.descripcion,
       fechaMovimiento: fila.fechaMovimiento.toISOString(),
