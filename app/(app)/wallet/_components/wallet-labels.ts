@@ -34,10 +34,13 @@ import { proximoCobro, type PeriodicidadUnidad } from "@/lib/utils/periodicidad"
  */
 export { money };
 
-/** Etiqueta legible del tipo de movimiento (ingreso/egreso). */
+/**
+ * Etiqueta legible de la DIRECCIÓN del movimiento. FICHA 458-E (R55, design §5.2): «Entra» / «Sale»,
+ * las palabras del filtro Todo / Entra / Sale y del panel «Ver»; antes «Ingreso» / «Egreso».
+ */
 export const TIPO_LABEL: Record<WalletMovimientoTipo, string> = {
-  ingreso: "Ingreso",
-  egreso: "Egreso",
+  ingreso: "Entra",
+  egreso: "Sale",
 };
 
 export { CATEGORIA_LABEL } from "@/lib/constants/wallet-rotulos";

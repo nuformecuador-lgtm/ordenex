@@ -3,6 +3,7 @@ import {
   COLUMNAS_DESCARGA_WALLET_CAJA,
   filaDescargaMovimientoCaja,
 } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+import type { AutoriaDeFilaDTO } from "@/lib/types/libro-caja-autoria";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 
 // Feature 170 / T C.3 (R5/R7/R8/R23) — columnas de export del libro de caja principal.
@@ -48,25 +49,32 @@ describe("columnas de descarga del libro de caja", () => {
     //    eso sería comparar la lista CONSIGO MISMA: una aserción contra su propia fuente, que
     //    no puede ponerse roja nunca. Sería más débil, no más fuerte.
     //
-    // Feature 231 (T5.3, R34/R35): «dueno» se AÑADE al final, que es donde la tabla la pinta
-    // —la última de los datos, antes de «Acciones»—. Ninguna de las cinco anteriores se mueve
-    // ni se quita, que es exactamente lo que este caso viene afirmando desde la 170: las
-    // columnas están ENUMERADAS y en el ORDEN de la pantalla.
+    // Feature 231 (T5.3, R34/R35): «dueno» se AÑADIÓ al final, que es donde la tabla la pintaba.
+    //
+    // FICHA 458-E (T E.1, design §5.2; R3, R55–R57) — CONTRATO NUEVO, escrito a mano y a propósito:
+    // el archivo sigue el orden de la tabla nueva (Fecha · Movimiento y motivo · A quién · Monto ·
+    // Registró), con el concepto y el motivo en dos columnas y la dirección, el monto y el dueño en
+    // tres (una hoja se filtra y se suma por columna). Las seis claves de antes se CONSERVAN y
+    // entran `aQuien` y `registro`. Sustituye al literal de la 170/231 (listado en impl_458-E.md).
     expect(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave)).toEqual([
       "fecha",
-      "tipo",
       "categoria",
-      "monto",
       "origen",
+      "aQuien",
+      "tipo",
+      "monto",
       "dueno",
+      "registro",
     ]);
     expect(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.encabezado)).toEqual([
       "Fecha",
-      "Tipo",
-      "Categoría",
+      "Movimiento",
+      "Motivo y origen",
+      "A quién",
+      "Entra o sale",
       "Monto",
-      "Origen",
       "Dueño",
+      "Registró",
     ]);
   });
 
@@ -84,7 +92,8 @@ describe("columnas de descarga del libro de caja", () => {
 
   it("emite tipo y categoria como ETIQUETA LEGIBLE, no como valor interno (R8)", () => {
     const fila = filaDescargaMovimientoCaja(MOV);
-    expect(fila.tipo).toBe("Egreso");
+    // FICHA 458-E (R55): la dirección se dice «Entra» / «Sale», como el filtro y la tabla.
+    expect(fila.tipo).toBe("Sale");
     expect(fila.categoria).toBe("Gasto fijo de Ordenex");
     expect(fila.tipo).not.toBe("egreso");
     expect(fila.categoria).not.toBe("egreso_gasto_fijo");
@@ -118,5 +127,41 @@ describe("columnas de descarga del libro de caja", () => {
         expect(celda).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
       }
     }
+  });
+
+  it("458-E R56/R57/R3: «A quién» y «Registró» con los textos de la tabla, nunca un id", () => {
+    const autoria: AutoriaDeFilaDTO = {
+      movimientoId: MOV.id,
+      aQuien: {
+        nombre: "Tania Tienda",
+        beneficiario: "Facebook",
+        // El id de la cuenta viaja para el ENLACE de la pantalla; en la hoja no puede salir.
+        cuenta: { tipo: "tienda", id: "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d" },
+        esOrdenex: false,
+      },
+      registro: { nombre: "Ana Maestra", automatico: null },
+    };
+    const fila = filaDescargaMovimientoCaja(MOV, autoria);
+    expect(fila.aQuien).toBe("Tania Tienda · a Facebook");
+    expect(fila.registro).toBe("Ana Maestra");
+    for (const celda of Object.values(fila)) {
+      if (typeof celda === "string") {
+        expect(celda).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      }
+    }
+
+    // Lo automático, con la acción y quien la decidió.
+    const automatico = filaDescargaMovimientoCaja(MOV, {
+      ...autoria,
+      aQuien: { nombre: null, beneficiario: null, cuenta: null, esOrdenex: false },
+      registro: { nombre: null, automatico: { accion: "plantilla_gasto_fijo", por: null } },
+    });
+    expect(automatico.aQuien).toBe("—");
+    expect(automatico.registro).toBe("Automático · Plantilla de gasto fijo");
+
+    // Sin autoría resuelta: «—», nunca el `registradoPor` crudo.
+    const sin = filaDescargaMovimientoCaja(MOV);
+    expect(sin.aQuien).toBe("—");
+    expect(sin.registro).toBe("—");
   });
 });

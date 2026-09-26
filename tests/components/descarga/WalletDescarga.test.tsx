@@ -43,6 +43,26 @@ vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosDeFilaAction: vi.fn(),
 }));
 
+// FICHA 458-E (T E.1, R56/R57): el módulo del libro lee «A quién» y «Registró» por los ids de la
+// página (y la descarga, por los del libro entero). Doble determinista: cada id se nombra por sí
+// mismo, sin exponerlo (el nombre es «Cuenta N» a partir del sufijo del id del fixture).
+const autoriaMock = vi.fn(async (input: { movimientoIds: string[] }) => ({
+  status: "ok" as const,
+  filas: input.movimientoIds.map((id) => ({
+    movimientoId: id,
+    aQuien: {
+      nombre: `Cuenta ${id.split("-").pop()}`,
+      beneficiario: null,
+      cuenta: null,
+      esOrdenex: false,
+    },
+    registro: { nombre: null, automatico: { accion: "aprobacion_cierre" as const, por: "Ana Maestra" } },
+  })),
+}));
+vi.mock("@/lib/actions/libro-caja-autoria", () => ({
+  autoriaDelLibroCajaAction: (...a: unknown[]) => autoriaMock(...(a as [{ movimientoIds: string[] }])),
+}));
+
 const listarMisMovimientosMock = vi.fn();
 const listarMisMovimientosCompletoMock = vi.fn();
 vi.mock("@/lib/actions/wallet-tienda", () => ({
@@ -657,10 +677,9 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
     // así el caso deja de hablar sólo de las dos categorías de la 173 y afirma lo general —que
     // ninguna categoría del catálogo añade ni quita columnas—, que es lo que el título dice.
     //
-    // La red de que las columnas son LAS QUE SON (las seis anteriores, en su orden, más
-    // «Dueño» en su sitio) la aporta el caso «R35: los encabezados anteriores conservan su
-    // orden y «Dueño» se añade», al final de este archivo. Si alguien borra aquél creyendo que
-    // la protección vive aquí, el libro se queda sin ella.
+    // La red de que las columnas son LAS QUE SON la aporta el caso «458-E R55: los encabezados del
+    // libro son los de la maqueta, en su orden», al final de este archivo. Si alguien borra aquél
+    // creyendo que la protección vive aquí, el libro se queda sin ella.
     const unaPorCategoria: WalletMovimientoDTO[] = WALLET_MOVIMIENTO_CATEGORIA_SEED.map(
       (categoria, i) => ({
         ...movimientoCaja(i + 1),
@@ -746,26 +765,26 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // Feature 231 (T5.1/T5.3) — la columna «Dueño», en la tabla y en el archivo.
 //
-// Los dos casos de aquí abajo son los que D1 pedía AÑADIR al cambiar la aserción de la 173:
-// el caso de arriba sigue protegiendo lo suyo —que las categorías de la 173 no tocan las
-// columnas— y estos fijan lo de ESTA feature: que «Dueño» está, dónde está, y que el archivo
-// dice exactamente la misma palabra que la pantalla.
+// FICHA 458-E (T E.1, design §5.2; R3, R55–R57) — REESCRITO en el MISMO commit que cambia las
+// columnas, como pide el design: aquí el literal ES el contrato. Antes: «R35: los encabezados
+// anteriores conservan su orden y «Dueño» se añade» (seis encabezados de la 170 + «Dueño» antes de
+// «Ver»). Ahora el libro tiene las columnas de la maqueta aprobada (pantalla 3) y «Dueño» viaja
+// DENTRO de «Monto» con la dirección. Lo que el caso R34 de la 231 protegía —que el archivo dice la
+// MISMA palabra que la pantalla— se conserva y se extiende a «A quién» y «Registró».
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
-/** Los seis encabezados que el libro tenía ANTES de esta feature, en su orden. */
-const ENCABEZADOS_ANTERIORES = [
+/** 458-E — los encabezados del libro de la caja, en su orden (maqueta, pantalla 3). */
+const ENCABEZADOS_DEL_LIBRO = [
   "Fecha",
-  "Tipo",
-  "Categoría",
+  "Movimiento y motivo",
+  "A quién",
   "Monto",
-  "Origen",
-  // FICHA 458-C (TC.5): la columna de acciones pasa a «Ver» (contrato nuevo, listado en impl_458-C.md).
+  "Registró",
   "Ver",
 ] as const;
 
-describe("Feature 231 · el libro dice de quién es cada movimiento", () => {
-  it("R35: los encabezados anteriores conservan su orden y «Dueño» se añade", async () => {
-    // Un movimiento de cada naturaleza, para que la tabla tenga las dos palabras dentro.
+describe("458-E · el libro de la caja con las columnas de la maqueta", () => {
+  it("458-E R55: los encabezados del libro son los de la maqueta, en su orden", async () => {
     renderCaja([movimientoCaja(1), movimientoNuevo("ingreso_cod_recaudado", 1)]);
 
     const tabla = await screen.findByRole("table", { name: "Libro de movimientos" });
@@ -773,57 +792,88 @@ describe("Feature 231 · el libro dice de quién es cada movimiento", () => {
       .getAllByRole("columnheader")
       .map((c) => c.textContent);
 
-    // Ninguna de las seis se movió ni se fue: filtradas del juego actual, salen en su orden.
-    expect(
-      encabezados.filter((h) => ENCABEZADOS_ANTERIORES.includes(h as never)),
-    ).toEqual([...ENCABEZADOS_ANTERIORES]);
-
-    // Y «Dueño» entra: una sola columna más, la ÚLTIMA de los datos —justo antes del botón—.
-    //
-    // FICHA 344 — el conteo pasa de 7 a 8 y NINGUNA columna de datos se movió, se añadió ni se
-    // fue: las seis de arriba salen en su orden y «Dueño» sigue justo antes de «Acciones». La de
-    // más es «Desglose», la columna del control de apertura que ANTEPONE la primitiva
-    // `DataTable` en cuanto el consumidor declara `renderExpanded` —lo declara ahora el libro,
-    // para abrir las órdenes que componen el importe de una fila de cierre—. No la declara este
-    // componente y no forma parte de la secuencia que este caso protege, así que se cuenta
-    // aparte y se NOMBRA: si el número volviera a subir, ya no sería por esto.
-    const COLUMNA_DE_DESGLOSE = 1;
-    expect(encabezados[0]).toBe("Desglose");
-    expect(encabezados).toHaveLength(ENCABEZADOS_ANTERIORES.length + 1 + COLUMNA_DE_DESGLOSE);
-    expect(encabezados).toContain("Dueño");
-    expect(encabezados.indexOf("Dueño")).toBe(encabezados.indexOf("Ver") - 1);
+    // FICHA 344: la primera es «Desglose», la columna del control de apertura que ANTEPONE la
+    // primitiva `DataTable` al declarar `renderExpanded`; no la declara el libro y se nombra aparte.
+    expect(encabezados).toEqual(["Desglose", ...ENCABEZADOS_DEL_LIBRO]);
+    // Y ninguna de las columnas retiradas vuelve (su dato vive en «Movimiento y motivo» y «Monto»).
+    for (const retirada of ["Tipo", "Categoría", "Origen", "Dueño", "Acciones"]) {
+      expect(encabezados, retirada).not.toContain(retirada);
+    }
   });
 
-  it("R34: la descarga trae «Dueño» con el mismo texto que muestra la tabla", async () => {
+  it("R34 (231) / 458-E R56/R57: el archivo dice lo mismo que la tabla en «Dueño», «A quién» y «Registró»", async () => {
+    const user = userEvent.setup();
     const propio = movimientoCaja(1); // flete → dinero de Ordenex
     const terceros = movimientoNuevo("ingreso_cod_recaudado", 1); // contra-entrega → tienda
+    listarMovimientosMock.mockResolvedValue({
+      status: "ok",
+      data: { movimientos: [propio, terceros], total: 2, page: 1 },
+    });
+    listarMovimientosCompletoMock.mockResolvedValue({
+      status: "ok",
+      items: [propio, terceros],
+      total: 2,
+    });
     renderCaja([propio, terceros]);
 
     const tabla = await screen.findByRole("table", { name: "Libro de movimientos" });
     const encabezados = within(tabla)
       .getAllByRole("columnheader")
       .map((c) => c.textContent);
-    const columna = encabezados.indexOf("Dueño");
-    expect(columna).toBeGreaterThan(-1);
+    const monto = encabezados.indexOf("Monto");
+    const aQuien = encabezados.indexOf("A quién");
+    const registro = encabezados.indexOf("Registró");
+    expect(Math.min(monto, aQuien, registro)).toBeGreaterThan(-1);
 
-    // Lo que se LEE en la celda de cada fila, en el orden en que llegaron.
+    // La autoría llega (lectura del módulo por los ids de la página).
+    await waitFor(() => {
+      expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
+      expect(within(tabla).queryByText("Cargando…")).toBeNull();
+      expect(within(tabla).getAllByText("Automático · Aprobación del cierre por Ana Maestra")).toHaveLength(2);
+    });
+
     const filasTabla = within(tabla).getAllByRole("row").slice(1);
-    const enPantalla = filasTabla.map(
-      (fila) => within(fila).getAllByRole("cell")[columna].textContent,
-    );
-    expect(enPantalla).toEqual([DUENO_LABEL.propio, DUENO_LABEL.terceros]);
+    const enPantalla = filasTabla.map((fila) => {
+      const celdas = within(fila).getAllByRole("cell");
+      return {
+        dueno: celdas[monto].querySelector("[data-dueno]")?.textContent,
+        aQuien: celdas[aQuien].textContent,
+        registro: celdas[registro].textContent,
+      };
+    });
+    expect(enPantalla.map((f) => f.dueno)).toEqual([DUENO_LABEL.propio, DUENO_LABEL.terceros]);
     // Las dos palabras son DISTINTAS: si «Ordenex» y «Tienda» fueran la misma, la columna
     // entera no diría nada y este caso pasaría igual.
     expect(DUENO_LABEL.propio).not.toBe(DUENO_LABEL.terceros);
 
-    // Y el archivo dice exactamente eso, celda a celda.
-    expect([propio, terceros].map((m) => filaDescargaMovimientoCaja(m).dueno)).toEqual(
-      enPantalla,
-    );
-    // La columna está declarada en la hoja, con su encabezado.
-    expect(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave)).toContain("dueno");
+    // Y el archivo dice exactamente eso, celda a celda, con la autoría leída para el libro ENTERO.
+    await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
+    await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
+    const [columnas, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(columnas.map((c) => c.key)).toEqual(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave));
     expect(
-      COLUMNAS_DESCARGA_WALLET_CAJA.find((c) => c.clave === "dueno")?.encabezado,
-    ).toBe("Dueño");
+      filas.map((f) => ({ dueno: f.dueno, aQuien: f.aQuien, registro: f.registro })),
+    ).toEqual(enPantalla);
+    // R3: ningún id en ninguna celda del archivo.
+    for (const fila of filas) {
+      for (const id of [propio.id, terceros.id, propio.origenId, terceros.origenId]) {
+        expect(Object.values(fila)).not.toContain(id);
+      }
+    }
+  });
+
+  it("458-E: si la autoría no se puede leer, la descarga NO produce archivo", async () => {
+    const user = userEvent.setup();
+    renderCaja();
+    await screen.findByRole("table", { name: "Libro de movimientos" });
+    // La tabla ya pidió SU autoría al montar; la siguiente lectura es la de la descarga, y falla.
+    await waitFor(() => expect(autoriaMock).toHaveBeenCalledTimes(1));
+    autoriaMock.mockResolvedValueOnce({ status: "forbidden" } as never);
+
+    await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
+    await waitFor(() => expect(listarMovimientosCompletoMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(autoriaMock).toHaveBeenCalledTimes(2));
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+    expect(descargarBlobMock).not.toHaveBeenCalled();
   });
 });

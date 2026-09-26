@@ -81,16 +81,32 @@ function fuentesDeWallet(dir = CARPETA_WALLET, acc: string[] = []): string[] {
   return acc;
 }
 
-/** El índice de la columna «Dueño» y las celdas de cada fila de datos. */
+/**
+ * El índice de la columna «Monto» y las celdas de cada fila de datos.
+ *
+ * FICHA 458-E (T E.1, design §5.2, R55) — el dueño deja de ser una columna propia y viaja DENTRO de
+ * «Monto» (dirección + dueño, maqueta pantalla 3). Lo que esta suite protege no cambia —punto +
+ * texto, no insignia; el dato del servidor—; cambia DÓNDE se mira: el elemento `[data-dueno]` de la
+ * celda del monto. Reescrito en el commit que cambia las columnas (listado en impl_458-E.md).
+ */
 function tablaDelLibro() {
   const tabla = screen.getByRole("table", { name: "Libro de movimientos" });
   const encabezados = within(tabla)
     .getAllByRole("columnheader")
     .map((c) => c.textContent);
-  const columna = encabezados.indexOf("Dueño");
-  expect(columna, "el libro no tiene columna «Dueño»").toBeGreaterThan(-1);
+  expect(encabezados, "«Dueño» ya no es una columna propia").not.toContain("Dueño");
+  const columna = encabezados.indexOf("Monto");
+  expect(columna, "el libro no tiene columna «Monto»").toBeGreaterThan(-1);
   const filas = within(tabla).getAllByRole("row").slice(1);
   return { tabla, columna, filas };
+}
+
+/** El dueño de UNA fila: el elemento `[data-dueno]` de su celda de monto. */
+function duenoDe(fila: HTMLElement, columna: number): HTMLElement {
+  const celda = within(fila).getAllByRole("cell")[columna];
+  const dueno = celda.querySelector<HTMLElement>("[data-dueno]");
+  expect(dueno, "la celda del monto no dice de quién es el dinero").not.toBeNull();
+  return dueno as HTMLElement;
 }
 
 afterEach(() => {
@@ -105,8 +121,7 @@ describe("WalletLedger — la columna «Dueño» (R31/R33)", () => {
     expect(filas).toHaveLength(2);
 
     for (const fila of filas) {
-      const celdas = within(fila).getAllByRole("cell");
-      const celdaDueno = celdas[columna];
+      const celdaDueno = duenoDe(fila, columna);
 
       // El punto: un elemento redondo, pequeño y DECORATIVO — quien no ve color lee la palabra.
       const punto = celdaDueno.querySelector<HTMLElement>("[aria-hidden='true']");
@@ -123,8 +138,9 @@ describe("WalletLedger — la columna «Dueño» (R31/R33)", () => {
       ).toBeNull();
 
       // CONTROL DE NO-VACUIDAD del `not`: el detector SÍ encuentra insignias donde las hay.
-      // La misma fila lleva una —la del tipo—; sin esta comprobación, un selector mal escrito
-      // dejaría la aserción de arriba pasando por no mirar nada.
+      // La misma fila —y la misma celda del monto— lleva una, la de la dirección (Entra / Sale);
+      // sin esta comprobación, un selector mal escrito dejaría la aserción de arriba pasando por
+      // no mirar nada.
       const insigniasEnLaFila = fila.querySelectorAll('[data-slot="badge"]');
       expect(insigniasEnLaFila.length, "la fila no tiene ninguna insignia").toBeGreaterThan(0);
       for (const insignia of insigniasEnLaFila) {
@@ -137,7 +153,7 @@ describe("WalletLedger — la columna «Dueño» (R31/R33)", () => {
     renderLedger(<WalletLedger movimientos={[INGRESO_PROPIO, INGRESO_DE_TERCEROS]} />);
 
     const { columna, filas } = tablaDelLibro();
-    const textos = filas.map((f) => within(f).getAllByRole("cell")[columna].textContent);
+    const textos = filas.map((f) => duenoDe(f, columna).textContent);
 
     expect(textos).toEqual([DUENO_LABEL.propio, DUENO_LABEL.terceros]);
     // Las dos palabras son distintas: si fueran la misma, la columna no diría nada y este
@@ -145,10 +161,7 @@ describe("WalletLedger — la columna «Dueño» (R31/R33)", () => {
     expect(DUENO_LABEL.propio).not.toBe(DUENO_LABEL.terceros);
     // Y el punto tampoco es el mismo color en las dos filas.
     const puntos = filas.map(
-      (f) =>
-        within(f).getAllByRole("cell")[columna].querySelector<HTMLElement>(
-          "[aria-hidden='true']",
-        )?.className ?? "",
+      (f) => duenoDe(f, columna).querySelector<HTMLElement>("[aria-hidden='true']")?.className ?? "",
     );
     expect(puntos[0]).not.toBe(puntos[1]);
 
@@ -158,9 +171,7 @@ describe("WalletLedger — la columna «Dueño» (R31/R33)", () => {
       <WalletLedger movimientos={[{ ...INGRESO_PROPIO, dueno: "terceros" }]} />,
     );
     const segundo = tablaDelLibro();
-    expect(
-      within(segundo.filas[0]).getAllByRole("cell")[segundo.columna].textContent,
-    ).toBe(DUENO_LABEL.terceros);
+    expect(duenoDe(segundo.filas[0], segundo.columna).textContent).toBe(DUENO_LABEL.terceros);
   });
 });
 
