@@ -88,7 +88,7 @@ quienesDelLibroCajaAction(input: {
 type QuienDelLibroCajaOpcionDTO = {
   valor: AQuienFiltro;                        // se manda TAL CUAL como `aQuien`; viaja, no se pinta (H6)
   clase: "tienda" | "mensajero" | "nombre";   // para el rótulo («Tienda», «Mensajero», «Nombre anotado»)
-  nombre: string;                             // nombreCompletoUsuario (el mismo texto que la columna «A quién»)
+  nombre: string;                             // cuenta: etiquetaDeCuenta (458-A R33); nombre libre: el anotado, recortado
   movimientos: number;                        // filas de la caja en el periodo: cardinal, nunca dinero
 };
 
@@ -119,12 +119,20 @@ type QuienDelLibroCajaOpcionDTO = {
 | `lib/repositories/FiltrosWalletRepository.ts` | `contarConceptosCaja` con `aQuien`; `quienesDelLibroCaja` |
 | `lib/services/WalletService.ts`, `WalletEgresoService.ts` | pasan `aQuien` al repositorio |
 | `lib/services/FiltrosWalletService.ts` | `quienesDelLibroCaja` (rol, búsqueda, orden, tope) + `opcionesDeQuienes` |
-| `lib/actions/wallet-filtros.ts` | `quienesDelLibroCajaAction` |
+| `lib/actions/wallet-filtros.ts` | `quienesDelLibroCajaAction`, con `@sin-superficie` hasta que el frontend la cablee (guardia `superficie-de-uso`) |
 | `lib/interfaces/**` (3) | los contratos de lo anterior |
 | `lib/config/wallet-movimiento.ts` | `MAX_QUIENES_FILTRO` |
 | `tests/unit/guards/caja-173-alcance.guardia.test.ts` | **modificado**: el cliente mínimo gana `$queryRaw` (compila) + caso nuevo «el filtro «A quién» solo SUMA la caja» (toda `SUM(` del repo es `SUM(w."monto")`; el módulo del cruce no nombra `monto`). R33 de la 173 no se relaja: otras tablas solo como criterio de pertenencia |
 | `tests/integration/db/libro-caja-filtro-a-quien.test.ts` | **nuevo** (16) |
 | `tests/unit/services/filtros-wallet-quienes-458e.test.ts` | **nuevo** (10) |
+
+### Lo que el primer gate encontró (INIT_EXIT=1, 3 rojos nuevos, los tres míos) y cómo se cerró
+
+| Guardia / test | Qué dijo | Arreglo |
+| --- | --- | --- |
+| `superficie-de-uso.guardia` | `quienesDelLibroCajaAction` no la importa ninguna ruta | `@sin-superficie` con el motivo real (el control es de frontend_dev); se borra al cablearlo |
+| `wallet-movimiento-repository` (R47) | la clase ganó un método (`gruposConAQuien`) | pasa a función del módulo: la superficie sigue siendo de nueve métodos |
+| `wallet-etiqueta-cuenta.guardia` (458-A R33) | `FiltrosWalletRepository` nombraba la cuenta con `nombreCompletoUsuario` | `etiquetaDeCuenta` (la función única de la wallet) |
 
 ### R59 → tests
 
@@ -148,7 +156,7 @@ El oráculo del test NO es el código probado: el conjunto esperado sale de `Lib
 | M1 | la cuenta sale del `EXISTS` (sin `= id`) | 4/25 |
 | M2 | el nombre libre no se compara | 2/25 |
 | M3 | el repositorio ignora `aQuien` (vuelve al `where` de Prisma) | 8/25 |
-| M4 | tarjetas y desglose agregan sin el WHERE | 3/25 |
+| M4 | tarjetas y desglose agregan sin el WHERE | 3/25; re-medida tras el arreglo del gate: 3/26 |
 | M5 | el desglose no pasa `aQuien` | 2/25 |
 | M6 | `construirFiltros` no pasa `aQuien` | 9/25 |
 | M7 | el selector de nombres ignora el periodo | 1/25 |

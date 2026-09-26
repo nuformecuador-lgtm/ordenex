@@ -134,7 +134,7 @@ export type QuienDelLibroCajaOpcionDTO = {
   valor: AQuienFiltro;
   /** Que es: una tienda, un mensajero o un nombre libre anotado a mano. */
   clase: AQuienCuentaTipo | "nombre";
-  /** El nombre, con la misma funcion que la columna «A quién» (`nombreCompletoUsuario`). */
+  /** El nombre: `etiquetaDeCuenta` para una cuenta (458-A, R33); el nombre anotado, recortado. */
   nombre: string;
   movimientos: number;
 };

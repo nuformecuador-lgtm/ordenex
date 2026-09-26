@@ -18,7 +18,6 @@ import {
 } from "@/lib/repositories/libro-caja-a-quien-sql";
 import type { AQuienCuentaTipo } from "@/lib/types/libro-caja-a-quien";
 import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
-import { nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 type FiltrosPrismaClient = Pick<
   PrismaClient,
@@ -160,11 +159,12 @@ export class FiltrosWalletRepository implements IFiltrosWalletRepository {
     >(cuentasConMovimientosSql(filtros));
     const nombres = await this.prisma.$queryRaw<NombreConMovimientosRow[]>(nombresConMovimientosSql(filtros));
     return {
-      // El nombre con la MISMA funcion que la columna «A quién» (`LibroCajaAutoriaRepository`).
+      // La cuenta se nombra con la funcion UNICA de la wallet (458-A, R33: `etiquetaDeCuenta`, que
+      // es `nombreCompletoUsuario` sin espacios dobles): las tres columnas de `CUENTA_USUARIO_SELECT`.
       cuentas: cuentas.map((c) => ({
         tipo: c.tipo,
         cuentaId: c.cuentaId,
-        nombre: nombreCompletoUsuario(c),
+        nombre: etiquetaDeCuenta(c),
         movimientos: c.movimientos,
       })),
       nombres,

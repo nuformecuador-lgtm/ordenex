@@ -17,7 +17,7 @@ export type FiltrosConteoCaja = {
 /** Ficha 458-E (R59) — el periodo y la direccion de las opciones del selector «A quién». */
 export type FiltrosQuienesCaja = { tipo?: WalletMovimientoTipo; desde?: Date; hasta?: Date };
 
-/** Una cuenta con filas en la caja: su nombre (`nombreCompletoUsuario`) y cuantas filas. */
+/** Una cuenta con filas en la caja: su nombre (`etiquetaDeCuenta`) y cuantas filas. */
 export type CuentaConMovimientosRow = {
   tipo: AQuienCuentaTipo;
   cuentaId: string;

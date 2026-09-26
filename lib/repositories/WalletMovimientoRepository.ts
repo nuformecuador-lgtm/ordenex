@@ -115,6 +115,21 @@ function conAQuien<F extends BalanceFiltros>(f: F): (F & { aQuien: AQuienFiltro 
 type GrupoSql = { categoria: WalletMovimientoCategoria; tipo: MovimientoRow["tipo"]; total: Prisma.Decimal | null };
 
 /**
+ * Ficha 458-E (R59): `SUM(monto)` por (categoria, tipo) con el WHERE de «A quién». Funcion del modulo
+ * y no metodo: la superficie de la clase sigue siendo la de R47 (nueve metodos, ninguno que escriba).
+ */
+async function gruposConAQuien(
+  prisma: Pick<PrismaClient, "$queryRaw">,
+  f: BalanceFiltros & { aQuien: AQuienFiltro },
+): Promise<GrupoSql[]> {
+  return prisma.$queryRaw<GrupoSql[]>(Prisma.sql`
+    SELECT w."categoria"::text AS "categoria", w."tipo"::text AS "tipo", SUM(w."monto") AS "total"
+    FROM "wallet_movimiento" w
+    WHERE ${whereLibroCajaSql(f)}
+    GROUP BY w."categoria", w."tipo"`);
+}
+
+/**
  * Feature 42 — repositorio del LIBRO de movimientos de la wallet. SOLO queries Prisma.
  * Inserta idempotentemente (skipDuplicates -> ON CONFLICT DO NOTHING, R6/R13), lista
  * paginado por fecha desc con filtros en el WHERE (R20/R24) y agrega por (categoria, tipo)
@@ -276,7 +291,7 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
     const f = conAQuien(filtros);
     if (f !== null) {
       // Ficha 458-E (R59): la misma agrupacion sobre el MISMO WHERE que `listar` con «A quién».
-      const grupos = await this.gruposConAQuien(f);
+      const grupos = await gruposConAQuien(this.prisma, f);
       return grupos.map((g) => ({
         categoria: g.categoria,
         tipo: g.tipo,
@@ -356,7 +371,7 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
     if (f !== null) {
       // Ficha 458-E (R59): con «A quién», la suma por categoria sale de los grupos (categoria, tipo)
       // del MISMO WHERE que el libro. Se suman TODOS los grupos de la categoria (con `Decimal`).
-      const grupos = await this.gruposConAQuien(f);
+      const grupos = await gruposConAQuien(this.prisma, f);
       const sumaConAQuien = (categoria: string): string =>
         grupos
           .filter((g) => g.categoria === categoria)
@@ -385,14 +400,5 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       sueldo: sumaDe("egreso_sueldo"),
       indemnizacion: sumaDe("egreso_indemnizacion"), // feature 158/R32
     };
-  }
-
-  /** Ficha 458-E (R59): `SUM(monto)` por (categoria, tipo) con el WHERE de «A quién». */
-  private async gruposConAQuien(f: BalanceFiltros & { aQuien: AQuienFiltro }): Promise<GrupoSql[]> {
-    return this.prisma.$queryRaw<GrupoSql[]>(Prisma.sql`
-      SELECT w."categoria"::text AS "categoria", w."tipo"::text AS "tipo", SUM(w."monto") AS "total"
-      FROM "wallet_movimiento" w
-      WHERE ${whereLibroCajaSql(f)}
-      GROUP BY w."categoria", w."tipo"`);
   }
 }

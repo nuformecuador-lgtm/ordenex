@@ -35,8 +35,9 @@
    "que": "las tarjetas y el desglose agregan sin el WHERE",
    "archivo": "lib/repositories/WalletMovimientoRepository.ts",
    "rojos": 3,
-   "corridos": 25,
-   "restaurado": true
+   "corridos": 26,
+   "restaurado": true,
+   "nota": "re-medida tras mover la agregacion a una funcion del modulo (gate: superficie R47 de la clase): 3 rojos de 26; restaurada byte a byte sobre el arbol con el arreglo sin commitear"
   },
   {
    "id": "M5",

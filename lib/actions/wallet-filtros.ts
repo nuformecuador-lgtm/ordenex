@@ -94,6 +94,8 @@ export async function cierresDeLaCuentaAction(
  * pedidos, buscables por nombre, con tope de configuracion y `hayMas`. Cada opcion trae en `valor` el
  * `aQuien` que se manda de vuelta al libro (`listarMovimientosAction`, `verResumenCajaAction`,
  * `verDesgloseEgresosAction`, la descarga y el detalle de la composicion). Solo acceso total.
+ *
+ * @sin-superficie FICHA 458-E (TE.2, R59): la parte servidor del filtro «A quién» se entrega ANTES que su control; el `SelectorBuscable` de `WalletFiltros` es de frontend_dev (pendiente en `progress/impl_458-E.md`) y esta anotacion se borra al cablearlo.
  */
 export async function quienesDelLibroCajaAction(
   input: unknown,
