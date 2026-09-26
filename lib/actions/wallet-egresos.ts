@@ -83,11 +83,11 @@ export interface WalletEgresoDeps {
  * FICHA 458-B (R42/R74): acepta tambien un `FormData` con `contraparteNombre`, `referencia` y
  * `comprobante` opcionales (molde 459); anotacion y comprobante van en la MISMA transaccion.
  */
-export function registrarEgresoAdministrativoAction(
+export async function registrarEgresoAdministrativoAction(
   input: FormData,
   deps?: WalletEgresoDeps,
 ): Promise<RegistrarEgresoConComprobanteActionResult>;
-export function registrarEgresoAdministrativoAction(
+export async function registrarEgresoAdministrativoAction(
   input: unknown,
   deps?: WalletEgresoDeps,
 ): Promise<RegistrarEgresoActionResult>;

@@ -146,11 +146,11 @@ export async function registrarPagoMensajeroAction(
  * R3/R29 — registra un pago a una TIENDA contra su saldo acumulado. Sin cierre: `.strict()`
  * rechaza un `cierreId` colado en la peticion.
  */
-export function registrarPagoTiendaAction(
+export async function registrarPagoTiendaAction(
   input: FormData,
   deps?: LiquidacionDeps,
 ): Promise<RegistrarPagoConComprobanteActionResult>;
-export function registrarPagoTiendaAction(
+export async function registrarPagoTiendaAction(
   input: unknown,
   deps?: LiquidacionDeps,
 ): Promise<RegistrarPagoActionResult>;
@@ -218,11 +218,11 @@ export async function previsualizarRepartoMensajeroAction(
  * excepcion que esta accion llevo anotada mientras esa pantalla no existia quedo BORRADA al
  * montarla: el guard `superficie-de-uso` exige que ninguna excepcion sobreviva a su motivo.
  */
-export function registrarRepartoMensajeroAction(
+export async function registrarRepartoMensajeroAction(
   input: FormData,
   deps?: LiquidacionDeps,
 ): Promise<RegistrarRepartoConComprobanteActionResult>;
-export function registrarRepartoMensajeroAction(
+export async function registrarRepartoMensajeroAction(
   input: unknown,
   deps?: LiquidacionDeps,
 ): Promise<RegistrarRepartoActionResult>;
