@@ -91,9 +91,11 @@ export const CATEGORIA_TIENDA_OPTIONS = [
  */
 export const DESGLOSE_TIENDA_LABEL = {
   aFavor: "A favor de la tienda",
-  aFavorHint: "Contra-entrega cobrado, correcciones a favor y devoluciones por anulaciones",
+  // Ficha 457 (design §2, R50): nombra el pago de la tienda a Ordenex y su anulación.
+  aFavorHint:
+    "Contra-entrega cobrado, correcciones a favor, pagos de la tienda a Ordenex y devoluciones por anulaciones",
   cargos: "Cargos de Ordenex",
-  cargosHint: "Fletes, comisión, IVA y los cobros de Ordenex a la tienda",
+  cargosHint: "Fletes, comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados",
   pagado: "Pagado a la tienda",
   pagadoHint: "Lo que Ordenex le pagó a la tienda o pagó por ella",
   saldo: "Saldo a favor",

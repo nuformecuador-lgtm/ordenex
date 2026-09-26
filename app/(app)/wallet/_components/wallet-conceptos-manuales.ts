@@ -39,10 +39,15 @@ import {
 // ganancia y baja «De las tiendas» sin tocar «Entró»), así que cae en los DOS libros como el pago
 // de un gasto, y su grupo se llama por lo que hace («Se descuenta del saldo de una tienda»).
 //
+// FICHA 457 (design §8.1/§8.2, R54/R55/R67) — entra el OCTAVO concepto, «Una tienda le paga a
+// Ordenex», en el grupo «Llega dinero a la caja»: una tienda con saldo en contra le paga a Ordenex
+// lo que debe. Escribe en los DOS libros (el crédito en la tienda y el ingreso de terceros en la
+// caja) y es el ÚNICO concepto que acredita dinero a una tienda (la guardia de alcance lo exige).
+//
 // Módulo PURO: sin React y sin leer ningún reloj. La fecha del movimiento la pone el diálogo.
 
 /**
- * Los SIETE conceptos, en el orden en que se ofrecen: tres tramos CONSECUTIVOS, uno por grupo
+ * Los OCHO conceptos (ficha 457), en el orden en que se ofrecen: tres tramos CONSECUTIVOS, uno por grupo
  * (el `Select` agrupa por tramos, `components/ui/select.tsx`). `gasto_fijo` NO está: lo emite el
  * cron. El primero sigue siendo el gasto de Ordenex: quien abre y registra sin tocar el selector
  * registra lo mismo que antes.
@@ -53,6 +58,7 @@ export const CONCEPTO_MANUAL_IDS = [
   "pago_por_cuenta_tienda",
   "ajuste_egreso",
   "aporte_capital",
+  "abono_tienda",
   "ajuste_ingreso",
   "cobro_tienda",
 ] as const;
@@ -98,6 +104,14 @@ export type DestinoConcepto =
       // FICHA 459 (R68): entrada de capital de Ordenex en la caja.
       readonly clase: "aporte_capital";
       readonly categoria: WalletMovimientoCategoria;
+    }
+  | {
+      // FICHA 457 (design §8.1): el pago de una tienda a Ordenex. Escribe en los DOS libros — el
+      // ingreso de terceros en la caja y el CRÉDITO en la tienda. Ninguna de las dos viaja: las
+      // decide el servicio.
+      readonly clase: "abono_tienda";
+      readonly categoria: "ingreso_abono_tienda";
+      readonly categoriaTienda: "abono_tienda";
     };
 
 /**
@@ -138,7 +152,10 @@ export interface ConceptoManual {
   readonly grupo: GrupoConcepto;
 }
 
-/** Ficha 461 (design §7.1, R39): los siete nombres, desde Ordenex y diciendo quién le paga a quién. */
+/**
+ * Ficha 461 (design §7.1, R39): los nombres, desde Ordenex y diciendo quién le paga a quién.
+ * Ficha 457: ocho.
+ */
 export const CONCEPTOS_MANUALES: readonly ConceptoManual[] = [
   {
     id: "gasto_variable",
@@ -201,6 +218,21 @@ export const CONCEPTOS_MANUALES: readonly ConceptoManual[] = [
     grupo: "entra",
   },
   {
+    // ⭑ FICHA 457 (design §8.1, R54) — una tienda con saldo en contra le paga a Ordenex lo que debe.
+    // Llega dinero DE LA TIENDA (terceros): su saldo sube y la ganancia no cambia (ya se contó al
+    // aprobar cada cierre). Solo con saldo en contra y hasta lo que debe: lo decide el servidor.
+    id: "abono_tienda",
+    label: "Una tienda le paga a Ordenex",
+    descripcionLabel: "Motivo del pago",
+    descripcionPlaceholder: "Ej. Pago de lo que debía por los fletes de septiembre",
+    destino: {
+      clase: "abono_tienda",
+      categoria: "ingreso_abono_tienda",
+      categoriaTienda: "abono_tienda",
+    },
+    grupo: "entra",
+  },
+  {
     // R7 — la corrección que SUMA. El nombre dice lo que le pasa al dinero, no el nombre del enum:
     // «ingreso_ajuste» no se le enseña a nadie.
     id: "ajuste_ingreso",
@@ -256,6 +288,9 @@ export const FRASE_DEL_EFECTO: Record<ConceptoManualId, string> = {
     "Sale dinero de Ordenex hacia un tercero (Facebook, Jet Cargo…) y se descuenta del saldo de la tienda; la ganancia no cambia.",
   ajuste_egreso: "Sale dinero de la caja para corregir un descuadre y baja la ganancia de Ordenex.",
   aporte_capital: "Llega dinero de Ordenex a la caja; no es ganancia, la ganancia no cambia.",
+  // Ficha 457 (design §8.2, R55): literal.
+  abono_tienda:
+    "Llega dinero de la tienda a la caja: paga lo que debe y su saldo sube; la ganancia de Ordenex no cambia.",
   ajuste_ingreso: "Llega dinero a la caja para corregir un descuadre y sube la ganancia de Ordenex.",
   cobro_tienda:
     "No llega dinero nuevo: se descuenta del saldo a favor de la tienda y pasa a ser ganancia de Ordenex; si la tienda no tiene saldo, queda en contra.",
@@ -271,6 +306,8 @@ export const FRASE_DEL_EFECTO: Record<ConceptoManualId, string> = {
 export function libroDelConcepto(concepto: ConceptoManual): LibroDestino {
   if (concepto.destino.clase === "cobro_tienda") return "caja_y_tienda";
   if (concepto.destino.clase === "pago_por_cuenta_tienda") return "caja_y_tienda";
+  // FICHA 457: el pago de una tienda a Ordenex también.
+  if (concepto.destino.clase === "abono_tienda") return "caja_y_tienda";
   return "caja";
 }
 
@@ -294,7 +331,9 @@ export function nombreEnElLibro(concepto: ConceptoManual): string {
  */
 export function nombreEnElLibroDeLaTienda(concepto: ConceptoManual): string {
   const { destino } = concepto;
-  return destino.clase === "pago_por_cuenta_tienda" || destino.clase === "cobro_tienda"
+  return destino.clase === "pago_por_cuenta_tienda" ||
+    destino.clase === "cobro_tienda" ||
+    destino.clase === "abono_tienda"
     ? CATEGORIA_TIENDA_LABEL[destino.categoriaTienda]
     : "";
 }
@@ -337,11 +376,17 @@ export const CABECERA_CAJA = {
  * si hay un error, se anula desde el libro de la caja con un motivo (R19/R20). La del cobro ya no
  * dice «no se puede editar ni deshacer»: desde esta ficha SÍ se anula (HD1).
  */
-const DESCRIPCION_CABECERA_DOS_LIBROS: Record<"pago_por_cuenta_tienda" | "cobro_tienda", string> = {
+const DESCRIPCION_CABECERA_DOS_LIBROS: Record<
+  "pago_por_cuenta_tienda" | "cobro_tienda" | "abono_tienda",
+  string
+> = {
   pago_por_cuenta_tienda:
     "Elegí la tienda, a quién se le pagó, el monto y la fecha. El pago no se puede editar: si hay un error, se anula desde el libro de la caja con un motivo.",
   cobro_tienda:
     "Elegí la tienda, el monto y la fecha. El cobro se descuenta de lo que Ordenex le debe a esa tienda y no se edita: si hay un error, se anula desde el libro de la caja con un motivo.",
+  // FICHA 457 (design §8.1): literal.
+  abono_tienda:
+    "Elegí la tienda, el monto, la fecha real y el método. Solo se admite si la tienda tiene saldo en contra y hasta lo que debe. El pago no se edita: si hay un error, se anula desde el libro de la caja con un motivo.",
 };
 
 /**
@@ -355,7 +400,11 @@ export function cabeceraDelConcepto(concepto: ConceptoManual): {
   readonly descripcion: string;
 } {
   const { destino } = concepto;
-  if (destino.clase === "pago_por_cuenta_tienda" || destino.clase === "cobro_tienda") {
+  if (
+    destino.clase === "pago_por_cuenta_tienda" ||
+    destino.clase === "cobro_tienda" ||
+    destino.clase === "abono_tienda"
+  ) {
     return { titulo: concepto.label, descripcion: DESCRIPCION_CABECERA_DOS_LIBROS[destino.clase] };
   }
   return CABECERA_CAJA;

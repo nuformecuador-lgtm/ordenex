@@ -45,12 +45,14 @@ export { money } from "@/lib/config/moneda";
 // cobró» / «Ordenex anuló un cobro y te lo devolvió». Sin la sigla «COD» (P9).
 export const DESGLOSE_MI_WALLET_LABEL = {
   aFavor: "A tu favor",
-  aFavorHint: "Lo cobrado a tus clientes, las correcciones a tu favor y lo que Ordenex te devolvió al anular",
+  // Ficha 457 (design §2, R50): nombra lo que le pagaste a Ordenex y su anulación.
+  aFavorHint:
+    "Lo cobrado a tus clientes, las correcciones a tu favor, lo que le pagaste a Ordenex y lo que Ordenex te devolvió al anular",
   cargos: "Cargos de Ordenex",
   // FICHA 381 (R37) — la enumeración no es solo de conceptos AUTOMÁTICOS: dentro de este importe
   // puede haber un cobro decidido por una persona, y la tienda tiene que poder relacionarlo con la
   // fila que va a leer en su libro («Ordenex te cobró»).
-  cargosHint: "Fletes, comisión, IVA y lo que Ordenex te cobró",
+  cargosHint: "Fletes, comisión, IVA, lo que Ordenex te cobró y los pagos a Ordenex que se anularon",
   pagado: "Ya pagado",
   // Ficha 459 (T B.17, design §5): el pago de un gasto de la tienda cae en `pagado` (dinero
   // entregado a la tienda a traves de un tercero, decision de la 458 §2.6), y la pista lo nombra.

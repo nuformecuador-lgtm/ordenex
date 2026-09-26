@@ -97,8 +97,20 @@ export const NOMBRES_TOMADOS_457: ReadonlyArray<{
   nombre: string;
   diccionario: string;
   clave: string;
+  /**
+   * Frontend 457 (T6.3): las OTRAS posiciones que `design.md` §2 le asigna al mismo nombre, y solo
+   * esas. «Una tienda le paga a Ordenex» es también el nombre del concepto en el diálogo (fila
+   * «Diálogo: concepto», `CONCEPTOS_MANUALES[].label`, clave `abono_tienda`), igual que «Ordenex le
+   * cobra a una tienda» es a la vez categoría de caja y concepto.
+   */
+  tambien?: readonly string[];
 }> = [
-  { nombre: "Una tienda le paga a Ordenex", diccionario: "CATEGORIA_LABEL", clave: "ingreso_abono_tienda" },
+  {
+    nombre: "Una tienda le paga a Ordenex",
+    diccionario: "CATEGORIA_LABEL",
+    clave: "ingreso_abono_tienda",
+    tambien: ["CONCEPTOS_MANUALES.label.abono_tienda"],
+  },
   {
     nombre: "Pago de una tienda a Ordenex anulado",
     diccionario: "CATEGORIA_LABEL",
@@ -250,6 +262,8 @@ const DICCIONARIOS_POR_NOMBRE: Record<string, Record<string, string>> = {
   CATEGORIA_LABEL,
   CATEGORIA_TIENDA_LABEL,
   CATEGORIA_MI_WALLET_LABEL,
+  // Frontend 457: el catálogo del diálogo, por id de concepto (para decir QUÉ concepto lo dice).
+  "CONCEPTOS_MANUALES.label": Object.fromEntries(CONCEPTOS_MANUALES.map((c) => [c.id, c.label])),
 };
 
 /** Las claves de TODOS los diccionarios de la wallet y del historial cuyo valor es `nombre`. */
@@ -273,7 +287,15 @@ describe("457/R53 — los nombres que la 461 reservó quedan tomados EXACTAMENTE
 
   it.each(NOMBRES_TOMADOS_457)("«$nombre» es el valor de $diccionario.$clave y de ninguna otra clave", (t) => {
     expect(DICCIONARIOS_POR_NOMBRE[t.diccionario][t.clave]).toBe(t.nombre);
-    expect(quienesDicen(t.nombre)).toEqual([`${t.diccionario}.${t.clave}`]);
+    expect(quienesDicen(t.nombre).sort()).toEqual([`${t.diccionario}.${t.clave}`, ...(t.tambien ?? [])].sort());
+  });
+
+  it("⭑ frontend 457: el concepto del diálogo que dice «Una tienda le paga a Ordenex» es EXACTAMENTE el `abono_tienda`", () => {
+    expect(DICCIONARIOS_POR_NOMBRE["CONCEPTOS_MANUALES.label"].abono_tienda).toBe("Una tienda le paga a Ordenex");
+    // Los otros tres tomados NO son nombre de ningún concepto del diálogo.
+    for (const t of NOMBRES_TOMADOS_457.filter((x) => x.tambien === undefined)) {
+      expect(quienesDicen(t.nombre).filter((q) => q.startsWith("CONCEPTOS_MANUALES")), t.nombre).toEqual([]);
+    }
   });
 
   it("el quinto reservado («Pago a Ordenex anulado») quedó sin uso: nadie lo dice (D10 de la 457)", () => {

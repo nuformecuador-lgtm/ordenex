@@ -16,8 +16,9 @@ import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
  *   (2) `AbonoTiendaService` NO se construye sin su puerto de caja (el constructor lo exige por tipo, sin
  *       `?` ni default), y el metodo que escribe el credito llama a `emitirIngresoDeAbono` dentro del
  *       MISMO `runTransaction`;
- *   (3) el catalogo del dialogo «Registrar movimiento» no ofrece NINGUN concepto que acredite a una tienda
- *       salvo, si existe, el del pago de la tienda a Ordenex (clase `abono_tienda`), y como mucho uno.
+ *   (3) el catalogo del dialogo «Registrar movimiento» tiene EXACTAMENTE un concepto que acredita a una
+ *       tienda, y es el del pago de la tienda a Ordenex (clase `abono_tienda`). [T6.3 del frontend: el
+ *       backend lo dejo en «como mucho uno» mientras el concepto no existia; al añadirlo se aprieta.]
  *
  * Las tres son AUSENCIAS, asi que cada una lleva su CONTROL DE NO-VACUIDAD y su CONTRAPRUEBA (una fuente
  * mutada la pone roja): sin eso un `grep` mal escrito da la misma salida vacia que un alcance respetado.
@@ -109,7 +110,7 @@ describe("457/R65 — `AbonoTiendaService` exige su puerto de caja y lo llama en
   });
 });
 
-// ── (3) el dialogo: como mucho UN concepto acredita a una tienda, y es el pago de la tienda a Ordenex ──
+// ── (3) el dialogo: EXACTAMENTE un concepto acredita a una tienda, y es el pago de la tienda a Ordenex ──
 
 type Concepto = (typeof CONCEPTOS_MANUALES)[number];
 
@@ -130,14 +131,20 @@ describe("457/R67 — el unico concepto del dialogo que acredita a una tienda es
     expect(TIPO_POR_CATEGORIA_TIENDA.abono_tienda).toBe("credito");
   });
 
-  it("los conceptos que acreditan son, como mucho, uno: el de clase `abono_tienda`", () => {
+  it("los conceptos que acreditan son EXACTAMENTE uno: el de clase `abono_tienda`", () => {
     const acreditan = conceptosQueAcreditan(CONCEPTOS_MANUALES);
-    expect(acreditan.length).toBeLessThanOrEqual(1);
-    for (const id of acreditan) {
-      const c = CONCEPTOS_MANUALES.find((x) => x.id === id);
-      expect(c?.destino.clase, id).toBe("abono_tienda");
-      expect((c?.destino as { categoriaTienda?: string }).categoriaTienda, id).toBe("abono_tienda");
-    }
+    expect(acreditan).toEqual(["abono_tienda"]);
+    const c = CONCEPTOS_MANUALES.find((x) => x.id === "abono_tienda");
+    expect(c?.destino.clase).toBe("abono_tienda");
+    expect((c?.destino as { categoriaTienda?: string }).categoriaTienda).toBe("abono_tienda");
+    // Y ese concepto entra a la caja por su ingreso de terceros (R67: el mismo importe en la caja).
+    expect(c?.destino.categoria).toBe("ingreso_abono_tienda");
+  });
+
+  it("CONTRAPRUEBA: sin el concepto del pago, el catalogo ya no cumple «exactamente uno»", () => {
+    const sinAbono = CONCEPTOS_MANUALES.filter((c) => c.id !== "abono_tienda");
+    expect(sinAbono.length).toBe(CONCEPTOS_MANUALES.length - 1);
+    expect(conceptosQueAcreditan(sinAbono)).toEqual([]);
   });
 
   it("CONTRAPRUEBA: un concepto que acreditara con `cobro_tienda_anulado` o `ajuste_credito` se detecta", () => {

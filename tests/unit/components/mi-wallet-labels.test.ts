@@ -148,9 +148,9 @@ describe("461 — CATEGORIA_MI_WALLET_LABEL: la lectura desde la tienda (R44, de
 describe("461 — la cabecera de /mi-wallet habla desde la tienda (R45, design §7.5)", () => {
   it("las tres pistas, literales, y sin la sigla «COD»", () => {
     expect(DESGLOSE_MI_WALLET_LABEL.aFavorHint).toBe(
-      "Lo cobrado a tus clientes, las correcciones a tu favor y lo que Ordenex te devolvió al anular",
+      "Lo cobrado a tus clientes, las correcciones a tu favor, lo que le pagaste a Ordenex y lo que Ordenex te devolvió al anular",
     );
-    expect(DESGLOSE_MI_WALLET_LABEL.cargosHint).toBe("Fletes, comisión, IVA y lo que Ordenex te cobró");
+    expect(DESGLOSE_MI_WALLET_LABEL.cargosHint).toBe("Fletes, comisión, IVA, lo que Ordenex te cobró y los pagos a Ordenex que se anularon");
     expect(DESGLOSE_MI_WALLET_LABEL.pagadoHint).toBe("Lo que Ordenex te pagó o pagó por ti");
     for (const texto of Object.values(DESGLOSE_MI_WALLET_LABEL)) expect(texto).not.toMatch(/\bCOD\b/);
   });
@@ -259,10 +259,10 @@ describe("ORIGEN_TIENDA_LABEL cubre cada origen que escribe en el libro de la ti
 
   it("las pistas de /wallet/tiendas hablan desde Ordenex y nombran el cobro y su anulación (R45)", () => {
     expect(DESGLOSE_TIENDA_LABEL.aFavorHint).toBe(
-      "Contra-entrega cobrado, correcciones a favor y devoluciones por anulaciones",
+      "Contra-entrega cobrado, correcciones a favor, pagos de la tienda a Ordenex y devoluciones por anulaciones",
     );
     expect(DESGLOSE_TIENDA_LABEL.cargosHint).toBe(
-      "Fletes, comisión, IVA y los cobros de Ordenex a la tienda",
+      "Fletes, comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados",
     );
     expect(DESGLOSE_TIENDA_LABEL.pagadoHint).toBe("Lo que Ordenex le pagó a la tienda o pagó por ella");
   });

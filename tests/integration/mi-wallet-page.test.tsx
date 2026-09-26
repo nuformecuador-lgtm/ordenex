@@ -841,7 +841,7 @@ describe("⭑ FICHA 459 — el pago por cuenta en /mi-wallet (R44)", () => {
     expect(importeDe("A tu favor")).toBe("₡60.000");
     expect(saldoEnPantalla()).toBe("₡50.000");
     expect(screen.getByText("Lo que Ordenex te pagó o pagó por ti")).toBeInTheDocument();
-    expect(screen.getByText("Lo cobrado a tus clientes, las correcciones a tu favor y lo que Ordenex te devolvió al anular")).toBeInTheDocument();
+    expect(screen.getByText("Lo cobrado a tus clientes, las correcciones a tu favor, lo que le pagaste a Ordenex y lo que Ordenex te devolvió al anular")).toBeInTheDocument();
     const anulado = screen.getByRole("row", { name: /Anulación · A Facebook/ });
     expect(within(anulado).getByText("Ordenex anuló un pago hecho por ti")).toBeInTheDocument();
   });

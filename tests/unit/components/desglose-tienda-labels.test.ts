@@ -161,10 +161,10 @@ describe("textos propios del desglose por tienda (R7, P1; 461 R45)", () => {
 
   it("⭑ 461 R45: las pistas nombran el cobro y su anulación con la palabra de su fila, desde Ordenex", () => {
     expect(DESGLOSE_TIENDA_LABEL.aFavorHint).toBe(
-      "Contra-entrega cobrado, correcciones a favor y devoluciones por anulaciones",
+      "Contra-entrega cobrado, correcciones a favor, pagos de la tienda a Ordenex y devoluciones por anulaciones",
     );
     expect(DESGLOSE_TIENDA_LABEL.cargosHint).toBe(
-      "Fletes, comisión, IVA y los cobros de Ordenex a la tienda",
+      "Fletes, comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados",
     );
     expect(DESGLOSE_TIENDA_LABEL.pagadoHint).toBe("Lo que Ordenex le pagó a la tienda o pagó por ella");
     // «cobros de Ordenex a la tienda» ↔ la fila «Ordenex le cobra a la tienda» / «Cobro de Ordenex a la tienda anulado».
