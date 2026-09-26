@@ -54,7 +54,8 @@ import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 // que no importa Server Actions (salvo la reversa de la 45). Estas dos son MUTACIONES y la lectura
 // de un enlace firmado al pulsar; ninguna es una lectura del listado.
 //
-// El id del documento es el `origenId` de la fila; viaja al servidor y no se pinta (R100).
+// El id del documento es el `origenId` de la fila —salvo en la corrección de caja (461-R71), cuyo
+// documento ES la fila y el id es `movimiento.id`—; viaja al servidor y no se pinta (R100).
 // Money-safe: el monto solo se PINTA con `money`, y no viaja en la anulación (R37).
 
 type TipoDocumento = DocumentoCajaDTO["tipo"];
@@ -94,7 +95,8 @@ const ACCIONES: Record<
     comprobante: async () => ({ status: "sin_comprobante" as const }),
   },
   // Ficha 461 (R71, auditoría D3): la corrección de caja original; el id del «documento» es el de la
-  // propia fila (lo resuelve el servidor).
+  // PROPIA fila (`movimiento.id`, no `origenId`, que aquí es `null`): `anularAjusteCajaSchema` pide
+  // `movimientoId` y `AjusteCajaService.anular` la busca con `obtenerPorId`.
   ajuste_caja: {
     anular: (movimientoId, motivo) => anularAjusteCajaAction({ movimientoId, motivo }),
     comprobante: async () => ({ status: "sin_comprobante" as const }),
@@ -124,7 +126,7 @@ function avisoDeAnulacion(resultado: ResultadoAnulacion): string {
 }
 
 export interface DocumentoCajaAccionesProps {
-  /** La fila ORIGINAL; `documento` no nulo y `origenId` con el id del documento. */
+  /** La fila ORIGINAL; `documento` no nulo y `origenId` con el id del documento (la corrección de caja, con el suyo). */
   movimiento: WalletMovimientoDTO & { documento: DocumentoCajaDTO };
   /** Tras anular (o si ya lo estaba): el módulo relee libro, tarjeta y composición (R65). */
   onAnulado?: () => void;
@@ -139,7 +141,9 @@ export function DocumentoCajaAcciones({ movimiento, onAnulado }: DocumentoCajaAc
   const [aviso, setAviso] = useState<string | null>(null);
 
   const { documento } = movimiento;
-  const documentoId = movimiento.origenId;
+  // Ficha 461 (R71; recorrido F1): la corrección de caja ES su propio documento —`origenId` viene
+  // `null` a propósito— y `anularAjusteCajaSchema` espera el id de la fila (`movimientoId`).
+  const documentoId = documento.tipo === "ajuste_caja" ? movimiento.id : movimiento.origenId;
   const concepto = CATEGORIA_LABEL[movimiento.categoria];
   const fecha = fechaDiaMovimientoCR(movimiento.fechaMovimiento);
   const montoPintado = money(movimiento.monto);

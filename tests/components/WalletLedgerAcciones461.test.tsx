@@ -313,6 +313,151 @@ describe("461 — anular un cobro desde el libro (R13/R17/R21)", () => {
   }, 20000);
 });
 
+// ── R69/R70/R71 — la CORRECCIÓN DE CAJA ofrece «Anular…» (recorrido_461 F1) ──────────────────────
+//
+// La corrección es su PROPIO documento: origen `manual`, `origenId` null a propósito, y el servidor
+// la marca con `documento.tipo = "ajuste_caja"`. El id que la action espera (`anularAjusteCajaSchema`
+// → `{ movimientoId, motivo }`) es el de la FILA, no `origenId`. F1: el componente leía `origenId`
+// para todos los tipos y, al ser null, no pintaba nada; ni maestro ni admin podían anularla.
+
+const CORRECCION_SUMA_ID = "d7e9f1a3-5b7c-4d9e-8f1a-3b5c7d9e1f2a";
+const CORRECCION_RESTA_ID = "f1a3b5c7-9d1e-4f3a-8b5c-7d9e1f3a5b7c";
+const CORRECCION_ANULADA_ID = "a3b5c7d9-1e3f-4a5b-8c7d-9e1f3a5b7c9d";
+
+/** «Corrección de caja (suma)» vigente, registrada a mano. */
+const CORRECCION_SUMA = fila({
+  id: CORRECCION_SUMA_ID,
+  tipo: "ingreso",
+  categoria: "ingreso_ajuste",
+  origenTipo: "manual",
+  origenId: null,
+  monto: "2000.00",
+  descripcion: "Sobrante al cuadrar",
+  fechaMovimiento: "2026-09-25T15:00:00.000Z",
+  documento: { tipo: "ajuste_caja", anulado: false, tieneComprobante: false },
+});
+/** «Corrección de caja (resta)» vigente: un egreso de origen `manual`, que NO es un gasto reversable. */
+const CORRECCION_RESTA = fila({
+  id: CORRECCION_RESTA_ID,
+  tipo: "egreso",
+  categoria: "egreso_ajuste",
+  origenTipo: "manual",
+  origenId: null,
+  monto: "1000.00",
+  descripcion: "Faltante al cuadrar",
+  fechaMovimiento: "2026-09-24T15:00:00.000Z",
+  documento: { tipo: "ajuste_caja", anulado: false, tieneComprobante: false },
+});
+/** Una corrección ya ANULADA. */
+const CORRECCION_ANULADA = fila({
+  id: CORRECCION_ANULADA_ID,
+  tipo: "ingreso",
+  categoria: "ingreso_ajuste",
+  origenTipo: "manual",
+  origenId: null,
+  monto: "500.00",
+  descripcion: "Sobrante duplicado",
+  fechaMovimiento: "2026-09-20T15:00:00.000Z",
+  documento: { tipo: "ajuste_caja", anulado: true, tieneComprobante: false },
+});
+/** Su contra-asiento (R69): origen `manual` con `origenId` = la corrección, SIN documento. */
+const CONTRA_ASIENTO_CORRECCION = fila({
+  id: "m-contra-correccion",
+  tipo: "egreso",
+  categoria: "egreso_ajuste",
+  origenTipo: "manual",
+  origenId: CORRECCION_ANULADA_ID,
+  monto: "500.00",
+  descripcion: "Anulación · Sobrante duplicado",
+  fechaMovimiento: "2026-09-21T15:00:00.000Z",
+});
+
+const CORRECCIONES = [CORRECCION_SUMA, CORRECCION_RESTA, CORRECCION_ANULADA, CONTRA_ASIENTO_CORRECCION];
+
+describe("461 — la corrección de caja ofrece «Anular…» (R69/R70/R71; recorrido F1)", () => {
+  it("«Anular…» en la (suma) y en la (resta) vigentes; «Anulado» en la anulada; NADA en su contra-asiento", () => {
+    render(<WalletLedger movimientos={CORRECCIONES} />);
+
+    const suma = filaPorDescripcion(/Sobrante al cuadrar/);
+    expect(within(suma).getByRole("button", { name: /^Anular / })).toHaveTextContent("Anular…");
+
+    const resta = filaPorDescripcion(/Faltante al cuadrar/);
+    expect(within(resta).getByRole("button", { name: /^Anular / })).toHaveTextContent("Anular…");
+    // La (resta) es un egreso, pero NO un gasto: no se le ofrece «Reversar».
+    expect(within(resta).queryByRole("button", { name: "Reversar" })).toBeNull();
+
+    const anulada = filaPorDescripcion(/^(?!.*Anulación).*Sobrante duplicado/);
+    expect(within(anulada).queryByRole("button", { name: /^Anular / })).toBeNull();
+    expect(within(anulada).getByText("Anulado")).toBeInTheDocument();
+
+    const contra = filaPorDescripcion(/Anulación · Sobrante duplicado/);
+    expect(within(contra).queryAllByRole("button")).toHaveLength(0);
+    expect(within(contra).queryByText("Anulado")).toBeNull();
+
+    // Cada botón se identifica con SU fila (concepto, fecha CR, importe).
+    expect(
+      screen.getByRole("button", { name: "Anular Corrección de caja (suma) del 2026-09-25 por ₡2.000" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Anular Corrección de caja (resta) del 2026-09-24 por ₡1.000" }),
+    ).toBeInTheDocument();
+    // Una corrección nunca tiene comprobante.
+    expect(screen.queryAllByRole("button", { name: /^Ver comprobante/ })).toHaveLength(0);
+  });
+
+  it("manda {movimientoId: el id de LA PROPIA FILA, motivo} SIN monto a la action de la corrección; el módulo relee", async () => {
+    anularAjusteMock.mockResolvedValue({ status: "ok" });
+    const onAnulado = vi.fn();
+    const user = userEvent.setup();
+    render(<WalletLedger movimientos={[CORRECCION_SUMA]} onDocumentoAnulado={onAnulado} />);
+
+    await user.click(screen.getByRole("button", { name: /^Anular / }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Anular la corrección de caja")).toBeInTheDocument();
+    const confirmar = within(dialog).getByRole("button", { name: "Anular" });
+    expect(confirmar).toBeDisabled();
+    await user.type(within(dialog).getByLabelText(/Motivo de la anulación/), "  Se contó mal ");
+    await user.click(confirmar);
+
+    await waitFor(() => expect(anularAjusteMock).toHaveBeenCalledTimes(1));
+    // R70: la clave que el schema `.strict()` espera, con el id de la fila (no `origenId`, que es null).
+    expect(anularAjusteMock.mock.calls[0][0]).toEqual({ movimientoId: CORRECCION_SUMA_ID, motivo: "Se contó mal" });
+    expect(Object.keys(anularAjusteMock.mock.calls[0][0] as object).sort()).toEqual(["motivo", "movimientoId"]);
+    for (const otra of [anularCobroMock, anularPagoMock, anularAporteMock, reversarMock]) {
+      expect(otra).not.toHaveBeenCalled();
+    }
+    await waitFor(() => expect(onAnulado).toHaveBeenCalledTimes(1));
+    expect(successMock).toHaveBeenCalledWith("Anulado. Se registró el movimiento contrario.");
+  }, 20000);
+
+  it("la (resta) viaja igual, con el id de SU fila", async () => {
+    anularAjusteMock.mockResolvedValue({ status: "ok" });
+    const user = userEvent.setup();
+    render(<WalletLedger movimientos={[CORRECCION_RESTA]} onDocumentoAnulado={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /^Anular / }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/Motivo de la anulación/), "No faltaba nada");
+    await user.click(within(dialog).getByRole("button", { name: "Anular" }));
+
+    await waitFor(() => expect(anularAjusteMock).toHaveBeenCalledTimes(1));
+    expect(anularAjusteMock.mock.calls[0][0]).toEqual({ movimientoId: CORRECCION_RESTA_ID, motivo: "No faltaba nada" });
+    expect(reversarMock).not.toHaveBeenCalled();
+  }, 20000);
+
+  it("R52: el id de la corrección no se pinta ni va en los nombres accesibles", () => {
+    render(<WalletLedger movimientos={CORRECCIONES} />);
+    const texto = document.body.textContent ?? "";
+    for (const id of [CORRECCION_SUMA_ID, CORRECCION_RESTA_ID, CORRECCION_ANULADA_ID]) {
+      expect(texto).not.toContain(id);
+      for (const nodo of document.querySelectorAll("[aria-label]")) {
+        expect(nodo.getAttribute("aria-label") ?? "").not.toContain(id);
+      }
+    }
+    expect(texto).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+  });
+});
+
 // ── R42/R52 — rótulos y dueño, en la tabla y en la descarga ────────────────────────────────────
 
 /** Lo que tiene que leerse en cada fila: concepto, tipo, origen legible y dueño (design §7). */
