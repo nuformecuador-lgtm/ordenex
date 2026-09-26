@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 import { anularAbonoTiendaAction, registrarAbonoTiendaAction } from "@/lib/actions/abono-tienda";
+import { PRISMA_OMIT } from "@/lib/db/prisma-client";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { AbonoTiendaTxRunner } from "@/lib/interfaces/services/IAbonoTiendaService";
@@ -24,7 +26,7 @@ import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import { PagoPorCuentaTiendaService } from "@/lib/services/PagoPorCuentaTiendaService";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 
-import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
+import { HAY_BASE_DE_DATOS, crearPrismaDeTest, urlDeBaseDeDatos } from "./_postgres-real";
 import {
   conCandado459,
   endeudar457,
@@ -354,6 +356,41 @@ describeSiHayBase("457/T5.2 — concurrencia del pago de una tienda a Ordenex (P
       );
       expect(saldo.toFixed(2)).toBe("-5000.00");
     });
+  }, 120_000);
+
+  it("R16 (m3 de la revision): con UNA sola conexion en el pool, el pago se registra: el saldo bajo el candado se lee por la transaccion que lo tomo", async () => {
+    // Produccion tiene 3 conexiones por instancia (`lib/db/prisma-client.ts`). Si la lectura del saldo
+    // bajo el candado fuera por OTRA conexion del pool, tres operaciones de la misma tienda a la vez
+    // (una con el candado, dos esperandolo) dejarian a la primera sin conexion: cuelgue y rollback. Con
+    // un pool de UNA conexion ese escenario es el de cada pago: la transaccion ocupa la unica conexion y
+    // una lectura fuera de ella no llega nunca (la transaccion caduca a los 10 s). Por el `tx`, entra.
+    const clienteUno = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: urlDeBaseDeDatos(), max: 1 }),
+      omit: PRISMA_OMIT,
+    }) as unknown as PrismaClient;
+    try {
+      await conPersonas(async (p) => {
+        await endeudar457(prisma, p.tiendaId, "10000.00");
+        const svc = new AbonoTiendaService(
+          new AbonoTiendaRepository(clienteUno),
+          new WalletTiendaMovimientoRepository(clienteUno),
+          new LiquidacionPagoRepository(clienteUno),
+          new UserRepository(clienteUno),
+          new CajaAbonoTiendaFeedService(new WalletMovimientoRepository(clienteUno)),
+          STORAGE_NO_USADO,
+          URLS_NO_USADAS,
+          ((fn: (tx: never) => Promise<unknown>) =>
+            clienteUno.$transaction((tx) => fn(tx as never), { timeout: 10_000 })) as unknown as AbonoTiendaTxRunner,
+        );
+        const r = await svc.registrar(abonoDe(p, "4000.00"), null, p.maestro);
+        expect(r.status).toBe("ok");
+        if (r.status !== "ok") throw new Error("imposible");
+        expect(r.saldo.saldo).toBe("-6000.00");
+        expect(await prisma.abonoTienda.count({ where: { tiendaId: p.tiendaId } })).toBe(1);
+      });
+    } finally {
+      await clienteUno.$disconnect();
+    }
   }, 120_000);
 
   it("R36: dos anulaciones simultaneas del mismo pago -> una constancia y un solo contra-asiento por libro", async () => {

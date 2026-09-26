@@ -12,7 +12,10 @@ import type {
 } from "@/lib/interfaces/repositories/IAbonoTiendaRepository";
 import type { ILiquidacionPagoRepository } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
 import type { IUserRepository } from "@/lib/interfaces/repositories/IUserRepository";
-import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
+import type {
+  IWalletTiendaMovimientoRepository,
+  WalletTiendaTxClient,
+} from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
   AbonoTiendaTxRunner,
   AnularAbonoTiendaServiceResult,
@@ -129,12 +132,16 @@ export class AbonoTiendaService implements IAbonoTiendaService {
    *  1. ROL antes de leer nada (R2).
    *  2. ESCALA 2 una vez: el MISMO string va a las cuatro escrituras (R5).
    *  3. La TIENDA, validada en el servidor (R10); el estado NO se exige (R11, D2).
+   *  3b. La CLAVE (R25): si ya tiene documento, `ya_registrado` ANTES de la regla del dinero (un
+   *     reenvio de un pago que YA salda la deuda no puede responder `sin_deuda`/`excede`).
    *  4. Pre-chequeo OPTIMISTA del saldo, sin candado: ahorra subir un archivo que no va a servir. No
    *     sustituye al paso 7.
    *  5. El COMPROBANTE, validado y subido ANTES de la transaccion (R26–R28).
    *  6. Las FECHAS: la real del pago para el documento; el inicio de ese dia en CR para los dos asientos (R20).
-   *  7. La TRANSACCION: candado de la tienda ANTES de leer el saldo (R16) → saldo ≥ 0 → `sin_deuda`
-   *     (R14); monto > |saldo| → `excede` (R15); documento + historial → credito → entrada en la caja.
+   *  7. La TRANSACCION: candado de la tienda ANTES de leer el saldo (R16), leido por ESA transaccion
+   *     (m3) → saldo ≥ 0 → `sin_deuda` (R14); monto > |saldo| → `excede` (R15) —y si la regla rechaza,
+   *     la clave se mira OTRA VEZ: dos envios simultaneos de la misma clave—; documento + historial →
+   *     credito → entrada en la caja.
    *  8. El saldo DESPUES, derivado (R18): nunca por encima de cero bajo el candado (R66).
    *  9. Ante cualquier desenlace distinto de `ok`, se retira el comprobante subido (R29).
    */
@@ -200,7 +207,8 @@ export class AbonoTiendaService implements IAbonoTiendaService {
         // R16: la MISMA fila `usuario` que bloquean `registrarPagoTienda` y `PagoPorCuentaTiendaService`.
         await this.candado.bloquearBeneficiario(tx, { tipo: "tienda", tiendaId: input.tiendaId });
         // R14/R15 BAJO el candado: dos operaciones simultaneas no pueden evaluarse sobre el mismo saldo.
-        const saldo = await this.saldoDe(input.tiendaId);
+        // Por la MISMA transaccion del candado (m3): otra conexion del pool podria no llegar nunca.
+        const saldo = await this.saldoDe(input.tiendaId, tx);
         const regla = reglaDelDinero(saldo, monto);
         if (regla !== null) {
           if (regla.status === "sin_deuda") throw new SinDeudaError(regla.saldo);
@@ -360,8 +368,15 @@ export class AbonoTiendaService implements IAbonoTiendaService {
     };
   }
 
-  private async saldoDe(tiendaId: string): Promise<SaldoTiendaDTO> {
-    const agregado = await this.tiendaRepo.agregarSaldoPorTienda(tiendaId, {});
+  /**
+   * `tx` solo BAJO el candado (m3 de la revision): la lectura que decide viaja por la conexion que
+   * tomo el candado. Fuera de la transaccion (pre-chequeo, saldo de la respuesta), el cliente de siempre.
+   */
+  private async saldoDe(tiendaId: string, tx?: WalletTiendaTxClient): Promise<SaldoTiendaDTO> {
+    const agregado =
+      tx === undefined
+        ? await this.tiendaRepo.agregarSaldoPorTienda(tiendaId, {})
+        : await this.tiendaRepo.agregarSaldoPorTienda(tiendaId, {}, tx);
     return derivarSaldoTienda(agregado.creditos, agregado.debitos);
   }
 }

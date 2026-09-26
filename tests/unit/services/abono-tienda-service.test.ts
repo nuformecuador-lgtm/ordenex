@@ -141,6 +141,18 @@ describe("457/T4.1 — registrar: las reglas del dinero", () => {
     expect(m.tiendaRepo.crearMovimientos.mock.calls[0][0]).toBe(m.tx);
     expect(vi.mocked(m.caja.emitirIngresoDeAbono).mock.calls[0][0]).toBe(m.tx);
   });
+
+  it("m3: la lectura del saldo que DECIDE viaja por la MISMA transaccion del candado; el pre-chequeo y el saldo de la respuesta, no", async () => {
+    const m = montar();
+    const r = await m.svc.registrar(entrada(), null, MAESTRO);
+    expect(r.status).toBe("ok");
+    const llamadas = m.tiendaRepo.agregarSaldoPorTienda.mock.calls as unknown[][];
+    expect(llamadas).toHaveLength(3);
+    expect(llamadas[0]).toEqual([TIENDA_ID, {}]); // pre-chequeo, sin candado
+    expect(llamadas[1]).toHaveLength(3);
+    expect(llamadas[1][2]).toBe(m.tx); // bajo el candado: el `tx` que lo tomo
+    expect(llamadas[2]).toEqual([TIENDA_ID, {}]); // la respuesta, tras commitear
+  });
 });
 
 describe("457/T4.1 — registrar: lo que viaja a cada escritura", () => {

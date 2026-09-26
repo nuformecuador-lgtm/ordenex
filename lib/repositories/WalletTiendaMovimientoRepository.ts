@@ -124,12 +124,14 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
   async agregarSaldoPorTienda(
     tiendaId: string,
     filtros: SaldoTiendaFiltros,
+    cliente?: WalletTiendaTxClient,
   ): Promise<SaldoTiendaAgregado> {
     const where: Prisma.WalletTiendaMovimientoWhereInput = {
       tiendaId, // R19: acotado por tienda en el WHERE
       ...buildFiltrosWhere(filtros),
     };
-    const grupos = await this.prisma.walletTiendaMovimiento.groupBy({
+    // Ficha 457 (m3): con `cliente` (el `tx` del candado) la lectura va por ESA conexion.
+    const grupos = await (cliente ?? this.prisma).walletTiendaMovimiento.groupBy({
       by: ["tipo"],
       where,
       _sum: { monto: true },

@@ -206,8 +206,19 @@ export interface IWalletTiendaMovimientoRepository {
   crearMovimientos(tx: WalletTiendaTxClient, movs: CrearMovimientoTiendaInput[]): Promise<number>;
   /** R19/R22: pagina el ledger de UNA tienda (orderBy fecha_movimiento desc), filtros + tienda en el WHERE. */
   listarPorTienda(filtros: ListarPorTiendaFiltros): Promise<ListarPorTiendaPage>;
-  /** R16/R19: SUM(monto) por tipo acotado a `tiendaId` + filtros en el WHERE. STRING (money-safe). */
-  agregarSaldoPorTienda(tiendaId: string, filtros: SaldoTiendaFiltros): Promise<SaldoTiendaAgregado>;
+  /**
+   * R16/R19: SUM(monto) por tipo acotado a `tiendaId` + filtros en el WHERE. STRING (money-safe).
+   *
+   * FICHA 457 (m3 de la revision): `cliente` OPCIONAL. Quien decide con el saldo BAJO el candado de la
+   * tienda lo lee por la MISMA transaccion que tomo el candado (el `tx`), no por otra conexion del
+   * pool: con el pool de 3 por instancia, tres operaciones de la misma tienda a la vez (una con el
+   * candado, dos esperandolo) dejaban a la primera sin conexion para leer. Sin `cliente`, el de siempre.
+   */
+  agregarSaldoPorTienda(
+    tiendaId: string,
+    filtros: SaldoTiendaFiltros,
+    cliente?: WalletTiendaTxClient,
+  ): Promise<SaldoTiendaAgregado>;
   /** R20: una fila por tienda (con nombre) con sus totales credito/debito, para el maestro. */
   listarSaldosTodasTiendas(): Promise<SaldoTiendaAgregadoRow[]>;
   /**
