@@ -252,7 +252,8 @@ quitando la que la 458-E ponía junto al concepto. El recorrido encontró que es
 | R55 | `WalletLibroCaja458E` (T E.1), `WalletDescarga.test.tsx` («458-E R55»), `wallet-ledger-dueno` |
 | R56, R57 | `WalletLibroCaja458E` (T E.1 y «el módulo lee la autoría»), `WalletDescarga.test.tsx`, `tests/integration/db/libro-caja-a-quien.test.ts` (458-B, servidor) |
 | R58, R60 | `WalletLibroCaja458E` (T E.3), `WalletLedgerVer458C` y `DetalleMovimientoPanel` (458-C) |
-| R59 | servidor: `tests/integration/db/libro-caja-filtro-a-quien.test.ts` (16) + `tests/unit/services/filtros-wallet-quienes-458e.test.ts` (10); **pantalla: pendiente** (frontend_dev) |
+| R59 | servidor: `tests/integration/db/libro-caja-filtro-a-quien.test.ts` (16) + `tests/unit/services/filtros-wallet-quienes-458e.test.ts` (10); pantalla: `tests/components/WalletFiltroAQuien458E.test.tsx` (13) + `DetalleFilaComposicion.test.tsx` («458-E R59»); recorrido `progress/recorrido_458-E/recorrido.md` § «Cierre de la pantalla» |
+| R102, R103 | `docs/ayuda/oficina/wallet-caja.md` + `tests/unit/asistente/contexto-458.test.ts` (bloque E, 9) + cuatro preguntas reales (recorrido) |
 | R61, R73 | `WalletLibroCaja458E` (T E.4) + los tests de colas sin modificar + `wallet-anulacion-458` |
 | R71/R72 (fila) | `WalletLibroCaja458E` («R71/R72…»), `WalletLedgerVer458C` (B2) |
 | R101 | `wallet-textos-458.guardia` |
@@ -283,11 +284,63 @@ Sin red: la insignia tachada (`flex` vs `inline-flex`) no la ve jsdom; queda med
 
 ## Pendiente
 
-1. **R59 / filtro «A quién»**: el servidor está (sección «R59 «A quién» — PARTE SERVIDOR»); falta el
-   `SelectorBuscable` en `WalletFiltros` y pasar `aQuien` en `inputDeFiltros` (frontend_dev, contrato arriba).
+1. ~~R59 / filtro «A quién» en pantalla~~ → cerrado (sección «Cierre de la pantalla», abajo).
 2. Los enlaces de «A quién» apuntan a `/wallet/tiendas/<id>` y `/wallet/mensajeros/<id>`, que crea la
    458-D: hasta que se mergee dan 404.
-3. TE.6 (ayuda de la caja + bloque E del asistente + cuatro preguntas) y TE.7 (recorrido COMPLETO de los
-   doce pasos y revisión final) no se pidieron en esta tanda.
-4. `VerMovimientoCaja` relee la autoría de su fila al abrir aunque el módulo ya la tiene (una lectura de
-   más, sin efecto en el dinero): se puede pasar por props cuando la 458-C se asiente.
+3. ~~TE.6~~ → cerrado abajo. TE.7 (recorrido COMPLETO de los doce pasos y revisión final de la 458)
+   sigue sin pedirse.
+4. ~~`VerMovimientoCaja` relee la autoría~~ → cerrado abajo.
+
+## Cierre de la pantalla (frontend_dev) · rama `wt/458-E-cierre` → `feature/458-E`
+
+**Entorno.** `git checkout -B wt/458-E-cierre origin/feature/458-E` (HEAD `089c18a5` comprobado) y
+`git merge origin/dev` (contiene `e0234bf9`): **sin conflictos** (`22384df0`) — la rama ya traía la
+revisión de la 458-C (`c36b2efc`, `a38ea386`); lo de la C se conserva tal cual: la fila anulada dice
+«Anulado» (celda de «Ver», `inline-flex`) y el panel dice quién anuló, cuándo, el motivo y el método.
+Base propia `ordenex_458ec` (`CREATE DATABASE … TEMPLATE ordenex`, 0 conexiones a la plantilla;
+`migrate deploy`: «No pending migrations»). `.env` del checkout principal con la base cambiada y sin
+`DATABASE_URL_PREVIEW`. `pnpm install --frozen-lockfile` propio, sin junction. UN dev server (3487),
+apagado al terminar. `ordenex` y `feature_list.json` sin tocar. **Búsqueda:** se consultó primero el MCP
+`codebase-memory` (sin resultados para los símbolos de la 458-E: índice rancio); cada símbolo se leyó en
+el archivo real.
+
+| Qué | Archivos |
+| --- | --- |
+| R59: `SelectorBuscable` «A quién» en `WalletFiltros` (lee `quienesDelLibroCajaAction` al abrirse, con dirección y periodo del borrador y búsqueda en el servidor; se aplica al elegir; «Todos» y «Limpiar» lo quitan). `aQuien` entra en `WalletFiltrosValue` (opcional) y viaja por `inputDeFiltros` a libro, tarjetas + composición, desglose, detalle de fila y descarga, y a los conceptos | `WalletFiltros.tsx`, **nuevos** `a-quien-selector.ts` (rótulos y opción ↔ filtro, validada con `aQuienFiltroSchema`) y `use-quienes-del-libro-caja.ts` (SWR perezoso) |
+| Fuera el `@sin-superficie` de `quienesDelLibroCajaAction` (la guardia `superficie-de-uso` ya la encuentra en `app/`) | `lib/actions/wallet-filtros.ts` (solo el comentario) |
+| El panel «Ver» usa la autoría que el libro ya leyó (`autoriaDelLibro`); solo la lee él si el libro no la tiene. Tras registrar/anular/adjuntar el módulo relee la autoría (versión en la clave SWR) para que el panel diga quién anuló | `VerMovimientoCaja.tsx`, `WalletLedger.tsx`, `WalletModule.tsx` |
+| «Close» → «Cerrar» en la primitiva `Sheet` (la de la wallet; `Dialog` ya decía «Cerrar»; los `Modal` de la wallet no tienen botón de cierre con texto) | `components/ui/sheet.tsx` |
+| Ayuda: columnas del libro, filtros (Todo/Entra/Sale, «A quién», concepto, periodo; las tarjetas cuentan lo filtrado), «Ver», anulado; «tipo Ingreso» → «Entra»; fuentes | `docs/ayuda/oficina/wallet-caja.md`, `contexto-458.test.ts` bloque E |
+
+**Tests nuevos:** `tests/components/WalletFiltroAQuien458E.test.tsx` (13: selector perezoso y rótulos sin
+uuid; contexto y búsqueda al servidor; `hayMas` y error; por TIENDA —la misma entrada al libro y a las
+tarjetas, tarjetas y libro del conjunto filtrado, conceptos y descarga—; por MENSAJERO con dirección; por
+NOMBRE LIBRE, «Todos» y «Limpiar»; se conserva al aplicar el periodo; opción ↔ filtro; el panel no relee;
+tras anular relee el libro una vez; «Cerrar» en el panel y en `Sheet`/`Dialog`) + caso «458-E R59» en
+`DetalleFilaComposicion.test.tsx` + bloque E (9) de `contexto-458.test.ts`. Ningún test retirado.
+
+**Mutaciones** (11, una a una; patrón único, 65 tests corridos por mutación, restauradas byte a byte,
+`arbolIgual: true`; base 65/65 verde) — `progress/mutaciones_458E_cierre.json`:
+
+| # | Mutación | Rojos |
+| --- | --- | --- |
+| M1 | `inputDeFiltros` no pasa `aQuien` | 6/65 |
+| M2 | elegir «A quién» no se aplica | 4/65 |
+| M3 | «Todos» no quita el filtro | 1/65 |
+| M4 | los conceptos no se cuentan para «A quién» | 1/65 |
+| M5 | el selector ignora dirección y periodo | 1/65 |
+| M6 | el selector no manda la búsqueda | 1/65 |
+| M7 | el valor pierde el tipo de cuenta (tienda ↔ mensajero) | 2/65 |
+| M8 | el rótulo no dice qué es | 5/65 |
+| M9 | el panel relee la autoría aunque el libro la tenga | 2/65 |
+| M10 | tras anular el libro no relee la autoría | 1/65 |
+| M11 | el cierre vuelve a «Close» | 2/65 |
+
+**Recorrido** (`progress/recorrido_458-E/recorrido.md` § «Cierre de la pantalla»): maestro y admin, por
+tienda (buscando), por mensajero y por nombre libre (buscando): libro filtrado = oráculo (libro sin
+filtro por su columna «A quién») en filas y sumas, y tarjetas (Movimientos, Entró, Salió) = Σ del libro
+filtrado, 6/6; R7/R8 = 0,00 en las 8 medidas. Asistente: cuatro preguntas reales, las cuatro responden con
+la ayuda nueva.
+
+**Primer gate rápido de los tests:** la guardia `ancla-de-carga` rechazó tres esperas ancladas a un
+conteo en el test nuevo → anclas de contenido (`6c773e73`).
