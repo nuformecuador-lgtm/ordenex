@@ -22,6 +22,8 @@ import {
 import type { AnularPagoResult, PagoRegistradoDTO } from "@/lib/types/liquidacion";
 import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
 
+import { RegistrarMovimientoCajaDialog } from "../../_components/RegistrarMovimientoCajaDialog";
+
 import { claveDesgloseTienda } from "./DesgloseMovimientosTienda";
 import { DESGLOSE_TIENDA_LABEL } from "./desglose-tienda-labels";
 import { esClaveSaldosTiendas } from "./saldos-tiendas-clave";
@@ -46,6 +48,17 @@ import { esClaveSaldosTiendas } from "./saldos-tiendas-clave";
 // atado a la caché por defecto, y esta pantalla puede vivir bajo un `SWRConfig` con caché
 // propia. Con el del contexto, el refresco alcanza siempre a la caché en la que de verdad
 // están los datos.
+
+// FICHA 457 (T6.6, design §8.4, R59) — cuando la tienda está EN CONTRA, junto al botón de pagar se
+// monta el MISMO diálogo «Registrar movimiento» de la caja con el concepto «Una tienda le paga a
+// Ordenex» y esta tienda FIJOS: un solo formulario para el mismo pago (D8). Tras registrar, el
+// refresco es el de siempre (`refrescarEstaTienda`: desglose, comprobantes y tabla de saldos). Con
+// saldo cero o a favor NO se monta: no hay nada que la tienda deba.
+
+/** FICHA 457 (design §2/§8.4): el texto del botón. LITERAL. */
+export const ABONO_TIENDA_TEXTO = {
+  abrir: "Registrar pago de la tienda a Ordenex",
+} as const;
 
 /** Prefijo de la clave SWR de la lista de comprobantes. Identifica esta lectura entre todas. */
 const CLAVE_PAGOS_TIENDA = "liquidacion:pagos-tienda";
@@ -129,6 +142,8 @@ export function PagoTiendaAcciones({
   );
 
   const hayQuePagar = signo === "positivo";
+  /** FICHA 457 (R59): la tienda debe; lo decide el `signo` del SERVIDOR, sin comparar importes. */
+  const tiendaDebe = signo === "negativo";
 
   async function registrar(campos: RegistrarPagoCampos) {
     return registrarPagoTiendaAction({ ...campos, tiendaId });
@@ -187,6 +202,15 @@ export function PagoTiendaAcciones({
             {PAGO_TIENDA_TEXTO.sinSaldo}
           </span>
         )}
+        {/* FICHA 457 (R59): solo con saldo en contra; concepto y tienda fijos. */}
+        {tiendaDebe ? (
+          <RegistrarMovimientoCajaDialog
+            conceptoInicial="abono_tienda"
+            tiendaFija={{ id: tiendaId, nombre: tiendaNombre }}
+            etiquetaBoton={ABONO_TIENDA_TEXTO.abrir}
+            onRegistrado={refrescarEstaTienda}
+          />
+        ) : null}
       </div>
 
       {/* R50 — los comprobantes de esta tienda, dentro de su propio desglose. */}

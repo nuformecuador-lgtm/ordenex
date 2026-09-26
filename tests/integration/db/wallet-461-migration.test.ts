@@ -56,10 +56,11 @@ describeSiHayBase("461 — migraciones 4, 5 y 6 (auditoria D2/D3/T2) contra Post
     await prisma?.$disconnect();
   });
 
-  it("(a) el enum del historial es EXACTAMENTE el catalogo, y `wallet_movimiento_manual_anulado` es el ultimo", async () => {
+  it("(a) el enum del historial es EXACTAMENTE el catalogo, y `wallet_movimiento_manual_anulado` cierra lo de la 461", async () => {
     const tipos = await etiquetasDeEnum(prisma, "historial_accion_tipo");
     expect([...tipos].sort()).toEqual([...HISTORIAL_ACCION_TIPOS].sort());
-    expect(tipos.slice(-2)).toEqual(["cobro_tienda_anulado", "wallet_movimiento_manual_anulado"]);
+    // Ficha 457 (2026-09-25): sus dos tipos (`20260927120000`) van DETRAS; el orden relativo se conserva.
+    expect(tipos.slice(-4, -2)).toEqual(["cobro_tienda_anulado", "wallet_movimiento_manual_anulado"]);
   });
 
   it("(b) R67: las dos columnas `clave_idempotencia` existen, admiten NULL y tienen su indice UNIQUE", async () => {

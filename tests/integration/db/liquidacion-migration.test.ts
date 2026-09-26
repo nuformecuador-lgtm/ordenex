@@ -226,11 +226,15 @@ describe("UP — CHECK tipo <-> categoria de los dos libros (condicion heredada 
     // `tests/integration/db/wallet-tienda-cobro-migration.test.ts`, que es donde ese CHECK vive
     // ahora.
     //   - `cobro_tienda_anulado` (461): lo anade `20260926120100_cobro_tienda_461_anulacion_y_checks`.
+    //   - `abono_tienda` y `abono_tienda_anulado` (457): los anade
+    //     `20260927120100_abono_tienda_457_tablas_y_checks`.
     const AGREGADAS_DESPUES_TIENDA = [
       "cobro_manual",
       "pago_por_cuenta",
       "pago_por_cuenta_anulado",
       "cobro_tienda_anulado",
+      "abono_tienda",
+      "abono_tienda_anulado",
     ];
     const clasificadas = [...ramasTienda.values()].flat();
     expect([...clasificadas].sort()).toEqual(

@@ -541,7 +541,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.6 (b)(c) — el ciclo up/down, medido
     // ⚠️ Cada ficha que amplie el enum despues de esta entra aqui. 459: `pago_por_cuenta`,
     // `pago_por_cuenta_anulado` (`caja-459-migration.test.ts`). 461: `cobro_tienda_anulado`
     // (`cobro-tienda-461-migration.test.ts`).
-    const POSTERIORES = ["pago_por_cuenta", "pago_por_cuenta_anulado", "cobro_tienda_anulado"];
+    const POSTERIORES = ["pago_por_cuenta", "pago_por_cuenta_anulado", "cobro_tienda_anulado", "abono_tienda", "abono_tienda_anulado"]; // 457: `abono-tienda-457-migration.test.ts`
     const sinElNuevo = WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.filter(
       (c) => c !== VALOR_NUEVO && !POSTERIORES.includes(c),
     );

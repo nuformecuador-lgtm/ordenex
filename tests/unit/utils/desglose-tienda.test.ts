@@ -32,11 +32,14 @@ function fila(
 /** El `tipo` con el que el SISTEMA emite cada categoria (design §2.1). */
 // Ficha 459: + `pago_por_cuenta_anulado`, el tercer credito (la anulacion devuelve el dinero).
 // Ficha 461: + `cobro_tienda_anulado`, el cuarto (la anulacion de un cobro de Ordenex lo devuelve).
+// Ficha 457: + `abono_tienda`, el quinto (la tienda le paga a Ordenex y su saldo sube); su anulacion
+// (`abono_tienda_anulado`) es un debito y cae en «cargos».
 const CREDITO_SEED: readonly WalletTiendaMovimientoCategoria[] = [
   "cod_recaudado",
   "ajuste_credito",
   "pago_por_cuenta_anulado",
   "cobro_tienda_anulado",
+  "abono_tienda",
 ];
 
 function tipoEmitido(categoria: WalletTiendaMovimientoCategoria): WalletTiendaMovimientoTipo {

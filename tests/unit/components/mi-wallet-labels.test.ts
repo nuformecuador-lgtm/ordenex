@@ -45,6 +45,9 @@ const LECTURA_DESDE_LA_TIENDA: Record<WalletTiendaMovimientoCategoria, string> =
   pago_tienda: "Ordenex te pagó",
   pago_por_cuenta: "Ordenex pagó un gasto por ti",
   pago_por_cuenta_anulado: "Ordenex anuló un pago hecho por ti",
+  // Ficha 457 (design §2, D10, R47): la lectura desde la tienda del pago que ELLA le hizo a Ordenex.
+  abono_tienda: "Le pagaste a Ordenex",
+  abono_tienda_anulado: "Ordenex anuló el pago que le hiciste",
   ajuste_credito: "Corrección a tu favor",
   ajuste_debito: "Corrección en tu contra",
 };
@@ -66,17 +69,30 @@ const UNA_PARTE_ACTUA_SOBRE_LA_OTRA: readonly WalletTiendaMovimientoCategoria[] 
   "pago_tienda",
   "pago_por_cuenta",
   "pago_por_cuenta_anulado",
+  // Ficha 457: la tienda paga y Ordenex anula: las dos partes actuan.
+  "abono_tienda",
+  "abono_tienda_anulado",
   "ajuste_credito",
   "ajuste_debito",
 ];
 
 describe("461 — CATEGORIA_MI_WALLET_LABEL: la lectura desde la tienda (R44, design §7.5)", () => {
-  it("dice exactamente los 14 textos aprobados, y el seed es exactamente esas 14 claves", () => {
+  it("dice exactamente los 16 textos aprobados (14 de la 461 + 2 de la 457), y el seed es exactamente esas 16 claves", () => {
     expect(CATEGORIA_MI_WALLET_LABEL).toEqual(LECTURA_DESDE_LA_TIENDA);
     expect([...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED].sort()).toEqual(
       Object.keys(LECTURA_DESDE_LA_TIENDA).sort(),
     );
-    expect(WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED).toHaveLength(14);
+    expect(WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED).toHaveLength(16);
+  });
+
+  it("⭑ 457 (R46/R47): el pago de la tienda a Ordenex y su anulacion se leen distinto desde cada lado", () => {
+    // Mutacion 11 de design §13: poner en `/mi-wallet` el nombre desde Ordenex → rojo aqui.
+    expect(CATEGORIA_MI_WALLET_LABEL.abono_tienda).toBe("Le pagaste a Ordenex");
+    expect(CATEGORIA_MI_WALLET_LABEL.abono_tienda_anulado).toBe("Ordenex anuló el pago que le hiciste");
+    expect(CATEGORIA_TIENDA_LABEL.abono_tienda).toBe("La tienda le paga a Ordenex");
+    expect(CATEGORIA_TIENDA_LABEL.abono_tienda_anulado).toBe("Pago de la tienda a Ordenex anulado");
+    expect(CATEGORIA_MI_WALLET_LABEL.abono_tienda).not.toBe(CATEGORIA_TIENDA_LABEL.abono_tienda);
+    expect(CATEGORIA_MI_WALLET_LABEL.abono_tienda_anulado).not.toBe(CATEGORIA_TIENDA_LABEL.abono_tienda_anulado);
   });
 
   it("R44: es DISTINTA del nombre desde Ordenex en todo concepto donde una parte actúa sobre la otra", () => {
@@ -91,8 +107,8 @@ describe("461 — CATEGORIA_MI_WALLET_LABEL: la lectura desde la tienda (R44, de
         CATEGORIA_TIENDA_LABEL[categoria],
       );
     }
-    // Anti-vacuidad: la lista de conceptos con actor cubre 13 de los 14.
-    expect(UNA_PARTE_ACTUA_SOBRE_LA_OTRA).toHaveLength(13);
+    // Anti-vacuidad: la lista de conceptos con actor cubre 15 de los 16 (ficha 457: + 2).
+    expect(UNA_PARTE_ACTUA_SOBRE_LA_OTRA).toHaveLength(15);
   });
 
   it("el cobro y lo que Ordenex paga se leen en segunda persona, con Ordenex como sujeto", () => {
@@ -132,9 +148,9 @@ describe("461 — CATEGORIA_MI_WALLET_LABEL: la lectura desde la tienda (R44, de
 describe("461 — la cabecera de /mi-wallet habla desde la tienda (R45, design §7.5)", () => {
   it("las tres pistas, literales, y sin la sigla «COD»", () => {
     expect(DESGLOSE_MI_WALLET_LABEL.aFavorHint).toBe(
-      "Lo cobrado a tus clientes, las correcciones a tu favor y lo que Ordenex te devolvió al anular",
+      "Lo cobrado a tus clientes, las correcciones a tu favor, lo que le pagaste a Ordenex y lo que Ordenex te devolvió al anular",
     );
-    expect(DESGLOSE_MI_WALLET_LABEL.cargosHint).toBe("Fletes, comisión, IVA y lo que Ordenex te cobró");
+    expect(DESGLOSE_MI_WALLET_LABEL.cargosHint).toBe("Fletes, comisión, IVA, lo que Ordenex te cobró y los pagos a Ordenex que se anularon");
     expect(DESGLOSE_MI_WALLET_LABEL.pagadoHint).toBe("Lo que Ordenex te pagó o pagó por ti");
     for (const texto of Object.values(DESGLOSE_MI_WALLET_LABEL)) expect(texto).not.toMatch(/\bCOD\b/);
   });
@@ -199,6 +215,8 @@ const ESCRIBEN_EN_LA_TIENDA: readonly WalletOrigenTipo[] = [
   "gestion_orden",
   "pago_por_cuenta_tienda",
   "cobro_tienda",
+  // Ficha 457: el credito del pago de la tienda a Ordenex y el debito de su anulacion.
+  "abono_tienda",
 ];
 const NO_ESCRIBEN_EN_LA_TIENDA: readonly WalletOrigenTipo[] = [
   "pago_mensajero",
@@ -235,15 +253,16 @@ describe("ORIGEN_TIENDA_LABEL cubre cada origen que escribe en el libro de la ti
       gestion_orden: "Gestión de orden",
       pago_por_cuenta_tienda: "Pago de un gasto de una tienda",
       cobro_tienda: "Cobro de Ordenex a una tienda",
+      abono_tienda: "Pago de una tienda a Ordenex", // ficha 457: el MISMO texto que `ORIGEN_LABEL`
     });
   });
 
   it("las pistas de /wallet/tiendas hablan desde Ordenex y nombran el cobro y su anulación (R45)", () => {
     expect(DESGLOSE_TIENDA_LABEL.aFavorHint).toBe(
-      "Contra-entrega cobrado, correcciones a favor y devoluciones por anulaciones",
+      "Contra-entrega cobrado, correcciones a favor, pagos de la tienda a Ordenex y devoluciones por anulaciones",
     );
     expect(DESGLOSE_TIENDA_LABEL.cargosHint).toBe(
-      "Fletes, comisión, IVA y los cobros de Ordenex a la tienda",
+      "Fletes, comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados",
     );
     expect(DESGLOSE_TIENDA_LABEL.pagadoHint).toBe("Lo que Ordenex le pagó a la tienda o pagó por ella");
   });

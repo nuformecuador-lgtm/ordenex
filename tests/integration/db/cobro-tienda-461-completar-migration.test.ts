@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
+import { AbonoTiendaRepository } from "@/lib/repositories/AbonoTiendaRepository";
 import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnulacionRepository";
 import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import { PagoPorCuentaTiendaRepository } from "@/lib/repositories/PagoPorCuentaTiendaRepository";
@@ -166,6 +167,7 @@ function walletDe(tx: TxDeTest) {
     aportes: new AporteCapitalRepository(tx as never),
     cobros: new CobroTiendaAnulacionRepository(tx as never),
     ajustes: new AjusteCajaAnulacionRepository(tx as never),
+    abonos: new AbonoTiendaRepository(tx as never), // ficha 457: lo exige `LectoresDocumentosCaja`
   });
 }
 

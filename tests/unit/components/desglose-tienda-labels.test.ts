@@ -48,6 +48,9 @@ const DESDE_ORDENEX: Record<WalletTiendaMovimientoCategoria, string> = {
   pago_tienda: "Ordenex le paga a la tienda",
   pago_por_cuenta: "Ordenex paga un gasto de la tienda",
   pago_por_cuenta_anulado: "Pago de un gasto de la tienda anulado",
+  // Ficha 457 (design §2, D10): el nombre reservado por la 461 y el patron de «… de la tienda anulado».
+  abono_tienda: "La tienda le paga a Ordenex",
+  abono_tienda_anulado: "Pago de la tienda a Ordenex anulado",
   ajuste_credito: "Corrección a favor de la tienda",
   ajuste_debito: "Corrección en contra de la tienda",
 };
@@ -158,10 +161,10 @@ describe("textos propios del desglose por tienda (R7, P1; 461 R45)", () => {
 
   it("⭑ 461 R45: las pistas nombran el cobro y su anulación con la palabra de su fila, desde Ordenex", () => {
     expect(DESGLOSE_TIENDA_LABEL.aFavorHint).toBe(
-      "Contra-entrega cobrado, correcciones a favor y devoluciones por anulaciones",
+      "Contra-entrega cobrado, correcciones a favor, pagos de la tienda a Ordenex y devoluciones por anulaciones",
     );
     expect(DESGLOSE_TIENDA_LABEL.cargosHint).toBe(
-      "Fletes, comisión, IVA y los cobros de Ordenex a la tienda",
+      "Fletes, comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados",
     );
     expect(DESGLOSE_TIENDA_LABEL.pagadoHint).toBe("Lo que Ordenex le pagó a la tienda o pagó por ella");
     // «cobros de Ordenex a la tienda» ↔ la fila «Ordenex le cobra a la tienda» / «Cobro de Ordenex a la tienda anulado».

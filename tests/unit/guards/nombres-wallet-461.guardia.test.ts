@@ -87,14 +87,41 @@ export const NOMBRES_RETIRADOS_461: readonly string[] = [
   "Cobro reclasificado como pago por cuenta",
 ];
 
-/** design §7.8 — reservados para la 457: ningún concepto de hoy puede tomarlos. */
-export const NOMBRES_RESERVADOS_457: readonly string[] = [
-  "Una tienda le paga a Ordenex",
-  "La tienda le paga a Ordenex",
-  "Le pagaste a Ordenex",
-  "Pago de una tienda a Ordenex anulado",
-  "Pago a Ordenex anulado",
+/**
+ * design §7.8 de la 461 → TOMADOS por la 457 (design §2, R53): cada nombre reservado es el valor de
+ * EXACTAMENTE la clave de este mapa y de ninguna otra. El quinto reservado («Pago a Ordenex anulado»)
+ * quedó sin uso (D10 de la 457: `/mi-wallet` dice «Ordenex anuló el pago que le hiciste», que dice
+ * QUIÉN anuló) y sale de la lista.
+ */
+export const NOMBRES_TOMADOS_457: ReadonlyArray<{
+  nombre: string;
+  diccionario: string;
+  clave: string;
+  /**
+   * Frontend 457 (T6.3): las OTRAS posiciones que `design.md` §2 le asigna al mismo nombre, y solo
+   * esas. «Una tienda le paga a Ordenex» es también el nombre del concepto en el diálogo (fila
+   * «Diálogo: concepto», `CONCEPTOS_MANUALES[].label`, clave `abono_tienda`), igual que «Ordenex le
+   * cobra a una tienda» es a la vez categoría de caja y concepto.
+   */
+  tambien?: readonly string[];
+}> = [
+  {
+    nombre: "Una tienda le paga a Ordenex",
+    diccionario: "CATEGORIA_LABEL",
+    clave: "ingreso_abono_tienda",
+    tambien: ["CONCEPTOS_MANUALES.label.abono_tienda"],
+  },
+  {
+    nombre: "Pago de una tienda a Ordenex anulado",
+    diccionario: "CATEGORIA_LABEL",
+    clave: "egreso_reverso_abono_tienda",
+  },
+  { nombre: "La tienda le paga a Ordenex", diccionario: "CATEGORIA_TIENDA_LABEL", clave: "abono_tienda" },
+  { nombre: "Le pagaste a Ordenex", diccionario: "CATEGORIA_MI_WALLET_LABEL", clave: "abono_tienda" },
 ];
+
+/** Un reservado FICTICIO para las contrapruebas: ningún concepto de hoy lo toma. */
+const RESERVADO_FICTICIO = "Nombre reservado para una ficha futura";
 
 /** design §7.9 — las frases que afirmaban que el cobro no pasaba por la caja. */
 export const FRASES_RETIRADAS_461: readonly string[] = [
@@ -103,7 +130,7 @@ export const FRASES_RETIRADAS_461: readonly string[] = [
   "La caja y la ganancia no cambian",
 ];
 
-const PROHIBIDOS = new Set<string>([...NOMBRES_RETIRADOS_461, ...NOMBRES_RESERVADOS_457]);
+const PROHIBIDOS = new Set<string>([...NOMBRES_RETIRADOS_461, RESERVADO_FICTICIO]);
 const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const ALTERNATIVA = [...PROHIBIDOS].map(escapar).join("|");
 /** En código: el nombre como literal de cadena ENTERO (`"X"` / `'X'`) o citado entre «». */
@@ -218,14 +245,71 @@ describe("461/R47/R48 — ningún diccionario de la wallet ni del historial usa 
     ]);
     expect(hallazgosEnDiccionario("ORIGEN_LABEL (459)", ["Manual", "Gasto", "Cierre del día"])).toHaveLength(2);
     expect(hallazgosEnDiccionario("DUENO_LABEL (mutado)", ["Ordenex", "Cobro de Ordenex"])).toHaveLength(1);
-    // Un reservado de la 457 tampoco puede colarse en ningún concepto de hoy (R48).
-    expect(hallazgosEnDiccionario("CATEGORIA_LABEL (mutado)", ["Una tienda le paga a Ordenex"])).toHaveLength(1);
+    // Un nombre reservado para una ficha futura tampoco puede colarse en ningún concepto de hoy (R48).
+    expect(hallazgosEnDiccionario("CATEGORIA_LABEL (mutado)", [RESERVADO_FICTICIO])).toHaveLength(1);
     // La frase de la 459 dentro de una frase de efecto (mutación 13).
     expect(
       hallazgosEnDiccionario("FRASE_DEL_EFECTO (459)", [
         "No sale ni entra dinero: es un cobro de Ordenex a la tienda que baja su saldo. La caja y la ganancia no cambian.",
       ]),
     ).toHaveLength(1);
+  });
+});
+
+// ── 1b. Ficha 457 (R53): los reservados, TOMADOS ─────────────────────────────────────────────────
+
+const DICCIONARIOS_POR_NOMBRE: Record<string, Record<string, string>> = {
+  CATEGORIA_LABEL,
+  CATEGORIA_TIENDA_LABEL,
+  CATEGORIA_MI_WALLET_LABEL,
+  // Frontend 457: el catálogo del diálogo, por id de concepto (para decir QUÉ concepto lo dice).
+  "CONCEPTOS_MANUALES.label": Object.fromEntries(CONCEPTOS_MANUALES.map((c) => [c.id, c.label])),
+};
+
+/** Las claves de TODOS los diccionarios de la wallet y del historial cuyo valor es `nombre`. */
+function quienesDicen(nombre: string): string[] {
+  return DICCIONARIOS.flatMap(([dic, valores]) => {
+    const fuente = DICCIONARIOS_POR_NOMBRE[dic];
+    if (fuente !== undefined) {
+      return Object.entries(fuente)
+        .filter(([, v]) => v === nombre)
+        .map(([k]) => `${dic}.${k}`);
+    }
+    return valores.filter((v) => v === nombre).map(() => `${dic}.?`);
+  });
+}
+
+describe("457/R53 — los nombres que la 461 reservó quedan tomados EXACTAMENTE por sus conceptos", () => {
+  it("el barrido mira algo: cuatro nombres tomados, en tres diccionarios distintos", () => {
+    expect(NOMBRES_TOMADOS_457).toHaveLength(4);
+    expect(new Set(NOMBRES_TOMADOS_457.map((t) => t.diccionario)).size).toBe(3);
+  });
+
+  it.each(NOMBRES_TOMADOS_457)("«$nombre» es el valor de $diccionario.$clave y de ninguna otra clave", (t) => {
+    expect(DICCIONARIOS_POR_NOMBRE[t.diccionario][t.clave]).toBe(t.nombre);
+    expect(quienesDicen(t.nombre).sort()).toEqual([`${t.diccionario}.${t.clave}`, ...(t.tambien ?? [])].sort());
+  });
+
+  it("⭑ frontend 457: el concepto del diálogo que dice «Una tienda le paga a Ordenex» es EXACTAMENTE el `abono_tienda`", () => {
+    expect(DICCIONARIOS_POR_NOMBRE["CONCEPTOS_MANUALES.label"].abono_tienda).toBe("Una tienda le paga a Ordenex");
+    // Los otros tres tomados NO son nombre de ningún concepto del diálogo.
+    for (const t of NOMBRES_TOMADOS_457.filter((x) => x.tambien === undefined)) {
+      expect(quienesDicen(t.nombre).filter((q) => q.startsWith("CONCEPTOS_MANUALES")), t.nombre).toEqual([]);
+    }
+  });
+
+  it("el quinto reservado («Pago a Ordenex anulado») quedó sin uso: nadie lo dice (D10 de la 457)", () => {
+    expect(quienesDicen("Pago a Ordenex anulado")).toEqual([]);
+  });
+
+  it("CONTRAPRUEBA: un tomado puesto ADEMÁS en otra clave se detecta (dos claves lo dirían)", () => {
+    const mutado = { ...CATEGORIA_TIENDA_LABEL, cobro_manual: "La tienda le paga a Ordenex" };
+    const claves = Object.entries(mutado)
+      .filter(([, v]) => v === "La tienda le paga a Ordenex")
+      .map(([k]) => k)
+      .sort();
+    expect(claves).toEqual(["abono_tienda", "cobro_manual"]);
+    expect(claves).not.toEqual(["abono_tienda"]);
   });
 });
 
@@ -278,7 +362,7 @@ const label = "Cobrar un costo a una tienda"; // «Cobro de Ordenex» es el rót
     expect(h).toContain("conceptos-459.ts: nombre «Cobrar un costo a una tienda»");
     expect(h).toContain("conceptos-459.ts: nombre «Cobro de Ordenex»");
     expect(hallazgosEnCodigo(`manual: "Manual", gasto: "Gasto",`)).toHaveLength(2);
-    expect(hallazgosEnCodigo(`x: "Una tienda le paga a Ordenex"`)).toHaveLength(1);
+    expect(hallazgosEnCodigo(`x: "${RESERVADO_FICTICIO}"`)).toHaveLength(1);
   });
 
   it("y NO ladra ante los nombres nuevos ni ante la prosa que los rodea", () => {
@@ -329,7 +413,7 @@ describe("461/R47/R56 — la ayuda no cita ningún nombre retirado ni afirma que
     expect(hallazgosEnDocumento("Los cobros de un costo a una tienda bajan su saldo sin pasar por la caja.")).toEqual([
       "doc.md: frase «bajan su saldo sin pasar por la caja»",
     ]);
-    expect(hallazgosEnDocumento("Lo ves como «Le pagaste a Ordenex».")).toHaveLength(1);
+    expect(hallazgosEnDocumento(`Lo ves como «${RESERVADO_FICTICIO}».`)).toHaveLength(1);
   });
 
   it("y NO ladra ante los nombres nuevos", () => {

@@ -69,9 +69,12 @@ describeSiHayBase("461/T B.10 — las migraciones del cobro a una tienda contra 
     expect([...caja].sort()).toEqual([...WALLET_MOVIMIENTO_CATEGORIA_SEED].sort());
     expect([...tienda].sort()).toEqual([...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED].sort());
     expect([...origen].sort()).toEqual([...WALLET_ORIGEN_TIPO_SEED].sort());
-    expect(caja.slice(-2)).toEqual(["ingreso_cobro_tienda", "egreso_reverso_cobro_tienda"]);
-    expect(tienda.slice(-1)).toEqual(["cobro_tienda_anulado"]);
-    expect(origen.slice(-2)).toEqual(["cobro_tienda", "cobro_tienda_completado"]);
+    // Ficha 457 (2026-09-25): sus valores (`20260927120000`) van DETRAS de los de la 461, asi que los de
+    // esta ficha ya no cierran la lista: se leen justo antes (dos en la caja, dos en la tienda, uno en el
+    // origen). Lo que se afirma es el orden relativo: contiguos y al final de lo que habia antes.
+    expect(caja.slice(-4, -2)).toEqual(["ingreso_cobro_tienda", "egreso_reverso_cobro_tienda"]);
+    expect(tienda.slice(-3, -2)).toEqual(["cobro_tienda_anulado"]);
+    expect(origen.slice(-3, -1)).toEqual(["cobro_tienda", "cobro_tienda_completado"]);
     // El `up` de la 1 es aditivo y solo eso: seis `ADD VALUE IF NOT EXISTS`, ni un CHECK ni una tabla.
     expect(soloEjecutable(UP_1).match(/ADD VALUE IF NOT EXISTS/g)).toHaveLength(6);
     expect(soloEjecutable(UP_1)).not.toMatch(/CHECK|CREATE TABLE|UPDATE|DELETE/);

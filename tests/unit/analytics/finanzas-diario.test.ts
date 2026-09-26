@@ -45,6 +45,22 @@ describe("La derivación del dinero por día", () => {
     ]);
   });
 
+  // Ficha 457 (R19/R39, design §10): el pago de una tienda a Ordenex es EFECTIVO de terceros: cuenta
+  // en los `ingresos` de su dia y su anulacion en los `egresos` del dia en que se anula; la ganancia
+  // del dia no se mueve con ninguno de los dos (los fletes que la tienda debia ya se contaron al
+  // aprobar el cierre). El cobro que la dejo en contra es un CARGO: sube la ganancia y no los ingresos.
+  it("el pago de una tienda a Ordenex entra en los ingresos del dia y su anulacion en los egresos; la ganancia no cambia", () => {
+    const dias = derivarFinanzasDiarias([
+      fila("2026-09-20", "ingreso_cobro_tienda", "ingreso", "10000.00"), // cargo: no es efectivo
+      fila("2026-09-20", "ingreso_abono_tienda", "ingreso", "4000.00"), // efectivo de terceros
+      fila("2026-09-21", "egreso_reverso_abono_tienda", "egreso", "4000.00"), // efectivo de terceros
+    ]);
+    expect(dias).toEqual([
+      { fecha: "2026-09-20", ingresos: "4000.00", egresos: "0.00", ganancia: "10000.00", pagoMensajeros: "0.00", pagoTiendas: "0.00" },
+      { fecha: "2026-09-21", ingresos: "0.00", egresos: "4000.00", ganancia: "0.00", pagoMensajeros: "0.00", pagoTiendas: "0.00" },
+    ]);
+  });
+
   // El pago a mensajeros se pidió aparte, pero YA está dentro de los egresos y del lado
   // negativo de la ganancia. Sumarlo al total lo contaría dos veces.
   it("el pago a mensajeros sale aparte y además cuenta dentro de los egresos", () => {

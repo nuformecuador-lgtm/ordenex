@@ -156,6 +156,9 @@ model Usuario {
   aportesCapitalAnulados              AporteCapitalAnulacion[]           @relation("AporteCapitalAnulacionActor") // ficha 459/R74: anulaciones de saldo inicial o aporte
   cobrosTiendaAnulados                CobroTiendaAnulacion[]             @relation("CobroTiendaAnulacionActor") // ficha 461/R10: anulaciones de cobros de Ordenex a una tienda que este usuario hizo; FK RESTRICT (quien devolvio dinero es evidencia)
   ajustesCajaAnulados                 AjusteCajaAnulacion[]              @relation("AjusteCajaAnulacionActor") // ficha 461/R69: anulaciones de correcciones de caja que este usuario hizo; FK RESTRICT
+  abonosComoTienda                    AbonoTienda[]                      @relation("AbonoTiendaTienda") // ficha 457/R1: pagos que ESTA tienda le hizo a Ordenex
+  abonosRegistrados                   AbonoTienda[]                      @relation("AbonoTiendaRegistrador") // ficha 457/R1: pagos de una tienda a Ordenex que este usuario registro
+  abonosAnulados                      AbonoTiendaAnulacion[]             @relation("AbonoTiendaAnulacionActor") // ficha 457/R31: anulaciones de pagos de una tienda a Ordenex que este usuario hizo; FK RESTRICT
   rankingSnapshotFilas                RankingSnapshotFila[]              @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
   ordenNotasEscritas                  OrdenNota[]                        @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   postulacionesRecursoAtendidas       PostulacionRecurso[]               @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
@@ -1687,6 +1690,12 @@ enum WalletMovimientoCategoria {
   // Migracion `20260926120000_cobro_tienda_461_enums`.
   ingreso_cobro_tienda // la linea de caja del cobro (origen `cobro_tienda` o `cobro_tienda_completado`)
   egreso_reverso_cobro_tienda // la anulacion del cobro: devuelve el saldo a la tienda y baja la ganancia
+  // Ficha 457 (design §3.3/§4, DH1): el PAGO DE UNA TIENDA A ORDENEX es dinero de TERCEROS que entra
+  // de verdad (efectivo): sube «Entro», la cifra principal y «De las tiendas»; NO toca la ganancia
+  // (los fletes que la tienda debia ya se contaron al aprobar cada cierre). Su anulacion es el
+  // egreso de terceros que lo devuelve. Migracion `20260927120000_abono_tienda_457_enums`.
+  ingreso_abono_tienda // la entrada del pago (origen `abono_tienda`, origen_id = id del documento)
+  egreso_reverso_abono_tienda // la anulacion del pago: la tienda vuelve a deber
 
   @@map("wallet_movimiento_categoria")
 }
@@ -1721,6 +1730,10 @@ enum WalletOrigenTipo {
   // origenes para que el `down` de esa migracion borre EXACTAMENTE lo suyo (A7 descartada).
   cobro_tienda
   cobro_tienda_completado
+  // Ficha 457 (design §0): el documento del PAGO DE UNA TIENDA A ORDENEX (`abono_tienda`). Las cuatro
+  // filas de los dos libros (credito y debito de anulacion en la tienda; ingreso y reverso en la
+  // caja) llevan este origen con `origen_id` = id del documento.
+  abono_tienda
 
   @@map("wallet_origen_tipo")
 }
@@ -1820,6 +1833,12 @@ enum WalletTiendaMovimientoCategoria {
   /// `egreso_reverso_cobro_tienda` (invariante R8, ahora SIN excepcion). El cobro mismo sigue siendo
   /// `cobro_manual`, que desde esta ficha SI tiene contrapartida: `ingreso_cobro_tienda`.
   cobro_tienda_anulado
+  /// Ficha 457 (design §0/§4, DH1/DH5): el PAGO DE UNA TIENDA A ORDENEX (credito: la tienda con
+  /// saldo en contra le entrega dinero a Ordenex y su saldo sube) y su ANULACION (debito: vuelve a
+  /// deber). Contrapartida en la caja: `ingreso_abono_tienda` / `egreso_reverso_abono_tienda`
+  /// (terceros, efectivo; invariante R8 sin excepcion). Documento propio: `abono_tienda`.
+  abono_tienda
+  abono_tienda_anulado
 
   @@map("wallet_tienda_movimiento_categoria")
 }
@@ -2158,6 +2177,59 @@ model AjusteCajaAnulacion {
   anulador   Usuario          @relation("AjusteCajaAnulacionActor", fields: [anuladoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@map("ajuste_caja_anulacion")
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 457 (design §3.1/§3.2) — el PAGO DE UNA TIENDA A ORDENEX (`abono_tienda`). Documento
+// INMUTABLE (sin updatedAt ni deletedAt, molde `pago_por_cuenta_tienda`); la anulacion es un
+// documento aparte con `UNIQUE` sobre el original y «anulado» se DERIVA de que exista. Migracion
+// `20260927120100_abono_tienda_457_tablas_y_checks`.
+//
+// ⚠️ SOLO DOS RESTRICCIONES UNICAS en el documento (PK y `clave_idempotencia`), POR ESCRITO: el
+// repositorio trata un P2002 sin pista como choque de la clave (mismo razonamiento que
+// `pago_por_cuenta_tienda`). Un `UNIQUE` nuevo aqui haria que un choque ajeno se leyera como
+// «ya registrado». Los CHECK (monto > 0, motivo no vacio, comprobante en par) van a mano en la
+// migracion. RLS habilitada SIN policies (solo service role), R76.
+// ════════════════════════════════════════════════════════════════════════════════════════════
+
+/// Ficha 457 (R1, DH1/DH2) — dinero que una tienda con saldo en contra le ENTREGA a Ordenex. Sube el
+/// saldo de la tienda (credito `abono_tienda`) y entra a la caja como dinero de TERCEROS
+/// (`ingreso_abono_tienda`); no toca la ganancia. Nunca por encima de lo que la tienda debe (R15).
+model AbonoTienda {
+  id                     String          @id @default(uuid())
+  claveIdempotencia      String          @unique @map("clave_idempotencia") // la genera el dialogo al abrirse (R13/R25)
+  tiendaId               String          @map("tienda_id") // FK -> usuario (rol adminTienda); quien paga
+  monto                  Decimal         @db.Decimal(12, 2) // > 0 (CHECK)
+  metodo                 MetodoPagoValue // enum EXISTENTE de la feature 36
+  referencia             String? // obligatoria si metodo != efectivo (en el borde, como la 172)
+  motivo                 String // CHECK no vacio; tope 200 en el borde (R6)
+  fechaPago              DateTime        @map("fecha_pago") @db.Date // la fecha REAL del pago (R1/R20)
+  comprobantePath        String?         @map("comprobante_path") // bucket privado compartido; NUNCA sale en un DTO (R48)
+  comprobanteContentType String?         @map("comprobante_content_type") // CHECK: los dos NULL o los dos NOT NULL
+  registradoPor          String          @map("registrado_por") // FK -> usuario (actor)
+  createdAt              DateTime        @default(now()) @map("created_at")
+
+  anulacion   AbonoTiendaAnulacion? // 0 o 1: su existencia ES el estado «anulado»
+  tienda      Usuario               @relation("AbonoTiendaTienda", fields: [tiendaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  registrador Usuario               @relation("AbonoTiendaRegistrador", fields: [registradoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([tiendaId, fechaPago])
+  @@map("abono_tienda")
+}
+
+/// Ficha 457 (R31/R36) — la anulacion de un pago de una tienda a Ordenex. `abono_id` UNIQUE: se anula
+/// UNA vez. El motivo vive aqui y NO viaja al historial ni a las descripciones (R63).
+model AbonoTiendaAnulacion {
+  id         String   @id @default(uuid())
+  abonoId    String   @unique @map("abono_id")
+  motivo     String // CHECK no vacio
+  anuladoPor String   @map("anulado_por")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  abono    AbonoTienda @relation(fields: [abonoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  anulador Usuario     @relation("AbonoTiendaAnulacionActor", fields: [anuladoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@map("abono_tienda_anulacion")
 }
 
 /// Ficha 459 (R68, P1) — un SALDO INICIAL o un APORTE DE CAPITAL: dinero de Ordenex que entra a la
@@ -3974,6 +4046,13 @@ enum HistorialAccionTipo {
   /// contra-asiento deshace el efecto de la correccion en la ganancia. Tipo PROPIO (un tipo por
   /// metodo). Entidad: `wallet_movimiento` (la correccion original).
   wallet_movimiento_manual_anulado
+  /// FICHA 457 (R61/R62): alguien REGISTRO un pago de una tienda a Ordenex, o lo ANULO. Los dos
+  /// «mueven dinero»: entra (o vuelve a salir) dinero de la tienda y su saldo sube (o baja). UN TIPO
+  /// POR METODO (`AbonoTiendaRepository.crear` / `.anular`; la guardia del censo mide por metodo).
+  /// La fila lleva el importe y el NOMBRE de la tienda; NUNCA el motivo, la referencia ni la ruta
+  /// del comprobante (texto libre, R63). Entidad: `abono_tienda` (1:1 con la tabla).
+  abono_tienda_registrado
+  abono_tienda_anulado
 
   @@map("historial_accion_tipo")
 }
@@ -4014,6 +4093,8 @@ enum HistorialAccionEntidad {
   /// FICHA 459 (design §4.2): los dos documentos nuevos, 1:1 con sus tablas.
   pago_por_cuenta_tienda
   aporte_capital
+  /// FICHA 457 (design §9): el documento del pago de una tienda a Ordenex, 1:1 con su tabla.
+  abono_tienda
 
   @@map("historial_accion_entidad")
 }

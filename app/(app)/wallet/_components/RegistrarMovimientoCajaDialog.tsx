@@ -18,6 +18,7 @@ import { registrarEgresoAdministrativoAction } from "@/lib/actions/wallet-egreso
 import { registrarCobroTiendaAction } from "@/lib/actions/wallet-tienda";
 import { registrarPagoPorCuentaTiendaAction } from "@/lib/actions/pago-por-cuenta-tienda";
 import { registrarAporteCapitalAction } from "@/lib/actions/aporte-capital";
+import { registrarAbonoTiendaAction } from "@/lib/actions/abono-tienda";
 import { listarAdminTiendas } from "@/lib/actions/usuarios-por-rol";
 import { money } from "@/lib/config/moneda";
 import { WALLET_COMPROBANTE_MIME } from "@/lib/config/wallet-comprobante";
@@ -35,6 +36,7 @@ import {
   conceptoPorId,
   fraseDelLibro,
   type ConceptoManual,
+  type ConceptoManualId,
 } from "./wallet-conceptos-manuales";
 import { montoValido } from "./wallet-labels";
 
@@ -67,6 +69,13 @@ import { montoValido } from "./wallet-labels";
 // efecto dicen eso y su aviso de éxito dice en palabras cuando la tienda queda debiendo (R54). Los
 // tres registros que van a la caja viajan con la clave de idempotencia y tratan `ya_registrado`
 // como éxito (R66/R68): un doble clic no puede producir ni una fila ni un segundo aviso.
+//
+// FICHA 457 (T6.4, design §8.3) — el OCTAVO concepto, «Una tienda le paga a Ordenex»: pide tienda,
+// método (con referencia en SINPE y transferencia) y comprobante opcional, y su fecha —la REAL del
+// pago— no tiene ventana hacia atrás y viaja SIEMPRE como `fechaPago` (D3). `sin_deuda` y `excede`
+// se pintan bajo su campo con el importe que devolvió el SERVIDOR (R58): aquí no se compara ni se
+// resta ningún importe. Y tres props (D8) para que el desglose de `/wallet/tiendas` abra el MISMO
+// formulario con el concepto y la tienda fijos: sin ellas, el diálogo es el de siempre.
 //
 // Money-safe (R15 de la 334 / R28 de la 459): el monto viaja como STRING de punta a punta y NUNCA
 // se convierte a punto flotante en este archivo; el borde lo re-valida con aritmetica decimal.
@@ -154,6 +163,38 @@ const TEXTO_APORTE = {
     `Registrado. ${TEXTO_APORTE.nombreClase[clase]} de ${money(monto)}.`,
 } as const;
 
+/** FICHA 457 (design §8.3, R57/R58) — los textos del pago de una tienda a Ordenex. LITERALES. */
+const TEXTO_ABONO = {
+  tienda: "Tienda que paga",
+  pista: "Solo se admite si la tienda tiene saldo en contra, y hasta lo que debe.",
+  sinTienda: "Elegí la tienda que paga.",
+  catalogoCaido:
+    "No se pudo cargar la lista de tiendas, así que no se puede registrar el pago de una tienda ahora mismo. Cerrá y volvé a abrir para reintentarlo; los otros conceptos siguen funcionando.",
+  /** R58 — `sin_deuda`, bajo el campo de la tienda. */
+  sinDeuda: "Esta tienda no tiene saldo en contra: no hay nada que pagar.",
+  /** R58 — `excede`, bajo el monto, con la deuda que devolvió el SERVIDOR ya formateada. */
+  excede: (deuda: string) => `La tienda debe ${deuda}: el pago no puede superar ese importe.`,
+  /** R57 — el saldo del SERVIDOR con su signo; si sigue en contra, en palabras. */
+  registrado: (tienda: string, saldo: SaldoTiendaDTO) => `Pago registrado. ${fraseSaldoAbono(tienda, saldo)}`,
+  /**
+   * m7 de la revisión — `ya_registrado`: la clave ya tenía un pago. Dice el importe del pago que QUEDÓ
+   * (el del servidor), porque si el usuario cambió la cifra antes de reintentar, la suya no se registró.
+   */
+  yaRegistrado: (tienda: string, monto: string, saldo: SaldoTiendaDTO) =>
+    `Este pago ya estaba registrado, por ${money(monto)}. ${fraseSaldoAbono(tienda, saldo)}`,
+} as const;
+
+/** R57 — el saldo del SERVIDOR con su signo; si sigue en contra, en palabras. */
+function fraseSaldoAbono(tienda: string, saldo: SaldoTiendaDTO): string {
+  return (
+    `El saldo de ${tienda} queda en ${money(saldo.saldo)} · ${SALDO_SIGNO_LABEL[saldo.signo]}.` +
+    (saldo.signo === "negativo" ? " La tienda todavía le debe ese dinero a Ordenex." : "")
+  );
+}
+
+/** El texto del botón que abre el diálogo cuando nadie lo cambia (D8 de la 457). */
+const ETIQUETA_BOTON_POR_DEFECTO = "Registrar movimiento";
+
 /** FICHA 459 (R54/R56) — el comprobante, opcional. */
 const TEXTO_COMPROBANTE = {
   label: "Comprobante (opcional)",
@@ -209,16 +250,32 @@ function nuevaClave(): string {
 export interface RegistrarMovimientoCajaDialogProps {
   /** Callback opcional para que el módulo recargue su vista (libro + cifras + desglose, R18/R65). */
   onRegistrado?: () => void;
+  /** FICHA 457 (D8): el concepto con el que se abre. Defecto: el primero del catálogo. */
+  conceptoInicial?: ConceptoManualId;
+  /**
+   * FICHA 457 (D8): la tienda, FIJA. Con ella el concepto no se puede cambiar, la tienda se muestra
+   * por su nombre y no se pide el catálogo de tiendas.
+   */
+  tiendaFija?: { readonly id: string; readonly nombre: string };
+  /** FICHA 457 (D8): el texto del botón que abre el diálogo. Defecto: «Registrar movimiento». */
+  etiquetaBoton?: string;
 }
 
 export function RegistrarMovimientoCajaDialog({
   onRegistrado,
+  conceptoInicial,
+  tiendaFija,
+  etiquetaBoton,
 }: RegistrarMovimientoCajaDialogProps) {
+  /** El concepto de apertura: el pedido, o el primero del catálogo (el de siempre). */
+  const conceptoDeApertura: ConceptoManual =
+    (conceptoInicial === undefined ? undefined : conceptoPorId(conceptoInicial)) ??
+    CONCEPTO_INICIAL;
   const router = useRouter();
   const toast = useToast();
 
   const [open, setOpen] = useState(false);
-  const [concepto, setConcepto] = useState<ConceptoManual>(CONCEPTO_INICIAL);
+  const [concepto, setConcepto] = useState<ConceptoManual>(conceptoDeApertura);
   const [monto, setMonto] = useState("");
   const [fecha, setFecha] = useState("");
   const [descripcion, setDescripcion] = useState("");
@@ -235,12 +292,13 @@ export function RegistrarMovimientoCajaDialog({
   // La ventana admisible se congela AL ABRIR y no se recalcula en cada render.
   const [ventana, setVentana] = useState({ min: "", max: "" });
 
-  // R5 de la 381 — el catálogo se pide AL ABRIR el diálogo y no antes.
+  // R5 de la 381 — el catálogo se pide AL ABRIR el diálogo y no antes. FICHA 457 (D8): con la
+  // tienda fija no se pide nunca.
   const {
     data: tiendas,
     error: errorTiendas,
     isLoading: cargandoTiendas,
-  } = useSWR(open ? SWR_KEY_TIENDAS_COBRO : null, cargarTiendas, {
+  } = useSWR(open && tiendaFija === undefined ? SWR_KEY_TIENDAS_COBRO : null, cargarTiendas, {
     shouldRetryOnError: false,
   });
 
@@ -248,18 +306,46 @@ export function RegistrarMovimientoCajaDialog({
   const esCobro = claseDestino === "cobro_tienda";
   const esPagoPorCuenta = claseDestino === "pago_por_cuenta_tienda";
   const esAporte = claseDestino === "aporte_capital";
-  /** Los dos conceptos que eligen una tienda. */
-  const pideTienda = esCobro || esPagoPorCuenta;
+  // FICHA 457 (design §8.3): el pago de una tienda a Ordenex.
+  const esAbono = claseDestino === "abono_tienda";
+  /** Los tres conceptos que eligen una tienda. */
+  const pideTienda = esCobro || esPagoPorCuenta || esAbono;
+  /** FICHA 457: los dos conceptos que piden el método de pago. */
+  const pideMetodo = esPagoPorCuenta || esAbono;
+  /** FICHA 457 (D3): los dos conceptos cuya fecha no tiene ventana hacia atrás. */
+  const fechaSinVentana = esAporte || esAbono;
   /** R6 de la 381 — el catálogo no se pudo leer. Solo bloquea a los conceptos que lo usan. */
   const catalogoCaido = errorTiendas !== undefined;
   const conceptoBloqueado = pideTienda && catalogoCaido;
   /** R34 — la referencia se pide solo con SINPE y transferencia. */
-  const pideReferencia = esPagoPorCuenta && metodo !== "" && metodo !== "efectivo";
+  const pideReferencia = pideMetodo && metodo !== "" && metodo !== "efectivo";
 
-  const opcionesTienda: SelectOption[] = (tiendas ?? []).map((t) => ({
-    value: t.id,
-    label: t.nombre,
-  }));
+  // FICHA 457 (D8): con la tienda fija, la única opción es ella (el campo va deshabilitado).
+  const opcionesTienda: SelectOption[] =
+    tiendaFija === undefined
+      ? (tiendas ?? []).map((t) => ({ value: t.id, label: t.nombre }))
+      : [{ value: tiendaFija.id, label: tiendaFija.nombre }];
+
+  /** El rótulo del campo de la tienda, por concepto. */
+  function rotuloTienda(): string {
+    if (esCobro) return TEXTO_COBRO_TIENDA.label;
+    if (esAbono) return TEXTO_ABONO.tienda;
+    return TEXTO_PAGO_POR_CUENTA.tienda;
+  }
+
+  /** La pista bajo el campo de la tienda, por concepto. */
+  function pistaTienda(): string {
+    if (esCobro) return TEXTO_COBRO_TIENDA.hint;
+    if (esAbono) return TEXTO_ABONO.pista;
+    return TEXTO_PAGO_POR_CUENTA.pistaSaldo;
+  }
+
+  /** El aviso de catálogo caído, por concepto. */
+  function avisoCatalogoCaido(): string {
+    if (esCobro) return TEXTO_COBRO_TIENDA.catalogoCaido;
+    if (esAbono) return TEXTO_ABONO.catalogoCaido;
+    return TEXTO_PAGO_POR_CUENTA.catalogoCaido;
+  }
 
   function placeholderTienda(): string {
     if (catalogoCaido) return TEXTO_COBRO_TIENDA.catalogoCaidoBreve;
@@ -271,7 +357,7 @@ export function RegistrarMovimientoCajaDialog({
 
   function reset() {
     const hoy = fechaCalendarioCR();
-    setConcepto(CONCEPTO_INICIAL);
+    setConcepto(conceptoDeApertura);
     // R27 (459): el monto arranca VACÍO para TODOS los conceptos, y ningún camino lo rellena.
     setMonto("");
     // R19: el campo arranca en el día calendario EN CURSO de Costa Rica.
@@ -279,8 +365,9 @@ export function RegistrarMovimientoCajaDialog({
     setVentana({ min: primerDiaMovimientoAdmisible(), max: hoy });
     setDescripcion("");
     // FICHA 381: la tienda elegida también se limpia: un cobro heredado de la vez anterior sería
-    // dinero cobrado a quien no tocaba. Lo mismo vale para un pago por cuenta.
-    setTiendaId("");
+    // dinero cobrado a quien no tocaba. Lo mismo vale para un pago por cuenta. FICHA 457 (D8): la
+    // tienda fija vuelve a ser la fija.
+    setTiendaId(tiendaFija?.id ?? "");
     setBeneficiario("");
     setMetodo("");
     setReferencia("");
@@ -321,12 +408,13 @@ export function RegistrarMovimientoCajaDialog({
     if (!montoValido(monto)) {
       nuevos.monto = "El monto debe ser un número mayor que 0.";
     }
-    if (esAporte) {
+    if (fechaSinVentana) {
       // P7: el saldo inicial o aporte NO tiene ventana hacia atrás; solo no puede ser futuro. El
       // tope del saldo inicial contra el primer día de la caja lo aplica el servidor (R71).
+      // FICHA 457 (D3): el pago de una tienda tampoco: una tienda paga hoy deudas de hace meses.
       if (fecha === "") nuevos.fecha = "Elegí la fecha.";
       else if (fecha > fechaCalendarioCR()) nuevos.fecha = "La fecha no puede ser posterior a hoy.";
-      if (clase === "") nuevos.clase = TEXTO_APORTE.sinClase;
+      if (esAporte && clase === "") nuevos.clase = TEXTO_APORTE.sinClase;
     } else {
       // Los textos de rechazo son los MISMOS que emite el borde (`problemaDeFechaMovimiento`).
       const problemaFecha = problemaDeFechaMovimiento(fecha);
@@ -334,14 +422,19 @@ export function RegistrarMovimientoCajaDialog({
     }
     if (descripcion.trim().length === 0) {
       nuevos.descripcion =
-        esPagoPorCuenta || esAporte ? "El motivo es obligatorio." : "La descripción es obligatoria.";
+        esPagoPorCuenta || esAporte || esAbono
+          ? "El motivo es obligatorio."
+          : "La descripción es obligatoria.";
     }
+    if (esAbono && tiendaId === "") nuevos.tiendaId = TEXTO_ABONO.sinTienda;
     if (esCobro && tiendaId === "") nuevos.tiendaId = TEXTO_COBRO_TIENDA.sinElegir;
     if (esPagoPorCuenta) {
       if (tiendaId === "") nuevos.tiendaId = TEXTO_PAGO_POR_CUENTA.sinTienda;
       if (beneficiario.trim().length === 0) {
         nuevos.beneficiario = TEXTO_PAGO_POR_CUENTA.sinBeneficiario;
       }
+    }
+    if (pideMetodo) {
       if (metodo === "") nuevos.metodo = TEXTO_PAGO_POR_CUENTA.sinMetodo;
       if (pideReferencia && referencia.trim().length === 0) {
         nuevos.referencia = TEXTO_PAGO_POR_CUENTA.sinReferencia;
@@ -392,6 +485,23 @@ export function RegistrarMovimientoCajaDialog({
     return fd;
   }
 
+  /**
+   * FICHA 457 (R56) — el `FormData` del pago de una tienda a Ordenex, SOLO con sus claves. La fecha
+   * viaja SIEMPRE, como `fechaPago` (D3: es la fecha real del pago y el schema la exige).
+   */
+  function formDataAbono(): FormData {
+    const fd = new FormData();
+    fd.set("claveIdempotencia", clave);
+    fd.set("tiendaId", tiendaId);
+    fd.set("monto", monto.trim());
+    fd.set("metodo", metodo);
+    if (pideReferencia) fd.set("referencia", referencia.trim());
+    fd.set("motivo", descripcion.trim());
+    fd.set("fechaPago", fecha);
+    if (comprobante !== null) fd.set("comprobante", comprobante);
+    return fd;
+  }
+
   async function registrar(): Promise<ResultadoRegistro> {
     // El enrutado sigue siendo por la CLASE del destino, nunca por el id del concepto.
     const destino = concepto.destino;
@@ -402,6 +512,35 @@ export function RegistrarMovimientoCajaDialog({
         return {
           status: "ok",
           mensajeExito: TEXTO_PAGO_POR_CUENTA.registrado(res.pago.tiendaNombre, res.saldo),
+        };
+      }
+      if (res.status === "comprobante_no_guardado") {
+        return { status: "aviso", mensaje: TEXTO_COMPROBANTE.noGuardado };
+      }
+      return res;
+    }
+
+    if (destino.clase === "abono_tienda") {
+      const res = await registrarAbonoTiendaAction(formDataAbono());
+      if (res.status === "ok") {
+        return { status: "ok", mensajeExito: TEXTO_ABONO.registrado(res.abono.tiendaNombre, res.saldo) };
+      }
+      // R25/R57: `ya_registrado` = el doble envío devolvió el pago ORIGINAL; es un éxito, un aviso, y
+      // dice el importe que quedó (m7).
+      if (res.status === "ya_registrado") {
+        return {
+          status: "ok",
+          mensajeExito: TEXTO_ABONO.yaRegistrado(res.abono.tiendaNombre, res.abono.monto, res.saldo),
+        };
+      }
+      // R58: el motivo bajo SU campo, con el importe del SERVIDOR (sin recalcular nada aquí).
+      if (res.status === "sin_deuda") {
+        return { status: "validation_error", fieldErrors: { tiendaId: [TEXTO_ABONO.sinDeuda] } };
+      }
+      if (res.status === "excede") {
+        return {
+          status: "validation_error",
+          fieldErrors: { monto: [TEXTO_ABONO.excede(money(res.deuda))] },
         };
       }
       if (res.status === "comprobante_no_guardado") {
@@ -491,7 +630,8 @@ export function RegistrarMovimientoCajaDialog({
       const f = result.fieldErrors;
       setErrores({
         monto: f.monto?.[0],
-        fecha: f.fecha?.[0],
+        // FICHA 457: la fecha del pago de una tienda vuelve del borde como `fechaPago`.
+        fecha: f.fecha?.[0] ?? f.fechaPago?.[0],
         descripcion: f.descripcion?.[0] ?? f.motivo?.[0],
         tiendaId: f.tiendaId?.[0],
         beneficiario: f.beneficiario?.[0],
@@ -520,7 +660,7 @@ export function RegistrarMovimientoCajaDialog({
   return (
     <>
       <Button type="button" onClick={abrir}>
-        Registrar movimiento
+        {etiquetaBoton ?? ETIQUETA_BOTON_POR_DEFECTO}
       </Button>
 
       <Modal
@@ -546,6 +686,8 @@ export function RegistrarMovimientoCajaDialog({
               value={concepto.id}
               onValueChange={elegirConcepto}
               options={CONCEPTO_MANUAL_OPTIONS}
+              // FICHA 457 (D8): con la tienda fija, el concepto también lo está.
+              disabled={tiendaFija !== undefined}
             />
             {/* R60 (459): qué le pasa a la caja, a la tienda y a la ganancia. */}
             <p id="movimiento-concepto-efecto" className="text-sm font-medium text-foreground">
@@ -563,14 +705,15 @@ export function RegistrarMovimientoCajaDialog({
             </p>
           )}
 
-          {/* R2/R3 de la 381 y R61 de la 459 — el campo de la tienda existe SOLO para los dos
-              conceptos que la eligen. Con los otros no se monta y su valor no puede viajar. */}
+          {/* R2/R3 de la 381, R61 de la 459 y R56 de la 457 — el campo de la tienda existe SOLO
+              para los tres conceptos que la eligen. Con los otros no se monta y su valor no puede
+              viajar. */}
           {pideTienda ? (
             <FormField
               id="movimiento-tienda"
-              label={esCobro ? TEXTO_COBRO_TIENDA.label : TEXTO_PAGO_POR_CUENTA.tienda}
+              label={rotuloTienda()}
               error={errores.tiendaId}
-              hint={esCobro ? TEXTO_COBRO_TIENDA.hint : TEXTO_PAGO_POR_CUENTA.pistaSaldo}
+              hint={pistaTienda()}
             >
               {(control) => (
                 <>
@@ -579,21 +722,19 @@ export function RegistrarMovimientoCajaDialog({
                     id={control.id}
                     aria-invalid={control["aria-invalid"]}
                     aria-describedby={control["aria-describedby"]}
-                    aria-label={esCobro ? TEXTO_COBRO_TIENDA.label : TEXTO_PAGO_POR_CUENTA.tienda}
+                    aria-label={rotuloTienda()}
                     value={tiendaId}
                     onValueChange={(v) => {
                       setTiendaId(v);
                       if (errores.tiendaId) setErrores((p) => ({ ...p, tiendaId: undefined }));
                     }}
                     options={opcionesTienda}
-                    disabled={catalogoCaido || cargandoTiendas}
+                    disabled={tiendaFija !== undefined || catalogoCaido || cargandoTiendas}
                     placeholder={placeholderTienda()}
                   />
                   {catalogoCaido ? (
                     <p role="alert" className="mt-1.5 text-sm text-destructive">
-                      {esCobro
-                        ? TEXTO_COBRO_TIENDA.catalogoCaido
-                        : TEXTO_PAGO_POR_CUENTA.catalogoCaido}
+                      {avisoCatalogoCaido()}
                     </p>
                   ) : null}
                 </>
@@ -671,8 +812,9 @@ export function RegistrarMovimientoCajaDialog({
                 aria-required="true"
                 type="date"
                 value={fecha}
-                // P7 (459): el saldo inicial o aporte no tiene ventana hacia atrás.
-                min={esAporte ? undefined : ventana.min}
+                // P7 (459): el saldo inicial o aporte no tiene ventana hacia atrás. FICHA 457 (D3):
+                // el pago de una tienda tampoco.
+                min={fechaSinVentana ? undefined : ventana.min}
                 max={ventana.max}
                 onChange={(e) => {
                   setFecha(e.target.value);
@@ -705,7 +847,7 @@ export function RegistrarMovimientoCajaDialog({
             )}
           </FormField>
 
-          {esPagoPorCuenta ? (
+          {pideMetodo ? (
             <FormField
               id="movimiento-metodo"
               label={TEXTO_PAGO_POR_CUENTA.metodo}
@@ -753,8 +895,8 @@ export function RegistrarMovimientoCajaDialog({
             </FormField>
           ) : null}
 
-          {/* R54 — el comprobante es OPCIONAL (H1 de la 458). */}
-          {esPagoPorCuenta || esAporte ? (
+          {/* R54 — el comprobante es OPCIONAL (H1 de la 458). FICHA 457: también el del pago. */}
+          {esPagoPorCuenta || esAporte || esAbono ? (
             <FormField
               id="movimiento-comprobante"
               label={TEXTO_COMPROBANTE.label}

@@ -82,6 +82,7 @@ describeSiHayBase("459/T B.12 — saldo inicial o aporte de capital por la actio
       pagosPorCuenta: new PagoPorCuentaTiendaRepository(prisma),
       aportes: new AporteCapitalRepository(prisma),
       cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] }, // ficha 461: lo exige `LectoresDocumentosCaja`; esta suite no lee cobros
+      abonos: { estadoDeDocumentos: async () => [] }, // ficha 457: lo exige `LectoresDocumentosCaja`; esta suite no lee pagos de una tienda a Ordenex
     });
     const r = await svc.verResumenCaja({ page: 1, pageSize: 1 }, p.maestro);
     if (r.status !== "ok") throw new Error(`verResumenCaja: ${JSON.stringify(r)}`);

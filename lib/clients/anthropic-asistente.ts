@@ -33,8 +33,13 @@ const ANTHROPIC_VERSION = "2023-06-01";
 /** Nombre de la operación que se cita en los errores. Sin URL, sin credencial, sin la pregunta. */
 const OPERACION = "asistente";
 
-/** Techo de la respuesta. Una explicación de pantalla no necesita más, y acota el gasto. */
-const MAX_TOKENS_DEFAULT = 1024;
+/**
+ * Techo de la respuesta: acota el gasto. Era 1024 y CORTABA a media frase una respuesta que
+ * enumera tres casos (medido en la ficha 457, §11.4 de `progress/impl_457.md`: «¿cómo anulo un pago
+ * de una tienda?» se truncó las dos veces, `tokens salida 1024`). 2048 le da aire sin abrir la puerta
+ * a respuestas largas: las instrucciones del sistema siguen pidiendo brevedad.
+ */
+const MAX_TOKENS_DEFAULT = 2048;
 
 export interface AnthropicAsistenteOpts {
   /** La credencial. `null` -> desenlace `sin_credencial` y `fetchImpl` NO se llama (R20). */

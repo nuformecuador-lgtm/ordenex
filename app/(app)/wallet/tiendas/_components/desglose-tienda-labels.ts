@@ -55,6 +55,10 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
   pago_tienda: "Ordenex le paga a la tienda",
   pago_por_cuenta: "Ordenex paga un gasto de la tienda",
   pago_por_cuenta_anulado: "Pago de un gasto de la tienda anulado",
+  // Ficha 457 (design §2, D10): el pago de la tienda a Ordenex (nombre reservado por la 461 §7.8,
+  // tomado aqui) y su anulacion, con el patron de «Pago de un gasto de la tienda anulado».
+  abono_tienda: "La tienda le paga a Ordenex",
+  abono_tienda_anulado: "Pago de la tienda a Ordenex anulado",
   ajuste_credito: "Corrección a favor de la tienda",
   ajuste_debito: "Corrección en contra de la tienda",
 };
@@ -87,9 +91,11 @@ export const CATEGORIA_TIENDA_OPTIONS = [
  */
 export const DESGLOSE_TIENDA_LABEL = {
   aFavor: "A favor de la tienda",
-  aFavorHint: "Contra-entrega cobrado, correcciones a favor y devoluciones por anulaciones",
+  // Ficha 457 (design §2, R50): nombra el pago de la tienda a Ordenex y su anulación.
+  aFavorHint:
+    "Contra-entrega cobrado, correcciones a favor, pagos de la tienda a Ordenex y devoluciones por anulaciones",
   cargos: "Cargos de Ordenex",
-  cargosHint: "Fletes, comisión, IVA y los cobros de Ordenex a la tienda",
+  cargosHint: "Fletes, comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados",
   pagado: "Pagado a la tienda",
   pagadoHint: "Lo que Ordenex le pagó a la tienda o pagó por ella",
   saldo: "Saldo a favor",

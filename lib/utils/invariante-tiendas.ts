@@ -46,6 +46,8 @@ export const TIPO_POR_CATEGORIA_TIENDA: Record<
   pago_por_cuenta: "debito",
   pago_por_cuenta_anulado: "credito",
   cobro_tienda_anulado: "credito", // ficha 461: la anulacion devuelve el monto a la tienda
+  abono_tienda: "credito", // ficha 457: la tienda le paga a Ordenex y su saldo sube
+  abono_tienda_anulado: "debito", // ficha 457: la anulacion del pago: vuelve a deber
 };
 
 /** Marca de los conceptos de la tienda que NO tienen asiento en la caja. */
@@ -83,4 +85,10 @@ export const CONTRAPARTIDA_EN_CAJA: Record<
   // Ficha 461 (R10/R12): la anulacion del cobro acredita a la tienda y escribe el REVERSO del cargo
   // en la caja, en la misma transaccion; las dos mueven «De las tiendas» y el saldo hacia arriba.
   cobro_tienda_anulado: "egreso_reverso_cobro_tienda",
+  // Ficha 457 (R17/R24/R31): el pago de una tienda a Ordenex entra a la caja como efectivo de
+  // terceros en la MISMA transaccion en que se acredita a la tienda (`AbonoTiendaService` →
+  // `CajaAbonoTiendaFeedService`); su anulacion debita a la tienda y saca el reverso de la caja.
+  // La misma pareja «efectivo de terceros» que `cod_recaudado ↔ ingreso_cod_recaudado`.
+  abono_tienda: "ingreso_abono_tienda",
+  abono_tienda_anulado: "egreso_reverso_abono_tienda",
 };

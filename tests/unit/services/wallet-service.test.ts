@@ -818,6 +818,7 @@ const SIN_DOCUMENTOS_459 = {
   pagosPorCuenta: { estadoDeDocumentos: async () => [] },
   aportes: { estadoDeDocumentos: async () => [] },
   cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] }, // ficha 461
+  abonos: { estadoDeDocumentos: async () => [] }, // ficha 457: lo exige `LectoresDocumentosCaja`; esta suite no lee pagos de una tienda a Ordenex
 };
 
 // ─── FICHA 459 (T B.16, design §7.3) — el DOCUMENTO de cada fila, resuelto en lote ───
@@ -829,8 +830,14 @@ describe("WalletService.listarMovimientos — el documento de las filas original
   // Ficha 461: un cobro con su linea PROPIA (vigente), otro COMPLETADO por la migracion (anulado).
   const COBRO_PROPIO = "4610000a-0000-4000-8000-000000000001";
   const COBRO_COMPLETADO = "4610000a-0000-4000-8000-000000000002";
+  // Ficha 457 (R41): un pago de una tienda a Ordenex (vigente, con comprobante) y su reverso.
+  const ABONO = "4570000a-0000-4000-8000-000000000001";
 
   const PAGINA: WalletMovimientoDTO[] = [
+    // Ficha 457 (design §8.5): la ENTRADA del pago de una tienda a Ordenex es original; su reverso no.
+    // Mutacion 10 de design §13 (sin la rama del abono en `tipoDeDocumentoOriginal`) deja `b1` en `null`.
+    mov({ id: "b1", tipo: "ingreso", categoria: "ingreso_abono_tienda", origenTipo: "abono_tienda", origenId: ABONO }),
+    mov({ id: "b1r", tipo: "egreso", categoria: "egreso_reverso_abono_tienda", origenTipo: "abono_tienda", origenId: ABONO }),
     // Original del pago por cuenta (vigente, con comprobante).
     mov({ id: "p1", tipo: "egreso", categoria: "egreso_pago_por_cuenta_tienda", origenTipo: "pago_por_cuenta_tienda", origenId: PAGO }),
     // Original de otro pago por cuenta (anulado).
@@ -874,6 +881,12 @@ describe("WalletService.listarMovimientos — el documento de las filas original
           ids.map((id) => ({ id, anulado: false, tieneComprobante: false })),
         ),
       },
+      // Ficha 457 (R41): los pagos de una tienda a Ordenex; el de esta pagina lleva comprobante.
+      abonos: {
+        estadoDeDocumentos: vi.fn(async (ids: readonly string[]) =>
+          ids.map((id) => ({ id, anulado: false, tieneComprobante: true })),
+        ),
+      },
     };
   }
 
@@ -901,6 +914,9 @@ describe("WalletService.listarMovimientos — el documento de las filas original
       k2: { tipo: "cobro_tienda", anulado: true, tieneComprobante: false },
       k2r: null,
       f1: null,
+      // Ficha 457 (R41): la entrada del pago de una tienda lleva su documento (con comprobante); el reverso no.
+      b1: { tipo: "abono_tienda", anulado: false, tieneComprobante: true },
+      b1r: null,
     });
   });
 
@@ -919,6 +935,9 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     // Ficha 461: UNA consulta para los dos cobros (propio y completado), sin el reverso.
     expect(docs.cobros.estadoDeDocumentos).toHaveBeenCalledTimes(1);
     expect(docs.cobros.estadoDeDocumentos).toHaveBeenCalledWith([COBRO_PROPIO, COBRO_COMPLETADO]);
+    // Ficha 457: UNA consulta para el pago de la tienda, solo con el id de la entrada original.
+    expect(docs.abonos.estadoDeDocumentos).toHaveBeenCalledTimes(1);
+    expect(docs.abonos.estadoDeDocumentos).toHaveBeenCalledWith([ABONO]);
   });
 
   it("sin filas de un tipo, ese lector NO se consulta", async () => {
@@ -931,6 +950,7 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     expect(docs.pagosPorCuenta.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.aportes.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.cobros.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 461
+    expect(docs.abonos.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 457
     if (r.status !== "ok") throw new Error("se esperaba ok");
     expect(r.data.movimientos.every((m) => m.documento === null)).toBe(true);
   });
@@ -942,6 +962,7 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     expect(docs.pagosPorCuenta.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.aportes.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.cobros.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 461
+    expect(docs.abonos.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 457
   });
 
   it("la descarga del libro NO resuelve documentos (R58: la descarga no los lleva)", async () => {
@@ -954,6 +975,7 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     expect(docs.pagosPorCuenta.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.aportes.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.cobros.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 461
+    expect(docs.abonos.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 457
   });
 });
 

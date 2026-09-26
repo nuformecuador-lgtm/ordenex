@@ -444,6 +444,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("398/T1.5 (b) — el down recrea las listas 
       // 461) y la anulacion de una correccion de caja (migracion 4, auditoria D3).
       "cobro_tienda_anulado",
       "wallet_movimiento_manual_anulado",
+      // Ficha 457 (2026-09-25): el pago de una tienda a Ordenex, registrar y anular (la guardia del censo
+      // mide por metodo). Su archivo: `abono-tienda-457-migration.test.ts`.
+      "abono_tienda_registrado",
+      "abono_tienda_anulado",
     ];
     expect([...origenAntes].sort()).toEqual(
       ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter(

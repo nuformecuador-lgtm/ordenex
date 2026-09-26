@@ -110,6 +110,12 @@ export interface LectoresDocumentosCaja {
    * por defecto: sin el, ninguna correccion ofreceria «Anular…».
    */
   ajustes: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 457 (design §8.5, R41) — el estado de los PAGOS DE UNA TIENDA A ORDENEX cuya entrada esta en
+   * la pagina. Lo implementa `AbonoTiendaRepository`. Sin valor por defecto: sin el, ninguna fila
+   * ofreceria «Anular…» ni «Ver comprobante».
+   */
+  abonos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
 }
 
 export interface IWalletService {

@@ -76,6 +76,10 @@ export const CATEGORIA_LABEL: Record<WalletMovimientoCategoria, string> = {
   ingreso_reverso_pago_tienda: "Pago a una tienda anulado",
   egreso_pago_por_cuenta_tienda: "Ordenex paga un gasto de una tienda",
   ingreso_reverso_pago_por_cuenta_tienda: "Pago de un gasto de una tienda anulado",
+  // Ficha 457 (design §2, DH7): el pago de una tienda a Ordenex (nombre reservado por la 461 §7.8,
+  // tomado aqui) y su anulacion.
+  ingreso_abono_tienda: "Una tienda le paga a Ordenex",
+  egreso_reverso_abono_tienda: "Pago de una tienda a Ordenex anulado",
   // Lo que Ordenex gasta.
   egreso_pago_mensajero: "Ordenex le paga a un mensajero",
   egreso_sueldo: "Sueldo",
@@ -345,6 +349,8 @@ export const ORIGEN_LABEL: Record<WalletOrigenTipo, string> = {
   // El cargo del cobro y su reverso (servicio) y la linea completada por la migracion de datos (R37).
   cobro_tienda: "Cobro de Ordenex a una tienda",
   cobro_tienda_completado: "Cobro de Ordenex a una tienda (línea de caja completada al corregir)",
+  // Ficha 457 (design §2): el documento del pago de una tienda a Ordenex.
+  abono_tienda: "Pago de una tienda a Ordenex",
 };
 
 // ── Ficha 459 (design §9.4, R66/R67) — las acciones del libro sobre un DOCUMENTO ──
@@ -367,6 +373,8 @@ export const DOCUMENTO_CAJA_NOMBRE: Record<
   aporte_capital: "el aporte de dinero a la caja",
   cobro_tienda: "el cobro de Ordenex a una tienda",
   ajuste_caja: "la corrección de caja",
+  // Ficha 457 (design §2/§8.5).
+  abono_tienda: "el pago de una tienda a Ordenex",
 };
 
 /**

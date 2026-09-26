@@ -92,9 +92,12 @@ describe("R51 · las tres metricas de ingreso de Ordenex no ven el dinero de ter
       .map(([c]) => c)
       .sort();
     // Ficha 459: + el pago por cuenta de una tienda y su anulacion (dinero de las tiendas).
+    // Ficha 457 (DH1): + el pago de una tienda a Ordenex y su anulacion (tambien dinero de las tiendas).
     expect(terceros).toEqual([
       "egreso_pago_por_cuenta_tienda",
       "egreso_pago_tienda",
+      "egreso_reverso_abono_tienda",
+      "ingreso_abono_tienda",
       "ingreso_cod_recaudado",
       "ingreso_reverso_pago_por_cuenta_tienda",
       "ingreso_reverso_pago_tienda",
@@ -444,9 +447,11 @@ describe("las listas de las dos metricas nuevas se comprueban contra el Record",
     const declaradas = [...(getMetrica("dinero_en_caja")?.definicion.categorias ?? [])].sort();
     expect(declaradas).toEqual(Object.keys(NATURALEZA_POR_CATEGORIA).sort());
     expect(declaradas).toEqual([...WALLET_MOVIMIENTO_CATEGORIA_SEED].sort());
-    expect(declaradas).toHaveLength(23); // ficha 459: 17 + 4; ficha 461 (R29): + 2
+    expect(declaradas).toHaveLength(25); // ficha 459: 17 + 4; ficha 461 (R29): + 2; ficha 457 (R52): + 2
     expect(declaradas).toContain("ingreso_cobro_tienda");
     expect(declaradas).toContain("egreso_reverso_cobro_tienda");
+    expect(declaradas).toContain("ingreso_abono_tienda");
+    expect(declaradas).toContain("egreso_reverso_abono_tienda");
   });
 
   it("`ganancia_ordenex` declara EXACTAMENTE las de naturaleza propio, y ni una de terceros", () => {
@@ -473,11 +478,14 @@ describe("las listas de las dos metricas nuevas se comprueban contra el Record",
     const enCaja = getMetrica("dinero_en_caja")?.definicion.categorias ?? [];
     const ganancia = new Set(getMetrica("ganancia_ordenex")?.definicion.categorias ?? []);
     // Ficha 459: + los dos de terceros del pago por cuenta y los dos de CAPITAL, que tampoco son
-    // ganancia.
+    // ganancia. Ficha 457 (R52, D11): + el pago de una tienda a Ordenex y su anulacion, que son de
+    // TERCEROS (DH1) y por eso `ganancia_ordenex` no los ve: 9 categorias.
     expect(enCaja.filter((c) => !ganancia.has(c)).sort()).toEqual([
       "egreso_pago_por_cuenta_tienda",
       "egreso_pago_tienda",
+      "egreso_reverso_abono_tienda",
       "egreso_reverso_aporte_capital",
+      "ingreso_abono_tienda",
       "ingreso_aporte_capital",
       "ingreso_cod_recaudado",
       "ingreso_reverso_pago_por_cuenta_tienda",

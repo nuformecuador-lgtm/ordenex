@@ -67,6 +67,11 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   // anulacion es el REVERSO de ese cargo (egreso propio «cargo», que no suma a «Salio»).
   "ingreso_cobro_tienda",
   "egreso_reverso_cobro_tienda",
+  // Ficha 457 (design §3.3/§4, DH1): el PAGO DE UNA TIENDA A ORDENEX es dinero de TERCEROS que
+  // entra de verdad (efectivo): sube «Entro», la cifra principal y «De las tiendas», y NO toca la
+  // ganancia. Su anulacion es el egreso de terceros que lo devuelve.
+  "ingreso_abono_tienda",
+  "egreso_reverso_abono_tienda",
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -110,6 +115,9 @@ export const WALLET_ORIGEN_TIPO_SEED = [
   // migracion borre EXACTAMENTE lo suyo.
   "cobro_tienda",
   "cobro_tienda_completado",
+  // Ficha 457 (design §0): el documento del PAGO DE UNA TIENDA A ORDENEX. Las cuatro filas de los dos
+  // libros llevan este origen con `origen_id` = id del documento.
+  "abono_tienda",
 ] as const satisfies readonly PrismaWalletOrigenTipo[];
 
 export type WalletOrigenTipo = (typeof WALLET_ORIGEN_TIPO_SEED)[number];
@@ -288,8 +296,12 @@ export type WalletMovimientoDTO = {
  * comprobante). El reverso del cobro y las salidas reclasificadas siguen con `documento: null`.
  */
 export type DocumentoCajaDTO = {
-  /** Ficha 461 (R71): + `ajuste_caja`, la correccion de caja original (su contra-asiento lleva `null`). */
-  tipo: "pago_por_cuenta_tienda" | "aporte_capital" | "cobro_tienda" | "ajuste_caja";
+  /**
+   * Ficha 461 (R71): + `ajuste_caja`, la correccion de caja original (su contra-asiento lleva `null`).
+   * Ficha 457 (design §8.5, R41): + `abono_tienda`, la entrada del pago de una tienda a Ordenex
+   * (`ingreso_abono_tienda` con origen `abono_tienda`); su reverso lleva `null`.
+   */
+  tipo: "pago_por_cuenta_tienda" | "aporte_capital" | "cobro_tienda" | "ajuste_caja" | "abono_tienda";
   anulado: boolean;
   tieneComprobante: boolean;
 };

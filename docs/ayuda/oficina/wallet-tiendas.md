@@ -12,6 +12,8 @@ fuentes:
   - lib/utils/descripcion-cobro-tienda.ts
   - lib/services/PagoPorCuentaTiendaService.ts
   - lib/services/CobroTiendaService.ts
+  - lib/services/AbonoTiendaService.ts
+  - lib/utils/descripcion-abono.ts
   - app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx
   - app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx
   - app/(app)/wallet/tiendas/_components/saldo-tienda-signo-label.ts
@@ -46,8 +48,8 @@ y las correcciones, cada uno con la orden y el cierre de los que viene.
 Ahí se resuelven las discusiones de *«este número no me cuadra»*: se baja hasta la entrega concreta.
 
 Arriba del desglose, cuatro cifras: **A favor de la tienda** (contra-entrega cobrado, correcciones a
-favor y devoluciones por anulaciones), **Cargos de Ordenex** (fletes, comisión, IVA y los cobros de
-Ordenex a la tienda), **Pagado a la tienda** (lo que Ordenex le pagó a la tienda o pagó por ella) y
+favor, pagos de la tienda a Ordenex y devoluciones por anulaciones), **Cargos de Ordenex** (fletes,
+comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados), **Pagado a la tienda** (lo que Ordenex le pagó a la tienda o pagó por ella) y
 **Saldo a favor**.
 
 ## Cómo se llama cada movimiento
@@ -61,6 +63,8 @@ Ordenex a la tienda), **Pagado a la tienda** (lo que Ordenex le pagó a la tiend
 | **Ordenex paga un gasto de la tienda** | Ordenex le pagó a un tercero en nombre de la tienda (su proveedor, su publicidad, su personal). La descripción dice a quién, el motivo, el método y la referencia | **Sí** |
 | **Pago de un gasto de la tienda anulado** | La devolución de un pago de un gasto que se anuló: el saldo vuelve a subir | Vuelve a entrar |
 | **Ordenex le paga a la tienda** | Lo que se le pagó a la tienda de su saldo | **Sí** |
+| **La tienda le paga a Ordenex** | Lo que la tienda le pagó a Ordenex cuando estaba en contra. Su saldo sube | **Sí**: entró dinero de la tienda |
+| **Pago de la tienda a Ordenex anulado** | La anulación de ese pago: el saldo vuelve a bajar | Vuelve a salir |
 | **Corrección a favor de la tienda** / **Corrección en contra de la tienda** | Una corrección hecha a mano | — |
 
 El cobro y el pago de un gasto se registran desde **Wallet · Caja**, con **Registrar movimiento**:
@@ -79,6 +83,12 @@ Desde las acciones de la tienda registrás lo que le pagaste, y el saldo se muev
 Un pago se puede **anular** si se registró por error. Si te dice **«Este pago ya estaba anulado»**, es
 que alguien se te adelantó — recargá y mirá cómo quedó.
 
+## Registrar un pago de la tienda a Ordenex
+
+Cuando una tienda está **en contra**, desde las acciones de su desglose registrás el pago que ella le hizo a Ordenex: **Registrar pago de la tienda a Ordenex**. Se pide el monto —hasta lo que debe—, la fecha real, el motivo, el método (con referencia en SINPE y transferencia) y un comprobante opcional. Su saldo sube en el monto y la fila se actualiza sola. Se anula desde **Wallet · Caja**, en el libro, con motivo.
+
+Con la tienda en cero o a favor, esa acción no aparece: no hay nada que la tienda deba.
+
 ## Cosas que te pueden pasar
 
 **«No hay tiendas con saldo registrado».** Ninguna tiene movimientos todavía. En una operación nueva
@@ -93,6 +103,6 @@ fecha de corte.
 ## Lo que esta pantalla NO hace
 
 - **No es la caja de Ordenex.** Eso es **Wallet · Caja**.
-- **No se registran ni se anulan cobros a una tienda ni pagos de un gasto de una tienda.** Eso es en
-  **Wallet · Caja**, desde el libro.
+- **No se registran ni se anulan cobros a una tienda ni pagos de un gasto de una tienda, ni se anulan
+  pagos de la tienda a Ordenex.** Eso es en **Wallet · Caja**, desde el libro.
 - **No se corrige una entrega desde acá.** Un cargo mal calculado nace de la orden; se arregla allá.

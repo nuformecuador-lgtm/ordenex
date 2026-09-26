@@ -332,11 +332,21 @@ constructor(
 
 ### 5.1 `registrar(input, comprobante | null, actor)` — el orden es parte del requisito
 
+> **Actualizado el 2026-09-26 (m4 de la revisión; el código ya iba así desde `6fe2acd0`):** la CLAVE
+> se mira **antes** de la regla del dinero (paso 3b) y **otra vez** si la regla rechaza bajo el candado
+> (paso 8). Con el orden original —la clave solo al final (paso 13)— el reenvío de un pago que ya salda
+> la deuda (el doble clic del §17.4) respondía `sin_deuda`/`excede` sobre un pago que SÍ quedó (medido:
+> la integración «R25» daba `excede`). La lectura por clave no escribe, va detrás del rol (R2 intacto) y
+> no sube archivo. Y el saldo del paso 8 se lee por la MISMA transacción que tomó el candado (m3).
+
 1. **Rol** (`esAccesoTotal`) antes de leer nada → `forbidden` (R2).
 2. **Escala 2 una vez**: `montoStr` (R5). El MISMO string va a las cuatro escrituras.
 3. **Tienda** (`obtenerCuentaTienda`): inexistente / no `adminTienda` → `validation_error` bajo
    `tiendaId` (R10). El estado **no** se exige (R11, D2): los mensajes `inexistente` y `rol` son los de
    `PagoPorCuentaTiendaService.ts:48-52`; el de `inactiva` no se usa.
+3b. **Clave** (`abonoRepo.obtenerPorClave`, sin candado ni transacción): si ya tiene documento →
+   `ya_registrado` con el pago ORIGINAL y el saldo de SU tienda (R25), sin subir el archivo ni evaluar la
+   regla del dinero.
 4. **Pre-chequeo optimista** del saldo SIN candado: si ya es ≥ 0 o el monto excede, se responde sin
    subir el archivo (ahorra subidas inútiles). No sustituye al paso 7.
 5. **Comprobante** (si viene): `problemaDeComprobante` → `validation_error` bajo `comprobante` (R26);
@@ -348,9 +358,11 @@ constructor(
 7. `runTransaction`: `candado.bloquearBeneficiario(tx, { tipo: "tienda", tiendaId })` — la MISMA fila
    `usuario` que bloquean `registrarPagoTienda` (`LiquidacionService.ts:638`) y
    `PagoPorCuentaTiendaService.registrar` (`:179`) (R16).
-8. Saldo bajo candado: `derivarSaldoTienda(agregarSaldoPorTienda(tiendaId, {}))`. `saldo >= 0` →
-   `sin_deuda` (R14). `monto > |saldo|` → `excede { deuda: |saldo| }` (R15). Los dos salen de la
-   transacción sin escribir.
+8. Saldo bajo candado: `derivarSaldoTienda(agregarSaldoPorTienda(tiendaId, {}, tx))` —por el `tx` del
+   candado, no por otra conexión del pool (m3)—. `saldo >= 0` → `sin_deuda` (R14). `monto > |saldo|` →
+   `excede { deuda: |saldo| }` (R15). Los dos salen de la transacción sin escribir; ANTES de responderlos
+   se vuelve a mirar la clave: si ya tiene documento (dos envíos SIMULTÁNEOS de la misma clave: el
+   segundo esperó el candado y ve el saldo que dejó el primero) → `ya_registrado` (R25).
 9. `abonoRepo.crear(tx, …)` → documento + fila de historial `abono_tienda_registrado` en el MISMO
    método (censo de la guardia, §9). `clave_repetida` → `ClaveRepetidaError` para salir de la transacción.
 10. `tiendaRepo.crearMovimientos(tx, [{ tiendaId, tipo: "credito", categoria: "abono_tienda", origenTipo:
@@ -467,8 +479,10 @@ paga a Ordenex».» (R57).
 - `formDataAbono()` arma SOLO sus claves (R56): `claveIdempotencia`, `tiendaId`, `monto`, `metodo`,
   `referencia` (si `pideReferencia`), `motivo`, `fechaPago`, `comprobante` (si hay). Ningún otro
   `FormData`/payload cambia.
-- `registrar()`: `registrarAbonoTiendaAction(formDataAbono())` → `ok`/`ya_registrado` → éxito con
-  `TEXTO_ABONO.registrado(res.abono.tiendaNombre, res.saldo)` (R57); `sin_deuda` →
+- `registrar()`: `registrarAbonoTiendaAction(formDataAbono())` → `ok` → éxito con
+  `TEXTO_ABONO.registrado(res.abono.tiendaNombre, res.saldo)` (R57); `ya_registrado` → éxito con
+  `TEXTO_ABONO.yaRegistrado(res.abono.tiendaNombre, res.abono.monto, res.saldo)` (m7 de la revisión,
+  2026-09-26: el importe es el del pago que QUEDÓ, por si el usuario cambió la cifra antes de reintentar); `sin_deuda` →
   `validation_error { tiendaId: [TEXTO_ABONO.sinDeuda] }`; `excede` → `{ monto:
   [TEXTO_ABONO.excede(money(res.deuda))] }` (R58; el importe viene del servidor); `comprobante_no_guardado`
   → aviso general existente.
@@ -477,7 +491,8 @@ paga a Ordenex».» (R57).
   tienda no tiene saldo en contra: no hay nada que pagar.» · `excede(deuda)` «La tienda debe {deuda}: el
   pago no puede superar ese importe.» · `registrado(tienda, saldo)` «Pago registrado. El saldo de
   {tienda} queda en {money(saldo.saldo)} · {SALDO_SIGNO_LABEL[saldo.signo]}.» + si `negativo` « La tienda
-  todavía le debe ese dinero a Ordenex.» (R57).
+  todavía le debe ese dinero a Ordenex.» (R57) · `yaRegistrado(tienda, monto, saldo)` «Este pago ya
+  estaba registrado, por {money(monto)}. El saldo de {tienda} queda en …» con la misma cola (m7).
 - **Props nuevas (D8):** `conceptoInicial?: ConceptoManualId` (defecto: el primero del catálogo),
   `tiendaFija?: { id: string; nombre: string }` (con ella el selector de concepto queda deshabilitado en
   `conceptoInicial`, el campo de la tienda muestra el nombre sin catálogo ni SWR y `tiendaId` es el
@@ -686,12 +701,17 @@ ORDER BY 1, 2, 3;
 SELECT to_regclass('public.abono_tienda') AS tabla_abono_ya_existe,
        (SELECT COUNT(*) FROM liquidacion_pago WHERE tienda_id IS NOT NULL) AS pagos_a_tienda;
 
--- M8 — R7 y R8 con la formula de la 461: es EXACTAMENTE C461-1 de specs/461-…/design.md §13; se corre
---      antes y despues (diferencia_r8 = 0,00 y diferencia_r7 = 0,00). Tras el primer pago de Nuform de M:
---      entro +M, cifra +M, de_tiendas +M, suma_saldos +M, ganancia igual, capital igual.
+-- M8 — R7 y R8: es la C461-1 de specs/461-…/design.md §13 CON las dos categorias de esta ficha en la
+--      lista de TERCEROS ('ingreso_abono_tienda','egreso_reverso_abono_tienda', §4, DH1). La C461-1
+--      LITERAL las trataria como «propio» y daria diferencia_r8 = −Σ pagos vigentes (recorrido R79, F1:
+--      medido −34.000,00 en el clon; y −4.000,00 con un solo pago de 4.000 en ordenex_457c). La consulta
+--      COMPLETA, lista para pegar, es la «C457-1» de progress/contraste_457.md, seccion «SQL M8 para
+--      despues del despliegue». Se corre antes y despues (diferencia_r8 = 0,00 y diferencia_r7 = 0,00).
+--      Tras el primer pago de Nuform de M: entro +M, cifra +M, de_tiendas +M, suma_saldos +M, ganancia
+--      igual, capital igual.
 ```
 
-**Tras desplegar (R78):** M6 idéntico; M8 con las dos diferencias en 0,00; M3 con 25 / 16 / 14 / 63 /
+**Tras desplegar (R78):** M6 idéntico; M8 (la C457-1, NO la C461-1 literal) con las dos diferencias en 0,00; M3 con 25 / 16 / 14 / 63 /
 24; M4 con las listas de §3.3; `SELECT relname, relrowsecurity FROM pg_class WHERE relname IN
 ('abono_tienda','abono_tienda_anulacion')` → `t`, `t`; errores de runtime en la hora siguiente = 0. **Tras
 el primer pago real de Nuform:** M1 con el saldo subido en el monto y M8 en 0,00.
@@ -852,6 +872,13 @@ Preparación: `prisma migrate deploy`; una tienda de prueba con saldo en contra 
   migren; `prisma generate` se pisa entre worktrees. Clon propio (`CREATE DATABASE … TEMPLATE ordenex`).
 - **L7 — Bucket no creado en un entorno:** registrar CON comprobante falla ruidoso (R28); SIN
   comprobante funciona.
+- **L9 — Un pago retroactivo puede quedar ANTES del saldo inicial (m6 de la revisión, observación; no
+  se cambia).** D3 deja la fecha del pago sin límite hacia atrás (molde del pago a tienda). La 459 exige
+  que el saldo inicial no sea posterior al primer día con movimientos (`AporteCapitalService.ts:113-121`),
+  pero esa regla solo se evalúa al REGISTRAR el saldo inicial: un pago retroactivo registrado después
+  deja dinero «entrando» antes del saldo inicial. No rompe R7/R8 (las sumas no dependen del orden); es
+  una rareza de lectura del libro por fechas. Si hiciera falta, el arreglo sería un límite inferior en
+  `fechaPagoSchema` (el día del saldo inicial vigente), y es decisión del humano.
 - **L8 — Sale después de la 461 y sin la pantalla de la 458:** el humano acotó la UI; la ficha SÍ se
   puede desplegar sola (el botón del desglose y el concepto del diálogo son la pantalla), pero su
   despliegue lo decide el humano con el pago real de Nuform delante.
