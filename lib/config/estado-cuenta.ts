@@ -23,7 +23,7 @@ export interface EstadoCuentaConfig {
   /**
    * FICHA 458-B (revision M2) — tiempo maximo de la transaccion REPEATABLE READ que agrupa las
    * lecturas del extracto, y espera maxima por una conexion del pool (ms). Mismos valores que la
-   * lectura consistente de la analitica financiera (`lib/config/analitica-financiera.ts`).
+   * lectura consistente de la analitica de dinero (feature 187).
    */
   TIMEOUT_LECTURA_MS: number;
   MAX_WAIT_LECTURA_MS: number;

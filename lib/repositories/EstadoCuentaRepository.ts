@@ -31,7 +31,7 @@ type Cliente = Pick<
   | "cierreDia"
 > & {
   /**
-   * FICHA 458-B (revision M2) — OPCIONAL por el mismo motivo que en `IngresosAnaliticaRepository`:
+   * FICHA 458-B (revision M2) — OPCIONAL por el mismo motivo que en el repositorio de ingresos de la analitica (feature 187):
    * dentro de la lectura consistente la instancia se construye con el cliente TRANSACCIONAL, que no
    * tiene `$transaction` (las transacciones no se anidan).
    */
@@ -104,7 +104,7 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
    * FICHA 458-B (revision M2) — UNA transaccion `repeatable read` para todas las lecturas del
    * extracto: Postgres fija el snapshot en la primera sentencia y lo mantiene hasta el final, asi que
    * la pagina, los totales (actual y anterior) y el periodo ven la misma foto aunque un cierre se
-   * apruebe en medio. Molde: `IngresosAnaliticaRepository.enLecturaConsistente` (feature 187).
+   * apruebe en medio. Molde: la lectura consistente del repositorio de ingresos de la analitica (feature 187).
    * Sin `try`/`catch`: un fallo sube tal cual. Anidar falla ruidoso en vez de reusar el snapshot.
    */
   async enLecturaConsistente<T>(fn: (repo: IEstadoCuentaRepository) => Promise<T>): Promise<T> {
