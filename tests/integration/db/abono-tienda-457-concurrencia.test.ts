@@ -291,6 +291,71 @@ describeSiHayBase("457/T5.2 — concurrencia del pago de una tienda a Ordenex (P
     });
   }, 120_000);
 
+  it("R38 (m2 de la revision): la ANULACION toma el candado de la tienda; un pago de la misma tienda la espera y se evalua sobre la deuda ya devuelta", async () => {
+    // Deuda 10 000 − pago vigente de 4 000 = −6 000. La anulacion de ESE pago se PAUSA con la constancia
+    // escrita y el candado tomado (sin commitear). Mientras, otro pago de 5 000 de la MISMA tienda (cabe
+    // en el pre-chequeo: debe 6 000). Con el candado espera, entra cuando la anulacion ya devolvio los
+    // 4 000 (debe 10 000) y responde el saldo REAL: −5 000. Sin el candado de `anular`
+    // (`AbonoTiendaService.ts`, `bloquearBeneficiario` de la anulacion) no espera a nadie: termina
+    // DURANTE la pausa y le dice a la oficina «queda en −1 000» cuando al commitear la anulacion son −5 000.
+    // Nada mas bloquea al pago: la constancia solo tiene FK al pago y al operador, no a la fila de la tienda.
+    await conPersonas(async (p) => {
+      await endeudar457(prisma, p.tiendaId, "10000.00");
+      // Por `clienteB`, no por `prisma`: `prisma` tiene una de sus dos conexiones ocupada por el candado
+      // del fixture (`conCandado459`).
+      const previo = await abonoService(clienteB).registrar(abonoDe(p, "4000.00"), null, p.maestro);
+      if (previo.status !== "ok") throw new Error(`registro previo: ${JSON.stringify(previo)}`);
+
+      const dentro = senal();
+      const soltar = senal();
+      class RepoConPausa extends AbonoTiendaRepository {
+        override async anular(...args: Parameters<AbonoTiendaRepository["anular"]>) {
+          const r = await super.anular(...args);
+          dentro.dar();
+          await soltar.p; // PAUSA: constancia escrita, candado tomado, nada commiteado
+          return r;
+        }
+      }
+      const anulador = new AbonoTiendaService(
+        new RepoConPausa(clienteA),
+        new WalletTiendaMovimientoRepository(clienteA),
+        new LiquidacionPagoRepository(clienteA),
+        new UserRepository(clienteA),
+        new CajaAbonoTiendaFeedService(new WalletMovimientoRepository(clienteA)),
+        STORAGE_NO_USADO,
+        URLS_NO_USADAS,
+        ((fn: (tx: never) => Promise<unknown>) =>
+          clienteA.$transaction((tx) => fn(tx as never), { timeout: 30_000 })) as unknown as AbonoTiendaTxRunner,
+      );
+      const promesaAnular = anulador.anular({ abonoId: previo.abono.id, motivo: "se registro dos veces" }, p.maestro);
+      await dentro.p;
+
+      let pagoTermino = false;
+      const pago = abonoService(clienteB)
+        .registrar(abonoDe(p, "5000.00"), null, p.maestro)
+        .finally(() => {
+          pagoTermino = true;
+        });
+      await dormir(1500);
+      const terminoDuranteLaPausa = pagoTermino;
+      soltar.dar();
+      const [rAnular, rPago] = await Promise.all([promesaAnular, pago]);
+
+      expect(terminoDuranteLaPausa, "el pago NO debe poder evaluarse mientras la anulacion tiene el candado").toBe(false);
+      expect(rAnular.status).toBe("ok");
+      expect(rPago.status).toBe("ok");
+      if (rPago.status !== "ok") throw new Error("imposible");
+      // El saldo que ve la oficina es el real: −10 000 (anulado el de 4 000) + 5 000.
+      expect(rPago.saldo.saldo).toBe("-5000.00");
+      const filas = await prisma.walletTiendaMovimiento.findMany({ where: { tiendaId: p.tiendaId } });
+      const saldo = filas.reduce(
+        (acc, f) => (f.tipo === "credito" ? acc.add(f.monto) : acc.sub(f.monto)),
+        new Prisma.Decimal(0),
+      );
+      expect(saldo.toFixed(2)).toBe("-5000.00");
+    });
+  }, 120_000);
+
   it("R36: dos anulaciones simultaneas del mismo pago -> una constancia y un solo contra-asiento por libro", async () => {
     await conPersonas(async (p) => {
       await endeudar457(prisma, p.tiendaId, "10000.00");
