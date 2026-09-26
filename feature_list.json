@@ -5472,7 +5472,7 @@
       "title": "rediseño de la wallet: cada movimiento dice que, quien, por que y como quedo",
       "description": "Un solo registro de movimientos con catalogo predefinido y estado de cuenta claro por tienda, mensajero y bodega.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "alta",
       "depends_on": null,
