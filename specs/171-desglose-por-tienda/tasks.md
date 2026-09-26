@@ -201,7 +201,7 @@
 | R25, R29, R40 (borde) | `tests/unit/actions/wallet-tienda-desglose-action.test.ts` |
 | R20 | test de identidad de etiquetas (T2.1) |
 | R31, R49 | suites existentes de `wallet-tienda` y `/mi-wallet`, **sin editar** |
-| R41 | `columnas-sensibles.guardia.test.ts` + `desglose-tienda-descarga-columnas.test.ts` |
+| R41 | `columnas-sensibles.guardia.test.ts` + `estado-cuenta-descarga-columnas.test.ts` (458-D: el desglose y su descarga se retiraron; la sucesora es la descarga del estado de cuenta de la tienda, sin ids) |
 | R42 | `cobertura-tablas.guardia.test.ts` (totales actualizados) |
 | R47 | T2.3 (el componente no importa ninguna acción de escritura) |
 | R48 | T3.1 (diff sin carpeta de migración) |

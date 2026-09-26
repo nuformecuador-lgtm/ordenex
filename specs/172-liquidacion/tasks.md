@@ -715,7 +715,7 @@ queda el registro de cierre y lo que cada una desencadenó.
 | R1 | `tests/unit/services/liquidacion-service.test.ts` — rol sin acceso total → `forbidden` sin tocar datos |
 | R2 | idem — `adminTienda` pidiendo **su propia** tienda → `forbidden` (contraprueba) |
 | R3 | `tests/unit/actions/liquidacion-action.test.ts` — sin sesión → `unauthenticated` sin llamar al servicio (registro y anulación) |
-| R4 | `tests/integration/wallet-tiendas-pago.test.tsx` — sin permiso no se renderizan los controles de pagar ni de anular |
+| R4 | `tests/components/PagosTiendaEstadoCuenta.test.tsx` + `tests/components/EstadoCuenta.test.tsx` — sin permiso no se renderizan los controles de pagar ni de anular (458-D: el desglose y su test se retiraron; el pago vive en el estado de cuenta de la tienda) |
 | R5 | `tests/unit/services/liquidacion-service.test.ts` — el rol se comprueba antes de leer el beneficiario del input |
 | R6 | **pantalla, CON EL ROL**: `tests/components/CierresAdminPage.test.tsx` — se monta la página real y un `adminSatelite` **aprueba** un cierre con pendiente > 0 **sin** recibir la oferta de pago; `maestro` y `admin` sí la reciben (contraprueba) · **el módulo respeta su prop**: `tests/components/CierresAdminPagoMensajero.test.tsx` · **la acción niega**: `liquidacion-service.test.ts` — `forbidden` al llamar directo ⚠️ **fila corregida el 2026-08-02 (bloqueante 2 del review)**: apuntaba sólo a `CierresAdminPagoMensajero.test.tsx`, donde el caso se simula con `puedeRegistrarPago: false` y **no aparece ningún `adminSatelite`**; el eslabón rol → prop (`puedeRegistrarPago={esAccesoTotal(actor.rol)}` en `app/(app)/cierres-admin/page.tsx`) no lo medía nadie. Ahora sí, y verificado por mutación (`={true}` ⇒ cae el caso del `adminSatelite`, siguen verdes las contrapruebas) |
 | R7 | `tests/unit/repositories/liquidacion-pago-repository.test.ts` — las 10 columnas del documento |
@@ -744,8 +744,8 @@ queda el registro de cierre y lo que cada una desencadenó.
 | R30 | `tests/components/RegistrarPagoDialog.test.tsx` — monto prefijado al disponible y editable a la baja |
 | R31 | `tests/unit/services/liquidacion-service.test.ts` — monto > saldo → `excede` `[P1]` |
 | R32 | idem — saldo 0 o negativo → `sin_saldo` con mensaje `[P1]` |
-| R33 | `tests/integration/wallet-tiendas-pago.test.tsx` — refresco dirigido a una sola tienda |
-| R34 | suite de la 171 sin editar (`wallet-tiendas-desglose.test.tsx`, `wallet-tiendas-page.test.tsx`) |
+| R33 | `tests/components/WalletRefrescoDirigido.test.tsx` + `tests/components/PagosTiendaEstadoCuenta.test.tsx` — refresco dirigido a una sola tienda (458-D) |
+| R34 | suite de la 171 sin editar (`wallet-tiendas-page.test.tsx`); el desglose de la 171 se retiró en la 458-D (D14) y lo sustituye `tests/integration/wallet-tiendas-estado-page.test.tsx` |
 | R35 | `tests/unit/services/liquidacion-service.test.ts` — movimiento `pago`/`liquidacion` |
 | R36 | idem — movimiento `debito`/`pago_tienda` |
 | R37 | idem — `fechaMovimiento` = medianoche UTC de la fecha real, no la de registro |
@@ -761,10 +761,10 @@ queda el registro de cierre y lo que cada una desencadenó.
 | R47 | idem + `RegistrarPagoDialog.test.tsx` — reintento devuelve `ya_registrado` |
 | R48 | idem — reintentar la aprobación no duplica movimientos |
 | R49 | `tests/components/PagosRegistradosTabla.test.tsx` — los datos del comprobante |
-| R50 | `tests/integration/wallet-tiendas-pago.test.tsx` — la lista aparece en el desglose de la tienda |
+| R50 | `tests/components/PagosTiendaEstadoCuenta.test.tsx` — la lista aparece en el estado de cuenta de la tienda (458-D; antes, en su desglose) |
 | R51 | idem — el movimiento del pago se distingue por su concepto |
 | R52 | `tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts` — pago y contraasiento, las dos mitades |
-| R53 | `tests/integration/wallet-tiendas-pago.test.tsx` — «pagado» sube y saldo baja igual |
+| R53 | `tests/components/WalletRefrescoDirigido.test.tsx` — tras registrar, el saldo de la tarjeta es el que devuelve el servidor (458-D: el estado de cuenta ya no enseña «pagado» aparte) |
 | R54 | `tests/integration/mis-pagos-page.test.tsx` — el mensajero ve el pago y su reverso |
 | R55 | `tests/integration/mi-wallet-page.test.tsx` — «pagado» separado de «cargos» `[P5]` |
 | R56 | `tests/unit/descarga/pagos-registrados-descarga-columnas.test.ts` + guardia de columnas sensibles |

@@ -839,7 +839,7 @@ Preparación: `prisma migrate deploy`; una tienda de prueba con saldo en contra 
 | R53 | `nombres-wallet-461.guardia.test.ts` (tomados + retirados) |
 | R54, R55, R57, R58, R67 | `wallet-conceptos-manuales.test.ts`, `wallet-registrar-movimiento-dialog.test.tsx`, `abono-tienda-alcance.guardia.test.ts` (3) |
 | R56 | `wallet-registrar-movimiento-dialog.test.tsx` (payload exacto del abono; los otros seis intactos) |
-| R59 | `tests/components/PagoTiendaAccionesAbono457.test.tsx` (botón solo con signo negativo; props del diálogo; refresco de las tres claves) |
+| R59 | `tests/components/EstadoCuentaAcciones.test.tsx` + `tests/components/WalletRefrescoDirigido.test.tsx` (acción solo con signo negativo; concepto y tienda fijos; refresco de ESA cuenta — 458-D: la acción pasó del desglose al estado de cuenta) |
 | R61–R64 | `catalogo-y-choke-point.test.ts`, `historial-accion-escrituras-cubiertas.guardia`, `historial-accion-sin-datos-cliente.guardia`, `tests/components/HistorialAccionesAbonoTienda457.test.tsx` |
 | R65, R67 | `abono-tienda-alcance.guardia.test.ts` + integración Σ `abono_tienda` = Σ `ingreso_abono_tienda` por `origen_id` |
 | R68, R69 | `tests/unit/asistente/contexto-457.test.ts`, `contexto-461.test.ts` (literal reescrito), guardias `ayuda-*`, `nombres-wallet-461.guardia` sobre `docs/ayuda/**` |
