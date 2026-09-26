@@ -2,7 +2,13 @@ import { money } from "@/lib/config/moneda";
 import type { EstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import { cn } from "@/lib/utils";
 
-import { ESTADO_CUENTA_TEXTO, TARJETAS_TEXTO, fraseDelSaldo, sinSigno } from "./estado-cuenta-labels";
+import {
+  ESTADO_CUENTA_TEXTO,
+  TARJETAS_TEXTO,
+  fraseDelSaldo,
+  fraseDelSaldoParaLaTienda,
+  sinSigno,
+} from "./estado-cuenta-labels";
 
 // FICHA 458-D (T D.1, design §5.1; R18, R20, R22) — las TARJETAS del estado de cuenta: el saldo actual
 // con su signo y la frase de quién le debe a quién, los abonos y los cargos del periodo, y el saldo
@@ -27,9 +33,14 @@ function Tarjeta({ rotulo, valor, clase }: { rotulo: string; valor: string; clas
 
 export interface TarjetasEstadoCuentaProps {
   estado: EstadoCuentaDTO;
+  /**
+   * FICHA 458-D (R34) — cómo se dice la frase del saldo. «oficina» (por defecto): en tercera persona,
+   * desde Ordenex; «tienda»: la propia tienda en `/mi-wallet`, en segunda persona.
+   */
+  vista?: "oficina" | "tienda";
 }
 
-export function TarjetasEstadoCuenta({ estado }: Readonly<TarjetasEstadoCuentaProps>) {
+export function TarjetasEstadoCuenta({ estado, vista = "oficina" }: Readonly<TarjetasEstadoCuentaProps>) {
   const { cuenta } = estado;
   const t = TARJETAS_TEXTO[cuenta.tipo];
   // La bodega: el saldo es lo que TIENE POR ENTREGAR; positivo no es «a favor» sino deuda con la central.
@@ -39,7 +50,11 @@ export function TarjetasEstadoCuenta({ estado }: Readonly<TarjetasEstadoCuentaPr
         ? "text-warning-strong"
         : COLOR_DEL_SALDO[estado.signo]
       : COLOR_DEL_SALDO[estado.signo];
-  const frase = fraseDelSaldo(cuenta.tipo, estado.sentido, cuenta.nombre, money(sinSigno(estado.saldoActual)));
+  const monto = money(sinSigno(estado.saldoActual));
+  const frase =
+    vista === "tienda"
+      ? fraseDelSaldoParaLaTienda(estado.sentido, monto)
+      : fraseDelSaldo(cuenta.tipo, estado.sentido, cuenta.nombre, monto);
 
   return (
     <section aria-label={ESTADO_CUENTA_TEXTO.tarjetas(cuenta.nombre)} className="flex flex-col gap-3">

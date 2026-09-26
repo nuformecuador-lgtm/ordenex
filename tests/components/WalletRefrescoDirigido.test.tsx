@@ -107,7 +107,8 @@ describe("R30/R48 — registrar desde el estado de cuenta relee ESA cuenta y nin
         </ToastProvider>
       </SWRConfig>,
     );
-    await waitFor(() => expect(verEstadoCuentaMock).toHaveBeenCalled());
+    // 458-D (cierre de pantalla): la primera página del servidor NO se relee al montar (`revalidateIfStale: false`).
+    expect(verEstadoCuentaMock).not.toHaveBeenCalled();
     const acciones = screen.getByRole("region", { name: "Acciones sobre la cuenta de Tania Tienda" });
     await user.click(within(acciones).getByRole("button", { name: "La tienda le paga a Ordenex" }));
     const dialogo = await screen.findByRole("dialog");

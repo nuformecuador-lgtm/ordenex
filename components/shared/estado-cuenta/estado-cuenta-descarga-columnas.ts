@@ -20,6 +20,8 @@ export interface LineaEstadoCuenta {
   movimiento: string;
   motivo: string | null;
   origen: string | null;
+  /** FICHA 458-D — el método y la referencia del pago de la fila, en palabras; `null` si no es un pago. */
+  pago: string | null;
   registro: string | null;
   cargo: string | null;
   abono: string | null;
@@ -34,12 +36,22 @@ export const COLUMNAS_DESCARGA_ESTADO_CUENTA: DescargaColumna[] = [
   { clave: "movimiento", encabezado: "Movimiento" },
   { clave: "motivo", encabezado: "Motivo" },
   { clave: "origen", encabezado: "Origen" },
+  { clave: "pago", encabezado: "Cómo se pagó" },
   { clave: "registro", encabezado: "Registró" },
   { clave: "cargo", encabezado: "Cargo" },
   { clave: "abono", encabezado: "Abono" },
   { clave: "saldo", encabezado: "Saldo" },
   { clave: "estado", encabezado: "Estado" },
 ];
+
+/**
+ * FICHA 458-D (R34/R35) — las columnas del archivo de `/mi-wallet`: las mismas SIN «Registró» (la
+ * tienda no ve los nombres de la gente de Ordenex: el servidor no los manda y la pantalla no pinta esa
+ * línea).
+ */
+export const COLUMNAS_DESCARGA_MI_ESTADO_CUENTA: DescargaColumna[] = COLUMNAS_DESCARGA_ESTADO_CUENTA.filter(
+  (c) => c.clave !== "registro",
+);
 
 /** Proyecta UNA línea del extracto a una fila de export con valores crudos. */
 export function filaDescargaEstadoCuenta(linea: LineaEstadoCuenta): DescargaFila {
@@ -48,6 +60,7 @@ export function filaDescargaEstadoCuenta(linea: LineaEstadoCuenta): DescargaFila
     movimiento: linea.movimiento,
     motivo: linea.motivo ?? null,
     origen: linea.origen ?? null,
+    pago: linea.pago ?? null,
     registro: linea.registro ?? null,
     cargo: linea.cargo ?? null,
     abono: linea.abono ?? null,

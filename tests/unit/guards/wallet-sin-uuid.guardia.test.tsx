@@ -27,7 +27,6 @@ import { SWRConfig } from "swr";
 import type { ReactNode } from "react";
 
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
-import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 import type { OrigenLegibleDTO } from "@/lib/types/wallet-origen";
 
 const H = vi.hoisted(() => ({
@@ -53,7 +52,13 @@ vi.mock("@/lib/actions/wallet-mensajero", () => ({
   listarCuentasPorPagarPaginadoAction: vi.fn(() => new Promise(() => {})),
   listarCuentasPorPagarCompletoAction: vi.fn(),
 }));
-vi.mock("@/lib/actions/estado-cuenta", () => ({ verEstadoCuentaAction: (...a: unknown[]) => H.estadoCuenta(...a) }));
+vi.mock("@/lib/actions/estado-cuenta", () => ({
+  verEstadoCuentaAction: (...a: unknown[]) => H.estadoCuenta(...a),
+  verEstadoCuentaCompletoAction: vi.fn(),
+  verMiEstadoCuentaAction: vi.fn(),
+  verMiEstadoCuentaCompletoAction: vi.fn(),
+  verOrdenesDeFilaAction: vi.fn(),
+}));
 vi.mock("@/lib/actions/como-quedo", () => ({ comoQuedoAction: vi.fn(async () => ({ status: "forbidden" })) }));
 vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
 vi.mock("@/lib/actions/wallet-anulacion", () => ({ anularMovimientoAction: vi.fn() }));
@@ -80,8 +85,7 @@ import { WalletLedger } from "@/app/(app)/wallet/_components/WalletLedger";
 import { WalletFiltros } from "@/app/(app)/wallet/_components/WalletFiltros";
 import { DetalleFilaComposicion } from "@/app/(app)/wallet/_components/DetalleFilaComposicion";
 import { FILTROS_VACIOS } from "@/app/(app)/wallet/_components/WalletFiltros";
-import { DesgloseTiendaLedger } from "@/app/(app)/mi-wallet/_components/DesgloseTiendaLedger";
-import { MiWalletFiltros } from "@/app/(app)/mi-wallet/_components/MiWalletFiltros";
+import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 import { EstadoCuentaTienda } from "@/app/(app)/wallet/tiendas/_components/EstadoCuentaTienda";
 import { EstadoCuentaMensajero } from "@/app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero";
 import { EstadoCuentaSatelite } from "@/app/(app)/wallet/satelites/_components/EstadoCuentaSatelite";
@@ -120,20 +124,6 @@ const CAJA: (WalletMovimientoDTO & { origen: OrigenLegibleDTO })[] = [
     fechaMovimiento: "2026-09-12T20:00:00.000Z",
     dueno: "propio",
     documento: null,
-    origen: ORIGEN,
-  },
-];
-const TIENDA_FILAS: (WalletTiendaMovimientoDTO & { origen: OrigenLegibleDTO })[] = [
-  {
-    id: u(11),
-    tiendaId: TIENDA,
-    tipo: "credito",
-    categoria: "cod_recaudado",
-    monto: "9000.00",
-    origenTipo: "cierre_dia",
-    origenId: CIERRE,
-    descripcion: null,
-    fechaMovimiento: "2026-09-12T20:00:00.000Z",
     origen: ORIGEN,
   },
 ];
@@ -315,17 +305,27 @@ const SUPERFICIES: { nombre: string; montar: () => Promise<void> }[] = [
     },
   },
   {
-    nombre: "/mi-wallet · libro de la tienda y filtros (cierre con uuid)",
+    // FICHA 458-D (T D.5): `/mi-wallet` es el estado de cuenta de la tienda, con su selector de cierre
+    // (el cierre con uuid en las opciones) y el origen con entidad (uuid SOLO en el `href`).
+    nombre: "/mi-wallet · estado de cuenta de la tienda y selector de cierre (cierre con uuid)",
     montar: async () => {
       conSWR(
-        <>
-          <MiWalletFiltros
-            onAplicar={vi.fn()}
-            onLimpiar={vi.fn()}
-            cierres={{ opciones: [{ cierreId: CIERRE, fecha: "2026-09-12T20:00:00.000Z", movimientos: 1 }], hayMas: false, disponible: true }}
-          />
-          <DesgloseTiendaLedger movimientos={TIENDA_FILAS} />
-        </>,
+        <MiEstadoCuenta
+          inicial={estadoEC("tienda", TIENDA, "Tania Tienda", [
+            filaEC(11, {
+              categoria: "cod_recaudado",
+              origenTipo: "cierre_dia",
+              origen: ORIGEN,
+              registro: { nombre: null, automatico: null },
+              chip: "cierres",
+              naceDeUnCierre: true,
+              anulable: false,
+              cargo: null,
+              abono: "9000.00",
+            }),
+          ])}
+          cierres={{ opciones: [{ cierreId: CIERRE, fecha: "2026-09-12T20:00:00.000Z", movimientos: 1 }], hayMas: false, disponible: true }}
+        />,
       );
       await screen.findByText(/Cierre del día · 2026-09-12/);
     },

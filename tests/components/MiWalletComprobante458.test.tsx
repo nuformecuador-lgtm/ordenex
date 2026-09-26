@@ -2,6 +2,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, within, waitFor, fireEvent } from "@testing-library/react";
 
+import { SWRConfig } from "swr";
+
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 import { FORMA_UUID, UUID_MOV, UUID_TIENDA } from "@/tests/fixtures/estado-cuenta";
@@ -25,7 +27,19 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
   verDetalleDeMiMovimientoCompletoAction: vi.fn(),
 }));
 
-import { DesgloseTiendaLedger } from "@/app/(app)/mi-wallet/_components/DesgloseTiendaLedger";
+vi.mock("@/lib/actions/estado-cuenta", () => ({
+  verEstadoCuentaAction: vi.fn(),
+  verEstadoCuentaCompletoAction: vi.fn(),
+  verMiEstadoCuentaAction: vi.fn(),
+  verMiEstadoCuentaCompletoAction: vi.fn(),
+  verOrdenesDeFilaAction: vi.fn(),
+}));
+
+// FICHA 458-D (T D.5, cierre de pantalla): `/mi-wallet` es el ESTADO DE CUENTA de la tienda; «Ver
+// comprobante» es la acción de SOLO LECTURA de cada fila (`MiEstadoCuenta`). Mismos casos.
+import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
+import type { FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
+import { estado, fila } from "@/tests/fixtures/estado-cuenta";
 
 function mov(n: number, parcial: Partial<WalletTiendaMovimientoDTO>): WalletTiendaMovimientoDTO {
   return {
@@ -51,11 +65,31 @@ const FILAS = [
   mov(6, { categoria: "flete", origenTipo: "cierre_dia" }),
 ];
 
+/** El movimiento como fila del estado de cuenta de la tienda (vista tienda). */
+function comoFila(m: WalletTiendaMovimientoDTO): FilaEstadoCuentaDTO {
+  return fila({
+    ref: { libro: "tienda", movimientoId: m.id },
+    fecha: m.fechaMovimiento.slice(0, 10),
+    categoria: m.categoria,
+    origenTipo: m.origenTipo,
+    cargo: m.tipo === "debito" ? m.monto : null,
+    abono: m.tipo === "credito" ? m.monto : null,
+    naceDeUnCierre: m.origenTipo === "cierre_dia",
+    registro: { nombre: null, automatico: null },
+  });
+}
+
 function montar() {
+  const filas = FILAS.map(comoFila);
   return render(
-    <ToastProvider>
-      <DesgloseTiendaLedger movimientos={FILAS} />
-    </ToastProvider>,
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <ToastProvider>
+        <MiEstadoCuenta
+          inicial={estado({ filas, total: filas.length })}
+          cierres={{ opciones: [], hayMas: false, disponible: true }}
+        />
+      </ToastProvider>
+    </SWRConfig>,
   );
 }
 

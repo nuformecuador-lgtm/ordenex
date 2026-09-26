@@ -14,6 +14,12 @@ fuentes:
   - components/shared/estado-cuenta/EstadoCuenta.tsx
   - components/shared/estado-cuenta/estado-cuenta-labels.ts
   - components/shared/estado-cuenta/estado-cuenta-descarga-columnas.ts
+  - components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx
+  - components/shared/wallet/cierres-selector.ts
+  - app/(app)/wallet/_components/DetalleMovimientoCierre.tsx
+  - app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts
+  - lib/actions/estado-cuenta.ts
+  - lib/services/OrigenLegibleService.ts
   - components/shared/wallet/DetalleMovimientoPanel.tsx
   - components/shared/wallet/RegistrarMovimientoDialog.tsx
   - lib/services/EstadoCuentaService.ts
@@ -68,7 +74,18 @@ La tabla es el **extracto**, del más antiguo al más reciente:
 - Cada movimiento dice su fecha, su concepto (desde Ordenex), el motivo, de dónde viene, si tiene
   comprobante y **quién lo registró** («Registró: Ana Admin», o «Automático · Aprobación del cierre por
   Ana Admin»), el **cargo** o el **abono**, y el **saldo** de la tienda justo después de ese movimiento.
+- **De dónde viene** lo dice con nombre —«Cierre del día · 2026-09-12 · Juan Pérez Mora», «Pago de
+  Ordenex a una tienda · 2026-09-14 · SINPE»— y, cuando esa cosa tiene su pantalla, con un enlace
+  **Ver** que te lleva a ella (por ejemplo, al cierre).
+- Si el movimiento es un pago, dice **Cómo se pagó**: el método y la referencia («SINPE · referencia
+  12345»).
 - El saldo de la última fila es el de la tarjeta y el de la fila de la tabla de saldos.
+
+### Las órdenes de un cierre
+
+Las filas que vienen de un **cierre** tienen una flecha al principio: al abrirla ves **las órdenes de esta
+tienda que componen ese importe** —guía (con enlace a la orden), destinatario, resultado y cuánto aportó
+cada una—, con el día del cierre, el mensajero y cuántas de sus órdenes aportan. Se pueden descargar.
 
 ### Filtrar el estado de cuenta
 
@@ -77,8 +94,10 @@ La tabla es el **extracto**, del más antiguo al más reciente:
   baja de a poco como si los otros movimientos no existieran.
 - **Desde** y **Hasta**: días completos de Costa Rica. Con un periodo, la primera fila es el saldo
   con el que la tienda empezó ese periodo.
-- Por **cierre** todavía no se puede filtrar el estado de cuenta: los movimientos que vienen de un
-  cierre están en el chip **Cierres**, con su día.
+- **Cierre**: un selector con búsqueda. Solo ofrece los cierres que tienen movimientos en **esta**
+  tienda, cada uno con su día y el mensajero («Cierre del 2026-09-12 · Juan Pérez Mora · 3
+  movimientos»); se busca por un día (2026-09-12) o por el nombre del mensajero. **Todos los cierres**
+  quita el filtro. Como con los chips, el saldo de cada fila sigue siendo el de la cuenta entera.
 
 ### Anulados
 
@@ -98,6 +117,10 @@ movimiento lo admite (lo que produce la aprobación de un cierre no se anula des
 
 La descarga trae **el periodo entero** que estás mirando (no solo la página), con el saldo inicial
 arriba y el **saldo** de cada fila, en las mismas columnas que la tabla. No lleva ningún identificador.
+Respeta el periodo, el chip y el cierre elegidos. Si hay más movimientos de los que entran en una
+descarga, **no se descarga nada** y te lo dice: «El estado de cuenta tiene … movimientos con estos
+filtros y la descarga admite hasta …». Elegí un periodo más corto, un chip o un cierre y volvé a
+descargar.
 
 ## Registrar desde el estado de cuenta
 
@@ -157,5 +180,3 @@ fecha de corte: el estado de cuenta con un periodo dice el saldo de ese día exa
 
 - **No es la caja de Ordenex.** Eso es **Wallet · Caja**.
 - **No se corrige una entrega desde acá.** Un cargo mal calculado nace de la orden; se arregla allá.
-- **No se abren las órdenes de un cierre desde el estado de cuenta.** Las órdenes que componen un cierre
-  se ven en **Cierres** (o desde la fila del cierre en el libro de **Wallet · Caja**).

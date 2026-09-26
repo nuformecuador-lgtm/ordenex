@@ -5,43 +5,60 @@ pantalla: /mi-wallet
 roles: [adminTienda]
 actualizado: 2026-09-26
 fuentes:
-  - app/(app)/mi-wallet/_components/MiWalletModule.tsx
-  - components/shared/wallet/conceptos-filtro.ts
+  - app/(app)/mi-wallet/page.tsx
+  - app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx
+  - app/(app)/mi-wallet/_components/mi-estado-cuenta-labels.ts
+  - components/shared/estado-cuenta/EstadoCuenta.tsx
+  - components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx
+  - components/shared/estado-cuenta/estado-cuenta-labels.ts
+  - components/shared/estado-cuenta/estado-cuenta-descarga-columnas.ts
+  - lib/actions/estado-cuenta.ts
+  - lib/services/EstadoCuentaService.ts
+  - lib/utils/estado-cuenta-chips.ts
   - components/shared/wallet/OrigenMovimiento.tsx
   - lib/services/OrigenLegibleService.ts
   - app/(app)/mi-wallet/_components/mi-wallet-labels.ts
+  - app/(app)/mi-wallet/_components/mi-wallet-cierres.ts
   - lib/utils/descripcion-pago-por-cuenta.ts
   - lib/services/CobroTiendaService.ts
   - lib/services/AbonoTiendaService.ts
   - lib/utils/descripcion-abono.ts
-  - app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx
-  - app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx
   - app/(app)/mi-wallet/_components/VerComprobanteMiMovimiento.tsx
   - lib/actions/wallet-comprobante.ts
-  - app/(app)/mi-wallet/_components/MiWalletFiltros.tsx
+  - app/(app)/mi-wallet/_components/DetalleMiMovimientoCierre.tsx
   - app/(app)/mi-wallet/_components/detalle-mi-movimiento-labels.ts
   - lib/auth/menu-visibility.ts
 ---
 
 # Mi wallet
 
-Acá está **tu plata con Ordenex**: cuánto se cobró a tus clientes en tus entregas, cuánto te cobró
-Ordenex de servicio, y cómo queda la cuenta entre los dos.
+Acá está **tu plata con Ordenex**, como el extracto de un banco: cuánto se cobró a tus clientes en tus
+entregas, cuánto te cobró Ordenex de servicio, lo que te pagó, y cómo queda la cuenta entre los dos.
 
 ## El saldo, arriba
 
-Una sola cifra que resume todo, con tres lecturas posibles:
+La cifra grande es tu **saldo actual**, con una frase que dice **quién le debe a quién**:
 
 | Dice | Significa |
 | --- | --- |
-| **A tu favor** | Ordenex te debe. Es plata que se cobró a tus clientes y todavía no te llegó |
-| **En contra** | Vos debés. Los cargos del servicio superaron lo cobrado |
-| **En cero** | Está cuadrado |
+| **Ordenex te debe ₡…** | Tenés saldo a favor. Es plata que se cobró a tus clientes y todavía no te llegó |
+| **Le debés ₡… a Ordenex** | Tu saldo está en contra. Los cargos superaron lo cobrado |
+| **Ordenex y vos no se deben nada** | Está cuadrado |
 
-## De dónde sale cada número
+Debajo, cuatro cifras del periodo que estás mirando: **Saldo inicial**, **Abonos del periodo** (lo que
+suma a tu favor), **Cargos del periodo** (lo que resta) y **Saldo al final del periodo**. Siempre se
+cumple: saldo inicial más abonos menos cargos es el saldo final. Un movimiento anulado y su anulación
+**no cuentan** en abonos ni cargos: se cancelan entre ellos.
 
-El saldo no es un número suelto: es la suma de todos tus movimientos. Arriba del desglose lo ves
-resumido en cuatro cifras: **A tu favor**, **Cargos de Ordenex**, **Ya pagado** y **Saldo a favor**.
+## Tu estado de cuenta
+
+La tabla es el **extracto**, del movimiento más antiguo al más reciente:
+
+- La primera fila es el **saldo inicial**: lo que tenías al terminar el día anterior al periodo.
+- Cada movimiento dice su fecha, qué fue, el motivo, de dónde viene, cómo se pagó (si es un pago), el
+  **cargo** o el **abono**, y tu **saldo** justo después de ese movimiento.
+- El saldo de la última fila es el mismo de la cifra grande de arriba.
+
 Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 
 **Lo que suma a tu favor**
@@ -63,15 +80,18 @@ Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 - **Ordenex anuló el pago que le hiciste** — la anulación de un pago tuyo registrado por error: tu saldo vuelve a bajar.
 
 Cada línea dice de qué orden y de qué cierre viene, así que siempre podés rastrear una cifra hasta la
-entrega concreta que la produjo. La columna **Origen** lo dice con nombre, por ejemplo «Cierre del día
+entrega concreta que la produjo. El **origen** lo dice con nombre, por ejemplo «Cierre del día
 · 2026-09-12» o «Gestión de orden · cobro por rechazo · guía 4321».
+
+Un movimiento anulado **no desaparece**: sigue en su lugar, tachado, con el día en que se anuló y el
+motivo. Su anulación aparece como otra fila, con la marca **Anulación**.
 
 ## Un cobro que Ordenex te hizo
 
 A veces la oficina te cobra algo a mano —material de despacho entregado en la bodega, por ejemplo—.
 Lo ves como **Ordenex te cobró**, con el motivo que escribió la oficina.
 
-- **Baja tu saldo** en el monto y se cuenta dentro de **Cargos de Ordenex**.
+- **Baja tu saldo** en el monto: es un **cargo** de tu estado de cuenta, en el chip **Cobros**.
 - Si no tenías saldo a favor, **tu saldo queda en contra**: le debés ese dinero a Ordenex, y se cobra
   cuando tus entregas vuelvan a generarte plata a favor.
 - Si la oficina lo anula, aparece una línea **Ordenex anuló un cobro y te lo devolvió** que te devuelve
@@ -84,8 +104,7 @@ A veces Ordenex paga algo **por vos**: tu proveedor, tu publicidad, alguien de t
 **Ordenex pagó un gasto por ti**, y la descripción dice **a quién se le pagó, el motivo, el método** y,
 si la hay, **la referencia** (por ejemplo, «A Facebook · Pauta de publicidad · SINPE · 12345»).
 
-- **Baja tu saldo** en el monto, y se cuenta dentro de **Ya pagado**: es dinero que Ordenex ya puso
-  por vos.
+- **Baja tu saldo** en el monto: es dinero que Ordenex ya puso por vos, en el chip **Pagos**.
 - Si no tenías saldo suficiente, **tu saldo queda en contra**: le debés ese dinero a Ordenex.
 - Si la oficina lo anula, aparece una línea **Ordenex anuló un pago hecho por ti** que te devuelve el
   monto. El pago original no se borra.
@@ -101,25 +120,26 @@ pagos que Ordenex te hizo, en los pagos que Ordenex hizo por ti, en los cobros d
 que le hiciste a Ordenex. Se abre en otra pestaña con un enlace que dura poco. Si esa fila no tiene
 comprobante, te lo dice: «Este registro no tiene comprobante.». Solo ves los de tu tienda.
 
-## Buscar en el desglose
+## Filtrar tu estado de cuenta
 
-Dos filtros:
+- Los **chips** de arriba: **Todo · Cierres · Pagos · Cobros · Correcciones**. Cada movimiento cae en
+  uno solo. El saldo de cada fila **sigue siendo el de tu cuenta entera**, aunque filtres.
+- **Cierre** — todos los movimientos que entraron con un cierre determinado. Cada cierre se nombra por
+  su día y cuántos movimientos trajo, por ejemplo «Cierre del 2026-09-12 · 7 movimientos». **Todos los
+  cierres** quita el filtro.
+- **Desde** y **Hasta** — días completos de Costa Rica. Con un periodo, la primera fila es el saldo con
+  el que empezaste ese periodo.
 
-- **Por concepto** — para ver solo, por ejemplo, las comisiones o los cobros. Solo aparecen los
-  conceptos que **tienen movimientos** tuyos en el periodo (y el cierre) que elegiste, cada uno con su
-  número entre paréntesis, por ejemplo «Ordenex te cobró el flete (8)». Si cambiás el periodo y el
-  concepto elegido se queda sin movimientos, sigue elegido con **(0)** hasta que lo quites.
-- **Por cierre** — todos los movimientos que entraron con un cierre determinado. Cada cierre se
-  nombra por su día y cuántos movimientos trajo.
-
-Las fechas **Desde** y **Hasta** son días completos de Costa Rica. Y podés **descargar el desglose**
-para cuadrarlo por tu cuenta o pasarlo a tu contabilidad, con los mismos nombres que la tabla.
+Y podés **descargar tu estado de cuenta**: trae **el periodo entero** que estás mirando (no solo la
+página), con el saldo inicial arriba y el saldo de cada fila, con los mismos nombres que la tabla. Si
+el periodo tiene más movimientos de los que entran en una descarga, no se descarga nada y te lo dice:
+elegí un periodo más corto, un chip o un cierre.
 
 ## El detalle de un cierre
 
-Tocando un movimiento de cierre ves **qué entregas lo componen**: destinatario, guía, qué se cobró y
-en qué forma. Es el nivel donde se resuelven las dudas del tipo *«¿por qué este cierre me dio esta
-cifra?»*.
+Tocando la flecha de un movimiento de cierre ves **qué entregas lo componen**: destinatario, guía, qué
+se cobró y en qué forma. Es el nivel donde se resuelven las dudas del tipo *«¿por qué este cierre me dio
+esta cifra?»*.
 
 ## Cosas que te pueden pasar
 

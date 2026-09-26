@@ -4,25 +4,25 @@ import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { ROLES_MI_WALLET } from "@/lib/auth/menu-visibility";
-import {
-  listarMisCierresAction,
-  listarMisMovimientosAction,
-  verMiSaldoAction,
-} from "@/lib/actions/wallet-tienda";
+import { verMiEstadoCuentaAction } from "@/lib/actions/estado-cuenta";
+import { listarMisCierresAction } from "@/lib/actions/wallet-tienda";
 
-import { MiWalletModule } from "./_components/MiWalletModule";
+import { MiEstadoCuenta } from "./_components/MiEstadoCuenta";
+import { MI_ESTADO_CUENTA_PAGINA } from "./_components/mi-estado-cuenta-labels";
 import type { CierresDeLaTienda } from "./_components/mi-wallet-cierres";
 
 /**
- * Feature 43 (T14, R18/R19/R21) — pagina `/mi-wallet`: el saldo a favor de la TIENDA
- * (cuanto le debe entregar Ordenex). Server Component role-aware. El rol se resuelve SOLO
- * server-side via `resolveActorFromSession` (patron `/wallet`): cualquier rol distinto de
- * `adminTienda` (o sin sesion) NO ve la wallet (`notFound`, R19 — forbidden sin exponer
- * datos). El backend acota SIEMPRE a `actor.usuarioId` = tienda_id en el WHERE (R19): la
- * tienda solo ve lo suyo. Los datos sensibles (desglose + saldo) se pre-obtienen
- * server-side y se pasan YA serializados (STRING) por props al modulo cliente (R21): el
- * cliente nunca recibe `Prisma.Decimal`. Si una action no responde `ok` → `notFound`
- * (defensa en profundidad).
+ * Feature 43 (T14, R18/R19/R21) — pagina `/mi-wallet`: el dinero de la TIENDA con Ordenex. Server
+ * Component role-aware. El rol se resuelve SOLO server-side via `resolveActorFromSession` (patron
+ * `/wallet`): cualquier rol distinto de `adminTienda` (o sin sesion) NO ve la wallet (`notFound`,
+ * R19 — forbidden sin exponer datos). El backend acota SIEMPRE a la tienda del actor en el WHERE: la
+ * tienda solo ve lo suyo. Los datos se pre-obtienen server-side y se pasan YA serializados (STRING)
+ * por props al modulo cliente (R21): el cliente nunca recibe `Prisma.Decimal`. Si la lectura no
+ * responde `ok` → `notFound` (defensa en profundidad).
+ *
+ * FICHA 458-D (T D.5, R34–R36) — la pantalla ES el estado de cuenta de la propia tienda, en solo
+ * lectura: la MISMA lectura que la oficina (`verMiEstadoCuentaAction`, con la tienda de la SESION y
+ * sin ninguna clave de cuenta en la entrada), con su selector de cierre de siempre (335).
  */
 export default async function MiWalletPage() {
   const actor = await resolveActorFromSession();
@@ -42,52 +42,35 @@ export default async function MiWalletPage() {
     notFound(); // R19/R34: rol no autorizado / sin sesion → sin exponer datos
   }
 
-  // Pre-fetch server-side con los filtros por defecto (page 1, sin filtros). El backend
-  // acota a la tienda del actor; aqui no se pasa tienda_id (nunca en memoria/props, R19).
-  const [saldoResult, movimientosResult, cierresResult] = await Promise.all([
-    verMiSaldoAction(),
-    listarMisMovimientosAction({}),
-    // FICHA 335 (B1, R22) — el catalogo de cierres del selector. Se lee UNA vez, en la carga:
-    // es el catalogo del libro, no depende de los filtros vigentes, asi que `recargar()` no lo
-    // vuelve a pedir. Precio declarado: un cierre que entre con la pantalla abierta no aparece
-    // hasta recargar la ruta. La action va SIN argumentos (R5): no hay ninguna clave donde
-    // escribir un alcance ajeno.
+  // Pre-fetch server-side de la primera pagina, sin filtros. El servidor acota a la tienda del
+  // actor; aqui no se pasa ningun id de tienda (nunca en memoria/props, R19/R36).
+  const [estadoResult, cierresResult] = await Promise.all([
+    verMiEstadoCuentaAction({}),
+    // FICHA 335 (B1, R22) — el catalogo de cierres del selector. Se lee UNA vez, en la carga: es el
+    // catalogo del libro, no depende de los filtros vigentes. Precio declarado: un cierre que entre
+    // con la pantalla abierta no aparece hasta recargar la ruta. La action va SIN argumentos (R5):
+    // no hay ninguna clave donde escribir un alcance ajeno.
     listarMisCierresAction(),
   ]);
 
-  // Defensa en profundidad: si el service niega (forbidden/unauthenticated) o valida mal,
-  // no renderizamos el modulo (no expone nada).
-  if (saldoResult.status !== "ok" || movimientosResult.status !== "ok") {
+  // Defensa en profundidad: si el servicio niega (forbidden/unauthenticated) o valida mal, no se
+  // renderiza el modulo (no expone nada).
+  if (estadoResult.status !== "ok") {
     notFound();
   }
 
-  // FICHA 335 (B1, R29) — la lectura de cierres se DEGRADA, no tumba la pantalla: NO hay un
-  // tercer `notFound()`. El saldo y el libro SON la pantalla; el filtro es una comodidad, y que
-  // se caiga una comodidad no puede esconderle a la tienda su dinero. Cuando no responde `ok`,
-  // el selector queda vacio y deshabilitado, y lo dice en pantalla.
+  // FICHA 335 (B1, R29) — la lectura de cierres se DEGRADA, no tumba la pantalla: NO hay un segundo
+  // `notFound()`. El estado de cuenta ES la pantalla; el filtro es una comodidad, y que se caiga una
+  // comodidad no puede esconderle a la tienda su dinero. Cuando no responde `ok`, el selector queda
+  // vacio y deshabilitado, y lo dice en pantalla.
   const cierres: CierresDeLaTienda =
     cierresResult.status === "ok"
       ? { opciones: cierresResult.cierres, hayMas: cierresResult.hayMas, disponible: true }
       : { opciones: [], hayMas: false, disponible: false };
 
   return (
-    <AppPage
-      title="Mi wallet"
-      description="Tu saldo a favor: lo cobrado a tus clientes en contra-entrega menos los descuentos de Ordenex, con el desglose por cierre y concepto"
-    >
-      <MiWalletModule
-        movimientos={movimientosResult.data.movimientos}
-        total={movimientosResult.data.total}
-        page={movimientosResult.data.page}
-        pageSize={movimientosResult.data.pageSize}
-        saldo={saldoResult.saldo}
-        /* Feature 172 (T G.2, R55): los tres importes viajan CON el listado, del mismo
-           conjunto y con los mismos filtros; el cliente no los recalcula (R14). */
-        desglose={movimientosResult.data.desglose}
-        /* Ficha 335 (R22): el filtro de cierre deja de pedir un identificador escrito a mano;
-           las opciones bajan YA resueltas del servidor. */
-        cierres={cierres}
-      />
+    <AppPage title={MI_ESTADO_CUENTA_PAGINA.titulo} description={MI_ESTADO_CUENTA_PAGINA.descripcion}>
+      <MiEstadoCuenta inicial={estadoResult.estado} cierres={cierres} />
     </AppPage>
   );
 }

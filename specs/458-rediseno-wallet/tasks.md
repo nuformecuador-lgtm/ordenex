@@ -274,6 +274,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   `EstadoCuentaAnulados.test.tsx` (R18–R25, R72).
   *Evidencia 458-D:* verdes (20 + 6). Desvío: el despliegue de órdenes de las filas de cierre queda pendiente de servidor (R19, `progress/impl_458-D.md` §Pendientes 3).
   *Evidencia 458-D servidor:* `verOrdenesDeFilaAction` (R19) — `tests/integration/db/detalle-movimiento-cierre-postgres.test.ts` («458-D R19 …», 3) y `tests/unit/actions/estado-cuenta-458d-action.test.ts`; origen con entidad y enlace, método y referencia, filtro por cierre (R6–R8, R10–R12) — `tests/integration/db/estado-cuenta-servidor-458d.test.ts`. Falta montarlo en pantalla (frontend).
+  *Evidencia 458-D cierre de pantalla:* filtro por cierre (`SelectorCierreDeCuenta`), origen con entidad y enlace, «Cómo se pagó», despliegue de órdenes de las filas de cierre (`fuenteOrdenesDeFila` sobre `DetalleMovimientoCierre`; el mensajero dice su `snapshot_del_cierre` en palabras) — `tests/components/EstadoCuenta458DPantalla.test.tsx`, `tests/unit/descarga/ordenes-de-fila-cuenta.test.ts`; recorrido `progress/recorrido_458-D/cierre-{maestro,admin}.json`.
 - [x] **TD.2** [P] `/wallet/tiendas/[tiendaId]` (`notFound` por rol y cuenta) + el listado enlaza y deja
   de desplegar; acciones «La tienda le paga a Ordenex» (solo con saldo en contra), «Ordenex le cobra a
   la tienda», «Ordenex le paga a la tienda» (deshabilitado con motivo sin saldo a favor) abriendo el
@@ -289,16 +290,18 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   (`ConciliacionAcciones`, `MarcarRecibidoDialog`) con sus textos. *Hecho:* `EstadoCuentaSatelite.test.tsx`
   + tests de la 431 verdes (R31).
   *Evidencia 458-D:* `EstadoCuentaSatelite.test.tsx` (8) + 431 verdes; recorrido paso 11.
-- [ ] **TD.5** `/mi-wallet` como estado de cuenta en solo lectura (lecturas 461 §7.5 y 457), selector
+- [x] **TD.5** `/mi-wallet` como estado de cuenta en solo lectura (lecturas 461 §7.5 y 457), selector
   de cierre actual, comprobantes de sus filas por `verComprobanteAction`/las actions de la 459 y la
   457; sin actions de escritura. *Hecho:* `mi-wallet-page.test.tsx` ampliado (R34–R36, R78);
   `mi-wallet-335.guardia` verde.
   *Evidencia 458-D (PARCIAL):* comprobante por fila en `/mi-wallet` (`MiWalletComprobante458.test.tsx`, R35/R78) y guardia verde; el estado de cuenta con saldo corrido (R34) y el selector de cierre esperan lectura de servidor acotada a la tienda (`progress/impl_458-D.md` §Pendientes 1 y 4).
   *Evidencia 458-D servidor:* `verMiEstadoCuentaAction` / `verMiEstadoCuentaCompletoAction` (R34–R36, R22) — `tests/integration/db/estado-cuenta-servidor-458d.test.ts` y `tests/unit/actions/estado-cuenta-458d-action.test.ts`. Falta montarlo en `/mi-wallet` (frontend).
+  *Evidencia 458-D cierre de pantalla:* `/mi-wallet` = `MiEstadoCuenta` (el módulo compartido en vista «tienda»: frase en segunda persona, sin «Registró», sin «Ver»/«Anular…», «Ver comprobante» por fila, selector de cierre de la 335, despliegue de SUS órdenes) — `tests/integration/mi-wallet-page.test.tsx`, `MiWalletFiltros.test.tsx`, `MiWalletComprobante458.test.tsx`, `DetalleMiMovimientoCierre.test.tsx`, `desglose-tienda-ledger.test.tsx`, `saldo-tienda-card.negativo.test.tsx` (reescritos sobre el módulo nuevo, mismo archivo y mismos R); recorrido `progress/recorrido_458-D/cierre-tienda.json` (corrido de la última fila = tarjeta = ₡147.670,10).
 - [x] **TD.6** [P] Descarga del estado de cuenta con saldo corrido y fila de saldo inicial. *Hecho:*
   test de columnas; `columnas-sensibles.guardia` verde (R3, R32).
   *Evidencia 458-D:* `estado-cuenta-descarga-columnas.test.ts` (6); recorrido paso 9 (0 uuid en el xlsx).
   *Evidencia 458-D servidor:* `verEstadoCuentaCompletoAction` con el tope en el servidor (R32) — `tests/integration/db/estado-cuenta-servidor-458d.test.ts` («TD.6/R32 …»). Falta que la descarga la use (frontend).
+  *Evidencia 458-D cierre de pantalla:* la descarga usa el completo (oficina y `/mi-wallet`), con periodo, chip y cierre; `limite_excedido` → aviso claro sin archivo — `tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts`, `tests/components/descarga/WalletDescarga.test.tsx`; recorrido: xlsx con cierre (9 filas) y completo (29/31), 0 uuid.
 
 - [x] **TD.7** Refresco dirigido tras registrar/anular desde el estado de cuenta (claves SWR de ESA
   cuenta; el listado revalida al montar). *Hecho:* `WalletRefrescoDirigido.test.tsx` (R30, R48).

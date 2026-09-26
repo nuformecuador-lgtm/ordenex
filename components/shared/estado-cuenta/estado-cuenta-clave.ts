@@ -16,14 +16,16 @@ export interface FiltroEstadoCuenta {
   chip: string;
   page: number;
   pageSize: number;
+  /** FICHA 458-D (R10) — el cierre elegido, o "" sin filtro de cierre. */
+  cierre: string;
 }
 
 export function claveEstadoCuenta(
   tipo: TipoDeCuenta,
   id: string,
   f: FiltroEstadoCuenta,
-): readonly [string, TipoDeCuenta, string, string, string, string, number, number] {
-  return [CLAVE_ESTADO_CUENTA, tipo, id, f.desde, f.hasta, f.chip, f.page, f.pageSize] as const;
+): readonly [string, TipoDeCuenta, string, string, string, string, number, number, string] {
+  return [CLAVE_ESTADO_CUENTA, tipo, id, f.desde, f.hasta, f.chip, f.page, f.pageSize, f.cierre] as const;
 }
 
 /** El predicado del `mutate`: TODAS las claves de ESTA cuenta, ninguna de otra. */

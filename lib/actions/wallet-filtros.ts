@@ -79,7 +79,8 @@ export async function conceptosConMovimientosAction(
  * La consumia el `SelectorBuscable` de `DesgloseMovimientosTienda` y `DesglosePagosMensajero`
  * (`useCierresDeLaCuenta`).
  *
- * @sin-superficie FICHA 458-D (T D.8, D14): los dos desgloses se retiraron; desde la 458-D servidor el estado de cuenta YA filtra por cierre (`cierreId` en `estadoCuentaSchema`, R10/R12) y esta es la lectura de SUS opciones, pero la pantalla todavia no monta el selector (frontend). Esta anotacion CADUCA al montarlo.
+ * Superficie (FICHA 458-D): el filtro por cierre del estado de cuenta de una tienda o de un mensajero
+ * (`components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx`, via `useCierresDeLaCuenta`).
  */
 export async function cierresDeLaCuentaAction(
   input: unknown,

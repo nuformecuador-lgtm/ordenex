@@ -130,7 +130,8 @@ describe("335 / R17 — `/mi-wallet` es de SOLO LECTURA: ninguna action que escr
     expect(ARCHIVOS_MI_WALLET.length).toBeGreaterThan(4);
     const todas = ARCHIVOS_MI_WALLET.flatMap(actionsImportadas);
     expect(todas.length).toBeGreaterThan(0);
-    expect(todas).toContain("verMiSaldoAction");
+    // FICHA 458-D (T D.5): la lectura de la pantalla es ahora el estado de cuenta de la tienda.
+    expect(todas).toContain("verMiEstadoCuentaAction");
   });
 
   it("ningun archivo de `app/(app)/mi-wallet/**` importa una action de mutacion", () => {
@@ -163,8 +164,9 @@ describe("335 / R17 — `/mi-wallet` es de SOLO LECTURA: ninguna action que escr
  * se DERIVA del disco en vez de escribirse a mano: un archivo nuevo entra solo.
  */
 const CENSADOS_POR_LA_172 = new Set([
-  `${MI_WALLET}/_components/MiWalletModule.tsx`,
-  `${MI_WALLET}/_components/SaldoTiendaCard.tsx`,
+  // FICHA 458-D (T D.5): `MiWalletModule` y `SaldoTiendaCard` se retiraron; la 172 censa ahora
+  // `MiEstadoCuenta.tsx` (y `TarjetasEstadoCuenta.tsx`, fuera de esta carpeta).
+  `${MI_WALLET}/_components/MiEstadoCuenta.tsx`,
   `${MI_WALLET}/_components/mi-wallet-labels.ts`,
   `${MI_WALLET}/page.tsx`,
 ]);
@@ -172,7 +174,7 @@ const CENSADOS_POR_LA_172 = new Set([
 const NO_CENSADOS = ARCHIVOS_MI_WALLET.filter((r) => !CENSADOS_POR_LA_172.has(r));
 
 describe("335 / R16 — ningun archivo de `/mi-wallet` convierte un monto a numero", () => {
-  it("CONTROL: los cuatro archivos que la 172 censa siguen existiendo, y quedan archivos fuera", () => {
+  it("CONTROL: los archivos que la 172 censa siguen existiendo, y quedan archivos fuera", () => {
     // Si la 172 dejara de censarlos —o si se renombraran— este barrido pasaria a ser el unico,
     // y hay que enterarse. Y si `NO_CENSADOS` quedara vacio, el barrido de abajo no miraria nada.
     for (const ruta of CENSADOS_POR_LA_172) {

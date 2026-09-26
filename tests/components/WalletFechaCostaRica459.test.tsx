@@ -6,7 +6,6 @@ import type { ReactNode } from "react";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
-import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 import { estado, fila as filaEstado } from "@/tests/fixtures/estado-cuenta";
 
 // =================================================================================================
@@ -50,8 +49,7 @@ import { filaDescargaMovimientoCaja } from "@/app/(app)/wallet/_components/walle
 import { EstadoCuentaTienda, ROTULOS_TIENDA } from "@/app/(app)/wallet/tiendas/_components/EstadoCuentaTienda";
 import { ROTULOS_MENSAJERO } from "@/app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero";
 import { lineaDeFila } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
-import { DesgloseTiendaLedger } from "@/app/(app)/mi-wallet/_components/DesgloseTiendaLedger";
-import { filaDescargaMiWallet } from "@/app/(app)/mi-wallet/_components/mi-wallet-descarga-columnas";
+import { MiEstadoCuenta, ROTULOS_MI_WALLET } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 /** 22:00 del 24/09/2026 en Costa Rica (UTC-6). */
@@ -83,18 +81,6 @@ const PAGO_A_TIENDA: WalletMovimientoDTO = {
   descripcion: "Pago SINPE",
   fechaMovimiento: PAGO_LIQUIDACION,
   documento: null,
-};
-
-const CARGO_TIENDA: WalletTiendaMovimientoDTO = {
-  id: "t-noche",
-  tiendaId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-  tipo: "debito",
-  categoria: "cobro_manual",
-  monto: "10000.00",
-  origenTipo: "manual",
-  origenId: null,
-  descripcion: "Cobro de la noche",
-  fechaMovimiento: NOCHE_CR,
 };
 
 
@@ -173,15 +159,31 @@ describe("459/F1 — /wallet/tiendas/[tiendaId]: el estado de cuenta y su descar
   });
 });
 
-describe("459/F1 — /mi-wallet: el libro de la tienda y su descarga", () => {
+// FICHA 458-D (T D.5): `/mi-wallet` es el estado de cuenta de la tienda; como en la oficina, el día de
+// la fila lo manda el SERVIDOR en día CR y la pantalla y la descarga lo pintan tal cual.
+describe("459/F1 — /mi-wallet: el estado de cuenta de la tienda y su descarga", () => {
   it("la tabla y la descarga dicen el 24", () => {
-    envolver(<DesgloseTiendaLedger movimientos={[CARGO_TIENDA]} />);
-    const fila = screen.getByText("Registrado a mano · Cobro de la noche").closest("tr");
+    const f = filaEstado({
+      fecha: DIA_CR,
+      categoria: "cobro_manual",
+      origenTipo: "manual",
+      descripcion: "Cobro de la noche",
+      cargo: "10000.00",
+      abono: null,
+      registro: { nombre: null, automatico: null },
+    });
+    envolver(
+      <MiEstadoCuenta
+        inicial={estado({ filas: [f], total: 1 })}
+        cierres={{ opciones: [], hayMas: false, disponible: true }}
+      />,
+    );
+    const fila = screen.getByText("Cobro de la noche").closest("tr");
     expect(fila).not.toBeNull();
     expect(within(fila!).getByText(DIA_CR)).toBeInTheDocument();
     expect(document.body.textContent ?? "").not.toContain(DIA_UTC);
 
-    expect(filaDescargaMiWallet(CARGO_TIENDA).fecha).toBe(DIA_CR);
+    expect(lineaDeFila(f, ROTULOS_MI_WALLET).fecha).toBe(DIA_CR);
   });
 });
 

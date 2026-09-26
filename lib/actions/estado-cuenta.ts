@@ -123,7 +123,7 @@ export async function verEstadoCuentaAction(
  * filtros que la pagina sin `page`/`pageSize`; el tope (`descargaConfig.MAX_FILAS`) lo aplica el
  * servidor: por encima, `limite_excedido` con los conteos y ninguna fila.
  *
- * @sin-superficie FICHA 458-D (servidor): la descarga del estado de cuenta todavia lee las paginas desde el cliente (`EstadoCuenta.tsx`); esta anotacion CADUCA cuando el frontend la monte.
+ * Superficie (FICHA 458-D): la descarga de `components/shared/estado-cuenta/EstadoCuenta.tsx` (`filasDelPeriodo`) en las tres paginas de la oficina.
  */
 export async function verEstadoCuentaCompletoAction(
   input: unknown,
@@ -145,7 +145,7 @@ export async function verEstadoCuentaCompletoAction(
  * `cuenta` o un `tiendaId` es `validation_error` sin leer nada); cualquier rol que no sea
  * `adminTienda` → `forbidden`.
  *
- * @sin-superficie FICHA 458-D (servidor): `/mi-wallet` todavia monta sus lecturas de la 461 §7.5; esta anotacion CADUCA cuando el frontend monte el estado de cuenta en `/mi-wallet`.
+ * Superficie (FICHA 458-D): `app/(app)/mi-wallet/page.tsx` (primera pagina) y `MiEstadoCuenta.tsx` (periodo, chip, cierre y paginas).
  */
 export async function verMiEstadoCuentaAction(
   input: unknown,
@@ -164,7 +164,7 @@ export async function verMiEstadoCuentaAction(
 /**
  * FICHA 458-D (servidor, R32/R36) — el de `/mi-wallet` con el periodo ENTERO, tope en el servidor.
  *
- * @sin-superficie FICHA 458-D (servidor): la descarga del estado de cuenta de `/mi-wallet` la monta el frontend; esta anotacion CADUCA entonces.
+ * Superficie (FICHA 458-D): la descarga del estado de cuenta de `/mi-wallet` (`MiEstadoCuenta.tsx`).
  */
 export async function verMiEstadoCuentaCompletoAction(
   input: unknown,
@@ -188,7 +188,7 @@ export type VerOrdenesDeFilaResult = VerDetalleMovimientoServiceResult | ErrorDe
  * estado de cuenta de una tienda o de un mensajero, en la oficina. Acceso total; la cuenta y el
  * movimiento viajan como ids (nunca se pintan) y el movimiento de OTRA cuenta responde `not_found`.
  *
- * @sin-superficie FICHA 458-D (servidor): el despliegue de ordenes de las filas de cierre del estado de cuenta lo monta el frontend; esta anotacion CADUCA entonces.
+ * Superficie (FICHA 458-D): el despliegue de las filas de cierre del estado de cuenta de tienda y mensajero (`app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts`).
  */
 export async function verOrdenesDeFilaAction(
   input: unknown,

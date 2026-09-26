@@ -1,11 +1,16 @@
 "use client";
 
 import { EstadoCuenta, type PanelDeLaSuperficie } from "@/components/shared/estado-cuenta/EstadoCuenta";
+import { SelectorCierreDeCuenta } from "@/components/shared/estado-cuenta/SelectorCierreDeCuenta";
 import type { RotulosEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
 import { COBRO_RECHAZO_TEXTO } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
+
+import { DetalleMovimientoCierre } from "../../_components/DetalleMovimientoCierre";
+import { DETALLE_MOVIMIENTO_NOMBRE } from "../../_components/detalle-movimiento-labels";
+import { fuenteOrdenesDeFila } from "../../_components/ordenes-de-fila-cuenta";
 
 import { EstadoCuentaAcciones } from "./EstadoCuentaAcciones";
 import { PagosTiendaEstadoCuenta } from "./PagosTiendaEstadoCuenta";
@@ -48,11 +53,29 @@ export interface EstadoCuentaTiendaProps {
 }
 
 export function EstadoCuentaTienda({ inicial, puedeRegistrar }: Readonly<EstadoCuentaTiendaProps>) {
+  const tiendaId = inicial.cuenta.id;
   return (
     <EstadoCuenta
       inicial={inicial}
       rotulos={ROTULOS_TIENDA}
       panel={PANEL_TIENDA}
+      // R10–R12 — el filtro por cierre de ESTA tienda (la 458-A); el cierre viaja, no se pinta.
+      selectorCierre={(valor, onCambiar) => (
+        <SelectorCierreDeCuenta cuenta={{ cuenta: "tienda", tiendaId }} valor={valor} onCambiar={onCambiar} />
+      )}
+      // R19 (344/345) — las órdenes de ESTA tienda que componen el importe de una fila de cierre.
+      detalleDeFila={{
+        nombre: ({ concepto, fecha }) => DETALLE_MOVIMIENTO_NOMBRE.abrir(concepto, fecha),
+        render: (f, { concepto, fecha }) =>
+          f.ref !== null && "movimientoId" in f.ref ? (
+            <DetalleMovimientoCierre
+              movimientoId={f.ref.movimientoId}
+              concepto={concepto}
+              fecha={fecha}
+              fuente={fuenteOrdenesDeFila({ tipo: "tienda", id: tiendaId })}
+            />
+          ) : null,
+      }}
       acciones={
         puedeRegistrar ? (vigente, refrescar) => <EstadoCuentaAcciones estado={vigente} onCambio={refrescar} /> : undefined
       }

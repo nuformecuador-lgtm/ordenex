@@ -234,7 +234,11 @@ export type VerDetalleDeMiMovimientoCompletoActionResult =
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
-/** R17/R19: saldo total del adminTienda (STRING+signo), acotado a su tienda_id. Forbidden/unauthenticated sin exponer datos. */
+/**
+ * R17/R19: saldo total del adminTienda (STRING+signo), acotado a su tienda_id. Forbidden/unauthenticated sin exponer datos.
+ *
+ * @sin-superficie FICHA 458-D (T D.5, R34): `/mi-wallet` es ahora el estado de cuenta de la tienda (`verMiEstadoCuentaAction`, cuyas tarjetas dan el saldo); su superficie era la tarjeta `SaldoTiendaCard`, retirada. Se conserva: la usa `tests/unit/actions/wallet-tienda-actions.test.ts` (borde de la 43); retirarla es tarea de servidor.
+ */
 export async function verMiSaldoAction(
   deps: WalletTiendaDeps = {},
 ): Promise<VerMiSaldoActionResult> {
@@ -248,7 +252,11 @@ export async function verMiSaldoAction(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
-/** R19/R22/R27: movimientos paginados + filtros del adminTienda, acotados a su tienda_id en el WHERE. */
+/**
+ * R19/R22/R27: movimientos paginados + filtros del adminTienda, acotados a su tienda_id en el WHERE.
+ *
+ * @sin-superficie FICHA 458-D (T D.5, R34): el libro de `/mi-wallet` (`MiWalletModule`/`DesgloseTiendaLedger`) se retiró; lo sustituye el estado de cuenta de la tienda (`verMiEstadoCuentaAction`). Se conserva: la usan `tests/unit/actions/wallet-tienda-actions.test.ts` y `tests/unit/types/wallet-tienda-schemas.test.ts`; retirarla es tarea de servidor.
+ */
 export async function listarMisMovimientosAction(
   input: unknown,
   deps: WalletTiendaDeps = {},
@@ -269,6 +277,8 @@ export async function listarMisMovimientosAction(
  * para la descarga. Calcado de `listarMisMovimientosAction`: mismo borde, mismo actor, mismo
  * schema (menos `page`/`pageSize`, y `.strict()`) y el MISMO servicio, que acota a su
  * `tienda_id` (R14/R15). Ninguna rama devuelve filas junto a un error (R16/R17/R18).
+ *
+ * @sin-superficie FICHA 458-D (T D.5, R34): la descarga del libro de `/mi-wallet` se retiró con él; la sustituye la del estado de cuenta (`verMiEstadoCuentaCompletoAction`). Se conserva: la usa `tests/unit/actions/wallet-tienda-descarga-action.test.ts` (borde de la 170); retirarla es tarea de servidor.
  */
 export async function listarMisMovimientosCompletoAction(
   input: unknown,

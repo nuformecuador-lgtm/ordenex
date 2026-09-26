@@ -16,6 +16,11 @@ fuentes:
   - components/shared/estado-cuenta/EstadoCuenta.tsx
   - components/shared/estado-cuenta/estado-cuenta-descarga-columnas.ts
   - components/shared/estado-cuenta/estado-cuenta-labels.ts
+  - components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx
+  - app/(app)/wallet/_components/DetalleMovimientoCierre.tsx
+  - app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts
+  - app/(app)/wallet/_components/detalle-movimiento-labels.ts
+  - lib/actions/estado-cuenta.ts
   - components/shared/wallet/DetalleMovimientoPanel.tsx
   - lib/actions/wallet-anulacion.ts
   - lib/services/EstadoCuentaService.ts
@@ -41,12 +46,21 @@ sus premios), **Cargos del periodo** (lo que ya se le pagó o descontó) y **Sal
 Acá las cifras ya **no cuentan los pagos anulados**: un pago y su anulación se cancelan entre ellos.
 
 El extracto va del más antiguo al más reciente, con el **saldo inicial** como primera fila, y cada
-movimiento con su fecha, su concepto, el motivo, **quién lo registró** y el **saldo** del mensajero
-justo después. Se filtra con los chips **Todo · Cierres · Pagos · Premios · Correcciones** y con
-**Desde** / **Hasta** (días de Costa Rica). El saldo de cada fila es siempre el de la cuenta entera.
+movimiento con su fecha, su concepto, el motivo, **de dónde viene** con nombre («Cierre del día ·
+2026-09-12 · Juan Pérez Mora», con un enlace **Ver** al cierre), **cómo se pagó** si es un pago (método y
+referencia), **quién lo registró** y el **saldo** del mensajero justo después. Se filtra con los chips
+**Todo · Cierres · Pagos · Premios · Correcciones**, con **Desde** / **Hasta** (días de Costa Rica) y
+por **cierre**: un selector con búsqueda que solo ofrece los cierres con movimientos de este mensajero,
+cada uno con su día; se busca por un día o por el nombre. El saldo de cada fila es siempre el de la
+cuenta entera.
+
+Las filas que vienen de un cierre tienen una flecha al principio. Al abrirla, el pago de un cierre **no
+se reparte orden por orden**: es el total que ese cierre dejó anotado para pagarle al mensajero, y el
+detalle lo dice así. Para ver sus órdenes, abrí el cierre con el enlace **Ver** de la fila.
 
 Es el nivel donde se contesta *«¿por qué me pagaron esto?»* sin discutir de memoria. Se puede
-**descargar** el periodo entero, con el saldo de cada fila.
+**descargar** el periodo entero (con el chip y el cierre elegidos), con el saldo de cada fila; si hay más
+movimientos de los que entran en una descarga, no se descarga nada y te lo dice.
 
 ## Pagarle al mensajero
 
@@ -81,5 +95,3 @@ cuando entrega. Si tiene cierres sin aprobar, ese trabajo todavía no está cont
 
 - **No se aprueban cierres acá.** Eso es **Cierres**. Sin cierre aprobado no hay nada que pagar.
 - **No se definen las tarifas.** Cuánto se paga por entrega se configura en **Configuración · Tarifas**.
-- **No se filtra el estado de cuenta por cierre todavía.** Lo que viene de los cierres está en el chip
-  **Cierres**, con su día.

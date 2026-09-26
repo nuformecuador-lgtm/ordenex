@@ -44,6 +44,16 @@ export function fraseDelSaldo(tipo: TipoDeCuenta, sentido: SentidoDelSaldo, nomb
   return `Ordenex y ${nombre} no se deben nada`;
 }
 
+/**
+ * FICHA 458-D (R34) — la MISMA frase leída por la propia tienda en `/mi-wallet`, en segunda persona
+ * (como el resto de esa pantalla). `monto` llega ya pintado y sin signo, igual que arriba.
+ */
+export function fraseDelSaldoParaLaTienda(sentido: SentidoDelSaldo, monto: string): string {
+  if (sentido === "ordenex_debe") return `Ordenex te debe ${monto}`;
+  if (sentido === "cuenta_debe") return `Le debés ${monto} a Ordenex`;
+  return "Ordenex y vos no se deben nada";
+}
+
 /** R18 — las tarjetas. En la bodega el cargo es lo DECLARADO y el abono lo RECIBIDO. */
 export const TARJETAS_TEXTO: Record<
   TipoDeCuenta,
@@ -122,6 +132,17 @@ export const ESTADO_CUENTA_TEXTO = {
   periodoInvalido: "«Desde» no puede ser posterior a «hasta».",
   acciones: (nombre: string) => `Acciones sobre la cuenta de ${nombre}`,
   volver: "Volver al listado",
+  /** FICHA 458-D (R19, 172/457/459) — el método y la referencia del pago de la fila, en palabras. */
+  como: (texto: string) => `Cómo se pagó: ${texto}`,
+  /** FICHA 458-D (R10) — el rótulo visible del filtro por cierre. */
+  cierre: "Cierre",
+  /**
+   * FICHA 458-D (TD.6/R32) — la descarga supera el tope del servidor: no hay archivo (nunca uno al que
+   * le falten filas), y se dice qué hacer.
+   */
+  limiteDescarga: (total: number, limite: number) =>
+    `El estado de cuenta tiene ${total} movimientos con estos filtros y la descarga admite hasta ${limite}. ` +
+    "Elegí un periodo más corto, un chip o un cierre y volvé a descargar.",
 } as const;
 
 /** R25 — la leyenda de una fila anulada: quién, cuándo y por qué (o «motivo no registrado»). */

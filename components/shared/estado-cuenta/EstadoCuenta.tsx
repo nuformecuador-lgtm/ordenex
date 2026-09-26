@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,14 +10,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DataTable, type Column, type DataTableProps, type DescargaFilasResult } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { SUFIJO_REINTENTO, mensajeLimite } from "@/components/shared/descarga-resultado";
+import { SUFIJO_REINTENTO } from "@/components/shared/descarga-resultado";
 import { DetalleMovimientoPanel, type DetalleMovimiento } from "@/components/shared/wallet/DetalleMovimientoPanel";
 import { PANEL_TEXTO, textoRegistro } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
+import { ORIGEN_ENLACE_VISIBLE } from "@/components/shared/wallet/origen-movimiento";
 import { money } from "@/lib/config/moneda";
-import { verEstadoCuentaAction } from "@/lib/actions/estado-cuenta";
-import { descargaConfig } from "@/lib/config/descarga";
+import { verEstadoCuentaAction, verEstadoCuentaCompletoAction } from "@/lib/actions/estado-cuenta";
 import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
-import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
+import type {
+  EstadoCuentaDTO,
+  FilaEstadoCuentaDTO,
+  VerEstadoCuentaCompletoResult,
+  VerEstadoCuentaResult,
+} from "@/lib/types/estado-cuenta";
 import type { ChipEstadoCuenta } from "@/lib/utils/estado-cuenta-chips";
 import { cn } from "@/lib/utils";
 
@@ -25,26 +31,35 @@ import { TarjetasEstadoCuenta } from "./TarjetasEstadoCuenta";
 import { claveEstadoCuenta, esClaveDeLaCuenta } from "./estado-cuenta-clave";
 import {
   COLUMNAS_DESCARGA_ESTADO_CUENTA,
+  COLUMNAS_DESCARGA_MI_ESTADO_CUENTA,
   filaDescargaEstadoCuenta,
 } from "./estado-cuenta-descarga-columnas";
 import { CHIP_TODO, COLUMNAS_TEXTO, ESTADO_CUENTA_TEXTO, type ChipOTodo } from "./estado-cuenta-labels";
-import { estadoDeFila, lineaDeFila, lineaSaldoInicial, type RotulosEstadoCuenta } from "./estado-cuenta-lineas";
+import {
+  estadoDeFila,
+  lineaDeFila,
+  lineaSaldoInicial,
+  origenDeFila,
+  pagoDeFila,
+  type RotulosEstadoCuenta,
+} from "./estado-cuenta-lineas";
 
-// FICHA 458-D (T D.1/T D.6/T D.7, design §3.2/§5; R17–R25, R30, R32, R71, R72) — el ESTADO DE CUENTA
-// de una tienda, un mensajero o una bodega satélite, como pantalla (no la fila desplegable de antes,
-// D14).
+// FICHA 458-D (T D.1/T D.5/T D.6/T D.7, design §3.2/§5; R17–R25, R30, R32, R34, R71, R72) — el ESTADO
+// DE CUENTA de una tienda, un mensajero o una bodega satélite, como pantalla (no la fila desplegable de
+// antes, D14); y, en su vista «tienda», el de `/mi-wallet` (R34).
 //
 // La primera página la resolvió el Server Component (que ya comprobó el rol, R81) y baja por props;
-// los cambios de periodo, chip y página se piden a `verEstadoCuentaAction` con SWR, con una clave POR
-// CUENTA (`estado-cuenta-clave.ts`). Tras registrar o anular desde aquí se releen SOLO las claves de
-// ESTA cuenta (R30): `refrescarCuenta`, que también reciben las acciones de la página.
+// los cambios de periodo, chip, cierre y página se piden al LECTOR de la superficie con SWR, con una
+// clave POR CUENTA (`estado-cuenta-clave.ts`). Tras registrar o anular desde aquí se releen SOLO las
+// claves de ESTA cuenta (R30): `refrescarCuenta`, que también reciben las acciones de la página.
 //
 // Nada se deriva aquí (R90, A4): tarjetas, totales, saldo inicial y saldo corrido los calcula el
-// servidor; el estado «anulado» viaja en la fila (R71). Ningún identificador se pinta (H6).
+// servidor; el estado «anulado» viaja en la fila (R71); el origen con su entidad y su enlace, y el
+// método y la referencia del pago, también (458-D servidor). Ningún identificador se pinta (H6).
 //
 // El extracto (`TablaEstadoCuenta`, abajo) vive en ESTE archivo y no en uno propio: su `<DataTable>`
-// lo montan tres pantallas (tienda, mensajero, bodega) a través de este módulo, y así el censo de
-// tablas (`tests/unit/descarga/censo-tablas.ts`) ve una tabla compartida con sus tres montajes.
+// lo montan las pantallas (tienda, mensajero, bodega, `/mi-wallet`) a través de este módulo, y así el
+// censo de tablas (`tests/unit/descarga/censo-tablas.ts`) ve una tabla compartida con sus montajes.
 
 /** Lo que la página necesita saber de la fila para abrir el panel «Ver» (lo pone la superficie). */
 export interface PanelDeLaSuperficie {
@@ -56,11 +71,70 @@ export interface PanelDeLaSuperficie {
   nota?: (fila: FilaEstadoCuentaDTO) => string | null;
 }
 
+/** Los filtros del extracto tal como viajan al borde (ausente = sin ese filtro). */
+export interface FiltrosDeLectura {
+  desde?: string;
+  hasta?: string;
+  chip?: ChipEstadoCuenta;
+  cierreId?: string;
+}
+
+/**
+ * FICHA 458-D — DE DÓNDE se lee el estado de cuenta. La oficina lo lee por la cuenta de la página
+ * (`verEstadoCuentaAction` / `verEstadoCuentaCompletoAction`); `/mi-wallet`, por la tienda de la SESIÓN
+ * (`verMiEstadoCuentaAction` / `verMiEstadoCuentaCompletoAction`, sin ninguna clave de cuenta, R36). El
+ * módulo no sabe cuál: pinta lo que devuelve.
+ */
+export interface LectorEstadoCuenta {
+  leer: (f: FiltrosDeLectura & { page: number; pageSize: number }) => Promise<VerEstadoCuentaResult>;
+  /** TD.6/R32 — el periodo filtrado ENTERO, con el tope en el servidor. */
+  leerCompleto: (f: FiltrosDeLectura) => Promise<VerEstadoCuentaCompletoResult>;
+}
+
+/** El lector de la oficina: la cuenta de la página viaja como id (nunca se pinta). */
+export function lectorDeLaCuenta(cuenta: Pick<EstadoCuentaDTO["cuenta"], "tipo" | "id">): LectorEstadoCuenta {
+  const { tipo, id } = cuenta;
+  return {
+    leer: (f) => verEstadoCuentaAction({ cuenta: { tipo, id }, ...f }),
+    leerCompleto: (f) => verEstadoCuentaCompletoAction({ cuenta: { tipo, id }, ...f }),
+  };
+}
+
+/** FICHA 458-D (R19) — el despliegue de las órdenes de las filas que nacen de un cierre. */
+export interface DetalleDeFila {
+  render: (fila: FilaEstadoCuentaDTO, textos: { concepto: string; fecha: string }) => ReactNode;
+  /** El nombre accesible del botón que la despliega: identifica SU fila (concepto y día). */
+  nombre: (textos: { concepto: string; fecha: string }) => string;
+}
+
+/** FICHA 458-D (R10) — el selector de cierre de la superficie; el valor es el cierre (viaja, no se pinta). */
+export type SelectorDeCierre = (valor: string | null, onCambiar: (cierreId: string | null) => void) => ReactNode;
+
+/** R78 — una acción de SOLO LECTURA por fila (el comprobante de `/mi-wallet`), en lugar de «Ver». */
+export interface AccionDeFila {
+  titulo: string;
+  render: (fila: FilaEstadoCuentaDTO) => ReactNode;
+}
+
 export interface EstadoCuentaProps {
   /** La primera página, resuelta en el servidor (sin periodo ni chip). */
   inicial: EstadoCuentaDTO;
   rotulos: RotulosEstadoCuenta;
-  /** Sin él la tabla no ofrece «Ver» (la bodega no tiene filas de libro). */
+  /** Sin él, el de la oficina sobre `inicial.cuenta`. */
+  lector?: LectorEstadoCuenta;
+  /**
+   * «oficina» (por defecto) o «tienda» (`/mi-wallet`, R34/R35): la frase del saldo en segunda persona,
+   * sin la línea «Registró» (el servidor no manda a la tienda los nombres de la gente de Ordenex) y la
+   * descarga sin esa columna.
+   */
+  vista?: "oficina" | "tienda";
+  /** R10 — el filtro por cierre, si la superficie lo ofrece. */
+  selectorCierre?: SelectorDeCierre;
+  /** R19 — el despliegue de órdenes de las filas de cierre. */
+  detalleDeFila?: DetalleDeFila;
+  /** R78 — acción de solo lectura por fila. */
+  accionDeFila?: AccionDeFila;
+  /** Sin él la tabla no ofrece «Ver» (la bodega no tiene filas de libro; `/mi-wallet` solo lee). */
   panel?: PanelDeLaSuperficie;
   /**
    * R26–R29 / R31 — las acciones de la cuenta. Reciben el estado VIGENTE (el saldo, su signo) y la
@@ -73,55 +147,48 @@ export interface EstadoCuentaProps {
 
 type Periodo = { desde: string; hasta: string };
 
-async function leer(
-  tipo: EstadoCuentaDTO["cuenta"]["tipo"],
-  id: string,
-  periodo: Periodo,
-  chip: ChipOTodo,
-  page: number,
-  pageSize: number,
-): Promise<EstadoCuentaDTO> {
-  const r = await verEstadoCuentaAction({
-    cuenta: { tipo, id },
+/** De lo que se eligió en pantalla a lo que viaja al borde: lo vacío no viaja. */
+export function filtrosDeLectura(periodo: Periodo, chip: ChipOTodo, cierreId: string | null): FiltrosDeLectura {
+  return {
     ...(periodo.desde === "" ? {} : { desde: periodo.desde }),
     ...(periodo.hasta === "" ? {} : { hasta: periodo.hasta }),
     ...(chip === CHIP_TODO ? {} : { chip: chip as ChipEstadoCuenta }),
-    page,
-    pageSize,
-  });
+    ...(cierreId === null ? {} : { cierreId }),
+  };
+}
+
+async function leer(
+  lector: LectorEstadoCuenta,
+  filtros: FiltrosDeLectura,
+  page: number,
+  pageSize: number,
+): Promise<EstadoCuentaDTO> {
+  const r = await lector.leer({ ...filtros, page, pageSize });
   if (r.status !== "ok") throw new Error(r.status);
   return r.estado;
 }
 
 /**
- * R32 — el periodo filtrado ENTERO, con la línea del saldo inicial arriba. Se piden las páginas al
- * mismo borde (el tope de página del servidor) hasta el total; por encima del tope de filas de las
- * descargas no se produce archivo (nunca un archivo al que le faltan filas sin avisar).
+ * R32 / TD.6 — el periodo filtrado ENTERO (periodo, chip y cierre), con la línea del saldo inicial
+ * arriba, en UNA lectura: la acción «completa» del servidor, que aplica el tope. Por encima del tope no
+ * hay archivo (`limite_excedido`: nunca uno al que le falten filas) y se dice con un aviso claro.
  */
 export async function filasDelPeriodo(
-  inicial: EstadoCuentaDTO,
-  periodo: Periodo,
-  chip: ChipOTodo,
+  lector: LectorEstadoCuenta,
+  filtros: FiltrosDeLectura,
   rotulos: RotulosEstadoCuenta,
 ): Promise<DescargaFilasResult> {
-  const { tipo, id } = inicial.cuenta;
-  const tamano = estadoCuentaConfig.MAX_PAGE_SIZE;
   try {
-    const primera = await leer(tipo, id, periodo, chip, 1, tamano);
-    if (primera.total > descargaConfig.MAX_FILAS) {
-      return { status: "error", mensaje: mensajeLimite(primera.total, descargaConfig.MAX_FILAS) };
+    const r = await lector.leerCompleto(filtros);
+    if (r.status === "limite_excedido") {
+      return { status: "error", mensaje: ESTADO_CUENTA_TEXTO.limiteDescarga(r.total, r.limite) };
     }
-    const filas = [...primera.filas];
-    for (let page = 2; filas.length < primera.total; page += 1) {
-      const siguiente = await leer(tipo, id, periodo, chip, page, tamano);
-      if (siguiente.filas.length === 0) break;
-      filas.push(...siguiente.filas);
-    }
+    if (r.status !== "ok") throw new Error(r.status);
     return {
       status: "ok",
       filas: [
-        filaDescargaEstadoCuenta(lineaSaldoInicial(primera, periodo.desde)),
-        ...filas.map((f) => filaDescargaEstadoCuenta(lineaDeFila(f, rotulos))),
+        filaDescargaEstadoCuenta(lineaSaldoInicial(r.estado, filtros.desde ?? "")),
+        ...r.estado.filas.map((f) => filaDescargaEstadoCuenta(lineaDeFila(f, rotulos))),
       ],
     };
   } catch {
@@ -145,7 +212,9 @@ function detalleDe(
     // Desde el lado del titular de la cuenta: el abono entra a su favor, el cargo sale.
     direccion: fila.abono !== null ? "entra" : "sale",
     motivo: fila.descripcion,
-    origen: rotulos.origen(fila) ?? undefined,
+    origen: origenDeFila(fila, rotulos) ?? undefined,
+    // Método y referencia del pago (458-D servidor); en las filas que no son un pago no hay línea.
+    como: fila.pago === null ? undefined : pagoDeFila(fila),
     estado: {
       anulado: a !== null,
       motivoNoRegistrado: a !== null && a.motivo === null,
@@ -159,22 +228,46 @@ function detalleDe(
   };
 }
 
-export function EstadoCuenta({ inicial, rotulos, panel, acciones, pie }: Readonly<EstadoCuentaProps>) {
+export function EstadoCuenta({
+  inicial,
+  rotulos,
+  lector: lectorDado,
+  vista = "oficina",
+  selectorCierre,
+  detalleDeFila,
+  accionDeFila,
+  panel,
+  acciones,
+  pie,
+}: Readonly<EstadoCuentaProps>) {
   const { tipo, id, nombre } = inicial.cuenta;
+  const lector = lectorDado ?? lectorDeLaCuenta(inicial.cuenta);
   const { mutate } = useSWRConfig();
   const [periodo, setPeriodo] = useState<Periodo>({ desde: "", hasta: "" });
   const [borrador, setBorrador] = useState<Periodo>({ desde: "", hasta: "" });
   const [errorPeriodo, setErrorPeriodo] = useState<string | null>(null);
   const [chip, setChip] = useState<ChipOTodo>(CHIP_TODO);
+  const [cierreId, setCierreId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(inicial.pageSize);
   const [abierta, setAbierta] = useState<FilaEstadoCuentaDTO | null>(null);
 
-  const esLaInicial = periodo.desde === "" && periodo.hasta === "" && chip === CHIP_TODO && page === 1 && pageSize === inicial.pageSize;
+  const esLaInicial =
+    periodo.desde === "" &&
+    periodo.hasta === "" &&
+    chip === CHIP_TODO &&
+    cierreId === null &&
+    page === 1 &&
+    pageSize === inicial.pageSize;
+  const filtros = filtrosDeLectura(periodo, chip, cierreId);
   const { data, error, isLoading } = useSWR(
-    claveEstadoCuenta(tipo, id, { ...periodo, chip, page, pageSize }),
-    () => leer(tipo, id, periodo, chip, page, pageSize),
-    { fallbackData: esLaInicial ? inicial : undefined, keepPreviousData: true },
+    claveEstadoCuenta(tipo, id, { ...periodo, chip, page, pageSize, cierre: cierreId ?? "" }),
+    () => leer(lector, filtros, page, pageSize),
+    // `revalidateIfStale: false`: la primera página YA la leyó el servidor; sin esto SWR la vuelve a
+    // pedir al montar (medido: una lectura de más por visita) y, si esa segunda lectura fallara, la
+    // tabla cambiaría las filas buenas por el aviso de error. Una clave nueva (periodo, chip, cierre,
+    // página) no tiene datos y se lee igual; tras registrar o anular, `refrescarCuenta` relee.
+    { fallbackData: esLaInicial ? inicial : undefined, keepPreviousData: true, revalidateIfStale: false },
   );
 
   const vigente = data ?? inicial;
@@ -208,7 +301,7 @@ export function EstadoCuenta({ inicial, rotulos, panel, acciones, pie }: Readonl
 
   return (
     <div className="flex flex-col gap-6">
-      <TarjetasEstadoCuenta estado={vigente} />
+      <TarjetasEstadoCuenta estado={vigente} vista={vista} />
 
       {acciones ? (
         <section aria-label={ESTADO_CUENTA_TEXTO.acciones(nombre)} className="flex flex-col gap-3">
@@ -216,7 +309,7 @@ export function EstadoCuenta({ inicial, rotulos, panel, acciones, pie }: Readonl
         </section>
       ) : null}
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between">
         <ChipsEstadoCuenta
           tipo={tipo}
           nombre={nombre}
@@ -226,6 +319,12 @@ export function EstadoCuenta({ inicial, rotulos, panel, acciones, pie }: Readonl
             setPage(1);
           }}
         />
+        {selectorCierre
+          ? selectorCierre(cierreId, (c) => {
+              setCierreId(c);
+              setPage(1);
+            })
+          : null}
         <form
           aria-label={ESTADO_CUENTA_TEXTO.periodo(nombre)}
           className="flex flex-wrap items-end gap-2"
@@ -278,10 +377,13 @@ export function EstadoCuenta({ inicial, rotulos, panel, acciones, pie }: Readonl
         isLoading={data === undefined && isLoading}
         error={error !== undefined}
         onVer={panel === undefined ? undefined : (f) => (seAbre(f) ? setAbierta(f) : undefined)}
+        conRegistro={vista === "oficina"}
+        detalleDeFila={detalleDeFila}
+        accionDeFila={accionDeFila}
         descarga={{
           titulo: ESTADO_CUENTA_TEXTO.tabla(nombre),
-          columnas: COLUMNAS_DESCARGA_ESTADO_CUENTA,
-          obtenerFilas: () => filasDelPeriodo(inicial, periodo, chip, rotulos),
+          columnas: vista === "oficina" ? COLUMNAS_DESCARGA_ESTADO_CUENTA : COLUMNAS_DESCARGA_MI_ESTADO_CUENTA,
+          obtenerFilas: () => filasDelPeriodo(lector, filtros, rotulos),
         }}
       />
       {data !== undefined && data.filas.length === 0 ? (
@@ -324,17 +426,19 @@ export function EstadoCuenta({ inicial, rotulos, panel, acciones, pie }: Readonl
   );
 }
 
-// FICHA 458-D (T D.1, design §3.2/§5.1; R19–R25, R71, R72) — el EXTRACTO del estado de cuenta.
+// FICHA 458-D (T D.1, design §3.2/§5.1; R6–R8, R19–R25, R71, R72) — el EXTRACTO del estado de cuenta.
 //
 //  - Primera línea: el SALDO INICIAL del periodo (R20), en la página 1.
 //  - Orden ascendente, tal cual lo devolvió el servidor (R23): aquí no se reordena nada.
-//  - Cada fila: fecha (día CR), movimiento y motivo (concepto, origen, descripción, comprobante y quién
-//    lo registró), cargo, abono, SALDO CORRIDO de la cuenta entera (R21, lo calcula la base) y «Ver».
+//  - Cada fila: fecha (día CR), movimiento y motivo (concepto, origen con su entidad y su enlace, método
+//    y referencia del pago, descripción, comprobante y quién lo registró), cargo, abono, SALDO CORRIDO
+//    de la cuenta entera (R21, lo calcula la base) y «Ver».
+//  - Las filas que nacen de un cierre despliegan las órdenes que componen su importe (R19, 344/345).
 //  - Anulado (R25/R71): el estado VIAJA en la fila, decidido por el servidor; la fila se tacha y dice
 //    quién, cuándo y por qué («motivo no registrado» si no hay constancia, R72). El contra-asiento se
 //    rotula «Anulación». Ningún componente compara filas entre sí para decidirlo (guardia R98).
 // Money-safe (R90): los importes llegan STRING y se pintan con `money`. Ningún id se pinta (H6): `ref`
-// viaja al panel «Ver» y nada más.
+// viaja al panel «Ver» y al despliegue, y el del origen va SOLO en el `href` de su enlace (R7).
 
 /** Una línea de la tabla: el saldo inicial o un movimiento. */
 export type LineaTabla = { tipo: "inicial"; clave: string } | { tipo: "movimiento"; clave: string; fila: FilaEstadoCuentaDTO };
@@ -349,6 +453,12 @@ export interface TablaEstadoCuentaProps {
   isLoading: boolean;
   error: boolean;
   onVer?: (fila: FilaEstadoCuentaDTO) => void;
+  /** R34/R35 — `false` en `/mi-wallet`: la tienda no ve quién de Ordenex registró la fila. */
+  conRegistro?: boolean;
+  /** R19 — el despliegue de órdenes de las filas que nacen de un cierre. */
+  detalleDeFila?: DetalleDeFila;
+  /** R78 — acción de solo lectura por fila (en lugar de «Ver»). */
+  accionDeFila?: AccionDeFila;
   descarga?: DataTableProps<LineaTabla>["descarga"];
 }
 
@@ -357,9 +467,40 @@ export function seAbre(fila: FilaEstadoCuentaDTO): boolean {
   return fila.ref !== null && "libro" in fila.ref;
 }
 
+/**
+ * R19 — la fila despliega sus órdenes si nace de un cierre (lo decide el servidor) y trae su destino de
+ * libro. Un contra-asiento no: las órdenes son las de su original.
+ */
+export function despliegaOrdenes(fila: FilaEstadoCuentaDTO): boolean {
+  return fila.naceDeUnCierre && !fila.esContraAsiento && seAbre(fila);
+}
+
 function Importe({ valor, tachado, clase }: { valor: string | null; tachado: boolean; clase?: string }) {
   if (valor === null) return null;
   return <span className={cn("tabular-nums", tachado && "line-through", clase)}>{money(valor)}</span>;
+}
+
+/** R6–R8 — el origen con su entidad y, si el rol que mira accede a esa pantalla, el enlace. */
+function OrigenDeFila({ fila, rotulos }: { fila: FilaEstadoCuentaDTO; rotulos: RotulosEstadoCuenta }) {
+  const texto = origenDeFila(fila, rotulos);
+  if (texto === null) return null;
+  const enlace = fila.origen?.enlace ?? null;
+  return (
+    <span className="inline-flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
+      <span>{texto}</span>
+      {enlace === null ? null : (
+        // El id va SOLO en `href`; el nombre accesible es la etiqueta del servidor, que EMPIEZA por el
+        // texto visible (R7, «Label in Name»).
+        <Link
+          href={enlace.href}
+          aria-label={enlace.etiqueta}
+          className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          {ORIGEN_ENLACE_VISIBLE}
+        </Link>
+      )}
+    </span>
+  );
 }
 
 export function TablaEstadoCuenta({
@@ -370,6 +511,9 @@ export function TablaEstadoCuenta({
   isLoading,
   error,
   onVer,
+  conRegistro = true,
+  detalleDeFila,
+  accionDeFila,
   descarga,
 }: Readonly<TablaEstadoCuentaProps>) {
   const tipo = estado?.cuenta.tipo ?? "tienda";
@@ -406,7 +550,7 @@ export function TablaEstadoCuenta({
         const f = l.fila;
         const anulado = f.anulacion !== null;
         const leyenda = estadoDeFila(f);
-        const origen = rotulos.origen(f);
+        const pago = pagoDeFila(f);
         return (
           <div className="flex min-w-[16rem] flex-col gap-0.5">
             <span className="flex flex-wrap items-center gap-2">
@@ -417,10 +561,15 @@ export function TablaEstadoCuenta({
               {f.tieneComprobante ? <Badge variant="secondary">{ESTADO_CUENTA_TEXTO.conComprobante}</Badge> : null}
             </span>
             {f.descripcion ? <span className="text-sm text-muted-foreground">{f.descripcion}</span> : null}
-            {origen ? <span className="text-xs text-muted-foreground">{origen}</span> : null}
-            <span className="text-xs text-muted-foreground">
-              {ESTADO_CUENTA_TEXTO.registro(textoRegistro(f.registro))}
-            </span>
+            <OrigenDeFila fila={f} rotulos={rotulos} />
+            {pago !== null ? (
+              <span className="text-xs text-muted-foreground">{ESTADO_CUENTA_TEXTO.como(pago)}</span>
+            ) : null}
+            {conRegistro ? (
+              <span className="text-xs text-muted-foreground">
+                {ESTADO_CUENTA_TEXTO.registro(textoRegistro(f.registro))}
+              </span>
+            ) : null}
             {anulado && leyenda !== null ? <span className="text-xs font-medium text-foreground">{leyenda}</span> : null}
           </div>
         );
@@ -456,9 +605,11 @@ export function TablaEstadoCuenta({
     },
     {
       id: "ver",
-      value: t.ver,
-      render: (l) =>
-        l.tipo === "movimiento" && onVer !== undefined && seAbre(l.fila) ? (
+      value: accionDeFila?.titulo ?? t.ver,
+      render: (l) => {
+        if (l.tipo !== "movimiento") return null;
+        if (accionDeFila !== undefined) return accionDeFila.render(l.fila);
+        return onVer !== undefined && seAbre(l.fila) ? (
           <Button
             type="button"
             variant="outline"
@@ -468,7 +619,8 @@ export function TablaEstadoCuenta({
           >
             {PANEL_TEXTO.ver}
           </Button>
-        ) : null,
+        ) : null;
+      },
     },
   ];
 
@@ -488,6 +640,21 @@ export function TablaEstadoCuenta({
             : l.fila.anulacion !== null
               ? "text-muted-foreground"
               : undefined
+        }
+        // R19 — el despliegue SOLO en las filas que nacen de un cierre; `null` = la primitiva no pinta
+        // el botón. El contenido se monta al abrir: la tabla cerrada no lee ninguna orden.
+        renderExpanded={
+          detalleDeFila === undefined
+            ? undefined
+            : (l) =>
+                l.tipo === "movimiento" && despliegaOrdenes(l.fila)
+                  ? detalleDeFila.render(l.fila, { concepto: rotulos.concepto(l.fila), fecha: l.fila.fecha })
+                  : null
+        }
+        expandAriaLabel={(l) =>
+          l.tipo === "movimiento" && detalleDeFila !== undefined
+            ? detalleDeFila.nombre({ concepto: rotulos.concepto(l.fila), fecha: l.fila.fecha })
+            : ""
         }
         descarga={descarga}
       />

@@ -173,8 +173,11 @@ describe("R55 — la clasificación de `/mi-wallet` es LA MISMA función que la 
 describe("R55 — la pantalla de la tienda NO clasifica: solo pinta", () => {
   const ARCHIVOS = [
     "app/(app)/mi-wallet/page.tsx",
-    "app/(app)/mi-wallet/_components/MiWalletModule.tsx",
-    "app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx",
+    // FICHA 458-D (T D.5): `MiWalletModule` y `SaldoTiendaCard` se retiraron; la pantalla es el estado
+    // de cuenta de la tienda, cuyas tarjetas y abonos/cargos los clasifica el SERVIDOR (chips incluidos).
+    "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+    "components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx",
+    "components/shared/estado-cuenta/EstadoCuenta.tsx",
   ];
 
   it("ningún archivo de la cabecera decide en qué importe cae una categoría", () => {

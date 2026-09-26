@@ -65,7 +65,9 @@ export const AFIRMACIONES: readonly Afirmacion[] = [
   },
   {
     id: "T5-mi-wallet",
-    archivo: "app/(app)/mi-wallet/_components/MiWalletFiltros.tsx",
+    // FICHA 458-D (T D.5): `MiWalletFiltros` se retiró con el libro de `/mi-wallet`; la afirmación se
+    // vigila en el archivo que lo sustituye, el estado de cuenta de la tienda.
+    archivo: "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
     patron: /pobla\w*\s+(?:desde\s+el|del)\s+SEED|se\s+pueblan?\s+del\s+SEED/i,
     conComentarios: true,
   },

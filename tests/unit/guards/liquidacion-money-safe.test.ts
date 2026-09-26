@@ -55,8 +55,10 @@ const ARCHIVOS_DE_LA_FEATURE: readonly string[] = [
   "app/(app)/cierres-admin/_components/RegistrarPagoMensajeroDialog.tsx",
   "app/(app)/cierres-admin/_components/pago-mensajero-labels.ts",
   "app/(app)/cierres-admin/page.tsx",
-  "app/(app)/mi-wallet/_components/MiWalletModule.tsx",
-  "app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx",
+  // FICHA 458-D (T D.5): el libro de `/mi-wallet` (`MiWalletModule` + `SaldoTiendaCard`) se retiró; lo
+  // sustituye el estado de cuenta de la tienda (el módulo y sus tarjetas compartidas).
+  "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+  "components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx",
   "app/(app)/mi-wallet/_components/mi-wallet-labels.ts",
   "app/(app)/mi-wallet/page.tsx",
   "app/(app)/wallet/_components/wallet-labels.ts",

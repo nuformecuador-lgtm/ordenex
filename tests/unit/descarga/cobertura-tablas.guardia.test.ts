@@ -213,8 +213,14 @@ const ARBOLES_UI = ["app", "components"] as const;
 // `ConciliacionSatelite`). Dentro de alcance 25 -> 24 (las tres son `con_descarga`); exclusiones
 // intactas. Esta guardia se vio fallar PRIMERO con «expected 37 to be 38» y «expected 38 to be 39»
 // antes de tocar estos numeros. Censo total: 38 = 37 `<DataTable>` + 1 `<table>` cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 37;
-const TOTAL_INSTANCIAS_DATATABLE = 37;
+//
+// ⭑ FICHA 458-D (T D.5, cierre de pantalla): 37 -> 36 archivos y 37 -> 36 instancias. Se RETIRA
+// `mi-wallet/_components/DesgloseTiendaLedger.tsx` («Desglose de movimientos de la tienda»): `/mi-wallet`
+// es ahora el estado de cuenta compartido, que gana su cuarto montaje (`MiEstadoCuenta`). Dentro de
+// alcance 24 -> 23; exclusiones intactas. Esta guardia se vio fallar PRIMERO con «expected 36 to be 37»
+// y «expected 37 to be 38» antes de tocar estos numeros. Censo total: 37 = 36 `<DataTable>` + 1 cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 36;
+const TOTAL_INSTANCIAS_DATATABLE = 36;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -417,7 +423,9 @@ describe("guardia de cobertura del censo de tablas", () => {
     // literal de sus gemelas de tiendas. Las 14 exclusiones NO se mueven.
     // ⭑ FICHA 458-D (T D.8): 39 → 38. Salen los dos desplegables de tiendas y mensajeros y entra el
     // extracto compartido del estado de cuenta. Las 14 exclusiones NO se mueven.
-    expect(totalCensado).toBe(38);
+    // ⭑ FICHA 458-D (T D.5, cierre de pantalla): 38 → 37. Sale el libro de `/mi-wallet`
+    // (`DesgloseTiendaLedger`): la tienda ve el extracto compartido. Las 14 exclusiones NO se mueven.
+    expect(totalCensado).toBe(37);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -528,7 +536,8 @@ describe("guardia de cobertura del censo de tablas", () => {
     // archivo por archivo, que sus gemelas de tiendas.
     // ⭑ FICHA 458-D (T D.8): 25 → 24 dentro de alcance —salen dos desplegables `con_descarga` y entra
     // uno, el extracto del estado de cuenta, también `con_descarga`—; las 14 exclusiones INTACTAS.
-    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(24);
+    // ⭑ FICHA 458-D (T D.5, cierre de pantalla): 24 → 23 —sale el libro de `/mi-wallet`, `con_descarga`—.
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(23);
     expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(14);
   });
 

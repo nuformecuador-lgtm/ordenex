@@ -7,12 +7,11 @@
 //  - TA.4 (R2, R10–R12): el cierre de `/wallet/tiendas` y `/wallet/mensajeros` se ELIGE en un
 //    selector con búsqueda (leído al abrirlo), ya no se teclea: ningún campo pide un identificador.
 //
-// FICHA 458-D (T D.8, D14): los dos desgloses que montaban el selector se retiraron y el estado de
-// cuenta que los sustituye todavía NO filtra por cierre (su borde no lo acepta: pendiente de servidor,
-// `progress/impl_458-D.md`). Para no perder la red, los casos del selector se conservan sobre la MISMA
-// composición que usaban los desgloses (`SelectorBuscable` + `useCierresDeLaCuenta` +
-// `CIERRE_SELECTOR_TEXTOS`), montada aquí; y el estado de cuenta se mide por R2 (ningún control pide
-// un id).
+// FICHA 458-D (T D.8, D14): los dos desgloses que montaban el selector se retiraron; desde el cierre de
+// pantalla de la 458-D el selector vive en el filtro por cierre del ESTADO DE CUENTA de tienda y
+// mensajero (`SelectorCierreDeCuenta`, medido montado en `EstadoCuenta458DPantalla.test.tsx`). Aquí se
+// conserva la red de la composición (`SelectorBuscable` + `useCierresDeLaCuenta` +
+// `CIERRE_SELECTOR_TEXTOS`) y el estado de cuenta se mide por R2 (ningún control pide un id).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, within, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -20,7 +19,8 @@ import { SWRConfig } from "swr";
 import type { ReactNode } from "react";
 
 
-const { conceptosMock, cierresMock, desgloseTiendaMock } = vi.hoisted(() => ({
+const { conceptosMock, cierresMock, desgloseTiendaMock, miEstadoCuentaMock } = vi.hoisted(() => ({
+  miEstadoCuentaMock: vi.fn(),
   conceptosMock: vi.fn(),
   cierresMock: vi.fn(),
   desgloseTiendaMock: vi.fn(),
@@ -32,8 +32,13 @@ vi.mock("@/lib/actions/wallet-filtros", () => ({
 }));
 vi.mock("@/lib/actions/estado-cuenta", () => ({
   verEstadoCuentaAction: (...a: unknown[]) => desgloseTiendaMock(...a),
+  verEstadoCuentaCompletoAction: vi.fn(),
+  verMiEstadoCuentaAction: (...a: unknown[]) => miEstadoCuentaMock(...a),
+  verMiEstadoCuentaCompletoAction: vi.fn(),
+  verOrdenesDeFilaAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/como-quedo", () => ({ comoQuedoAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-tienda", () => ({ verDetalleDeMiMovimientoAction: vi.fn(), verDetalleDeMiMovimientoCompletoAction: vi.fn() }));
 vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
 vi.mock("@/lib/actions/wallet-anulacion", () => ({ anularMovimientoAction: vi.fn() }));
 vi.mock("@/lib/actions/usuarios-por-rol", () => ({ listarAdminTiendas: vi.fn(), listarMensajerosActivos: vi.fn() }));
@@ -48,7 +53,7 @@ vi.mock("@/hooks/useToast", () => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
 import { WalletFiltros } from "@/app/(app)/wallet/_components/WalletFiltros";
-import { MiWalletFiltros } from "@/app/(app)/mi-wallet/_components/MiWalletFiltros";
+import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 import { useState } from "react";
 import { SelectorBuscable } from "@/components/shared/SelectorBuscable";
 import { CIERRE_SELECTOR_TEXTOS } from "@/components/shared/wallet/cierres-selector";
@@ -158,16 +163,22 @@ describe("TA.3 — `/wallet`: el filtro de categoría (libro de caja)", () => {
   });
 });
 
-describe("TA.3 — `/mi-wallet`: el filtro de concepto de la tienda", () => {
-  it("R13: pide `libro: mi_tienda` SIN ningún id de tienda, con el periodo, y rotula desde la tienda", async () => {
-    conSWR(
-      <MiWalletFiltros onAplicar={vi.fn()} onLimpiar={vi.fn()} cierres={{ opciones: [], hayMas: false, disponible: true }} />,
-    );
-    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-09-01" } });
-    await waitFor(() => expect(conceptosMock).toHaveBeenLastCalledWith({ libro: "mi_tienda", desde: "2026-09-01" }));
-    for (const [input] of conceptosMock.mock.calls) expect(input).not.toHaveProperty("tiendaId");
-    const opciones = await opcionesDe(screen.getByRole("combobox", { name: "Filtrar por concepto" }));
-    expect(opciones).toContain("Ordenex te cobró (1)");
+// FICHA 458-D (T D.5): `/mi-wallet` es el ESTADO DE CUENTA de la tienda; su filtro de concepto
+// (`MiWalletFiltros`, `libro: "mi_tienda"`) se retiró con el libro y lo sustituyen los chips (R24), como
+// en la oficina. Lo que TA.3 protegía en `/mi-wallet` —ningún id de tienda viaja y se lee desde la
+// tienda— se mide sobre el chip.
+describe("TA.3 → 458-D — `/mi-wallet`: el filtro por concepto es el chip, sin ningún id de tienda", () => {
+  it("R13/R36: el chip «Cobros» lee SU estado de cuenta sin `tiendaId` ni `cuenta`, y rotula desde la tienda", async () => {
+    miEstadoCuentaMock.mockResolvedValue({ status: "ok", estado: estado() });
+    conSWR(<MiEstadoCuenta inicial={estado()} cierres={{ opciones: [], hayMas: false, disponible: true }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Cobros" }));
+    await waitFor(() => expect(miEstadoCuentaMock).toHaveBeenLastCalledWith({ chip: "cobros", page: 1, pageSize: 20 }));
+    for (const [input] of miEstadoCuentaMock.mock.calls) {
+      expect(input).not.toHaveProperty("tiendaId");
+      expect(input).not.toHaveProperty("cuenta");
+    }
+    expect(screen.getByText("Cobrado a tus clientes en contra-entrega")).toBeInTheDocument();
+    expect(conceptosMock).not.toHaveBeenCalled();
   });
 });
 

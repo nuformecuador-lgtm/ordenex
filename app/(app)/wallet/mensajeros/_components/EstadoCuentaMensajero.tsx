@@ -1,10 +1,15 @@
 "use client";
 
 import { EstadoCuenta, type PanelDeLaSuperficie } from "@/components/shared/estado-cuenta/EstadoCuenta";
+import { SelectorCierreDeCuenta } from "@/components/shared/estado-cuenta/SelectorCierreDeCuenta";
 import type { RotulosEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
+
+import { DetalleMovimientoCierre } from "../../_components/DetalleMovimientoCierre";
+import { DETALLE_MOVIMIENTO_NOMBRE } from "../../_components/detalle-movimiento-labels";
+import { fuenteOrdenesDeFila } from "../../_components/ordenes-de-fila-cuenta";
 
 import { PagoMensajeroAcciones } from "./PagoMensajeroAcciones";
 import { ESTADO_CUENTA_MENSAJERO_PAGINA } from "./estado-cuenta-mensajero-labels";
@@ -41,11 +46,31 @@ export interface EstadoCuentaMensajeroProps {
 }
 
 export function EstadoCuentaMensajero({ inicial, puedeRegistrar }: Readonly<EstadoCuentaMensajeroProps>) {
+  const mensajeroId = inicial.cuenta.id;
   return (
     <EstadoCuenta
       inicial={inicial}
       rotulos={ROTULOS_MENSAJERO}
       panel={PANEL_MENSAJERO}
+      // R10–R12 — el filtro por cierre de ESTE mensajero (la 458-A); el cierre viaja, no se pinta.
+      selectorCierre={(valor, onCambiar) => (
+        <SelectorCierreDeCuenta cuenta={{ cuenta: "mensajero", mensajeroId }} valor={valor} onCambiar={onCambiar} />
+      )}
+      // R19 — su fila de cierre se abre igual: el pago del mensajero es un total que el cierre dejó
+      // anotado (`sin_reparto: snapshot_del_cierre`), y el panel lo dice en palabras; el enlace a SU
+      // cierre es el del origen de la fila.
+      detalleDeFila={{
+        nombre: ({ concepto, fecha }) => DETALLE_MOVIMIENTO_NOMBRE.abrir(concepto, fecha),
+        render: (f, { concepto, fecha }) =>
+          f.ref !== null && "movimientoId" in f.ref ? (
+            <DetalleMovimientoCierre
+              movimientoId={f.ref.movimientoId}
+              concepto={concepto}
+              fecha={fecha}
+              fuente={fuenteOrdenesDeFila({ tipo: "mensajero", id: mensajeroId })}
+            />
+          ) : null,
+      }}
       acciones={
         puedeRegistrar
           ? (vigente, refrescar) => (

@@ -64,15 +64,16 @@ describe("458-A (bloque A) — lo de la oficina no sale de la oficina", () => {
 });
 
 describe("458-A (bloque A) — la tienda entiende sus filtros y sus orígenes en Mi wallet", () => {
-  it("adminTienda: conceptos con su número y el elegido con (0); origen con nombre", () => {
+  // FICHA 458-D (T D.5, cierre de pantalla): `/mi-wallet` es el estado de cuenta de la tienda. El filtro
+  // por concepto de la 458-A (con su número y el «(0)») se retiró con el libro: lo sustituyen los chips,
+  // y la ayuda ya no lo promete (bloque D, abajo). El origen con nombre se conserva.
+  it("adminTienda: el origen con nombre; el filtro por concepto ya no se promete", () => {
     const wallet = cuerpoEnContexto("adminTienda", "tienda/mi-wallet");
     expect(wallet).toContain(
-      "Solo aparecen los conceptos que **tienen movimientos** tuyos en el periodo (y el cierre) que elegiste, cada uno con su número entre paréntesis, por ejemplo «Ordenex te cobró el flete (8)».",
+      "El **origen** lo dice con nombre, por ejemplo «Cierre del día · 2026-09-12» o «Gestión de orden · cobro por rechazo · guía 4321».",
     );
-    expect(wallet).toContain("sigue elegido con **(0)** hasta que lo quites.");
-    expect(wallet).toContain(
-      "La columna **Origen** lo dice con nombre, por ejemplo «Cierre del día · 2026-09-12» o «Gestión de orden · cobro por rechazo · guía 4321».",
-    );
+    expect(wallet).not.toContain("Solo aparecen los conceptos que **tienen movimientos**");
+    expect(wallet).not.toContain("sigue elegido con **(0)**");
   });
 
   it.each(["mensajero", "adminSatelite"] as RolValue[])("%s NO recibe Mi wallet", (rol) => {
@@ -229,6 +230,30 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
     expect(satelites).toContain("Debajo del estado de cuenta de la bodega están sus consolidaciones");
   });
 
+  // Cierre de PANTALLA de la 458-D (R6–R8, R10, R19, TD.6): lo que el servidor ya daba y la pantalla
+  // ahora monta. Frases literales: la ayuda dice lo que la pantalla hace hoy.
+  it.each(OFICINA)("%s: filtrar por cierre, el origen con enlace, cómo se pagó y las órdenes de un cierre (tienda)", (rol) => {
+    const tiendas = cuerpoEnContexto(rol, "oficina/wallet-tiendas");
+    expect(tiendas).toContain("**Cierre**: un selector con búsqueda. Solo ofrece los cierres que tienen movimientos en **esta** tienda");
+    expect(tiendas).toContain("se busca por un día (2026-09-12) o por el nombre del mensajero");
+    expect(tiendas).toContain("y, cuando esa cosa tiene su pantalla, con un enlace **Ver** que te lleva a ella");
+    expect(tiendas).toContain("Si el movimiento es un pago, dice **Cómo se pagó**: el método y la referencia");
+    expect(tiendas).toContain("### Las órdenes de un cierre");
+    expect(tiendas).toContain("**las órdenes de esta tienda que componen ese importe**");
+    expect(tiendas).toContain("Si hay más movimientos de los que entran en una descarga, **no se descarga nada** y te lo dice");
+    // Lo que la ayuda decía mientras faltaba el servidor no vuelve.
+    expect(tiendas).not.toContain("todavía no se puede filtrar el estado de cuenta");
+    expect(tiendas).not.toContain("No se abren las órdenes de un cierre desde el estado de cuenta");
+  });
+
+  it.each(OFICINA)("%s: el mensajero se filtra por cierre y su fila de cierre dice que no se reparte por orden", (rol) => {
+    const mensajeros = cuerpoEnContexto(rol, "oficina/wallet-mensajeros");
+    expect(mensajeros).toContain("un selector con búsqueda que solo ofrece los cierres con movimientos de este mensajero");
+    expect(mensajeros).toContain("el pago de un cierre **no se reparte orden por orden**");
+    expect(mensajeros).toContain("Para ver sus órdenes, abrí el cierre con el enlace **Ver** de la fila.");
+    expect(mensajeros).not.toContain("No se filtra el estado de cuenta por cierre todavía");
+  });
+
   it.each(FUERA_DE_OFICINA)("%s NO recibe la ayuda de los estados de cuenta (R103)", (rol) => {
     const slugs = contextoPara(docs, rol).map((d) => d.slug);
     expect(slugs).not.toContain("oficina/wallet-satelites");
@@ -244,16 +269,24 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
         "app/(app)/wallet/tiendas/[tiendaId]/page.tsx",
         "components/shared/estado-cuenta/EstadoCuenta.tsx",
         "app/(app)/wallet/tiendas/_components/EstadoCuentaAcciones.tsx",
+        "components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx",
+        "app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts",
       ],
       "oficina/wallet-mensajeros": [
         "app/(app)/wallet/mensajeros/[mensajeroId]/page.tsx",
         "app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero.tsx",
+        "components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx",
+        "app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts",
       ],
       "oficina/wallet-satelites": [
         "app/(app)/wallet/satelites/[zonaId]/page.tsx",
         "app/(app)/wallet/satelites/_components/ConciliacionSatelite.tsx",
       ],
-      "tienda/mi-wallet": ["app/(app)/mi-wallet/_components/VerComprobanteMiMovimiento.tsx"],
+      "tienda/mi-wallet": [
+        "app/(app)/mi-wallet/_components/VerComprobanteMiMovimiento.tsx",
+        "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+        "components/shared/estado-cuenta/EstadoCuenta.tsx",
+      ],
     };
     for (const [slug, fuentes] of Object.entries(esperado)) {
       const doc = docs.find((d) => d.slug === slug);
@@ -266,6 +299,11 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
         "app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx",
         "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
         "app/(app)/wallet/satelites/_components/DesgloseConsolidacionesSatelite.tsx",
+        // Cierre de pantalla de la 458-D (T D.5): el libro de `/mi-wallet` se retiró.
+        "app/(app)/mi-wallet/_components/MiWalletModule.tsx",
+        "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",
+        "app/(app)/mi-wallet/_components/MiWalletFiltros.tsx",
+        "app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx",
       ]) {
         expect(declaradas, `${slug} declara la retirada ${retirada}`).not.toContain(retirada);
       }
@@ -281,6 +319,27 @@ describe("458-D (bloque D) — la tienda puede preguntar cómo ve el comprobante
     expect(wallet).toContain("Solo ves los de tu tienda.");
     expect(wallet).toContain("**No se sube ni se cambia ningún comprobante.** Los guarda la oficina; acá solo se ven.");
     expect(wallet).not.toContain("No se abre el comprobante de un pago que Ordenex hizo por ti");
+  });
+
+  // Cierre de pantalla de la 458-D (T D.5, R34/R35): `/mi-wallet` es el estado de cuenta de la tienda.
+  it("adminTienda: Mi wallet es su estado de cuenta: la frase del saldo, el extracto, los chips y el cierre", () => {
+    const wallet = cuerpoEnContexto("adminTienda", "tienda/mi-wallet");
+    expect(wallet).toContain("La cifra grande es tu **saldo actual**, con una frase que dice **quién le debe a quién**");
+    expect(wallet).toContain("**Ordenex te debe ₡…**");
+    expect(wallet).toContain("**Le debés ₡… a Ordenex**");
+    expect(wallet).toContain("## Tu estado de cuenta");
+    expect(wallet).toContain("La primera fila es el **saldo inicial**");
+    expect(wallet).toContain("El saldo de la última fila es el mismo de la cifra grande de arriba.");
+    expect(wallet).toContain("## Filtrar tu estado de cuenta");
+    expect(wallet).toContain("**Todo · Cierres · Pagos · Cobros · Correcciones**");
+    expect(wallet).toContain("«Cierre del 2026-09-12 · 7 movimientos»");
+    expect(wallet).toContain("Y podés **descargar tu estado de cuenta**");
+    // Lo retirado con el libro no vuelve: ni la cabecera de tres importes ni el filtro por concepto.
+    expect(wallet).not.toContain("Cargos de Ordenex");
+    expect(wallet).not.toContain("Ya pagado");
+    expect(wallet).not.toContain("**Por concepto**");
+    // Tampoco se nombra a la gente de Ordenex: la tienda no ve quién registró ni quién anuló.
+    expect(wallet).not.toContain("Registró:");
   });
 
   it.each(["mensajero", "adminSatelite"] as RolValue[])("%s NO recibe la explicación del comprobante de la tienda", (rol) => {

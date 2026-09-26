@@ -16,7 +16,9 @@ export function fila(parcial: Partial<FilaEstadoCuentaDTO> & { n?: number; libro
     fecha: "2026-09-12",
     categoria: "cod_recaudado",
     origenTipo: "cierre_dia",
-    origen: { texto: "Cierre del día", enlace: null },
+    // Sin origen compuesto por defecto: la pantalla cae al rótulo del diccionario de SU superficie
+    // (como una fila de bodega). Los casos del origen con entidad (R6–R8) lo dan explícito.
+    origen: null,
     pago: null,
     descripcion: null,
     registro: { nombre: null, automatico: { accion: "aprobacion_cierre", por: "Ana Admin" } },

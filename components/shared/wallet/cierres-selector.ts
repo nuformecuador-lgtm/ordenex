@@ -18,7 +18,8 @@ function contarMovimientos(n: number): string {
 }
 
 /**
- * @sin-superficie FICHA 458-D (T D.8, pendiente de servidor anotado en `progress/impl_458-D.md`): sus dos superficies eran los desgloses de `/wallet/tiendas` y `/wallet/mensajeros`, que se retiraron (D14). El estado de cuenta que los sustituye NO filtra por cierre porque su borde (`estadoCuentaSchema`) no acepta un cierre; cuando lo acepte, este selector se monta ahi (R10). Esta anotacion CADUCA con eso.
+ * FICHA 458-D (R10): lo monta el filtro por cierre del estado de cuenta de una tienda o de un mensajero
+ * (`components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx`).
  * Las opciones del selector. Rotulo: `Cierre del <dia> · <mensajero> · <n> movimientos`; si dos
  * rotulos coinciden, a TODOS los repetidos se les añade la hora (mismo criterio que el selector de
  * `/mi-wallet`, ficha 335). El `value` es el cierre y NUNCA se pinta (R1).

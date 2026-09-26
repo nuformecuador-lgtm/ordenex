@@ -343,12 +343,9 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ruta: "app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx",
     tablas: [{ nombre: "Incidentes — histórico", estado: "con_descarga" }],
   },
-  {
-    ruta: "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",
-    tablas: [
-      { nombre: "Desglose de movimientos de la tienda", estado: "con_descarga" },
-    ],
-  },
+  // FICHA 458-D (T D.5, cierre de pantalla): «Desglose de movimientos de la tienda»
+  // (`mi-wallet/_components/DesgloseTiendaLedger.tsx`) se retiró: `/mi-wallet` es ahora el estado de
+  // cuenta compartido (`components/shared/estado-cuenta/EstadoCuenta.tsx`), que gana su cuarto montaje.
   {
     // FICHA 344 (B7/B8) — el desplegable de UNA fila del libro de la TIENDA: las órdenes de esa
     // tienda que componen el importe de ese movimiento. Va justo después de
@@ -620,6 +617,7 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
         nombre: "Estado de cuenta de una tienda, un mensajero o una bodega",
         estado: "con_descarga",
         montajes: [
+          "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
           "app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero.tsx",
           "app/(app)/wallet/satelites/_components/EstadoCuentaSatelite.tsx",
           "app/(app)/wallet/tiendas/_components/EstadoCuentaTienda.tsx",
