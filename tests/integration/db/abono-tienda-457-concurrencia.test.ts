@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { anularAbonoTiendaAction, registrarAbonoTiendaAction } from "@/lib/actions/abono-tienda";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
@@ -52,6 +52,8 @@ import {
 //     `usuario`) y al entrar la tienda sigue en contra → `sin_saldo`.
 //   · R16 — pago de la tienda pausado ∥ pago de un gasto de la tienda: el pago de un gasto espera y al
 //     entrar se registra sobre el saldo ya subido: −10 000 + 8 000 − 5 000 = −7 000.
+//   · R25 — la MISMA clave enviada dos veces a la vez por toda la deuda: el segundo espera, la regla del
+//     dinero lo rechazaria (saldo 0) y responde `ya_registrado` con el pago original.
 //   · R36 — dos anulaciones del mismo pago a la vez, por la action: una sola constancia y un solo
 //     contra-asiento en cada libro.
 
@@ -174,8 +176,11 @@ describeSiHayBase("457/T5.2 — concurrencia del pago de una tienda a Ordenex (P
       // R66: el saldo NUNCA quedo por encima de cero, y solo hay UN documento.
       expect(await prisma.abonoTienda.count({ where: { tiendaId: p.tiendaId } })).toBe(1);
       const filas = await prisma.walletTiendaMovimiento.findMany({ where: { tiendaId: p.tiendaId } });
-      const saldo = filas.reduce((acc, f) => (f.tipo === "credito" ? acc + Number(f.monto) : acc - Number(f.monto)), 0);
-      expect(saldo).toBe(-2000);
+      const saldo = filas.reduce(
+        (acc, f) => (f.tipo === "credito" ? acc.add(f.monto) : acc.sub(f.monto)),
+        new Prisma.Decimal(0),
+      );
+      expect(saldo.toFixed(2)).toBe("-2000.00");
     });
   }, 120_000);
 
@@ -261,6 +266,28 @@ describeSiHayBase("457/T5.2 — concurrencia del pago de una tienda a Ordenex (P
       expect(rGasto.status).toBe("ok");
       if (rGasto.status !== "ok") throw new Error("imposible");
       expect(rGasto.saldo.saldo).toBe("-7000.00"); // −10 000 + 8 000 − 5 000
+    });
+  }, 120_000);
+
+  it("R25: la MISMA clave enviada dos veces A LA VEZ por toda la deuda -> un solo pago; el segundo espera y responde ya_registrado (no `sin_deuda`)", async () => {
+    await conPersonas(async (p) => {
+      await endeudar457(prisma, p.tiendaId, "8000.00");
+      const dentro = senal();
+      const soltar = senal();
+      const entradaComun = abonoDe(p, "8000.00"); // la MISMA clave en los dos envios: doble clic
+      const promesaA = abonoService(clienteA, { dentro: dentro.dar, soltar: soltar.p }).registrar(entradaComun, null, p.maestro);
+      await dentro.p;
+      const promesaB = abonoService(clienteB).registrar(entradaComun, null, p.maestro);
+      await dormir(800);
+      soltar.dar();
+      const [rA, rB] = await Promise.all([promesaA, promesaB]);
+      expect(rA.status).toBe("ok");
+      expect(rB.status).toBe("ya_registrado");
+      if (rA.status !== "ok" || rB.status !== "ya_registrado") throw new Error("imposible");
+      expect(rB.abono.id).toBe(rA.abono.id);
+      expect(rB.saldo.saldo).toBe("0.00");
+      expect(await prisma.abonoTienda.count({ where: { tiendaId: p.tiendaId } })).toBe(1);
+      expect(await prisma.walletMovimiento.count({ where: { origenId: rA.abono.id } })).toBe(1);
     });
   }, 120_000);
 
