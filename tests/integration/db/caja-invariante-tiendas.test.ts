@@ -70,6 +70,12 @@ const LEGADO_COMPLETADO = "300.00";
 const LEGADOS = new Prisma.Decimal(LEGADO_RECLASIFICADO).add(LEGADO_COMPLETADO).toFixed(2); // 1000.00
 /** El cobro del ESCENARIO (lo registra `CobroTiendaService` en `sembrarEscenario459`). */
 const COBRO_DEL_ESCENARIO = "2500.50";
+/**
+ * FICHA 457 (T5.4, R23): un cobro GRANDE a la tienda B la deja EN CONTRA (7 015,62 − 20 000,00 = −12 984,38);
+ * sobre esa deuda la tienda le paga 4 000,00 a Ordenex y luego ese pago se anula.
+ */
+const COBRO_GRANDE_B = "20000.00";
+const PAGO_DE_B = "4000.00";
 
 interface Paso {
   nombre: string;
@@ -105,6 +111,16 @@ interface Medida {
   } | null;
   /** Los dos contra-asientos de la anulacion del cobro del escenario. */
   anulacion: { creditos: number; reversos: number; montoCredito: string; montoReverso: string } | null;
+  /** Ficha 457: las cuatro filas del pago de la tienda B a Ordenex y de su anulacion, por origen. */
+  abono: {
+    creditos: number;
+    debitos: number;
+    ingresos: number;
+    egresos: number;
+    montos: string[];
+    mismoInstanteRegistro: boolean;
+    mismoInstanteAnulacion: boolean;
+  } | null;
 }
 
 const suma = (xs: string[]) => xs.reduce((a, x) => a.add(new Prisma.Decimal(x)), new Prisma.Decimal(0)).toFixed(2);
@@ -149,6 +165,7 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
     let reclasificada: Medida["reclasificada"] = null;
     let completada: Medida["completada"] = null;
     let anulacion: Medida["anulacion"] = null;
+    let abono: Medida["abono"] = null;
 
     const foto = async (nombre: string) => {
       const lectura = await leerCajaEntera(s, esc.maestro);
@@ -257,7 +274,42 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
     anulacion = await contraAsientosDe(tx, cobroDelEscenario.id);
     await foto("anulacion del cobro");
 
-    // 10 — anular el saldo inicial: la caja vuelve a «flujo» (R21).
+    // ── FICHA 457 (T5.4, R23) ─────────────────────────────────────────────────────────────────
+    // 10 — un cobro GRANDE de Ordenex a la tienda B la deja EN CONTRA (la precondicion del pago, R14).
+    respuestas.cobroGrande = (
+      await s.cobroTienda.registrarCobro(
+        { claveIdempotencia: randomUUID(), tiendaId: esc.tiendaB, monto: COBRO_GRANDE_B, descripcion: "Cobro grande 457" },
+        esc.maestro,
+      )
+    ).status;
+    await foto("cobro grande a la tienda B");
+
+    // 11 — la tienda B le PAGA a Ordenex (efectivo de terceros: sube «Entro», la cifra y «De las tiendas»).
+    const pagoDeB = await s.abonoTienda.registrar(
+      {
+        claveIdempotencia: randomUUID(),
+        tiendaId: esc.tiendaB,
+        monto: PAGO_DE_B,
+        metodo: "SINPE",
+        referencia: "SINPE-457",
+        motivo: "Pago de lo que debía por los fletes",
+        fechaPago: fechaCalendarioCR(new Date()),
+      },
+      null,
+      esc.maestro,
+    );
+    respuestas.pagoDeTienda = pagoDeB.status;
+    if (pagoDeB.status !== "ok") throw new Error(`pago de la tienda: ${JSON.stringify(pagoDeB)}`);
+    await foto("pago de la tienda B a Ordenex");
+
+    // 12 — su anulacion: la tienda vuelve a deber; «Salio» sube y la cifra y «De las tiendas» bajan.
+    respuestas.anularPagoDeTienda = (
+      await s.abonoTienda.anular({ abonoId: pagoDeB.abono.id, motivo: "Referencia equivocada" }, esc.maestro)
+    ).status;
+    abono = await asientosDelAbono(tx, pagoDeB.abono.id);
+    await foto("anulacion del pago de la tienda B");
+
+    // 13 — anular el saldo inicial: la caja vuelve a «flujo» (R21).
     if (saldoInicial.status === "ok") {
       respuestas.anularSaldoInicial = (
         await s.aporteCapital.anular({ aporteId: saldoInicial.aporte.id, motivo: "Cifra equivocada" }, esc.maestro)
@@ -265,7 +317,24 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
     }
     await foto("anulacion del saldo inicial");
 
-    return { antes, pasos, estados, respuestas, reclasificada, completada, anulacion };
+    return { antes, pasos, estados, respuestas, reclasificada, completada, anulacion, abono };
+  }
+
+  /** Ficha 457: las cuatro filas del pago de la tienda a Ordenex y de su anulacion, por su origen. */
+  async function asientosDelAbono(tx: TxDeTest, abonoId: string): Promise<NonNullable<Medida["abono"]>> {
+    const tienda = await tx.walletTiendaMovimiento.findMany({ where: { origenTipo: "abono_tienda", origenId: abonoId } });
+    const caja = await tx.walletMovimiento.findMany({ where: { origenTipo: "abono_tienda", origenId: abonoId } });
+    const instante = (filas: { categoria: string; fechaMovimiento: Date }[], cat: string) =>
+      filas.find((f) => f.categoria === cat)?.fechaMovimiento.getTime();
+    return {
+      creditos: tienda.filter((f) => f.categoria === "abono_tienda").length,
+      debitos: tienda.filter((f) => f.categoria === "abono_tienda_anulado").length,
+      ingresos: caja.filter((f) => f.categoria === "ingreso_abono_tienda").length,
+      egresos: caja.filter((f) => f.categoria === "egreso_reverso_abono_tienda").length,
+      montos: [...tienda, ...caja].map((f) => f.monto.toFixed(2)),
+      mismoInstanteRegistro: instante(tienda, "abono_tienda") === instante(caja, "ingreso_abono_tienda"),
+      mismoInstanteAnulacion: instante(tienda, "abono_tienda_anulado") === instante(caja, "egreso_reverso_abono_tienda"),
+    };
   }
 
   /** Un cobro como los de la 381: `debito/cobro_manual`, origen manual, SIN linea de caja, fechado en el pasado. */
@@ -359,6 +428,9 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
       aporte: "ok",
       anularAporte: "ok",
       anularCobro: "ok",
+      cobroGrande: "ok",
+      pagoDeTienda: "ok",
+      anularPagoDeTienda: "ok",
       anularSaldoInicial: "ok",
     });
     expect(m().pasos.map((p) => [p.nombre, p.filasNuevasEnCaja])).toEqual([
@@ -375,8 +447,25 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
       ["cobro completado", 1],
       // El REVERSO del cargo (el credito va al libro de la tienda).
       ["anulacion del cobro", 1],
+      // Ficha 457: el cargo del cobro grande; la ENTRADA del pago de la tienda; el EGRESO de su anulacion.
+      // Mutacion 1 de design §13 de la 457 (sin `emitirIngresoDeAbono`) → aqui 0 y R8 rota en el paso 11.
+      ["cobro grande a la tienda B", 1],
+      ["pago de la tienda B a Ordenex", 1],
+      ["anulacion del pago de la tienda B", 1],
       ["anulacion del saldo inicial", 1],
     ]);
+  });
+
+  it("⭑ 457 (R17/R20/R31/R32): el pago de la tienda B dejo un credito y una entrada con el mismo instante; su anulacion, un debito y un egreso con el mismo instante; los cuatro por 4 000,00", () => {
+    expect(m().abono).toEqual({
+      creditos: 1,
+      debitos: 1,
+      ingresos: 1,
+      egresos: 1,
+      montos: [PAGO_DE_B, PAGO_DE_B, PAGO_DE_B, PAGO_DE_B],
+      mismoInstanteRegistro: true,
+      mismoInstanteAnulacion: true,
+    });
   });
 
   it("R61 (revision m1 de la 459): la salida del cobro reclasificado la escribio el SQL REAL de la migracion de la 459", () => {
@@ -478,7 +567,25 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
       ganancia: `-${COBRO_DEL_ESCENARIO}`,
       saldoTiendaB: COBRO_DEL_ESCENARIO,
     });
-    expect(cambio(10)).toEqual({ ...nada, enCaja: "-1000000.00", capital: "-1000000.00" });
+    // ── Ficha 457 (R19/R23/R39, design §4.1) ──
+    // 10 — el cobro grande (461): un cargo. La cifra principal no se mueve; «De las tiendas» baja y la
+    // ganancia sube 20 000,00; la tienda B queda EN CONTRA.
+    expect(cambio(10)).toEqual({ ...nada, deTerceros: `-${COBRO_GRANDE_B}`, ganancia: COBRO_GRANDE_B, saldoTiendaB: `-${COBRO_GRANDE_B}` });
+    expect(pasos[10].saldoTiendaB).toBe("-12984.38"); // 7 015,62 − 20 000,00
+    // 11 — el pago de la tienda a Ordenex (R19, DH1): «Entro», la cifra principal y «De las tiendas» suben
+    // 4 000,00 y el saldo de B sube lo mismo; la ganancia y el capital NO se mueven.
+    // Mutaciones 2 y 3 de §13 (propio / cargo) → aqui la ganancia se moveria o la cifra no.
+    expect(cambio(11)).toEqual({ ...nada, enCaja: PAGO_DE_B, deTerceros: PAGO_DE_B, saldoTiendaB: PAGO_DE_B });
+    expect(menos(pasos[11].lectura.resumen.entradas, pasos[10].lectura.resumen.entradas)).toBe(PAGO_DE_B);
+    expect(menos(pasos[11].lectura.resumen.salidas, pasos[10].lectura.resumen.salidas)).toBe("0.00");
+    expect(pasos[11].saldoTiendaB).toBe("-8984.38");
+    // 12 — su anulacion (R39): «Salio» sube 4 000,00; la cifra y «De las tiendas» bajan lo mismo; la
+    // tienda vuelve a deber; ganancia y capital intactos. Mutacion 8 de §13 (sin el debito) → R8 rota aqui.
+    expect(cambio(12)).toEqual({ ...nada, enCaja: `-${PAGO_DE_B}`, deTerceros: `-${PAGO_DE_B}`, saldoTiendaB: `-${PAGO_DE_B}` });
+    expect(menos(pasos[12].lectura.resumen.salidas, pasos[11].lectura.resumen.salidas)).toBe(PAGO_DE_B);
+    expect(menos(pasos[12].lectura.resumen.entradas, pasos[11].lectura.resumen.entradas)).toBe("0.00");
+    expect(pasos[12].saldoTiendaB).toBe("-12984.38");
+    expect(cambio(13)).toEqual({ ...nada, enCaja: "-1000000.00", capital: "-1000000.00" });
   });
 
   it("R14/R21 (459): la caja esta en «saldo» mientras el saldo inicial esta vigente, y vuelve a «flujo» al anularlo", () => {
@@ -493,6 +600,9 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
       "cobro reclasificado": "saldo",
       "cobro completado": "saldo",
       "anulacion del cobro": "saldo",
+      "cobro grande a la tienda B": "saldo",
+      "pago de la tienda B a Ordenex": "saldo",
+      "anulacion del pago de la tienda B": "saldo",
       "anulacion del saldo inicial": "flujo",
     });
   });

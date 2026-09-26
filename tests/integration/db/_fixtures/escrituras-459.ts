@@ -137,10 +137,16 @@ export async function limpiar459(prisma: PrismaClient, p: Personas459 | null): P
     where: { registradoPor: { in: usuarios } },
     select: { id: true },
   });
-  const documentos = [...pagos.map((x) => x.id), ...aportes.map((x) => x.id)];
+  // Ficha 457: los pagos de una tienda a Ordenex de estas personas (documento propio).
+  const abonos = await prisma.abonoTienda.findMany({
+    where: { OR: [{ tiendaId: { in: usuarios } }, { registradoPor: { in: usuarios } }] },
+    select: { id: true },
+  });
+  const documentos = [...pagos.map((x) => x.id), ...aportes.map((x) => x.id), ...abonos.map((x) => x.id)];
   await prisma.historialAccion.deleteMany({
     where: { OR: [{ entidadId: { in: documentos } }, { actorUsuarioId: { in: usuarios } }] },
   });
+  await prisma.abonoTiendaAnulacion.deleteMany({ where: { abonoId: { in: abonos.map((x) => x.id) } } });
   await prisma.pagoPorCuentaTiendaAnulacion.deleteMany({ where: { pagoId: { in: pagos.map((x) => x.id) } } });
   await prisma.aporteCapitalAnulacion.deleteMany({ where: { aporteId: { in: aportes.map((x) => x.id) } } });
   // Ficha 461: las anulaciones cuelgan por FK RESTRICT de las filas de los libros; van ANTES.
@@ -158,9 +164,28 @@ export async function limpiar459(prisma: PrismaClient, p: Personas459 | null): P
   });
   // Los pagos de Ordenex a una tienda que siembran los tests de concurrencia (T B.13).
   await prisma.liquidacionPago.deleteMany({ where: { tiendaId: { in: usuarios } } });
+  await prisma.abonoTienda.deleteMany({ where: { id: { in: abonos.map((x) => x.id) } } });
   await prisma.pagoPorCuentaTienda.deleteMany({ where: { id: { in: pagos.map((x) => x.id) } } });
   await prisma.aporteCapital.deleteMany({ where: { id: { in: aportes.map((x) => x.id) } } });
   await prisma.usuario.deleteMany({ where: { id: { in: usuarios } } });
+}
+
+/**
+ * Ficha 457 — deja a una tienda EN CONTRA: un debito `cobro_manual` como los de la 381 (origen manual,
+ * sin linea de caja). Commiteado. Es la precondicion del pago de una tienda a Ordenex (R14).
+ */
+export async function endeudar457(prisma: PrismaClient, tiendaId: string, monto: string): Promise<void> {
+  await prisma.walletTiendaMovimiento.create({
+    data: {
+      tiendaId,
+      tipo: "debito",
+      categoria: "cobro_manual",
+      monto: new Prisma.Decimal(monto),
+      origenTipo: "manual",
+      origenId: null,
+      descripcion: "deuda sembrada 457",
+    },
+  });
 }
 
 /** Un `FormData` como el que arma el dialogo: solo las claves que se le pasan. */
