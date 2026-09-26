@@ -21,7 +21,7 @@ está rancio para la 458-B/C (lo dice la bitácora de la 458-C); cada símbolo s
 | `SegmentedToggle`, `useConceptosConMovimientos` (458-A) | existen | `SegmentedToggle` no tiene `disabled` |
 | Subtítulo de `/wallet` sin «dinero en caja» (TE.5) | ya lo cerró la 458-A (TA.6, T9) | nada que hacer; guardia `wallet-textos-458` verde |
 
-## ⛔ PARADO — el filtro «A quién» (R59, parte de R54) necesita servidor
+## PARADO (histórico) — el filtro «A quién» (R59, parte de R54) necesitaba servidor → resuelto abajo
 
 `listarMovimientosSchema`, `verResumenCajaAction` y `verDesgloseEgresosAction` no admiten `aQuien`
 (`{tipo, id}` o `{nombre}`, design §6), y el `WHERE` que lo resuelva vive en el repositorio (cruce por
@@ -31,6 +31,136 @@ descarga para que las tarjetas «reflejen el conjunto filtrado». Filtrar la pá
 mentiría (paginación y tarjetas). Es servidor y es dinero (lo que dicen las tarjetas): **no se hizo**.
 La pantalla no pinta un control que no filtra. Queda para backend_dev: schema + repositorio (con test
 contra Postgres y mutación que quite la cuenta del `WHERE`) + un `SelectorBuscable` en `WalletFiltros`.
+
+## ✅ R59 «A quién» — PARTE SERVIDOR (backend_dev) · `33e58c33`, `1c0786ae`, `34dbb6c7`
+
+Lo PARADO de arriba, resuelto en el servidor. **Falta el control en la pantalla** (`SelectorBuscable`
+en `WalletFiltros` + pasar `aQuien` en `inputDeFiltros`): es frontend_dev, con el contrato de abajo.
+
+**Entorno.** Rama `feature/458-E` desde `32045882`. Base propia `ordenex_458eq` (`CREATE DATABASE …
+TEMPLATE ordenex` con 0 conexiones a la plantilla; `migrate deploy`: «No pending migrations»; `migrate
+status` → `ordenex_458eq` en `localhost:5432`). `.env` del checkout principal con la base cambiada y sin
+`DATABASE_URL_PREVIEW`, copiado sin imprimirlo. `pnpm install --frozen-lockfile` propio, sin junction.
+**Búsqueda:** el MCP `codebase-memory` se consultó primero; no conoce `autoriaDelLibroCajaAction`
+(índice rancio para la 458-B/C), así que cada símbolo se leyó en el archivo real.
+
+### Qué hace
+
+- **El filtro.** `listarMovimientosSchema` gana `aQuien?` y pasa a `.strict()`. Como la descarga
+  (`…CompletoSchema`) y el detalle de una fila de la composición (`…DeFilaSchema`) DERIVAN de él, y el
+  resumen y el desglose lo usan tal cual, los seis bordes del libro lo aceptan a la vez:
+  `listarMovimientosAction`, `listarMovimientosCompletoAction`, `listarMovimientosDeFilaAction`,
+  `verResumenCajaAction` (tarjetas + composición), `verDesgloseEgresosAction`, y además
+  `conceptosConMovimientosAction({ libro: "caja", aQuien })`.
+- **El WHERE vive en el repositorio** (`lib/repositories/libro-caja-a-quien-sql.ts`): la tabla de
+  design §3.4 —la MISMA de `LibroCajaAutoriaService.aQuien`, la columna «A quién»— como un `Record`
+  TOTAL sobre `WalletOrigenTipo` (un origen nuevo no compila hasta decidir a quién se le paga) traducido
+  a `EXISTS` correlacionados. Sin `IN` de ids: la consulta lleva siempre los mismos parámetros, tenga la
+  cuenta 3 filas o 300.000 (el fallo que la revisión de la 458-A retiró de `cierresDeTienda`).
+- **Tarjetas = Σ filas por construcción.** Con `aQuien`, `WalletMovimientoRepository` pagina, cuenta y
+  agrega (`listar`, `agregarPorCategoriaYTipo`, `agregarPorCategoria`) con EL MISMO `whereLibroCajaSql`.
+  Sin `aQuien`, el camino es el `where` de Prisma de siempre (sin cambios).
+- **El selector:** `quienesDelLibroCajaAction` con el MISMO cruce (una sola definición para filtro y
+  opciones: el selector no puede ofrecer una cuenta que el filtro no encuentre).
+- **Rol antes de leer** en todo: `esAccesoTotal` (maestro/admin) en el servicio, antes del repositorio.
+
+### Contrato para el frontend
+
+```ts
+// lib/types/libro-caja-a-quien.ts
+type AQuienFiltro =
+  | { tipo: "tienda" | "mensajero"; id: string /* uuid */ }   // .strict()
+  | { nombre: string /* trim, 1..120 */ };                    // .strict()
+
+// 1) Las opciones del selector — lib/actions/wallet-filtros.ts
+quienesDelLibroCajaAction(input: {
+  tipo?: "ingreso" | "egreso";   // la dirección vigente (Todo = ausente)
+  desde?: "YYYY-MM-DD";          // el periodo vigente, días CR (mismos schemas que el libro)
+  hasta?: "YYYY-MM-DD";
+  busqueda?: string;             // trim, ≤ 80; sin mayúsculas ni tildes, sobre el nombre
+}): Promise<
+  | { status: "ok"; opciones: QuienDelLibroCajaOpcionDTO[]; hayMas: boolean }
+  | { status: "forbidden" } | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+>;
+
+// lib/types/wallet-filtros.ts
+type QuienDelLibroCajaOpcionDTO = {
+  valor: AQuienFiltro;                        // se manda TAL CUAL como `aQuien`; viaja, no se pinta (H6)
+  clase: "tienda" | "mensajero" | "nombre";   // para el rótulo («Tienda», «Mensajero», «Nombre anotado»)
+  nombre: string;                             // nombreCompletoUsuario (el mismo texto que la columna «A quién»)
+  movimientos: number;                        // filas de la caja en el periodo: cardinal, nunca dinero
+};
+
+// 2) El filtro — la MISMA clave en los seis bordes del libro
+{ ...inputDeFiltros(filtros), aQuien?: AQuienFiltro }
+```
+
+- **Orden:** alfabético por nombre (sin tildes) y, a igual nombre, tienda → mensajero → nombre libre.
+- **Tope:** `MAX_QUIENES_FILTRO` (`lib/config/wallet-movimiento.ts`, env `WALLET_MAX_QUIENES_FILTRO`,
+  200 por defecto); por encima, `hayMas: true` (la pantalla pide afinar la búsqueda, como el de cierres).
+- **Nombre libre:** se agrupa y se compara sin mayúsculas ni espacios de los bordes
+  («Cartonera del Valle» y «  cartonera DEL valle » son UNA opción y el mismo filtro).
+- **«Ordenex» (aporte de capital) no es una opción**: no es una cuenta ni un nombre anotado.
+- **Clave colada** (`.strict()`) o id sin forma de uuid → `validation_error`, sin leer. Un id válido que
+  no tiene filas → libro vacío y todo en `0.00` (no es error).
+- `periodoFiltrado` de las tarjetas pasa a `true` con `aQuien` (es un filtro: el rótulo de la cifra debe
+  ser el de «periodo», R62/R101).
+
+### Archivos
+
+| Archivo | Cambio |
+| --- | --- |
+| `lib/types/libro-caja-a-quien.ts` | **nuevo** (hoja): `aQuienFiltroSchema`, `AQuienFiltro`, `A_QUIEN_NOMBRE_MAX` |
+| `lib/types/wallet.ts` | `listarMovimientosSchema` + `aQuien`, `.strict()` |
+| `lib/types/wallet-filtros.ts` | conceptos de la caja + `aQuien`; `quienesDelLibroCajaSchema`, DTO, resultado |
+| `lib/repositories/libro-caja-a-quien-sql.ts` | **nuevo**: el cruce en SQL (filtro, comunes, opciones) |
+| `lib/repositories/WalletMovimientoRepository.ts` | camino SQL con `aQuien` en `listar` y los dos agregados; `$queryRaw` en el `Pick` |
+| `lib/repositories/FiltrosWalletRepository.ts` | `contarConceptosCaja` con `aQuien`; `quienesDelLibroCaja` |
+| `lib/services/WalletService.ts`, `WalletEgresoService.ts` | pasan `aQuien` al repositorio |
+| `lib/services/FiltrosWalletService.ts` | `quienesDelLibroCaja` (rol, búsqueda, orden, tope) + `opcionesDeQuienes` |
+| `lib/actions/wallet-filtros.ts` | `quienesDelLibroCajaAction` |
+| `lib/interfaces/**` (3) | los contratos de lo anterior |
+| `lib/config/wallet-movimiento.ts` | `MAX_QUIENES_FILTRO` |
+| `tests/unit/guards/caja-173-alcance.guardia.test.ts` | **modificado**: el cliente mínimo gana `$queryRaw` (compila) + caso nuevo «el filtro «A quién» solo SUMA la caja» (toda `SUM(` del repo es `SUM(w."monto")`; el módulo del cruce no nombra `monto`). R33 de la 173 no se relaja: otras tablas solo como criterio de pertenencia |
+| `tests/integration/db/libro-caja-filtro-a-quien.test.ts` | **nuevo** (16) |
+| `tests/unit/services/filtros-wallet-quienes-458e.test.ts` | **nuevo** (10) |
+
+### R59 → tests
+
+| Qué | Test |
+| --- | --- |
+| por tienda / por mensajero / por nombre libre = la columna «A quién» | `libro-caja-filtro-a-quien` («por TIENDA», «por MENSAJERO», «por NOMBRE LIBRE») |
+| tarjetas + composición = Σ filas; desglose y conceptos = Σ filas | ídem («las tarjetas … suman EXACTAMENTE», «el desglose … y los conceptos») |
+| ajeno → 0 | ídem («una cuenta AJENA») |
+| con dirección, concepto y periodo; orden total; DTO igual al de Prisma | ídem («con dirección, concepto y periodo»), borde 06:00Z |
+| descarga y detalle de fila | ídem |
+| selector: cuentas, nombres, periodo, búsqueda, tope + `hayMas` | ídem (4 casos) + `filtros-wallet-quienes-458e` |
+| rol antes de leer; `.strict()` / uuid | ídem (R82, design §6) + unitario |
+
+El oráculo del test NO es el código probado: el conjunto esperado sale de `LibroCajaAutoriaService`
+(la columna «A quién» de la 458-B) fila a fila, y las sumas se hacen en el test con `Prisma.Decimal`.
+
+### Mutaciones (11, una a una; autocomprobadas: patrón único, > 0 tests corridos, `git diff` limpio) — `progress/mutaciones_458E_quien.json`
+
+| # | Mutación | Rojos |
+| --- | --- | --- |
+| M1 | la cuenta sale del `EXISTS` (sin `= id`) | 4/25 |
+| M2 | el nombre libre no se compara | 2/25 |
+| M3 | el repositorio ignora `aQuien` (vuelve al `where` de Prisma) | 8/25 |
+| M4 | tarjetas y desglose agregan sin el WHERE | 3/25 |
+| M5 | el desglose no pasa `aQuien` | 2/25 |
+| M6 | `construirFiltros` no pasa `aQuien` | 9/25 |
+| M7 | el selector de nombres ignora el periodo | 1/25 |
+| M8 | el cobro por rechazo se atribuye al mensajero | 4/25 |
+| M9 | los conceptos ignoran `aQuien` | 2/25 |
+| M10 | se pierde la dirección en el camino SQL | 1/25 |
+| M11 | `hasta` inclusivo en el camino SQL | 0/25 → caso del instante 06:00Z añadido → 1/26 |
+
+Sin red en la base: los orígenes que el escenario de la 459 no escribe —`orden_incidente`,
+`pago_mensajero`, `cobro_tienda_completado`, `cobro_manual_reclasificado`— (el `abono_tienda` sí: se
+añadió un pago de la tienda B). Los tres últimos comparten rama (mismo documento) con `pago_tienda` y
+`cobro_tienda`, que sí se prueban; `orden_incidente` solo lo sostiene el `Record` total.
 
 ## TE.1 — Columnas (R55–R57) y descarga sin ids (R3) · `d160b2a0`
 
@@ -102,7 +232,7 @@ quitando la que la 458-E ponía junto al concepto. El recorrido encontró que es
 | R55 | `WalletLibroCaja458E` (T E.1), `WalletDescarga.test.tsx` («458-E R55»), `wallet-ledger-dueno` |
 | R56, R57 | `WalletLibroCaja458E` (T E.1 y «el módulo lee la autoría»), `WalletDescarga.test.tsx`, `tests/integration/db/libro-caja-a-quien.test.ts` (458-B, servidor) |
 | R58, R60 | `WalletLibroCaja458E` (T E.3), `WalletLedgerVer458C` y `DetalleMovimientoPanel` (458-C) |
-| R59 | **sin test: PARADO (servidor)** |
+| R59 | servidor: `tests/integration/db/libro-caja-filtro-a-quien.test.ts` (16) + `tests/unit/services/filtros-wallet-quienes-458e.test.ts` (10); **pantalla: pendiente** (frontend_dev) |
 | R61, R73 | `WalletLibroCaja458E` (T E.4) + los tests de colas sin modificar + `wallet-anulacion-458` |
 | R71/R72 (fila) | `WalletLibroCaja458E` («R71/R72…»), `WalletLedgerVer458C` (B2) |
 | R101 | `wallet-textos-458.guardia` |
@@ -133,7 +263,8 @@ Sin red: la insignia tachada (`flex` vs `inline-flex`) no la ve jsdom; queda med
 
 ## Pendiente
 
-1. **R59 / filtro «A quién»**: servidor (PARADO, arriba).
+1. **R59 / filtro «A quién»**: el servidor está (sección «R59 «A quién» — PARTE SERVIDOR»); falta el
+   `SelectorBuscable` en `WalletFiltros` y pasar `aQuien` en `inputDeFiltros` (frontend_dev, contrato arriba).
 2. Los enlaces de «A quién» apuntan a `/wallet/tiendas/<id>` y `/wallet/mensajeros/<id>`, que crea la
    458-D: hasta que se mergee dan 404.
 3. TE.6 (ayuda de la caja + bloque E del asistente + cuatro preguntas) y TE.7 (recorrido COMPLETO de los
