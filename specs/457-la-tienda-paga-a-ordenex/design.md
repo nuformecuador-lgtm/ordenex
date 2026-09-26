@@ -686,12 +686,17 @@ ORDER BY 1, 2, 3;
 SELECT to_regclass('public.abono_tienda') AS tabla_abono_ya_existe,
        (SELECT COUNT(*) FROM liquidacion_pago WHERE tienda_id IS NOT NULL) AS pagos_a_tienda;
 
--- M8 — R7 y R8 con la formula de la 461: es EXACTAMENTE C461-1 de specs/461-…/design.md §13; se corre
---      antes y despues (diferencia_r8 = 0,00 y diferencia_r7 = 0,00). Tras el primer pago de Nuform de M:
---      entro +M, cifra +M, de_tiendas +M, suma_saldos +M, ganancia igual, capital igual.
+-- M8 — R7 y R8: es la C461-1 de specs/461-…/design.md §13 CON las dos categorias de esta ficha en la
+--      lista de TERCEROS ('ingreso_abono_tienda','egreso_reverso_abono_tienda', §4, DH1). La C461-1
+--      LITERAL las trataria como «propio» y daria diferencia_r8 = −Σ pagos vigentes (recorrido R79, F1:
+--      medido −34.000,00 en el clon; y −4.000,00 con un solo pago de 4.000 en ordenex_457c). La consulta
+--      COMPLETA, lista para pegar, es la «C457-1» de progress/contraste_457.md, seccion «SQL M8 para
+--      despues del despliegue». Se corre antes y despues (diferencia_r8 = 0,00 y diferencia_r7 = 0,00).
+--      Tras el primer pago de Nuform de M: entro +M, cifra +M, de_tiendas +M, suma_saldos +M, ganancia
+--      igual, capital igual.
 ```
 
-**Tras desplegar (R78):** M6 idéntico; M8 con las dos diferencias en 0,00; M3 con 25 / 16 / 14 / 63 /
+**Tras desplegar (R78):** M6 idéntico; M8 (la C457-1, NO la C461-1 literal) con las dos diferencias en 0,00; M3 con 25 / 16 / 14 / 63 /
 24; M4 con las listas de §3.3; `SELECT relname, relrowsecurity FROM pg_class WHERE relname IN
 ('abono_tienda','abono_tienda_anulacion')` → `t`, `t`; errores de runtime en la hora siguiente = 0. **Tras
 el primer pago real de Nuform:** M1 con el saldo subido en el monto y M8 en 0,00.
