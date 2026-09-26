@@ -4,7 +4,7 @@
 - **457, backend:** rama `feature/457-backend` en origin, con cada paso pusheado. Hechos: la Fase 0, las migraciones, el servicio con su puerto de caja, las actions y parte de los tests. El clon de base es `ordenex_457`. Falta cerrar los tests y las mutaciones, escribir `progress/impl_457.md` (contratos para el frontend) y correr el gate completo. Si el agente murió, relanzar un backend_dev (Opus) desde el último SHA de la rama.
 - **457, frontend:** sin empezar. Va después del backend, sobre la misma rama (design §8). Luego revisión, recorrido, PR y merge.
 - **458:** spec rehecho en `dev` (104 R, hijas A→B→C→D∥E). Arranca con la 457 ya en `dev`.
-- **Modelo:** Fable agotado; los subagentes van con Opus. Para ahorrar cuota: un agente a la vez y nada de trabajo especulativo.
+- **Modelo:** Fable agotado; los subagentes van con Opus. Carlos quiere TERMINAR TODO (457 y 458 completas). Mantener el paralelismo seguro y todo pusheado a cada paso, por si se corta la cuota.
 - **Release:** solo con la orden de Carlos. La lista del día está en `docs/release.md` › «Pendiente para la PRÓXIMA release».
 
 # Estado — sesión del 2026-09-23 (nocturna, autónoma)
