@@ -9,6 +9,8 @@ fuentes:
   - app/(app)/mi-wallet/_components/mi-wallet-labels.ts
   - lib/utils/descripcion-pago-por-cuenta.ts
   - lib/services/CobroTiendaService.ts
+  - lib/services/AbonoTiendaService.ts
+  - lib/utils/descripcion-abono.ts
   - app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx
   - app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx
   - app/(app)/mi-wallet/_components/MiWalletFiltros.tsx
@@ -43,6 +45,7 @@ Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 - **Corrección a tu favor** — una corrección a tu favor.
 - **Ordenex anuló un pago hecho por ti** — la devolución de un pago que Ordenex hizo por vos y se anuló.
 - **Ordenex anuló un cobro y te lo devolvió** — la devolución de un cobro que Ordenex te hizo y se anuló.
+- **Le pagaste a Ordenex** — lo que le pagaste a Ordenex cuando tu saldo estaba en contra.
 
 **Lo que resta**
 - **Ordenex te cobró el flete**, **Ordenex te cobró el flete por rechazo**, **Ordenex te cobró la
@@ -52,6 +55,7 @@ Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 - **Corrección en tu contra** — una corrección en tu contra.
 - **Ordenex te pagó** — lo que Ordenex ya te pagó de tu saldo.
 - **Ordenex pagó un gasto por ti** — lo que Ordenex **le pagó a otro en tu nombre**.
+- **Ordenex anuló el pago que le hiciste** — la anulación de un pago tuyo registrado por error: tu saldo vuelve a bajar.
 
 Cada línea dice de qué orden y de qué cierre viene, así que siempre podés rastrear una cifra hasta la
 entrega concreta que la produjo.
@@ -79,6 +83,10 @@ si la hay, **la referencia** (por ejemplo, «A Facebook · Pauta de publicidad �
 - Si no tenías saldo suficiente, **tu saldo queda en contra**: le debés ese dinero a Ordenex.
 - Si la oficina lo anula, aparece una línea **Ordenex anuló un pago hecho por ti** que te devuelve el
   monto. El pago original no se borra.
+
+## Un pago que le hiciste a Ordenex
+
+Si tu saldo quedó en contra y le pagaste a Ordenex, lo ves como **Le pagaste a Ordenex**, con el motivo, el método y la referencia. **Sube tu saldo** en el monto. Si la oficina lo anula por error, aparece **Ordenex anuló el pago que le hiciste** y tu saldo vuelve a bajar. El comprobante de tu pago lo guarda la oficina.
 
 ## Buscar en el desglose
 

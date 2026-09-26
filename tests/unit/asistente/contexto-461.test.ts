@@ -72,10 +72,13 @@ describe("461 R56/R57 — la oficina puede preguntar por el cobro de Ordenex a u
     expect(caja).toContain("Ordenex le paga **₡50.000 a Facebook**");
   });
 
-  it.each(OFICINA)("%s: los siete conceptos del diálogo con sus nombres y sus tres grupos", (rol) => {
+  // FICHA 457 (T7.1) — REESCRITO (listado en `progress/impl_457.md`): el grupo «Llega dinero a la caja»
+  // gana «Una tienda le paga a Ordenex» y el diálogo pasa a tener ocho conceptos (R68). Lo que la 461
+  // fijaba aquí —los nombres y los tres grupos— se conserva literal.
+  it.each(OFICINA)("%s: los ocho conceptos del diálogo con sus nombres y sus tres grupos", (rol) => {
     const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
     expect(caja).toContain("**Sale dinero de Ordenex** | Gasto de Ordenex · Sueldo · Ordenex paga un gasto de una tienda · Corrección de caja (resta)");
-    expect(caja).toContain("**Llega dinero a la caja** | Aporte de dinero a la caja · Corrección de caja (suma)");
+    expect(caja).toContain("**Llega dinero a la caja** | Aporte de dinero a la caja · Una tienda le paga a Ordenex · Corrección de caja (suma)");
     expect(caja).toContain("**Se descuenta del saldo de una tienda** | Ordenex le cobra a una tienda");
   });
 
