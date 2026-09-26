@@ -68,7 +68,11 @@ export function montar(opts: {
   crear?: IAbonoTiendaRepository["crear"];
   anular?: IAbonoTiendaRepository["anular"];
   documento?: AbonoTiendaRegistro | null;
-  original?: AbonoTiendaRegistro | null;
+  /**
+   * Lo que devuelve `obtenerPorClave` en cada llamada (el ultimo se repite). Por defecto `[null]`: la
+   * clave es NUEVA. `[null, original]` = la clave aparece despues (el choque en la transaccion).
+   */
+  porClave?: ReadonlyArray<AbonoTiendaRegistro | null>;
   upload?: IFileStorage["upload"];
   /** Por defecto la tienda DEBE 10 000,00 (creditos 5 000 − debitos 15 000). */
   saldos?: Saldos;
@@ -76,6 +80,7 @@ export function montar(opts: {
   ahora?: Date;
 } = {}) {
   const orden: string[] = [];
+  let lecturasClave = 0;
   const abonoRepo: IAbonoTiendaRepository = {
     crear: vi.fn(
       opts.crear ??
@@ -103,7 +108,13 @@ export function montar(opts: {
           return { status: "anulado" as const };
         }),
     ),
-    obtenerPorClave: vi.fn(async () => (opts.original === undefined ? registro() : opts.original)),
+    obtenerPorClave: vi.fn(async () => {
+      orden.push("clave");
+      const seq = opts.porClave ?? [null];
+      const r = seq[Math.min(lecturasClave, seq.length - 1)];
+      lecturasClave += 1;
+      return r;
+    }),
     obtenerPorId: vi.fn(async () => (opts.documento === undefined ? registro() : opts.documento)),
     estadoDeDocumentos: vi.fn(async () => []),
   };

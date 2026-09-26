@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 
 import { CONCEPTOS_MANUALES } from "@/app/(app)/wallet/_components/wallet-conceptos-manuales";
 import { TIPO_POR_CATEGORIA_TIENDA } from "@/lib/utils/invariante-tiendas";
-import { sinComentarios } from "@/tests/fixtures/sin-comentarios";
+import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
 
 /**
  * FICHA 457 / T8.2 (design §12; R65, R67) — GUARDIA DE ALCANCE: **lo que la D3 de la 381 protegia,
@@ -38,7 +38,7 @@ function fuentesDe(carpeta: string): string[] {
 }
 
 function codigo(ruta: string): string {
-  return sinComentarios(readFileSync(path.join(RAIZ, ruta), "utf8"));
+  return quitarComentarios(readFileSync(path.join(RAIZ, ruta), "utf8"));
 }
 
 const FUENTES_LIB = fuentesDe("lib");

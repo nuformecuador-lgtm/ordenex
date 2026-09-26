@@ -26,6 +26,7 @@ describe("457/T4.1 — registrar: quien puede y con que tienda", () => {
       const r = await m.svc.registrar(entrada(), PDF, actor);
       expect(r).toEqual({ status: "forbidden" });
       expect(m.usuarioRepo.obtenerCuentaTienda).not.toHaveBeenCalled();
+      expect(m.abonoRepo.obtenerPorClave).not.toHaveBeenCalled();
       expect(m.tiendaRepo.agregarSaldoPorTienda).not.toHaveBeenCalled();
       expect(m.storage.upload).not.toHaveBeenCalled();
       expect(m.runTx).not.toHaveBeenCalled();
@@ -114,8 +115,9 @@ describe("457/T4.1 — registrar: las reglas del dinero", () => {
     });
     const r = await m.svc.registrar(entrada({ monto: "8000.00" }), null, MAESTRO);
     expect(r).toEqual({ status: "excede", deuda: "2000.00" });
-    // El candado se tomo ANTES de la lectura que decidio, y no se escribio nada.
-    expect(m.orden).toEqual(["saldo", "candado", "saldo"]);
+    // La clave primero (R25); el candado ANTES de la lectura que decidio; y, rechazado, se vuelve a
+    // mirar la clave (un reenvio simultaneo no es un `excede`). No se escribio nada.
+    expect(m.orden).toEqual(["clave", "saldo", "candado", "saldo", "clave"]);
     expect(m.abonoRepo.crear).not.toHaveBeenCalled();
   });
 
@@ -123,7 +125,16 @@ describe("457/T4.1 — registrar: las reglas del dinero", () => {
     const m = montar();
     const r = await m.svc.registrar(entrada(), null, MAESTRO);
     expect(r.status).toBe("ok");
-    expect(m.orden).toEqual(["saldo", "candado", "saldo", "crear", "tienda:abono_tienda", "caja:ingreso", "saldo"]);
+    expect(m.orden).toEqual([
+      "clave",
+      "saldo",
+      "candado",
+      "saldo",
+      "crear",
+      "tienda:abono_tienda",
+      "caja:ingreso",
+      "saldo",
+    ]);
     expect(m.candado.bloquearBeneficiario).toHaveBeenCalledWith(m.tx, { tipo: "tienda", tiendaId: TIENDA_ID });
     // Las tres escrituras reciben la MISMA transaccion.
     expect(vi.mocked(m.abonoRepo.crear).mock.calls[0][0]).toBe(m.tx);
@@ -314,9 +325,13 @@ describe("457/T4.1 — registrar: el comprobante (R26–R30)", () => {
   });
 
   it("R25/R29: clave repetida -> ya_registrado con el ORIGINAL y el saldo de la tienda DEL ORIGINAL; el comprobante nuevo se retira", async () => {
+    // La clave NO existia al entrar (primera lectura `null`) y choca en la transaccion: dos envios a la vez.
     const m = montar({
       crear: async () => ({ status: "clave_repetida" as const }),
-      original: registro({ id: "ab-original", tiendaId: "7f1c2d3e-0000-4000-8000-0000000000ff", monto: "2500.00" }),
+      porClave: [
+        null,
+        registro({ id: "ab-original", tiendaId: "7f1c2d3e-0000-4000-8000-0000000000ff", monto: "2500.00" }),
+      ],
     });
     const r = await m.svc.registrar(entrada({ monto: "9999.00" }), PDF, MAESTRO);
     expect(r.status).toBe("ya_registrado");
@@ -330,6 +345,36 @@ describe("457/T4.1 — registrar: el comprobante (R26–R30)", () => {
     expect(m.storage.remove).toHaveBeenCalledWith([subida.path]);
     expect(m.tiendaRepo.crearMovimientos).not.toHaveBeenCalled();
     expect(m.caja.emitirIngresoDeAbono).not.toHaveBeenCalled();
+  });
+
+  it("R25 (reenvio de un pago que YA salda la deuda): la clave manda sobre la regla del dinero; ni se sube el archivo ni se abre la transaccion", async () => {
+    // Medido en Postgres antes de este arreglo: pagar TODA la deuda y reenviar con la misma clave
+    // devolvia `excede`/`sin_deuda` —el dialogo pintaba un error sobre un pago que SI quedo—.
+    const original = registro({ id: "ab-original", monto: "10000.00" });
+    const m = montar({ porClave: [original], saldos: [{ creditos: "15000.00", debitos: "15000.00" }] });
+    const r = await m.svc.registrar(entrada({ monto: "10000.00" }), PDF, MAESTRO);
+    expect(r.status).toBe("ya_registrado");
+    if (r.status !== "ya_registrado") return;
+    expect(r.abono.id).toBe("ab-original");
+    expect(r.saldo).toEqual({ creditos: "15000.00", debitos: "15000.00", saldo: "0.00", signo: "cero" });
+    expect(m.storage.upload).not.toHaveBeenCalled();
+    expect(m.runTx).not.toHaveBeenCalled();
+    expect(m.abonoRepo.crear).not.toHaveBeenCalled();
+  });
+
+  it("R25 (dos envios A LA VEZ): el segundo espera el candado, la regla lo rechazaria, y responde ya_registrado; el archivo se retira", async () => {
+    const original = registro({ id: "ab-original", monto: "10000.00" });
+    const m = montar({
+      porClave: [null, original],
+      saldos: [
+        { creditos: "5000.00", debitos: "15000.00" }, // pre-chequeo: debe 10 000
+        { creditos: "15000.00", debitos: "15000.00" }, // bajo el candado: el primero ya pago
+      ],
+    });
+    const r = await m.svc.registrar(entrada({ monto: "10000.00" }), PDF, MAESTRO);
+    expect(r.status).toBe("ya_registrado");
+    expect(m.abonoRepo.crear).not.toHaveBeenCalled();
+    expect(m.storage.remove).toHaveBeenCalledWith([vi.mocked(m.storage.upload).mock.calls[0][0].path]);
   });
 
   it("R30: sin comprobante se registra igual, y con exito el comprobante NO se retira", async () => {
@@ -348,7 +393,7 @@ describe("457/T4.1 — registrar: el comprobante (R26–R30)", () => {
 describe("457 — R40: no hay forma de editar ni de deshacer una anulacion", () => {
   it("la superficie publica del servicio son TRES metodos", () => {
     const metodos = Object.getOwnPropertyNames(AbonoTiendaService.prototype)
-      .filter((m) => m !== "constructor" && !m.startsWith("saldo"))
+      .filter((m) => !["constructor", "saldoDe", "yaRegistrado"].includes(m))
       .sort();
     expect(metodos).toEqual(["anular", "obtenerComprobante", "registrar"]);
   });

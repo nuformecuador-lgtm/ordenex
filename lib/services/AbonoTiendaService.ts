@@ -154,6 +154,12 @@ export class AbonoTiendaService implements IAbonoTiendaService {
     if (cuenta === null) return errorDeCampo("tiendaId", MSG_TIENDA.inexistente);
     if (cuenta.rol !== ROL_TIENDA) return errorDeCampo("tiendaId", MSG_TIENDA.rol);
 
+    // R25 ANTES que la regla del dinero: un reenvio de un pago que YA salda la deuda veria el saldo
+    // nuevo y responderia `sin_deuda`/`excede`, y el dialogo pintaria un error sobre un pago que SI
+    // quedo registrado. La clave manda (medido: la integracion R25 daba `excede` sin esta lectura).
+    const repetido = await this.yaRegistrado(input.claveIdempotencia);
+    if (repetido !== null) return repetido;
+
     // 4. Pre-chequeo optimista (sin candado): la respuesta definitiva la da el paso 7.
     const previo = await this.saldoDe(input.tiendaId);
     const reglaPrevia = reglaDelDinero(previo, monto);
@@ -243,19 +249,20 @@ export class AbonoTiendaService implements IAbonoTiendaService {
       exito = true;
       return { status: "ok", abono: aAbonoTiendaDTO(abono), saldo: await this.saldoDe(input.tiendaId) };
     } catch (error) {
-      if (error instanceof SinDeudaError) return { status: "sin_deuda", saldo: error.saldo };
-      if (error instanceof ExcedeError) return { status: "excede", deuda: error.deuda };
+      if (error instanceof SinDeudaError || error instanceof ExcedeError) {
+        // R25 con dos envios SIMULTANEOS de la misma clave: el segundo espera el candado, lee el saldo
+        // que dejo el primero y la regla lo rechaza. Si la clave ya tiene documento, es un reenvio.
+        const repetido = await this.yaRegistrado(input.claveIdempotencia);
+        if (repetido !== null) return repetido;
+        if (error instanceof SinDeudaError) return { status: "sin_deuda", saldo: error.saldo };
+        return { status: "excede", deuda: error.deuda };
+      }
       if (error instanceof ClaveRepetidaError) {
-        // R25: el pago ORIGINAL y el saldo actual de la tienda DE ESE pago.
-        const original = await this.abonoRepo.obtenerPorClave(input.claveIdempotencia);
-        if (original === null) {
+        const repetido = await this.yaRegistrado(input.claveIdempotencia);
+        if (repetido === null) {
           throw new Error("pago de una tienda a Ordenex: clave repetida sin documento que releer");
         }
-        return {
-          status: "ya_registrado",
-          abono: aAbonoTiendaDTO(original),
-          saldo: await this.saldoDe(original.tiendaId),
-        };
+        return repetido;
       }
       throw error;
     } finally {
@@ -338,6 +345,19 @@ export class AbonoTiendaService implements IAbonoTiendaService {
     if (abono.comprobantePath === null) return { status: "sin_comprobante" }; // R44
     const url = await this.urls.createSignedUrl(abono.comprobantePath, this.config.SIGNED_URL_TTL_SECONDS);
     return { status: "ok", url };
+  }
+
+  /** R25 — el pago ORIGINAL de esa clave y el saldo actual de la tienda DE ESE pago; `null` si no existe. */
+  private async yaRegistrado(
+    claveIdempotencia: string,
+  ): Promise<Extract<RegistrarAbonoTiendaServiceResult, { status: "ya_registrado" }> | null> {
+    const original = await this.abonoRepo.obtenerPorClave(claveIdempotencia);
+    if (original === null) return null;
+    return {
+      status: "ya_registrado",
+      abono: aAbonoTiendaDTO(original),
+      saldo: await this.saldoDe(original.tiendaId),
+    };
   }
 
   private async saldoDe(tiendaId: string): Promise<SaldoTiendaDTO> {
