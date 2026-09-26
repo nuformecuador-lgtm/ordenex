@@ -332,11 +332,21 @@ constructor(
 
 ### 5.1 `registrar(input, comprobante | null, actor)` — el orden es parte del requisito
 
+> **Actualizado el 2026-09-26 (m4 de la revisión; el código ya iba así desde `6fe2acd0`):** la CLAVE
+> se mira **antes** de la regla del dinero (paso 3b) y **otra vez** si la regla rechaza bajo el candado
+> (paso 8). Con el orden original —la clave solo al final (paso 13)— el reenvío de un pago que ya salda
+> la deuda (el doble clic del §17.4) respondía `sin_deuda`/`excede` sobre un pago que SÍ quedó (medido:
+> la integración «R25» daba `excede`). La lectura por clave no escribe, va detrás del rol (R2 intacto) y
+> no sube archivo. Y el saldo del paso 8 se lee por la MISMA transacción que tomó el candado (m3).
+
 1. **Rol** (`esAccesoTotal`) antes de leer nada → `forbidden` (R2).
 2. **Escala 2 una vez**: `montoStr` (R5). El MISMO string va a las cuatro escrituras.
 3. **Tienda** (`obtenerCuentaTienda`): inexistente / no `adminTienda` → `validation_error` bajo
    `tiendaId` (R10). El estado **no** se exige (R11, D2): los mensajes `inexistente` y `rol` son los de
    `PagoPorCuentaTiendaService.ts:48-52`; el de `inactiva` no se usa.
+3b. **Clave** (`abonoRepo.obtenerPorClave`, sin candado ni transacción): si ya tiene documento →
+   `ya_registrado` con el pago ORIGINAL y el saldo de SU tienda (R25), sin subir el archivo ni evaluar la
+   regla del dinero.
 4. **Pre-chequeo optimista** del saldo SIN candado: si ya es ≥ 0 o el monto excede, se responde sin
    subir el archivo (ahorra subidas inútiles). No sustituye al paso 7.
 5. **Comprobante** (si viene): `problemaDeComprobante` → `validation_error` bajo `comprobante` (R26);
@@ -348,9 +358,11 @@ constructor(
 7. `runTransaction`: `candado.bloquearBeneficiario(tx, { tipo: "tienda", tiendaId })` — la MISMA fila
    `usuario` que bloquean `registrarPagoTienda` (`LiquidacionService.ts:638`) y
    `PagoPorCuentaTiendaService.registrar` (`:179`) (R16).
-8. Saldo bajo candado: `derivarSaldoTienda(agregarSaldoPorTienda(tiendaId, {}))`. `saldo >= 0` →
-   `sin_deuda` (R14). `monto > |saldo|` → `excede { deuda: |saldo| }` (R15). Los dos salen de la
-   transacción sin escribir.
+8. Saldo bajo candado: `derivarSaldoTienda(agregarSaldoPorTienda(tiendaId, {}, tx))` —por el `tx` del
+   candado, no por otra conexión del pool (m3)—. `saldo >= 0` → `sin_deuda` (R14). `monto > |saldo|` →
+   `excede { deuda: |saldo| }` (R15). Los dos salen de la transacción sin escribir; ANTES de responderlos
+   se vuelve a mirar la clave: si ya tiene documento (dos envíos SIMULTÁNEOS de la misma clave: el
+   segundo esperó el candado y ve el saldo que dejó el primero) → `ya_registrado` (R25).
 9. `abonoRepo.crear(tx, …)` → documento + fila de historial `abono_tienda_registrado` en el MISMO
    método (censo de la guardia, §9). `clave_repetida` → `ClaveRepetidaError` para salir de la transacción.
 10. `tiendaRepo.crearMovimientos(tx, [{ tiendaId, tipo: "credito", categoria: "abono_tienda", origenTipo:
@@ -860,6 +872,13 @@ Preparación: `prisma migrate deploy`; una tienda de prueba con saldo en contra 
   migren; `prisma generate` se pisa entre worktrees. Clon propio (`CREATE DATABASE … TEMPLATE ordenex`).
 - **L7 — Bucket no creado en un entorno:** registrar CON comprobante falla ruidoso (R28); SIN
   comprobante funciona.
+- **L9 — Un pago retroactivo puede quedar ANTES del saldo inicial (m6 de la revisión, observación; no
+  se cambia).** D3 deja la fecha del pago sin límite hacia atrás (molde del pago a tienda). La 459 exige
+  que el saldo inicial no sea posterior al primer día con movimientos (`AporteCapitalService.ts:113-121`),
+  pero esa regla solo se evalúa al REGISTRAR el saldo inicial: un pago retroactivo registrado después
+  deja dinero «entrando» antes del saldo inicial. No rompe R7/R8 (las sumas no dependen del orden); es
+  una rareza de lectura del libro por fechas. Si hiciera falta, el arreglo sería un límite inferior en
+  `fechaPagoSchema` (el día del saldo inicial vigente), y es decisión del humano.
 - **L8 — Sale después de la 461 y sin la pantalla de la 458:** el humano acotó la UI; la ficha SÍ se
   puede desplegar sola (el botón del desglose y el concepto del diálogo son la pantalla), pero su
   despliegue lo decide el humano con el pago real de Nuform delante.
