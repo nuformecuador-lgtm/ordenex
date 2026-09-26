@@ -20,4 +20,9 @@ export interface IWalletAnulacionService {
    * cierre y las salidas reclasificadas → `no_anulable` con su motivo (R65).
    */
   enrutar(destino: DestinoMovimiento, actor: Actor): Promise<RutaAnulacion>;
+  /**
+   * La MISMA clasificacion SIN mirar el rol: para quien ya decidio el alcance antes (el comprobante,
+   * R77–R79, que tambien atiende a la tienda duena). Nunca se expone en un borde sin esa decision.
+   */
+  clasificar(destino: DestinoMovimiento): Promise<Exclude<RutaAnulacion, { status: "forbidden" }>>;
 }

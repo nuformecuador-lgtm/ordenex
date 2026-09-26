@@ -232,3 +232,42 @@ nombre leído de `usuario`, enlaces, «—» sin anotación, automático con qui
 M1 signo del corrido al revés → 4/13 rojos; M2 sin `created_at` en la ventana (tienda) → 3/13; M2b
 (mensajero) → 1/13; M12 totales sin excluir el par → 4/13; bodega con rechazadas → 1/13; borde de
 periodo en UTC en vez de día CR → 1/13.
+
+## TB.10 — Comprobante lateral (R74–R80)
+
+`PREFIJO_COMPROBANTE` +3 (`movimientos-caja`, `cobros-tienda`, `pagos`). `WalletComprobanteRepository`
+(`crear` con `createMany({ skipDuplicates })` → `ya_tiene` sin interpretar un P2002; `lateralDe`,
+`duenoDeLateral`, `documento` para los tres de la 459/457, `tiendaDeFila`) + `WalletComprobanteService`
+(`subir` / `registrarEnTx` / `retirar` para los registros de TB.11; `adjuntar` y `ver`) +
+`lib/actions/wallet-comprobante.ts` (`adjuntarComprobanteAction(FormData: destino JSON + archivo)`,
+`verComprobanteAction({ destino })`, las dos `@sin-superficie` hasta 458-C/D). Tipos en
+`lib/types/wallet-comprobante-lateral.ts`.
+
+El destino se clasifica con la MISMA tabla que la anulación: `WalletAnulacionService` gana
+`clasificar(destino)` (la clasificación sin el rol; `enrutar` = rol + `clasificar`), y
+`FUENTE_POR_CAMINO` (`Record<CaminoAnulacion, …>` total) dice dónde vive el comprobante: egreso y
+corrección → caja; cobro de Ordenex → fila de la tienda; pago de la 172 → `liquidacion_pago`; pago de un
+gasto, aporte y pago de la tienda → en SU documento (`no_admite: en_su_documento` al adjuntar; `ver`
+los lee de su `comprobante_path`); cobro por rechazo y premio → sin comprobante. Alcance de la tienda:
+solo filas de SU libro y los documentos que la nombran (`liquidacion_pago`, `pago_por_cuenta_tienda`,
+`abono_tienda`); todo lo demás —caja, mensajeros, ajeno, inexistente— `no_encontrado` idéntico, y ANTES
+de clasificar (así una fila de cierre de la caja no delata que existe con `sin_comprobante`). Rótulo
+(R80): `{ fuente, categoria, fecha }` sin la ruta; el texto lo pone la pantalla.
+
+**Desviación anotada:** `ver` cubre también los comprobantes de los documentos de la 459/457 por el
+mismo destino (R77 dice «todo comprobante»); sus actions propias (`obtenerComprobante…`) siguen igual.
+La indemnización (egreso de caja anulable) también admite adjuntar después (R79: «movimiento anulable»).
+
+**Tests:** `tests/unit/services/wallet-comprobante-service.test.ts` (21: tipo, tamaño, fallo de subida
+no registra, fallo de registro retira, `ya_tiene` retira, pre-chequeo sin subir, `no_admite` por
+camino, carpeta y columna por camino, rol antes de leer, alcance de la tienda, actions `.strict()`) y
+`tests/integration/db/wallet-comprobante-alcance.test.ts` (8, Postgres: las tres columnas, UNIQUE por
+el repo saltándose el servicio, sin huérfanos, D6, URL + rótulo, R78, R77 ajeno = inexistente, borde
+sin reemplazar/borrar).
+
+**Mutaciones TB.10** (`aplicado=true`, `restaurado=true`): sin comprobar el dueño → 1/8 rojo; sin el
+filtro de libro de la tienda → 1/8; `crear` sin `skipDuplicates` → 7/8; sin retirar el objeto → 2/20;
+cobro a la columna de la caja → 4/28; la tienda pide cualquier documento → 1/21. Dos supervivientes
+iniciales, anotados: quitar SOLO `libro !== "tienda"` (lo cubre `tiendaDeFila`, capa redundante:
+equivalente) y la lista de documentos de la tienda (sobrevivía hasta añadir el caso del cobro por
+rechazo, que habría respondido `sin_comprobante`).

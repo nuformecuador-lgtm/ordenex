@@ -8,6 +8,8 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IWalletAnulacionService, RutaAnulacion } from "@/lib/interfaces/services/IWalletAnulacionService";
 import type { DestinoMovimiento } from "@/lib/types/wallet-anulacion";
 
+type Clasificacion = Exclude<RutaAnulacion, { status: "forbidden" }>;
+
 /**
  * FICHA 458-B (design §4.2, R63/R65/R82) — decide por que camino se anula un destino.
  *
@@ -35,7 +37,10 @@ export class WalletAnulacionService implements IWalletAnulacionService {
 
   async enrutar(destino: DestinoMovimiento, actor: Actor): Promise<RutaAnulacion> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R82: antes de leer
+    return this.clasificar(destino);
+  }
 
+  async clasificar(destino: DestinoMovimiento): Promise<Clasificacion> {
     if ("documento" in destino) {
       switch (destino.documento) {
         case "liquidacion_pago":
@@ -67,7 +72,7 @@ export class WalletAnulacionService implements IWalletAnulacionService {
     }
   }
 
-  private async rutaDeCaja(f: FilaDeLibroParaAnular): Promise<RutaAnulacion> {
+  private async rutaDeCaja(f: FilaDeLibroParaAnular): Promise<Clasificacion> {
     if (f.tipo === "egreso" && f.origenTipo === "gasto") return ruta("egreso_caja", f.id);
     if (f.categoria === "egreso_indemnizacion" && f.origenTipo === "orden_incidente") {
       return ruta("egreso_caja", f.id);
@@ -115,7 +120,7 @@ export class WalletAnulacionService implements IWalletAnulacionService {
     return noAnulable("contra_asiento");
   }
 
-  private async rutaDeTienda(f: FilaDeLibroParaAnular): Promise<RutaAnulacion> {
+  private async rutaDeTienda(f: FilaDeLibroParaAnular): Promise<Clasificacion> {
     if (f.categoria === "cobro_manual" && f.origenTipo === "manual") return ruta("cobro_tienda", f.id);
     if (f.origenTipo === "cierre_dia") return noAnulable("nace_de_un_cierre");
     if (f.origenId === null) return noAnulable("no_es_anulable");
@@ -135,7 +140,7 @@ export class WalletAnulacionService implements IWalletAnulacionService {
     return noAnulable("contra_asiento");
   }
 
-  private async rutaDeMensajero(f: FilaDeMensajeroParaAnular): Promise<RutaAnulacion> {
+  private async rutaDeMensajero(f: FilaDeMensajeroParaAnular): Promise<Clasificacion> {
     if (f.categoria === "liquidacion" && f.origenTipo === "pago_mensajero" && f.origenId !== null) {
       return ruta("liquidacion_pago", f.origenId);
     }
@@ -151,16 +156,16 @@ export class WalletAnulacionService implements IWalletAnulacionService {
     return noAnulable("no_es_anulable");
   }
 
-  private async rutaDeRechazo(gestionId: string): Promise<RutaAnulacion> {
+  private async rutaDeRechazo(gestionId: string): Promise<Clasificacion> {
     const cobroId = await this.repo.cobroRechazoDeGestion(gestionId);
     return cobroId === null ? { status: "no_encontrado" } : ruta("rechazo_tienda_cobro", cobroId);
   }
 }
 
-function ruta(camino: Extract<RutaAnulacion, { status: "ruta" }>["camino"], id: string): RutaAnulacion {
+function ruta(camino: Extract<RutaAnulacion, { status: "ruta" }>["camino"], id: string): Clasificacion {
   return { status: "ruta", camino, id };
 }
 
-function noAnulable(motivo: Extract<RutaAnulacion, { status: "no_anulable" }>["motivo"]): RutaAnulacion {
+function noAnulable(motivo: Extract<RutaAnulacion, { status: "no_anulable" }>["motivo"]): Clasificacion {
   return { status: "no_anulable", motivo };
 }

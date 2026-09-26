@@ -300,6 +300,7 @@ describe("458-B — WalletAnulacionService.enrutar: cada destino a SU camino (de
 describe("458-B — anularMovimientoAction: el borde y la respuesta normalizada", () => {
   const enrutadorA = (camino: "egreso_caja" | "liquidacion_pago" | "premio_del_ranking"): IWalletAnulacionService => ({
     enrutar: vi.fn(async () => ({ status: "ruta" as const, camino, id: "doc-1" })),
+    clasificar: vi.fn(async () => ({ status: "ruta" as const, camino, id: "doc-1" })),
   });
 
   it("sin sesion responde `unauthenticated` sin tocar el enrutador", async () => {

@@ -53,6 +53,12 @@ export const PREFIJO_COMPROBANTE = {
   pago_por_cuenta_tienda: "pagos-por-cuenta",
   aporte_capital: "aportes-capital",
   abono_tienda: "abonos-tienda",
+  // Ficha 458-B (design §4.1, D12): los caminos SIN documento propio, cuyo comprobante vive en
+  // `wallet_comprobante`: un movimiento de caja (sueldo, gasto, correccion), el cobro de Ordenex a
+  // una tienda y el pago de Ordenex a una tienda o a un mensajero (172).
+  wallet_movimiento: "movimientos-caja",
+  wallet_tienda_movimiento: "cobros-tienda",
+  liquidacion_pago: "pagos",
 } as const;
 export type DocumentoConComprobante = keyof typeof PREFIJO_COMPROBANTE;
 
