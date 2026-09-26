@@ -55,7 +55,7 @@ export interface EfectoMovimientoDeps {
 /**
  * R44–R47 — el antes y el despues de un registro, calculados en el servidor.
  *
- * @sin-superficie FICHA 458-B (backend por delante del frontend): la llama «Así queda» del `RegistrarMovimientoDialog` de la 458-C (design §4.4). Esta anotacion CADUCA con la 458-C.
+ * Superficie (458-C): «Así queda» (`components/shared/wallet/AsiQueda.tsx`) del `RegistrarMovimientoDialog`.
  */
 export async function previsualizarMovimientoAction(
   input: unknown,

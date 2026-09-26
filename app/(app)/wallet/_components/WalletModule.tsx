@@ -42,7 +42,7 @@ import {
   inputDeFiltros,
   type WalletFiltrosValue,
 } from "./WalletFiltros";
-import { RegistrarMovimientoCajaDialog } from "./RegistrarMovimientoCajaDialog";
+import { RegistrarMovimientoDialog } from "@/components/shared/wallet/RegistrarMovimientoDialog";
 import { ComposicionGananciaCard } from "./ComposicionGananciaCard";
 import {
   GastosFijosPlantillasPanel,
@@ -261,7 +261,7 @@ export function WalletModule({
               botones casi iguales —«Registrar movimiento» y «Registrar egreso»— con dos
               vocabularios que no se explicaban entre si, y habia que adivinar cual abrir. El
               enrutado por concepto vive dentro del dialogo, no aqui. */}
-          <RegistrarMovimientoCajaDialog
+          <RegistrarMovimientoDialog
             onRegistrado={() => void recargar(filtros, page)}
           />
         </div>
@@ -333,7 +333,7 @@ export function WalletModule({
         filtros={filtros}
       />
 
-      <section aria-label="Gastos fijos">
+      <section id="gastos-fijos" aria-label="Gastos fijos" className="scroll-mt-4">
         {/* Feature 170 — FASE 2 (T I.2): el panel pagina su propio listado y relee su página
             tras cada cambio del CRUD (R23); la wallet ya no guarda la lista en su estado. */}
         <GastosFijosPlantillasPanel initialData={plantillas} ahoraIso={ahoraIso} />
