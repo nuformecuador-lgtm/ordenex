@@ -37,29 +37,33 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
 
 ## 458-A — Detalles y guardias sobre las pantallas actuales (fullstack) · depende de 461 y 457 en `dev`
 
-- [ ] **TA.0** Confirmar en `dev`: `ORIGEN_LABEL`/`ORIGEN_TIENDA_LABEL`/`ORIGEN_PAGO_LABEL` con los
+- [x] **TA.0** Confirmar en `dev`: `ORIGEN_LABEL`/`ORIGEN_TIENDA_LABEL`/`ORIGEN_PAGO_LABEL` con los
   textos de la 461 §7.3 y la 457; si la 461 dejó `cargosHint` de `/wallet/tiendas` con los cobros
   (R90 anterior) y el estado real de C1.1/C1.2/C3.1/C4.1 (`design.md` §1.1). *Hecho:* nota en
   `progress/impl_458-A.md` con lo que sigue vivo. Fotografía 459 verde sobre el SHA anotado.
-- [ ] **TA.1** `lib/utils/etiqueta-cuenta.ts`: UNA función de etiqueta de tienda/mensajero/bodega,
+  *Evidencia:* `progress/impl_458-A.md` §1 (lo vivo y lo que difiere del design, sobre `752e40df`); fotografía `caja-caracterizacion-459` 18/18 en `752e40df` y en `1d938439`.
+- [x] **TA.1** `lib/utils/etiqueta-cuenta.ts`: UNA función de etiqueta de tienda/mensajero/bodega,
   usada por avisos, historial, tablas, origen y «A quién» de la wallet (sustituye a `etiquetaDePersona`
   donde la wallet la usa y a `nombre` a secas). *Hecho:* `etiqueta-cuenta.test.ts`; guardia de fuente
   que prohíbe otra composición del nombre en `app/(app)/wallet/**` y `app/(app)/mi-wallet/**` (R33).
-- [ ] **TA.2** [P] `OrigenLegibleService` en LOTE (`design.md` §3.3): una consulta por tipo presente;
+  *Evidencia:* `68dc8d42`; revisión B1 en `dde7ac7e` (historial: `CobroTiendaAnulacionRepository`, `LiquidacionPagoRepository` y `LiquidacionRepartoRepository` con `etiquetaDeCuenta`). `tests/unit/utils/etiqueta-cuenta.test.ts`; guardia `wallet-etiqueta-cuenta` con el censo del historial por contenido + contraprueba de `cd91bcf4`; `tests/integration/db/wallet-etiqueta-historial-458.test.ts` (Postgres, literales, mensajero con segundo apellido). Mutaciones en `progress/impl_458-A.md` §16.
+- [x] **TA.2** [P] `OrigenLegibleService` en LOTE (`design.md` §3.3): una consulta por tipo presente;
   los tres mapas de origen pasan a `Record<WalletOrigenTipo, …>` totales y los DTO a
   `origenTipo: WalletOrigenTipo`; fuera `origenLabel` con `??`; enlace por rol (`hrefDetalleCierre`,
   estado de cuenta, orden por guía, plantillas). *Hecho:* `wallet-origen-legible.test.ts` (un caso por
   origen, incluido `gestion_orden` en el libro de la tienda), test de número de consultas,
   `wallet-origen-enlace.test.tsx` (con y sin acceso), guardia `wallet-origen-total` + contraprueba
   (R5–R9, R94).
-- [ ] **TA.3** [P] `FiltrosWalletService.conceptosConMovimientos` (repo `groupBy` con `_count`, sin el
+  *Evidencia:* `bef2d2f8` (servidor), `1ceab0a6` (pantalla). `tests/unit/services/wallet-origen-legible.test.ts` (14 orígenes, R7/R8, lote sin ids), `tests/integration/db/wallet-origen-legible.test.ts` (literal desde `aed9f27a`), `tests/components/OrigenMovimiento.test.tsx`, guardia `wallet-origen-total` + contraprueba. `wallet-origen-enlace.test.tsx` no existe: lo cubren `OrigenMovimiento.test.tsx` y el bloque R7/R8 (revisión m7, anotado).
+- [x] **TA.3** [P] `FiltrosWalletService.conceptosConMovimientos` (repo `groupBy` con `_count`, sin el
   propio filtro de concepto) + action; los 3 filtros (`WalletFiltros`, `MiWalletFiltros`,
   `DesgloseMovimientosTienda`) lo consumen con el diccionario de su superficie y conservan el elegido
   en 0; fuera `CATEGORIA_OPTIONS`/`CATEGORIA_TIENDA_OPTIONS` del SEED y los comentarios T5. *Hecho:*
   `tests/integration/db/wallet-conceptos-con-movimientos.test.ts` (periodo, cuenta; `egreso_gasto` y
   `ajuste_debito` ausentes sin filas), tests de los tres filtros, guardia `wallet-conceptos-sin-seed`
   + contraprueba (R13–R15, R95).
-- [ ] **TA.4** `FiltrosWalletService.cierresDeLaCuenta` (tienda con nombre de mensajero; mensajero) con
+  *Evidencia:* `8cd41703` (servidor), `1ceab0a6` (filtros). `tests/integration/db/wallet-conceptos-con-movimientos.test.ts`, `tests/unit/components/conceptos-filtro.test.ts`, `tests/components/WalletFiltros458.test.tsx`, guardia `wallet-conceptos-sin-seed` + contraprueba.
+- [x] **TA.4** `FiltrosWalletService.cierresDeLaCuenta` (tienda con nombre de mensajero; mensajero) con
   tope y `hayMas`; borde `cierreId: z.string().uuid()` en `wallet-tienda.ts:177` y
   `wallet-mensajero.ts:157`, `WHERE` siempre con la cuenta; `SelectorBuscable` mínimo
   (`components/shared/SelectorBuscable.tsx`: popover + input, vacío/cargando/error, foco opaco,
@@ -68,26 +72,32 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   `tests/integration/db/wallet-cierres-selector.test.ts` (cierre ajeno → 0 filas; mutación que quita la
   cuenta del `WHERE` → rojo), tests de las dos pantallas, `SelectorBuscable.test.tsx`, guardia
   `wallet-sin-campo-id` + contraprueba (R2, R10–R12, R93). Depende de TA.1.
-- [ ] **TA.5** [P] `EnlaceCierre`/`CIERRE_ENLACE` sin uuid en el nombre accesible (se nombra por día CR
+  *Evidencia:* `251274de` (servidor), `1ceab0a6` (selector), `069b7ca2` (revisión m4: la búsqueda en la misma consulta, sin `IN` sin tope). `tests/integration/db/wallet-cierres-selector.test.ts` (cierre ajeno → 0 filas; 33.000 cierres que casan; texto literal), `tests/components/SelectorBuscable.test.tsx`, guardia `wallet-sin-campo-id` + contraprueba.
+- [x] **TA.5** [P] `EnlaceCierre`/`CIERRE_ENLACE` sin uuid en el nombre accesible (se nombra por día CR
   y mensajero, con `etiquetaDeCuenta`); guardia de render `wallet-sin-uuid` sobre todas las superficies
   con fixtures uuid. *Hecho:* guardia verde; contraprueba con el `EnlaceCierre` de hoy roja (R1, R96,
   R99). Depende de TA.1.
-- [ ] **TA.6** [P] `listarMovimientosTiendaSchema` `.strict()` (m1); `WalletEgresoService.ts:123` sin
+  *Evidencia:* `1ceab0a6`. Guardia de render `wallet-sin-uuid` (7 superficies) + contraprueba con el `EnlaceCierre` de antes; `RepartoPrevisualizacion.test.tsx`, `DesglosePagosMensajero.test.tsx`.
+- [x] **TA.6** [P] `listarMovimientosTiendaSchema` `.strict()` (m1); `WalletEgresoService.ts:123` sin
   caída al `id` (texto legible); comentarios T1–T6 y subtítulo T9 de `design.md` §1.4; guardia
   `wallet-textos-458` + contraprueba; ampliar `nombres-wallet-461.guardia` a `components/shared/
   {estado-cuenta,wallet}/**` (aún vacías: control de no-vacuidad ajustado a «≥ 0 archivos hoy, falla si
   aparece un retirado»). *Hecho:* tests verdes; `tests/unit/types/wallet-tienda-schemas.test.ts` rojo
   con `tiendaId` ajeno (R4, R36, R97, R101).
-- [ ] **TA.7** [P] `/analitica`: el panel mensual rotula la cifra de caja con `rotuloCifraPrincipal({
+  *Evidencia:* `1d938439`; revisión m3 en `4b1ddecc` (el comentario del desglose ya no niega el `.strict()`). `tests/unit/types/wallet-tienda-schemas.test.ts` (paginado y desglose por la action → `validation_error`), `tests/unit/services/wallet-egreso-reverso-legible.test.ts`, guardias `wallet-textos-458` (9 afirmaciones) y `nombres-wallet-461` ampliada.
+- [x] **TA.7** [P] `/analitica`: el panel mensual rotula la cifra de caja con `rotuloCifraPrincipal({
   periodoFiltrado: true, estado })` → «Movimiento neto del periodo». *Hecho:*
   `tests/unit/analitica/panel-mensual-rotulo.test.ts` (R62).
-- [ ] **TA.8** Ayuda y asistente: `docs/ayuda/oficina/wallet-tiendas.md`, `wallet-mensajeros.md`,
+  *Evidencia:* `f7fe9471`; revisión m5 en `1eb205dc` (ya no se pide `verResumenCajaAction`). `tests/unit/analitica/panel-mensual-rotulo.test.ts`, `tests/unit/analytics/tablero-financiero-cargar.test.ts`.
+- [x] **TA.8** Ayuda y asistente: `docs/ayuda/oficina/wallet-tiendas.md`, `wallet-mensajeros.md`,
   `tienda/mi-wallet.md` (filtros por selector, orígenes con nombre y enlace, conceptos con cuenta);
   `contexto-458.test.ts` bloque A; cuatro preguntas reales. *Hecho:* frases literales por rol en el
   test; respuestas anotadas (R102, R103).
-- [ ] **TA.9** Recorrido pasos 1, 8, 12 y accesibilidad de §10 sobre las pantallas actuales;
+  *Evidencia:* `12444e25`. Los tres documentos con `actualizado` y `fuentes`; `tests/unit/asistente/contexto-458.test.ts` bloque A; las cuatro preguntas en `progress/recorrido_458-A/recorrido.md`.
+- [x] **TA.9** Recorrido pasos 1, 8, 12 y accesibilidad de §10 sobre las pantallas actuales;
   fotografía 459 verde; gate rápido; revisión. *Hecho:* `progress/recorrido_458-A/` con números;
   `INIT_EXIT=0`; `progress/impl_458-A.md` con la tabla R→test y los tests reescritos (R104).
+  *Evidencia:* `cd91bcf4` (recorrido `progress/recorrido_458-A/`, gate `progress/gate_458A.log`); revisión `progress/review_458-A.md` RECHAZADA y cierre de sus puntos en `progress/impl_458-A.md` §16 con el gate completo `progress/gate_458A_cierre.log`.
 
 ## 458-B — Cimientos (backend, migración) · depende de 461 y 457 en `dev` · [P] con 458-A
 
