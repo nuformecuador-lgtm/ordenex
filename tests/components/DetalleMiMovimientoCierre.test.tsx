@@ -307,6 +307,12 @@ describe("Ficha 344 — /mi-wallet: abrir una fila del libro (R1–R8)", () => {
     await abrir(ABRIR_FLETE);
     const dentro = within(await screen.findByRole("region", { name: PANEL_FLETE }));
     expect(await dentro.findByText(DETALLE_MI_MOVIMIENTO_VACIO)).toBeInTheDocument();
+    // FICHA 458-D (cierre): el literal ES el contrato (el vacío se explica, no contradice el importe).
+    expect(
+      dentro.getByText(
+        "Con los datos que el cierre guardó de tus órdenes, ninguna aporta a este concepto: este importe no se puede repartir orden por orden.",
+      ),
+    ).toBeInTheDocument();
   });
 });
 

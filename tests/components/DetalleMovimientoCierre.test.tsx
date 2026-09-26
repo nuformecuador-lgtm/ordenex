@@ -307,6 +307,14 @@ describe("Ficha 344 — abrir una fila del libro (R1–R7)", () => {
 
     const dentro = within(await screen.findByRole("region", { name: PANEL_FLETE }));
     expect(await dentro.findByText(DETALLE_MOVIMIENTO_VACIO)).toBeInTheDocument();
+    // FICHA 458-D (cierre): el literal ES el contrato. Junto al importe de la cabecera, el vacío se
+    // explica («no se puede repartir») en vez de parecer un error («ninguna aporta» a secas).
+    expect(
+      dentro.getByText(
+        "Con los datos que el cierre guardó de sus órdenes, ninguna aporta a este concepto: este importe no se puede repartir orden por orden.",
+      ),
+    ).toBeInTheDocument();
+    expect(dentro.getByText("0 de 23 órdenes del cierre aportan a este concepto")).toBeInTheDocument();
   });
 });
 

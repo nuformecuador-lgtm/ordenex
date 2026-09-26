@@ -35,9 +35,14 @@ export const DETALLE_MI_MOVIMIENTO_COLUMNAS = {
   orden: "Orden",
 } as const;
 
-/** R8: un detalle sin órdenes lo dice; no se deja una tabla muda. */
+/**
+ * R8: un detalle sin órdenes lo dice; no se deja una tabla muda.
+ *
+ * FICHA 458-D (cierre) — explica el vacío en vez de contradecir el importe (el motivo, medido, está en
+ * `DETALLE_MOVIMIENTO_VACIO` de la oficina, `app/(app)/wallet/_components/detalle-movimiento-labels.ts`).
+ */
 export const DETALLE_MI_MOVIMIENTO_VACIO =
-  "Ninguna orden tuya de este cierre aporta a este concepto.";
+  "Con los datos que el cierre guardó de tus órdenes, ninguna aporta a este concepto: este importe no se puede repartir orden por orden.";
 
 /** R7: el fallo se cuenta DENTRO de la fila, y el resto del libro sigue en pie. */
 export const DETALLE_MI_MOVIMIENTO_ERROR =
