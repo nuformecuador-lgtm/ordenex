@@ -36,7 +36,7 @@ const PAGO_ID = "7c6b5a49-3827-4165-9f4e-3d2c1b0a9f8e";
 const PAGO: PagoRegistradoDTO = {
   id: PAGO_ID,
   monto: "4000.00",
-  metodo: "sinpe",
+  metodo: "SINPE",
   referencia: "123456",
   nota: "Quincena",
   fechaPago: "2026-09-20",
