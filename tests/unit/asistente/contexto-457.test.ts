@@ -138,10 +138,13 @@ describe("457 R68 — cada documento tocado declara su fecha y las fuentes del p
     ["oficina/wallet-caja", ["lib/services/AbonoTiendaService.ts", "lib/utils/descripcion-abono.ts", "lib/actions/abono-tienda.ts"]],
     ["oficina/wallet-tiendas", ["lib/services/AbonoTiendaService.ts", "lib/utils/descripcion-abono.ts"]],
     ["tienda/mi-wallet", ["lib/services/AbonoTiendaService.ts", "lib/utils/descripcion-abono.ts"]],
-  ] as const)("%s: actualizado el 2026-09-25 y con las fuentes del pago", (slug, fuentes) => {
+  ] as const)("%s: actualizado desde el 2026-09-25 y con las fuentes del pago", (slug, fuentes) => {
     const doc = docs.find((d) => d.slug === slug);
     expect(doc).toBeDefined();
-    expect(doc?.actualizado).toBe("2026-09-25");
+    // FICHA 458-B: `oficina/wallet-caja` se volvio a tocar el 2026-09-26 (anulacion del cobro por
+    // rechazo y de la indemnizacion). Lo que este caso afirma es que la ficha lo ACTUALIZO: la fecha
+    // no puede ser anterior a la suya, pero una ficha posterior puede moverla (fecha ISO: orden de texto).
+    expect((doc?.actualizado ?? "") >= "2026-09-25").toBe(true);
     const crudo = readFileSync(path.join(DIR_AYUDA, `${slug}.md`), "utf8");
     const declaradas = partirFrontmatter(crudo).datos.fuentes ?? [];
     for (const fuente of fuentes) expect(declaradas, `${slug} sin ${fuente}`).toContain(fuente);

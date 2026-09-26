@@ -219,6 +219,14 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
 - [ ] **TC.3** [P] Campo de comprobante en el formulario (tipo y tamaño avisados antes de enviar con
   `problemaDeComprobante`; el servidor decide) y «Adjuntar comprobante» en el panel para filas sin
   él. *Hecho:* `wallet-comprobante-campo.test.tsx` (R74–R76, R79, R80).
+  **Heredado de la 458-B (revisión M1/m6):** desde el cierre de la 458-B el servidor dice la verdad en
+  `documento.tieneComprobante` para el egreso, la corrección de caja y el cobro de Ordenex (leen
+  `wallet_comprobante`). Pero `DocumentoCajaAcciones` (`ACCIONES[tipo].comprobante`) responde
+  «sin comprobante» SIN ir al servidor para `egreso_caja`, `ajuste_caja` y `cobro_tienda`: en cuanto
+  estos puedan llevar comprobante desde la pantalla, «Ver comprobante» tiene que llamar a
+  `verComprobanteAction({ destino })`. Hoy no se ve (ningún diálogo manda el archivo aún). Y
+  `adjuntarComprobanteAction` responde `no_admite` con `motivo: "anulado"` en un movimiento anulado:
+  la pantalla no debe ofrecer «Adjuntar» ahí y tiene que traducir ese motivo.
 - [ ] **TC.4** `components/shared/wallet/DetalleMovimientoPanel` (Sheet: quién, por qué, cómo,
   comprobante con rótulo legible, registró, estado de anulación, «Cómo quedó», «Anular…» /
   «Anulado», texto del cobro por rechazo R100) + `AnularMovimientoDialog` (molde `AnularPagoDialog`;
