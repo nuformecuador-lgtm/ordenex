@@ -1,0 +1,91 @@
+{
+  "rol": "maestro",
+  "pasos": [
+    {
+      "paso": "4 estado de cuenta de Tania (a favor)",
+      "ok": true,
+      "listado": "Tania Tienda ₡132.670,10 A favor Ver estado de cuenta",
+      "tarjetas": "Saldo actual ₡132.670,10 Ordenex le debe ₡132.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡58.729,90 Saldo al final del periodo ₡132.670,10",
+      "primeraFila": "— Saldo inicial ₡0",
+      "filas": 21,
+      "acciones": "Ordenex le cobra a la tienda Ordenex le paga a la tienda",
+      "ordenexPagaDeshabilitado": false,
+      "tiendaPagaVisible": 0,
+      "sinUuid": true
+    },
+    {
+      "paso": "4 saldo corrido de la última fila",
+      "ok": true,
+      "ultimaFila": "2026-09-26 Cobro de Ordenex a la tienda anulado Anulación Anulación · Recorrido 458-D: dejar la tienda en contra (admin) Cobro de Ordenex a una tienda Registró: Ana Admin ₡200.000 ₡132.670,10 Ver"
+    },
+    {
+      "paso": "5 cobro 5.000 desde el estado de cuenta",
+      "ok": true,
+      "asiQueda": "Ordenex le cobra a una tienda Elegí la tienda, el monto y la fecha. El cobro se descuenta de lo que Ordenex le debe a esa tienda y no se edita: si hay un error, se anula desde el libro de la caja con un motivo. SALE DINERO DE ORDENEX Gasto de Ordenex Sueldo Ordenex paga un gasto de una tienda Corrección de caja (resta) Ordenex le paga a una tienda Ordenex le paga a un mensajero LLEGA DINERO A LA CAJA Aporte de dinero a la caja Una tienda le paga a Ordenex Corrección de caja (suma) SE DESCUENTA DEL SALDO DE UNA TIENDA Ordenex le cobra a una tienda Los gastos fijos no se registran aquí: se cobran solos desde sus plantillas. Ver las plantillas de gasto fijo No llega dinero nuevo: se descuenta del saldo a favor de la tienda y pasa a ser ganancia de Ordenex; si la tienda no tiene saldo, queda en contra. Se registra en la caja como «Ordenex le cobra a una tienda» y en el libro de la tienda com",
+      "tarjetasTras": "Saldo actual ₡127.670,10 Ordenex le debe ₡127.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡63.729,90 Saldo al final del periodo ₡127.670,10"
+    },
+    {
+      "paso": "5 la fila del listado tras volver",
+      "ok": true,
+      "listado": "Tania Tienda ₡127.670,10 A favor Ver estado de cuenta"
+    },
+    {
+      "paso": "6 pago de un gasto de Tania a Facebook 10.000",
+      "ok": true,
+      "asiQueda": "Ordenex paga un gasto de una tienda Elegí la tienda, a quién se le pagó, el monto y la fecha. El pago no se puede editar: si hay un error, se anula desde el libro de la caja con un motivo. SALE DINERO DE ORDENEX Gasto de Ordenex Sueldo Ordenex paga un gasto de una tienda Corrección de caja (resta) Ordenex le paga a una tienda Ordenex le paga a un mensajero LLEGA DINERO A LA CAJA Aporte de dinero a la caja Una tienda le paga a Ordenex Corrección de caja (suma) SE DESCUENTA DEL SALDO DE UNA TIENDA Ordenex le cobra a una tienda Los gastos fijos no se registran aquí: se cobran solos desde sus plantillas. Ver las plantillas de gasto fijo Sale dinero de Ordenex hacia un tercero (Facebook, Jet Cargo…) y se descuenta del saldo de la tienda; la ganancia no cambia. Se registra en la caja como «Ordenex paga un gasto de una tienda» y en el libro de la tienda como «Ordenex paga un gasto de la tienda»"
+    },
+    {
+      "paso": "4b Tania en contra: frase y acciones",
+      "ok": true,
+      "tarjetas": "Saldo actual -₡82.329,90 Tania Tienda le debe ₡82.329,90 a Ordenex Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡273.729,90 Saldo al final del periodo -₡82.329,90",
+      "acciones": "La tienda le paga a Ordenex Ordenex le cobra a la tienda Ordenex le paga a la tienda Ordenex no le debe nada a Tania Tienda: sin saldo a favor no hay nada que pagarle.",
+      "tiendaPagaVisible": 1,
+      "ordenexPagaDeshabilitado": true
+    },
+    {
+      "paso": "4d anular el cobro desde el panel del estado de cuenta",
+      "ok": true,
+      "panel": "Ordenex le cobra a la tienda 2026-09-26 · Sale ₡200.000 A quién Tania Tienda Por qué Recorrido 458-D: dejar la tienda en contra (maestro) De dónde sale Registrado a mano Comprobante Sin comprobante. Adjuntar comprobante Registró Maestro QA Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.463.932,72 Ganancia de Ordenex ₡13.546.262,62 Lo que Ordenex les debe a las tiendas -₡82.329,90 Saldo inicial y aportes ₡0 Saldo de la tienda -₡82.329,90 Anular… Close",
+      "tarjetas": "Saldo actual ₡117.670,10 Ordenex le debe ₡117.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡73.729,90 Saldo al final del periodo ₡117.670,10",
+      "extractoContieneAnulado": true,
+      "extractoContieneAnulacion": true
+    },
+    {
+      "paso": "9 descarga del estado de cuenta",
+      "ok": true,
+      "archivo": "maestro-09-estado-de-cuenta-de-tania-tienda-2026-09-26.xlsx"
+    },
+    {
+      "paso": "10 estado de cuenta de Marco",
+      "ok": true,
+      "tarjetas": "Saldo actual ₡5.100 Ordenex le debe ₡5.100 a Marco Mensajero Saldo inicial ₡0 Abonos del periodo ₡15.300 Cargos del periodo ₡10.200 Saldo al final del periodo ₡5.100",
+      "acciones": "Se puede pagar ahora ₡5.100 La suma de los cierres aprobados que un solo pago puede saldar. Sale del servidor. Ordenex le paga al mensajero Para anular un pago, abrí su fila con «Ver»: es la misma anulación que la de Cierres; el pago vuelve a quedar por pagar.",
+      "sinUuid": true
+    },
+    {
+      "paso": "10 reparto de 1.000 al mensajero",
+      "ok": true,
+      "previsualizacion": "Registrar pago a Marco Mensajero El pago queda anotado como documento y no se puede editar: si algo sale mal, se anula y se registra de nuevo. Disponible: ₡5.100 Monto* Puedes registrar un pago parcial: escribe un monto menor. Cómo se reparte este pago Cierre del 2026-08-13 Pago parcial Ver el cierre del 2026-08-13 de Marco Mensajero Se aplica ₡1.000 Pendiente hoy: ₡3.400 · Queda pendiente: ₡2.400 Estos cierres no pueden recibir pago porque no están aprobados: 1 solicitados. Método* Efectivo Referencia Opcional en efectivo: número de recibo, si lo hay. Fecha del pago* El día en que se entregó el dinero. No puede ser posterior a hoy. Nota Opcional. Queda guardada junto al comprobante. Cancela",
+      "tarjetasTras": "Saldo actual ₡4.100 Ordenex le debe ₡4.100 a Marco Mensajero Saldo inicial ₡0 Abonos del periodo ₡15.300 Cargos del periodo ₡11.200 Saldo al final del periodo ₡4.100"
+    },
+    {
+      "paso": "10 anular el pago desde el estado de cuenta (R70)",
+      "ok": true,
+      "tarjetasTras": "Saldo actual ₡5.100 Ordenex le debe ₡5.100 a Marco Mensajero Saldo inicial ₡0 Abonos del periodo ₡15.300 Cargos del periodo ₡10.200 Saldo al final del periodo ₡5.100",
+      "extractoAnulado": true
+    },
+    {
+      "paso": "10 /cierres-admin sigue en pie",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "paso": "11 marcar recibido en la bodega",
+      "ok": false,
+      "listadoAntes": "Quepos Recibido incompleto ₡1.000 al día 26 sept · ₡24.000 de ₡25.000 Ver estado de cuenta",
+      "tarjetasAntes": "Por entregar hoy ₡1.000 Quepos tiene ₡1.000 por entregar Por entregar al inicio ₡0 Recibido en el periodo ₡24.000 Declarado en el periodo ₡25.000 Por entregar al final del periodo ₡1.000",
+      "tarjetasTras": "",
+      "listadoTras": "Quepos Recibido incompleto ₡1.000 al día 26 sept · ₡24.000 de ₡25.000 Ver estado de cuenta"
+    }
+  ]
+}

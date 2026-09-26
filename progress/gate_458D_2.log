@@ -1,0 +1,13 @@
+== Arnes SDD :: init (modo: completo) ==
+[0;32m✓ node v24.13.0[0m
+[0;32m✓ dependencias: 58 declaradas, todas presentes[0m
+[0;32m✓ feature_list.json: sin ids duplicados (457 fichas), cupo por zona respetado (in_progress=1) y specs en su sitio[0m
+-> pnpm run typecheck
+
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a035977c2902080fa
+> tsc --noEmit
+
+tests/components/PagosTiendaEstadoCuenta.test.tsx(39,3): error TS2820: Type '"sinpe"' is not assignable to type '"efectivo" | "SINPE" | "transferencia"'. Did you mean '"SINPE"'?
+ ELIFECYCLE  Command failed with exit code 2.
+[0;31m✗ 'pnpm run typecheck' fallo[0m
+INIT_EXIT=1

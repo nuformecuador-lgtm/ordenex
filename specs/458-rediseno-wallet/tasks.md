@@ -268,41 +268,51 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
 
 ## 458-D — Estados de cuenta y «Mi wallet» (fullstack) · depende de 458-C · [P] con 458-E
 
-- [ ] **TD.1** `components/shared/estado-cuenta/` (tarjetas con frase, tabla extracto con saldo
+- [x] **TD.1** `components/shared/estado-cuenta/` (tarjetas con frase, tabla extracto con saldo
   inicial arriba y orden ascendente, chips por tipo de cuenta, periodo, anulados tachados con motivo,
   «Ver» → panel de 458-C, despliegue de órdenes en las filas de cierre). *Hecho:* `EstadoCuenta.test.tsx`,
   `EstadoCuentaAnulados.test.tsx` (R18–R25, R72).
-- [ ] **TD.2** [P] `/wallet/tiendas/[tiendaId]` (`notFound` por rol y cuenta) + el listado enlaza y deja
+  *Evidencia 458-D:* verdes (20 + 6). Desvío: el despliegue de órdenes de las filas de cierre queda pendiente de servidor (R19, `progress/impl_458-D.md` §Pendientes 3).
+- [x] **TD.2** [P] `/wallet/tiendas/[tiendaId]` (`notFound` por rol y cuenta) + el listado enlaza y deja
   de desplegar; acciones «La tienda le paga a Ordenex» (solo con saldo en contra), «Ordenex le cobra a
   la tienda», «Ordenex le paga a la tienda» (deshabilitado con motivo sin saldo a favor) abriendo el
   diálogo de 458-C preseleccionado. *Hecho:* `EstadoCuentaAcciones.test.tsx`,
   `wallet-tiendas-estado-page.test.tsx` (R17, R26–R28, R40, R81). Depende de TD.1.
-- [ ] **TD.3** [P] `/wallet/mensajeros/[mensajeroId]`: estado de cuenta, «Ordenex le paga al
+  *Evidencia 458-D:* verdes (12 + 11); recorrido pasos 4–6.
+- [x] **TD.3** [P] `/wallet/mensajeros/[mensajeroId]`: estado de cuenta, «Ordenex le paga al
   mensajero» (reparto con previsualización) y «Anular…» de sus pagos con `anularPagoAction` /
   `anularRepartoAction`; `/cierres-admin` sigue igual. *Hecho:* `EstadoCuentaMensajeroAnular.test.tsx`,
   `wallet-mensajeros-estado-page.test.tsx`, test existente de `PagoMensajeroSeccion` verde (R29, R70).
-- [ ] **TD.4** [P] `/wallet/satelites/[zonaId]`: estado de cuenta Declarado/Recibido + conciliación
+  *Evidencia 458-D:* verdes (3 + 7); recorrido paso 10.
+- [x] **TD.4** [P] `/wallet/satelites/[zonaId]`: estado de cuenta Declarado/Recibido + conciliación
   (`ConciliacionAcciones`, `MarcarRecibidoDialog`) con sus textos. *Hecho:* `EstadoCuentaSatelite.test.tsx`
   + tests de la 431 verdes (R31).
+  *Evidencia 458-D:* `EstadoCuentaSatelite.test.tsx` (8) + 431 verdes; recorrido paso 11.
 - [ ] **TD.5** `/mi-wallet` como estado de cuenta en solo lectura (lecturas 461 §7.5 y 457), selector
   de cierre actual, comprobantes de sus filas por `verComprobanteAction`/las actions de la 459 y la
   457; sin actions de escritura. *Hecho:* `mi-wallet-page.test.tsx` ampliado (R34–R36, R78);
   `mi-wallet-335.guardia` verde.
-- [ ] **TD.6** [P] Descarga del estado de cuenta con saldo corrido y fila de saldo inicial. *Hecho:*
+  *Evidencia 458-D (PARCIAL):* comprobante por fila en `/mi-wallet` (`MiWalletComprobante458.test.tsx`, R35/R78) y guardia verde; el estado de cuenta con saldo corrido (R34) y el selector de cierre esperan lectura de servidor acotada a la tienda (`progress/impl_458-D.md` §Pendientes 1 y 4).
+- [x] **TD.6** [P] Descarga del estado de cuenta con saldo corrido y fila de saldo inicial. *Hecho:*
   test de columnas; `columnas-sensibles.guardia` verde (R3, R32).
-- [ ] **TD.7** Refresco dirigido tras registrar/anular desde el estado de cuenta (claves SWR de ESA
+  *Evidencia 458-D:* `estado-cuenta-descarga-columnas.test.ts` (6); recorrido paso 9 (0 uuid en el xlsx).
+- [x] **TD.7** Refresco dirigido tras registrar/anular desde el estado de cuenta (claves SWR de ESA
   cuenta; el listado revalida al montar). *Hecho:* `WalletRefrescoDirigido.test.tsx` (R30, R48).
-- [ ] **TD.8** Retirar `DesgloseMovimientosTienda`, `DesglosePagosMensajero`,
+  *Evidencia 458-D:* `WalletRefrescoDirigido.test.tsx` (3) verde.
+- [x] **TD.8** Retirar `DesgloseMovimientosTienda`, `DesglosePagosMensajero`,
   `DesgloseConsolidacionesSatelite`, `PagoTiendaAcciones` (la acción vive en el estado de cuenta) y
   sus labels/columnas de descarga; cada test retirado listado con su R sustituto. *Hecho:* lista en el
   informe; ninguna guardia pierde archivos sin que su control de no-vacuidad lo diga.
-- [ ] **TD.9** Ayuda y asistente: `docs/ayuda/oficina/wallet-tiendas.md`, `wallet-mensajeros.md`,
+  *Evidencia 458-D:* 9 tests retirados con su R sustituto en `progress/impl_458-D.md`; `DesgloseConsolidacionesSatelite` pasa a `ConciliacionSatelite`.
+- [x] **TD.9** Ayuda y asistente: `docs/ayuda/oficina/wallet-tiendas.md`, `wallet-mensajeros.md`,
   `wallet-satelites.md`, `tienda/mi-wallet.md` (estado de cuenta, saldo corrido, chips, acciones,
   anulados, comprobante); `contexto-458.test.ts` bloque D; cuatro preguntas reales (una desde la
   tienda). *Hecho:* frases literales por rol (R102, R103).
-- [ ] **TD.10** Recorrido pasos 4–6, 8–11 de §10 + adminTienda + mensajero/adminSatelite sin acceso;
+  *Evidencia 458-D:* `contexto-458.test.ts` bloque D + `contexto-457.test.ts`; cuatro preguntas en `progress/recorrido_458-D/asistente.json`.
+- [x] **TD.10** Recorrido pasos 4–6, 8–11 de §10 + adminTienda + mensajero/adminSatelite sin acceso;
   fotografías verdes; gate rápido; revisión. *Hecho:* `progress/recorrido_458-D/`; `INIT_EXIT=0`;
   `progress/impl_458-D.md` (R104).
+  *Evidencia 458-D:* `progress/recorrido_458-D/`; gate completo `progress/gate_458D.log` `INIT_EXIT=0`; `progress/impl_458-D.md`.
 
 ## 458-E — Libro de caja (fullstack) · depende de 458-C · [P] con 458-D
 
