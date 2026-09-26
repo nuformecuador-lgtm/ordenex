@@ -500,14 +500,18 @@ describe("WalletPage — la descripción de la página (R59)", () => {
     expect(document.body.textContent?.toLowerCase()).not.toContain("balance");
   });
 
-  it("R59: y nombra las dos cifras con los mismos nombres que la tarjeta", async () => {
+  // Ficha 458-A (TA.6, R101) REESCRIBE este caso de la 173: la tarjeta ya no se llama siempre «Dinero
+  // en caja» (la 459 la rotula «Flujo de dinero registrado» en estado «flujo»), así que el subtítulo
+  // —que no conoce el estado— deja de nombrarla. Sustituto: `wallet-textos-458.guardia` (T9).
+  it("R59/R101: nombra la ganancia y las cifras de la caja, y NO dice «dinero en caja» (estado flujo)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
     const { default: WalletPage } = await import("@/app/(app)/wallet/page");
 
     render(await WalletPage());
 
     const texto = (document.body.textContent ?? "").toLowerCase();
-    expect(texto).toContain("dinero en caja");
+    expect(texto).not.toContain("dinero en caja");
+    expect(texto).toContain("cifras de la caja");
     expect(texto).toContain("ganancia de ordenex");
   });
 });

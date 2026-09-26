@@ -183,6 +183,11 @@ export type ListarSaldosTiendasCompletoResult = ListarCompletoResult<SaldoTienda
 // Listado del ledger de la tienda: paginado + filtros opcionales por cierre, concepto y
 // rango de fechas. El acotado por tienda NO viaja aqui (lo pone el service desde el actor,
 // R19); estos filtros son solo del desglose.
+// Ficha 458-A (TA.6, R36, m1 de la auditoria): `.strict()`. El paginado de `/mi-wallet` NO era
+// estricto: una clave que nombrara una tienda (`tiendaId`) se descartaba en silencio en vez de
+// rechazarse. El servicio acota igual por el actor, pero una peticion con una clave ajena es un
+// intento de ampliar el alcance y se responde `validation_error` sin leer nada. Las derivadas
+// (`.extend` del desglose, `.omit` del completo) heredan la misma politica.
 export const listarMovimientosTiendaSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -193,7 +198,7 @@ export const listarMovimientosTiendaSchema = z.object({
   // Ficha 461 (R72, auditoria T1): dias de Costa Rica; `hasta` exclusivo en el repositorio.
   desde: desdeDiaCRSchema.optional(),
   hasta: hastaDiaCRSchema.optional(),
-});
+}).strict();
 
 export type ListarMovimientosTiendaInput = z.infer<typeof listarMovimientosTiendaSchema>;
 
@@ -230,18 +235,18 @@ export type ListarMovimientosTiendaCompletoResult =
  * Feature 171 (design §2.1, R7/R8/R10) — cabecera del desglose: TRES cubetas exhaustivas
  * sobre el ledger + el saldo que se deriva de ellas.
  *
- * `pagado` esta separado de `cargos` a proposito, y hoy vale siempre "0.00" porque ningun
- * flujo emite `pago_tienda` (lo emitira la 172). No es un cero fijo: se lee de la categoria
- * REAL del ledger, de modo que el dia que la 172 inserte el primer pago esta cabecera lo
- * refleje sin tocar una linea (R43). Si «pagado» se plegara dentro de «cargos», nadie podria
- * distinguir *lo que te cobre* de *lo que ya te pague* mirando la pantalla.
+ * `pagado` esta separado de `cargos` a proposito: es lo que Ordenex le pago a la tienda o pago
+ * por ella (`pago_tienda` de la 172, `pago_por_cuenta` de la 459), leido de las categorias REALES
+ * del ledger. Si «pagado» se plegara dentro de «cargos», nadie podria distinguir *lo que te
+ * cobre* de *lo que ya te pague* mirando la pantalla. (Ficha 458-A, T2: el comentario de la 171
+ * decia que valia siempre 0,00 hasta la 172; la 172 ya emite pagos.)
  *
  * Money-safe (R23): los cuatro importes cruzan la frontera como STRING escala 2.
  */
 export type DesgloseTiendaDTO = {
   aFavor: string; // Σ creditos (cod_recaudado, ajuste_credito)
-  cargos: string; // Σ debitos != pago_tienda (fletes, comision, los tres IVA, ajuste_debito)
-  pagado: string; // Σ debitos == pago_tienda (hoy siempre "0.00", ver R43)
+  cargos: string; // Σ debitos en cubeta `cargos` (CUBETA_POR_CATEGORIA: fletes, comision, IVA, cobros, ajuste_debito)
+  pagado: string; // Σ debitos en cubeta `pagado` (CUBETA_POR_CATEGORIA: pagos de Ordenex a la tienda o por ella)
   saldo: string; // aFavor - cargos - pagado (puede venir "-123.45")
   signo: SaldoTiendaSigno;
 };

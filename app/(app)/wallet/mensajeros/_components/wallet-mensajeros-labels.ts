@@ -175,7 +175,7 @@ export const CATEGORIA_PAGO_LABEL: Record<PagoMensajeroMovimientoCategoria, stri
  *
  * Ficha 458-A (TA.2, R5/R9/R94): `Record<WalletOrigenTipo, string>` TOTAL, sin caida al valor
  * tecnico, con los textos de la 461 §7.3 (los mismos que `ORIGEN_LABEL` de la caja). «Liquidación»
- * y «Manual» se retiran: el primero es el nombre de un CONCEPTO de este libro y el segundo es un
+ * y el rotulo de una palabra del origen manual se retiran: el primero es un CONCEPTO de este libro y el segundo, un
  * nombre retirado por la 461. Un origen nuevo del catalogo no compila sin su nombre aqui.
  */
 export const ORIGEN_PAGO_LABEL: Record<WalletOrigenTipo, string> = {

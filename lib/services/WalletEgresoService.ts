@@ -19,6 +19,7 @@ import {
 } from "@/lib/types/wallet";
 import { instanteDelMovimientoManual } from "@/lib/utils/fecha-movimiento-manual";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { CATEGORIA_LABEL } from "@/app/(app)/wallet/_components/wallet-labels";
 
 // Roles autorizados (R17): acceso total (maestro/admin, dueños de la caja central), espejo de
 // WalletService.
@@ -130,7 +131,8 @@ export class WalletEgresoService implements IWalletEgresoService {
         monto: original.monto,
         origenTipo: "gasto",
         origenId: original.id,
-        descripcion: `Reverso de: ${original.descripcion ?? original.id}`,
+        // Ficha 458-A (TA.6, R4): sin descripcion, el texto cae al NOMBRE del concepto, nunca al id.
+        descripcion: `Reverso de: ${original.descripcion ?? CATEGORIA_LABEL[original.categoria]}`,
         registradoPor: actor.usuarioId,
       },
       { accion: "egreso_administrativo_reversado", actorUsuarioId: actor.usuarioId },

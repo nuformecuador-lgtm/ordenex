@@ -80,10 +80,10 @@ export const CATEGORIA_TIENDA_OPTIONS = [
  * Los CUATRO importes de la cabecera, en el orden de R7 — que es la fórmula leída de
  * izquierda a derecha: `saldo = a favor − cargos − pagado`.
  *
- * «Pagado a la tienda» hoy sale siempre en `0.00` porque ningún flujo emite `pago_tienda`
- * (lo emitirá la 172). Se muestra IGUAL: es un cero verdadero, leído de la categoría real
- * del libro, no un «no disponible». Si se plegara dentro de «cargos», el día que haya pagos
- * nadie podría distinguir *lo que te cobré* de *lo que ya te pagué* mirando esta pantalla.
+ * «Pagado a la tienda» es lo que Ordenex le pagó a la tienda o pagó por ella, leído de las
+ * categorías reales del libro. Va aparte de «cargos» para que se distinga *lo que te cobré* de
+ * *lo que ya te pagué* mirando esta pantalla. (Ficha 458-A, T1: aquí decía que salía siempre en
+ * 0,00 hasta la 172; la 172 ya emite pagos.)
  *
  * Ficha 461 (design §7.5, R45): las tres pistas nombran el cobro y su anulación con la MISMA
  * palabra con la que se rotula su fila en ESTA pantalla («los cobros de Ordenex a la tienda»,
