@@ -8,9 +8,19 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 
 import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
+import { SelectorBuscable } from "@/components/shared/SelectorBuscable";
 import { CONCEPTOS_FILTRO_AVISO, opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import { useConceptosConMovimientos } from "@/components/shared/wallet/use-conceptos-con-movimientos";
+import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 import type { WalletMovimientoTipo } from "@/lib/types/wallet";
+
+import {
+  A_QUIEN_FILTRO,
+  A_QUIEN_SELECTOR_TEXTOS,
+  aQuienDeValor,
+  valorDeAQuien,
+} from "./a-quien-selector";
+import { useQuienesDelLibroCaja } from "./use-quienes-del-libro-caja";
 
 import { FILTRO_DIRECCION, type DireccionFiltro } from "./libro-caja-labels";
 import { CATEGORIA_LABEL, CATEGORIA_TODAS_OPTION } from "./wallet-labels";
@@ -43,6 +53,11 @@ export interface WalletFiltrosValue {
   categoria: string;
   desde: string;
   hasta: string;
+  /**
+   * FICHA 458-E (R59) — «A quién»: la tienda, el mensajero o el nombre anotado elegido en el selector.
+   * Ausente = todos. Es el `valor` que dio el servidor, tal cual (viaja, no se pinta: H6).
+   */
+  aQuien?: AQuienFiltro;
 }
 
 export const FILTROS_VACIOS: WalletFiltrosValue = {
@@ -69,6 +84,9 @@ export function inputDeFiltros(filtros: WalletFiltrosValue): Record<string, unkn
   if (filtros.categoria) input.categoria = filtros.categoria;
   if (filtros.desde) input.desde = filtros.desde;
   if (filtros.hasta) input.hasta = filtros.hasta;
+  // FICHA 458-E (R59): la MISMA clave en los seis bordes del libro (libro, tarjetas + composición,
+  // desglose, descarga, detalle de una fila de la composición) y en los conceptos.
+  if (filtros.aQuien) input.aQuien = filtros.aQuien;
   return input;
 }
 
@@ -101,12 +119,36 @@ export function WalletFiltros({ onAplicar, onLimpiar, disabled = false }: Wallet
     onAplicar(siguiente);
   }
 
-  // R13: los conceptos del periodo y del tipo que se están eligiendo (el borrador), no del SEED.
-  const conceptos = useConceptosConMovimientos({
-    libro: "caja",
-    tipo: (draft.tipo || undefined) as WalletMovimientoTipo | undefined,
+  /**
+   * FICHA 458-E (R59) — «A quién» se aplica al elegirlo, como la dirección: es una elección de una
+   * lista, no algo que se teclea y se confirma. Viaja con el resto del borrador.
+   */
+  function elegirAQuien(valor: string | null) {
+    if (disabled) return;
+    const aQuien = aQuienDeValor(valor);
+    const siguiente: WalletFiltrosValue = { ...draft, aQuien };
+    if (aQuien === undefined) delete siguiente.aQuien;
+    setDraft(siguiente);
+    onAplicar(siguiente);
+  }
+
+  const tipoBorrador = (draft.tipo || undefined) as WalletMovimientoTipo | undefined;
+
+  // R59: las opciones de «A quién» son las del periodo y la dirección que se están eligiendo.
+  const quienes = useQuienesDelLibroCaja({
+    tipo: tipoBorrador,
     desde: draft.desde || undefined,
     hasta: draft.hasta || undefined,
+  });
+
+  // R13: los conceptos del periodo y del tipo que se están eligiendo (el borrador), no del SEED.
+  // 458-E (R59): y de «A quién», si hay uno elegido.
+  const conceptos = useConceptosConMovimientos({
+    libro: "caja",
+    tipo: tipoBorrador,
+    desde: draft.desde || undefined,
+    hasta: draft.hasta || undefined,
+    aQuien: draft.aQuien,
   });
   const opcionesCategoria = opcionesDeConceptos(
     conceptos.conceptos,
@@ -132,6 +174,31 @@ export function WalletFiltros({ onAplicar, onLimpiar, disabled = false }: Wallet
         onChange={elegirDireccion}
         ariaLabel={FILTRO_DIRECCION.nombre}
       />
+
+      {/* FICHA 458-E (R59): «A quién», con búsqueda en el servidor por nombre de tienda, de mensajero
+          o por el nombre anotado. El rótulo corto es visible y el nombre accesible del disparador
+          dice además qué está elegido («A quién: Todos»). */}
+      <div className="flex w-full items-center gap-2 sm:w-auto">
+        <Label
+          htmlFor="wallet-filtro-a-quien"
+          className="shrink-0 text-xs font-normal text-muted-foreground"
+        >
+          {A_QUIEN_FILTRO.rotulo}
+        </Label>
+        <SelectorBuscable
+          id="wallet-filtro-a-quien"
+          etiqueta={A_QUIEN_FILTRO.etiqueta}
+          opciones={quienes.opciones}
+          valor={draft.aQuien ? valorDeAQuien(draft.aQuien) : null}
+          onCambiar={elegirAQuien}
+          onBuscar={quienes.buscar}
+          estado={quienes.estado}
+          hayMas={quienes.hayMas}
+          textos={A_QUIEN_SELECTOR_TEXTOS}
+          disabled={disabled}
+          className="w-full sm:w-56"
+        />
+      </div>
 
       {/* El `Select` de categoría dice su nombre en el PLACEHOLDER («Todas las categorías»), que
           informa mejor que el rótulo: dice qué se está viendo ahora. Por eso el rótulo pasa a

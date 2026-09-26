@@ -24,7 +24,7 @@ import {
   hrefEstadoCuenta,
   textoAQuien,
 } from "./libro-caja-labels";
-import { VerMovimientoCaja } from "./VerMovimientoCaja";
+import { VerMovimientoCaja, type AutoriaDeLaFilaEnElLibro } from "./VerMovimientoCaja";
 import { COLUMNAS_DESCARGA_WALLET_CAJA } from "./wallet-ledger-descarga-columnas";
 import {
   CATEGORIA_LABEL,
@@ -226,14 +226,33 @@ function claseDeFila(m: WalletMovimientoDTO): string | undefined {
  * el tachado. Va en la celda de «Ver», donde vivían las acciones: el orden de las columnas no se toca.
  * Es una insignia (caja en línea atómica), así que el tachado de la fila no la cruza.
  */
-function CeldaVer({ m, onCambio }: { m: WalletMovimientoDTO; onCambio?: () => void }) {
+/** FICHA 458-E (cierre) — lo que el libro tiene de UNA fila, para que su panel no lo lea otra vez. */
+function autoriaParaElPanel(
+  autoria: AutoriaDelLibro | undefined,
+  movimientoId: string,
+): AutoriaDeLaFilaEnElLibro | undefined {
+  // Sin la prop, el libro no lee nada: el panel lee la suya al abrir (como en la 458-C).
+  if (autoria === undefined) return undefined;
+  if (autoria.estado !== "ok") return autoria;
+  return { estado: "ok", fila: autoria.porMovimiento.get(movimientoId) };
+}
+
+function CeldaVer({
+  m,
+  onCambio,
+  autoria,
+}: {
+  m: WalletMovimientoDTO;
+  onCambio?: () => void;
+  autoria: AutoriaDeLaFilaEnElLibro | undefined;
+}) {
   return (
     // 458-E (recorrido): `inline-flex` y no `flex`. Un bloque (y sus hijos «blockificados») HEREDA el
     // tachado de la fila; una caja en línea atómica no. Medido en el navegador: con `flex` la insignia
     // «Anulado» salía tachada.
     <span className="inline-flex items-center gap-2">
       {m.documento?.anulado ? <Badge variant="secondary">{PANEL_TEXTO.anulado}</Badge> : null}
-      <VerMovimientoCaja movimiento={m} onCambio={onCambio} />
+      <VerMovimientoCaja movimiento={m} onCambio={onCambio} autoriaDelLibro={autoria} />
     </span>
   );
 }
@@ -269,9 +288,10 @@ export function WalletLedger({
   movimientos,
   isLoading = false,
   onCambio,
-  autoria = AUTORIA_CARGANDO,
+  autoria: autoriaProp,
   obtenerFilasDescarga,
 }: WalletLedgerProps) {
+  const autoria = autoriaProp ?? AUTORIA_CARGANDO;
   // Feature 200 (tanda 3): cada columna declara su ancho MÍNIMO para que, cuando la pantalla no dé,
   // aparezca el scroll horizontal de la tabla ANTES de que las celdas se estrujen; el dinero a la
   // DERECHA, en `tabular-nums` y con su color semántico.
@@ -331,10 +351,10 @@ export function WalletLedger({
         id: "ver",
         value: LIBRO_CAJA_COLUMNA.ver,
         minWidth: "5rem",
-        render: (m) => <CeldaVer m={m} onCambio={onCambio} />,
+        render: (m) => <CeldaVer m={m} onCambio={onCambio} autoria={autoriaParaElPanel(autoriaProp, m.id)} />,
       },
     ],
-    [onCambio, autoria],
+    [onCambio, autoria, autoriaProp],
   );
 
   return (

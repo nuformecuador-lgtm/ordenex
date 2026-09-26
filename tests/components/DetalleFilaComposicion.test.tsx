@@ -524,6 +524,16 @@ describe("Ficha 339 — el cliente manda un TOKEN, nunca categorías (design §1
     // plural) NO: ése lo deriva el servidor con la misma definición que produce el importe.
     expect(Object.keys(input)).not.toContain("categorias");
   });
+
+  it("458-E R59: «A quién» también baja al detalle de la fila, tal cual", async () => {
+    const aQuien = { tipo: "tienda" as const, id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d" };
+    pintar({ ...FILTROS_VACIOS, aQuien });
+
+    await abrir(ABRIR_MENSAJEROS);
+    await screen.findByRole("region", { name: PANEL_MENSAJEROS });
+
+    expect(inputDeLlamada(0)).toEqual({ aQuien, fila: "egreso_pago_mensajero", page: 1 });
+  });
 });
 
 describe("Ficha 339 — money-safe en el navegador (R35)", () => {

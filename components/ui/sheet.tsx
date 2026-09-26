@@ -72,7 +72,8 @@ function SheetContent({
           >
             <XIcon
             />
-            <span className="sr-only">Close</span>
+            {/* 458-E: la app habla español; el lector de pantalla anunciaba «Close». Mismo texto que `dialog.tsx`. */}
+            <span className="sr-only">Cerrar</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Popup>

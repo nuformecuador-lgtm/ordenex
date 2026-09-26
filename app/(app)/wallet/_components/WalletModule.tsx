@@ -236,10 +236,16 @@ export function WalletModule({
   // FICHA 458-E (R56/R57) — la autoría de la página que se está viendo. La clave son los ids de la
   // página: cambiar de filtro, de página o releer tras registrar/anular trae filas nuevas y la
   // lectura se repite sola; volver a una página ya vista la sirve la caché de SWR.
+  //
+  // FICHA 458-E (cierre) — el panel «Ver» ya no relee la autoría de su fila: usa ESTA. Por eso, tras
+  // registrar, anular o adjuntar (`recargarTrasCambio`), la clave lleva además una VERSIÓN: la misma
+  // página con los mismos ids tiene que volver a leerse, porque quién anuló, cuándo y cómo acaban de
+  // cambiar y la caché diría lo de antes.
+  const [versionAutoria, setVersionAutoria] = useState(0);
   const ids = movimientos.map((m) => m.id);
   const { data: autoriaData, error: autoriaError } = useSWR(
-    ids.length === 0 ? null : (["wallet:autoria-libro", ...ids] as const),
-    ([, ...clave]) => leerAutoria(clave),
+    ids.length === 0 ? null : (["wallet:autoria-libro", versionAutoria, ...ids] as const),
+    ([, , ...clave]) => leerAutoria(clave),
     { revalidateOnFocus: false, shouldRetryOnError: false },
   );
   const autoria = useMemo<AutoriaDelLibro>(() => {
@@ -313,6 +319,12 @@ export function WalletModule({
     void recargar(filtros, nextPage);
   }
 
+  /** R60 — tras registrar, anular o adjuntar: relee todo con los filtros vigentes Y la autoría. */
+  async function recargarTrasCambio() {
+    await recargar(filtros, page);
+    setVersionAutoria((v) => v + 1);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* R59: el nombre accesible de la sección también cambia — la palabra que mentía no se
@@ -331,7 +343,7 @@ export function WalletModule({
               vocabularios que no se explicaban entre si, y habia que adivinar cual abrir. El
               enrutado por concepto vive dentro del dialogo, no aqui. */}
           <RegistrarMovimientoDialog
-            onRegistrado={() => void recargar(filtros, page)}
+            onRegistrado={() => void recargarTrasCambio()}
           />
         </div>
 
@@ -354,7 +366,7 @@ export function WalletModule({
         <CobrosGastoFijoPendientesPanel
           initialData={cobrosPendientes}
           puedeDecidir={puedeDecidirCobros}
-          onCambio={() => void recargar(filtros, page)}
+          onCambio={() => void recargarTrasCambio()}
         />
       ) : null}
 
@@ -376,7 +388,7 @@ export function WalletModule({
         <CobrosRechazoTiendaPendientesPanel
           initialData={cobrosRechazoTienda}
           puedeDecidir={puedeDecidirCobrosRechazo}
-          onCambio={() => void recargar(filtros, page)}
+          onCambio={() => void recargarTrasCambio()}
         />
       ) : null}
 
@@ -445,7 +457,7 @@ export function WalletModule({
               movimientos={movimientos}
               isLoading={loading}
               // Ficha 459 (R65) / 458-C (R60): anular o adjuntar desde el panel «Ver» relee libro, tarjetas, composición y desglose.
-              onCambio={() => void recargar(filtros, page)}
+              onCambio={() => void recargarTrasCambio()}
               autoria={autoria}
               obtenerFilasDescarga={() =>
                 filasDesdeResultado(listarConAutoria(inputDeFiltros(filtros)), (f) =>
