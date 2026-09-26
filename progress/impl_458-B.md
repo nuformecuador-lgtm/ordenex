@@ -119,3 +119,13 @@ ahora directamente: quitar el pago a la tienda no mueve `totalEgresos` y sí baj
 
 **Queda rojo hasta TB.9:** `historial-accion-escrituras-cubiertas.guardia` (los dos tipos nuevos aún no
 tienen productor; sus métodos nacen en TB.9).
+
+## Arreglo heredado de la 457 (§12.4): el saldo del pago a una tienda por el `tx` del candado
+
+`LiquidacionService.registrarPagoTienda` leía el saldo que decide (`agregarSaldoPorTienda`) por el
+cliente global mientras tenía el candado de la tienda. Ahora le pasa el `tx` (tercer parámetro, molde
+`AbonoTiendaService`). Tests: `tests/integration/db/liquidacion-pago-tienda-458-concurrencia.test.ts`
+(pool de UNA conexión: el pago se registra, restante 6 000,00; `excede` con 2 500,00 sin escribir) y
+`tests/unit/services/liquidacion-service.test.ts` R29 (`toHaveBeenCalledWith("t1", {}, d.tx)`).
+Mutación (quitar el `tx`): **3 rojos de 91** (los dos de Postgres, por la transacción que caduca a los
+10 s, y el unitario), `aplicado=true`, `restaurado=true`.

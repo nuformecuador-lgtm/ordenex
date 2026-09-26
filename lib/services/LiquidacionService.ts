@@ -642,7 +642,13 @@ export class LiquidacionService implements ILiquidacionService {
 
         // R31/R32: el disponible es el saldo a favor DERIVADO del ledger (creditos - debitos),
         // sin filtros: se paga contra el saldo acumulado, no contra un periodo.
-        const agregado = await this.tiendaRepo.agregarSaldoPorTienda(input.tiendaId, {});
+        //
+        // Ficha 458-B (arreglo heredado de la 457, `progress/impl_457.md` §12.4): el saldo que
+        // DECIDE se lee por el MISMO `tx` que tomo el candado, no por otra conexion del pool. Con el
+        // pool de 3 por instancia, tres operaciones de la misma tienda a la vez (una con el candado,
+        // dos esperandolo) dejaban a la primera sin conexion para leer: cuelgue y rollback. Molde:
+        // `AbonoTiendaService` (tercer parametro de `agregarSaldoPorTienda`).
+        const agregado = await this.tiendaRepo.agregarSaldoPorTienda(input.tiendaId, {}, tx);
         const disponible = new Prisma.Decimal(
           derivarSaldoTienda(agregado.creditos, agregado.debitos).saldo,
         );
