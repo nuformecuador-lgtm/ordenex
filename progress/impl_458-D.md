@@ -280,3 +280,160 @@ y después con `c458c-1.sql`; saldo corrido de la última fila = saldo de Tania 
 UI de la 458-D entregada (pantallas 1 y 4: estado de cuenta de tienda, mensajero y bodega satélite; comprobante en
 /mi-wallet), sin tocar servidor ni dinero; build y gate completo en verde; quedan 8 pendientes de servidor (R10,
 R6/R7, R19, R34 entre ellos) y TD.5 parcial por R34.
+
+---
+
+# §Servidor — los pendientes de servidor de la 458-D (backend_dev, 2026-09-26)
+
+**Rama:** `wt/458-D-servidor` desde `origin/feature/458-D` en `ba304748` (incluye `dev` con la 458-C), empujada a
+`feature/458-D` tras cada paso. **Base:** clon propio `ordenex_458ds` (`CREATE DATABASE … TEMPLATE ordenex` con 0
+conexiones a la plantilla medidas antes; `prisma migrate deploy`: «No pending migrations»). `.env` del checkout
+principal copiado sin imprimirlo, con la base cambiada al clon y **sin** `DATABASE_URL_PREVIEW`. `pnpm install
+--frozen-lockfile` propio, sin junction. Ni la base `ordenex` ni `feature_list.json` se tocaron.
+**Búsqueda — lo digo explícitamente:** probé el MCP `codebase-memory` (`search_graph` sobre
+`R-job-singularis-projects-ordenex` por «EstadoCuentaService leer estado cuenta») y devolvió símbolos ajenos
+(`plantilla-datos.leer`, `cuenta-por-pagar`…): el índice no tiene las piezas de la 458. Todo lo demás se localizó con
+`grep` y lectura del archivo real.
+**Sin migraciones:** ninguna tabla ni columna nueva; todo son lecturas sobre lo que ya existe (RLS sin cambios).
+
+## Qué se hizo (pendientes 1–6 del frontend_dev)
+
+| # | Pendiente | Pieza |
+| --- | --- | --- |
+| 1 | Filtro por cierre (R10–R12) | `estadoCuentaSchema.cierreId` (uuid); `VentanaDeLibro.cierreId` → `AND l.origen_tipo = 'cierre_dia' AND l.origen_id = $cierre` sobre el `libro` YA acotado a la cuenta (`EstadoCuentaRepository.paginar`) |
+| 2 | Origen con entidad y enlace (R6–R8) | `EstadoCuentaService` recibe `OrigenLegibleService` (458-A) por constructor (obligatorio) y resuelve el origen EN LOTE, fuera de la transacción, con el actor (la tienda no ve mensajero ni enlace al cierre) |
+| 3 | Órdenes de una fila de cierre (R19) | `DetalleMovimientoService.verDetalleDeFilaDeCuenta` (344, una sola derivación) + `EstadoCuentaRepository.movimientoDeMensajero` + `FUENTE_MENSAJERO` (Record total) |
+| 4 | `/mi-wallet` con saldo corrido (R34–R36) | `EstadoCuentaService.leerMiTienda`: el MISMO `leerCuenta` que la oficina con `cuenta = { tienda, actor.usuarioId }` |
+| 5 | Método y referencia en la fila | `EstadoCuentaRepository.pagosDe` (una consulta por tipo de documento de pago presente) → `fila.pago` |
+| 6 | Descarga completa con tope en el servidor | `leerCompleto` / `leerMiTiendaCompleto`: ventana `tope + 1`; por encima de `descargaConfig.MAX_FILAS`, `limite_excedido` sin filas |
+| 7 | Retirar actions sin pantalla y los conceptos del libro de la tienda | **Nada se borra** (ver §Retirada) |
+
+### Decisiones tomadas (técnicas, anotadas para revisar)
+
+- **El filtro por cierre se comporta como el chip:** filtra FILAS; el saldo corrido sigue siendo el de la cuenta
+  entera (R21) y las tarjetas (inicial, abonos, cargos, final) siguen siendo las del periodo. Así R22 sigue cuadrando
+  y la afirmación del servicio no cambia. `total` es el de las filas filtradas.
+- **Un cierre de otra cuenta** no es error: devuelve 0 filas (R12: «no devolver movimientos de ninguna otra
+  cuenta»), igual que un cierre inexistente. Sin forma de uuid → `validation_error` en el borde. En una bodega →
+  `validation_error` (`fieldErrors.cierreId`): no hay cierres de mensajero que filtrar.
+- **La vista de la tienda** (`/mi-wallet`) NO lleva los nombres de la gente de Ordenex: `registro = { nombre: null,
+  automatico: null }` y `anulacion.por = null` (se conservan el motivo y el día, R25). `/mi-wallet` nunca los enseñó
+  (su descarga excluía `registradoPor`) y 335/D2 no revela a la tienda quién movió su dinero. `anulable = false`
+  siempre (R35). Si el humano quiere ver quién anuló, es una línea en `paraLaTienda`.
+- **El mensajero no reparte por orden:** `pago_devengado` = `cierre_dia.total_pago_mensajero` y `pago_efectivo` =
+  `min(P,E)` (`WalletMensajeroFeedService`); `cierre_detail` no congela ningún pago por orden. Abrir su fila responde
+  `sin_reparto: snapshot_del_cierre` (medido, no supuesto); el enlace a SU cierre lo da `fila.origen.enlace`.
+
+## Contratos para el frontend (todas Server Actions en `lib/actions/estado-cuenta.ts`)
+
+Orden del borde en todas: sesión (`unauthenticated`) → zod `.strict()` (`validation_error` sin leer nada) → servicio
+(rol ANTES de leer). Montos STRING escala 2; fechas `YYYY-MM-DD` de Costa Rica; ningún error viaja con filas.
+
+**`FilaEstadoCuentaDTO` gana dos campos** (el resto, igual que en la 458-B):
+
+```ts
+origen: OrigenLegibleDTO | null   // { texto, enlace: { etiqueta, href } | null }; null SOLO en filas de bodega.
+                                  // El id va SOLO en enlace.href. La tienda: sin mensajero y sin enlace al cierre.
+pago: { metodo: "efectivo" | "SINPE" | "transferencia"; referencia: string | null } | null
+                                  // pago de la 172 (tienda o mensajero), pago de un gasto (459), pago de la tienda (457)
+```
+
+1. **`verEstadoCuentaAction(input)`** (ampliada) — `input = { cuenta: { tipo: "tienda"|"mensajero"|"bodega", id: uuid },
+   desde?, hasta?, chip?, cierreId?: uuid, page?, pageSize? }` → `{ status: "ok", estado: EstadoCuentaDTO } |
+   no_encontrado | forbidden | validation_error | unauthenticated`. `cierreId` sale de `cierresDeLaCuentaAction`.
+2. **`verEstadoCuentaCompletoAction(input)`** (nueva) — `{ cuenta, desde?, hasta?, chip?, cierreId? }` (sin `page`/
+   `pageSize`: `validation_error`) → `{ status: "ok", estado }` con TODAS las filas del periodo/filtro (`page: 1`,
+   `pageSize: total`) `| { status: "limite_excedido", total, limite }` (sin filas; `limite` = `DESCARGA_MAX_FILAS`,
+   5000) `| no_encontrado | forbidden | validation_error | unauthenticated`. La fila del saldo inicial la compone la
+   pantalla con `estado.saldoInicial`, como hoy.
+3. **`verMiEstadoCuentaAction(input)`** (nueva, `/mi-wallet`) — `{ desde?, hasta?, chip?, cierreId?, page?, pageSize? }`;
+   una `cuenta`, un `tiendaId` o cualquier otra clave → `validation_error`. Solo `adminTienda` (si no, `forbidden`).
+   `estado.cuenta = { tipo: "tienda", id: <la de la sesión>, nombre }`. Filas: `registro` siempre `{ null, null }`,
+   `anulacion.por` siempre `null`, `anulable` siempre `false`, `ref` presente (para `verComprobanteAction`, R78).
+   Chips de la tienda (`todo`/`cierres`/`pagos`/`cobros`/`correcciones`); `cierreId` sale de `listarMisCierresAction`
+   (335, su selector actual). Mismas filas, mismo corrido y mismas tarjetas que la oficina (medido).
+4. **`verMiEstadoCuentaCompletoAction(input)`** (nueva) — lo de 3 sin paginar; mismas ramas que 2.
+5. **`verOrdenesDeFilaAction(input)`** (nueva, R19) — `{ cuenta: { tipo: "tienda"|"mensajero", id }, movimientoId,
+   page?, pageSize? }` (pageSize de la 344: 25 por defecto, tope 100) → `{ status: "ok", data: DetalleMovimientoPayload }`
+   (el de la 344: `monto`, `cierre: { fecha, mensajeroNombre }`, `ordenesDelCierre`, `total`, `page`, `pageSize`,
+   `ordenes[]`) `| { status: "sin_reparto", motivo } | not_found | forbidden | validation_error | unauthenticated`.
+   Solo acceso total. Úsese en las filas con `naceDeUnCierre`; la cuenta es la de la página (`movimientoId` =
+   `fila.ref.movimientoId`). En la tienda trae SOLO las órdenes de esa tienda y el mensajero en la cabecera; en el
+   mensajero responde siempre `sin_reparto: "snapshot_del_cierre"`.
+6. **`cierresDeLaCuentaAction`** (458-A, sin cambios) — `{ cuenta: "tienda", tiendaId, busqueda? } | { cuenta:
+   "mensajero", mensajeroId, busqueda? }` → `{ ok, opciones: [{ cierreId, dia, hora, mensajero, movimientos }], hayMas }`.
+   `opciones[i].cierreId` es el `cierreId` de 1/2.
+
+Las cuatro nuevas llevan `@sin-superficie` con su motivo: **caducan** al montarlas (la guardia de superficie exige
+quitarlas entonces). Los comentarios de `components/shared/wallet/cierres-selector.ts` y `use-cierres-de-la-cuenta.ts`
+aún dicen «pendiente de servidor»: son UI y no los toqué; al montar el selector se actualizan.
+
+## §Retirada (pendiente 7) — nada se borra, y por qué
+
+Busqué TODOS los llamadores de cada candidata en `app/`, `lib/`, `components/`, `scripts/`, `e2e/`, `tests/`
+(incluidas las rutas de `app/api/**`, los 7 crons y el asistente): **ninguna tiene llamadores en API pública,
+asistente, scripts ni crons; todas tienen llamadores en tests**, varios de ellos redes de OTRAS fichas contra
+Postgres. Por la regla del encargo, no se borra ninguna; cada una lleva anotados sus usuarios junto al export.
+
+| Candidata | Usuarios que impiden borrarla |
+| --- | --- |
+| `listarMovimientosDeTienda{,Completo}Action` | `tests/integration/db/wallet-cierres-selector.test.ts` y `wallet-origen-legible.test.ts` (458-A, Postgres), `wallet-tiendas-page`, `BajoRiesgoPaginacion`, `saldos-tiendas-table.negativo`, `wallet-tienda-schemas`, `wallet-tienda-desglose-action` |
+| `listarPagosDeMensajero{,Completo}Action` | `e2e/wallet-mensajeros.spec.ts`, `rutas-336-retiradas.guardia` (las nombra), `pago-mensajero-liquidacion` y `wallet-cierres-selector` (Postgres), `wallet-mensajeros-page`, `CuentasPorPagarTable`, `paginacion-transversal`, `WalletMensajerosTabs`, sus tests de borde |
+| `obtenerComprobanteAbonoAction` | `tests/integration/db/abono-tienda-457.test.ts` (alcance del comprobante de la 457 contra Postgres), `abono-tienda-action`, doble en `WalletLedgerAcciones457` |
+| `obtenerComprobante{AporteCapital,PagoPorCuenta}Action` | `pago-por-cuenta-y-capital-actions` (borde de la 459), dobles en `WalletLedgerAcciones457/459/461` y `WalletFechaCostaRica459` |
+| `conceptosConMovimientosAction` rama `libro: "tienda"` | `wallet-conceptos-con-movimientos` (R13 de la 458-A contra Postgres, tienda ajena incluida), `filtros-wallet-service` |
+| `cierresDeLaCuentaAction` | NO es candidata ya: es la lectura de las opciones del filtro por cierre que el servidor ahora acepta; su `@sin-superficie` caduca al montar el selector |
+
+Retirarlas es mover primero esas redes (al estado de cuenta, a `verComprobanteAction` o a la rama `mi_tienda`),
+otra tarea.
+
+## Tests nuevos o tocados
+
+- `tests/integration/db/estado-cuenta-servidor-458d.test.ts` (13, Postgres real, transacción revertida): siembra el
+  escenario de la 458 + un cierre REAL del mensajero compartido por la tienda C y una tienda D nueva, y una fila de D
+  en el cierre de C.
+- `tests/integration/db/detalle-movimiento-cierre-postgres.test.ts`: +3 casos «458-D R19» (feeds reales de la 344).
+- `tests/unit/actions/estado-cuenta-458d-action.test.ts` (7): orden del borde de las cuatro actions nuevas.
+- Ajustes de construcción (dependencia nueva obligatoria): `_fixtures/wallet-458.ts`, `estado-cuenta-concurrencia-458`,
+  `wallet-detalle-movimiento`, `wallet-tienda-detalle-movimiento`; y los dos campos nuevos en los dobles
+  `tests/fixtures/estado-cuenta.ts` y `wallet-sin-uuid.guardia` (sin cambiar ninguna aserción).
+
+## Mapa R → test (servidor)
+
+| R | Test |
+| --- | --- |
+| R10, R12 | `estado-cuenta-servidor-458d` («R10/R12: el cierre compartido…», «R12: un cierre de otra cuenta…», «R10/R12: cierre en una bodega o sin forma de id…»); `estado-cuenta-458d-action` (cierre sin forma en el completo) |
+| R21 (con cierre) | `estado-cuenta-servidor-458d` («R21: el corrido de las filas filtradas por cierre…») |
+| R6, R7 | `estado-cuenta-servidor-458d` («R6/R7: en la oficina…») |
+| R8 | `estado-cuenta-servidor-458d` («R8: la tienda ve el mismo origen SIN…») |
+| Método y referencia | `estado-cuenta-servidor-458d` («metodo y referencia del documento de pago…») |
+| R19 | `detalle-movimiento-cierre-postgres` («458-D R19: …», 3); `estado-cuenta-458d-action` («las ordenes de una fila») |
+| R22 | `estado-cuenta-servidor-458d` («R22: corrido de la ultima fila = tarjeta = derivarSaldoTienda = verMiSaldo») |
+| R34 | `estado-cuenta-servidor-458d` («R34: /mi-wallet lee el MISMO extracto…») |
+| R35 | `estado-cuenta-servidor-458d` («R35/D2: …») |
+| R36 | `estado-cuenta-servidor-458d` («R36: lo ajeno responde igual que lo inexistente…», «R36: ninguna clave de cuenta…»); `estado-cuenta-458d-action` (borde de /mi-wallet) |
+| R32 (TD.6) | `estado-cuenta-servidor-458d` («TD.6/R32 …»); `estado-cuenta-458d-action` |
+
+## Mutaciones (12, una a una; arnés con autocomprobación) — `progress/mutaciones_458-D_servidor.json`
+
+Cada una: el archivo cambia, se corren > 0 tests, se restaura byte a byte y el `git diff` del archivo queda igual.
+**12/12 muertas.**
+
+| # | Mutación | Tests | Rojos |
+| --- | --- | --- | --- |
+| M-D1 | el filtro de cierre sin el id (solo `origen_tipo`) | `estado-cuenta-servidor-458d` | 4/13 |
+| M-D2 | el filtro de cierre no se aplica | `estado-cuenta-servidor-458d` | 4/13 |
+| M-D3 | `/mi-wallet` sin comprobar el rol | `estado-cuenta-servidor-458d` | 1/13 |
+| M-D4 | la vista de la tienda no se aplica (nombres y «Anular…») | `estado-cuenta-servidor-458d` | 1/13 |
+| M-D5 | la fila sin el origen resuelto | `estado-cuenta-servidor-458d` | 3/13 |
+| M-D6 | la referencia no viaja | `estado-cuenta-servidor-458d` | 1/13 |
+| M-D7 | el tope del completo no se mira | `estado-cuenta-servidor-458d` | 1/13 |
+| M-D8 | cierre aceptado en una bodega | `estado-cuenta-servidor-458d` | 1/13 |
+| M-D9 | el borde de `/mi-wallet` sin `.strict()` | `estado-cuenta-458d-action` + `-servidor-458d` | 2/20 |
+| M-D10 | la fila del mensajero sin su cuenta en el `WHERE` | `detalle-movimiento-cierre-postgres` | 1/14 |
+| M-D11 | las órdenes de la tienda sin acotar a esa tienda | `detalle-movimiento-cierre-postgres` | 1/14 |
+| M-D12 | las órdenes de una fila sin comprobar el rol | `detalle-movimiento-cierre-postgres` | 1/14 |
+
+## Build y gate (servidor)
+
+PENDIENTE_GATE

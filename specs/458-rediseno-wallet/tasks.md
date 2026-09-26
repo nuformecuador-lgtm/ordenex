@@ -273,6 +273,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   «Ver» → panel de 458-C, despliegue de órdenes en las filas de cierre). *Hecho:* `EstadoCuenta.test.tsx`,
   `EstadoCuentaAnulados.test.tsx` (R18–R25, R72).
   *Evidencia 458-D:* verdes (20 + 6). Desvío: el despliegue de órdenes de las filas de cierre queda pendiente de servidor (R19, `progress/impl_458-D.md` §Pendientes 3).
+  *Evidencia 458-D servidor:* `verOrdenesDeFilaAction` (R19) — `tests/integration/db/detalle-movimiento-cierre-postgres.test.ts` («458-D R19 …», 3) y `tests/unit/actions/estado-cuenta-458d-action.test.ts`; origen con entidad y enlace, método y referencia, filtro por cierre (R6–R8, R10–R12) — `tests/integration/db/estado-cuenta-servidor-458d.test.ts`. Falta montarlo en pantalla (frontend).
 - [x] **TD.2** [P] `/wallet/tiendas/[tiendaId]` (`notFound` por rol y cuenta) + el listado enlaza y deja
   de desplegar; acciones «La tienda le paga a Ordenex» (solo con saldo en contra), «Ordenex le cobra a
   la tienda», «Ordenex le paga a la tienda» (deshabilitado con motivo sin saldo a favor) abriendo el
@@ -293,9 +294,12 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   457; sin actions de escritura. *Hecho:* `mi-wallet-page.test.tsx` ampliado (R34–R36, R78);
   `mi-wallet-335.guardia` verde.
   *Evidencia 458-D (PARCIAL):* comprobante por fila en `/mi-wallet` (`MiWalletComprobante458.test.tsx`, R35/R78) y guardia verde; el estado de cuenta con saldo corrido (R34) y el selector de cierre esperan lectura de servidor acotada a la tienda (`progress/impl_458-D.md` §Pendientes 1 y 4).
+  *Evidencia 458-D servidor:* `verMiEstadoCuentaAction` / `verMiEstadoCuentaCompletoAction` (R34–R36, R22) — `tests/integration/db/estado-cuenta-servidor-458d.test.ts` y `tests/unit/actions/estado-cuenta-458d-action.test.ts`. Falta montarlo en `/mi-wallet` (frontend).
 - [x] **TD.6** [P] Descarga del estado de cuenta con saldo corrido y fila de saldo inicial. *Hecho:*
   test de columnas; `columnas-sensibles.guardia` verde (R3, R32).
   *Evidencia 458-D:* `estado-cuenta-descarga-columnas.test.ts` (6); recorrido paso 9 (0 uuid en el xlsx).
+  *Evidencia 458-D servidor:* `verEstadoCuentaCompletoAction` con el tope en el servidor (R32) — `tests/integration/db/estado-cuenta-servidor-458d.test.ts` («TD.6/R32 …»). Falta que la descarga la use (frontend).
+
 - [x] **TD.7** Refresco dirigido tras registrar/anular desde el estado de cuenta (claves SWR de ESA
   cuenta; el listado revalida al montar). *Hecho:* `WalletRefrescoDirigido.test.tsx` (R30, R48).
   *Evidencia 458-D:* `WalletRefrescoDirigido.test.tsx` (3) verde.
