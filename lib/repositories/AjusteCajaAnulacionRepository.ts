@@ -14,7 +14,7 @@ import { esP2002, textoConstraintP2002 } from "@/lib/repositories/_shared/prisma
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
 import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 
-type AjusteCajaAnulacionPrismaClient = Pick<PrismaClient, "ajusteCajaAnulacion">;
+type AjusteCajaAnulacionPrismaClient = Pick<PrismaClient, "ajusteCajaAnulacion" | "walletComprobante">;
 
 /** El P2002 de la anulacion es el de `UNIQUE(movimiento_id)` (la unica otra unica es la PK sobre un uuid nuevo). */
 function esChoqueDeAnulacion(error: unknown): boolean {
@@ -135,14 +135,27 @@ export class AjusteCajaAnulacionRepository implements IAjusteCajaAnulacionReposi
     }));
   }
 
-  /** R71 — UNA consulta para todos los ids de la pagina; cada id vuelve, anulado o no. */
+  /**
+   * R71 — DOS consultas para todos los ids de la pagina; cada id vuelve, anulado o no.
+   *
+   * FICHA 458-B (revision M1): `tieneComprobante` lo decide la base. Desde TB.11 la correccion de
+   * caja puede llevar comprobante en `wallet_comprobante.caja_movimiento_id` (la fila de la
+   * correccion); un `false` fijo haria que la pantalla ofreciera «Adjuntar» y el servidor
+   * respondiera `ya_tiene` (R79/R80: lo decide el servidor, no el cliente).
+   */
   async estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> {
     if (ids.length === 0) return [];
+    const lista = [...ids];
     const anuladas = await this.prisma.ajusteCajaAnulacion.findMany({
-      where: { movimientoId: { in: [...ids] } },
+      where: { movimientoId: { in: lista } },
       select: { movimientoId: true },
     });
+    const comprobantes = await this.prisma.walletComprobante.findMany({
+      where: { cajaMovimientoId: { in: lista } },
+      select: { cajaMovimientoId: true },
+    });
     const anulados = new Set(anuladas.map((a) => a.movimientoId));
-    return ids.map((id) => ({ id, anulado: anulados.has(id), tieneComprobante: false }));
+    const conComprobante = new Set(comprobantes.map((c) => c.cajaMovimientoId));
+    return lista.map((id) => ({ id, anulado: anulados.has(id), tieneComprobante: conComprobante.has(id) }));
   }
 }
