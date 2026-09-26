@@ -13,9 +13,15 @@ import { registrarEgresoAdministrativoSchema, registrarMovimientoManualSchema } 
 // Los topes NO se inventan: «a quien» es el MISMO concepto que el beneficiario del pago de un gasto
 // (459, 120) y la referencia la misma que la del pago de la 172 (60).
 //
-// D5 dice «a quien» OBLIGATORIO en sueldo y gasto: lo exige el DIALOGO de la 458-C (R42 es del
-// dialogo). En el servidor es opcional a proposito: el dialogo de hoy no lo manda, y sin los campos
-// nuevos el registro tiene que ser byte a byte el de hoy (TB.11). Anotado en `progress/impl_458-B.md`.
+// D5 dice «a quien» OBLIGATORIO en sueldo y gasto. La 458-B lo dejo opcional en el servidor porque
+// el dialogo de entonces (`RegistrarMovimientoCajaDialog`) no lo mandaba. FICHA 458-C (TC.1, heredado
+// de la 458-B, revision m1): ese dialogo se RETIRA y el unico que registra sueldos y gastos
+// (`RegistrarMovimientoDialog`) lo exige; desde aqui el SERVIDOR tambien: un sueldo o un gasto de
+// Ordenex sin «a quien» (ausente o en blanco) es `validation_error` en `contraparteNombre`. La
+// correccion de caja lo sigue teniendo opcional (D5).
+
+/** D5 — el texto del rechazo, el MISMO que el dialogo pinta bajo el campo. */
+export const CONTRAPARTE_OBLIGATORIA = "Escribí a quién se le pagó.";
 
 /** Un texto libre opcional: vacio o solo espacios = ausente (un campo de formulario sin rellenar). */
 function textoOpcional(max: number, mensaje: string) {
@@ -38,8 +44,17 @@ export const camposLateralesCaja = z.object({
 
 export type CamposLateralesCaja = z.infer<typeof camposLateralesCaja>;
 
-/** Sueldo / gasto de Ordenex CON sus laterales. Intersección: cada lado conserva sus reglas. */
-export const registrarEgresoConLateralesSchema = z.intersection(registrarEgresoAdministrativoSchema, camposLateralesCaja);
+/**
+ * Sueldo / gasto de Ordenex CON sus laterales. Intersección: cada lado conserva sus reglas. FICHA
+ * 458-C (D5): «a quién» es OBLIGATORIO en los dos (los únicos `tipoEgreso` que admite el borde).
+ */
+export const registrarEgresoConLateralesSchema = z
+  .intersection(registrarEgresoAdministrativoSchema, camposLateralesCaja)
+  .superRefine((valor, ctx) => {
+    if (valor.contraparteNombre === undefined) {
+      ctx.addIssue({ code: "custom", path: ["contraparteNombre"], message: CONTRAPARTE_OBLIGATORIA });
+    }
+  });
 /** Corrección de caja CON sus laterales (su `refine` tipo↔categoría se conserva). */
 export const registrarMovimientoManualConLateralesSchema = z.intersection(registrarMovimientoManualSchema, camposLateralesCaja);
 

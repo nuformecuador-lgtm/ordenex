@@ -1,0 +1,60 @@
+{
+  "pasos": [
+    {
+      "rol": "adminTienda",
+      "paso": 6,
+      "que": "en /mi-wallet se lee «Ordenex pagó un gasto por ti · A Facebook…»; sin registrar/anular/adjuntar",
+      "resultado": "OK",
+      "numeros": {
+        "fila": " 2026-09-26 Débito Ordenex pagó un gasto por ti ₡10.000 Pago de un gasto de una tienda · Tania Tienda · a Facebook · A Facebook · Pauta de septiembre (recorrido 458-C) · Efectivo",
+        "botonesRegistro": 0
+      }
+    },
+    {
+      "rol": "adminTienda",
+      "paso": "acceso",
+      "que": "/wallet → no encontrado",
+      "resultado": "OK",
+      "numeros": {
+        "http": 404
+      }
+    },
+    {
+      "rol": "adminTienda",
+      "paso": "acceso",
+      "que": "/wallet/tiendas → no encontrado",
+      "resultado": "OK",
+      "numeros": {
+        "http": 404
+      }
+    },
+    {
+      "rol": "mensajero",
+      "paso": "acceso",
+      "que": "/wallet → no encontrado",
+      "resultado": "OK",
+      "numeros": {
+        "http": 404
+      }
+    },
+    {
+      "rol": "mensajero",
+      "paso": "acceso",
+      "que": "/mi-wallet → no encontrado",
+      "resultado": "OK",
+      "numeros": {
+        "http": 404
+      }
+    },
+    {
+      "rol": "maestro",
+      "paso": "R47",
+      "que": "«Así queda» avisa el saldo en contra con su signo antes de confirmar (no se registró)",
+      "resultado": "OK",
+      "numeros": {
+        "asiQueda": "Así queda Antes Después Saldo de Tania Tienda Antes: ₡117.670,10 Después: -₡82.329,90 Flujo de dinero registrado ₡13.453.932,72 · no cambia Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.536.262,62 Lo que Ordenex les debe a las tiendas Antes: ₡117.670,10 Después: -₡82.329,90 Saldo inicial y aportes ₡0 · no cambia Así, Tania Tienda queda con el saldo en contra: -₡82.329,90. Le deberá ese dinero a Ordenex."
+      }
+    }
+  ],
+  "urlTrasLoginTienda": "http://localhost:3458/dashboard"
+}

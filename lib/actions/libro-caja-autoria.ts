@@ -39,7 +39,8 @@ export interface LibroCajaAutoriaDeps {
 /**
  * «A quien» y «Registro» de las filas de una pagina del libro de la caja, por sus ids.
  *
- * @sin-superficie FICHA 458-B (backend por delante del frontend): la llaman las columnas «A quien» y «Registro» del libro de la 458-E (design §5.2). Esta anotacion CADUCA con la 458-E.
+ * Superficie (458-C): «A quién» y «Registró» del panel «Ver» de una fila del libro (`VerMovimientoCaja`,
+ * una fila por lectura); la 458-E la suma a las columnas del libro (design §5.2).
  */
 export async function autoriaDelLibroCajaAction(
   input: unknown,

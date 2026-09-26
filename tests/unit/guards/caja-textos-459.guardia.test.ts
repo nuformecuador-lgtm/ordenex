@@ -192,7 +192,8 @@ function montoRellenadoEn(fuente: string): string[] {
 const IMPORTE_SUGERIDO = /\b\w*(sugerid|propuest|precalcul|estimad)\w*\b/i;
 
 describe("guardia 459 — R27: nadie propone un importe de saldo inicial", () => {
-  const DIALOGO = "app/(app)/wallet/_components/RegistrarMovimientoCajaDialog.tsx";
+  // Ficha 458-C (TC.5): el diálogo único sustituye a `RegistrarMovimientoCajaDialog`; la regla sigue.
+  const DIALOGO = "components/shared/wallet/RegistrarMovimientoDialog.tsx";
 
   it("el diálogo solo asigna al monto la cadena vacía o lo tecleado", () => {
     const fuente = readFileSync(path.join(RAIZ, DIALOGO), "utf8");

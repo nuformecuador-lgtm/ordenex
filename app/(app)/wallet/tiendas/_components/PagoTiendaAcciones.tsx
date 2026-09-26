@@ -22,7 +22,7 @@ import {
 import type { AnularPagoResult, PagoRegistradoDTO } from "@/lib/types/liquidacion";
 import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
 
-import { RegistrarMovimientoCajaDialog } from "../../_components/RegistrarMovimientoCajaDialog";
+import { RegistrarMovimientoDialog } from "@/components/shared/wallet/RegistrarMovimientoDialog";
 
 import { claveDesgloseTienda } from "./DesgloseMovimientosTienda";
 import { DESGLOSE_TIENDA_LABEL } from "./desglose-tienda-labels";
@@ -204,9 +204,9 @@ export function PagoTiendaAcciones({
         )}
         {/* FICHA 457 (R59): solo con saldo en contra; concepto y tienda fijos. */}
         {tiendaDebe ? (
-          <RegistrarMovimientoCajaDialog
+          <RegistrarMovimientoDialog
             conceptoInicial="abono_tienda"
-            tiendaFija={{ id: tiendaId, nombre: tiendaNombre }}
+            cuentaFija={{ id: tiendaId, nombre: tiendaNombre }}
             etiquetaBoton={ABONO_TIENDA_TEXTO.abrir}
             onRegistrado={refrescarEstaTienda}
           />

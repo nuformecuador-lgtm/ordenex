@@ -1,0 +1,250 @@
+{
+  "rol": "maestro",
+  "pasos": [
+    {
+      "paso": 2,
+      "que": "diez conceptos en tres grupos + enlace a plantillas",
+      "resultado": "OK",
+      "numeros": {
+        "radios": 10,
+        "grupos": [
+          "Sale dinero de Ordenex: 6",
+          "Llega dinero a la caja: 3",
+          "Se descuenta del saldo de una tienda: 1"
+        ],
+        "enlace": "/wallet#gastos-fijos"
+      }
+    },
+    {
+      "paso": 2,
+      "que": "Sueldo: pide a quién, monto, fecha, motivo, comprobante; «Así queda» cifra y ganancia bajan, tiendas y capital «no cambia»",
+      "resultado": "FALLO",
+      "numeros": {
+        "campos": [
+          "Gasto de Ordenex",
+          "Sueldo",
+          "Ordenex paga un gasto de una tienda",
+          "Corrección de caja (resta)",
+          "Ordenex le paga a una tienda",
+          "Ordenex le paga a un mensajero",
+          "Aporte de dinero a la caja",
+          "Una tienda le paga a Ordenex",
+          "Corrección de caja (suma)",
+          "Ordenex le cobra a una tienda",
+          "A quién se le pagó*",
+          "Monto*",
+          "Fecha*",
+          "Trabajador y periodo*",
+          "Referencia (opcional)",
+          "Comprobante (opcional)"
+        ],
+        "asiQueda": "Así queda Antes Después Flujo de dinero registrado Antes: ₡13.483.932,72 Después: ₡13.458.932,72 Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.311.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 · no cambia Saldo inicial y aportes ₡0 · no cambia"
+      }
+    },
+    {
+      "paso": 2,
+      "que": "registrar con un PDF: el almacenamiento local no lo guarda → R76: lo dice y NO registra nada",
+      "resultado": "OK",
+      "numeros": {
+        "aviso": "No se pudo guardar el comprobante, así que no se registró nada. Probá de nuevo.",
+        "filasEscritas": 0
+      }
+    },
+    {
+      "paso": 2,
+      "que": "registrar el sueldo (sin archivo)",
+      "resultado": "OK",
+      "numeros": {
+        "toast": "Movimiento registrado correctamente."
+      }
+    },
+    {
+      "paso": 3,
+      "que": "fila nueva: A quién = el nombre escrito; Registró = la persona; «Cómo quedó»; sin comprobante ofrece «Adjuntar comprobante» (abrirlo: no verificable en local, ver nota)",
+      "resultado": "OK",
+      "numeros": {
+        "panel": "Sueldo 2026-09-26 · Sale ₡25.000 A quién María Solano Por qué Sueldo de septiembre (recorrido 458-C, maestro) De dónde sale Sueldo · Sueldo de septiembre (recorrido 458-C, maestro) Comprobante Sin comprobante. Adjuntar comprobante Registró Maestro QA Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.458.932,72 Ganancia de Ordenex ₡13.311.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Close",
+        "ofreceAdjuntar": 1
+      }
+    },
+    {
+      "paso": 3,
+      "que": "Anular… con motivo → original tachado «Anulado» + contra-asiento; tarjetas de vuelta a su valor",
+      "resultado": "FALLO",
+      "numeros": {
+        "toast": "Anulado. Se registró el movimiento contrario.",
+        "claseFila": "border-b text-muted-foreground line-through",
+        "contraAsiento": {
+          "categoria": "ingreso_ajuste",
+          "descripcion": "Anulación de: Sueldo de septiembre (recorrido 458-C, maestro)",
+          "monto": "25000.00"
+        },
+        "tarjetasAntes": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.483.932,72 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex. Entró ₡13.524.733,22 Salió ₡40.800,50 Movimientos 36 Registros del periodo que estás viendo De las tiendas ₡147.670,10 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡13.336.262,62 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡13.377.063,12 Gastos de Ordenex ₡40.800,50 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes.",
+        "tarjetasTrasSueldo": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.458.932,72 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex. Entró ₡13.524.733,22 Salió ₡65.800,50 Movimientos 37 Registros del periodo que estás viendo De las tiendas ₡147.670,10 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡13.311.262,62 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡13.377.063,12 Gastos de Ordenex ₡65.800,50 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes.",
+        "tarjetasTrasAnular": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.483.932,72 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex. Entró ₡13.549.733,22 Salió ₡65.800,50 Movimientos 38 Registros del periodo que estás viendo De las tiendas ₡147.670,10 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡13.336.262,62 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡13.402.063,12 Gastos de Ordenex ₡65.800,50 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes."
+      }
+    },
+    {
+      "paso": 3,
+      "que": "segundo intento → «Ya estaba anulado», un solo contra-asiento",
+      "resultado": "OK",
+      "numeros": {
+        "toast": "Ya estaba anulado; no se registró nada más.",
+        "contraAsientos": 1
+      }
+    },
+    {
+      "paso": 5,
+      "que": "cobro 5.000: saldo −5.000, ganancia +5.000, «De las tiendas» −5.000, cifra principal «no cambia»",
+      "resultado": "FALLO",
+      "numeros": {
+        "asiQueda": "Así queda Antes Después Saldo de Tania Tienda Antes: ₡147.670,10 Después: ₡142.670,10 Flujo de dinero registrado ₡13.483.932,72 · no cambia Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.341.262,62 Lo que Ordenex les debe a las tiendas Antes: ₡147.670,10 Después: ₡142.670,10 Saldo inicial y aportes ₡0 · no cambia",
+        "saldoTaniaAntes": "147670.10"
+      }
+    },
+    {
+      "paso": 5,
+      "que": "tras registrar, la fila de /wallet/tiendas muestra el saldo nuevo",
+      "resultado": "OK",
+      "numeros": {
+        "toast": "Cobro registrado. El saldo de Tania Tienda queda en ₡142.670,10 · A favor.",
+        "filaTania": " Tania Tienda ₡142.670,10 A favor",
+        "saldoTaniaAntes": "147670.10",
+        "saldoTaniaDespues": "142670.10"
+      }
+    },
+    {
+      "paso": 6,
+      "que": "pago de un gasto de la tienda 10.000: cifra −10.000, «De las tiendas» −10.000, ganancia «no cambia», saldo −10.000 (+ aviso si queda en contra)",
+      "resultado": "FALLO",
+      "numeros": {
+        "asiQueda": "Así queda Antes Después Saldo de Tania Tienda Antes: ₡142.670,10 Después: ₡132.670,10 Flujo de dinero registrado Antes: ₡13.483.932,72 Después: ₡13.473.932,72 Ganancia de Ordenex ₡13.341.262,62 · no cambia Lo que Ordenex les debe a las tiendas Antes: ₡142.670,10 Después: ₡132.670,10 Saldo inicial y aportes ₡0 · no cambia"
+      }
+    },
+    {
+      "paso": 6,
+      "que": "registrar el pago de un gasto de la tienda",
+      "resultado": "OK",
+      "numeros": {
+        "toast": "Pago registrado. El saldo de Tania Tienda queda en ₡132.670,10 · A favor."
+      }
+    },
+    {
+      "paso": "llega",
+      "que": "Corrección de caja (suma): registrar con «a quién» y anular desde el panel",
+      "resultado": "OK",
+      "numeros": {
+        "asiQueda": "Así queda Antes Después Flujo de dinero registrado Antes: ₡13.473.932,72 Después: ₡13.474.932,72 Ganancia de Ordenex Antes: ₡13.341.262,62 Después: ₡13.342.262,62 Lo que Ordenex les debe a las tiendas ₡132.670,10 · no cambia Saldo inicial y aportes ₡0 · no cambia",
+        "panel": "Corrección de caja (suma) 2026-09-26 · Entra ₡1.000 A quién Cajero Por qué Sobrante al cuadrar (recorrido 458-C) De dónde sale Registrado a mano · Sobrante al cuadrar (recorrido 458-C) Comprobante Sin comprobante. Adjuntar comprobante Registró Maestro QA Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.474.932,72 Ganancia de Ordenex ₡13.342.262,62 Lo que Ordenex les debe a las tiendas ₡132.670,10 Saldo inicial y aportes ₡0 Anular… Close",
+        "toast": "Anulado. Se registró el movimiento contrario."
+      }
+    },
+    {
+      "paso": "descuenta",
+      "que": "cobro a una tienda: anular desde el panel",
+      "resultado": "OK",
+      "numeros": {
+        "toast": "Anulado. Se registró el movimiento contrario."
+      }
+    }
+  ],
+  "r7r8": [
+    {
+      "etiqueta": "antes",
+      "entro": "13524733.22",
+      "salio": "40800.50",
+      "cifra": "13483932.72",
+      "ganancia": "13336262.62",
+      "de_tiendas": "147670.10",
+      "capital": "0",
+      "suma_saldos": "147670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "etiqueta": "tras registrar el sueldo",
+      "entro": "13524733.22",
+      "salio": "65800.50",
+      "cifra": "13458932.72",
+      "ganancia": "13311262.62",
+      "de_tiendas": "147670.10",
+      "capital": "0",
+      "suma_saldos": "147670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "etiqueta": "tras anular el sueldo",
+      "entro": "13549733.22",
+      "salio": "65800.50",
+      "cifra": "13483932.72",
+      "ganancia": "13336262.62",
+      "de_tiendas": "147670.10",
+      "capital": "0",
+      "suma_saldos": "147670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "etiqueta": "tras el cobro de 5.000",
+      "entro": "13549733.22",
+      "salio": "65800.50",
+      "cifra": "13483932.72",
+      "ganancia": "13341262.62",
+      "de_tiendas": "142670.10",
+      "capital": "0",
+      "suma_saldos": "142670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "etiqueta": "tras el pago de un gasto de 10.000",
+      "entro": "13549733.22",
+      "salio": "75800.50",
+      "cifra": "13473932.72",
+      "ganancia": "13341262.62",
+      "de_tiendas": "132670.10",
+      "capital": "0",
+      "suma_saldos": "132670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "etiqueta": "tras la corrección (suma) de 1.000",
+      "entro": "13550733.22",
+      "salio": "75800.50",
+      "cifra": "13474932.72",
+      "ganancia": "13342262.62",
+      "de_tiendas": "132670.10",
+      "capital": "0",
+      "suma_saldos": "132670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "etiqueta": "tras anular la corrección",
+      "entro": "13550733.22",
+      "salio": "76800.50",
+      "cifra": "13473932.72",
+      "ganancia": "13341262.62",
+      "de_tiendas": "132670.10",
+      "capital": "0",
+      "suma_saldos": "132670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "etiqueta": "tras anular el cobro de 5.000",
+      "entro": "13550733.22",
+      "salio": "76800.50",
+      "cifra": "13473932.72",
+      "ganancia": "13336262.62",
+      "de_tiendas": "137670.10",
+      "capital": "0",
+      "suma_saldos": "137670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    }
+  ],
+  "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('section[aria-label*=\"rechazo\" i]').first().getByRole('button', { name: /^Aprobar/ }).first()\u001b[22m\n\n    at C:\\Users\\ArqDev\\AppData\\Local\\Temp\\claude\\R--job-singularis-projects-ordenex\\c79d3149-6314-4615-a08b-55e31bc5a792\\scratchpad\\pw-maestro.cjs:244:19"
+}

@@ -148,14 +148,15 @@ describe("459/F1 — el día de Costa Rica de un instante de la wallet", () => {
 });
 
 describe("459/F1 — /wallet: el libro de la caja y su descarga", () => {
-  it("la fila y el nombre accesible de «Anular…» dicen el 24, no el 25", () => {
+  // FICHA 458-C (TC.5): el botón de la fila es ahora «Ver»; su nombre accesible lleva el día CR igual.
+  it("la fila y el nombre accesible de «Ver» dicen el 24, no el 25", () => {
     envolver(<WalletLedger movimientos={[PAGO_POR_CUENTA, PAGO_A_TIENDA]} />);
     const fila = screen.getByRole("row", { name: /A Facebook · Pauta/ });
     expect(within(fila).getByText(DIA_CR)).toBeInTheDocument();
     expect(within(fila).queryByText(DIA_UTC)).toBeNull();
     expect(
       screen.getByRole("button", {
-        name: "Anular Ordenex paga un gasto de una tienda del 2026-09-24 por ₡10.000",
+        name: "Ver Ordenex paga un gasto de una tienda del 2026-09-24 por ₡10.000",
       }),
     ).toBeInTheDocument();
     // El pago de la liquidación sigue en SU día.

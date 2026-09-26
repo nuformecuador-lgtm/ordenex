@@ -168,16 +168,21 @@ describe("R31 — el concepto es una opción del filtro por categoría", () => {
 });
 
 describe("R30 — la indemnización NO ofrece reversa en el libro", () => {
-  it("su fila no trae el botón 'Reversar', y la de un gasto administrativo sí", () => {
+  // FICHA 458-C (TC.5, D11) — REESCRITO: «Reversar» salió del libro; cada fila tiene «Ver» y la
+  // anulación vive en el panel, decidida por el `documento` del SERVIDOR. La indemnización del CIERRE
+  // llega con `documento: null` (nace de un cierre, R65) y no se anula; lo mide
+  // `tests/components/WalletLedgerVer458C.test.tsx`. Aquí queda lo de la 158: ni una «Reversar» y el
+  // criterio de la 45 intacto.
+  it("ninguna fila trae 'Reversar' (D11): las dos se abren con «Ver»; el criterio de la 45 sigue", () => {
     render(
       <ToastProvider>
         <WalletLedger movimientos={[EGRESO_INDEMNIZACION, EGRESO_GASTO]} />
       </ToastProvider>,
     );
 
-    // Un solo botón de reversa en toda la tabla: el del gasto administrativo.
     const tabla = screen.getByRole("table", { name: "Libro de movimientos" });
-    expect(within(tabla).getAllByRole("button", { name: "Reversar" })).toHaveLength(1);
+    expect(within(tabla).queryAllByRole("button", { name: "Reversar" })).toHaveLength(0);
+    expect(within(tabla).getAllByRole("button", { name: /^Ver .+ del .+ por / })).toHaveLength(2);
     // Y el criterio que lo decide es el `origen_tipo`, no la categoría.
     expect(esEgresoAdministrativo(EGRESO_INDEMNIZACION)).toBe(false);
     expect(esEgresoAdministrativo(EGRESO_GASTO)).toBe(true);

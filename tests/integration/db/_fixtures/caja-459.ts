@@ -26,7 +26,12 @@ import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiend
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { AjusteCajaAnulacionRepository } from "@/lib/repositories/AjusteCajaAnulacionRepository";
 import { AbonoTiendaRepository } from "@/lib/repositories/AbonoTiendaRepository";
-import { EgresoCajaDocumentosRepository, IndemnizacionDocumentosRepository } from "@/lib/repositories/EgresoCajaDocumentosRepository";
+import {
+  EgresoCajaDocumentosRepository,
+  IndemnizacionDocumentosRepository,
+  PagoTiendaCajaDocumentosRepository,
+  PremioCajaDocumentosRepository,
+} from "@/lib/repositories/EgresoCajaDocumentosRepository";
 import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import type { AbonoTiendaTxRunner } from "@/lib/interfaces/services/IAbonoTiendaService";
 import { AbonoTiendaService } from "@/lib/services/AbonoTiendaService";
@@ -310,6 +315,9 @@ export function montarServicios459(tx: TxDeTest) {
       egresos: new EgresoCajaDocumentosRepository(c),
       indemnizaciones: new IndemnizacionDocumentosRepository(c),
       rechazos: new RechazoTiendaCobroAnulacionRepository(c),
+      // Ficha 458-C (revision B3, R71): el pago de Ordenex a una tienda y el premio del ranking.
+      pagosATienda: new PagoTiendaCajaDocumentosRepository(c),
+      premios: new PremioCajaDocumentosRepository(c),
     }),
     // Ficha 459 (T B.14) — los dos escritores nuevos, cableados como su `buildService()`.
     pagoPorCuenta: new PagoPorCuentaTiendaService(

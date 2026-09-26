@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, within, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, cleanup, within } from "@testing-library/react";
 
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 
@@ -131,126 +130,12 @@ const REVERSO = fila({
 
 const TODAS = [ABONO_VIGENTE, ABONO_SIN_COMPROBANTE, ABONO_ANULADO, REVERSO];
 
-function filaPor(texto: RegExp): HTMLElement {
-  return screen.getByRole("row", { name: texto });
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 afterEach(() => {
   cleanup();
-});
-
-describe("457/R41 — qué filas del pago ofrecen acciones", () => {
-  it("«Anular…» en los pagos VIGENTES; «Ver comprobante» solo en los que lo tienen; «Anulado» en el anulado", () => {
-    render(<WalletLedger movimientos={TODAS} />);
-
-    const vigente = filaPor(/Pago de los fletes/);
-    expect(within(vigente).getByRole("button", { name: /^Anular / })).toHaveTextContent("Anular…");
-    expect(within(vigente).getByRole("button", { name: /^Ver comprobante/ })).toBeInTheDocument();
-
-    const sinComprobante = filaPor(/Tienda Sur · Abono/);
-    expect(within(sinComprobante).getByRole("button", { name: /^Anular / })).toHaveTextContent("Anular…");
-    expect(within(sinComprobante).queryByRole("button", { name: /^Ver comprobante/ })).toBeNull();
-
-    const anulado = filaPor(/^(?!.*Anulación).*Pago equivocado/);
-    expect(within(anulado).queryByRole("button", { name: /^Anular / })).toBeNull();
-    expect(within(anulado).getByText("Anulado")).toBeInTheDocument();
-  });
-
-  it("NADA en el contra-asiento: ni botones ni «Anulado»", () => {
-    render(<WalletLedger movimientos={TODAS} />);
-    const reverso = filaPor(/Anulación · Tienda Este/);
-    expect(within(reverso).queryAllByRole("button")).toHaveLength(0);
-    expect(within(reverso).queryByText("Anulado")).toBeNull();
-  });
-
-  it("cada botón se identifica con SU fila (concepto, fecha CR, importe)", () => {
-    render(<WalletLedger movimientos={TODAS} />);
-    expect(
-      screen.getByRole("button", { name: "Anular Una tienda le paga a Ordenex del 2026-09-24 por ₡4.000" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Anular Una tienda le paga a Ordenex del 2026-09-20 por ₡150,50" }),
-    ).toBeInTheDocument();
-  });
-});
-
-describe("457/R41/R60 — anular un pago desde el libro", () => {
-  it("motivo obligatorio; manda {abonoId, motivo} SIN monto a la action del pago; el módulo relee", async () => {
-    anularAbonoMock.mockResolvedValue({
-      status: "ok",
-      saldo: { creditos: "0.00", debitos: "4000.00", saldo: "-4000.00", signo: "negativo" },
-    });
-    const onAnulado = vi.fn();
-    const user = userEvent.setup();
-    render(<WalletLedger movimientos={TODAS} onDocumentoAnulado={onAnulado} />);
-
-    await user.click(within(filaPor(/Pago de los fletes/)).getByRole("button", { name: /^Anular / }));
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Anular el pago de una tienda a Ordenex")).toBeInTheDocument();
-    const confirmar = within(dialog).getByRole("button", { name: "Anular" });
-    expect(confirmar).toBeDisabled();
-    await user.type(within(dialog).getByLabelText(/Motivo de la anulación/), "  Referencia equivocada ");
-    await user.click(confirmar);
-
-    await waitFor(() => expect(anularAbonoMock).toHaveBeenCalledTimes(1));
-    // R34: sin monto; el motivo recortado; el id es el del DOCUMENTO (el origen de la fila).
-    expect(anularAbonoMock.mock.calls[0][0]).toEqual({ abonoId: ABONO_ID, motivo: "Referencia equivocada" });
-    expect(Object.keys(anularAbonoMock.mock.calls[0][0] as object).sort()).toEqual(["abonoId", "motivo"]);
-    for (const otra of [anularCobroMock, anularPagoMock, anularAporteMock, anularAjusteMock]) {
-      expect(otra).not.toHaveBeenCalled();
-    }
-    await waitFor(() => expect(onAnulado).toHaveBeenCalledTimes(1));
-    expect(successMock).toHaveBeenCalledWith("Anulado. Se registró el movimiento contrario.");
-  }, 20000);
-
-  it("«ya estaba anulado» también cierra y relee, sin toast de error", async () => {
-    anularAbonoMock.mockResolvedValue({ status: "ya_anulado" });
-    const onAnulado = vi.fn();
-    const user = userEvent.setup();
-    render(<WalletLedger movimientos={[ABONO_VIGENTE]} onDocumentoAnulado={onAnulado} />);
-
-    await user.click(screen.getByRole("button", { name: /^Anular / }));
-    const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByLabelText(/Motivo de la anulación/), "x");
-    await user.click(within(dialog).getByRole("button", { name: "Anular" }));
-
-    await waitFor(() => expect(onAnulado).toHaveBeenCalledTimes(1));
-    expect(successMock).toHaveBeenCalledWith("Ya estaba anulado; no se registró nada más.");
-    expect(errorMock).not.toHaveBeenCalled();
-  }, 20000);
-
-  it("«no encontrado» se dice dentro del diálogo", async () => {
-    anularAbonoMock.mockResolvedValue({ status: "no_encontrado" });
-    const user = userEvent.setup();
-    render(<WalletLedger movimientos={[ABONO_VIGENTE]} onDocumentoAnulado={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /^Anular / }));
-    const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByLabelText(/Motivo de la anulación/), "x");
-    await user.click(within(dialog).getByRole("button", { name: "Anular" }));
-    expect(await within(dialog).findByText("No se encontró ese registro.")).toBeInTheDocument();
-  }, 20000);
-});
-
-describe("457/R41 — ver el comprobante del pago", () => {
-  it("pide el enlace temporal con el id del DOCUMENTO y lo abre en otra pestaña", async () => {
-    comprobanteAbonoMock.mockResolvedValue({ status: "ok", url: "https://almacen.example/firmada" });
-    const pestana = { opener: {} as unknown, location: { href: "" }, close: vi.fn() };
-    const open = vi.spyOn(window, "open").mockReturnValue(pestana as unknown as Window);
-    const user = userEvent.setup();
-    render(<WalletLedger movimientos={[ABONO_VIGENTE]} />);
-
-    await user.click(screen.getByRole("button", { name: /^Ver comprobante/ }));
-
-    await waitFor(() => expect(pestana.location.href).toBe("https://almacen.example/firmada"));
-    expect(comprobanteAbonoMock).toHaveBeenCalledWith({ abonoId: ABONO_ID });
-    expect(pestana.opener).toBeNull();
-    expect(document.body.textContent ?? "").not.toContain("almacen.example");
-    open.mockRestore();
-  });
 });
 
 const ESPERADO = [

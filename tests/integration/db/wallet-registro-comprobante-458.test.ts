@@ -152,9 +152,15 @@ describeSiHayBase("458-B/TB.11 — registros con «a quien», referencia y compr
         r.sueldo = await registrarEgresoAdministrativoAction(envioSueldo(), { getActor: async () => actor, service: egresos });
         r.sueldoOtraVez = await registrarEgresoAdministrativoAction(envioSueldo(), { getActor: async () => actor, service: egresos });
 
-        // C. Gasto como HOY (objeto, sin campos nuevos).
+        // C. Gasto como objeto, con «a quien» y sin referencia ni comprobante (458-C D5: «a quien» es
+        // obligatorio en el gasto; sin el, C2 no escribe nada).
         r.gastoDeHoy = await registrarEgresoAdministrativoAction(
-          { tipoEgreso: "gasto_variable", monto: "40.00", descripcion: "Cinta", claveIdempotencia: clave("gasto") },
+          { tipoEgreso: "gasto_variable", monto: "40.00", descripcion: "Cinta", claveIdempotencia: clave("gasto"), contraparteNombre: "Ferretería" },
+          { getActor: async () => actor, service: egresos },
+        );
+        // C2. FICHA 458-C (D5): el mismo gasto SIN «a quien» cae en el borde y no escribe NADA.
+        r.gastoSinAQuien = await registrarEgresoAdministrativoAction(
+          { tipoEgreso: "gasto_variable", monto: "41.00", descripcion: "Cinta", claveIdempotencia: clave("sinAQuien") },
           { getActor: async () => actor, service: egresos },
         );
         // D. Correccion con solo «a quien» (opcional, D5) y un campo de referencia vacio.
@@ -176,6 +182,7 @@ describeSiHayBase("458-B/TB.11 — registros con «a quien», referencia y compr
             tipoEgreso: "sueldo",
             monto: "10.00",
             descripcion: "x",
+            contraparteNombre: "Ana",
             claveIdempotencia: clave("invalido"),
             comprobante: new File(["hola"], "c.txt", { type: "text/plain" }),
           }),
@@ -190,7 +197,7 @@ describeSiHayBase("458-B/TB.11 — registros con «a quien», referencia y compr
           runTx,
         );
         r.caido = await registrarEgresoAdministrativoAction(
-          fd({ tipoEgreso: "sueldo", monto: "10.00", descripcion: "x", claveIdempotencia: clave("caido"), comprobante: png() }),
+          fd({ tipoEgreso: "sueldo", monto: "10.00", descripcion: "x", contraparteNombre: "Ana", claveIdempotencia: clave("caido"), comprobante: png() }),
           { getActor: async () => actor, service: new WalletEgresoService(cajaRepo, c, caido) },
         );
         // G. El registro NO se escribe con el objeto ya subido (la fila del comprobante viola su CHECK
@@ -241,7 +248,7 @@ describeSiHayBase("458-B/TB.11 — registros con «a quien», referencia y compr
         const movimientosPorClave: Record<string, number> = {};
         const anotaciones: Medida["anotaciones"] = {};
         const comprobantes: Medida["comprobantes"] = {};
-        for (const n of ["sueldo", "gasto", "correccion", "invalido", "caido"]) {
+        for (const n of ["sueldo", "gasto", "sinAQuien", "correccion", "invalido", "caido"]) {
           const filas = await tx.walletMovimiento.findMany({ where: { claveIdempotencia: claves[n] }, select: { id: true } });
           movimientosPorClave[n] = filas.length;
           const ids = filas.map((f) => f.id);
@@ -296,10 +303,17 @@ describeSiHayBase("458-B/TB.11 — registros con «a quien», referencia y compr
     expect(m().comprobantes.sueldo).toHaveLength(1);
   });
 
-  it("R43/R50: sin los campos nuevos el registro es el de siempre — ninguna fila lateral", () => {
+  it("R43/R50 + 458-C D5: el gasto con solo «a quien» deja su anotacion y ningun comprobante; sin «a quien» no escribe NADA", () => {
     expect(m().r.gastoDeHoy.status).toBe("ok");
-    expect(m().anotaciones.gasto).toEqual([]);
+    expect(m().anotaciones.gasto).toEqual([{ contraparteNombre: "Ferretería", referencia: null }]);
     expect(m().comprobantes.gasto).toEqual([]);
+    // D5 contra Postgres: `validation_error` en «a quien» y cero filas con esa clave.
+    expect(m().r.gastoSinAQuien).toEqual({
+      status: "validation_error",
+      fieldErrors: { contraparteNombre: ["Escribí a quién se le pagó."] },
+    });
+    expect(m().movimientosPorClave.sinAQuien).toBe(0);
+    expect(m().anotaciones.sinAQuien).toEqual([]);
     expect(m().r.pagoTiendaDeHoy.status).toBe("ok");
     expect(m().comprobantes.pagoTiendaDeHoy).toEqual([]);
   });

@@ -52,7 +52,8 @@ describe("457 R68/R69 — la oficina puede preguntar por el pago de una tienda a
       "**Una tienda le paga a Ordenex** / **Pago de una tienda a Ordenex anulado** | Lo que una tienda con saldo en contra le paga a Ordenex, y su anulación. Es dinero de la tienda: sube lo que Ordenex les debe a las tiendas",
     );
     expect(caja).toContain("**Pago de una tienda a Ordenex**");
-    expect(caja).toContain("**ocho conceptos en tres grupos**");
+    // FICHA 458-C (TC.6, R37) — REESCRITO: el registro único tiene DIEZ conceptos (impl_458-C.md).
+    expect(caja).toContain("**diez conceptos en tres grupos**");
     expect(caja).toContain(
       "**Llega dinero a la caja** | Aporte de dinero a la caja · Una tienda le paga a Ordenex · Corrección de caja (suma)",
     );

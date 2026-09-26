@@ -759,7 +759,8 @@ const ENCABEZADOS_ANTERIORES = [
   "Categoría",
   "Monto",
   "Origen",
-  "Acciones",
+  // FICHA 458-C (TC.5): la columna de acciones pasa a «Ver» (contrato nuevo, listado en impl_458-C.md).
+  "Ver",
 ] as const;
 
 describe("Feature 231 · el libro dice de quién es cada movimiento", () => {
@@ -790,7 +791,7 @@ describe("Feature 231 · el libro dice de quién es cada movimiento", () => {
     expect(encabezados[0]).toBe("Desglose");
     expect(encabezados).toHaveLength(ENCABEZADOS_ANTERIORES.length + 1 + COLUMNA_DE_DESGLOSE);
     expect(encabezados).toContain("Dueño");
-    expect(encabezados.indexOf("Dueño")).toBe(encabezados.indexOf("Acciones") - 1);
+    expect(encabezados.indexOf("Dueño")).toBe(encabezados.indexOf("Ver") - 1);
   });
 
   it("R34: la descarga trae «Dueño» con el mismo texto que muestra la tabla", async () => {

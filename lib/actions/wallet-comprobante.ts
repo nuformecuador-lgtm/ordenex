@@ -73,7 +73,7 @@ function crudoDelFormData(formData: FormData): Record<string, unknown> {
  * D6/R79 — adjunta el comprobante a un movimiento que no lo tiene. `FormData`: `destino` (JSON del
  * destino, el mismo de la anulacion) y `comprobante` (File).
  *
- * @sin-superficie FICHA 458-B (backend por delante del frontend): la llama el panel «Ver» de la 458-C (design §4.1, D6). Esta anotacion CADUCA con la 458-C.
+ * Superficie (458-C): «Adjuntar comprobante» del panel «Ver» (`components/shared/wallet/DetalleMovimientoPanel.tsx`).
  */
 export async function adjuntarComprobanteAction(
   formData: FormData,
@@ -93,7 +93,7 @@ export async function adjuntarComprobanteAction(
 /**
  * R77/R78/R80 — el enlace temporal del comprobante de un destino, con su rotulo. Nunca la ruta.
  *
- * @sin-superficie FICHA 458-B (backend por delante del frontend): la llaman el panel «Ver» (458-C) y los estados de cuenta y `/mi-wallet` (458-D). Esta anotacion CADUCA con la 458-C.
+ * Superficie (458-C): «Ver comprobante» del panel «Ver» (`DetalleMovimientoPanel`); la 458-D la suma a los estados de cuenta y a `/mi-wallet`.
  */
 export async function verComprobanteAction(
   input: unknown,

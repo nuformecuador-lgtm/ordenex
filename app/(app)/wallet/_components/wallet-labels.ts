@@ -296,6 +296,9 @@ export const DOCUMENTO_CAJA_NOMBRE: Record<
   egreso_caja: "el gasto de la caja",
   indemnizacion: "la indemnización por un incidente",
   rechazo_tienda_cobro: "el cobro por rechazo a una tienda",
+  // Ficha 458-C (revision B3): el pago de Ordenex a una tienda (172) y el premio del ranking (293).
+  pago_tienda: "el pago de Ordenex a una tienda",
+  premio_del_ranking: "el premio del ranking",
 };
 
 /**
@@ -343,15 +346,6 @@ export const ANULAR_DOCUMENTO_CAJA_RESPUESTA = {
     `Este cobro no se puede anular desde aquí: ${MOTIVO_NO_ANULABLE_LABEL[motivo]}.`,
 } as const;
 
-/**
- * Feature 45 (R22c) y auditoria de la wallet P3 (ficha 461) — las acciones de la reversa de un gasto o
- * sueldo registrado a mano. «Reversado» es lo que se lee en la fila cuyo egreso YA tiene su reverso,
- * en vez de un boton que solo puede responder «ya tenia su reversa».
- */
-export const REVERSA_EGRESO_ACCION = {
-  reversar: "Reversar",
-  reversado: "Reversado",
-} as const;
 
 export const VER_COMPROBANTE_RESPUESTA = {
   sinComprobante: "Este registro no tiene comprobante.",

@@ -55,6 +55,11 @@ vi.mock("@/lib/actions/usuarios-por-rol", () => ({
   listarAdminTiendas: (...a: unknown[]) => listarTiendasMock(...a),
 }));
 
+// 458-C: el diálogo único pide «Así queda» al servidor; aquí no se mide (vive en su test propio).
+vi.mock("@/lib/actions/efecto-movimiento", () => ({
+  previsualizarMovimientoAction: vi.fn(async () => ({ status: "forbidden" })),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
@@ -174,12 +179,14 @@ describe("457/R59 — abre el MISMO diálogo con el concepto y la tienda fijos",
     fireEvent.click(await within(region).findByRole("button", { name: BOTON }));
     const dialogo = await screen.findByRole("dialog");
 
-    const concepto = within(dialogo).getByRole("combobox", { name: "Concepto del movimiento" });
-    expect(concepto).toBeDisabled();
-    expect(concepto.textContent).toContain("Una tienda le paga a Ordenex");
-    const tienda = within(dialogo).getByRole("combobox", { name: "Tienda que paga" });
+    // 458-C (TC.5): el MISMO diálogo es ahora el registro único; el concepto es un radio del
+    // catálogo (elegido y deshabilitado) y la tienda fija se lee por su nombre, deshabilitada.
+    const concepto = within(dialogo).getByRole("radio", { name: "Una tienda le paga a Ordenex" });
+    expect(concepto).toBeChecked();
+    expect(concepto).toHaveAttribute("aria-disabled", "true");
+    const tienda = within(dialogo).getByLabelText(/^Tienda que paga/) as HTMLInputElement;
     expect(tienda).toBeDisabled();
-    expect(tienda.textContent).toContain("Tienda Norte");
+    expect(tienda.value).toBe("Tienda Norte");
     expect(
       within(dialogo).getByText(
         "Llega dinero de la tienda a la caja: paga lo que debe y su saldo sube; la ganancia de Ordenex no cambia.",
@@ -197,8 +204,8 @@ describe("457/R59 — abre el MISMO diálogo con el concepto y la tienda fijos",
     const region = await desplegar("Tienda Norte");
     await user.click(await within(region).findByRole("button", { name: BOTON }));
     const dialogo = await screen.findByRole("dialog");
-    await user.type(within(dialogo).getByLabelText("Monto"), "4000.00");
-    await user.type(within(dialogo).getByLabelText("Motivo del pago"), "Pago de los fletes");
+    await user.type(within(dialogo).getByLabelText(/^Monto/), "4000.00");
+    await user.type(within(dialogo).getByLabelText(/^Motivo del pago/), "Pago de los fletes");
     await user.click(within(dialogo).getByRole("combobox", { name: "Método de pago" }));
     await user.click(within(await screen.findByRole("listbox")).getByRole("option", { name: "Efectivo" }));
 

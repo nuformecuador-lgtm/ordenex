@@ -205,11 +205,11 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
 
 ## 458-C — Registrar un movimiento y panel «Ver» (fullstack) · depende de 458-A, 458-B y 457 en `dev`
 
-- [ ] **TC.0** Confirmar en `dev`: nombres finales de las actions de la 457 (`registrarAbonoTiendaAction`,
+- [x] **TC.0** Confirmar en `dev`: nombres finales de las actions de la 457 (`registrarAbonoTiendaAction`,
   `anularAbonoTiendaAction`, `obtenerComprobanteAbonoAction`) y sus textos reservados; el test de la 461
   que fija «siete conceptos» (se reescribe aquí con la lista nueva como contrato y se lista con R37).
   *Hecho:* nota en `progress/impl_458-C.md`.
-- [ ] **TC.1** `components/shared/wallet/RegistrarMovimientoDialog`: catálogo `Record` total por
+- [x] **TC.1** `components/shared/wallet/RegistrarMovimientoDialog`: catálogo `Record` total por
   concepto en los tres grupos de la 461 (+ pago a tienda, pago a mensajero, «Una tienda le paga a
   Ordenex») + enlace a plantillas; campos por concepto; frase de efecto (siete de la 461 byte a byte;
   tres nuevas); `fraseDelLibro` para los diez; payload/`FormData` solo con sus claves; clave al
@@ -222,11 +222,11 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   gasto de Ordenex (`lib/types/wallet-laterales.ts`) porque el diálogo de hoy no lo manda. La 458-C
   DEBE exigir «a quién» en el diálogo para esos dos conceptos, con su test; y al retirarse
   `RegistrarMovimientoCajaDialog`, el servidor pasa a exigirlo también (schema + test del borde).
-- [ ] **TC.2** «Así queda» en el diálogo: pide la previsualización con retardo, estados cargando y
+- [x] **TC.2** «Así queda» en el diálogo: pide la previsualización con retardo, estados cargando y
   error sin cifras, «no cambia» por línea, aviso de saldo en contra, tope del pago decidido por el
   servidor. *Hecho:* tests de R44–R47; barrido money-safe sin `Number(`/`parseFloat(` en la carpeta
   (R90).
-- [ ] **TC.3** [P] Campo de comprobante en el formulario (tipo y tamaño avisados antes de enviar con
+- [x] **TC.3** [P] Campo de comprobante en el formulario (tipo y tamaño avisados antes de enviar con
   `problemaDeComprobante`; el servidor decide) y «Adjuntar comprobante» en el panel para filas sin
   él. *Hecho:* `wallet-comprobante-campo.test.tsx` (R74–R76, R79, R80).
   **Heredado de la 458-B (revisión M1/m6):** desde el cierre de la 458-B el servidor dice la verdad en
@@ -237,21 +237,34 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   `verComprobanteAction({ destino })`. Hoy no se ve (ningún diálogo manda el archivo aún). Y
   `adjuntarComprobanteAction` responde `no_admite` con `motivo: "anulado"` en un movimiento anulado:
   la pantalla no debe ofrecer «Adjuntar» ahí y tiene que traducir ese motivo.
-- [ ] **TC.4** `components/shared/wallet/DetalleMovimientoPanel` (Sheet: quién, por qué, cómo,
+- [x] **TC.4** `components/shared/wallet/DetalleMovimientoPanel` (Sheet: quién, por qué, cómo,
   comprobante con rótulo legible, registró, estado de anulación, «Cómo quedó», «Anular…» /
   «Anulado», texto del cobro por rechazo R100) + `AnularMovimientoDialog` (molde `AnularPagoDialog`;
   «Ya estaba anulado»; `no_anulable` legible). *Hecho:* `DetalleMovimientoPanel.test.tsx`,
   `AnularMovimientoDialog.test.tsx` (R58, R63–R67, R71, R100).
-- [ ] **TC.5** Sustituir `RegistrarMovimientoCajaDialog` en `/wallet` y enchufar «Ver» + panel en el
+- [x] **TC.5** Sustituir `RegistrarMovimientoCajaDialog` en `/wallet` y enchufar «Ver» + panel en el
   libro ACTUAL (`WalletLedger`: la columna de acciones pasa a «Ver»; fuera «Reversar» y su `Modal`;
   `DocumentoCajaAcciones` absorbido por el panel). *Hecho:* `wallet-page.test.tsx` verde; el efecto de
   cada concepto en la fotografía idéntico (R50); tests retirados listados.
-- [ ] **TC.6** Ayuda y asistente: `docs/ayuda/oficina/wallet-caja.md` (registrar un movimiento: diez
+- [x] **TC.6** Ayuda y asistente: `docs/ayuda/oficina/wallet-caja.md` (registrar un movimiento: diez
   conceptos, «Así queda», comprobante; «Ver» y «Anular…» uniformes); `contexto-458.test.ts` bloque C;
   cuatro preguntas reales. *Hecho:* frases literales por rol; respuestas anotadas (R102, R103).
-- [ ] **TC.7** Recorrido pasos 2, 3, 5, 6, 7 de §10 + adminTienda/mensajero con las actions →
+- [x] **TC.7** Recorrido pasos 2, 3, 5, 6, 7 de §10 + adminTienda/mensajero con las actions →
   `forbidden`; fotografías verdes; gate rápido; revisión. *Hecho:* `progress/recorrido_458-C/`;
   `INIT_EXIT=0`; `progress/impl_458-C.md` (R104).
+- [x] **TC.8** Cierre tras la revisión RECHAZADA (`progress/review_458-C.md`: B1, B2, B3, M1, M2, M3).
+  *Hecho:* `progress/impl_458-C.md` §«Cierre tras la revisión» (qué se arregló, test y mutación de cada
+  punto, bitácora de sustitutos corregida); build y gate completo sobre HEAD
+  (`progress/build_458C_cierre.log`, `progress/gate_458C_cierre.log`, `INIT_EXIT` dentro del log).
+  **Servidor tocado (mínimo, solo lectura; autorizado por el leader para B3/M1):** `DocumentoCajaDTO` gana
+  `pago_tienda` y `premio_del_ranking` (dos lectores nuevos en `LectoresDocumentosCaja`) y
+  `AutoriaDeFilaDTO` gana `como` y `anulacion`; test contra Postgres `libro-caja-revision-458c.test.ts`.
+  **Queda para TE.3 (458-E), con los R que arrastra:** el INSTANTE de registro en el panel del libro de la
+  caja (R58: hoy se pinta el día del movimiento, no el `created_at`); `reversarEgresoAdministrativoAction`
+  sin superficie y sin motivo (revisión m3: retirarla es servidor); m7 (pagar desde el diálogo a una tienda
+  o un mensajero INACTIVO con saldo, R41: sigue posible desde `/wallet/tiendas`). Los
+  `obtenerComprobante{Abono,AporteCapital,PagoPorCuenta}Action` con `@sin-superficie` son deuda de TD.5
+  (458-D), no una decisión (revisión m4).
 
 ## 458-D — Estados de cuenta y «Mi wallet» (fullstack) · depende de 458-C · [P] con 458-E
 

@@ -46,7 +46,7 @@ export interface ComoQuedoDeps {
 /**
  * R58 — la caja y la cuenta afectada tras un movimiento.
  *
- * @sin-superficie FICHA 458-B (backend por delante del frontend): la llama el panel «Ver» (`DetalleMovimientoPanel`) de la 458-C (design §3.7). Esta anotacion CADUCA con la 458-C.
+ * Superficie (458-C): «Cómo quedó» del panel «Ver» (`components/shared/wallet/DetalleMovimientoPanel.tsx`).
  */
 export async function comoQuedoAction(input: unknown, deps: ComoQuedoDeps = {}): Promise<ComoQuedoResult> {
   const r = await withErrorHandler(async () => {

@@ -110,7 +110,7 @@ describeSiHayBase("458-B/TB.10 — comprobante lateral: una vez, a su destino, y
         // El sueldo del escenario esta reversado: se registra uno nuevo por su action real.
         const claveSueldo = randomUUID();
         const nuevoSueldo = await registrarEgresoAdministrativoAction(
-          { tipoEgreso: "sueldo", monto: "25.00", descripcion: "Sueldo sin anular", claveIdempotencia: claveSueldo },
+          { tipoEgreso: "sueldo", monto: "25.00", descripcion: "Sueldo sin anular", claveIdempotencia: claveSueldo, contraparteNombre: "Ana" },
           { getActor: async () => esc.maestro, service: s.egresos },
         );
         if (nuevoSueldo.status !== "ok") throw new Error(`sueldo: ${JSON.stringify(nuevoSueldo)}`);

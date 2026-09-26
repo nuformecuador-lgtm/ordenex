@@ -542,7 +542,7 @@ describe("WalletPage — un solo control para mover dinero a mano (R1/R2)", () =
   it("la wallet ofrece un solo botón para registrar dinero", async () => {
     await pintarLaWalletEntera();
 
-    const botones = screen.getAllByRole("button", { name: "Registrar movimiento" });
+    const botones = screen.getAllByRole("button", { name: "Registrar un movimiento" });
     expect(botones).toHaveLength(1);
   });
 
@@ -565,7 +565,7 @@ describe("WalletPage — un solo control para mover dinero a mano (R1/R2)", () =
       .getAllByRole("button")
       .filter((b) => (b.textContent ?? "").trim().startsWith("Registrar"));
     expect(registradores.map((b) => (b.textContent ?? "").trim())).toEqual([
-      "Registrar movimiento",
+      "Registrar un movimiento", // 458-C (R37): el diálogo único se llama así
     ]);
   });
 });
