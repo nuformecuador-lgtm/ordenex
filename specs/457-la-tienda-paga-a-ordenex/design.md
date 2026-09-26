@@ -467,8 +467,10 @@ paga a Ordenex».» (R57).
 - `formDataAbono()` arma SOLO sus claves (R56): `claveIdempotencia`, `tiendaId`, `monto`, `metodo`,
   `referencia` (si `pideReferencia`), `motivo`, `fechaPago`, `comprobante` (si hay). Ningún otro
   `FormData`/payload cambia.
-- `registrar()`: `registrarAbonoTiendaAction(formDataAbono())` → `ok`/`ya_registrado` → éxito con
-  `TEXTO_ABONO.registrado(res.abono.tiendaNombre, res.saldo)` (R57); `sin_deuda` →
+- `registrar()`: `registrarAbonoTiendaAction(formDataAbono())` → `ok` → éxito con
+  `TEXTO_ABONO.registrado(res.abono.tiendaNombre, res.saldo)` (R57); `ya_registrado` → éxito con
+  `TEXTO_ABONO.yaRegistrado(res.abono.tiendaNombre, res.abono.monto, res.saldo)` (m7 de la revisión,
+  2026-09-26: el importe es el del pago que QUEDÓ, por si el usuario cambió la cifra antes de reintentar); `sin_deuda` →
   `validation_error { tiendaId: [TEXTO_ABONO.sinDeuda] }`; `excede` → `{ monto:
   [TEXTO_ABONO.excede(money(res.deuda))] }` (R58; el importe viene del servidor); `comprobante_no_guardado`
   → aviso general existente.
@@ -477,7 +479,8 @@ paga a Ordenex».» (R57).
   tienda no tiene saldo en contra: no hay nada que pagar.» · `excede(deuda)` «La tienda debe {deuda}: el
   pago no puede superar ese importe.» · `registrado(tienda, saldo)` «Pago registrado. El saldo de
   {tienda} queda en {money(saldo.saldo)} · {SALDO_SIGNO_LABEL[saldo.signo]}.» + si `negativo` « La tienda
-  todavía le debe ese dinero a Ordenex.» (R57).
+  todavía le debe ese dinero a Ordenex.» (R57) · `yaRegistrado(tienda, monto, saldo)` «Este pago ya
+  estaba registrado, por {money(monto)}. El saldo de {tienda} queda en …» con la misma cola (m7).
 - **Props nuevas (D8):** `conceptoInicial?: ConceptoManualId` (defecto: el primero del catálogo),
   `tiendaFija?: { id: string; nombre: string }` (con ella el selector de concepto queda deshabilitado en
   `conceptoInicial`, el campo de la tienda muestra el nombre sin catálogo ni SWR y `tiendaId` es el

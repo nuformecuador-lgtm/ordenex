@@ -1588,8 +1588,13 @@ describe("⭑ FICHA 457 — el pago de una tienda a Ordenex en el diálogo (R54�
     expect(texto).not.toMatch(/debe/);
   }, 30000);
 
-  it("R25/R57: `ya_registrado` (doble envío) es UN solo aviso de éxito, sin toast de error", async () => {
-    registrarAbonoMock.mockResolvedValue({ ...ABONO_OK_NEGATIVO, status: "ya_registrado" });
+  it("R25/R57 + m7: `ya_registrado` (doble envío) es UN solo aviso de éxito, sin toast de error, y dice el importe que QUEDÓ", async () => {
+    // El original quedó por 2.500 y el usuario reintentó con otra cifra: el aviso dice la del SERVIDOR.
+    registrarAbonoMock.mockResolvedValue({
+      ...ABONO_OK_NEGATIVO,
+      status: "ya_registrado",
+      abono: { ...ABONO_OK_NEGATIVO.abono, monto: "2500.00" },
+    });
     const { user, dialog } = await abrirDialogo();
     await elegirAbono(user, dialog);
     await rellenarAbono(user, dialog);
@@ -1597,7 +1602,7 @@ describe("⭑ FICHA 457 — el pago de una tienda a Ordenex en el diálogo (R54�
 
     await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
     expect(successMock).toHaveBeenCalledWith(
-      "Pago registrado. El saldo de Tienda Norte queda en -₡6.000 · En contra. La tienda todavía le debe ese dinero a Ordenex.",
+      "Este pago ya estaba registrado, por ₡2.500. El saldo de Tienda Norte queda en -₡6.000 · En contra. La tienda todavía le debe ese dinero a Ordenex.",
     );
     expect(errorMock).not.toHaveBeenCalled();
   }, 30000);

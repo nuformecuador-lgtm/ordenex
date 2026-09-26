@@ -175,10 +175,22 @@ const TEXTO_ABONO = {
   /** R58 — `excede`, bajo el monto, con la deuda que devolvió el SERVIDOR ya formateada. */
   excede: (deuda: string) => `La tienda debe ${deuda}: el pago no puede superar ese importe.`,
   /** R57 — el saldo del SERVIDOR con su signo; si sigue en contra, en palabras. */
-  registrado: (tienda: string, saldo: SaldoTiendaDTO) =>
-    `Pago registrado. El saldo de ${tienda} queda en ${money(saldo.saldo)} · ${SALDO_SIGNO_LABEL[saldo.signo]}.` +
-    (saldo.signo === "negativo" ? " La tienda todavía le debe ese dinero a Ordenex." : ""),
+  registrado: (tienda: string, saldo: SaldoTiendaDTO) => `Pago registrado. ${fraseSaldoAbono(tienda, saldo)}`,
+  /**
+   * m7 de la revisión — `ya_registrado`: la clave ya tenía un pago. Dice el importe del pago que QUEDÓ
+   * (el del servidor), porque si el usuario cambió la cifra antes de reintentar, la suya no se registró.
+   */
+  yaRegistrado: (tienda: string, monto: string, saldo: SaldoTiendaDTO) =>
+    `Este pago ya estaba registrado, por ${money(monto)}. ${fraseSaldoAbono(tienda, saldo)}`,
 } as const;
+
+/** R57 — el saldo del SERVIDOR con su signo; si sigue en contra, en palabras. */
+function fraseSaldoAbono(tienda: string, saldo: SaldoTiendaDTO): string {
+  return (
+    `El saldo de ${tienda} queda en ${money(saldo.saldo)} · ${SALDO_SIGNO_LABEL[saldo.signo]}.` +
+    (saldo.signo === "negativo" ? " La tienda todavía le debe ese dinero a Ordenex." : "")
+  );
+}
 
 /** El texto del botón que abre el diálogo cuando nadie lo cambia (D8 de la 457). */
 const ETIQUETA_BOTON_POR_DEFECTO = "Registrar movimiento";
@@ -510,11 +522,15 @@ export function RegistrarMovimientoCajaDialog({
 
     if (destino.clase === "abono_tienda") {
       const res = await registrarAbonoTiendaAction(formDataAbono());
-      // R25/R57: `ya_registrado` = el doble envío devolvió el pago ORIGINAL; es un éxito, un aviso.
-      if (res.status === "ok" || res.status === "ya_registrado") {
+      if (res.status === "ok") {
+        return { status: "ok", mensajeExito: TEXTO_ABONO.registrado(res.abono.tiendaNombre, res.saldo) };
+      }
+      // R25/R57: `ya_registrado` = el doble envío devolvió el pago ORIGINAL; es un éxito, un aviso, y
+      // dice el importe que quedó (m7).
+      if (res.status === "ya_registrado") {
         return {
           status: "ok",
-          mensajeExito: TEXTO_ABONO.registrado(res.abono.tiendaNombre, res.saldo),
+          mensajeExito: TEXTO_ABONO.yaRegistrado(res.abono.tiendaNombre, res.abono.monto, res.saldo),
         };
       }
       // R58: el motivo bajo SU campo, con el importe del SERVIDOR (sin recalcular nada aquí).
