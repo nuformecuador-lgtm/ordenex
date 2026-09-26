@@ -460,45 +460,213 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 > Se rellena cuando una ficha deja una comprobación que **sólo** se puede hacer desplegando. Se
 > vacía al ejecutarla. Si esta sección tiene entradas, **la release no está terminada** aunque el
 > despliegue esté verde.
+>
+> **Consolidada el 2026-09-26** en UNA lista ordenada, sin duplicados, a partir de: las notas de
+> release de `progress/impl_457.md`, `impl_458-A.md`, `impl_458-B.md` e `impl_461.md`; los
+> contrastes `progress/contraste_459.md`, `contraste_461.md` y `contraste_457.md`; las `status_note`
+> de `feature_list.json` (429–436, 454–462), y las secciones de release de cada spec (429 Fase 8/8-bis,
+> 431 puerta de despliegue, 436 Fase 10, 454/455 FASE 5, 456 FASE 6, 457 §14, 458 §14 y «Lo que hace el
+> LEADER», 459 §11, 461 §13, 462 Fase 5). Lo que venía de releases anteriores y **no** es de esta
+> (450, 284, 264, 262, 265) sigue abajo, en el **Anexo**, con su detalle intacto; la lista lo cita
+> en el paso que toca.
+>
+> **Plan de pruebas por rol en preview:** `progress/plan_pruebas_release.md`.
 
-### De la 461 — `pnpm run db:rollback` revierte siempre el ÚLTIMO directorio (herramienta; no bloquea)
+### Qué lleva esta release
 
-> Hallazgo H4 de `progress/review_461.md` (2026-09-25). Es una limitación PREVIA de
-> `scripts/db-rollback.ts` (viene de la ficha 53), no de la 461, y **aquí no se arregla**: se deja
-> escrito para que, si una release hay que deshacerla, nadie cuente con un rollback en cadena que no
-> existe. Aplica a cualquier ficha que traiga más de una migración.
+Medido el 2026-09-26 sobre `origin/dev` = `8b44476e` y `origin/prod` = `3965b568`:
+`git log origin/prod..origin/dev` = **489 commits**, y `origin/prod` **es ancestro** de `origin/dev`
+(`git rev-list --count origin/dev..origin/prod` = 0). El merge `dev` → `prod` no debería dar
+conflictos.
 
-- **Qué hace el script.** `getLastMigrationDir()` lista `db/migrations/`, ordena por nombre y toma el
-  **último directorio**; ejecuta su `down.sql` y borra su fila de `_prisma_migrations`. No mira qué
-  migración está APLICADA en la base ni acepta un nombre por argumento.
-- **Consecuencia, medida por el reviewer en un clon con las seis de la 461 aplicadas.** Seis
-  invocaciones seguidas revirtieron **seis veces la misma** (`20260926120500_wallet_461_fechas_cr_pagos`,
-  `ROLLBACK_1..6_EXIT=0`) y dejaron intactas la 1 a la 5. Como los `down` de la 461 son idempotentes,
-  encima sale «verde»: el modo de fallo mudo que este repo persigue.
-- **Cómo deshacer VARIAS.** A mano, una por una y en orden inverso al de aplicación, con su `down.sql`:
-  `pnpm exec prisma db execute --file db/migrations/<nombre>/down.sql` y después
-  `DELETE FROM "_prisma_migrations" WHERE migration_name = '<nombre>'`; repetir con la anterior. Para la
-  461 son seis, de la `…120500` a la `…120000`; los `down` de la 1, la 2 y la 5 **abortan sin borrar** si
-  hay filas que usen lo suyo (R62), y eso es lo esperado, no un fallo del rollback.
-- **Deuda para quien la tome (fuera de la 461).** Que el script elija la última migración **aplicada**
-  (`_prisma_migrations`) o acepte el nombre por argumento.
+| Bloque | Fichas | Migraciones |
+| --- | --- | --- |
+| SF-001 | 429, 430, 431, 432, 433, 434, 435, 436 | 6 (`20260918120000` … `20260920120000`) |
+| Estados | 454, 455, 456 (+ 460, ayuda y asistente) | 6 (`20260923120000` … `20260924120200`) |
+| Caja y wallet | 459, 461, 457, 458-A, 458-B | 14 (`20260925120000` … `20260925120300`, `20260926120000` … `20260926120500`, `20260927120000/120100`, `20260928120000/120100`) |
+| Aviso de las 7 | 462 | 1 (`20260925130000`) |
+| **458-C / 458-D / 458-E** | **pendiente 458-C/D/E** — la C está en curso en `feature/458-C`; D y E no han empezado. El humano decidió (2026-09-25) que el rediseño entra entero en esta release | **pendiente 458-C/D/E** |
 
-### De la 459 — la caja con el dinero real (DINERO: bloqueante)
+**Total hoy: 27 migraciones pendientes en producción** (las de `dev` posteriores a
+`20260917120200_cierre_rechazo_tienda`, menos `20260921120000_vista_filtro`, que ya salió el
+2026-09-21). Producción tenía **200** aplicadas tras la última release; se esperan **227** + las de la
+458-C/D/E.
 
-1. **Antes de desplegar:** crear el bucket PRIVADO `wallet-comprobantes` en preview y en producción (hoy no
-   existe en ninguno; `progress/medicion_457.md` M5). Sin él, todo registro con comprobante se rechaza.
-2. **Tras desplegar, en este orden y sin saltar (R91):** contraste C0–C2, C5 y C7 de
-   `specs/459-la-caja-muestra-el-dinero-real/design.md` §11 por el MCP, en solo lectura, después de cada
-   bloque (A: la fórmula; B: los tipos y tablas; C: la reclasificación de los 203). Se anota en
-   `progress/contraste_459.md`. **Cualquier diferencia distinta de 0,00, o C2 con filas, detiene la release.**
-3. **Esperado tras C:** la cifra principal −9.186.220,50 («Flujo de dinero registrado»); «De las tiendas»
-   = Σ saldos (−4.780.583,97 en la línea base); ganancia sin cambio; 203 filas y 25.769.034,50 reclasificados.
-   Producción se mueve cada día: vale la IGUALDAD, no los números exactos.
-4. La migración de reclasificación solo actúa en la base donde existen esos ids (producción). En preview no
-   escribe nada: es lo esperado.
-5. Errores de runtime en la hora siguiente al despliegue: 0 (memoria «diagnosticar prod con los logs de Vercel»).
+> Los PR #807–#815 (437–446 y 449) salen en `git log origin/prod..origin/dev` pero **ya están en
+> producción**: salieron por `cherry-pick` el 2026-09-17 (§2 bis), byte a byte idénticos. No son
+> contenido nuevo.
 
-### De la 450 — la advertencia de `pg` en los logs de Vercel
+**Leyenda.** *Quién*: **L** = el leader (agente con los MCP de Supabase y Vercel, solo lectura salvo
+que se diga), **H** = el humano (Carlos). *Detiene*: **sí** = si falla o falta, no se despliega (o, si
+ya se desplegó, se para y se diagnostica antes de seguir).
+
+### A · Antes de abrir el PR (en este orden)
+
+| # | Paso | Quién | Cómo se verifica | Detiene |
+| --- | --- | --- | --- | --- |
+| A1 | **Decisiones del humano cerradas** (bloque D de abajo): el modal del SINPE, la guía de la API a los integradores, la hora, y el visto bueno de la nota «Ayuda solicitada a la tienda» (456). | H | Cada una con su respuesta escrita en la nota de la release. | sí |
+| A2 | **pendiente 458-C/D/E** — las tres hijas en `dev`, con revisión aprobada, recorrido y gate post-merge verde; sus notas de release (migraciones, SQL, pasos) incorporadas a esta lista en su hueco. | L | `git log origin/prod..origin/dev` contiene sus PR; esta lista ya no dice «pendiente 458-C/D/E». | sí (decisión del humano: el rediseño entra entero) |
+| A3 | **Leer entera la `status_note` de toda ficha `in_progress` que entra** (hoy: la 458). Una ficha abierta esconde deuda del tipo «repetir antes de desplegar». | L | Anotado qué se sacó de ella. | sí, si esconde un paso no listado aquí |
+| A4 | **Crear el bucket PRIVADO `wallet-comprobantes`** en el Supabase de **preview** y en el de **producción**. Hoy no existe en ninguno (`progress/medicion_457.md` M5; `contraste_457.md` M5; en producción, `GET /storage/v1/bucket/wallet-comprobantes` → `NoSuchBucket`, `recorrido_457.md`). Sin él, todo registro con comprobante se rechaza («No se pudo guardar el comprobante…»). ⚠️ `impl_458-B.md` dice «el bucket ya existe (459)»: **es falso**, se refiere a que lo crea el paso de la 459. | H (es escribir en producción) | Producción: `SELECT id, public FROM storage.buckets WHERE id = 'wallet-comprobantes'` por el MCP → 1 fila, `public = false`. Preview: el MCP está fijado al ref de producción (memoria «preview no es verificable por MCP»), así que se verifica **en la app**: registrar en preview un movimiento con comprobante y abrirlo (plan de pruebas). | sí |
+| A5 | **Variables de entorno en Vercel**, proyecto **`ordenex`** (no `ordenex-app`, que es otro repo): (a) **`ANTHROPIC_API_KEY`** en Production y en Preview **como dos variables separadas**, nunca una marcada en los dos entornos (436 T25/Q7; memoria «separar env vars por entorno»); (b) **`NEXT_PUBLIC_SINPE_NUMERO`** y **`NEXT_PUBLIC_SINPE_NOMBRE`** siguen en Production: la siembra automática de la 432 las lee (no se retiran hasta C16); (c) **`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`** en Production (el push de la 462). | H (la clave) · L (comprobar) | `vercel env ls production` y `vercel env ls preview`: cada variable aparece en el entorno que toca, y `ANTHROPIC_API_KEY` aparece en los dos **como filas distintas**. | sí (a y b); (c) solo deja sin push a la 462 |
+| A6 | **`dev` NO está rojo.** El último gate completo de `dev` (`progress/gate_dev_tras_829.log`, tras la 458-B) **terminó `INIT_EXIT=1`**: 1 rojo, el deadlock `40P01` de `liquidacion-reparto-migration` «205 / bloque B» (verde aislado 3/3, `progress/rerun_dev_829_aislado.log`) y **35 skipped** en vez de los 26 de siempre. Eso no vale como pre-vuelo. Hace falta `./init.sh` **completo** (nunca `--rapido`) sobre el SHA exacto que se va a desplegar: `{ ./init.sh; echo "INIT_EXIT=$?"; } > progress/gate_release_<fecha>.log 2>&1`. | L | `INIT_EXIT=0` **dentro** del log; `skipped` = los 26 de `AnaliticaPage`/`AnaliticaShell` y **0 en `tests/integration/db`**. Un rojo de flake conocido (ver «Riesgos conocidos» R5) se repite aislado 3/3 **y** se repite el gate completo: se despliega sobre una corrida verde, no sobre una explicación. | sí |
+| A7 | **El pre-vuelo caduca.** Justo antes de abrir el PR, comparar el SHA medido en A6 con `origin/dev`: otra sesión empuja en paralelo. | L | `git rev-parse origin/dev` = SHA del log de A6. Si difiere, se repite A6. | sí |
+| A8 | **El orden de migraciones** (ver el recuadro de abajo): comprobar en producción qué está aplicado y que lo pendiente es exactamente la lista esperada. | L | `list_migrations` por el MCP: 200 aplicadas, la última `20260921120000_vista_filtro`, **0** fallidas o revertidas; las pendientes = las 27 de la lista (+ las de la 458-C/D/E). | sí |
+| A9 | **Mediciones previas en SOLO LECTURA** (MCP de Supabase), cada una anotada con fecha y hora en su archivo. Son fotos: se toman **el día de la release**, no se citan las de días anteriores. Detalle en el recuadro de abajo. | L | Cada archivo `progress/contraste_*.md` tiene su bloque «ANTES (día de la release)». | sí, con los criterios del recuadro |
+| A10 | **Aviso a los integradores enviado** con `docs/api/CHANGELOG.md` (entrada del 2026-09-24, RUPTURA: códigos de estado y de resultado + contrato de eventos de la 454), con la fecha ya escrita en la entrada (hoy dice «Fecha de despliegue: PENDIENTE»). Audiencia medida el 2026-09-24: **1 webhook activo y 4 API keys** con uso; se re-mide en A9. | H (envía) · L (re-mide y escribe la fecha) | La fecha escrita en el CHANGELOG y la confirmación del envío en la nota de la release. | sí (455 T5.2: «bloquea la release, no el código»), salvo que el humano decida otra cosa con la audiencia medida |
+| A11 | **La hora, fuera de reparto** (fija el humano). Restricciones conocidas: (a) durante el build el código VIEJO sigue sirviendo con el enum YA renombrado por la 455: una gestión registrada en esa ventana falla (455 design §8); (b) no cruzar el corte de las **00:00 CR** (`corte-diario`, 06:00Z) a mitad de despliegue: precedente de la release del 2026-09-15; (c) el primer aviso de la 462 corre a las **07:00 CR** (`avisos-diarios`, 13:00Z): si se despliega después, T5.3 de la 462 se mira un día más tarde. | H | La hora en la nota de la release, y `get_runtime_logs` sin cierres pedidos a medias al empezar. | sí |
+
+> **El orden de migraciones (A8), y lo que puede tumbar el build**
+>
+> `pnpm run build` en producción hace `prisma generate && tsx scripts/migrate-deploy.ts && next build`:
+> las 27 se aplican **de un tirón, en orden de nombre**, antes de compilar.
+>
+> 1. **SF-001 (`20260918…` a `20260920…`).** Tres de ellas tienen fecha **anterior** a
+>    `20260921120000_vista_filtro`, que ya está aplicada: `migrate deploy` aplica lo pendiente sin
+>    exigir historia lineal, pero **se comprueba en el log del build** que las 27 aparecen aplicadas
+>    (C1). La trampa de la 429: `20260918120200_zona_sinpe_no_nulo` aborta si las zonas no tienen
+>    SINPE. **Desde la 432 se desatasca sola**: ante un `P3009` de esa migración (lista blanca), la
+>    marca revertida, siembra el SINPE desde `NEXT_PUBLIC_SINPE_*` y reintenta **una** vez
+>    (`scripts/migrate-deploy.ts`). El log debe decir `[migrate] … SINPE sembrado: N zona(s)
+>    rellenada(s)`. Si el reintento también falla, el build muere con los dos motivos y
+>    **no se toca nada a ciegas**: `DATABASE_URL` de producción es `sensitive`; se diagnostica por el
+>    MCP. La vía manual de la 429 (sembrar a mano por el MCP ANTES del merge, `specs/429-*/tasks.md`
+>    Fase 8-bis) queda como alternativa, no como obligación.
+> 2. **La 431** (`20260919120100_cierre_bodega_conciliacion`) backfillea los cierres de bodega
+>    aprobados y **aborta** si alguno tiene `resuelto_por` NULL (el CHECK de coherencia). Se mide en A9.
+> 3. **La 454 antes que la 455.** `20260923120200_retiro_estados_454` (M3) pasa las órdenes de
+>    `ayuda_tienda`/`devolucion_por_confirmar` a `en_reparto` y retira esos dos valores; después la 455
+>    renombra 7 códigos de estado y 4 de `gestion_resultado` (`devuelta` → `novedad`, etc.).
+> 4. **459 → 462 → 461** (comprobado en un clon, `contraste_461.md`):
+>    `20260925120300_reclasificar_cobros_459` → `20260925130000_…462` →
+>    `20260926120200_cobro_tienda_461_completar_caja`. **Salvaguarda:** si la reclasificación de los
+>    203 no cuadra con su suma de control, aborta, el build muere **antes** de la 461 y esos 203 nunca
+>    acaban contados como ganancia. En preview la reclasificación no escribe nada (los ids solo
+>    existen en producción): es lo esperado.
+> 5. **457 y 458-B al final**: `20260927120000/120100` y `20260928120000/120100`. Sin backfill.
+> 6. **pendiente 458-C/D/E** — sus migraciones, si las traen, van aquí.
+>
+> La 462 T5.2 pedía reescribir la lista de su `down.sql` antes del PR: **no aplica**, su `down` es
+> dinámico (lee `pg_enum`; decisión del leader, T2.1). Se confirma leyendo el archivo, no se reescribe.
+
+> **Las mediciones previas (A9), con lo que detiene**
+>
+> | Medición | Dónde se anota | Esperado / qué detiene |
+> | --- | --- | --- |
+> | **Línea base 459**: C0, C1, C2, C4, C5 y C7 de `specs/459-*/design.md` §11 | `progress/contraste_459.md` | R7 y R8 = **0,00**; C2 **0 filas**; C4 = **203 / 25.769.034,50** (si ya no son esos, la migración abortará: se para y se habla con el humano). Cualquier diferencia ≠ 0,00 **detiene**. C5 (mensajeros) se guarda para compararlo después. |
+> | **C457-1** (el SQL completo está en `progress/contraste_457.md`, «SQL M8») + M1, M2 y M6 | `progress/contraste_457.md` | `diferencia_r8 = 0,00` y `diferencia_r7 = 0,00`. ≠ 0,00 **detiene**. |
+> | **Q458-1**, **Q458-2** y **Q458-4** de `specs/458-*/design.md` §14 | `progress/contraste_458.md` (**no existe todavía: se crea**) | Q458-1: se esperaba **35 / 95.824,00** el 2026-09-25; se anota el número de hoy y cuántos tienen su línea de caja y su débito (los que no, la anulación los rechaza con `no_anulable`). Q458-2 informativo. Q458-4: se espera **0 filas**; si hay, se anota (no detiene por sí). |
+> | **Contraste C461**: C461-0, C461-2 y C461-3 de `specs/461-*/design.md` §13 | `progress/contraste_461.md` | C461-0 = los **203** de la 459 (tras la 459 pasan a 0); C461-3 = catálogos de antes (para los `down`); es la T B.1 que sigue abierta. |
+> | **431**: `aprobadas`, `sin_aprobador` y `max(updated_at)` de `cierre_bodega` (consulta en `specs/431-*/tasks.md`, «La referencia CADUCA») | nota de la release | `sin_aprobador` = **0** (si no, la migración aborta: **detiene**). Se **dice el número por adelantado**: el backfill tiene que rellenar exactamente esas `aprobadas`. |
+> | **454**: órdenes en `ayuda_tienda` y `devolucion_por_confirmar` (27 y 1 el 2026-09-23) y población legada (371 el 2026-09-23); **audiencia** (suscripciones de webhook activas, keys con uso en 30 días) | nota de la release | Números de hoy. Si la audiencia creció, A10 se reevalúa. |
+> | **455**: T0.2 (a), (b) y (d) de `specs/455-*/tasks.md` (`progress/medicion_455.md` tiene el SQL) | `progress/medicion_455.md` | Con (b) se decide qué hará su M3 con `en_fulfillment`/`pendiente`; se anota. |
+> | **462**: parte **A** de `scripts/medir-462-retenidas.sql` (ya con el `hoy_cr` corregido por la 461) | nota de la release | Cuántas reprogramadas legadas están retenidas y por qué cierres: lo que la oficina verá el primer día. |
+> | **458-A**: tiendas con `segundo_apellido` no nulo | nota de la release | Informativo (dato del leader: ninguna). |
+> | **429**: número de zonas y que el `NEXT_PUBLIC_SINPE_NUMERO` vigente cumple `^[678][0-9]{7}$` (medido el 2026-09-15: sí, 1 número en 2.491 mensajes) | nota de la release, **sin escribir el número** (el repo es público) | Si no cumple, la siembra aborta: **detiene**. |
+
+### B · Durante
+
+| # | Paso | Quién | Cómo se verifica | Detiene |
+| --- | --- | --- | --- | --- |
+| B1 | **PR de `dev` → `prod`** con el cuerpo diciendo qué cambia para quien usa la app (no qué archivos). **Merge commit** («Create a merge commit»). **NUNCA squash ni rebase**: rompe la ascendencia y la siguiente release sale con decenas de archivos en conflicto (memoria «Release a `prod`: nunca squash»). | L abre · H ordena el merge | `git log -1 origin/prod` es un merge con **2 padres** y el segundo es el SHA de A6. | sí |
+| B2 | **Vercel creó el build.** Un PR `MERGED` con `prod` apuntando bien **no** garantiza despliegue: ya pasó que Vercel no creó build y el estado del commit se quedó en `pending` para siempre (memoria «Release mergeada sin despliegue»). | L | `list_deployments` del proyecto **`ordenex`**, target production, con el SHA del merge, en los primeros minutos. | sí |
+| B3 | **Leer el log del build**, líneas `[migrate]` y `[siembra]`: las 27 (+ 458-C/D/E) aplicadas, la línea del SINPE si hubo `P3009`, y la siembra de los recurrentes. ⚠️ Si las migraciones se aplicaron y **después** falla `next build`, producción sigue con el código VIEJO sobre el esquema NUEVO (códigos de la 455 renombrados): eso es un incidente, se arregla hacia delante (§2 bis) **de inmediato**. | L | Log del deployment. | sí |
+| B4 | **READY** y alias `ordenex.co` con `aliasError: null`. | L | `get_deployment`. | sí |
+
+### C · Después de desplegar (en este orden)
+
+| # | Paso | Quién | Cómo se verifica | Detiene |
+| --- | --- | --- | --- | --- |
+| C1 | **Migraciones aplicadas y nada más tocado.** 227 (+ 458-C/D/E) aplicadas, 0 revertidas, la última la de la 458-B (o la de la última hija). **431**: filas backfilleadas = las `aprobadas` medidas en A9 y `updated_at` sin moverse en ninguna otra. **455** (design §8.2): `order_status` con los 20 vigentes (+ los huérfanos que su M3 conservó), `gestion_resultado` con 5, **0** códigos anteriores en el barrido T0.2 (c) fuera de los snapshots. **429** (T27): una fila por zona, todas con el número y `sinpe_revisado_at` NULL. **457/458** catálogos: 27 / 18 / 14 / 65 / 24 (caja / tienda / origen / historial tipos / entidades) y RLS `t` en las tablas nuevas. | L | `list_migrations` + SQL de solo lectura; anotado en la nota de la release. | sí |
+| C2 | **El backfill de la 454, re-corrido si hace falta, con 0 órdenes en los estados retirados.** Primero **medir**: órdenes con estado `ayuda_tienda` o `devolucion_por_confirmar`, y si esos dos valores siguen en `order_status`. Se espera **0** y los dos valores retirados. Si hay alguna (entró por el código viejo durante la ventana del build), se re-ejecutan los pasos de M3 (`specs/454-*/design.md` §1.6) por el MCP. ⚠️ **No pegar `migration.sql` de la 454 tal cual**: nombra el resultado `devuelta`, que la 455 renombró a **`novedad`**; la copia a ejecutar lleva el código vigente. | L | La consulta da 0 y los valores ya no están en el catálogo. | sí, hasta que dé 0 |
+| C3 | **Contrastes 459 A, B y C.** Los tres bloques salen **en el mismo build**, así que «después de A», «de B» y «de C» se miden **a la vez**, una sola vez: C0, C1, C2, C4, C5 y C7. Esperado: C0 **0 filas** (inmediatamente después; en cuanto haya movimientos de los conceptos nuevos de la 461/457/458, C0 los listará y C1 deja de ser la medida: manda C4 de este paso y C457-1/Q458-3); C1 con R7 y R8 = **0,00**; C2 **0 filas**; C4 **203 filas y 25.769.034,50** reclasificados; C5 **idéntico** al de antes; cifra principal ≈ −9.186.220,50 en la línea base del 2026-09-24 («Flujo de dinero registrado»), «De las tiendas» = Σ saldos, ganancia sin cambio. Producción se mueve cada día: vale la **igualdad**, no los números exactos. | L | «DESPUÉS» en `progress/contraste_459.md`. | sí: cualquier diferencia ≠ 0,00, o C2 con filas (R91) |
+| C4 | **C457-1 (NO la C461-1).** La C461-1 literal cuenta los pagos de las tiendas como «propio» y sale con `diferencia_r8` = −Σ pagos aunque la app cuadre (F1 de `recorrido_457.md`). Esperado: R8 = R7 = **0,00**; M6 idéntico. **Repetirla tras el primer pago real de Nuform**: `pagos_de_tiendas` = el monto, `de_tiendas` y `suma_saldos` suben en él, ganancia igual. | L | «DESPUÉS» en `progress/contraste_457.md`. | sí |
+| C5 | **C461 después**: C461-0 = **0 filas**; C461-2 **sin filas**; C461-3 con los catálogos nuevos; la ganancia igual a la de después de la 459. El veredicto R7/R8 lo dan C4 y C6, no la C461-1. | L | «DESPUÉS» en `progress/contraste_461.md`. | sí |
+| C6 | **Q458-3**: la C457-1 con `es_cargo` ampliado a `'egreso_reverso_flete_devolucion'`, `'egreso_reverso_iva_flete_devolucion'` (SQL abajo). Esperado: `diferencia_r7` = `diferencia_r8` = **0,00** y la cifra principal **idéntica** a la de C4. | L | «DESPUÉS» en `progress/contraste_458.md`. | sí |
+| C7 | **La 462, a la mañana siguiente de la primera corrida de las 07:00 CR**: `scripts/medir-462-retenidas.sql` **completo** y comparar con la campana del admin, la franja de `/ordenes` y las marcas de `/cierres-admin` (R7): los cuatro números iguales (T5.3). **Push VAPID** (H6 de `review_462.md`): en esa primera corrida el aviso llega al celular de admin y adminSatelite y **no** al maestro. | L (números) · H (el celular) | Nota de la release; si no coinciden, ficha de corrección con la diferencia medida. | no detiene el despliegue; abre ficha |
+| C8 | **Errores de runtime en la primera hora**: `get_runtime_errors` con ventana que cubra el despliegue. **0** es lo esperado; cualquier otra cosa se investiga antes de seguir. Se repite a los 7 días (454 T5.4). | L | Número y ventana en la nota de la release. | sí |
+| C9 | **Los recurrentes y los jobs**: una fila de `liberar_reprogramadas` y de `analitica_rollup_diario` (§3 de arriba); los jobs `webhook_evento` (454) se procesan; si hay una suscripción activa, **un webhook real** con `estadoNombre` (455 §8.2). | L | SQL sobre `jobs` y el log de entregas. | sí, si falta la fila de un recurrente |
+| C10 | **Asistente** (436 T25/T26): con cada uno de los cinco roles, una pregunta real — cita un documento suyo y el enlace abre; fuera de la documentación dice «no lo sé»; un mensajero preguntando por la caja no la obtiene; el coste reportado. Abrir el panel desde tres pantallas, adjuntar una imagen, ver el aviso de datos sin abrir nada, agotar el tope, recargar. T27 (consultas, personas, choques con el tope) a las **24–48 h**. | L | `progress/impl_436.md`, con lo que se vio. | sí (es la única prueba de que los `.md` viajan a la función) |
+| C11 | **Ver la aplicación de SF-001 y los estados**: 429 T29 (aviso del SINPE: sale, se corrige, se cierra, no bloquea, reaparece hasta confirmar); 431 T26 (a)–(d) (la satélite asigna con una consolidación sin conciliar, consolida dos veces, la central marca recibido por menos y ve la diferencia, revierte); 456 T6.1 (rastreo público de una guía real en el móvil). 431 T28 (antigüedad máxima de las consolidaciones sin conciliar) a las 24–48 h. | L · H | Descrito lo que se vio, con rol y ruta. | no; abre ficha si falla |
+| C12 | **Volver a traer `prod` a `dev`**: el merge commit de B1 sólo existe en `prod`. Merge de `origin/prod` en `dev` (sin squash). | L | `git rev-list --count origin/dev..origin/prod` = **0**. | no, pero se hace el mismo día |
+| C13 | **Cerrar las fichas** que la release termina de verdad, diciendo en su nota lo que sigue vivo; **nunca** desde una rama con agentes dentro (memoria «No escribir feature_list con agentes dentro»). La 458 sigue abierta si alguna hija no salió. | L | Commit en `dev`. | no |
+| C14 | **Diferidos**: 429 T28, retirar `NEXT_PUBLIC_SINPE_NUMERO`/`_NOMBRE` de Production **y** Preview **cuando lleve días estable** (antes no: la siembra de la 432 las usa); **2026-09-28**, la advertencia de `pg` de la 450 (Anexo); PWA M1–M7 de la 284, 262, 264 y 265 (Anexo). | L · H | Cada una en su entrada. | no |
+
+**SQL de Q458-3** (C6). `specs/458-*/design.md` §14 la describe como «la C461-1 con `es_cargo`
+ampliado», pero la C461-1 literal ya no cuadra con la 457 (C4 de arriba), así que aquí se compone
+sobre la **C457-1**: es la de `progress/contraste_457.md` con **una sola** línea cambiada, la de
+`es_cargo`. ⚠️ **Composición no ejecutada todavía en un clon**: antes de fiarse de su resultado en
+producción, correrla una vez en un clon con una anulación de cobro por rechazo (el escenario de
+`tests/integration/db/wallet-anulacion-458.test.ts`) y comprobar R7 = R8 = 0,00.
+
+```sql
+-- Q458-3 = C457-1 con es_cargo ampliado a los dos reversos de la 458-B.
+-- En la C457-1 de progress/contraste_457.md, sustituir la definicion de es_cargo por:
+         cat IN ('ingreso_flete','ingreso_flete_devolucion','ingreso_comision_cod','ingreso_iva_flete',
+                 'ingreso_iva_flete_devolucion','ingreso_iva_comision_cod',
+                 'ingreso_cobro_tienda','egreso_reverso_cobro_tienda',
+                 'egreso_reverso_flete_devolucion','egreso_reverso_iva_flete_devolucion') AS es_cargo,
+-- Se esperan diferencia_r8 = 0,00 y diferencia_r7 = 0,00, y la cifra igual a la de la C457-1.
+```
+
+### D · Decisiones del humano (antes de A1)
+
+| # | Decisión | Por qué importa | Si no se decide |
+| --- | --- | --- | --- |
+| D1 | **El modal del SINPE** (`RevisionSinpeBodega`, en el layout global). Es un `Modal`: tapa **cualquier** pantalla del rol —medido tapando `/wallet` y `/wallet/tiendas` a maestro y admin en los recorridos de la 459, la 461 y la 457 (O1)— y reaparece **cada sesión de navegador** hasta confirmar el SINPE (se aplaza en `sessionStorage`). El día del despliegue lo verá **todo** admin, adminSatelite y maestro de cada bodega sin revisar. ¿Es el comportamiento querido, o pasa a aviso no bloqueante? | Riesgo R1. Cambiarlo es código: si se cambia, es una ficha antes de la release. | Sale como está, y se avisa a la oficina y a las satélites de que les va a salir. |
+| D2 | **Enviar la guía de la API a los integradores** (`docs/api/CHANGELOG.md`, 2026-09-24, RUPTURA) y **con qué fecha**. | Un integrador que compare `entregada` deja de encontrar órdenes el día del despliegue; el `422` le nombra el código nuevo. | A10 no se cumple: no se despliega. |
+| D3 | **La hora** (A11). | Ventana del build con el enum renombrado; corte de las 00:00 CR; aviso de las 07:00 CR. | No se despliega. |
+| D4 | **Visto bueno a la nota «Ayuda solicitada a la tienda»** (`specs/456-*/textos-aprobados.md`, «Pendiente de visto bueno del humano»). | 456 T6.1: la nota no sale sin él. | Se decide con él antes de la release. |
+
+### E · Rollback: qué se puede revertir y cómo
+
+1. **Revertir sólo el código (promover el despliegue anterior en Vercel) NO es seguro** una vez
+   aplicadas las migraciones: el código de antes usa los códigos que la 455 renombró (`entregada`,
+   `devuelta`…) y los estados que la 454 retiró, así que cada gestión fallaría. Sólo es una salida si
+   el build murió **antes** de `[migrate]` —y en ese caso producción ni se movió—.
+2. **`pnpm run db:rollback` revierte siempre el ÚLTIMO directorio** de `db/migrations/`, no la última
+   migración **aplicada**, y no acepta nombre (hallazgo H4 de `progress/review_461.md`, limitación de
+   `scripts/db-rollback.ts` desde la ficha 53). Medido: seis invocaciones seguidas revirtieron **seis
+   veces la misma** (`20260926120500_wallet_461_fechas_cr_pagos`, `ROLLBACK_1..6_EXIT=0`) y dejaron
+   intactas las otras cinco, **en verde**, porque esos `down` son idempotentes. Con 27 migraciones
+   nuevas, **sirve para deshacer una, nunca una cadena**.
+3. **Deshacer varias es a mano**, una por una, en **orden inverso** al de aplicación, con su
+   `down.sql` (las 27 lo tienen):
+   `pnpm exec prisma db execute --file db/migrations/<nombre>/down.sql` y después
+   `DELETE FROM "_prisma_migrations" WHERE migration_name = '<nombre>'`; repetir con la anterior.
+   Contra producción esto exige su `DATABASE_URL`, que es `sensitive`: se hace por el MCP.
+4. **Los `down` de dinero abortan a propósito si hay filas que usan lo suyo** (459, 461 —R62—, 457
+   y 458-B levantan `RAISE EXCEPTION` sin borrar nada). En cuanto alguien registra un cobro, un pago de
+   tienda o una anulación con los conceptos nuevos, **la base ya no se puede revertir sin borrar
+   datos reales**. Eso es lo esperado, no un fallo del rollback.
+5. **Un `down` que recrea un enum con lista** (p. ej. el de `20260923120000_job_tipo_webhook_evento`,
+   que recrea `job_tipo` con 10 valores) borra en silencio los valores que otra migración posterior
+   añadió (memoria «El `down.sql` borra los valores posteriores»): antes de ejecutarlo, comparar su
+   lista con `pg_enum`.
+6. **Lo que se recomienda**: arreglar **hacia delante** por la vía de §2 bis (rama nacida de
+   `origin/prod`, parche, gate, merge). El rollback de base se reserva para un fallo detectado en la
+   primera hora y **antes** de que existan datos de los conceptos nuevos, y lo decide el humano.
+7. **Deuda para quien la tome (fuera de esta release)**: que `scripts/db-rollback.ts` elija la última
+   migración **aplicada** (`_prisma_migrations`) o acepte el nombre por argumento.
+
+### Riesgos conocidos
+
+| # | Riesgo | Estado | Qué hacer |
+| --- | --- | --- | --- |
+| R1 | **O1: el modal del SINPE tapa `/wallet`** (y cualquier pantalla del rol) al cargar, a maestro y admin, y deja la página `aria-hidden`: «Registrar movimiento» no se puede pulsar hasta cerrarlo con «Ahora no» (`recorrido_459.md` fallo 1, `recorrido_461.md` O1, `recorrido_457.md` O1). | Vivo. | D1. En el plan de pruebas se cierra con «Ahora no» y se sigue. |
+| R2 | **La lectura del saldo en `LiquidacionService.registrarPagoTienda`** leía el saldo que decide por el cliente global mientras tenía el candado de la tienda: con el pool de 3 por instancia, tres operaciones de la misma tienda a la vez podían dejar la transacción sin conexión (falla cerrado, sin dinero mal escrito). Hallado en la 457 (`impl_457.md` §12.4; fue el rojo de `gate_457_cierre_a.log`). | **Corregido en la 458-B** (en `dev`): le pasa el `tx` del candado. Tests `tests/integration/db/liquidacion-pago-tienda-458-concurrencia.test.ts` (pool de UNA conexión) y `liquidacion-service.test.ts` R29; la mutación que quita el `tx` da 3 rojos. | Nada; se deja dicho por si reaparece un timeout de 30 s en esa transacción. |
+| R3 | **El `.env` local apunta el Storage al Supabase de PRODUCCIÓN** (ref `scfnwxqbsgkzwsdntdvd`; lo halló el recorrido de la 457, `recorrido_457.md` «Límite de entorno» y O5). Hoy no pasa nada porque el bucket no existe; **en cuanto A4 lo cree, cualquier recorrido o prueba local «con comprobante» subirá archivos de prueba al almacenamiento de producción**. | Vivo. | **Recomendación:** antes de A4, cambiar en el `.env` local (y en los que se copian a los worktrees) las variables del Storage para que apunten al proyecto de **preview**, o a un almacenamiento local; y hasta hacerlo, **no** probar en local nada con comprobante. Es tarea del humano: el agente no puede leer el `.env`. |
+| R4 | **El tope de tokens del asistente.** Con `MAX_TOKENS_DEFAULT` = 1024 una respuesta que enumeraba tres casos se cortaba a media frase (`impl_457.md` §11.4). | **Subido a 2048** en el cierre de la 457 (`a05cd58b`, `lib/clients/anthropic-asistente.ts`; test «el techo por defecto es 2048»). Residual: una respuesta más larga se sigue cortando, y ningún test lo detecta en producción. | En C10, mirar si alguna respuesta sale cortada; en T27 (24–48 h), contar las que llegaron al techo. |
+| R5 | **El flake del deadlock `40P01` de la 205** (`tests/integration/db/liquidacion-reparto-migration.test.ts`, «205 / bloque B — las restricciones RECHAZAN de verdad»). Tumbó el gate de `dev` tras la 458-B (`INIT_EXIT=1`, verde aislado 3/3) y aparece antes en la 435 y la 458-B. Cambia de bloque; bajo la carga del gate completo. | Vivo; conocido (memoria «Gate rojo: cuatro modos de flake»). | A6: se repite aislado 3/3 **y** el gate completo; la release sale sobre un `INIT_EXIT=0`, nunca sobre un rojo explicado. |
+| R6 | **La re-ejecución del backfill de la 454 con el código viejo** (`devuelta` en vez de `novedad`). | Anotado en C2. | No pegar el `migration.sql` tal cual. |
+| R7 | **Q458-3 no está probada en un clon** (compuesta aquí sobre la C457-1). | Anotado en C6. | Correrla en un clon antes de creerla en producción. |
+| R8 | **El panel financiero de `/analitica`**: el recorrido de la 458-A dice que la región `financiero` estaba comentada en `AnaliticaShell` y no la vio; en `dev` (`app/(app)/analitica/page.tsx`) la región **sí** se monta para acceso total. Contradicción no resuelta. | Abierto. | Mirarlo en preview (plan de pruebas, maestro paso 9): si no se ve, «Movimiento neto del periodo» y los netos de flete e IVA no son verificables en pantalla. |
+
+---
+
+### Anexo — lo pendiente de releases anteriores (no es de esta, se arrastra)
+
+#### De la 450 — la advertencia de `pg` en los logs de Vercel
 
 > **Esta entrada NO bloquea el `done` de la 450** (decisión 2 del humano, 2026-09-21). La prueba de
 > cierre de esa ficha es el contador determinista de consultas en vuelo + `./init.sh` completo en
@@ -534,7 +702,7 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
       440 lleva en cero desde el **2026-09-17 10:14 UTC** y la 450 no lo toca: si apareciera uno,
       la causa está en esta release y no en el tráfico.
 
-### De la 284 — la PWA: el relevo, la purga y el manifiesto
+#### De la 284 — la PWA: el relevo, la purga y el manifiesto
 
 > **Un service worker NO se puede medir en local**: el de producción se autodestruye en
 > `localhost`/`127.0.0.1` sin mirar `NODE_ENV` (`public/sw.js:7-9`), así que `pnpm build && pnpm
@@ -599,7 +767,7 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
       **Probarlo cuando no hace falta es la única forma de saber que funciona el día que haga
       falta**; si falla, hay que arreglarlo antes de que exista una base instalada.
 
-### De la 264 — el detalle del cierre
+#### De la 264 — el detalle del cierre
 
 - [x] ~~**Ver la sección «Órdenes sin gestionar» en pantalla.** Cierre terminado en `8F88DCD5`:
       debe listar 4 guías, y el pie seguir en ₡14.900 general y ₡2.000 de pago al mensajero.~~
@@ -610,7 +778,7 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
       **Si se quiere la garantía, hay que rehacerla sobre un cierre nuevo de la operación real** —
       y entonces son otras guías y otras cifras, así que es una tarea nueva, no ésta.
 
-### De la 262 — corregir el día de reparto
+#### De la 262 — corregir el día de reparto
 
 Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí existe:
 
@@ -627,7 +795,7 @@ Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí
       `por_recoger` 1. **Cero en `ayuda_tienda`.** Sigue abierta, pero no se desbloquea esperando:
       se desbloquea el día que la operación real produzca una, y entonces hay que acordarse.
 
-### De la 262 — una pregunta de producto, no una comprobación
+#### De la 262 — una pregunta de producto, no una comprobación
 
 - [ ] **Decidir si «Del 23 al 24 de agosto» se cambia.** Medido mirando la pantalla: se lee como un
       **rango de dos días** en la mitad de los casos —«del 24 al 23» es inequívoco porque ningún
@@ -636,7 +804,7 @@ Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí
       cae en la preposición: **falta el verbo**. Es contrato en `design.md` §14.4. Si se cambia, lo
       barato es el encabezado (`ETIQUETA_CORRECCION_DIA`), no el cuerpo que está bajo test.
 
-### De la 265 — el optimizador
+#### De la 265 — el optimizador
 
 - [ ] **C3 · Re-medir M1** con `ruta_optimizada_parada` ya poblada, para saber si el umbral
       `RUTA_ORIGEN_MAX_KM = 200` —hoy **declarado sin calibrar**— se sostiene. El 2026-08-22 la tabla
