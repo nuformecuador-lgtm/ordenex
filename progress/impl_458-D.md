@@ -436,4 +436,17 @@ Cada una: el archivo cambia, se corren > 0 tests, se restaura byte a byte y el `
 
 ## Build y gate (servidor)
 
-PENDIENTE_GATE
+- `pnpm run typecheck` y `pnpm exec eslint` sobre los archivos tocados: 0 errores (2 avisos previos ajenos).
+- `pnpm run build` sobre `319d1ca7`: **`BUILD_EXIT=0`** (`progress/build_458D_servidor.log`).
+- Gate completo `./init.sh` contra el clon `ordenex_458ds`, sin tail, con `INIT_EXIT` escrito dentro
+  (`progress/gate_458D_servidor.log`) sobre `4b704454`: **`INIT_EXIT=0`** — «DATABASE_URL resuelta: los 316 archivos
+  de tests contra Postgres SI se ejecutan»; **2313 archivos, 32196 tests verdes, 26 saltados**, todos en
+  `AnaliticaPage`/`AnaliticaShell` (ajenos, los mismos de la corrida del frontend); **0 saltados en
+  `integration/db`** (404 archivos, medido sobre `.vitest/rojos.json`); «sin rojos nuevos». Las fotografías de 459 y
+  458 corren dentro y pasan.
+
+## Veredicto (servidor)
+
+Los pendientes de servidor 1–6 de la 458-D quedan hechos con sus contratos para el frontend, probados contra
+Postgres y con 12/12 mutaciones muertas; el 7 (retirada) se evaluó y no se borra nada porque todas las candidatas
+tienen llamadores en tests de otras fichas; build y gate completo en verde.
