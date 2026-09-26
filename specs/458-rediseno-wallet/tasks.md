@@ -306,27 +306,49 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
 
 ## 458-E — Libro de caja (fullstack) · depende de 458-C · [P] con 458-D
 
-- [ ] **TE.1** Columnas Fecha · Movimiento y motivo · A quién · Monto (dirección + dueño) · Registró ·
+- [x] **TE.1** Columnas Fecha · Movimiento y motivo · A quién · Monto (dirección + dueño) · Registró ·
   Ver; `wallet-ledger-descarga-columnas.ts` en paralelo; la aserción de `WalletDescarga.test.tsx`
   reescrita en el MISMO commit como contrato nuevo. *Hecho:* `WalletLedger458.test.tsx` (R55–R57);
-  descarga sin ids (R3).
-- [ ] **TE.2** Filtros Todo/Entra/Sale (`SegmentedToggle`), «A quién» (`SelectorBuscable` con
+  descarga sin ids (R3). **Evidencia:** `d160b2a0`; `WalletLibroCaja458E.test.tsx` (T E.1),
+  `WalletDescarga.test.tsx` (R55, R34/R56/R57 y R3 con regex de uuid dentro de cada celda — revisión
+  m5), `wallet-caja-descarga-columnas.test.ts`; servidor `libro-caja-a-quien.test.ts` (458-B).
+- [x] **TE.2** Filtros Todo/Entra/Sale (`SegmentedToggle`), «A quién» (`SelectorBuscable` con
   búsqueda por tienda, mensajero o nombre libre), concepto con cuenta (458-A) y periodo; tarjetas del
-  conjunto filtrado. *Hecho:* `wallet-page.test.tsx` ampliado (R53, R54, R59).
-- [ ] **TE.3** Panel «Ver» + anular + «Cómo quedó» desde el libro; refresco del libro, tarjetas,
-  composición y desglose tras registrar/anular. *Hecho:* tests de R58, R60.
-- [ ] **TE.4** [P] Colas de gasto fijo y de rechazo (el cobro anulado se ve «Anulado» en su detalle y
+  conjunto filtrado. *Hecho:* `wallet-page.test.tsx` ampliado (R53, R54, R59). **Evidencia:**
+  `a9db4884` + servidor `33e58c33`/`1c0786ae`/`34dbb6c7` + pantalla del cierre;
+  `libro-caja-filtro-a-quien.test.ts` (Postgres, 16), `filtros-wallet-quienes-458e.test.ts`,
+  `WalletFiltroAQuien458E.test.tsx` (13); revisión M2 (el contra-asiento de un anulado cuenta con el
+  nombre de su original: neto 0) en `libro-caja-revision-458e.test.ts`.
+- [x] **TE.3** Panel «Ver» + anular + «Cómo quedó» desde el libro; refresco del libro, tarjetas,
+  composición y desglose tras registrar/anular. *Hecho:* tests de R58, R60. **Evidencia:** `cf817183`;
+  `WalletLibroCaja458E.test.tsx` (T E.3), `WalletLedgerVer458C.test.tsx`, `DetalleMovimientoPanel.test.tsx`.
+  **Lo que TC.8 dejó aquí, cerrado en la revisión de la 458-E:** el INSTANTE de registro (R58, B1:
+  `AutoriaDeFilaDTO.registradoEl` = `created_at` en día y hora CR; «Registró: Ana · el 2026-09-26 a
+  las 21:30»; `libro-caja-revision-458e.test.ts` + los dos tests de componente);
+  `reversarEgresoAdministrativoAction` RETIRADA (m3, sin llamadores; guardia en
+  `wallet-egresos-actions.test.ts`); m7 (pagar a una cuenta inactiva) queda como DECISIÓN en
+  `progress/impl_458-E.md` (R41 no obliga a ofrecerlas).
+- [x] **TE.4** [P] Colas de gasto fijo y de rechazo (el cobro anulado se ve «Anulado» en su detalle y
   no se vuelve a ofrecer), composición y plantillas sin cambios de comportamiento. *Hecho:* sus tests
   existentes verdes sin modificarlos + un caso para el cobro anulado (R61, R73, R83, R87).
-- [ ] **TE.5** Subtítulo de `/wallet` sin «dinero en caja» en estado «flujo» (`wallet-textos-458`).
-  *Hecho:* guardia verde (R101).
-- [ ] **TE.6** Ayuda y asistente: `docs/ayuda/oficina/wallet-caja.md` (libro: A quién, Registró, Ver,
+  **Evidencia:** `cf817183`; bloque «T E.4» de `WalletLibroCaja458E.test.tsx`; los tests de colas y
+  composición sin tocar (lista en `progress/impl_458-E.md` § TE.4) verdes en el gate.
+- [x] **TE.5** Subtítulo de `/wallet` sin «dinero en caja» en estado «flujo» (`wallet-textos-458`).
+  *Hecho:* guardia verde (R101). **Evidencia:** lo cerró la 458-A (TA.6); `wallet-textos-458.guardia`
+  verde en el gate de la 458-E.
+- [x] **TE.6** Ayuda y asistente: `docs/ayuda/oficina/wallet-caja.md` (libro: A quién, Registró, Ver,
   filtros); `contexto-458.test.ts` bloque E; cuatro preguntas reales. *Hecho:* frases literales por
-  rol (R102, R103).
+  rol (R102, R103). **Evidencia:** ayuda y bloque E del cierre de la pantalla; cuatro preguntas reales en
+  `progress/recorrido_458-E/recorrido.md`; tras la revisión, la ayuda dice cuándo se registró (B1), que
+  un anulado por nombre se compensa (M2) y que el contra-entrega cae bajo el mensajero (m4).
 - [ ] **TE.7** Recorrido COMPLETO por rol (§10, los doce pasos y los cuatro roles) con la tabla
   maqueta vs app; fotografías verdes; gate rápido; revisión final de la 458. *Hecho:*
   `progress/recorrido_458-E/` con números; `INIT_EXIT=0`; todas las R de `requirements.md` con su test
   en algún `progress/impl_458-*.md` (R104).
+  **Abierta.** Hecho en el recorrido de la 458-E: los pasos de `/wallet` con maestro, admin y adminTienda
+  (libro, filtros por tienda, mensajero y nombre libre = oráculo, tarjetas = Σ, R7/R8 = 0,00 en 14
+  medidas; `progress/recorrido_458-E/recorrido.md`). Falta: los pasos 4–6 y 8–11 de §10 (dependen de las
+  rutas de la 458-D, que se mergea JUNTO con la 458-E) y la revisión final de la 458.
 
 ## Dependencias
 

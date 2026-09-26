@@ -353,3 +353,64 @@ completo `./init.sh` contra `ordenex_458ec`, log sin `tail` con `INIT_EXIT` dent
    (`progress/rerun_458E_cierre_backfill_aislado.log`).
 2. `progress/gate_458E_cierre.log` — **`INIT_EXIT=0`**: 2313/2313 archivos, 32.257 tests verdes, 26
    skipped (los de `AnaliticaPage`/`AnaliticaShell`, previos); **`integration/db`: 404 archivos, 0 skipped**.
+
+## Cierre tras la revisión RECHAZADA (backend_dev) · rama `wt/458-E-fix` → `feature/458-E`
+
+**Entorno.** `git checkout -B wt/458-E-fix origin/feature/458-E` (HEAD `5a75ca51` comprobado) + `git
+merge origin/review/458-E` (`27fb03eb`, fast-forward). Base propia `ordenex_458ex` (`CREATE DATABASE …
+TEMPLATE ordenex` con 0 conexiones a la plantilla; `migrate deploy`: «No pending migrations»; `migrate
+status` → `ordenex_458ex` en `localhost:5432`). `.env` del checkout principal con la base cambiada y
+`DATABASE_URL_PREVIEW` comentada. `pnpm install --frozen-lockfile` propio, sin junction. `ordenex` solo
+como plantilla; `feature_list.json` sin tocar. **Búsqueda:** el MCP `codebase-memory` se usó para los
+llamadores de `reversarEgresoAdministrativoAction` (confirmado con `grep` sobre `app`, `lib`, `scripts`,
+`components` y `tests`); lo demás se leyó en el archivo real (el índice está rancio para la 458-B/C/E).
+
+| Punto | Qué se hizo | Test | Commit |
+| --- | --- | --- | --- |
+| **B1** (R58, bloqueante) | `AutoriaDeFilaDTO.registradoEl {fecha, hora}` = `created_at` de la fila en día y hora de Costa Rica (`fechaCalendarioCR` + `horaCostaRica`), leído por `LibroCajaAutoriaRepository.movimientos`. El panel (`DetalleMovimientoPanel`, línea «Registró») dice «Ana Maestra · el 2026-09-26 a las 21:30»; la fecha del movimiento sigue siendo la suya (`VerMovimientoCaja` no cambia: le pasa al panel la autoría entera). Quien monte el panel sin el instante (458-D) no lo pinta: el campo es opcional en la prop | `tests/integration/db/libro-caja-revision-458e.test.ts` (sueldo con fecha del 1 tecleado el 26 a las 21:30 CR = 03:30Z del 27: literal `{fecha: "2026-09-26", hora: "21:30"}`); `DetalleMovimientoPanel.test.tsx` («458-E B1»); `WalletLibroCaja458E.test.tsx` (T E.3, desde el libro) | `2f126345` |
+| **M2** | El contra-asiento de un sueldo, gasto o corrección anulados (`ingreso_ajuste`/`egreso_ajuste` con `origen_id` = la original) toma la anotación de su ORIGINAL: una regla (`lib/utils/anotacion-de-fila.ts`) y su gemelo SQL (`MOVIMIENTO_DE_LA_ANOTACION`) en el filtro, las opciones del selector y la columna «A quién» (`LibroCajaAutoriaService`). Así filtro y columna no discrepan (el test de la 458-E usa la columna de oráculo) | `libro-caja-revision-458e.test.ts`: con «A quién = Pedro …» el libro trae sueldo + corrección + sus dos anulaciones (4), Entró = Salió = 100.250,00, en caja y ganancia 0,00, el selector cuenta 4 y la columna del contra-asiento dice el nombre | `2f126345` |
+| **M1** | Guardia `caja-173-alcance` endurecida con reglas PURAS aplicadas al fuente real: `sum(` sin distinguir mayúsculas ni espacio solo de `w."monto"`; todo `FROM`/`JOIN` del repositorio es `"wallet_movimiento" w` (ni otra tabla con alias `w`, ni coma, ni tabla interpolada); ninguna `.reduce`/`.add`/`.plus` en el repositorio; ninguna escritura por SQL crudo (`$executeRaw*`, `$queryRawUnsafe`, `Prisma.raw`, `insert/update/delete/merge/truncate/returning`) en el repositorio ni en los módulos que importa; censo de los módulos de `lib/repositories/` importados = lista declarada. Para cumplirla, `agregarPorCategoria` con «A quién» suma por categoría EN SQL (antes sumaba los grupos con `.reduce` de `Decimal`) | bloque «M1 (revisión 458-E) — contrapruebas» (5 casos: cada regla caza su violación) + el caso real con control de no-vacuidad | `f59a47f9` |
+| **M4** (m3 de la 458-C) | `reversarEgresoAdministrativoAction` **RETIRADA**. Sin llamadores: ni `app/` (solo un comentario histórico en `WalletLedger.tsx`), ni API, ni scripts, ni crons; solo su test de la 45 (retirado, sustituido). La revisión de la 458-C (m3) la describe como puerta de dinero sin superficie ni motivo. El egreso se anula con motivo por `anularMovimientoAction` → `anularEgresoCajaAction`. El método del servicio `WalletEgresoService.reversarEgreso` se queda: no es Server Action y los escenarios de prueba lo usan para sembrar un reverso sin constancia (R72) | `wallet-egresos-actions.test.ts` «458-E M4»: el módulo ya no la exporta; ninguna acción de `lib/actions/` llama `.reversarEgreso(` (con contraprueba) | `0a4094ee` |
+| **M5** (m7 de la 458-C) | **Decisión, sin código.** R41: «NO DEBE ofrecer tiendas inactivas donde el camino actual no las admite». El camino del pago (`LiquidacionService`) no mira el estado del usuario, así que las admite, pero R41 no OBLIGA a ofrecerlas: el diálogo libre sigue ofreciendo solo cuentas activas (`listarAdminTiendas` / `listarUsuariosPorRol`). Pagar a una tienda o un mensajero inactivo con saldo entra por su estado de cuenta, que abre el diálogo con la cuenta ya elegida (R40, `cuentaFija`, 458-D). Si se quiere el buscador con inactivas, es decisión de producto | — | — |
+| **Menores** | m4: la ayuda dice que el contra-entrega de los clientes de una tienda cae bajo el MENSAJERO; que un anulado por nombre aparece con su anulación y se compensa; y cuándo se registró. m5: la comprobación R3 de `WalletDescarga.test.tsx` mira un uuid DENTRO de cada celda y el doble ya no nombra la cuenta con un trozo del id. m1 (descarga en serie), m2 (conteo viejo del selector) y m3 (opciones en memoria) son de pantalla o aceptados: sin tocar | `contexto-458.test.ts` bloque E (3 frases nuevas); `WalletDescarga.test.tsx` | `ee1809c9` |
+
+**Tests retirados:** `wallet-egresos-actions.test.ts` «reversarEgresoAdministrativoAction (R13/R17/R18)»
+(4 casos) — la acción ya no existe; sustituto: «458-E M4» (2 casos). La regla de negocio de la 45 que
+probaban (rol, idempotencia) sigue probada en `wallet-egreso-service.test.ts` sobre el servicio. Los
+`vi.mock` de componentes que declaran `reversarEgresoAdministrativoAction: vi.fn()` quedan: un export de
+más en una fábrica de mock no hace nada.
+
+**Mutaciones** (14, una a una con `mutar.py`: patrón único, > 0 tests corridos, restauración byte a byte
+comprobada por hash) — `progress/mutaciones_458E_fix.json`, **14/14 en rojo**:
+
+| # | Mutación | Rojos |
+| --- | --- | --- |
+| B1-a | el día del registro en UTC | 1/6 |
+| B1-b | la hora del registro en UTC | 1/6 |
+| B1-c | el panel no pinta el instante | 2/34 |
+| M2-a | el filtro por nombre no mira la original del contra-asiento | 2/22 |
+| M2-b | el selector no cuenta el contra-asiento | 1/22 |
+| M2-c | la columna «A quién» del contra-asiento vuelve a «—» | 1/22 |
+| M2-d | la regla olvida `ingreso_ajuste` | 4/22 |
+| M1-a | `sum(d."monto")` en minúsculas en el repositorio | 1/37 |
+| M1-b | `FROM "wallet_tienda_movimiento" w` en el repositorio | 1/37 |
+| M1-c | vuelve la `.reduce` de `Decimal` | 1/37 |
+| M1-d | `insert … returning` por `$queryRaw` en el repositorio | 1/37 |
+| M1-e | `DELETE` en SQL en el módulo del cruce | 2/37 |
+| M4-a | la acción sin motivo vuelve a exportarse | 2/26 |
+| m5-a | la descarga mete el id dentro del texto de «A quién» | 1/12 |
+
+### Mapa R → test (lo que cambia con la revisión)
+
+| R | Test |
+| --- | --- |
+| R58 (cuándo se registró) | `libro-caja-revision-458e.test.ts` («B1»), `DetalleMovimientoPanel.test.tsx` («458-E B1»), `WalletLibroCaja458E.test.tsx` («R58 (revisión B1)») |
+| R59 (anulados por nombre) | `libro-caja-revision-458e.test.ts` («M2», 4 casos) |
+| R3 (descarga sin ids) | `WalletDescarga.test.tsx` (regex de uuid dentro de cada celda) |
+| R33 de la 173 (el repositorio solo suma la caja) | `caja-173-alcance.guardia.test.ts` (caso real + 5 contrapruebas + censo de imports) |
+| R63 (anular siempre con motivo: ninguna puerta sin él) | `wallet-egresos-actions.test.ts` («458-E M4») |
+| R102/R103 | `contexto-458.test.ts` bloque E (+3 frases) |
+
+**Sigue fuera (no es de esta tarea):** M3 de la revisión (enlaces de «A quién» a las rutas de la 458-D):
+la 458-D y la 458-E se mergean juntas. TE.7 (recorrido completo y revisión final de la 458) abierta en
+`tasks.md`.
