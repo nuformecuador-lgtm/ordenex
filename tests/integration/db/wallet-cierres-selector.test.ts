@@ -10,7 +10,6 @@ import { FiltrosWalletService } from "@/lib/services/FiltrosWalletService";
 import { WalletMensajeroService } from "@/lib/services/WalletMensajeroService";
 import { WalletTiendaService } from "@/lib/services/WalletTiendaService";
 import type { CierresDeLaCuentaResult } from "@/lib/types/wallet-filtros";
-import { etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 import { ORIGENES_FALSOS } from "@/tests/fixtures/origenes-falsos";
 
 import { sembrarPersonas461 } from "./_fixtures/personas-461";
@@ -38,7 +37,7 @@ import {
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
 
-async function crearMensajero(tx: TxDeTest, nombre: string, apellido: string) {
+async function crearMensajero(tx: TxDeTest, nombre: string, apellido: string, segundo: string | null = null) {
   const plantilla = await tx.usuario.findFirstOrThrow({
     where: { rol: { value: "mensajero" } },
     select: { rolId: true, tipoIdentificacionId: true },
@@ -48,6 +47,7 @@ async function crearMensajero(tx: TxDeTest, nombre: string, apellido: string) {
     data: {
       nombre,
       primerApellido: apellido,
+      segundoApellido: segundo,
       email: `m458a-${sufijo}@example.test`,
       telefono: "88880000",
       passwordHash: "x",
@@ -63,7 +63,8 @@ async function crearMensajero(tx: TxDeTest, nombre: string, apellido: string) {
 async function sembrar(tx: TxDeTest) {
   const p = await sembrarPersonas461(tx);
   const zona = await tx.zona.findFirstOrThrow({ select: { id: true } });
-  const ana = await crearMensajero(tx, "Anacleta", "Zúñiga458");
+  // Con segundo apellido, como 11 de los 22 mensajeros de produccion: el rotulo lo lleva entero.
+  const ana = await crearMensajero(tx, "Anacleta", "Zúñiga458", "Mora458");
   const beto = await crearMensajero(tx, "Bertoldo", "Quirós458");
   const cierre = (mensajeroId: string, solicitadoAt: string) =>
     tx.cierreDia.create({
@@ -129,7 +130,8 @@ describeSiHayBase("458-A R10–R12 — el selector de cierre y el WHERE con la c
         cierreId: r.e.cA.id,
         dia: "2026-09-12",
         hora: "22:30",
-        mensajero: etiquetaDeCuenta(r.e.ana),
+        // Escrito a mano (revision m6): compararlo contra `etiquetaDeCuenta(...)` estaria siempre verde.
+        mensajero: "Anacleta Zúñiga458 Mora458",
         movimientos: 2,
       },
     ]);
@@ -152,12 +154,14 @@ describeSiHayBase("458-A R10–R12 — el selector de cierre y el WHERE con la c
       return {
         e,
         porNombre: await cierresDeLaCuentaAction({ ...base, busqueda: "zúñiga458" }, d),
+        porSegundoApellido: await cierresDeLaCuentaAction({ ...base, busqueda: "mora458" }, d),
         porOtroNombre: await cierresDeLaCuentaAction({ ...base, busqueda: "Bertoldo" }, d),
         porDia: await cierresDeLaCuentaAction({ ...base, busqueda: "2026-09-12" }, d),
         porDiaUtc: await cierresDeLaCuentaAction({ ...base, busqueda: "2026-09-13" }, d),
       };
     });
     expect(opciones(r.porNombre).map((o) => o.cierreId)).toEqual([r.e.cA.id]);
+    expect(opciones(r.porSegundoApellido).map((o) => o.cierreId)).toEqual([r.e.cA.id]);
     expect(opciones(r.porOtroNombre)).toEqual([]); // Bertoldo no tiene cierres en ESTA tienda
     expect(opciones(r.porDia).map((o) => o.cierreId)).toEqual([r.e.cA.id]);
     expect(opciones(r.porDiaUtc)).toEqual([]); // el 13 en UTC es el 12 en Costa Rica

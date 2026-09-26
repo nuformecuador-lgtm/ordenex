@@ -6,7 +6,6 @@ import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleReposit
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
 import { WalletTiendaService } from "@/lib/services/WalletTiendaService";
-import { etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 
 import { sembrarPersonas461 } from "./_fixtures/personas-461";
 import {
@@ -35,9 +34,10 @@ async function sembrar(tx: TxDeTest) {
     select: { estatusId: true, zonaId: true, provinciaId: true, cantonId: true },
   });
   if (zona === null || fks === null) throw new Error("base sin sembrar: faltan zona u orden");
-  const mensajero = await tx.usuario.findUniqueOrThrow({
+  // Un mensajero con segundo apellido, como 11 de los 22 de produccion: el origen lo nombra entero.
+  await tx.usuario.update({
     where: { id: p.mensajeroId },
-    select: { nombre: true, primerApellido: true, segundoApellido: true },
+    data: { nombre: "Juan", primerApellido: "Pérez", segundoApellido: "Mora" },
   });
   // 04:30Z del 13 = 22:30 del 12 de septiembre en Costa Rica: el dia del origen es el de CR.
   const cierre = await tx.cierreDia.create({
@@ -92,7 +92,7 @@ async function sembrar(tx: TxDeTest) {
       },
     ],
   });
-  return { p, cierre, numGuia, mensajeroNombre: etiquetaDeCuenta(mensajero) };
+  return { p, cierre, numGuia };
 }
 
 describeSiHayBase("458-A R5–R8 — el origen legible sale de la base, por la action", () => {
@@ -120,7 +120,8 @@ describeSiHayBase("458-A R5–R8 — el origen legible sale de la base, por la a
     const rechazo = porCategoria.get("flete_devolucion");
     expect(r.res.data.movimientos).toHaveLength(2);
 
-    expect(cierre?.texto).toBe(`Cierre del día · 2026-09-12 · ${r.e.mensajeroNombre}`);
+    // Escrito a mano (revision m6): compararlo contra `etiquetaDeCuenta(...)` estaria siempre verde.
+    expect(cierre?.texto).toBe("Cierre del día · 2026-09-12 · Juan Pérez Mora");
     expect(cierre?.enlace?.href).toBe(`/cierres-admin?cierre=${r.e.cierre.id}`);
     expect(rechazo?.texto).toBe(`Gestión de orden · cobro por rechazo · guía ${r.e.numGuia}`);
     expect(rechazo?.enlace).toEqual({
