@@ -148,7 +148,7 @@ describe("335 / R17 — `/mi-wallet` es de SOLO LECTURA: ninguna action que escr
 
   it("CONTRAPRUEBA: el criterio SI caza una action que escribe, y no caza las de lectura", () => {
     const escritoras = ["registrarPagoTiendaAction", "anularPagoAction", "crearAjusteAction"];
-    const lectoras = ["listarMisCierresAction", "verMiSaldoAction", "obtenerSaldoAction"];
+    const lectoras = ["listarMisCierresAction", "verMiEstadoCuentaAction", "obtenerSaldoAction"];
     expect(escritoras.filter((s) => !PREFIJOS_DE_LECTURA.test(s))).toEqual(escritoras);
     expect(lectoras.filter((s) => !PREFIJOS_DE_LECTURA.test(s))).toEqual([]);
   });

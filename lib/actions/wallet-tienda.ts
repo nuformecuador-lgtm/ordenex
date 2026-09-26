@@ -24,24 +24,19 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IWalletTiendaService,
   ListarMisCierresServiceResult,
-  ListarMisMovimientosServiceResult,
   ListarSaldosTiendasPaginadoServiceResult,
   ListarMovimientosDeTiendaServiceResult,
   ListarSaldosTiendasServiceResult,
-  VerMiSaldoServiceResult,
 } from "@/lib/interfaces/services/IWalletTiendaService";
 import {
   anularCobroTiendaSchema,
   listarMovimientosDeTiendaCompletoSchema,
   listarMovimientosDeTiendaSchema,
-  listarMovimientosTiendaCompletoSchema,
-  listarMovimientosTiendaSchema,
   listarSaldosTiendasCompletoSchema,
   listarSaldosTiendasPaginadoSchema,
   registrarCobroTiendaSchema,
   type AnularCobroTiendaResult,
   type ListarMovimientosDeTiendaCompletoResult,
-  type ListarMovimientosTiendaCompletoResult,
   type ListarSaldosTiendasCompletoResult,
 } from "@/lib/types/wallet-tienda";
 import type {
@@ -69,15 +64,15 @@ import type { AppErrorShape } from "@/lib/errors";
 // devuelve el service como resultado de dominio. Money-safe: los DTOs exponen montos como
 // STRING (R21/R27); el cliente nunca recibe Prisma.Decimal.
 
-export type VerMiSaldoActionResult =
-  | VerMiSaldoServiceResult
-  | { status: "unauthenticated" };
-
-export type ListarMisMovimientosActionResult =
-  // Ficha 458-A (TA.2, R5–R8): cada fila baja con su origen legible (`origen`).
-  | ConOrigenEnPagina<ListarMisMovimientosServiceResult>
-  | { status: "unauthenticated" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+// FICHA 458-D (cierre) — `verMiSaldoAction`, `listarMisMovimientosAction` y
+// `listarMisMovimientosCompletoAction` se RETIRARON: `/mi-wallet` lee su saldo, su libro, su resumen de
+// tres cifras y su descarga por `verMiEstadoCuentaAction` / `verMiEstadoCuentaCompletoAction`
+// (`lib/actions/estado-cuenta.ts`). No tenian llamadores fuera de los tests (ni API publica, ni asistente,
+// ni scripts, ni crons, medido); sus redes de borde se movieron, en los MISMOS archivos, a las actions
+// nuevas: `tests/unit/actions/wallet-tienda-actions.test.ts`, `wallet-tienda-descarga-action.test.ts` y
+// `tests/unit/types/wallet-tienda-schemas.test.ts`. Los metodos del SERVICIO
+// (`WalletTiendaService.verMiSaldo` / `listarMisMovimientos{,Completo}`) se quedan: los usan las redes de
+// servicio de la 43/170/172/344/458-A y la medida R22 de la 458-D contra Postgres.
 
 export type ListarSaldosTiendasActionResult =
   | ListarSaldosTiendasServiceResult
@@ -233,67 +228,6 @@ export type VerDetalleDeMiMovimientoCompletoActionResult =
   | VerDetalleMovimientoCompletoServiceResult
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
-
-/**
- * R17/R19: saldo total del adminTienda (STRING+signo), acotado a su tienda_id. Forbidden/unauthenticated sin exponer datos.
- *
- * @sin-superficie FICHA 458-D (T D.5, R34): `/mi-wallet` es ahora el estado de cuenta de la tienda (`verMiEstadoCuentaAction`, cuyas tarjetas dan el saldo); su superficie era la tarjeta `SaldoTiendaCard`, retirada. Se conserva: la usa `tests/unit/actions/wallet-tienda-actions.test.ts` (borde de la 43); retirarla es tarea de servidor.
- */
-export async function verMiSaldoAction(
-  deps: WalletTiendaDeps = {},
-): Promise<VerMiSaldoActionResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R19: antes de tocar el service
-    const service = deps.service ?? buildService();
-    return service.verMiSaldo(actor);
-  });
-  // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
-  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
-}
-
-/**
- * R19/R22/R27: movimientos paginados + filtros del adminTienda, acotados a su tienda_id en el WHERE.
- *
- * @sin-superficie FICHA 458-D (T D.5, R34): el libro de `/mi-wallet` (`MiWalletModule`/`DesgloseTiendaLedger`) se retiró; lo sustituye el estado de cuenta de la tienda (`verMiEstadoCuentaAction`). Se conserva: la usan `tests/unit/actions/wallet-tienda-actions.test.ts` y `tests/unit/types/wallet-tienda-schemas.test.ts`; retirarla es tarea de servidor.
- */
-export async function listarMisMovimientosAction(
-  input: unknown,
-  deps: WalletTiendaDeps = {},
-): Promise<ListarMisMovimientosActionResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    const data = listarMovimientosTiendaSchema.parse(input); // ZodError -> VALIDATION_ERROR
-    const service = deps.service ?? buildService();
-    const r = await service.listarMisMovimientos(data, actor);
-    return origenEnPagina(deps.origenes ?? buildOrigenes(), "tienda", r, actor);
-  });
-  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
-}
-
-/**
- * Feature 170 (T C.2, design §4) — ledger COMPLETO de la tienda del actor, sin paginacion,
- * para la descarga. Calcado de `listarMisMovimientosAction`: mismo borde, mismo actor, mismo
- * schema (menos `page`/`pageSize`, y `.strict()`) y el MISMO servicio, que acota a su
- * `tienda_id` (R14/R15). Ninguna rama devuelve filas junto a un error (R16/R17/R18).
- *
- * @sin-superficie FICHA 458-D (T D.5, R34): la descarga del libro de `/mi-wallet` se retiró con él; la sustituye la del estado de cuenta (`verMiEstadoCuentaCompletoAction`). Se conserva: la usa `tests/unit/actions/wallet-tienda-descarga-action.test.ts` (borde de la 170); retirarla es tarea de servidor.
- */
-export async function listarMisMovimientosCompletoAction(
-  input: unknown,
-  deps: WalletTiendaDeps = {},
-): Promise<ListarMovimientosTiendaCompletoResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
-    const data = listarMovimientosTiendaCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
-    const service = deps.service ?? buildService();
-    const r = await service.listarMisMovimientosCompleto(data, actor);
-    return origenEnItems(deps.origenes ?? buildOrigenes(), "tienda", r, actor);
-  });
-  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
-}
 
 /**
  * R20/R27: saldo de TODAS las tiendas (solo maestro). Forbidden/unauthenticated sin exponer datos.

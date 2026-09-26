@@ -74,13 +74,16 @@ describe("458-A R94 — ninguna superficie de la wallet pinta un origen sin nomb
     }
   });
 
-  it("composition root: los 9 bordes de los libros adjuntan el origen con el servicio REAL por defecto", () => {
+  it("composition root: los 7 bordes de los libros adjuntan el origen con el servicio REAL por defecto", () => {
     // Memoria «el composition root que no inyecta»: importar no es pasar. Cada borde que entrega
     // filas de un libro llama `deps.origenes ?? buildOrigenes()`, y `buildOrigenes` construye el
     // servicio sobre el repositorio de Prisma.
     const esperado: Record<string, number> = {
       "lib/actions/wallet.ts": 3,
-      "lib/actions/wallet-tienda.ts": 4,
+      // FICHA 458-D (cierre): 4 → 2. Se retiraron `listarMisMovimientos{,Completo}Action`; el libro de
+      // `/mi-wallet` es el estado de cuenta, cuyo origen lo resuelve `EstadoCuentaService` con el
+      // `OrigenLegibleService` que le inyecta `buildService()` de `lib/actions/estado-cuenta.ts`.
+      "lib/actions/wallet-tienda.ts": 2,
       "lib/actions/wallet-mensajero.ts": 2,
     };
     for (const [archivo, n] of Object.entries(esperado)) {

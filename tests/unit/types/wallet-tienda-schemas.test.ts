@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { listarMisMovimientosAction, listarMovimientosDeTiendaAction } from "@/lib/actions/wallet-tienda";
+import { verMiEstadoCuentaAction } from "@/lib/actions/estado-cuenta";
+import { listarMovimientosDeTiendaAction } from "@/lib/actions/wallet-tienda";
+import type { IEstadoCuentaService } from "@/lib/interfaces/services/IEstadoCuentaService";
 import type { IWalletTiendaService } from "@/lib/interfaces/services/IWalletTiendaService";
 import {
   listarMovimientosDeTiendaSchema,
@@ -34,15 +36,17 @@ describe("458-A R36 — el listado de /mi-wallet no admite una clave que nombre 
     ).toBe(false);
   });
 
+  // FICHA 458-D (cierre): `listarMisMovimientosAction` se retiró; el listado de `/mi-wallet` es hoy el
+  // estado de cuenta de la tienda (`verMiEstadoCuentaAction`, `miEstadoCuentaSchema` `.strict()`).
   it("por la action: `tiendaId` ajeno → validation_error y el servicio NO se llama", async () => {
-    const listarMisMovimientos = vi.fn();
-    const service = { listarMisMovimientos } as unknown as IWalletTiendaService;
-    const r = await listarMisMovimientosAction(
+    const leerMiTienda = vi.fn();
+    const service = { leerMiTienda } as unknown as IEstadoCuentaService;
+    const r = await verMiEstadoCuentaAction(
       { page: 1, pageSize: 20, tiendaId: TIENDA_AJENA },
-      { service, origenes: ORIGENES_FALSOS, getActor: async () => TIENDA },
+      { service, getActor: async () => TIENDA },
     );
     expect(r.status).toBe("validation_error");
-    expect(listarMisMovimientos).not.toHaveBeenCalled();
+    expect(leerMiTienda).not.toHaveBeenCalled();
   });
 
   // Revision 458-A (m3): el comentario de `WalletTiendaService.listarMovimientosDeTienda` decia que

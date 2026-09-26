@@ -1,10 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  verMiSaldoAction,
-  listarMisMovimientosAction,
-  listarSaldosTiendasAction,
-} from "@/lib/actions/wallet-tienda";
+import { listarSaldosTiendasAction } from "@/lib/actions/wallet-tienda";
+import { verMiEstadoCuentaAction } from "@/lib/actions/estado-cuenta";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IEstadoCuentaService } from "@/lib/interfaces/services/IEstadoCuentaService";
+import { estado } from "@/tests/fixtures/estado-cuenta";
 import type { IWalletTiendaService } from "@/lib/interfaces/services/IWalletTiendaService";
 import type { DesgloseTiendaDTO, SaldoTiendaDTO } from "@/lib/types/wallet-tienda";
 
@@ -107,59 +106,77 @@ function fakeService(overrides: Partial<IWalletTiendaService> = {}): IWalletTien
   };
 }
 
-describe("verMiSaldoAction (R19/R27)", () => {
+// FICHA 458-D (cierre) — `verMiSaldoAction` y `listarMisMovimientosAction` se RETIRARON (sin llamadores
+// fuera de los tests): `/mi-wallet` lee su saldo y su libro por `verMiEstadoCuentaAction`. Sus redes de
+// borde (43 R19/R22/R27) se MUEVEN aqui, sobre la action nueva, con las mismas R.
+
+function estadoCuentaEspia(overrides: Partial<IEstadoCuentaService> = {}) {
+  return {
+    leer: vi.fn(),
+    leerCompleto: vi.fn(),
+    leerMiTienda: vi.fn(async () => ({
+      status: "ok" as const,
+      estado: estado({ saldoActual: "8500.00", signo: "positivo", resumen: DESGLOSE }),
+    })),
+    leerMiTiendaCompleto: vi.fn(),
+    ...overrides,
+  } satisfies IEstadoCuentaService;
+}
+
+describe("verMiEstadoCuentaAction — el saldo de la tienda (antes verMiSaldoAction, 43 R19/R27)", () => {
   it("sin sesion -> unauthenticated, sin tocar el service", async () => {
-    const service = fakeService();
-    const r = await verMiSaldoAction({ service, getActor: async () => null });
+    const service = estadoCuentaEspia();
+    const r = await verMiEstadoCuentaAction({}, { service, getActor: async () => null });
     expect(r).toEqual({ status: "unauthenticated" });
-    expect(service.verMiSaldo).not.toHaveBeenCalled();
+    expect(service.leerMiTienda).not.toHaveBeenCalled();
   });
 
   it("R19: rol no autorizado -> forbidden (el service decide)", async () => {
-    const service = fakeService({ verMiSaldo: vi.fn(async () => ({ status: "forbidden" as const })) });
-    const r = await verMiSaldoAction({ service, getActor: async () => MAESTRO });
+    const service = estadoCuentaEspia({ leerMiTienda: vi.fn(async () => ({ status: "forbidden" as const })) });
+    const r = await verMiEstadoCuentaAction({}, { service, getActor: async () => MAESTRO });
     expect(r).toEqual({ status: "forbidden" });
   });
 
-  it("R27: adminTienda -> ok con saldo STRING+signo", async () => {
-    const service = fakeService();
-    const r = await verMiSaldoAction({ service, getActor: async () => TIENDA });
+  it("R27: adminTienda -> ok con saldo STRING+signo (y el resumen de tres cifras en STRING)", async () => {
+    const service = estadoCuentaEspia();
+    const r = await verMiEstadoCuentaAction({}, { service, getActor: async () => TIENDA });
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("ok");
-    expect(typeof r.saldo.saldo).toBe("string");
-    expect(r.saldo.signo).toBe("positivo");
+    expect(typeof r.estado.saldoActual).toBe("string");
+    expect(r.estado.signo).toBe("positivo");
+    for (const cifra of [r.estado.resumen?.aFavor, r.estado.resumen?.cargos, r.estado.resumen?.pagado]) {
+      expect(typeof cifra).toBe("string");
+    }
   });
 });
 
-describe("listarMisMovimientosAction (R19/R22/R27)", () => {
+describe("verMiEstadoCuentaAction — el libro de la tienda (antes listarMisMovimientosAction, 43 R19/R22/R27)", () => {
   it("sin sesion -> unauthenticated", async () => {
-    const service = fakeService();
-    const r = await listarMisMovimientosAction({}, { service, getActor: async () => null });
+    const service = estadoCuentaEspia();
+    const r = await verMiEstadoCuentaAction({ page: 1 }, { service, getActor: async () => null });
     expect(r).toEqual({ status: "unauthenticated" });
   });
 
   it("input invalido (pageSize fuera de rango) -> validation_error, sin tocar el service", async () => {
-    const service = fakeService();
-    const r = await listarMisMovimientosAction(
-      { page: 1, pageSize: 9999 },
-      { service, getActor: async () => TIENDA },
-    );
+    const service = estadoCuentaEspia();
+    const r = await verMiEstadoCuentaAction({ page: 1, pageSize: 9999 }, { service, getActor: async () => TIENDA });
     expect(r.status).toBe("validation_error");
-    expect(service.listarMisMovimientos).not.toHaveBeenCalled();
+    expect(service.leerMiTienda).not.toHaveBeenCalled();
   });
 
   it("R19: rol no autorizado -> forbidden", async () => {
-    const service = fakeService({ listarMisMovimientos: vi.fn(async () => ({ status: "forbidden" as const })) });
-    const r = await listarMisMovimientosAction({ page: 1, pageSize: 20 }, { service, getActor: async () => MAESTRO });
+    const service = estadoCuentaEspia({ leerMiTienda: vi.fn(async () => ({ status: "forbidden" as const })) });
+    const r = await verMiEstadoCuentaAction({ page: 1, pageSize: 20 }, { service, getActor: async () => MAESTRO });
     expect(r).toEqual({ status: "forbidden" });
   });
 
-  it("R27: adminTienda -> ok con saldo STRING", async () => {
-    const service = fakeService();
-    const r = await listarMisMovimientosAction({ page: 1, pageSize: 20 }, { service, getActor: async () => TIENDA });
+  it("R22/R27: adminTienda -> ok con las filas, su saldo corrido STRING y la pagina pedida al servicio", async () => {
+    const service = estadoCuentaEspia();
+    const r = await verMiEstadoCuentaAction({ page: 1, pageSize: 20 }, { service, getActor: async () => TIENDA });
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("ok");
-    expect(typeof r.data.saldo.saldo).toBe("string");
+    expect(typeof r.estado.filas[0].saldoCorrido).toBe("string");
+    expect(service.leerMiTienda).toHaveBeenCalledWith({ page: 1, pageSize: 20 }, TIENDA);
   });
 });
 
