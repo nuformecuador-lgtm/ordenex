@@ -336,3 +336,31 @@ fila → 2/9; sin puerto descarta en silencio → 1/6; laterales siempre present
 **Rojos ajenos aislados:** en la corrida entera de integration/db, 4 archivos cayeron por `40P01`
 (deadlock, 3) y una FK de siembra (`cierre-rechazado-aviso-dedupe`); aislados y en serie, 3 de 3 verdes
 (47/47 cada vez). Es el modo de flake conocido (memoria «cuatro modos de flake»).
+
+## TB.12 — «Así queda» (R44–R47, R50, R82)
+
+`lib/types/efecto-movimiento.ts` (`CONCEPTO_REGISTRO_SEED`: los diez conceptos de §4.1;
+`previsualizarMovimientoSchema` `.strict()`; `EfectoMovimientoDTO`), `lib/utils/efecto-movimiento.ts`
+(`EFECTO_POR_TIPO`, `Record` total por concepto: líneas de caja + asiento en la cuenta; y
+`efectoDeMovimiento`, PURA: filas hipotéticas + `derivarCaja` dos veces + `derivarSaldoTienda` /
+`derivarCuentaPorPagar`; ninguna resta propia), `PrevisualizarMovimientoService` (+ interfaz; rol antes
+de leer; lee la caja sin filtros, el saldo inicial vigente, el primer día y la cuenta) y
+`previsualizarMovimientoAction` (`lib/actions/efecto-movimiento.ts`, `@sin-superficie` hasta 458-C).
+
+**Contrato para la 458-C:** el diálogo enruta por `ConceptoRegistro` (la MISMA clave que
+`EFECTO_POR_TIPO`); `cifraPrincipal.rotulo` es el ESTADO de la caja (`saldo`/`flujo`), el texto lo pone
+la pantalla con el diccionario de la 459; `superaDisponible` solo viene en el pago a una tienda y en el
+pago de una tienda a Ordenex; `saldoEnContra` en cualquier concepto de tienda que la deje en negativo.
+**Anotado:** la cuenta del mensajero se valida por existencia del usuario (`obtenerNombreMensajero`), no
+por rol; un id de otro rol daría la cuenta por pagar de ese usuario (cero): lectura, sin efecto.
+
+**Tests:** `tests/unit/utils/efecto-movimiento.test.ts` (14: un caso por concepto con cifras escritas a
+mano, «no cambia», la línea de capital del aporte, identidad R7 tras cada concepto, `saldoEnContra`,
+`superaDisponible` en el borde exacto), `tests/unit/actions/previsualizar-movimiento-action.test.ts` (5:
+por rol con el servicio real, `forbidden` sin leer nada, `.strict()`, `cuentaId`, `no_encontrado`) y
+`tests/integration/db/efecto-movimiento-predice.test.ts` (5, Postgres: para los diez conceptos se
+previsualiza y luego se registra por su camino REAL; la caja y la cuenta quedan EXACTAMENTE como se
+previó — R50 medido, no supuesto; tabla de «cambia» de §4.1). `caja-derivaciones.guardia` verde.
+Mutaciones TB.12 (todas rojas, `restaurado=true`): **M9** aporte sin la línea de capital → 3/19; cobro
+con categoría de corrección → 2/5; pagar el saldo exacto como excedido → 1/14; sin aviso de saldo en
+contra → 2/19; rol después de leer → 1/5; pago a tienda como crédito → 1/5.
