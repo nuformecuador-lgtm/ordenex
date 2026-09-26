@@ -229,18 +229,18 @@ export type ListarMovimientosTiendaCompletoResult =
  * Feature 171 (design §2.1, R7/R8/R10) — cabecera del desglose: TRES cubetas exhaustivas
  * sobre el ledger + el saldo que se deriva de ellas.
  *
- * `pagado` esta separado de `cargos` a proposito, y hoy vale siempre "0.00" porque ningun
- * flujo emite `pago_tienda` (lo emitira la 172). No es un cero fijo: se lee de la categoria
- * REAL del ledger, de modo que el dia que la 172 inserte el primer pago esta cabecera lo
- * refleje sin tocar una linea (R43). Si «pagado» se plegara dentro de «cargos», nadie podria
- * distinguir *lo que te cobre* de *lo que ya te pague* mirando la pantalla.
+ * `pagado` esta separado de `cargos` a proposito: se lee de la categoria REAL del ledger
+ * (`pago_tienda`, que emite la 172, y `pago_por_cuenta`, que emite la 459). Si «pagado» se plegara
+ * dentro de «cargos», nadie podria distinguir *lo que te cobre* de *lo que ya te pague* mirando la
+ * pantalla. La cubeta de CADA categoria la fija `CUBETA_POR_CATEGORIA` (`lib/utils/desglose-tienda.ts`),
+ * un `Record` total: esa tabla es la fuente; los comentarios de abajo, un resumen (458-B, T2).
  *
  * Money-safe (R23): los cuatro importes cruzan la frontera como STRING escala 2.
  */
 export type DesgloseTiendaDTO = {
-  aFavor: string; // Σ creditos (cod_recaudado, ajuste_credito)
-  cargos: string; // Σ debitos != pago_tienda (fletes, comision, los tres IVA, ajuste_debito)
-  pagado: string; // Σ debitos == pago_tienda (hoy siempre "0.00", ver R43)
+  aFavor: string; // Σ creditos (cod_recaudado, ajuste_credito, abono_tienda y los creditos espejo de las anulaciones)
+  cargos: string; // Σ debitos de Ordenex (fletes, comision, los tres IVA, ajuste_debito, cobro_manual, abono_tienda_anulado)
+  pagado: string; // Σ pagos a la tienda (pago_tienda de la 172, pago_por_cuenta de la 459)
   saldo: string; // aFavor - cargos - pagado (puede venir "-123.45")
   signo: SaldoTiendaSigno;
 };

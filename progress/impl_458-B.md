@@ -388,3 +388,15 @@ medio == su prefijo; el pago a una tienda que tiene anulación → la tienda tra
 cobro → la caja tras SU cargo; el pago al mensajero sin caja; R82. Mutaciones TB.13 (todas rojas):
 contrapartida más lejana → 1/7; caja sin incluir la fila → 4/7; cobro sin su cargo → 1/7; saldo sin
 acotar a la tienda → 2/7; orden sin `created_at` → 1/7.
+
+## TB.14 — Comentarios T2–T4 (R101)
+
+Diff SOLO de comentarios (medido: `git diff -U0` sin una línea de código distinta; `prisma validate`
+verde): **T2** `lib/types/wallet-tienda.ts` — las tres cubetas de `DesgloseTiendaDTO` dicen lo que hoy
+contienen (con `cobro_manual`, `pago_por_cuenta`, los abonos y los créditos espejo) y remiten a
+`CUBETA_POR_CATEGORIA` como fuente; fuera el «hoy siempre 0,00». **T3** `schema.prisma` — `pago_tienda`
+deja de decirse «RESERVADO» (enum de orígenes y de categorías de la tienda). **T4** — el origen del libro
+de la tienda deja de ser «cierre_dia | pago_tienda | manual». **Añadido, mismo archivo y mismo tipo de
+afirmación:** `liquidacion` del libro del mensajero tampoco es ya «RESERVADO» (lo emiten la 172 y la
+205). Los tests de la 43/44 que nombran «RESERVADO» en sus `describe` (describen el estado de su
+migración) no se tocan; verdes.
