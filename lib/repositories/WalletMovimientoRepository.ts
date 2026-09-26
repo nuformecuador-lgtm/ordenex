@@ -130,6 +130,22 @@ async function gruposConAQuien(
 }
 
 /**
+ * Revision M1 (458-E): `SUM(monto)` por CATEGORIA con el WHERE de «A quién» — la suma la hace el motor,
+ * como el `groupBy(categoria)` del camino sin «A quién». En este repositorio ningun importe se suma en
+ * JavaScript (guardia `caja-173-alcance`).
+ */
+async function categoriasConAQuien(
+  prisma: Pick<PrismaClient, "$queryRaw">,
+  f: BalanceFiltros & { aQuien: AQuienFiltro },
+): Promise<Omit<GrupoSql, "tipo">[]> {
+  return prisma.$queryRaw<Omit<GrupoSql, "tipo">[]>(Prisma.sql`
+    SELECT w."categoria"::text AS "categoria", SUM(w."monto") AS "total"
+    FROM "wallet_movimiento" w
+    WHERE ${whereLibroCajaSql(f)}
+    GROUP BY w."categoria"`);
+}
+
+/**
  * Feature 42 — repositorio del LIBRO de movimientos de la wallet. SOLO queries Prisma.
  * Inserta idempotentemente (skipDuplicates -> ON CONFLICT DO NOTHING, R6/R13), lista
  * paginado por fecha desc con filtros en el WHERE (R20/R24) y agrega por (categoria, tipo)
@@ -369,14 +385,11 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   async agregarPorCategoria(filtros: BalanceFiltros): Promise<DesgloseEgresosAgregado> {
     const f = conAQuien(filtros);
     if (f !== null) {
-      // Ficha 458-E (R59): con «A quién», la suma por categoria sale de los grupos (categoria, tipo)
-      // del MISMO WHERE que el libro. Se suman TODOS los grupos de la categoria (con `Decimal`).
-      const grupos = await gruposConAQuien(this.prisma, f);
+      // Ficha 458-E (R59): con «A quién», la suma por categoria la hace el motor sobre el MISMO WHERE
+      // que el libro (revision M1: ninguna suma de importes en JavaScript).
+      const grupos = await categoriasConAQuien(this.prisma, f);
       const sumaConAQuien = (categoria: string): string =>
-        grupos
-          .filter((g) => g.categoria === categoria)
-          .reduce((acc, g) => acc.add(g.total ?? new Prisma.Decimal(0)), new Prisma.Decimal(0))
-          .toFixed(2);
+        (grupos.find((g) => g.categoria === categoria)?.total ?? new Prisma.Decimal(0)).toFixed(2);
       return {
         gastoFijo: sumaConAQuien("egreso_gasto_fijo"),
         gastoVariable: sumaConAQuien("egreso_gasto_variable"),
