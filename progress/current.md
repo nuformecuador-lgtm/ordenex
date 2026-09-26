@@ -1,5 +1,7 @@
 # PUNTO DE RETOMA — 2026-09-25 noche (la cuota semanal va al 75 %: si se corta, se sigue de aquí)
 
+**AUTORIZACIÓN (2026-09-25 noche):** Carlos se fue a dormir y dejó dicho: «quédate trabajando hasta terminar... que lo último que quede es desplegar y ya, que no te quede ni un pendiente». Esto cubre terminar la 457 y la 458 completas, con revisión, recorrido y merge a `dev`, y dejar listo el plan de pruebas y la lista previa a desplegar. NO cubre desplegar.
+
 - **En `dev`, sin desplegar:** 454, 455, 456, 459, 460, 461 (PR #826, gate post-merge verde, `progress/gate_dev_tras_826.log`) y 462.
 - **457, backend:** rama `feature/457-backend` en origin, con cada paso pusheado. Hechos: la Fase 0, las migraciones, el servicio con su puerto de caja, las actions y parte de los tests. El clon de base es `ordenex_457`. Falta cerrar los tests y las mutaciones, escribir `progress/impl_457.md` (contratos para el frontend) y correr el gate completo. Si el agente murió, relanzar un backend_dev (Opus) desde el último SHA de la rama.
 - **457, frontend:** sin empezar. Va después del backend, sobre la misma rama (design §8). Luego revisión, recorrido, PR y merge.
