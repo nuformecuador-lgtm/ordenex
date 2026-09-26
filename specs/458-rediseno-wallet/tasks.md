@@ -46,7 +46,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   usada por avisos, historial, tablas, origen y «A quién» de la wallet (sustituye a `etiquetaDePersona`
   donde la wallet la usa y a `nombre` a secas). *Hecho:* `etiqueta-cuenta.test.ts`; guardia de fuente
   que prohíbe otra composición del nombre en `app/(app)/wallet/**` y `app/(app)/mi-wallet/**` (R33).
-  *Evidencia:* `68dc8d42`; revisión B1 en `dde7ac7e` (historial: `CobroTiendaAnulacionRepository`, `LiquidacionPagoRepository` y `LiquidacionRepartoRepository` con `etiquetaDeCuenta`). `tests/unit/utils/etiqueta-cuenta.test.ts`; guardia `wallet-etiqueta-cuenta` con el censo del historial por contenido + contraprueba de `cd91bcf4`; `tests/integration/db/wallet-etiqueta-historial-458.test.ts` (Postgres, literales, mensajero con segundo apellido). Mutaciones en `progress/impl_458-A.md` §16.
+  *Evidencia:* `68dc8d42`; revisión B1 en `dde7ac7e` (historial: `CobroTiendaAnulacionRepository`, `LiquidacionPagoRepository` y `LiquidacionRepartoRepository` con `etiquetaDeCuenta`). `tests/unit/utils/etiqueta-cuenta.test.ts`; guardia `wallet-etiqueta-cuenta` con el censo del historial por contenido + contraprueba de `cd91bcf4`; `tests/integration/db/wallet-etiqueta-historial-458.test.ts` (Postgres, literales, mensajero con segundo apellido). Mutaciones en `progress/impl_458-A.md` §17.
 - [x] **TA.2** [P] `OrigenLegibleService` en LOTE (`design.md` §3.3): una consulta por tipo presente;
   los tres mapas de origen pasan a `Record<WalletOrigenTipo, …>` totales y los DTO a
   `origenTipo: WalletOrigenTipo`; fuera `origenLabel` con `??`; enlace por rol (`hrefDetalleCierre`,

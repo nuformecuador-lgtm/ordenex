@@ -5605,3 +5605,22 @@ Vercel**: T25, T26 y T27 quedan sin marcar a propósito, que es la señal de que
 
 ## 2026-09-25 — 462: aviso de reprogramados que esperan la aprobación de un cierre
 Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y franja en /ordenes desde un conteo único de solo lectura. Causa medida en prod el 24/09: la regla 276 retiene la reprogramada hasta aprobar su cierre (no hay 24 h). PR #825.
+
+## 2026-09-26 — 458-A: detalles y guardias de la wallet (hija A de la 458)
+- Sobre las pantallas actuales: el origen de cada movimiento con nombre y enlace (sin uuid), el cierre
+  se elige en un selector buscable (fuera los campos de pegar el id), los conceptos del filtro salen de
+  los movimientos con su cuenta, una sola `etiquetaDeCuenta` para nombrar tiendas y mensajeros, borde
+  `.uuid()`/`.strict()` y el panel mensual de `/analitica` dice «Movimiento neto del periodo».
+- Requisitos cubiertos: R1–R16 (selectores), R33, R36, R62, R84, R90, R93–R97, R99, R101 (parte),
+  R102–R104; mapa R→test en `progress/impl_458-A.md` §3 y §11.
+- Revisión RECHAZADA (`progress/review_458-A.md`): el historial del cobro leía «Tania Tienda» al
+  registrar y «Tania» al anular, y pagos/repartos «Juan Pérez» donde la tabla dice «Juan Pérez Mora»,
+  con la guardia verde porque su censo no miraba esos repositorios. Cerrado en §16–§18: el historial con
+  `etiquetaDeCuenta`, la guardia descubre por contenido a quien escribe el historial de una cuenta, test
+  contra Postgres con literales; además capas (`lib/services` ya no importa de `app/`), el buscador de
+  cierres sin `IN` sin tope (33.000 cierres rompían el selector), sin la lectura muerta de la caja en
+  `/analitica` y literales escritos a mano. 13 mutaciones en rojo. Gate completo `INIT_EXIT=0`,
+  31939 verdes, 26 saltados (ninguno en `integration/db`).
+- Deuda: contar en producción las tiendas con `segundo_apellido` antes de desplegar; m7–m9 de la
+  revisión (cobertura contra Postgres de 6 lectores del origen, ayuda de mensajeros, nombre de
+  `conciliadoPorNombre`); el panel de `/analitica` sigue oculto (región `financiero` comentada).

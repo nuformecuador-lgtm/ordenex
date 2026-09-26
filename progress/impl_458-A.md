@@ -319,3 +319,72 @@ literal tocado).
   hasta que vuelva (el cargador y su test ya lo dicen).
 - Enlaces del origen a los estados de cuenta (pagos, cobros, abonos, pago por cuenta): 458-D.
 - `SelectorBuscable` se reutiliza en 458-C/E (cuenta y «A quién»).
+
+---
+
+# 458-A — cierre tras la revisión RECHAZADA (backend_dev, 2026-09-26)
+
+Rama `wt/458-A-fix` desde `origin/feature/458-A` = `cd91bcf4` + merge de `origin/review/458-A`
+(`6f2bef71`, `progress/review_458-A.md`). Base propia `ordenex_458ax` (`CREATE DATABASE … TEMPLATE
+ordenex` + `migrate deploy`: 225, «No pending migrations»; `migrate status` → `ordenex_458ax` en
+`localhost:5432`); `.env` copiado del checkout principal con la base apuntando al clon; `pnpm install`
+propio. Búsqueda: MCP `codebase-memory` disponible (`search_code` para `etiquetaDePersona`); cada
+símbolo confirmado en el archivo real.
+
+## 16. Lo arreglado, punto por punto
+
+| Punto de la revisión | Commit | Qué | Test |
+| --- | --- | --- | --- |
+| **B1** (R33) | `dde7ac7e` | `CobroTiendaAnulacionRepository.anular`, `LiquidacionPagoRepository` (registro `nombreDelBeneficiario` y anulación) y `LiquidacionRepartoRepository` (registro y anulación): `CUENTA_USUARIO_SELECT` + `etiquetaDeCuenta` (sin cuenta, `null` → «(sin identificar)» como antes). Comentarios desfasados de `IWalletTiendaMovimientoRepository.ts` y `descripcion-cobro-tienda.ts`. | `tests/integration/db/wallet-etiqueta-historial-458.test.ts` (Postgres: «Tania Tienda» igual en registro, anulación y tabla; mensajero «Juan Pérez Mora» igual en pago, su anulación, reparto, su anulación y la tabla de `/wallet/mensajeros`); guardia `wallet-etiqueta-cuenta` ampliada |
+| **B1** guardia | `dde7ac7e` | El censo del servidor suma, POR CONTENIDO, todo archivo de `lib/{repositories,services}` que etiqueta el historial de una cuenta de la wallet (`etiquetaDeEntidad` de `wallet_tienda_movimiento`, `liquidacion_pago`, `liquidacion_reparto`, `pago_por_cuenta_tienda`, `abono_tienda`); patrones nuevos: el `nombre` a secas en `tiendaNombre`/`beneficiarioNombre`/`mensajeroNombre` y la cuenta leída sin apellidos. No-vacuidad: los tres repositorios en el censo, ≥ 11 archivos. | contraprueba con la fuente de `cd91bcf4` de la anulación y de los pagos |
+| **m1** | `3def2353` + este commit | TA.0–TA.9 `[x]` con `*Evidencia:*`; entrada en `progress/history.md`. | — |
+| **m2** capas | `031300ff` | `lib/constants/wallet-rotulos.ts` (`CATEGORIA_LABEL`, `ORIGEN_LABEL`, `ORIGEN_TIENDA_LABEL`, `ORIGEN_PAGO_LABEL`, `etiquetaVerOrden`), `lib/constants/origen-legible-rotulos.ts` (antes en `app/(app)/wallet/_components/`), `lib/constants/metodo-pago-label.ts`, `lib/utils/hora-cr.ts`, `lib/utils/cierre-enlace.ts`. Las pantallas re-exportan el MISMO objeto. Los censos de `_wallet-458-archivos` y `nombres-wallet-461` suman los rótulos de `lib/constants`; `caja-173-alcance` declara el catálogo. | guardia nueva `tests/unit/guards/lib-no-importa-app.guardia.test.ts` (+ contraprueba) |
+| **m3** | `4b1ddecc` | Comentario de `WalletTiendaService.listarMovimientosDeTienda` (y el del test del servicio): el borde ES estricto por el `.extend` de un `.strict()` (medido en zod: clave extra → `success: false`). | `wallet-tienda-schemas.test.ts` («por la action del desglose: una clave colada → validation_error»); afirmación `m3` en `wallet-textos-458` |
+| **m4** | `069b7ca2` | `cierresDeTienda`/`cierresDeMensajero`: la búsqueda va en la MISMA consulta (`JOIN` al cierre y a su mensajero, la cuenta primera en el `WHERE`, `LIMIT`), sin la lectura previa sin tope ni el `IN`; `ILIKE` con `%`, `_` y `\` escapados. | `wallet-cierres-selector.test.ts` «m4: 33.000 cierres que casan…» y «m4: el texto buscado es literal» |
+| **m5** | `1eb205dc` | `/analitica` ya no llama a `verResumenCajaAction`: con periodo el rótulo no depende del estado. | `panel-mensual-rotulo.test.ts` «m5…», `tablero-financiero-cargar.test.ts` (`not.toHaveBeenCalled()`) |
+| **m6** | `aed9f27a` | Las dos aserciones pasan a literales escritos a mano, con mensajeros de segundo apellido: «Anacleta Zúñiga458 Mora458» y «Cierre del día · 2026-09-12 · Juan Pérez Mora»; + búsqueda por segundo apellido. | `wallet-cierres-selector.test.ts`, `wallet-origen-legible.test.ts` |
+
+Fuera de alcance, anotado: `CierresAdminRepository.ts:2441` (historial del `cierre_dia`, pantalla de
+cierres, no wallet) y `RechazoTiendaCobroRepository` (cola de rechazos de `/cierres-admin`) siguen con
+su composición; m7 (cobertura contra Postgres de 6 de 8 lectores del origen), m8 (ayuda) y m9
+(`conciliadoPorNombre`) no se pidieron en este cierre. Lo persistido (nota de B1): las líneas de caja del
+cobro ya usaban `etiquetaDeCuenta` desde `cd91bcf4`; contar en producción las tiendas con
+`segundo_apellido` no nulo sigue pendiente antes de desplegar (dato del leader: ninguna tienda tiene
+apellidos).
+
+## 17. Mutaciones (una a una: el archivo cambia —`git diff --stat` no vacío—, se corre, se restaura con `git checkout HEAD --`, `git status` limpio)
+
+| # | Mutación | Tests | Resultado |
+| --- | --- | --- | --- |
+| C1 | `CobroTiendaAnulacionRepository.ts` de `cd91bcf4` | guardia R33 + historial Postgres | ROJO 2/7 |
+| C2 | `LiquidacionPagoRepository.ts` de `cd91bcf4` | ídem | ROJO 2/7 (guardia + mensajero) |
+| C3 | `LiquidacionRepartoRepository.ts` de `cd91bcf4` | ídem | ROJO 2/7 (guardia + mensajero) |
+| C4 | `FiltrosWalletService` vuelve a importar `horaCostaRica` de `app/…/textos` | `lib-no-importa-app` | ROJO 1/3 |
+| C5 | `ORIGEN_PAGO_LABEL: Record<string, string>` en `lib/constants/wallet-rotulos.ts` | `wallet-origen-total` | ROJO 1/6 (el diccionario mudado sigue vigilado) |
+| C6 | `WalletTiendaService.ts` de `cd91bcf4` (comentario viejo) | `wallet-textos-458` | ROJO 1/11 (m3) |
+| C7 | `listarMovimientosDeTiendaSchema = …Schema.strip().extend(…)` | `wallet-tienda-schemas` | ROJO 2/5 |
+| C8 | `FiltrosWalletRepository.ts` de `cd91bcf4` (lectura previa + `IN`) | `wallet-cierres-selector` | ROJO 2/8 (33.000 → `PrismaClientKnownRequestError`; `%` casaba todo) |
+| C9 | sin la tienda en el `WHERE` crudo de `cierresDeTienda` | ídem | ROJO 2/8 (R11 tienda, R10) |
+| C10 | sin el mensajero en el `WHERE` crudo de `cierresDeMensajero` | ídem | ROJO 1/8 (R11 mensajero) |
+| C11 | sin escapar los comodines del `ILIKE` | ídem | ROJO 1/8 (texto literal) |
+| C12 | `financiero/cargar.ts` de `cd91bcf4` (vuelve `verResumenCajaAction`) | `panel-mensual-rotulo` + `tablero-financiero-cargar` | ROJO 2/14 |
+| C13 | `etiquetaDeCuenta` sin segundo apellido | origen, selector e historial contra Postgres | ROJO 3/11 (con la aserción contra `etiquetaDeCuenta(...)` de antes, las dos de m6 habrían seguido verdes) |
+
+## 18. Gate completo (`./init.sh`, base `ordenex_458ax`, log `progress/gate_458A_cierre.log` sin `tail`, `INIT_EXIT` escrito dentro), sobre `3def2353`
+
+```
+✓ dependencias: 58 declaradas, todas presentes
+✓ typecheck paso
+✓ lint paso
+✓ DATABASE_URL resuelta: los 299 archivos de tests contra Postgres SI se ejecutan
+ Test Files  2280 passed (2280)
+      Tests  31939 passed | 26 skipped (31965)
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 2280 ejecutado(s), todos en el baseline conocido)
+INIT_EXIT=0
+```
+
+Los 26 `skipped` son los `it.skip` de `tests/components/AnaliticaPage.test.tsx` (17) y
+`AnaliticaShell.test.tsx` (9); **0 en `tests/integration/db`**. Antes del gate, `tests/unit` +
+`tests/components` completos: 1779 archivos, 26746 verdes, 26 saltados (los mismos).
+
+Veredicto: los puntos B1 y m1–m6 de la revisión cerrados con test y mutación en rojo; gate completo verde; lista para nueva revisión.
