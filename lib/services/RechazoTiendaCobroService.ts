@@ -355,7 +355,17 @@ export class RechazoTiendaCobroService implements IRechazoTiendaCobroService {
           registradoPor: actor.usuarioId,
           fechaMovimiento: ahora,
         }));
-        if (creditos.length > 0) await this.movimientoTiendaRepo.crearMovimientos(tx, creditos);
+        // FICHA 458-B (revision m4): por simetria con la caja, se CUENTA lo escrito. Un credito espejo
+        // que no se escribe dejaria a la tienda sin su devolucion con la caja ya revertida (R8 roto):
+        // se revierte todo, ruidosamente.
+        if (creditos.length > 0) {
+          const escritos = await this.movimientoTiendaRepo.crearMovimientos(tx, creditos);
+          if (escritos !== creditos.length) {
+            throw new Error(
+              `rechazo-tienda-cobro: la anulacion del cobro ${cobro.id} esperaba ${creditos.length} creditos espejo y escribio ${escritos}`,
+            );
+          }
+        }
 
         // Sin sumar aqui (este servicio no calcula dinero): los dos importes tal como se anularon.
         return {

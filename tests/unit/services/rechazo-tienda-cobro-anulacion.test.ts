@@ -68,6 +68,8 @@ function montaje(
     lineas?: LineasDelCobro;
     constancia?: "anulado" | "ya_anulado";
     reversos?: number;
+    /** 458-B m4: cuantos creditos espejo dice haber escrito el repositorio (por defecto, todos). */
+    creditosEscritos?: number;
   } = {},
 ) {
   const cobroRepo = {
@@ -92,7 +94,9 @@ function montaje(
     emitirReversosDeAnulacion: vi.fn(async () => opciones.reversos ?? esperados),
   };
   const movimientoRepo = { crearMovimientos: vi.fn(async () => 0) };
-  const movimientoTiendaRepo = { crearMovimientos: vi.fn(async (_tx: unknown, movs: CrearMovimientoTiendaInput[]) => movs.length) };
+  const movimientoTiendaRepo = {
+    crearMovimientos: vi.fn(async (_tx: unknown, movs: CrearMovimientoTiendaInput[]) => opciones.creditosEscritos ?? movs.length),
+  };
   const runTx = vi.fn(async (fn: (tx: RechazoTiendaCobroTx) => Promise<unknown>) => fn(TX));
   const service = new RechazoTiendaCobroService(
     cobroRepo,
@@ -197,6 +201,13 @@ describe("458-B — RechazoTiendaCobroService.anular (D7, R63–R68, R73)", () =
   it("si los reversos ya existian sin constancia, la transaccion LANZA (se revierte todo): la base no esta como se cree", async () => {
     const m = montaje({ reversos: 0 });
     await expect(m.service.anular(PETICION, MAESTRO, AHORA)).rejects.toThrow(/esperaba 2 reversos y escribio 0/);
+  });
+
+  it("458-B m4: si la tienda no recibe TODOS sus creditos espejo, la transaccion LANZA (se revierte todo)", async () => {
+    const m = montaje({ creditosEscritos: 1 });
+    await expect(m.service.anular(PETICION, MAESTRO, AHORA)).rejects.toThrow(/esperaba 2 creditos espejo y escribio 1/);
+    // Dentro de la transaccion: el throw la revierte entera (caja incluida).
+    expect(m.runTx).toHaveBeenCalledTimes(1);
   });
 });
 
