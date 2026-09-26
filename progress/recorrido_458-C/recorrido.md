@@ -85,3 +85,40 @@ Las cuatro citan «Wallet · Caja» y ninguna nombra un identificador ni «Rever
    débitos por el servicio.
 3. «Entró» y «Salió» suben con cada anulación de un egreso: el contra-asiento es un ingreso. Es la regla
    bruta de la 45 (las cifras netas —cifra, ganancia, De las tiendas, capital— vuelven a su valor).
+
+## Cierre tras la revisión (M2) — los dos conceptos nuevos de dinero, en la app · 2026-09-26
+
+Playwright ad hoc (script en el scratchpad) contra UN dev server (`next dev -p 3459`, apagado al terminar)
+sobre la base propia `ordenex_458cx` (clon de la local). Usuario `admin.qa` (seed QA corrido SOLO contra
+el clon). Salida cruda: `cierre-admin.json`; capturas `cierre-0*.png`. Al entrar a `/wallet`, el admin ve
+el modal «Confirmá el SINPE de GAM» (ajeno a la 458): se cierra con «Ahora no».
+
+| Paso | Resultado | Números / texto literal |
+| --- | --- | --- |
+| «Ordenex le paga a una tienda», Tania, ₡1.300, efectivo — «Así queda» | OK | «Saldo de Tania Tienda Antes: ₡145.420,10 Después: ₡144.120,10 · Flujo de dinero registrado ₡13.481.682,72 → ₡13.480.382,72 · Ganancia de Ordenex ₡13.336.262,62 · no cambia · Lo que Ordenex les debe a las tiendas ₡145.420,10 → ₡144.120,10 · Saldo inicial y aportes ₡0 · no cambia» |
+| registrar | OK | aviso «Pago de ₡1.300 a Tania Tienda registrado. Ordenex le sigue debiendo ₡144.120,10.»; en la base 1 `liquidacion_pago` y 1 línea `egreso_pago_tienda` |
+| «Ver» de la fila nueva (B3) | OK | nombre accesible «Ver Ordenex le paga a una tienda del 2026-09-26 por ₡1.300»; panel «Estado Vigente», «Cómo Efectivo» (M1), «Anular…» ofrecido |
+| «Anular…» con motivo | OK | «Anulado. Se registró el movimiento contrario.» |
+| la fila tras anular (B2) | OK | texto de la fila «… Tienda **Anulado** Ver», clase `text-muted-foreground line-through`, nombre accesible «Ver Ordenex le paga a una tienda del 2026-09-26 por ₡1.300 · Anulado» |
+| el panel tras anular (B3 + M1) | OK | «Estado **Anulado el 2026-09-26 por Ana Admin · Recorrido 458-C: pago a la cuenta equivocada**», «Cómo Efectivo», «Registró Ana Admin»; **0** botones «Anular…» |
+| «Ordenex le paga a un mensajero», Marco, ₡1.000, efectivo — «Así queda» | OK | «Lo que Ordenex le debe a Marco Mensajero Antes: ₡5.100 Después: ₡4.100»; cifra, ganancia, De las tiendas y capital «no cambia» |
+| registrar | OK | aviso «Pago de ₡1.000 a Marco Mensajero registrado. Ordenex le sigue debiendo ₡4.100 por sus cierres.»; en la base 1 `liquidacion_pago` (efectivo, 1.000,00) y **0** líneas de caja (el pago al mensajero no toca la caja, como dice su frase) |
+
+### R7 / R8 — `c458c-1.sql` tras cada paso: **todas `0,00`**
+
+| Momento | cifra | ganancia | De las tiendas | Σ saldos tiendas | R8 | R7 |
+| --- | --- | --- | --- | --- | --- | --- |
+| antes de todo | 13.481.682,72 | 13.336.262,62 | 145.420,10 | 145.420,10 | 0,00 | 0,00 |
+| tras pagar ₡1.300 a Tania | 13.480.382,72 | 13.336.262,62 | 144.120,10 | 144.120,10 | 0,00 | 0,00 |
+| tras anular ese pago | 13.481.682,72 | 13.336.262,62 | 145.420,10 | 145.420,10 | 0,00 | 0,00 |
+| tras pagar ₡1.000 a Marco | 13.481.682,72 | 13.336.262,62 | 145.420,10 | 145.420,10 | 0,00 | 0,00 |
+
+**Intentos previos del script, dicho para que el libro del clon cuadre:** dos corridas anteriores cayeron
+por un selector del script (el aviso dice «Tania Tienda», no «Tania»; «Efectivo» aparece dos veces en el
+panel) DESPUÉS de registrar: quedaron en el clon dos pagos vigentes a Tania de ₡1.000 y ₡1.250. Por eso
+«antes de todo» es 145.420,10 y no los 147.670,10 de la primera medida (147.670,10 − 1.000 − 1.250). Las
+medidas de esas corridas también dieron R7/R8 = 0,00 (`MEDIDA` en el log del script).
+
+**Observación (no es de esta hija; para la 458-E):** en el panel de un pago a una tienda, «Por qué» dice
+«Efectivo»: la línea de caja de la 172 guarda como `descripcion` el método y la referencia (`LiquidacionService` → `descripcionDePago`),
+no la nota del pago. «Cómo» ya dice el método; el motivo real («nota») no llega al libro de la caja.

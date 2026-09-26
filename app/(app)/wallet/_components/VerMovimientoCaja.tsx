@@ -4,11 +4,12 @@ import { useState } from "react";
 import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
+import { METODO_LIQUIDACION_LABEL } from "@/components/shared/liquidacion/liquidacion-labels";
 import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
 import { DetalleMovimientoPanel, type DetalleMovimiento } from "@/components/shared/wallet/DetalleMovimientoPanel";
 import { COBRO_RECHAZO_TEXTO, PANEL_TEXTO } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
 import { autoriaDelLibroCajaAction } from "@/lib/actions/libro-caja-autoria";
-import type { AutoriaDeFilaDTO } from "@/lib/types/libro-caja-autoria";
+import type { AutoriaDeFilaDTO, ComoDTO } from "@/lib/types/libro-caja-autoria";
 import type { DocumentoCajaDTO, WalletMovimientoDTO } from "@/lib/types/wallet";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
@@ -43,10 +44,23 @@ async function leerAutoria(movimientoId: string): Promise<AutoriaDeFilaDTO> {
   return fila;
 }
 
-/** La fila del libro → lo que el panel necesita. Pura: no mira ninguna otra fila. */
-export function detalleDeFilaCaja(m: WalletMovimientoDTO): DetalleMovimiento {
+/** M1 (R58): el «cómo» del servidor, en palabras; `null` = la fila no lo registra («—»). */
+function textoComo(como: ComoDTO | null): string | null {
+  if (como === null) return null;
+  return PANEL_TEXTO.comoTexto(como.metodo === null ? null : METODO_LIQUIDACION_LABEL[como.metodo], como.referencia);
+}
+
+/**
+ * La fila del libro → lo que el panel necesita. Pura: no mira ninguna otra fila.
+ *
+ * `autoria` (la lectura de ESA fila al abrir): `undefined` = cargando, `null` = no se pudo leer. De ella
+ * salen el «cómo» y quién anuló, cuándo y por qué (M1 de la revisión, R58); el «anulado» sigue siendo
+ * el `documento` que trae la fila del servidor (R71).
+ */
+export function detalleDeFilaCaja(m: WalletMovimientoDTO, autoria?: AutoriaDeFilaDTO | null): DetalleMovimiento {
   const concepto = CATEGORIA_LABEL[m.categoria];
   const documento = m.documento;
+  const anulacion = autoria?.anulacion ?? null;
   return {
     destino: { libro: "caja", movimientoId: m.id },
     concepto,
@@ -55,10 +69,16 @@ export function detalleDeFilaCaja(m: WalletMovimientoDTO): DetalleMovimiento {
     direccion: m.tipo === "ingreso" ? "entra" : "sale",
     motivo: m.descripcion,
     origen: <OrigenMovimiento fila={m} rotulos={ORIGEN_LABEL} />,
-    estado: {
-      anulado: documento?.anulado ?? false,
-      motivoNoRegistrado: documento?.motivoNoRegistrado,
-    },
+    como: autoria === undefined ? PANEL_TEXTO.cargando : autoria === null ? null : textoComo(autoria.como ?? null),
+    // B3 (revisión 458-C): sin documento el servidor no dijo nada del estado → el panel no afirma «Vigente».
+    estado:
+      documento === null
+        ? null
+        : {
+            anulado: documento.anulado,
+            motivoNoRegistrado: documento.motivoNoRegistrado,
+            detalle: documento.anulado && anulacion !== null ? anulacion : null,
+          },
     anulable: documento !== null && !documento.anulado,
     nombreParaAnular:
       documento === null
@@ -90,7 +110,8 @@ export function VerMovimientoCaja({ movimiento, onCambio }: VerMovimientoCajaPro
     () => leerAutoria(movimiento.id),
     { shouldRetryOnError: false, revalidateOnFocus: false },
   );
-  const detalle = detalleDeFilaCaja(movimiento);
+  const detalle = detalleDeFilaCaja(movimiento, error !== undefined ? null : data);
+  const nombreVer = movimiento.documento?.anulado ? PANEL_TEXTO.verNombreAnulado : PANEL_TEXTO.verNombre;
 
   return (
     <>
@@ -98,7 +119,7 @@ export function VerMovimientoCaja({ movimiento, onCambio }: VerMovimientoCajaPro
         type="button"
         variant="ghost"
         size="sm"
-        aria-label={PANEL_TEXTO.verNombre(detalle.concepto, detalle.fecha, money(movimiento.monto))}
+        aria-label={nombreVer(detalle.concepto, detalle.fecha, money(movimiento.monto))}
         onClick={() => setAbierto(true)}
       >
         {PANEL_TEXTO.ver}

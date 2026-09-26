@@ -190,6 +190,20 @@ describe("458-C R63/R65/R71/R72 — el estado y «Anular…» los decide la fila
     expect(within(await panel()).getByText("Anulado · motivo no registrado")).toBeTruthy();
   });
 
+  it("B3 (revisión): sin estado del servidor (`null`) NO afirma «Vigente»: la línea dice «—»", async () => {
+    pintar(movimiento({ estado: null, anulable: false }));
+    const p = await panel();
+    const dt = within(p).getByText("Estado", { selector: "dt" });
+    expect(dt.nextElementSibling?.textContent).toBe("—");
+    expect(within(p).queryByText("Vigente")).toBeNull();
+  });
+
+  it("vigente (el servidor lo dijo): la línea dice «Vigente»", async () => {
+    pintar();
+    const dt = within(await panel()).getByText("Estado", { selector: "dt" });
+    expect(dt.nextElementSibling?.textContent).toBe("Vigente");
+  });
+
   it("R71: con el detalle de la anulación, dice cuándo, quién y por qué", async () => {
     pintar(movimiento({ estado: { anulado: true, detalle: { fecha: "2026-09-20", por: "Ana", motivo: "Duplicado" } }, anulable: false }));
     expect(within(await panel()).getByText("Anulado el 2026-09-20 por Ana · Duplicado")).toBeTruthy();

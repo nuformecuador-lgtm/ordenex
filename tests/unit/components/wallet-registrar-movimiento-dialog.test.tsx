@@ -824,3 +824,328 @@ describe("458-C R44–R47 — «Así queda», calculado en el servidor", () => {
     ).toBeTruthy();
   });
 });
+
+// ─── B1 de la revisión — las respuestas del servidor que el reescrito había dejado sin test ──────
+//
+// Restituye, contra el diálogo ÚNICO, los casos del test de `RegistrarMovimientoCajaDialog` que la
+// tabla de sustitutos de `progress/impl_458-C.md` daba por cubiertos sin que nada los midiera:
+// `ya_registrado` (461 R68: el doble envío es ÉXITO, sin toast de error) en los ocho caminos,
+// `sin_deuda` / `excede` del abono (457 R57/R58), `ya_hay_saldo_inicial` (459 R70), los avisos de
+// éxito de aporte, abono y pago de un gasto (459 R63/R68, 457 R57) y `sin_saldo` / `excede` del pago
+// a un mensajero. Cada aviso se afirma con su LITERAL: el texto es el contrato que lee la oficina,
+// y compararlo contra la función que lo genera lo dejaría siempre verde.
+
+/** Rellena el concepto con lo mínimo válido (sin confirmar). */
+async function rellenar(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement, concepto: string) {
+  await elegirConcepto(user, dialog, concepto);
+  switch (concepto) {
+    case "Gasto de Ordenex":
+      escribir(dialog, /^A quién se le pagó/, "Proveedor");
+      escribir(dialog, /^Monto/, "10");
+      escribir(dialog, /^Concepto del gasto/, "Café");
+      return;
+    case "Corrección de caja (suma)":
+      escribir(dialog, /^Monto/, "40");
+      escribir(dialog, /^Motivo de la corrección/, "Sobrante");
+      return;
+    case "Ordenex le cobra a una tienda":
+      await elegirCuenta(dialog, "Tienda a la que se le cobra", "Tienda Norte");
+      escribir(dialog, /^Monto/, "15000");
+      escribir(dialog, /^Motivo del cobro/, "Reintento");
+      return;
+    case "Ordenex paga un gasto de una tienda":
+      await elegirCuenta(dialog, "Tienda por la que se paga", "Tienda Norte");
+      escribir(dialog, /^A quién se le pagó/, "Facebook");
+      escribir(dialog, /^Monto/, "10000");
+      escribir(dialog, /^Motivo del pago/, "Pauta");
+      await elegirMetodo(user, dialog, "Efectivo");
+      return;
+    case "Aporte de dinero a la caja":
+      await user.click(within(dialog).getByRole("radio", { name: /^Aporte de capital/ }));
+      escribir(dialog, /^Monto/, "5000");
+      escribir(dialog, /^Motivo/, "Aporte del socio");
+      return;
+    case "Una tienda le paga a Ordenex":
+      await elegirCuenta(dialog, "Tienda que paga", "Tienda Norte");
+      escribir(dialog, /^Monto/, "4000");
+      escribir(dialog, /^Motivo del pago/, "Fletes");
+      await elegirMetodo(user, dialog, "Efectivo");
+      return;
+    case "Ordenex le paga a una tienda":
+      await elegirCuenta(dialog, "Tienda a la que se le paga", "Tienda Norte");
+      escribir(dialog, /^Monto/, "3000");
+      escribir(dialog, /^Motivo del pago/, "Entrega");
+      await elegirMetodo(user, dialog, "Efectivo");
+      return;
+    case "Ordenex le paga a un mensajero":
+      await elegirCuenta(dialog, "Mensajero al que se le paga", "Juan Pérez Mora");
+      escribir(dialog, /^Monto/, "8000");
+      escribir(dialog, /^Motivo del pago/, "Semana 38");
+      await elegirMetodo(user, dialog, "Efectivo");
+      return;
+    default:
+      throw new Error(`rellenar: concepto sin receta ${concepto}`);
+  }
+}
+
+describe("458-C B1 — 461 R68: `ya_registrado` (el doble envío) es ÉXITO en los ocho caminos, sin toast de error", () => {
+  const CASOS: Array<[string, () => void, string]> = [
+    [
+      "Gasto de Ordenex",
+      () => registrarEgresoMock.mockResolvedValue({ status: "ya_registrado", movimiento: { id: "m1" } }),
+      "Movimiento registrado correctamente.",
+    ],
+    [
+      "Corrección de caja (suma)",
+      () => registrarManualMock.mockResolvedValue({ status: "ya_registrado", movimiento: { id: "m2" } }),
+      "Movimiento registrado correctamente.",
+    ],
+    [
+      "Ordenex le cobra a una tienda",
+      () => registrarCobroMock.mockResolvedValue({ status: "ya_registrado", cobro: { id: "c1" }, saldo: SALDO_NEGATIVO }),
+      "Cobro registrado. El saldo de Tienda Norte queda en -₡15.000 · En contra. La tienda le debe ese dinero a Ordenex.",
+    ],
+    [
+      "Ordenex paga un gasto de una tienda",
+      () =>
+        registrarPagoPorCuentaMock.mockResolvedValue({
+          status: "ya_registrado",
+          pago: { id: "p1", tiendaNombre: "Tienda Norte", monto: "10000.00" },
+          saldo: { ...SALDO_NEGATIVO, saldo: "-10000.00" },
+        }),
+      "Pago registrado. El saldo de Tienda Norte queda en -₡10.000 · En contra. La tienda le debe ese dinero a Ordenex.",
+    ],
+    [
+      "Aporte de dinero a la caja",
+      () =>
+        registrarAporteMock.mockResolvedValue({ status: "ya_registrado", aporte: { id: "a1", clase: "aporte", monto: "5000.00" } }),
+      "Registrado. Aporte de capital de ₡5.000.",
+    ],
+    [
+      "Una tienda le paga a Ordenex",
+      // m7 (457): el original quedó por 2.500 y el reintento traía otra cifra: el aviso dice la del SERVIDOR.
+      () =>
+        registrarAbonoMock.mockResolvedValue({
+          status: "ya_registrado",
+          abono: { id: "ab1", tiendaNombre: "Tienda Norte", monto: "2500.00" },
+          saldo: { creditos: "4000.00", debitos: "10000.00", saldo: "-6000.00", signo: "negativo" },
+        }),
+      "Este pago ya estaba registrado, por ₡2.500. El saldo de Tienda Norte queda en -₡6.000 · En contra. La tienda todavía le debe ese dinero a Ordenex.",
+    ],
+    [
+      "Ordenex le paga a una tienda",
+      () => registrarPagoTiendaMock.mockResolvedValue({ status: "ya_registrado", pago: { id: "lp1", monto: "3000.00" }, restante: "7000.00" }),
+      "Pago de ₡3.000 a Tienda Norte registrado. Ordenex le sigue debiendo ₡7.000.",
+    ],
+    [
+      "Ordenex le paga a un mensajero",
+      () =>
+        registrarRepartoMock.mockResolvedValue({
+          status: "ya_registrado",
+          reparto: { totalImputado: "8000.00", restanteImputable: "2000.00", imputaciones: [] },
+        }),
+      "Pago de ₡8.000 a Juan Pérez Mora registrado. Ordenex le sigue debiendo ₡2.000 por sus cierres.",
+    ],
+  ];
+
+  for (const [concepto, preparar, aviso] of CASOS) {
+    it(`${concepto}: un solo aviso de éxito (literal), cierra, avisa al módulo y ningún error`, async () => {
+      preparar();
+      const onRegistrado = vi.fn();
+      const { user, dialog } = await abrir({ onRegistrado });
+      await rellenar(user, dialog, concepto);
+      await confirmar(user, dialog);
+      await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+      expect(successMock).toHaveBeenCalledWith(aviso);
+      expect(errorMock).not.toHaveBeenCalled();
+      expect(onRegistrado).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    }, 30000);
+  }
+});
+
+describe("458-C B1 — los avisos de éxito con la cifra del SERVIDOR (459 R63/R68, 457 R57)", () => {
+  it("459 R63: el pago de un gasto dice el saldo con su signo; en contra, que la tienda le debe a Ordenex", async () => {
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Ordenex paga un gasto de una tienda");
+    await confirmar(user, dialog);
+    await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(successMock).toHaveBeenCalledWith(
+      "Pago registrado. El saldo de Tienda Norte queda en -₡10.000 · En contra. La tienda le debe ese dinero a Ordenex.",
+    );
+  }, 30000);
+
+  it("459 R63: con saldo a favor NO dice que la tienda debe", async () => {
+    registrarPagoPorCuentaMock.mockResolvedValue({
+      status: "ok",
+      pago: { id: "p1", tiendaNombre: "Tienda Norte", monto: "10000.00" },
+      saldo: { creditos: "50000.00", debitos: "10000.00", saldo: "40000.00", signo: "positivo" },
+    });
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Ordenex paga un gasto de una tienda");
+    await confirmar(user, dialog);
+    await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(successMock).toHaveBeenCalledWith("Pago registrado. El saldo de Tienda Norte queda en ₡40.000 · A favor.");
+  }, 30000);
+
+  it("459 R68: el saldo inicial avisa con la clase y el monto del servidor", async () => {
+    registrarAporteMock.mockResolvedValue({ status: "ok", aporte: { id: "a1", clase: "saldo_inicial", monto: "2500000.50" } });
+    const { user, dialog } = await abrir();
+    await elegirConcepto(user, dialog, "Aporte de dinero a la caja");
+    await user.click(within(dialog).getByRole("radio", { name: /^Saldo inicial/ }));
+    escribir(dialog, /^Monto/, "2500000.50");
+    escribir(dialog, /^Motivo/, "Arranque");
+    await confirmar(user, dialog);
+    await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(successMock).toHaveBeenCalledWith("Registrado. Saldo inicial de ₡2.500.000,50.");
+    expect(entradas(registrarAporteMock.mock.calls[0][0]).clase).toBe("saldo_inicial");
+  }, 30000);
+
+  it("459: el aporte de capital avisa con su nombre y el monto del servidor", async () => {
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Aporte de dinero a la caja");
+    await confirmar(user, dialog);
+    await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(successMock).toHaveBeenCalledWith("Registrado. Aporte de capital de ₡5.000.");
+  }, 30000);
+
+  it("457 R57: el pago de la tienda dice el saldo del SERVIDOR y, si sigue en contra, que la tienda todavía debe", async () => {
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Una tienda le paga a Ordenex");
+    await confirmar(user, dialog);
+    await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(successMock).toHaveBeenCalledWith(
+      "Pago registrado. El saldo de Tienda Norte queda en -₡6.000 · En contra. La tienda todavía le debe ese dinero a Ordenex.",
+    );
+  }, 30000);
+
+  it("457 R57: con el saldo en cero NO dice que la tienda debe", async () => {
+    registrarAbonoMock.mockResolvedValue({
+      status: "ok",
+      abono: { id: "ab1", tiendaNombre: "Tienda Norte", monto: "10000.00" },
+      saldo: { creditos: "10000.00", debitos: "10000.00", saldo: "0.00", signo: "cero" },
+    });
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Una tienda le paga a Ordenex");
+    await confirmar(user, dialog);
+    await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    const texto = String(successMock.mock.calls[0][0]);
+    expect(texto).toMatch(/^Pago registrado\. El saldo de Tienda Norte queda en ₡0 · /);
+    expect(texto).not.toMatch(/debe/);
+  }, 30000);
+});
+
+describe("458-C B1 — los rechazos del servidor, cada uno bajo SU campo y con su literal", () => {
+  it("459 R70: `ya_hay_saldo_inicial` se dice bajo la clase y el diálogo no cierra", async () => {
+    registrarAporteMock.mockResolvedValue({ status: "ya_hay_saldo_inicial" });
+    const { user, dialog } = await abrir();
+    await elegirConcepto(user, dialog, "Aporte de dinero a la caja");
+    await user.click(within(dialog).getByRole("radio", { name: /^Saldo inicial/ }));
+    escribir(dialog, /^Monto/, "100");
+    escribir(dialog, /^Motivo/, "x");
+    await confirmar(user, dialog);
+    const aviso = await within(dialog).findByText(
+      "Ya hay un saldo inicial registrado y solo puede haber uno. Si hay que cambiarlo, anulá el vigente desde el libro de la caja.",
+    );
+    expect(aviso.closest("#movimiento-clase-error")).not.toBeNull();
+    expect(successMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  }, 30000);
+
+  it("457 R58: `sin_deuda` se pinta bajo la TIENDA; lo tecleado sobrevive y no hay éxito", async () => {
+    registrarAbonoMock.mockResolvedValue({
+      status: "sin_deuda",
+      saldo: { creditos: "0.00", debitos: "0.00", saldo: "0.00", signo: "cero" },
+    });
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Una tienda le paga a Ordenex");
+    await confirmar(user, dialog);
+    const aviso = await within(dialog).findByText("Esta tienda no tiene saldo en contra: no hay nada que pagar.");
+    expect(aviso.closest("#movimiento-cuenta-error")).not.toBeNull();
+    expect((within(dialog).getByLabelText(/^Monto/) as HTMLInputElement).value).toBe("4000");
+    expect(successMock).not.toHaveBeenCalled();
+  }, 30000);
+
+  it("457 R58: `excede` se pinta bajo el MONTO con la deuda que devolvió el servidor, sin recalcularla", async () => {
+    registrarAbonoMock.mockResolvedValue({ status: "excede", deuda: "6000.00" });
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Una tienda le paga a Ordenex");
+    await confirmar(user, dialog);
+    const aviso = await within(dialog).findByText("La tienda debe ₡6.000: el pago no puede superar ese importe.");
+    const monto = within(dialog).getByLabelText(/^Monto/);
+    expect((monto.getAttribute("aria-describedby") ?? "").split(/\s+/)).toContain("movimiento-monto-error");
+    expect(aviso.closest("#movimiento-monto-error")).not.toBeNull();
+    expect(successMock).not.toHaveBeenCalled();
+  }, 30000);
+
+  it("el pago a un mensajero sin cierres pendientes: bajo el mensajero; el que excede: bajo el monto con el tope del servidor", async () => {
+    registrarRepartoMock.mockResolvedValueOnce({ status: "sin_saldo" });
+    registrarRepartoMock.mockResolvedValueOnce({ status: "excede", disponible: "5000.00" });
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Ordenex le paga a un mensajero");
+    await confirmar(user, dialog);
+    const sinSaldo = await within(dialog).findByText(
+      "Este mensajero no tiene cierres pendientes de pago: no hay nada que pagar.",
+    );
+    expect(sinSaldo.closest("#movimiento-cuenta-error")).not.toBeNull();
+    await confirmar(user, dialog);
+    const excede = await within(dialog).findByText(
+      "Se le pueden pagar hasta ₡5.000 por sus cierres pendientes: el pago no puede superar ese importe.",
+    );
+    expect(excede.closest("#movimiento-monto-error")).not.toBeNull();
+    expect(successMock).not.toHaveBeenCalled();
+  }, 30000);
+});
+
+// ─── M3 de la revisión — el fallo de red se dice y la clave es de UN concepto ────────────────────
+
+describe("458-C M3 — un fallo de red no es un diálogo mudo, y cambiar de concepto cambia la clave", () => {
+  const FALLO =
+    "No se pudo confirmar si el movimiento quedó registrado: la conexión falló o el servidor no respondió. Revisá el libro; si volvés a registrar sin cambiar nada, no se registra dos veces.";
+
+  it("si la action lanza (red caída), avisa a la vista, no cierra, conserva lo escrito y el reintento lleva la MISMA clave", async () => {
+    registrarEgresoMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    registrarEgresoMock.mockResolvedValueOnce({ status: "ya_registrado", movimiento: { id: "m1" } });
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Gasto de Ordenex");
+    await confirmar(user, dialog);
+    const alerta = await within(dialog).findByRole("alert");
+    expect(alerta.textContent).toBe(FALLO);
+    expect(successMock).not.toHaveBeenCalled();
+    expect((within(dialog).getByLabelText(/^Monto/) as HTMLInputElement).value).toBe("10");
+    await confirmar(user, dialog);
+    await waitFor(() => expect(registrarEgresoMock).toHaveBeenCalledTimes(2));
+    expect(entradas(registrarEgresoMock.mock.calls[1][0]).claveIdempotencia).toBe(
+      entradas(registrarEgresoMock.mock.calls[0][0]).claveIdempotencia,
+    );
+    await waitFor(() => expect(successMock).toHaveBeenCalledWith("Movimiento registrado correctamente."));
+  }, 30000);
+
+  it("un estado que el diálogo no conoce también se avisa (no se da por bueno ni se calla)", async () => {
+    registrarManualMock.mockResolvedValue({ status: "estado_nuevo_del_servidor" });
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Corrección de caja (suma)");
+    await confirmar(user, dialog);
+    expect((await within(dialog).findByRole("alert")).textContent).toBe(FALLO);
+    expect(successMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  }, 30000);
+
+  it("tras un fallo, pasar de «Gasto de Ordenex» a «Sueldo» (la MISMA action) manda una clave NUEVA", async () => {
+    registrarEgresoMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const { user, dialog } = await abrir();
+    await rellenar(user, dialog, "Gasto de Ordenex");
+    await confirmar(user, dialog);
+    await within(dialog).findByRole("alert");
+    await elegirConcepto(user, dialog, "Sueldo");
+    escribir(dialog, /^Trabajador y periodo/, "Sueldo de septiembre");
+    await confirmar(user, dialog);
+    await waitFor(() => expect(registrarEgresoMock).toHaveBeenCalledTimes(2));
+    const gasto = entradas(registrarEgresoMock.mock.calls[0][0]);
+    const sueldo = entradas(registrarEgresoMock.mock.calls[1][0]);
+    expect(gasto.tipoEgreso).toBe("gasto_variable");
+    expect(sueldo.tipoEgreso).toBe("sueldo");
+    expect(sueldo.claveIdempotencia).toMatch(UUID);
+    expect(sueldo.claveIdempotencia).not.toBe(gasto.claveIdempotencia);
+  }, 30000);
+});

@@ -819,7 +819,7 @@ const SIN_DOCUMENTOS_459 = {
   aportes: { estadoDeDocumentos: async () => [] },
   cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] }, // ficha 461
   abonos: { estadoDeDocumentos: async () => [] }, // ficha 457: lo exige `LectoresDocumentosCaja`; esta suite no lee pagos de una tienda a Ordenex
-  egresos: { estadoDeDocumentos: async () => [] }, indemnizaciones: { estadoDeDocumentos: async () => [] }, rechazos: { estadoDeDocumentos: async () => [] }, // ficha 458-B: lo exige `LectoresDocumentosCaja`
+  egresos: { estadoDeDocumentos: async () => [] }, indemnizaciones: { estadoDeDocumentos: async () => [] }, rechazos: { estadoDeDocumentos: async () => [] }, pagosATienda: { estadoDeDocumentos: async () => [] }, premios: { estadoDeDocumentos: async () => [] }, // ficha 458-B: lo exige `LectoresDocumentosCaja`
 };
 
 // ─── FICHA 459 (T B.16, design §7.3) — el DOCUMENTO de cada fila, resuelto en lote ───
@@ -892,6 +892,9 @@ describe("WalletService.listarMovimientos — el documento de las filas original
       egresos: { estadoDeDocumentos: vi.fn(async () => []) },
       indemnizaciones: { estadoDeDocumentos: vi.fn(async () => []) },
       rechazos: { estadoDeDocumentos: vi.fn(async () => []) },
+      // Ficha 458-C (revision B3): el pago a una tienda y el premio; esta pagina no trae ninguno.
+      pagosATienda: { estadoDeDocumentos: vi.fn(async () => []) },
+      premios: { estadoDeDocumentos: vi.fn(async () => []) },
     };
   }
 

@@ -59,12 +59,15 @@ export interface DetalleMovimiento {
   origen?: ReactNode;
   /** Cómo (método y referencia) si la superficie lo conoce; `undefined` = no se pinta la línea. */
   como?: string | null;
-  /** Estado de anulación, DECIDIDO EN EL SERVIDOR (R71/R72). */
+  /**
+   * Estado de anulación, DECIDIDO EN EL SERVIDOR (R71/R72). `null` = el servidor no lo dijo (una fila
+   * sin documento: un contra-asiento, lo del cierre): el panel NO afirma «Vigente» (B3 de la revisión).
+   */
   estado: {
     anulado: boolean;
     motivoNoRegistrado?: boolean;
     detalle?: { motivo: string | null; por: string | null; fecha: string | null } | null;
-  };
+  } | null;
   /** R63/R65 — el servidor dice si se ofrece «Anular…». */
   anulable: boolean;
   /** «el sueldo», «el cobro por rechazo a una tienda»: para el título de «Anular …». */
@@ -266,20 +269,25 @@ export function DetalleMovimientoPanel({
     }
   }
 
-  const estado = m.estado.anulado ? (
-    <Badge variant="secondary">
-      {m.estado.detalle
-        ? PANEL_TEXTO.anuladoDetalle(m.estado.detalle.fecha, m.estado.detalle.por, m.estado.detalle.motivo)
-        : m.estado.motivoNoRegistrado
-          ? PANEL_TEXTO.motivoNoRegistrado
-          : PANEL_TEXTO.anulado}
-    </Badge>
-  ) : (
-    <span>{PANEL_TEXTO.vigente}</span>
-  );
+  const anulado = m.estado?.anulado === true;
+  const estado =
+    m.estado === null ? (
+      // B3 (revisión 458-C): sin estado del servidor no se afirma nada.
+      <span>{PANEL_TEXTO.sinDato}</span>
+    ) : m.estado.anulado ? (
+      <Badge variant="secondary">
+        {m.estado.detalle
+          ? PANEL_TEXTO.anuladoDetalle(m.estado.detalle.fecha, m.estado.detalle.por, m.estado.detalle.motivo)
+          : m.estado.motivoNoRegistrado
+            ? PANEL_TEXTO.motivoNoRegistrado
+            : PANEL_TEXTO.anulado}
+      </Badge>
+    ) : (
+      <span>{PANEL_TEXTO.vigente}</span>
+    );
 
   // R79: «Adjuntar» solo sin comprobante, si la fila lo admite y NO está anulada (m6 de la 458-B).
-  const ofreceAdjuntar = !m.tieneComprobante && m.admiteAdjuntar && !m.estado.anulado;
+  const ofreceAdjuntar = !m.tieneComprobante && m.admiteAdjuntar && !anulado;
 
   return (
     <>
@@ -371,7 +379,7 @@ export function DetalleMovimientoPanel({
 
             <ComoQuedo destino={m.destino} abierto={abierto} />
 
-            {m.anulable && !m.estado.anulado ? (
+            {m.anulable && !anulado ? (
               <div>
                 <Button type="button" variant="destructive" onClick={() => setAnulando(true)}>
                   {PANEL_TEXTO.anular}
@@ -382,7 +390,7 @@ export function DetalleMovimientoPanel({
         </SheetContent>
       </Sheet>
 
-      {m.anulable && !m.estado.anulado ? (
+      {m.anulable && !anulado ? (
         <AnularMovimientoDialog
           open={anulando}
           onOpenChange={setAnulando}

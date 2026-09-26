@@ -136,6 +136,16 @@ export interface LectoresDocumentosCaja {
   indemnizaciones: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
   /** Ficha 458-B (D7, R71) — los cobros por rechazo aprobados: id = la GESTION (sus dos lineas). */
   rechazos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 458-C (revision B3, R71) — los pagos de Ordenex a una tienda (172): id = el
+   * `liquidacion_pago`. Lo implementa `PagoTiendaCajaDocumentosRepository`. Sin valor por defecto.
+   */
+  pagosATienda: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 458-C (revision B3, R71) — los premios del ranking (293): id = la fila del podio. Lo
+   * implementa `PremioCajaDocumentosRepository`. Sin valor por defecto.
+   */
+  premios: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
 }
 
 export interface IWalletService {

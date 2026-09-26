@@ -10,6 +10,9 @@ export const PANEL_TEXTO = {
   ver: "Ver",
   /** Nombre accesible del «Ver» de una fila: la fila dentro (N botones iguales no identifican nada). */
   verNombre: (concepto: string, fecha: string, monto: string) => `Ver ${concepto} del ${fecha} por ${monto}`,
+  /** B2 (revisión 458-C): la fila anulada lo dice también en el nombre del «Ver» (lector de pantalla). */
+  verNombreAnulado: (concepto: string, fecha: string, monto: string) =>
+    `Ver ${concepto} del ${fecha} por ${monto} · Anulado`,
   titulo: "Detalle del movimiento",
   entra: "Entra",
   sale: "Sale",
@@ -29,6 +32,13 @@ export const PANEL_TEXTO = {
     ["Anulado", fecha === null ? null : `el ${fecha}`, por === null ? null : `por ${por}`]
       .filter((x): x is string => x !== null)
       .join(" ") + (motivo === null ? "" : ` · ${motivo}`),
+  /** M1 (revisión 458-C, R58) — «Cómo»: el método y la referencia, en palabras. */
+  comoTexto: (metodo: string | null, referencia: string | null) =>
+    metodo === null
+      ? `Referencia ${referencia ?? ""}`.trim()
+      : referencia === null
+        ? metodo
+        : `${metodo} · referencia ${referencia}`,
   esOrdenex: "Ordenex",
   aTercero: (beneficiario: string) => `a ${beneficiario}`,
   cargando: "Cargando…",

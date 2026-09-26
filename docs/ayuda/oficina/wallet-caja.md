@@ -304,9 +304,10 @@ reparto. Si se anula, vuelve a **Flujo de dinero registrado**. La ganancia no ca
 ## Ver un movimiento
 
 **Ver**, en cada fila del libro, abre su detalle a un costado: **a quién** (la tienda, el mensajero, la
-persona o el proveedor), **por qué** (el motivo), **de dónde sale**, el **comprobante**, **quién lo
-registró** —o **Automático** y qué lo produjo, como «Aprobación del cierre»—, su **estado** (vigente o
-**Anulado**) y **Cómo quedó**: la cifra grande, la ganancia, lo que Ordenex les debe a las tiendas y el
+persona o el proveedor), **por qué** (el motivo), **de dónde sale**, **cómo** se pagó (el método y la
+referencia, si los tiene), el **comprobante**, **quién lo registró** —o **Automático** y qué lo produjo,
+como «Aprobación del cierre»—, su **estado** (**Vigente**, o **Anulado** con el día, quién lo anuló y el
+motivo) y **Cómo quedó**: la cifra grande, la ganancia, lo que Ordenex les debe a las tiendas y el
 saldo inicial y aportes **justo después** de ese movimiento, y el saldo de la cuenta que tocó.
 
 Un **cobro por rechazo** dice además en palabras que es un cargo a la tienda: la ganancia sube y el saldo
@@ -317,13 +318,13 @@ de la tienda baja, sin dinero nuevo en la caja.
 Un **sueldo**, un **gasto de Ordenex**, un **gasto fijo cobrado**, un **pago de un gasto de una tienda**,
 un **aporte de dinero a la caja**, un **cobro de Ordenex a una tienda**, un **pago de una tienda a
 Ordenex** o una **corrección de caja** no se editan. Tampoco un **cobro por rechazo a una tienda** ni una
-**indemnización por un incidente**. Si hubo un error, se anulan desde el detalle de su fila: **Ver** y
+**indemnización por un incidente**. Ni un **pago de Ordenex a una tienda** o un **premio del ranking**. Si hubo un error, se anulan desde el detalle de su fila: **Ver** y
 luego **Anular…**. Es la misma forma para todos:
 
 - **El motivo es obligatorio.** Queda guardado junto a la anulación.
 - Se registra **hoy** un **movimiento contrario** por el mismo monto. El registro original, su
   comprobante y su historial **quedan intactos**: no se borra nada.
-- La fila original pasa a decir **Anulado**. Una anulación no se deshace.
+- La fila original pasa a decir **Anulado** y sale tachada. Una anulación no se deshace.
 - Al anular un pago de un gasto de una tienda, la caja y el saldo de la tienda **vuelven a subir** en el
   monto. En el libro de la tienda aparece «Pago de un gasto de la tienda anulado».
 - Al anular un cobro de Ordenex a una tienda, la **ganancia baja** en el monto, **lo que Ordenex les
@@ -345,8 +346,8 @@ luego **Anular…**. Es la misma forma para todos:
 - Al anular una **indemnización**, aparece una **Corrección de caja (suma)** por el mismo monto: la
   caja y la ganancia vuelven a subir.
 
-Si te dice **«Ya estaba anulado; no se registró nada más»**, alguien se te adelantó. Si te dice que el
-cobro **no se puede anular desde aquí**, es uno de los cobros antiguos que ya se corrigieron como pago
+Si te dice **«Ya estaba anulado; no se registró nada más»**, alguien se te adelantó. Si te dice **«Este
+movimiento no se puede anular: …»** sobre un cobro, es uno de los cobros antiguos que ya se corrigieron como pago
 de un gasto de la tienda, o uno sin su línea en la caja: se explica en el propio aviso.
 
 Al anular un **gasto de Ordenex**, un **sueldo** o un **gasto fijo cobrado**, se registra una **Corrección

@@ -25,6 +25,9 @@ export const REGISTRAR_MOVIMIENTO_TEXTO = {
   unauthenticated: "Tu sesión expiró. Iniciá sesión de nuevo.",
   /** El aviso de éxito de los conceptos de la caja de la 334, byte a byte (R11 de la 334). */
   exitoCaja: "Movimiento registrado correctamente.",
+  /** M3 (revisión 458-C) — la respuesta no llegó: no se sabe si quedó registrado. */
+  falloDeRed:
+    "No se pudo confirmar si el movimiento quedó registrado: la conexión falló o el servidor no respondió. Revisá el libro; si volvés a registrar sin cambiar nada, no se registra dos veces.",
 } as const;
 
 /** Rótulos y avisos de los campos comunes. */

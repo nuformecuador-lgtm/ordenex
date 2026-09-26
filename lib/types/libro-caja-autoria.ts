@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { RegistroDTO } from "@/lib/types/estado-cuenta";
+import type { AnulacionDeFilaDTO, RegistroDTO } from "@/lib/types/estado-cuenta";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 458-B (design §3.4, R56/R57) — «A quien» y «Registro» de las filas del libro de la caja.
@@ -30,10 +30,28 @@ export interface AQuienDTO {
   esOrdenex: boolean;
 }
 
+/**
+ * Ficha 458-C (revision M1, R58) — «Como»: el metodo y la referencia del documento de la fila (pago a
+ * una tienda o a un mensajero, pago de un gasto de una tienda, pago de una tienda a Ordenex) o la
+ * referencia anotada a mano (sueldo, gasto, correccion). `null` = la fila no tiene ninguno de los dos.
+ */
+export interface ComoDTO {
+  metodo: "efectivo" | "SINPE" | "transferencia" | null;
+  referencia: string | null;
+}
+
 export interface AutoriaDeFilaDTO {
   movimientoId: string;
   aQuien: AQuienDTO;
   registro: RegistroDTO;
+  /** Ficha 458-C (M1, R58) — como se pago; `null` = la fila no lo registra. */
+  como: ComoDTO | null;
+  /**
+   * Ficha 458-C (M1, R58) — quien anulo el documento de la fila ORIGINAL, cuando (dia CR) y con que
+   * motivo, leido de SU constancia. `null` = vigente, un contra-asiento, o anulada sin constancia (un
+   * reverso de antes de la 458: el libro ya dice «motivo no registrado»).
+   */
+  anulacion: AnulacionDeFilaDTO | null;
 }
 
 export type AutoriaLibroCajaResult =
