@@ -486,3 +486,88 @@ describe("458-E T E.2 — filtros Todo / Entra / Sale, concepto y periodo; tarje
     expect(screen.queryByText("Todos los tipos")).toBeNull();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe("458-E T E.3 — «Ver», anular y el refresco del libro (R58, R60)", () => {
+  it("R60: anular desde el panel relee libro, tarjetas + composición y desglose con los filtros VIGENTES", async () => {
+    const user = pintarModulo();
+    await user.click(screen.getByRole("button", { name: "Sale" }));
+    await waitFor(() => expect(listarMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument());
+    vi.clearAllMocks();
+    listarMock.mockResolvedValue({ status: "ok", data: { movimientos: PAGINA, total: PAGINA.length, page: 1, pageSize: 20 } });
+    resumenMock.mockResolvedValue({ status: "ok", resumen: RESUMEN, composicion: COMPOSICION });
+    desgloseMock.mockResolvedValue({ status: "ok", desglose: DESGLOSE });
+    anularMock.mockResolvedValue({ status: "ok", camino: "egreso_caja" });
+
+    const fila = within(tabla()).getAllByRole("row").slice(1)[PAGINA.indexOf(SUELDO)];
+    await user.click(within(fila).getByRole("button", { name: /^Ver Sueldo del / }));
+    const panel = await screen.findByRole("dialog");
+    // El panel dice a quién y quién lo registró, con la MISMA lectura que la columna.
+    await waitFor(() => expect(within(panel).getByText("Juan Pérez")).toBeInTheDocument());
+    await user.click(within(panel).getByRole("button", { name: "Anular…" }));
+    const dialogo = await screen.findByRole("dialog", { name: /^Anular / });
+    await user.type(within(dialogo).getByLabelText(/^Motivo de la anulación/), "Registrado dos veces");
+    await user.click(within(dialogo).getByRole("button", { name: "Anular" }));
+
+    await waitFor(() => expect(anularMock).toHaveBeenCalledWith({
+      destino: { libro: "caja", movimientoId: SUELDO.id },
+      motivo: "Registrado dos veces",
+    }));
+    const vigentes = { tipo: "egreso", page: 1, pageSize: 20 };
+    await waitFor(() => expect(listarMock).toHaveBeenCalledWith(vigentes));
+    expect(resumenMock).toHaveBeenCalledWith(vigentes); // tarjetas + composición (misma respuesta)
+    expect(desgloseMock).toHaveBeenCalledWith(vigentes);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe("458-E T E.4 — el cobro por rechazo anulado (R61, R73)", () => {
+  const GESTION_ANULADA = uuid();
+  const FLETE_ANULADO = fila({
+    tipo: "ingreso",
+    categoria: "ingreso_flete_devolucion",
+    origenTipo: "gestion_orden",
+    origenId: GESTION_ANULADA,
+    monto: "1800.00",
+    descripcion: null,
+    registradoPor: null,
+    documento: doc("rechazo_tienda_cobro", { anulado: true }),
+  });
+  /** Otro cobro, PENDIENTE: la cola lo sigue ofreciendo. El anulado (aprobado) no está en ella. */
+  const PENDIENTE: RechazoTiendaCobroDTO = {
+    id: uuid(),
+    tiendaNombre: "Tienda Luna",
+    numGuia: 4021,
+    numRemision: "REM-4021",
+    montoFlete: "2500.00",
+    montoIva: "325.00",
+    generadoEl: "2026-09-20",
+    estado: "pendiente",
+  };
+
+  it("la cola ofrece solo el pendiente; la línea anulada dice «Anulado» y su panel, que no se vuelve a ofrecer", async () => {
+    colaRechazoMock.mockResolvedValue({ status: "ok", items: [PENDIENTE], total: 1 });
+    const filas = [FLETE_ANULADO, SUELDO];
+    const user = pintarModulo(filas, { items: [PENDIENTE], total: 1 });
+
+    // La cola (sin cambios de comportamiento): una fila, la del pendiente, con sus dos decisiones.
+    const cola = screen.getByRole("region", { name: /cobros por rechazo/i });
+    const filasCola = within(cola).getAllByRole("row").slice(1);
+    expect(filasCola).toHaveLength(1);
+    expect(filasCola[0].textContent).toContain("Tienda Luna");
+    expect(within(filasCola[0]).getByRole("button", { name: "Cobrar" })).toBeInTheDocument();
+    expect(within(cola).getAllByRole("button", { name: "Cobrar" })).toHaveLength(1);
+
+    // La línea del cobro anulado en el libro: «Anulado», tachada.
+    const linea = within(tabla()).getAllByRole("row").slice(1)[0];
+    expect(within(linea).getByText("Anulado")).toBeInTheDocument();
+    expect(linea.className).toContain("line-through");
+
+    // Su panel lo dice en palabras y no ofrece anularlo otra vez.
+    await user.click(within(linea).getByRole("button", { name: /^Ver / }));
+    const panel = await screen.findByRole("dialog");
+    expect(within(panel).getByText(COBRO_RECHAZO_TEXTO.anulado)).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Anular…" })).toBeNull();
+  });
+});
