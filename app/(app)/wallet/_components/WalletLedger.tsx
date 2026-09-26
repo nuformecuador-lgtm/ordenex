@@ -228,10 +228,13 @@ function claseDeFila(m: WalletMovimientoDTO): string | undefined {
  */
 function CeldaVer({ m, onCambio }: { m: WalletMovimientoDTO; onCambio?: () => void }) {
   return (
-    <div className="flex items-center gap-2">
+    // 458-E (recorrido): `inline-flex` y no `flex`. Un bloque (y sus hijos «blockificados») HEREDA el
+    // tachado de la fila; una caja en línea atómica no. Medido en el navegador: con `flex` la insignia
+    // «Anulado» salía tachada.
+    <span className="inline-flex items-center gap-2">
       {m.documento?.anulado ? <Badge variant="secondary">{PANEL_TEXTO.anulado}</Badge> : null}
       <VerMovimientoCaja movimiento={m} onCambio={onCambio} />
-    </div>
+    </span>
   );
 }
 
