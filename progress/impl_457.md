@@ -426,7 +426,28 @@ diff vacío (si no, aborta). Árbol limpio al final (`git status --porcelain -- 
 
 ### 11.6 Verificación
 
-Ver §12 (gate completo del frontend).
+Gate COMPLETO `./init.sh` contra `ordenex_457f`, sobre `fd471b7e`, log `progress/gate_457_frontend.log`
+(sin `tail`, con `INIT_EXIT=$?` escrito dentro):
+
+```
+✓ typecheck paso
+✓ lint paso
+✓ DATABASE_URL resuelta: los 295 archivos de tests contra Postgres SI se ejecutan
+ Test Files  2257 passed (2257)
+      Tests  31782 passed | 26 skipped (31808)
+== init OK ==
+INIT_EXIT=0
+```
+
+**`tests/integration/db`: 0 saltados.** Los 26 `skipped` (leídos de `.vitest/rojos.json`) son
+`tests/components/AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (9), ajenos y los mismos que
+en el gate del backend.
+
+**La primera corrida (`progress/gate_457_frontend_a.log`) fue ROJA por 4 archivos AJENOS a la ficha**, los
+modos de flake bajo carga ya conocidos: `censo-simpe.test.ts` y `buckets-estatus.guardia.test.ts`
+(timeout de 20 s en un barrido del árbol), `455/seed.test.ts` (deadlock `40P01`) y
+`ajuste-caja-anulacion-461.test.ts` (conteo global 40 ≠ 41 por un test concurrente). Aislados, 3 de 3
+corridas verdes (4/4 archivos, 39/39 tests) sin tocar nada; la segunda corrida completa, arriba, verde.
 
 ### 11.7 Pendiente
 
