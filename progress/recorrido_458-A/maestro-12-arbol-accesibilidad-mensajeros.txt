@@ -1,0 +1,41 @@
+- table "Desglose por cierre de Marco Mensajero":
+  - rowgroup:
+    - row "Fecha Tipo Concepto Monto Origen Cierre":
+      - columnheader "Fecha"
+      - columnheader "Tipo"
+      - columnheader "Concepto"
+      - columnheader "Monto"
+      - columnheader "Origen"
+      - columnheader "Cierre"
+  - rowgroup:
+    - 'row "2026-08-13 Devengo Pago devengado ₡1.700 Cierre del día · 2026-08-13 · Marco Mensajero Ver el cierre del 2026-08-13 de Marco Mensajero Ver el cierre de Marco Mensajero: Pago devengado del 2026-08-13"':
+      - cell "2026-08-13"
+      - cell "Devengo"
+      - cell "Pago devengado"
+      - cell "₡1.700"
+      - cell "Cierre del día · 2026-08-13 · Marco Mensajero Ver el cierre del 2026-08-13 de Marco Mensajero":
+        - text: Cierre del día · 2026-08-13 · Marco Mensajero
+        - link "Ver el cierre del 2026-08-13 de Marco Mensajero":
+          - /url: /cierres-admin?cierre=f4c93d88-3fbc-44e5-8ff6-e0b532fd6266
+          - text: Ver
+      - 'cell "Ver el cierre de Marco Mensajero: Pago devengado del 2026-08-13"':
+        - 'link "Ver el cierre de Marco Mensajero: Pago devengado del 2026-08-13"':
+          - /url: /cierres-admin?cierre=f4c93d88-3fbc-44e5-8ff6-e0b532fd6266
+    - 'row "2026-08-13 Devengo Ajuste (devengo) ₡600 Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo · Anulación de pago · Efectivo Ver el cierre de Marco Mensajero: Ajuste (devengo) del 2026-08-13"':
+      - cell "2026-08-13"
+      - cell "Devengo"
+      - cell "Ajuste (devengo)"
+      - cell "₡600"
+      - cell "Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo · Anulación de pago · Efectivo"
+      - 'cell "Ver el cierre de Marco Mensajero: Ajuste (devengo) del 2026-08-13"':
+        - 'link "Ver el cierre de Marco Mensajero: Ajuste (devengo) del 2026-08-13"':
+          - /url: /cierres-admin?cierre=f4c93d88-3fbc-44e5-8ff6-e0b532fd6266
+    - 'row "2026-08-13 Pago Liquidación ₡600 Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo · Efectivo Ver el cierre de Marco Mensajero: Liquidación del 2026-08-13"':
+      - cell "2026-08-13"
+      - cell "Pago"
+      - cell "Liquidación"
+      - cell "₡600"
+      - cell "Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo · Efectivo"
+      - 'cell "Ver el cierre de Marco Mensajero: Liquidación del 2026-08-13"':
+        - 'link "Ver el cierre de Marco Mensajero: Liquidación del 2026-08-13"':
+          - /url: /cierres-admin?cierre=f4c93d88-3fbc-44e5-8ff6-e0b532fd6266

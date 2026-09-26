@@ -206,3 +206,116 @@ Los 26 `skipped` son `it.skip` preexistentes de `tests/components/AnaliticaPage.
 `AnaliticaShell.test.tsx` (9); **0 en `tests/integration/db`**.
 
 Veredicto: backend de la 458-A entregado (TA.0–TA.4 servidor, TA.6), gate completo verde; falta la parte frontend (§6).
+
+---
+
+# 458-A — parte FRONTEND (frontend_dev, 2026-09-26)
+
+Rama `feature/458-A` desde `fbe61761` (checkout `wt/458-A-front`). Base propia `ordenex_458af`
+(`CREATE DATABASE … TEMPLATE ordenex` + `migrate deploy`: 225, «up to date»); `.env` copiado con la
+base apuntando al clon; `pnpm install` propio. Búsqueda: MCP `codebase-memory` disponible y usado para
+orientar (`search_code`); cada símbolo confirmado en el archivo real.
+
+## 10. Lo entregado (§6 entero)
+
+| Tarea | Qué | Commit |
+| --- | --- | --- |
+| TA.2 (pantalla) | `OrigenMovimiento` + `textoDeOrigen` (`components/shared/wallet/`): la celda «Origen» de los 5 libros (`WalletLedger`, `DetalleFilaComposicion`, `DesgloseTiendaLedger`, `DesgloseMovimientosTienda`, `DesglosePagosMensajero`) pinta `origen.texto` (+ descripción) y, si `enlace ≠ null`, un «Ver» con `aria-label = enlace.etiqueta`; las 4 descargas usan el MISMO texto (R3, R5–R8) | `1ceab0a6` |
+| TA.3 | `useConceptosConMovimientos` + `opcionesDeConceptos`: `WalletFiltros` (`libro: caja`, tipo y periodo del borrador), `DesgloseMovimientosTienda` (`tienda`, tiendaId, cierre y periodo) y `MiWalletFiltros` (`mi_tienda`, sin id) con «(n)» y el elegido conservado con «(0)»; aviso si la lectura falla. Fuera `CATEGORIA_OPTIONS`, `CATEGORIA_TIENDA_OPTIONS`, `CATEGORIA_MI_WALLET_OPTIONS` y los comentarios T5 | `1ceab0a6` |
+| TA.4 | `components/shared/SelectorBuscable.tsx` (popover + campo `role=combobox` + `listbox`, `aria-activedescendant`, ↓/↑/Inicio/Fin/Intro/Escape, foco al abrir y de vuelta al cerrar, anillo opaco, estados cargando/error/vacío/«solo los más recientes», nunca pinta `value`) + `useCierresDeLaCuenta` (lectura PEREZOSA, al abrir) + `cierres-selector.ts` (rótulo «Cierre del día · mensajero · n movimientos», hora si se repite). Sustituye los `<Input>` de `DesgloseMovimientosTienda` y `DesglosePagosMensajero`; fuera `cierrePlaceholder`, `cierreAyuda` y T6. Borradas las 2 `@sin-superficie` de `lib/actions/wallet-filtros.ts` | `1ceab0a6` |
+| TA.5 | `EnlaceCierre({ cierreId, nombre })`: el `sr-only` ya no lleva el uuid; se nombra por día CR y mensajero (`CIERRE_ENLACE.delDia` en la previsualización, `RepartoPrevisualizacion.tsx`), por la fila (`deLaFila`, desglose) o por lo aplicado (`delPago`, reparto aplicado) | `1ceab0a6` |
+| Guardias | `wallet-sin-campo-id` (R93), `wallet-conceptos-sin-seed` (R95), `wallet-sin-uuid` de render (R96, 7 superficies); T5×3 y T6 en `AFIRMACIONES` de `wallet-textos-458` | `e46f3f16`, `1ceab0a6` |
+| TA.7 | `cargarTableroFinanciero` rotula `dinero_en_caja` con `rotuloCifraPrincipal({ periodoFiltrado: true, estado })` → «Movimiento neto del periodo» | `f7fe9471` |
+| TA.8 | `docs/ayuda/oficina/wallet-tiendas.md`, `wallet-mensajeros.md`, `tienda/mi-wallet.md` (selector, conceptos con cuenta, origen con nombre; `actualizado` y `fuentes`); `tests/unit/asistente/contexto-458.test.ts` bloque A | `12444e25` |
+| TA.9 | recorrido `progress/recorrido_458-A/` (pasos 1, 8, 12, accesibilidad; maestro, admin, tienda; 4 preguntas al asistente) | este commit |
+
+## 11. R → test (parte frontend)
+
+| R | Test |
+| --- | --- |
+| R1 | `tests/unit/guards/wallet-sin-uuid.guardia.test.tsx` (render de 7 superficies); `tests/components/RepartoPrevisualizacion.test.tsx` y `DesglosePagosMensajero.test.tsx` («Ver el cierre» sin id); `tests/components/SelectorBuscable.test.tsx` («nunca el valor») |
+| R2 | `tests/unit/guards/wallet-sin-campo-id.guardia.test.ts`; `tests/components/WalletFiltros458.test.tsx` (sin campo de texto, sin «Pegá»/ayuda) |
+| R3 | `tests/components/OrigenMovimiento.test.tsx` («las cuatro descargas… sin id») |
+| R5, R6 | `tests/components/OrigenMovimiento.test.tsx`; `tests/integration/mi-wallet-page.test.tsx` (origen por fila) |
+| R7, R8 | `tests/components/OrigenMovimiento.test.tsx` («Ver» con `aria-label`, id solo en `href`; sin enlace si `null`) |
+| R10, R11 | `tests/components/WalletFiltros458.test.tsx` (selector al abrir, búsqueda por nombre/día, rótulo día · mensajero); `tests/integration/wallet-tiendas-desglose.test.tsx`, `wallet-mensajeros-page.test.tsx`, `wallet-tiendas-pago.test.tsx` (eligen `c1` por su rótulo) |
+| R12 (pantalla) | `tests/components/WalletFiltros458.test.tsx` (el cierre elegido viaja como `cierreId` al listado y al conteo) |
+| R13, R14 | `tests/unit/components/conceptos-filtro.test.ts`; `tests/components/WalletFiltros458.test.tsx`; `tests/unit/components/wallet-indemnizacion-libro.test.tsx`; `tests/unit/components/desglose-tienda-ledger.test.tsx`; `tests/integration/wallet-tiendas-desglose.test.tsx` («R44») |
+| R15 | `tests/unit/components/conceptos-filtro.test.ts`; `tests/components/WalletFiltros458.test.tsx` («se conserva, con 0») |
+| R16 (selectores) | el día CR lo pone el servidor (`dia`); `tests/components/WalletFiltros458.test.tsx` pinta ese día tal cual |
+| R62 | `tests/unit/analitica/panel-mensual-rotulo.test.ts`; `tests/unit/analytics/tablero-financiero-cargar.test.ts` (reescrito) |
+| R93 | `wallet-sin-campo-id.guardia.test.ts` (+ contraprueba C1.1/C1.2) |
+| R95 | `wallet-conceptos-sin-seed.guardia.test.ts` (+ contraprueba `CATEGORIA_OPTIONS`) |
+| R96 | `wallet-sin-uuid.guardia.test.tsx` (+ contraprueba `EnlaceCierre` de antes) |
+| R99 | las tres guardias: contraprueba + no-vacuidad (censo ≥ 40 archivos, `<Input>` vistos ≥ 3; 3 filtros en el censo; ≥ 7 superficies y ids en `href`) |
+| R101 (T5, T6) | `tests/unit/guards/wallet-textos-458.guardia.test.ts` (8 afirmaciones) |
+| R102, R103 | `tests/unit/asistente/contexto-458.test.ts` (bloque A) + 4 preguntas en `progress/recorrido_458-A/recorrido.md` |
+| R104 | `progress/recorrido_458-A/` |
+
+## 12. Tests reescritos (ninguno retirado sin sustituto)
+
+| Test | Cambio | R |
+| --- | --- | --- |
+| `tests/components/descarga/WalletDescarga.test.tsx` «T G.2 (R61)» | afirmaba que el filtro ES el SEED; ahora pasa todo el SEED por `opcionesDeConceptos` y exige rótulo legible con «(1)» | R13, R95 |
+| `WalletLedgerAcciones457/459/461.test.tsx` «el filtro por concepto…» | `CATEGORIA_OPTIONS` → `opcionesDeConceptos` con los conceptos del caso | R13 |
+| `DesgloseTiendaAbono457.test.tsx` (2 casos de filtro) | ídem con los diccionarios de tienda y de `/mi-wallet`; «(2)», «(1)» | R13 |
+| `tests/unit/components/wallet-labels.test.ts`, `desglose-tienda-labels.test.ts`, `mi-wallet-labels.test.ts` (opciones) | del SEED a `opcionesDeConceptos`; los rótulos esperados siguen escritos a mano | R13 |
+| `tests/unit/guards/incidente-exhaustividad.test.ts` «R31» | ídem | R13 |
+| `tests/unit/components/wallet-indemnizacion-libro.test.tsx` «las opciones salen del SEED» | ahora: las del servidor, con su número, sin `egreso_gasto` | R13, R14 |
+| `tests/unit/components/desglose-movimientos-tienda.test.tsx`, `desglose-tienda-ledger.test.tsx` (381/R35) | la opción es «… (1)» y la lista es la del servidor | R13 |
+| `tests/integration/wallet-tiendas-desglose.test.tsx` (6 casos), `wallet-mensajeros-page.test.tsx` (2), `wallet-tiendas-pago.test.tsx` (1) | teclear «c1» en «Cierre» → elegir el cierre en el selector (`tests/fixtures/selector-buscable.ts`); «R44: pago_tienda es una opción» → la lista del servidor | R2, R10, R13 |
+| `tests/integration/mi-wallet-page.test.tsx` (fixture) | el doble del borde ponía «Registrado a mano» como origen de TODA fila; ahora el rótulo de su origen | R5 |
+| `tests/components/DesglosePagosMensajero.test.tsx`, `RepartoPrevisualizacion.test.tsx` (R43/R44) | el nombre accesible afirmaba «Ver el cierre (<uuid>)»; ahora día/mensajero/fila y sin id | R1 |
+| `tests/unit/analytics/tablero-financiero-cargar.test.ts` (459 m3, 3 casos) | «Flujo de dinero registrado»/«Dinero en caja» → «Movimiento neto del periodo» | R62 |
+| `tests/unit/asistente/contexto-457.test.ts`, `contexto-461.test.ts` («actualizado el 2026-09-25») | fijaban la fecha EXACTA; ahora «el 2026-09-25 o después» (R102 obliga a actualizarla) | R102 |
+
+## 13. Mutaciones (arnés con autocomprobación: el archivo cambia, se ejecutan > 0 tests, se restaura byte a byte)
+
+| # | Mutación | Tests | Resultado |
+| --- | --- | --- | --- |
+| M1 | vuelve `cierrePlaceholder: "ID del cierre"` | guardia R93 | ROJO 1/3 |
+| M2 | `WalletFiltros` puebla la categoría del SEED | guardia R95 + `WalletFiltros458` | ROJO 4/15 |
+| M3 | `EnlaceCierre` vuelve a poner el uuid en el `sr-only` | guardia R96 | ROJO 2/10 (desglose y previsualización) |
+| M4 | selector sin `aria-activedescendant` | `SelectorBuscable` | ROJO 1/11 |
+| M5 | selector busca en el servidor en cada tecla | `SelectorBuscable` | ROJO 1/11 |
+| M6 | el disparador pinta el VALOR | `SelectorBuscable` | ROJO 1/11 |
+| M7 | Intro no elige | `SelectorBuscable` | ROJO 1/11 |
+| M8 | R15: el elegido sin movimientos desaparece | `conceptos-filtro` + `WalletFiltros458` | ROJO 3/15 |
+| M9 | la celda ignora `origen.texto` | `OrigenMovimiento` | ROJO 6/7 |
+| M10 | los cierres se leen al montar, no al abrir | `WalletFiltros458` | ROJO 1/9 |
+| M11 | el desglose del mensajero ignora el cierre elegido | `WalletFiltros458` | ROJO 1/9 |
+| M12 | vuelve la ayuda «copiá su dirección y pegala» | `wallet-textos-458` (T6) | ROJO 1/10 |
+
+Las 12 restauradas; `git status` limpio al terminar. Gate y mutaciones NO en paralelo.
+
+## 14. Recorrido y gate
+
+Recorrido (`progress/recorrido_458-A/recorrido.md`): maestro y admin OK en los pasos 1, 8 y 12 (árbol
+de «Ver el cierre» sin uuid) y en accesibilidad; tienda OK en `/mi-wallet` (7 conceptos, Σ 27 = su
+libro) y `/wallet` → 404. Σ de las cuentas del filtro de la caja = 36 = filas de la caja del clon.
+El panel mensual de `/analitica` NO se ve (región `financiero` comentada en `AnaliticaShell`).
+Una falsa alarma de la sonda (el `input` oculto de Base UI) anotada y medida.
+
+Gate completo (`./init.sh`, base `ordenex_458af`, log `progress/gate_458A.log`, sin `tail`), salida real:
+
+```
+✓ dependencias: 58 declaradas, todas presentes
+✓ typecheck paso
+✓ lint paso
+✓ DATABASE_URL resuelta: los 298 archivos de tests contra Postgres SI se ejecutan
+ Test Files  2278 passed (2278)
+      Tests  31928 passed | 26 skipped (31954)
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 2278 ejecutado(s), todos en el baseline conocido)
+INIT_EXIT=0
+```
+
+Los 26 `skipped` son los `it.skip` de `AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (9);
+**0 en `tests/integration/db`**. Fotografía `caja-caracterizacion-459` verde dentro del gate (ningún
+literal tocado).
+
+## 15. Pendiente (frontend)
+
+- `/analitica`: la región `financiero` está comentada en `AnaliticaShell`; el rótulo nuevo no se ve
+  hasta que vuelva (el cargador y su test ya lo dicen).
+- Enlaces del origen a los estados de cuenta (pagos, cobros, abonos, pago por cuenta): 458-D.
+- `SelectorBuscable` se reutiliza en 458-C/E (cuenta y «A quién»).
