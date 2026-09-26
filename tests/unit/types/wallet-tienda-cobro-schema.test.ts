@@ -23,8 +23,17 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 const TIENDA = "0b1e6f1a-6d3a-4c6e-9c8f-3a1c9d2b7e55";
 
+/** Ficha 461 (R66): la clave que el dialogo genera al abrirse; sin ella el borde rechaza el cobro. */
+const CLAVE_461 = "6b1f0d2e-7c3a-4d5b-9e8f-0a1b2c3d4e5f";
+
 function base(over: Partial<Record<string, unknown>> = {}) {
-  return { tiendaId: TIENDA, monto: "1500.00", descripcion: "Reposicion de etiquetas", ...over };
+  return {
+    claveIdempotencia: CLAVE_461,
+    tiendaId: TIENDA,
+    monto: "1500.00",
+    descripcion: "Reposicion de etiquetas",
+    ...over,
+  };
 }
 
 describe("381/A.2 — lo que el borde ACEPTA", () => {

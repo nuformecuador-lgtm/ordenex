@@ -92,7 +92,12 @@ export function derivarFinanzasDiarias(
       }
       if (esPropio) dia.ingresosPropios = dia.ingresosPropios.add(monto);
     } else {
-      dia.salidas = dia.salidas.add(monto);
+      // Ficha 461 (R30): los egresos del dia son las SALIDAS DE EFECTIVO, como el «Salio» de la
+      // caja. El reverso de un cargo (la anulacion de un cobro de Ordenex a una tienda) no saca
+      // dinero: devuelve saldo a la tienda. Sigue restando de la ganancia (abajo), que si cambia.
+      if (LIQUIDEZ_POR_CATEGORIA[fila.categoria] === "efectivo") {
+        dia.salidas = dia.salidas.add(monto);
+      }
       if (esPropio) dia.egresosPropios = dia.egresosPropios.add(monto);
       // Los dos pagos se acumulan ADEMAS de sumar a los egresos, no en vez de: ya estan dentro
       // de ellos. Sumarlos aparte al total los contaria dos veces.

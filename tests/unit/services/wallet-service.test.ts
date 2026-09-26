@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { RolValue } from "@prisma/client";
 import { WalletService } from "@/lib/services/WalletService";
@@ -106,6 +107,7 @@ function buildRepo(): IWalletMovimientoRepository {
       .mockResolvedValue({ gastoFijo: "0.00", gastoVariable: "0.00", sueldo: "0.00" }),
     obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
     primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: el dia del primer movimiento
+    obtenerPorClave: vi.fn(async () => null), // ficha 461 (R68): la relectura del segundo envio; se sobrescribe donde se ejercita
     // FICHA 362: el escritor de los movimientos que nacen de una DECISION humana. Abre su PROPIA
     // transaccion y escribe ademas la fila de auditoria; los feeds automaticos —los ~34 asientos
     // que emite aprobar un cierre— siguen entrando por `crearMovimientos` y NO dejan rastro.
@@ -453,7 +455,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
       r.composicion.otrosEgresos,
       r.composicion.totalEgresos,
     ];
-    expect(importes.length).toBe(10); // 7 conceptos + 3 totales: ninguno se pierde
+    expect(importes.length).toBe(11); // 8 conceptos (ficha 461: + el cobro a una tienda) + 3 totales: ninguno se pierde
     for (const v of importes) {
       expect(typeof v).toBe("string");
       expect(v).toMatch(/^-?\d+\.\d{2}$/); // escala 2 SIEMPRE, tambien en el cero
@@ -615,7 +617,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
     const repo = buildRepo();
     const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
     const r = await svc.registrarMovimientoManual(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
       OTRO,
     );
     expect(r).toEqual({ status: "forbidden" });
@@ -627,7 +629,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
     const repo = buildRepo();
     const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
     const r = await svc.registrarMovimientoManual(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
       ADMIN,
     );
     expect(r.status).toBe("ok");
@@ -644,7 +646,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
     });
     const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
     const r = await svc.registrarMovimientoManual(
-      { tipo: "egreso", categoria: "egreso_ajuste", monto: "50.00", descripcion: "correccion" },
+      { claveIdempotencia: randomUUID(), tipo: "egreso", categoria: "egreso_ajuste", monto: "50.00", descripcion: "correccion" },
       MAESTRO,
     );
     expect(r.status).toBe("ok");
@@ -702,6 +704,7 @@ describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/
 
   function ajuste(fecha?: string) {
     return {
+      claveIdempotencia: randomUUID(),
       tipo: "egreso" as const,
       categoria: "egreso_ajuste" as const,
       monto: "50.00",
@@ -814,6 +817,7 @@ const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };
 const SIN_DOCUMENTOS_459 = {
   pagosPorCuenta: { estadoDeDocumentos: async () => [] },
   aportes: { estadoDeDocumentos: async () => [] },
+  cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] }, // ficha 461
 };
 
 // ─── FICHA 459 (T B.16, design §7.3) — el DOCUMENTO de cada fila, resuelto en lote ───
@@ -822,6 +826,9 @@ describe("WalletService.listarMovimientos — el documento de las filas original
   const PAGO_2 = "1b6c1f7e-7a44-4b43-9c1a-5e0f2d9a1c12";
   const APORTE = "9f2e3d4c-1b2a-4c3d-8e9f-0a1b2c3d4e5f";
   const COBRO = "ecf6c289-9799-4558-be6d-ce5f8a12f5cd";
+  // Ficha 461: un cobro con su linea PROPIA (vigente), otro COMPLETADO por la migracion (anulado).
+  const COBRO_PROPIO = "4610000a-0000-4000-8000-000000000001";
+  const COBRO_COMPLETADO = "4610000a-0000-4000-8000-000000000002";
 
   const PAGINA: WalletMovimientoDTO[] = [
     // Original del pago por cuenta (vigente, con comprobante).
@@ -835,6 +842,11 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     // Original del saldo inicial y el contra-asiento de su anulacion.
     mov({ id: "a1", tipo: "ingreso", categoria: "ingreso_aporte_capital", origenTipo: "aporte_capital", origenId: APORTE }),
     mov({ id: "a1r", tipo: "egreso", categoria: "egreso_reverso_aporte_capital", origenTipo: "aporte_capital", origenId: APORTE }),
+    // Ficha 461 (design §5.4, R20/R37): la linea de caja de un cobro con su origen PROPIO, la de otro
+    // COMPLETADO por la migracion (los dos son originales), y el reverso del segundo (no lo es).
+    mov({ id: "k1", tipo: "ingreso", categoria: "ingreso_cobro_tienda", origenTipo: "cobro_tienda", origenId: COBRO_PROPIO }),
+    mov({ id: "k2", tipo: "ingreso", categoria: "ingreso_cobro_tienda", origenTipo: "cobro_tienda_completado", origenId: COBRO_COMPLETADO }),
+    mov({ id: "k2r", tipo: "egreso", categoria: "egreso_reverso_cobro_tienda", origenTipo: "cobro_tienda", origenId: COBRO_COMPLETADO }),
     // Una fila cualquiera.
     mov({ id: "f1" }),
   ];
@@ -849,6 +861,17 @@ describe("WalletService.listarMovimientos — el documento de las filas original
       aportes: {
         estadoDeDocumentos: vi.fn(async (ids: readonly string[]) =>
           ids.map((id) => ({ id, anulado: true, tieneComprobante: false })),
+        ),
+      },
+      cobros: {
+        estadoDeDocumentos: vi.fn(async (ids: readonly string[]) =>
+          ids.map((id) => ({ id, anulado: id === COBRO_COMPLETADO, tieneComprobante: false })),
+        ),
+      },
+      // Ficha 461 (R71): las correcciones de caja; en esta pagina ninguna esta anulada.
+      ajustes: {
+        estadoDeDocumentos: vi.fn(async (ids: readonly string[]) =>
+          ids.map((id) => ({ id, anulado: false, tieneComprobante: false })),
         ),
       },
     };
@@ -871,6 +894,12 @@ describe("WalletService.listarMovimientos — el documento de las filas original
       c1: null,
       a1: { tipo: "aporte_capital", anulado: true, tieneComprobante: false },
       a1r: null,
+      // Ficha 461 (R20/R37): las DOS lineas de cobro son originales —la propia y la completada—; el
+      // reverso no. Mutacion 14 de design §14.2 (sin el origen `cobro_tienda_completado`) deja `k2`
+      // en `null` y este caso en rojo.
+      k1: { tipo: "cobro_tienda", anulado: false, tieneComprobante: false },
+      k2: { tipo: "cobro_tienda", anulado: true, tieneComprobante: false },
+      k2r: null,
       f1: null,
     });
   });
@@ -887,6 +916,9 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     expect(docs.pagosPorCuenta.estadoDeDocumentos).toHaveBeenCalledWith([PAGO, PAGO_2]);
     expect(docs.aportes.estadoDeDocumentos).toHaveBeenCalledTimes(1);
     expect(docs.aportes.estadoDeDocumentos).toHaveBeenCalledWith([APORTE]);
+    // Ficha 461: UNA consulta para los dos cobros (propio y completado), sin el reverso.
+    expect(docs.cobros.estadoDeDocumentos).toHaveBeenCalledTimes(1);
+    expect(docs.cobros.estadoDeDocumentos).toHaveBeenCalledWith([COBRO_PROPIO, COBRO_COMPLETADO]);
   });
 
   it("sin filas de un tipo, ese lector NO se consulta", async () => {
@@ -898,6 +930,7 @@ describe("WalletService.listarMovimientos — el documento de las filas original
 
     expect(docs.pagosPorCuenta.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.aportes.estadoDeDocumentos).not.toHaveBeenCalled();
+    expect(docs.cobros.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 461
     if (r.status !== "ok") throw new Error("se esperaba ok");
     expect(r.data.movimientos.every((m) => m.documento === null)).toBe(true);
   });
@@ -908,6 +941,7 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     expect(await svc.listarMovimientos({ page: 1, pageSize: 20 }, OTRO)).toEqual({ status: "forbidden" });
     expect(docs.pagosPorCuenta.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.aportes.estadoDeDocumentos).not.toHaveBeenCalled();
+    expect(docs.cobros.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 461
   });
 
   it("la descarga del libro NO resuelve documentos (R58: la descarga no los lleva)", async () => {
@@ -919,5 +953,53 @@ describe("WalletService.listarMovimientos — el documento de las filas original
     await svc.listarMovimientosCompleto({}, MAESTRO);
     expect(docs.pagosPorCuenta.estadoDeDocumentos).not.toHaveBeenCalled();
     expect(docs.aportes.estadoDeDocumentos).not.toHaveBeenCalled();
+    expect(docs.cobros.estadoDeDocumentos).not.toHaveBeenCalled(); // ficha 461
+  });
+});
+
+// ─── FICHA 461 (R66/R68, auditoria D2) — la clave de idempotencia de la correccion de caja ───
+
+describe("WalletService.registrarMovimientoManual — la clave de idempotencia (461/R66/R68)", () => {
+  it("la clave del cliente viaja a la fila que se inserta", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
+    const clave = randomUUID();
+    const r = await svc.registrarMovimientoManual(
+      { claveIdempotencia: clave, tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      MAESTRO,
+    );
+    expect(r.status).toBe("ok");
+    const arg = vi.mocked(repo.crearMovimientoRegistrado).mock.calls[0][0];
+    expect(arg.claveIdempotencia).toBe(clave);
+    expect(arg.origenId).toBeNull(); // la idempotencia la da la CLAVE, no el origen
+  });
+
+  it("R68: si el repositorio no inserto (count 0: la clave ya tenia su fila), responde `ya_registrado` con la fila releida POR CLAVE y no relee por id", async () => {
+    const original = mov({ id: "w-original", categoria: "ingreso_ajuste", monto: "50.00", origenTipo: "manual", origenId: null });
+    const repo = buildRepo();
+    repo.crearMovimientoRegistrado = vi.fn(async () => 0);
+    repo.obtenerPorClave = vi.fn(async () => original);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
+    const clave = randomUUID();
+    const r = await svc.registrarMovimientoManual(
+      { claveIdempotencia: clave, tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      MAESTRO,
+    );
+    expect(r).toEqual({ status: "ya_registrado", movimiento: original });
+    expect(repo.obtenerPorClave).toHaveBeenCalledWith(clave);
+    expect(repo.obtenerPorId).not.toHaveBeenCalled();
+  });
+
+  it("count 0 sin fila que releer es un error con contexto, no una fila inventada", async () => {
+    const repo = buildRepo();
+    repo.crearMovimientoRegistrado = vi.fn(async () => 0);
+    repo.obtenerPorClave = vi.fn(async () => null);
+    const svc = new WalletService(repo, writeClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
+    await expect(
+      svc.registrarMovimientoManual(
+        { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+        MAESTRO,
+      ),
+    ).rejects.toThrow(/clave de idempotencia repetida/);
   });
 });

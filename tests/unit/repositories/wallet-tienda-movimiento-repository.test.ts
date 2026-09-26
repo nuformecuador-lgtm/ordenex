@@ -116,7 +116,7 @@ describe("WalletTiendaMovimientoRepository.listarPorTienda (R19/R22)", () => {
       categoria: "flete",
       origenTipo: "cierre_dia",
       origenId: "c1",
-      fechaMovimiento: { gte: desde, lte: hasta },
+      fechaMovimiento: { gte: desde, lt: hasta }, // ficha 461 (R72): `hasta` EXCLUSIVO
     });
   });
 });
@@ -225,7 +225,7 @@ describe("WalletTiendaMovimientoRepository.agregarDesglosePorTienda (R24/R34)", 
       categoria: "iva_flete",
       origenTipo: "cierre_dia",
       origenId: "c1",
-      fechaMovimiento: { gte: desde, lte: hasta },
+      fechaMovimiento: { gte: desde, lt: hasta }, // ficha 461 (R72): `hasta` EXCLUSIVO
     });
   });
 

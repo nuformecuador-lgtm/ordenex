@@ -106,8 +106,8 @@ describe("WalletLedger — visibilidad de Reversar (R22c/R32)", () => {
   it("NO muestra Reversar en ingresos ni en egresos no administrativos", () => {
     renderLedger(<WalletLedger movimientos={[INGRESO_FLETE, EGRESO_MENSAJERO]} />);
 
-    const filaIngreso = screen.getByRole("row", { name: /Flete/ });
-    const filaMensajero = screen.getByRole("row", { name: /Pago a mensajero/ });
+    const filaIngreso = screen.getByRole("row", { name: /Flete cobrado a la tienda/ });
+    const filaMensajero = screen.getByRole("row", { name: /Ordenex le paga a un mensajero/ });
     expect(within(filaIngreso).queryByRole("button", { name: "Reversar" })).not.toBeInTheDocument();
     expect(within(filaMensajero).queryByRole("button", { name: "Reversar" })).not.toBeInTheDocument();
   });

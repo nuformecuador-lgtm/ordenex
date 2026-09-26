@@ -163,6 +163,18 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       // Ficha 462 (2026-09-25): los dos valores de enum del aviso «reprogramadas de hoy que esperan la
       // aprobacion de un cierre». Sola, aditiva, `down.sql` dinamico; no toca `orden_traspaso_mensajero`.
       "20260925130000_notificacion_evento_reprogramadas_esperan_cierre",
+      // Ficha 461 (2026-09-25): los enums del cobro de Ordenex a una tienda; la tabla de su anulacion
+      // con los dos CHECK ampliados; la linea de caja de los cobros previos (solo INSERT en
+      // `wallet_movimiento`); el enum de la anulacion de una correccion; las claves de idempotencia y
+      // `ajuste_caja_anulacion`; y el backfill +6 h de los asientos de pago (solo UPDATE de
+      // `fecha_movimiento` en los tres libros). Ninguna toca `orden_traspaso_mensajero`. Van DESPUES de
+      // la de la 462 porque su timestamp (20260926…) es posterior: es el orden real de aplicacion.
+      "20260926120000_cobro_tienda_461_enums",
+      "20260926120100_cobro_tienda_461_anulacion_y_checks",
+      "20260926120200_cobro_tienda_461_completar_caja",
+      "20260926120300_wallet_461_enum_anulacion_correccion",
+      "20260926120400_wallet_461_idempotencia_y_anulacion_correccion",
+      "20260926120500_wallet_461_fechas_cr_pagos",
     ]);
   });
 });

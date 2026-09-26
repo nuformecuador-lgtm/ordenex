@@ -223,7 +223,9 @@ describeSiHayBase("173/T E.3 — el registro retroactivo contra Postgres", () =>
         categoria: "egreso_pago_tienda",
         monto: "15000.50",
         origenTipo: "pago_tienda",
-        fecha: FECHA_DEL_PAGO.toISOString(),
+        // Ficha 461 (R73): el asiento va al INICIO del dia de pago en Costa Rica (06:00Z), como lo
+        // escribe el camino vivo; `fecha_pago` del documento sigue siendo la medianoche UTC.
+        fecha: "2026-07-30T06:00:00.000Z",
       },
       {
         tipo: "ingreso",

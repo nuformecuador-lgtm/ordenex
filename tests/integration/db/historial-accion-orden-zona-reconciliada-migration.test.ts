@@ -123,6 +123,10 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
       "pago_por_cuenta_tienda_anulado",
       "aporte_capital_registrado",
       "aporte_capital_anulado",
+      // Ficha 461 (2026-09-25): la anulacion del cobro de Ordenex a una tienda (migracion 1 de la
+      // 461) y la anulacion de una correccion de caja (migracion 4, auditoria D3).
+      "cobro_tienda_anulado",
+      "wallet_movimiento_manual_anulado",
     ];
     expect([...HISTORIAL_ACCION_TIPOS].sort()).toEqual(
       [...previos, VALOR_NUEVO, ...POSTERIORES].sort(),

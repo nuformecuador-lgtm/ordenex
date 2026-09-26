@@ -15,7 +15,12 @@ import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
-import { CATEGORIA_TIENDA_LABEL, ORIGEN_TIENDA_LABEL, TIPO_TIENDA_LABEL } from "./mi-wallet-labels";
+// Ficha 461 (R44): el archivo de la tienda lleva la MISMA lectura desde la tienda que su tabla.
+import {
+  CATEGORIA_MI_WALLET_LABEL,
+  ORIGEN_TIENDA_LABEL,
+  TIPO_TIENDA_LABEL,
+} from "./mi-wallet-labels";
 
 /** Columnas emitidas por la descarga del ledger de la tienda, en su orden de pantalla. */
 export const COLUMNAS_DESCARGA_MI_WALLET: DescargaColumna[] = [
@@ -41,7 +46,7 @@ export function filaDescargaMiWallet(movimiento: WalletTiendaMovimientoDTO): Des
   return {
     fecha: fechaDiaMovimientoCR(movimiento.fechaMovimiento),
     tipo: TIPO_TIENDA_LABEL[movimiento.tipo] ?? movimiento.tipo,
-    concepto: CATEGORIA_TIENDA_LABEL[movimiento.categoria] ?? movimiento.categoria,
+    concepto: CATEGORIA_MI_WALLET_LABEL[movimiento.categoria] ?? movimiento.categoria,
     monto: movimiento.monto, // STRING tal cual (money-safe)
     origen: origen(movimiento),
   };

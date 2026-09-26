@@ -128,6 +128,36 @@ describe("La derivación del dinero por día", () => {
     });
   });
 
+  it("⭑ 461/R30: el cobro de Ordenex a una tienda y su reverso NO son efectivo del dia, pero SI cuentan en la ganancia", () => {
+    // Un cobro de 2 500,50 el dia 18 y su anulacion el 19: ni «ingresos» ni «egresos» se mueven
+    // (no entro ni salio dinero: se tomo del saldo de la tienda y se le devolvio), y la ganancia
+    // sube y baja exactamente en el monto.
+    const dias = derivarFinanzasDiarias([
+      fila("2026-09-18", "ingreso_cobro_tienda", "ingreso", "2500.50"),
+      fila("2026-09-18", "ingreso_ajuste", "ingreso", "100.00"),
+      fila("2026-09-19", "egreso_reverso_cobro_tienda", "egreso", "2500.50"),
+      fila("2026-09-19", "egreso_gasto_variable", "egreso", "40.00"),
+    ]);
+    expect(dias).toEqual([
+      {
+        fecha: "2026-09-18",
+        ingresos: "100.00", // solo el ajuste, que es efectivo
+        egresos: "0.00",
+        ganancia: "2600.50", // 2 500,50 del cobro + 100,00 del ajuste
+        pagoMensajeros: "0.00",
+        pagoTiendas: "0.00",
+      },
+      {
+        fecha: "2026-09-19",
+        ingresos: "0.00",
+        egresos: "40.00", // solo el gasto, que es efectivo; el reverso del cobro no sale de la caja
+        ganancia: "-2540.50", // −2 500,50 del reverso − 40,00 del gasto
+        pagoMensajeros: "0.00",
+        pagoTiendas: "0.00",
+      },
+    ]);
+  });
+
   it("suma con decimales exactos", () => {
     const filas = Array.from({ length: 100 }, () =>
       // Ficha 459: con un ingreso EFECTIVO (el flete ya no suma a los ingresos del dia).

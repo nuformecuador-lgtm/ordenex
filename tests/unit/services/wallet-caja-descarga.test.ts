@@ -59,7 +59,7 @@ function repoEnMemoria(filas: WalletMovimientoDTO[]) {
       .filter((m) => (f.tipo === undefined ? true : m.tipo === f.tipo))
       .filter((m) => (f.categoria === undefined ? true : m.categoria === f.categoria))
       .filter((m) => (f.desde === undefined ? true : new Date(m.fechaMovimiento) >= f.desde))
-      .filter((m) => (f.hasta === undefined ? true : new Date(m.fechaMovimiento) <= f.hasta))
+      .filter((m) => (f.hasta === undefined ? true : new Date(m.fechaMovimiento) < f.hasta)) // 461/R72: exclusivo
       .sort(
         (a, b) =>
           new Date(b.fechaMovimiento).getTime() - new Date(a.fechaMovimiento).getTime(),
@@ -160,12 +160,14 @@ describe("WalletService.listarMovimientosCompleto — libro de caja sin paginaci
         categoria: "egreso_sueldo",
         fechaMovimiento: "2026-07-11T00:00:00.000Z",
       }),
-      mov({ id: "ingreso-ago", tipo: "ingreso", fechaMovimiento: "2026-08-01T00:00:00.000Z" }),
+      // Ficha 461 (R72): las 06:00 CR del 1 de agosto (12:00Z); a las 00:00Z seria todavia el 31 en CR.
+      mov({ id: "ingreso-ago", tipo: "ingreso", fechaMovimiento: "2026-08-01T12:00:00.000Z" }),
     ];
     const { repo, listar } = repoEnMemoria(filas);
     const svc = servicio(repo);
 
-    const filtros = { tipo: "ingreso", hasta: new Date("2026-07-31T23:59:59.000Z") };
+    // Ficha 461 (R72): el borde recibe el DIA (`YYYY-MM-DD`) y lo traduce a dias de Costa Rica.
+    const filtros = { tipo: "ingreso", hasta: "2026-07-31" };
 
     const paginado = await svc.listarMovimientos(
       listarMovimientosSchema.parse({ ...filtros, pageSize: 50 }),
@@ -251,4 +253,5 @@ const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };
 const SIN_DOCUMENTOS_459 = {
   pagosPorCuenta: { estadoDeDocumentos: async () => [] },
   aportes: { estadoDeDocumentos: async () => [] },
+  cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] }, // ficha 461: lo exige `LectoresDocumentosCaja`
 };

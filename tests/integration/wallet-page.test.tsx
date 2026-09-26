@@ -206,6 +206,7 @@ const RESUMEN_OK = {
       ingreso_iva_flete_devolucion: "0.00",
       ingreso_iva_comision_cod: "0.00",
       ingreso_ajuste: "0.00",
+      ingreso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
     },
     totalIngresos: "1500.00",
     // Ficha 339 (T1.3/T6.2): un importe por egreso propio CON FILA que el desglose no abre.
@@ -214,6 +215,7 @@ const RESUMEN_OK = {
     egresos: {
       egreso_pago_mensajero: "0.00",
       egreso_ajuste: "0.00",
+      egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
     },
     otrosEgresos: "0.00",
     totalEgresos: "0.00",
@@ -436,7 +438,7 @@ describe("WalletPage — pre-fetch del maestro (R18/R21)", () => {
     // cantidad; lo que la 231 se negó a hacer fue meter una cantidad como `number`.
     const { ingresos, egresos, hayOtrosEgresos, ...totales } = props.composicion;
     // Control de no-vacuidad: el desglose trae las siete categorías, no un objeto vacío.
-    expect(Object.keys(ingresos)).toHaveLength(7);
+    expect(Object.keys(ingresos)).toHaveLength(8); // ficha 461 (R27): + `ingreso_cobro_tienda`
     for (const [categoria, valor] of Object.entries(ingresos)) {
       expect(typeof valor, `composicion.ingresos.${categoria}`).toBe("string");
     }

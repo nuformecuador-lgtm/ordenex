@@ -1,0 +1,76 @@
+== Arnes SDD :: init (modo: rapido) ==
+[0;32m✓ node v24.13.0[0m
+[0;32m✓ dependencias: 58 declaradas, todas presentes[0m
+[0;32m✓ feature_list.json: sin ids duplicados (457 fichas), cupo por zona respetado (in_progress=1) y specs en su sitio[0m
+[1;33mTu cambio toca cimientos, y para eso el modo rapido no alcanza:[0m
+    app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx
+    app/(app)/mi-wallet/_components/MiWalletFiltros.tsx
+    app/(app)/mi-wallet/_components/mi-wallet-cierres.ts
+    app/(app)/mi-wallet/_components/mi-wallet-descarga-columnas.ts
+    app/(app)/mi-wallet/_components/mi-wallet-labels.ts
+    app/(app)/mi-wallet/page.tsx
+    app/(app)/wallet/_components/ComposicionGananciaCard.tsx
+    app/(app)/wallet/_components/DesgloseEgresosLista.tsx
+    app/(app)/wallet/_components/DocumentoCajaAcciones.tsx
+    app/(app)/wallet/_components/RegistrarMovimientoCajaDialog.tsx
+    app/(app)/wallet/_components/WalletLedger.tsx
+    app/(app)/wallet/_components/composicion-detalle-labels.ts
+    app/(app)/wallet/_components/wallet-conceptos-manuales.ts
+    app/(app)/wallet/_components/wallet-labels.ts
+    app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx
+    app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx
+    app/(app)/wallet/mensajeros/_components/cuentas-por-pagar-clave.ts
+    app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx
+    app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx
+    app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts
+    app/(app)/wallet/tiendas/_components/saldos-tiendas-clave.ts
+    db/migrations/20260926120000_cobro_tienda_461_enums/down.sql
+    db/migrations/20260926120000_cobro_tienda_461_enums/migration.sql
+    db/migrations/20260926120100_cobro_tienda_461_anulacion_y_checks/down.sql
+    db/migrations/20260926120100_cobro_tienda_461_anulacion_y_checks/migration.sql
+    db/migrations/20260926120200_cobro_tienda_461_completar_caja/down.sql
+    db/migrations/20260926120200_cobro_tienda_461_completar_caja/migration.sql
+    db/migrations/20260926120300_wallet_461_enum_anulacion_correccion/down.sql
+    db/migrations/20260926120300_wallet_461_enum_anulacion_correccion/migration.sql
+    db/migrations/20260926120400_wallet_461_idempotencia_y_anulacion_correccion/down.sql
+    db/migrations/20260926120400_wallet_461_idempotencia_y_anulacion_correccion/migration.sql
+    db/migrations/20260926120500_wallet_461_fechas_cr_pagos/down.sql
+    db/migrations/20260926120500_wallet_461_fechas_cr_pagos/migration.sql
+    db/schema.prisma
+    lib/actions/wallet-tienda.ts
+    lib/actions/wallet.ts
+    lib/interfaces/repositories/IAjusteCajaAnulacionRepository.ts
+    lib/interfaces/repositories/ICobroTiendaAnulacionRepository.ts
+    lib/interfaces/repositories/IPagoMensajeroMovimientoRepository.ts
+    lib/interfaces/repositories/IWalletMovimientoRepository.ts
+    lib/interfaces/repositories/IWalletTiendaMovimientoRepository.ts
+    lib/interfaces/services/IAjusteCajaService.ts
+    lib/interfaces/services/ICajaCobroTiendaFeedService.ts
+    lib/interfaces/services/ICobroTiendaService.ts
+    lib/interfaces/services/IWalletEgresoService.ts
+    lib/interfaces/services/IWalletService.ts
+    lib/repositories/AjusteCajaAnulacionRepository.ts
+    lib/repositories/CobroTiendaAnulacionRepository.ts
+    lib/repositories/PagoMensajeroMovimientoRepository.ts
+    lib/repositories/WalletMovimientoRepository.ts
+    lib/repositories/WalletTiendaMovimientoRepository.ts
+    lib/services/AjusteCajaService.ts
+    lib/services/CajaBackfillTesoreriaService.ts
+    lib/services/CajaCobroTiendaFeedService.ts
+    lib/services/CobroTiendaService.ts
+    lib/services/LiquidacionService.ts
+    lib/services/WalletEgresoService.ts
+    lib/services/WalletService.ts
+    lib/types/filtro-dias-cr.ts
+    lib/types/historial-accion.ts
+    lib/types/wallet-mensajero.ts
+    lib/types/wallet-tienda.ts
+    lib/types/wallet.ts
+    lib/utils/caja-tesoreria.ts
+    lib/utils/descripcion-cobro-tienda.ts
+
+  El modo rapido corre 'vitest --changed', que selecciona por grafo de IMPORTS.
+  Una migracion no la importa nadie, y un tipo compartido lo importa medio repo:
+  en los dos casos 'los tests relacionados' no es la respuesta correcta.
+[0;31m✗ esto exige el gate completo. Corre: ./init.sh[0m
+INIT_EXIT=1

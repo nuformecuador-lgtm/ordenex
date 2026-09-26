@@ -2,9 +2,11 @@
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
+import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import { UserRepository } from "@/lib/repositories/UserRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { CajaCobroTiendaFeedService } from "@/lib/services/CajaCobroTiendaFeedService";
 import { CobroTiendaService } from "@/lib/services/CobroTiendaService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { WalletTiendaService } from "@/lib/services/WalletTiendaService";
@@ -20,6 +22,7 @@ import type {
   VerMiSaldoServiceResult,
 } from "@/lib/interfaces/services/IWalletTiendaService";
 import {
+  anularCobroTiendaSchema,
   listarMovimientosDeTiendaCompletoSchema,
   listarMovimientosDeTiendaSchema,
   listarMovimientosTiendaCompletoSchema,
@@ -27,6 +30,7 @@ import {
   listarSaldosTiendasCompletoSchema,
   listarSaldosTiendasPaginadoSchema,
   registrarCobroTiendaSchema,
+  type AnularCobroTiendaResult,
   type ListarMovimientosDeTiendaCompletoResult,
   type ListarMovimientosTiendaCompletoResult,
   type ListarSaldosTiendasCompletoResult,
@@ -132,24 +136,30 @@ function buildDetalleService(): IDetalleMovimientoService {
 }
 
 /**
- * FICHA 381 (T F.2) — COMPOSITION ROOT del cobro manual a una tienda.
+ * FICHA 381 → 461 (T F.2 / T B.9) — COMPOSITION ROOT del cobro de Ordenex a una tienda.
  *
- * Cablea el servicio con SUS TRES dependencias y con ninguna mas:
+ * Cablea el servicio con SUS CINCO dependencias:
  *
- *  - el repositorio del ledger de la tienda, que escribe el asiento Y su fila de historial;
- *  - el repositorio de usuarios, del que solo se usa `obtenerCuentaTienda` (R17);
- *  - el ejecutor de transacciones interactivo, que es lo que hace ATOMICOS el asiento y su rastro
- *    (R25/R42).
+ *  - el repositorio del ledger de la tienda, que escribe el debito Y su fila de historial;
+ *  - el repositorio de usuarios, del que solo se usa `obtenerCuentaTienda` (R6);
+ *  - el puerto de caja REAL (`CajaCobroTiendaFeedService` sobre `WalletMovimientoRepository`), que
+ *    escribe el cargo del cobro y el reverso de su anulacion;
+ *  - el repositorio de anulaciones (constancia + historial);
+ *  - el ejecutor de transacciones interactivo, que es lo que hace ATOMICAS las escrituras (R1/R10).
  *
- * ⚠️ Y LO QUE NO SE INYECTA ES PARTE DEL CONTRATO (R24, D1): aqui NO se construye ningun
- * `WalletMovimientoRepository` ni ningun puerto de caja. Un cobro no puede escribir en la caja de
- * Ordenex porque el servicio no tiene con que.
+ * ⚠️ AHORA LO QUE SI SE INYECTA ES EL CONTRATO (R9, HD1 de la 461). La 381 decia lo contrario («lo
+ * que NO se inyecta es parte del contrato: ningun puerto de caja») y ese fue el error de diseño que
+ * dejo los cobros sin rastro en la caja. Un test de integracion pasa POR ESTA ACTION, sin
+ * `deps.service`, y encuentra en Postgres el debito, el cargo y el historial (leccion «el composition
+ * root que no inyecta»).
  */
 function buildCobroTiendaService(): ICobroTiendaService {
   const prisma = getPrismaClient();
   return new CobroTiendaService(
     new WalletTiendaMovimientoRepository(prisma),
     new UserRepository(prisma),
+    new CajaCobroTiendaFeedService(new WalletMovimientoRepository(prisma)),
+    new CobroTiendaAnulacionRepository(prisma),
     (fn) => prisma.$transaction((tx) => fn(tx)),
   );
 }
@@ -481,6 +491,33 @@ export async function registrarCobroTiendaAction(
     const data = registrarCobroTiendaSchema.parse(input); // R14/R15/R16: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildCobroTiendaService();
     return service.registrarCobro(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
+}
+
+/**
+ * FICHA 461 (T B.9, R10–R18; design §6, P8) — ANULAR UN COBRO de Ordenex a una tienda, con motivo.
+ *
+ * Vive aqui, junto a `registrarCobroTiendaAction`, y comparte su composition root: son las dos
+ * unicas escrituras del cobro y el mismo servicio las hace. Mismo orden que su hermana y por los
+ * mismos motivos: sin sesion se corta ANTES de validar y de construir el servicio (`unauthenticated`,
+ * R18); `anularCobroTiendaSchema` —`.strict()`, SIN monto— mata en el BORDE un motivo vacio o
+ * cualquier clave colada (R13/R14: el monto de los contra-asientos se lee del cobro en el servidor);
+ * el ROL, el cobro, su estado y los contra-asientos los decide el SERVICIO.
+ *
+ * SUPERFICIE: la dispara «Anular…» en la linea original de cada cobro vigente del libro de la caja
+ * (`DocumentoCajaAcciones`, rama `cobro_tienda`; R20).
+ */
+export async function anularCobroTiendaAction(
+  input: unknown,
+  deps: CobroTiendaDeps = {},
+): Promise<AnularCobroTiendaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R18: antes del schema y del service
+    const data = anularCobroTiendaSchema.parse(input); // R13/R14: ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildCobroTiendaService();
+    return service.anular(data, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

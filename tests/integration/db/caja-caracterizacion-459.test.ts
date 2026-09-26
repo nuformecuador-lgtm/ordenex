@@ -208,18 +208,15 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
   //   total = 9 500 + 45 000 + 12 345,67 + 80 000 + 6 500 + 500,10 = 153 845,77
   // Ganancia = 63 970,93 − 153 845,77 = −89 874,84
 
-  it("R93: ganancia de Ordenex, ingresos y egresos propios", () => {
-    expect({
-      ingresosPropios: delta(foto(), (l) => l.resumen.ingresosPropios),
-      egresosPropios: delta(foto(), (l) => l.resumen.egresosPropios),
-      ganancia: delta(foto(), (l) => l.resumen.ganancia),
-    }).toEqual({
-      ingresosPropios: "63970.93",
-      egresosPropios: "153845.77",
-      ganancia: "-89874.84",
-    });
+  // FICHA 461 (T A.1): `ingresosPropios` y `ganancia` se mudan al bloque «lo que la 461 cambia a
+  // proposito» (el cobro pasa a ser un ingreso propio: HD1). Los egresos propios NO cambian y se
+  // quedan aqui con su literal.
+  it("R93: egresos propios de Ordenex", () => {
+    expect(delta(foto(), (l) => l.resumen.egresosPropios)).toBe("153845.77");
   });
 
+  // FICHA 461 (T A.1): `totalIngresos` se muda al bloque «a proposito» (gana el cobro). Las siete
+  // filas de ingreso de la 459 y toda la columna de egresos siguen aqui con sus literales.
   it("R93: composicion de la ganancia, concepto por concepto", () => {
     expect({
       ingreso_flete: delta(foto(), (l) => l.composicion.ingresos.ingreso_flete),
@@ -232,9 +229,9 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
       ),
       ingreso_iva_comision_cod: delta(foto(), (l) => l.composicion.ingresos.ingreso_iva_comision_cod),
       ingreso_ajuste: delta(foto(), (l) => l.composicion.ingresos.ingreso_ajuste),
-      totalIngresos: delta(foto(), (l) => l.composicion.totalIngresos),
       egreso_pago_mensajero: delta(foto(), (l) => l.composicion.egresos.egreso_pago_mensajero),
       egreso_ajuste: delta(foto(), (l) => l.composicion.egresos.egreso_ajuste),
+      egreso_reverso_cobro_tienda: delta(foto(), (l) => l.composicion.egresos.egreso_reverso_cobro_tienda),
       otrosEgresos: delta(foto(), (l) => l.composicion.otrosEgresos),
       totalEgresos: delta(foto(), (l) => l.composicion.totalEgresos),
     }).toEqual({
@@ -245,9 +242,9 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
       ingreso_iva_flete_devolucion: "325.00",
       ingreso_iva_comision_cod: "127.21",
       ingreso_ajuste: "51000.25",
-      totalIngresos: "63970.93",
       egreso_pago_mensajero: "9500.00",
       egreso_ajuste: "500.10",
+      egreso_reverso_cobro_tienda: "0.00", // ficha 461: el escenario no anula ningun cobro
       otrosEgresos: "0.00",
       totalEgresos: "153845.77",
     });
@@ -302,7 +299,10 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
   // ───────────────────────────────────────────────────────────────────────────────────────────
 
   it("R95/R96: filas de la CAJA, camino por camino", () => {
-    expect(foto().filas.caja).toEqual([
+    // FICHA 461 (T A.1): la linea de caja del cobro (`cobro_tienda|…`) se afirma en el bloque «lo
+    // que la 461 cambia a proposito»; aqui, las 22 filas de la 459, sin tocar un literal.
+    const sinElCobro = foto().filas.caja.filter((f) => !f.startsWith("cobro_tienda|"));
+    expect(sinElCobro).toEqual([
       // aprobacion del cierre (42/43/44/158/173): 6 conceptos, contra-entrega, P e indemnizacion
       "cierre_dia|egreso|egreso_indemnizacion|6500.00",
       "cierre_dia|egreso|egreso_pago_mensajero|4500.00",
@@ -331,7 +331,7 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
       // premio del ranking y su anulacion (293)
       "ranking_snapshot_fila|egreso|egreso_pago_mensajero|5000.00",
       "ranking_snapshot_fila|ingreso|ingreso_ajuste|5000.00",
-      // ⚠️ y NINGUNA del cobro de un costo (381/D1) ni de los pagos al mensajero ([P2] de la 173)
+      // ⚠️ y NINGUNA de los pagos al mensajero ([P2] de la 173). La del cobro (461/HD1) va en su bloque.
     ]);
   });
 
@@ -385,19 +385,24 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
   //
   // T A.3 (ficha 459): REESCRITO con la formula nueva. Las cifras de ANTES (fase 0, sobre
   // `6280fdbb`) eran: entradas 100 487,93 · enCaja −61 357,84 · deTerceros 28 517,00.
+  //
+  // T A.1 (ficha 461): de este bloque se reescriben SOLO dos cifras, `deTerceros` y `deOrdenex`, con
+  // el mismo criterio (a mano). Las de la 459 eran: deTerceros 15 546,32 · deOrdenex −89 874,84.
   describe("lo que esta ficha cambia a proposito (cifras con la formula de la 459)", () => {
     it("«Entro», la cifra principal, «De las tiendas», capital y «De Ordenex»", () => {
       // Cargos a tiendas del escenario (los seis conceptos del feed y del cobro por rechazo):
       //   flete 8 000 + IVA flete 1 040 + comision 978,47 + IVA comision 127,21
       //   + devolucion 2 500 + IVA devolucion 325 = 12 970,68
+      //   + (461) el cobro de Ordenex a la tienda B 2 500,50 → cargos 15 471,18
       // Entro = efectivo: contra-entrega 31 517,00 + reverso del pago a tienda 5 000,00
       //       + ajustes 51 000,25 (reverso del sueldo 45 000 + manual 1 000,25 + reverso del
-      //         premio 5 000) = 87 517,25        (= 100 487,93 de antes − 12 970,68)
-      // Cifra principal = 87 517,25 − 161 845,77 = −74 328,52
-      // De las tiendas  = 31 517,00 + 5 000,00 − 8 000,00 − 12 970,68 = 15 546,32
-      //                 = Σ saldos (7 530,70 + 5 515,12) + cobro de un costo 2 500,50  → R8
-      // Capital 0,00 ; De Ordenex = ganancia −89 874,84 + 0 = −89 874,84
-      // R7: −89 874,84 + 15 546,32 + 0 = −74 328,52 ✓
+      //         premio 5 000) = 87 517,25        (= 100 487,93 de antes − 12 970,68; el cobro NO entra)
+      // Cifra principal = 87 517,25 − 161 845,77 = −74 328,52   (sin cambio con la 461)
+      // De las tiendas  = 31 517,00 + 5 000,00 − 8 000,00 − 15 471,18 = 13 045,82
+      //                 = Σ saldos (7 530,70 + 5 515,12), SIN excepcion  → R8 (461/HD2)
+      //                 (la 459 daba 15 546,32 = Σ saldos + el cobro 2 500,50 sin linea de caja)
+      // Capital 0,00 ; De Ordenex = ganancia −87 374,34 + 0 = −87 374,34
+      // R7: −87 374,34 + 13 045,82 + 0 = −74 328,52 ✓
       expect({
         entradas: delta(foto(), (l) => l.resumen.entradas),
         enCaja: delta(foto(), (l) => l.resumen.enCaja),
@@ -407,10 +412,61 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
       }).toEqual({
         entradas: "87517.25",
         enCaja: "-74328.52",
-        deTerceros: "15546.32",
+        deTerceros: "13045.82",
         capital: "0.00",
-        deOrdenex: "-89874.84",
+        deOrdenex: "-87374.34",
       });
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────────────────────
+  // ⭑ LO QUE LA FICHA 461 CAMBIA A PROPOSITO (HD1, R4, R59) — el cobro de Ordenex a una tienda es un
+  // CARGO: escribe su linea en la caja, sube la ganancia y baja «De las tiendas» en su monto; la cifra
+  // principal y «Entro» no se mueven. Literales calculados A MANO en el comentario (nunca con la
+  // funcion probada). Las cifras de la 459 (fase 0 de la 461, sobre `f415f4bb`) eran: ganancia
+  // −89 874,84 · ingresosPropios 63 970,93 · totalIngresos 63 970,93 · 22 filas de caja.
+  // ───────────────────────────────────────────────────────────────────────────────────────────
+  describe("⭑ lo que la 461 cambia a proposito (el cobro es un cargo con linea de caja)", () => {
+    it("la ganancia sube EXACTAMENTE el cobro: −89 874,84 + 2 500,50 = −87 374,34", () => {
+      // Ingresos propios: 63 970,93 (los siete de la 459) + 2 500,50 (el cobro) = 66 471,43.
+      // Egresos propios: 153 845,77 (sin cambio). Ganancia = 66 471,43 − 153 845,77 = −87 374,34.
+      expect({
+        ingresosPropios: delta(foto(), (l) => l.resumen.ingresosPropios),
+        ganancia: delta(foto(), (l) => l.resumen.ganancia),
+      }).toEqual({
+        ingresosPropios: "66471.43",
+        ganancia: "-87374.34",
+      });
+    });
+
+    it("R27: el cobro es una fila PROPIA de la composicion, y el total de ingresos lo lleva dentro", () => {
+      // totalIngresos = 63 970,93 + 2 500,50 = 66 471,43 (= ingresosPropios).
+      expect({
+        ingreso_cobro_tienda: delta(foto(), (l) => l.composicion.ingresos.ingreso_cobro_tienda),
+        totalIngresos: delta(foto(), (l) => l.composicion.totalIngresos),
+      }).toEqual({
+        ingreso_cobro_tienda: "2500.50",
+        totalIngresos: "66471.43",
+      });
+    });
+
+    it("R1/R2/R3: el libro de la caja gana EXACTAMENTE una fila, la del cobro, vinculada a su debito", () => {
+      // Mutacion 1 de design §14.2 (quitar `emitirCargoDeCobro`) → rojo aqui, en la ganancia y en R8.
+      const delCobro = foto().filas.caja.filter((f) => f.startsWith("cobro_tienda|"));
+      expect(delCobro).toEqual(["cobro_tienda|ingreso|ingreso_cobro_tienda|2500.50"]);
+      // 22 de la 459 + 1 = 23.
+      expect(foto().filas.caja).toHaveLength(23);
+    });
+
+    it("R4: lo que NO se mueve: «Entro», «Salio», la cifra principal, el capital, los saldos y el mensajero", () => {
+      // Ya afirmados con sus literales en los bloques de arriba; aqui se dice en una sola frase que
+      // el cobro no toco ninguno: son los MISMOS literales de la fase 0 de la 461.
+      expect(delta(foto(), (l) => l.resumen.entradas)).toBe("87517.25");
+      expect(delta(foto(), (l) => l.resumen.salidas)).toBe("161845.77");
+      expect(delta(foto(), (l) => l.resumen.enCaja)).toBe("-74328.52");
+      expect(delta(foto(), (l) => l.resumen.capital)).toBe("0.00");
+      expect(foto().tiendaB.saldo).toBe("5515.12");
+      expect(foto().mensajero.cuentaPorPagar).toBe("1836.00");
     });
   });
 });
@@ -449,9 +505,9 @@ describeSiHayBase("459/T0.1 — el escenario se siembra dos veces sin choques", 
     // Las dos siembras son personas distintas: nada se deduplico contra la otra.
     expect(medido.dos.tiendaA).not.toBe(medido.uno.tiendaA);
     expect(medido.dos.cierreId).not.toBe(medido.uno.cierreId);
-    // Y cada una escribio EXACTAMENTE lo mismo (22 filas de caja, 9 + 9 de tiendas, 7 del
-    // mensajero): ni un duplicado ni una fila de menos.
-    expect(medido.filasUno.caja).toHaveLength(22);
+    // Y cada una escribio EXACTAMENTE lo mismo (23 filas de caja —22 de la 459 + la linea del
+    // cobro de la 461—, 9 + 9 de tiendas, 7 del mensajero): ni un duplicado ni una fila de menos.
+    expect(medido.filasUno.caja).toHaveLength(23);
     expect(medido.filasDos).toEqual(medido.filasUno);
   }, 300_000);
 });

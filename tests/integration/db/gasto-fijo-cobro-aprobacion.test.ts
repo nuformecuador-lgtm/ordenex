@@ -251,6 +251,7 @@ describeSiHayBase("333/D7 — R15: aprobar deja estado, decisor, instante y enla
         },
         obtenerPorOrigen: libroReal.obtenerPorOrigen.bind(libroReal),
         primerDiaDeLaCaja: libroReal.primerDiaDeLaCaja.bind(libroReal), // ficha 459
+        obtenerPorClave: libroReal.obtenerPorClave.bind(libroReal), // ficha 461
         listar: libroReal.listar.bind(libroReal),
         agregarPorCategoriaYTipo: libroReal.agregarPorCategoriaYTipo.bind(libroReal),
         obtenerPorId: libroReal.obtenerPorId.bind(libroReal),

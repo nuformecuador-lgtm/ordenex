@@ -56,15 +56,23 @@ export const COMPOSICION_DETALLE_ERROR =
  * no compila hasta que alguien decida como se llama en pantalla — que es exactamente la red que
  * impide que un egreso vuelva a caer en un cubo sin nombre.
  *
- * R3 — «Ajustes (egreso)» es el concepto que el dialogo «Registrar movimiento» le PROMETE al
- * usuario por `nombreEnElLibro` («Ajuste (egreso)», de `CATEGORIA_LABEL.egreso_ajuste`): quien
- * registro un gasto a mano lo encuentra aqui por su nombre en vez de dentro del cubo. Se
- * escribe a mano y NO se deriva de `CATEGORIA_LABEL` a proposito: derivarlo dejaria el test de
- * R3 comparando el rotulo contra su propia fuente, es decir, siempre verde.
+ * R3 — «Correcciones de caja (resta)» es el concepto que el dialogo «Registrar movimiento» le
+ * PROMETE al usuario por `nombreEnElLibro` («Corrección de caja (resta)», de
+ * `CATEGORIA_LABEL.egreso_ajuste`): quien registro una correccion a mano la encuentra aqui por su
+ * nombre en vez de dentro del cubo. Se escribe a mano y NO se deriva de `CATEGORIA_LABEL` a
+ * proposito: derivarlo dejaria el test de R3 comparando el rotulo contra su propia fuente, es
+ * decir, siempre verde.
+ *
+ * Ficha 461 (HD3, design §7): los tres en la voz plural de la columna y desde Ordenex («Pagos de
+ * Ordenex a mensajeros»); «Ajustes (egreso)» y «Pagos a mensajeros» quedan retirados con sus
+ * singulares. El singular del libro de cada uno vive en `CATEGORIA_LABEL`.
  */
 export const EGRESO_NOMBRADO_LABEL: Record<WalletEgresoNombrado, string> = {
-  egreso_pago_mensajero: "Pagos a mensajeros",
-  egreso_ajuste: "Ajustes (egreso)",
+  egreso_pago_mensajero: "Pagos de Ordenex a mensajeros",
+  egreso_ajuste: "Correcciones de caja (resta)",
+  // La fila de la anulacion de un cobro de Ordenex a una tienda (R27); en el libro, cada fila se
+  // rotula «Cobro a una tienda anulado».
+  egreso_reverso_cobro_tienda: "Cobros a una tienda anulados",
 };
 
 /**

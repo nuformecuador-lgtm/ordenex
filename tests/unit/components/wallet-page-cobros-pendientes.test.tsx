@@ -139,12 +139,14 @@ const RESUMEN_OK = {
       ingreso_iva_flete_devolucion: "0.00",
       ingreso_iva_comision_cod: "0.00",
       ingreso_ajuste: "0.00",
+      ingreso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
     },
     totalIngresos: "0.00",
     // Ficha 339 (T1.3): las dos cubetas nuevas y la bandera del servidor.
     egresos: {
       egreso_pago_mensajero: "0.00",
       egreso_ajuste: "0.00",
+      egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
     },
     otrosEgresos: "0.00",
     hayOtrosEgresos: false,

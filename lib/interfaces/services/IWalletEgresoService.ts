@@ -15,6 +15,8 @@ import type {
 
 export type RegistrarEgresoServiceResult =
   | { status: "ok"; movimiento: WalletMovimientoDTO }
+  /** Ficha 461 (R68): la MISMA clave ya tenia su fila; se devuelve esa y no se escribio nada. */
+  | { status: "ya_registrado"; movimiento: WalletMovimientoDTO }
   | { status: "forbidden" };
 
 export type ReversarEgresoServiceResult =

@@ -7,7 +7,8 @@ import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
 // FICHA 381: las dos piezas del borde del dinero manual, reutilizadas TAL CUAL desde el libro de la
 // caja. Ver `registrarCobroTiendaSchema` al final del archivo.
-import { fechaMovimientoSchema, montoPositivoSchema } from "@/lib/types/wallet";
+import { claveIdempotenciaSchema, fechaMovimientoSchema, montoPositivoSchema } from "@/lib/types/wallet";
+import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 
 // Feature 43 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del ledger POR
 // TIENDA, respaldada por los enums Postgres nativos (patron lib/types/wallet.ts). El
@@ -56,6 +57,9 @@ export const WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED = [
   // anulacion (credito). Contrapartida en la caja: `egreso_pago_por_cuenta_tienda` / su reverso.
   "pago_por_cuenta",
   "pago_por_cuenta_anulado",
+  // FICHA 461 (design §2.1, HD1): la ANULACION de un cobro de Ordenex a la tienda (credito). Le
+  // devuelve el monto del cobro; su contrapartida en la caja es `egreso_reverso_cobro_tienda`.
+  "cobro_tienda_anulado",
 ] as const satisfies readonly PrismaWalletTiendaMovimientoCategoria[];
 
 export type WalletTiendaMovimientoCategoria =
@@ -176,8 +180,9 @@ export const listarMovimientosTiendaSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   cierreId: z.string().min(1).optional(),
   categoria: z.enum(WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED).optional(),
-  desde: z.coerce.date().optional(),
-  hasta: z.coerce.date().optional(),
+  // Ficha 461 (R72, auditoria T1): dias de Costa Rica; `hasta` exclusivo en el repositorio.
+  desde: desdeDiaCRSchema.optional(),
+  hasta: hastaDiaCRSchema.optional(),
 });
 
 export type ListarMovimientosTiendaInput = z.infer<typeof listarMovimientosTiendaSchema>;
@@ -335,7 +340,43 @@ export const registrarCobroTiendaSchema = z
     monto: montoPositivoSchema, // STRING, > 0, <= 2 decimales (R14/R18)
     descripcion: z.string().trim().min(1, "La descripcion es obligatoria."), // R15
     fecha: fechaMovimientoSchema.optional(), // R16/R21
+    claveIdempotencia: claveIdempotenciaSchema, // ficha 461 (R66): un doble envio es UN cobro
   })
   .strict();
 
 export type RegistrarCobroTiendaInput = z.infer<typeof registrarCobroTiendaSchema>;
+
+// ── FICHA 461 — ANULAR UN COBRO de Ordenex a una tienda (R10–R19) ──
+
+/**
+ * FICHA 461 (R13/R14) — el BORDE de la anulacion: el cobro y un motivo. SIN monto, y `.strict()`
+ * lo hace cumplir (R13): el monto de los dos contra-asientos se lee DEL COBRO en el servidor, y una
+ * peticion que traiga `monto` —o cualquier otra clave no prevista— muere aqui con `validation_error`
+ * sin escribir nada. El motivo se recorta y no puede quedar vacio (R14). Molde:
+ * `anularPagoPorCuentaTiendaSchema`.
+ */
+export const anularCobroTiendaSchema = z
+  .object({
+    cobroId: z.string().uuid(),
+    motivo: z.string().trim().min(1, "El motivo de la anulacion es obligatorio."),
+  })
+  .strict();
+
+export type AnularCobroTiendaInput = z.infer<typeof anularCobroTiendaSchema>;
+
+/** R17 — por que un cobro no se puede anular por esta via. */
+export type MotivoNoAnulable = "reclasificado" | "sin_linea_de_caja";
+
+/**
+ * FICHA 461 (design §6) — el contrato COMPLETO que ve la pantalla. `unauthenticated` y
+ * `validation_error` los decide el borde; el resto, el dominio. `ok` devuelve el saldo de la tienda
+ * DESPUES de la anulacion, con su signo (STRING, R52). Ninguna rama de error viaja con importes.
+ */
+export type AnularCobroTiendaResult =
+  | { status: "ok"; saldo: SaldoTiendaDTO }
+  | { status: "ya_anulado" }
+  | { status: "no_encontrado" }
+  | { status: "no_anulable"; motivo: MotivoNoAnulable }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };

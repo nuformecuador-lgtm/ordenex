@@ -143,6 +143,13 @@ export async function limpiar459(prisma: PrismaClient, p: Personas459 | null): P
   });
   await prisma.pagoPorCuentaTiendaAnulacion.deleteMany({ where: { pagoId: { in: pagos.map((x) => x.id) } } });
   await prisma.aporteCapitalAnulacion.deleteMany({ where: { aporteId: { in: aportes.map((x) => x.id) } } });
+  // Ficha 461: las anulaciones cuelgan por FK RESTRICT de las filas de los libros; van ANTES.
+  await prisma.cobroTiendaAnulacion.deleteMany({
+    where: { OR: [{ anuladoPor: { in: usuarios } }, { cobro: { tiendaId: { in: usuarios } } }] },
+  });
+  await prisma.ajusteCajaAnulacion.deleteMany({
+    where: { OR: [{ anuladoPor: { in: usuarios } }, { movimiento: { registradoPor: { in: usuarios } } }] },
+  });
   await prisma.walletMovimiento.deleteMany({
     where: { OR: [{ origenId: { in: documentos } }, { registradoPor: { in: usuarios } }] },
   });

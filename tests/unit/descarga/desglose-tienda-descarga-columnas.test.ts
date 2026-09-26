@@ -59,7 +59,7 @@ describe("columnas de descarga del desglose por tienda", () => {
   it("emite tipo y concepto como ETIQUETA LEGIBLE, no como valor interno (R20)", () => {
     const fila = filaDescargaDesgloseTienda(MOV);
     expect(fila.tipo).toBe("Crédito");
-    expect(fila.concepto).toBe("COD recaudado");
+    expect(fila.concepto).toBe("Contra-entrega cobrado a los clientes de la tienda");
     expect(fila.concepto).not.toBe("cod_recaudado");
 
     const iva = filaDescargaDesgloseTienda({
@@ -68,7 +68,7 @@ describe("columnas de descarga del desglose por tienda", () => {
       categoria: "iva_comision_cod",
     });
     expect(iva.tipo).toBe("Débito");
-    expect(iva.concepto).toBe("IVA de la comisión");
+    expect(iva.concepto).toBe("IVA de la comisión cobrado a la tienda");
   });
 
   it("R43: un movimiento `pago_tienda` sale con su concepto propio, no plegado en otro", () => {
@@ -82,8 +82,8 @@ describe("columnas de descarga del desglose por tienda", () => {
       descripcion: null,
       monto: "4000.00",
     });
-    expect(pago.concepto).toBe("Pago a la tienda");
-    expect(pago.origen).toBe("Pago a la tienda");
+    expect(pago.concepto).toBe("Ordenex le paga a la tienda");
+    expect(pago.origen).toBe("Pago de Ordenex a una tienda");
     expect(pago.monto).toBe("4000.00");
   });
 
@@ -153,9 +153,9 @@ describe("⭑ FICHA 381 (R39) — el cobro en la descarga del desglose por tiend
     fechaMovimiento: "2026-09-08T14:30:00.000Z",
   };
 
-  it("dice «Cobro de Ordenex» y no el valor interno del enum", () => {
+  it("dice «Ordenex le cobra a la tienda» y no el valor interno del enum", () => {
     const fila = filaDescargaDesgloseTienda(COBRO);
-    expect(fila.concepto).toBe("Cobro de Ordenex");
+    expect(fila.concepto).toBe("Ordenex le cobra a la tienda");
     expect(fila.concepto).not.toBe("cobro_manual");
     expect(fila.tipo).toBe("Débito");
   });
@@ -163,7 +163,7 @@ describe("⭑ FICHA 381 (R39) — el cobro en la descarga del desglose por tiend
   it("el importe sale TAL CUAL y el motivo tecleado acompaña al origen manual", () => {
     const fila = filaDescargaDesgloseTienda(COBRO);
     expect(fila.monto).toBe("15000.00");
-    expect(fila.origen).toBe("Manual · Material de despacho entregado en bodega");
+    expect(fila.origen).toBe("Registrado a mano · Material de despacho entregado en bodega");
     expect(fila.fecha).toBe("2026-09-08");
   });
 

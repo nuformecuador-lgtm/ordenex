@@ -814,21 +814,21 @@ const COBRO_DE_UN_COSTO = movTienda({
 });
 
 describe("⭑ FICHA 459 — el pago por cuenta en /mi-wallet (R44)", () => {
-  it("se lee «Pago por cuenta de la tienda», con su beneficiario y referencia, nunca «Cobro de Ordenex»", async () => {
+  it("se lee «Ordenex pagó un gasto por ti», con su beneficiario y referencia, nunca «Ordenex te cobró»", async () => {
     sembrarTienda([COD, PAGO_POR_CUENTA, COBRO_DE_UN_COSTO], "10500.00");
     await verMiWallet();
 
     const fila = screen.getByRole("row", { name: /A Facebook · Pauta de septiembre/ });
-    expect(within(fila).getByText("Pago por cuenta de la tienda")).toBeInTheDocument();
-    expect(within(fila).queryByText("Cobro de Ordenex")).toBeNull();
+    expect(within(fila).getByText("Ordenex pagó un gasto por ti")).toBeInTheDocument();
+    expect(within(fila).queryByText("Ordenex te cobró")).toBeNull();
     expect(
       within(fila).getByText(
-        "Pago por cuenta de tienda · A Facebook · Pauta de septiembre · SINPE · REF-77",
+        "Pago de un gasto de una tienda · A Facebook · Pauta de septiembre · SINPE · REF-77",
       ),
     ).toBeInTheDocument();
     // El cobro de un costo sigue viéndose como hoy (R87): el contraste no es vacío.
     const cobro = screen.getByRole("row", { name: /Material de despacho/ });
-    expect(within(cobro).getByText("Cobro de Ordenex")).toBeInTheDocument();
+    expect(within(cobro).getByText("Ordenex te cobró")).toBeInTheDocument();
     // Ningún id en pantalla.
     expect(document.body.textContent ?? "").not.toContain(PAGO_POR_CUENTA_ID);
   });
@@ -840,10 +840,10 @@ describe("⭑ FICHA 459 — el pago por cuenta en /mi-wallet (R44)", () => {
     expect(importeDe("Ya pagado")).toBe("₡10.000");
     expect(importeDe("A tu favor")).toBe("₡60.000");
     expect(saldoEnPantalla()).toBe("₡50.000");
-    expect(screen.getByText("Lo que Ordenex ya te entregó o pagó por tu cuenta")).toBeInTheDocument();
-    expect(screen.getByText("COD recaudado, ajustes y pagos por cuenta anulados")).toBeInTheDocument();
+    expect(screen.getByText("Lo que Ordenex te pagó o pagó por ti")).toBeInTheDocument();
+    expect(screen.getByText("Lo cobrado a tus clientes, las correcciones a tu favor y lo que Ordenex te devolvió al anular")).toBeInTheDocument();
     const anulado = screen.getByRole("row", { name: /Anulación · A Facebook/ });
-    expect(within(anulado).getByText("Pago por cuenta anulado")).toBeInTheDocument();
+    expect(within(anulado).getByText("Ordenex anuló un pago hecho por ti")).toBeInTheDocument();
   });
 });
 
@@ -854,9 +854,9 @@ describe("⭑ FICHA 459 — la descarga de la tienda (R44/R100)", () => {
     );
     const f = filaDescargaMiWallet(PAGO_POR_CUENTA);
     const valores = Object.values(f).join(" | ");
-    expect(valores).toContain("Pago por cuenta de la tienda");
-    expect(valores).toContain("Pago por cuenta de tienda · A Facebook");
-    expect(valores).not.toContain("Cobro de Ordenex");
+    expect(valores).toContain("Ordenex pagó un gasto por ti");
+    expect(valores).toContain("Pago de un gasto de una tienda · A Facebook");
+    expect(valores).not.toContain("Ordenex te cobró");
     expect(valores).not.toContain(PAGO_POR_CUENTA_ID);
     expect(valores).not.toMatch(/pago_por_cuenta/);
     expect(Object.keys(f).sort()).toEqual(COLUMNAS_DESCARGA_MI_WALLET.map((c) => c.clave).sort());
@@ -869,8 +869,8 @@ describe("⭑ FICHA 459 — la descarga de la tienda (R44/R100)", () => {
     for (const m of [PAGO_POR_CUENTA, PAGO_POR_CUENTA_ANULADO]) {
       const f = filaDescargaDesgloseTienda(m);
       const valores = Object.values(f).join(" | ");
-      expect(valores).toMatch(/Pago por cuenta (de la tienda|anulado)/);
-      expect(valores).toContain("Pago por cuenta de tienda · ");
+      expect(valores).toMatch(/Ordenex paga un gasto de la tienda|Pago de un gasto de la tienda anulado/);
+      expect(valores).toContain("Pago de un gasto de una tienda · ");
       expect(valores).not.toContain(PAGO_POR_CUENTA_ID);
       expect(valores).not.toMatch(/pago_por_cuenta/);
       expect(Object.keys(f).sort()).toEqual(

@@ -408,6 +408,8 @@ function aprobar(db: Db, cierreId: string) {
       // Ficha 344: la lectura por id acotada a la tienda. Este doble no la ejercita.
       obtenerPorIdDeTienda: vi.fn(async () => null),
       registrarCobroEnHistorial: vi.fn(async () => undefined), // exigido por IWalletTiendaMovimientoRepository (ficha 381); no ejercitado aqui
+      obtenerCobroPorId: vi.fn(async () => null), // ficha 461; no ejercitado aqui
+      nombreDeTienda: vi.fn(async () => ""), obtenerCobroPorClave: vi.fn(async () => null), // ficha 461; no ejercitado aqui
     },
     new WalletTiendaFeedService(),
     // 44: fuera del alcance de estos dos casos (su libro sale de los snapshots del cierre_dia,

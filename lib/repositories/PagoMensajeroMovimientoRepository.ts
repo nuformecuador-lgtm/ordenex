@@ -123,7 +123,8 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
     if (f.desde !== undefined || f.hasta !== undefined) {
       where.fechaMovimiento = {
         ...(f.desde !== undefined ? { gte: f.desde } : {}),
-        ...(f.hasta !== undefined ? { lte: f.hasta } : {}),
+        // Ficha 461 (R72, auditoria T1): cota EXCLUSIVA; el borde manda el inicio del dia CR siguiente.
+        ...(f.hasta !== undefined ? { lt: f.hasta } : {}),
       };
     }
     return where;

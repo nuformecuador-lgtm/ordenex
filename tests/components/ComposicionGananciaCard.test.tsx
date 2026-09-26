@@ -75,6 +75,7 @@ const COMPOSICION: ComposicionGananciaDTO = {
     ingreso_iva_flete_devolucion: "520.00",
     ingreso_iva_comision_cod: "30.25",
     ingreso_ajuste: "90.00",
+    ingreso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
   },
   totalIngresos: "5709.75",
   /**
@@ -90,6 +91,7 @@ const COMPOSICION: ComposicionGananciaDTO = {
   egresos: {
     egreso_pago_mensajero: "700.00",
     egreso_ajuste: "45.75",
+    egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
   },
   otrosEgresos: "194.25",
   // R9: lo decide el SERVIDOR. Aqui quedan 194,25 sin clasificar, asi que la fila se pinta.
@@ -149,7 +151,7 @@ function pintarComoLa158(overrides: Partial<ComposicionGananciaDTO> = {}) {
   return pintar({
     composicion: {
       ...COMPOSICION,
-      egresos: { egreso_pago_mensajero: "0.00", egreso_ajuste: "0.00" },
+      egresos: { egreso_pago_mensajero: "0.00", egreso_ajuste: "0.00", egreso_reverso_cobro_tienda: "0.00" },
       otrosEgresos: "0.00",
       hayOtrosEgresos: false, // ficha 343 (R7): sin residuo, la fila «Otros» no se pinta
       totalEgresos: DESGLOSE.total,
@@ -198,9 +200,9 @@ describe("DesgloseEgresosCard — render (R11/R12) [re-hospedado de la 45]", () 
     pintarComoLa158();
 
     const lista = listaEgresos();
-    expect(within(lista).getByText("Gastos fijos")).toBeInTheDocument();
+    expect(within(lista).getByText("Gastos fijos de Ordenex")).toBeInTheDocument();
     expect(within(lista).getByText("₡300")).toBeInTheDocument();
-    expect(within(lista).getByText("Gastos variables")).toBeInTheDocument();
+    expect(within(lista).getByText("Gastos de Ordenex")).toBeInTheDocument();
     expect(within(lista).getByText("₡125,50")).toBeInTheDocument();
     expect(within(lista).getByText("Sueldos")).toBeInTheDocument();
     expect(within(lista).getByText("₡800")).toBeInTheDocument();
@@ -310,7 +312,7 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
 
     const filas = rotulos(listaIngresos());
     // Control de no-vacuidad: el catálogo tiene siete conceptos, no cero.
-    expect(WALLET_INGRESO_PROPIO_SEED.length).toBe(7);
+    expect(WALLET_INGRESO_PROPIO_SEED.length).toBe(8); // ficha 461 (R27): + el cobro de Ordenex a una tienda
     // Las siete filas más la del total: ninguna categoría propia se queda sin enseñar.
     expect(filas).toHaveLength(WALLET_INGRESO_PROPIO_SEED.length + 1);
     for (const categoria of WALLET_INGRESO_PROPIO_SEED) {
@@ -332,13 +334,15 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
     pintar();
 
     expect(pares(listaIngresos())).toEqual([
-      { rotulo: "Flete", importe: "₡150" },
-      { rotulo: "Flete por rechazo", importe: "₡4.000" },
-      { rotulo: "Comisión COD", importe: "₡900" },
-      { rotulo: "IVA del flete", importe: "₡19,50" },
-      { rotulo: "IVA del flete por rechazo", importe: "₡520" },
-      { rotulo: "IVA de la comisión", importe: "₡30,25" },
-      { rotulo: "Ajuste (ingreso)", importe: "₡90" },
+      { rotulo: "Flete cobrado a la tienda", importe: "₡150" },
+      { rotulo: "Flete por rechazo cobrado a la tienda", importe: "₡4.000" },
+      { rotulo: "Comisión de contra-entrega cobrada a la tienda", importe: "₡900" },
+      { rotulo: "IVA del flete cobrado a la tienda", importe: "₡19,50" },
+      { rotulo: "IVA del flete por rechazo cobrado a la tienda", importe: "₡520" },
+      { rotulo: "IVA de la comisión cobrado a la tienda", importe: "₡30,25" },
+      { rotulo: "Corrección de caja (suma)", importe: "₡90" },
+      // Ficha 461 (R27): la fila del cobro de Ordenex a una tienda; en este fixture vale 0,00.
+      { rotulo: "Ordenex le cobra a una tienda", importe: "₡0" },
       { rotulo: "Total de ingresos", importe: "₡5.709,75" },
     ]);
 
@@ -356,12 +360,14 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
     // sumaban ₡2.192 y el total decía ₡2.191, y eso estaba declarado como consecuencia
     // aceptada. Ya no hace falta aceptarla.
     expect(pares(listaEgresos())).toEqual([
-      { rotulo: "Gastos fijos", importe: "₡300" },
-      { rotulo: "Gastos variables", importe: "₡125,50" },
+      { rotulo: "Gastos fijos de Ordenex", importe: "₡300" },
+      { rotulo: "Gastos de Ordenex", importe: "₡125,50" },
       { rotulo: "Sueldos", importe: "₡800" },
       { rotulo: "Indemnizaciones", importe: "₡25,25" },
-      { rotulo: "Pagos a mensajeros", importe: "₡700" },
-      { rotulo: "Ajustes (egreso)", importe: "₡45,75" },
+      { rotulo: "Pagos de Ordenex a mensajeros", importe: "₡700" },
+      { rotulo: "Correcciones de caja (resta)", importe: "₡45,75" },
+      // Ficha 461 (R27): la fila de los cobros anulados; en este fixture vale 0,00.
+      { rotulo: "Cobros a una tienda anulados", importe: "₡0" },
       { rotulo: "Otros gastos de Ordenex", importe: "₡194,25" },
       { rotulo: "Total de egresos", importe: "₡2.190,75" },
     ]);
@@ -404,9 +410,10 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       DESGLOSE.indemnizacion,
       COMPOSICION.egresos.egreso_pago_mensajero,
       COMPOSICION.egresos.egreso_ajuste,
+      COMPOSICION.egresos.egreso_reverso_cobro_tienda, // ficha 461
       COMPOSICION.otrosEgresos,
     ].map(money);
-    expect(importesEgresos).toHaveLength(7);
+    expect(importesEgresos).toHaveLength(8);
     expect(new Set(importesEgresos).size).toBe(importesEgresos.length);
 
     // Y ninguno coincide con un total, que es el otro modo de que una fila mal cableada pase.
@@ -453,12 +460,13 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
     // reordenar una tarjeta que la gente ya conoce.
     const egresos = rotulos(listaEgresos());
     expect(egresos).toEqual([
-      "Gastos fijos",
-      "Gastos variables",
+      "Gastos fijos de Ordenex",
+      "Gastos de Ordenex",
       "Sueldos",
       "Indemnizaciones",
-      "Pagos a mensajeros",
-      "Ajustes (egreso)",
+      "Pagos de Ordenex a mensajeros",
+      "Correcciones de caja (resta)",
+      "Cobros a una tienda anulados", // ficha 461: tercer nombrado, antes de «Otros»
       "Otros gastos de Ordenex",
       "Total de egresos",
     ]);
@@ -589,7 +597,7 @@ describe("Ficha 339 — cada gasto con su nombre (R1/R2/R3/R5)", () => {
     const lista = listaEgresos();
     // El motivo de la ficha: en producción este concepto era 227.300,00 en nueve movimientos
     // y no aparecía por su nombre en ninguna parte de la tarjeta.
-    expect(within(lista).getByText("Pagos a mensajeros")).toBeInTheDocument();
+    expect(within(lista).getByText("Pagos de Ordenex a mensajeros")).toBeInTheDocument();
     expect(within(lista).getByText("₡700")).toBeInTheDocument();
   });
 
@@ -597,7 +605,7 @@ describe("Ficha 339 — cada gasto con su nombre (R1/R2/R3/R5)", () => {
     pintar();
 
     const lista = listaEgresos();
-    expect(within(lista).getByText("Ajustes (egreso)")).toBeInTheDocument();
+    expect(within(lista).getByText("Correcciones de caja (resta)")).toBeInTheDocument();
     expect(within(lista).getByText("₡45,75")).toBeInTheDocument();
   });
 
@@ -607,20 +615,20 @@ describe("Ficha 339 — cada gasto con su nombre (R1/R2/R3/R5)", () => {
     // promesa y el del rótulo— porque derivar uno del otro dejaría el caso siempre verde.
     const concepto = conceptoPorId("ajuste_egreso");
     expect(concepto, "el diálogo ya no ofrece registrar un ajuste que resta").toBeDefined();
-    expect(nombreEnElLibro(concepto!)).toBe("Ajuste (egreso)");
+    expect(nombreEnElLibro(concepto!)).toBe("Corrección de caja (resta)");
 
     pintar();
     const filas = rotulos(listaEgresos());
     // La fila lo rotula con ESE concepto, en la voz plural de sus vecinas de columna
     // («Sueldos», «Indemnizaciones»): quien registró el gasto a mano lo encuentra por su
     // nombre en vez de dentro del cubo anónimo.
-    expect(filas).toContain("Ajustes (egreso)");
+    expect(filas).toContain("Correcciones de caja (resta)");
     // Y lo hace en SU fila, fuera del cubo: quitando el cubo de la tarjeta, el rótulo sigue.
     cleanup();
     pintar({
       composicion: { ...COMPOSICION, otrosEgresos: "0.00", hayOtrosEgresos: false },
     });
-    expect(rotulos(listaEgresos())).toContain("Ajustes (egreso)");
+    expect(rotulos(listaEgresos())).toContain("Correcciones de caja (resta)");
   });
 
   it("R5: ningún rótulo de la columna de egresos es el valor del enum", () => {
@@ -645,12 +653,13 @@ describe("Ficha 339 — «Otros» sólo cuando de verdad queda algo (R7/R8/R9/R1
     const lista = listaEgresos();
     expect(within(lista).queryByText("Otros gastos de Ordenex")).toBeNull();
     expect(rotulos(lista)).toEqual([
-      "Gastos fijos",
-      "Gastos variables",
+      "Gastos fijos de Ordenex",
+      "Gastos de Ordenex",
       "Sueldos",
       "Indemnizaciones",
-      "Pagos a mensajeros",
-      "Ajustes (egreso)",
+      "Pagos de Ordenex a mensajeros",
+      "Correcciones de caja (resta)",
+      "Cobros a una tienda anulados", // ficha 461
       "Total de egresos",
     ]);
   });

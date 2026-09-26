@@ -48,9 +48,20 @@ export interface CrearMovimientoInput {
    * dos libros.
    */
   fechaMovimiento?: Date;
+  /**
+   * Ficha 461 (R66/R67/R68, auditoria D2) — la clave de idempotencia del CLIENTE, SOLO en los tres
+   * movimientos que una persona decide (correccion de caja, sueldo, gasto de Ordenex). Va a la
+   * columna UNIQUE `clave_idempotencia`; con `skipDuplicates` un choque deja `count = 0` y el
+   * servicio relee por la clave (`obtenerPorClave`) para responder `ya_registrado`.
+   *
+   * OPCIONAL con la misma forma que `id` y `fechaMovimiento`: ausente ⇒ la columna queda NULL y
+   * ninguno de los escritores automaticos cambia de comportamiento.
+   */
+  claveIdempotencia?: string;
 }
 
-// Filtros del listado del libro (R20). Rango de fechas sobre fecha_movimiento.
+// Filtros del listado del libro (R20). Rango de fechas sobre fecha_movimiento: `desde` inclusivo,
+// `hasta` EXCLUSIVO (ficha 461/R72: el borde manda el inicio del dia CR siguiente).
 export interface ListarMovimientosFiltros {
   page: number;
   pageSize: number;
@@ -155,6 +166,12 @@ export interface IWalletMovimientoRepository {
    * que el cliente falsee el monto). null si no existe.
    */
   obtenerPorId(id: string): Promise<WalletMovimientoDTO | null>;
+  /**
+   * Ficha 461 (R68) — el movimiento que lleva ESA clave de idempotencia, o `null`. Es la relectura
+   * del segundo envio: `crearMovimientos` devolvio 0 porque el indice unico de la clave ya tenia la
+   * fila, y el servicio responde `ya_registrado` con ella. `findUnique` sobre la columna UNIQUE.
+   */
+  obtenerPorClave(claveIdempotencia: string): Promise<WalletMovimientoDTO | null>;
   /**
    * Feature 45 (R11): desglose de egresos administrativos por tipo (gasto fijo / variable /
    * sueldo) del conjunto filtrado (mismos filtros que el libro). groupBy(categoria) +

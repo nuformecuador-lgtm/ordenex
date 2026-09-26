@@ -38,8 +38,11 @@ export interface CrearPagoMensajeroInput {
    * La prueba de que es opcional de verdad es que los tests de los dos feeds del cierre
    * siguen verdes sin editarlos.
    *
-   * Convencion de la 172: MEDIANOCHE UTC del dia de `fecha_pago` (`medianocheUtcDelDia`),
-   * no 06:00Z, para que el pago entre por los dos bordes del filtro por rango del desglose.
+   * Convencion HASTA la ficha 461: medianoche UTC del dia de `fecha_pago` (`medianocheUtcDelDia`),
+   * para que el pago entrara por los dos bordes de un filtro que comparaba contra `z.coerce.date()`.
+   * Ficha 461 (R73, auditoria T2): los filtros son dias de Costa Rica (R72) y el rollup agrupa por
+   * `fecha_movimiento − 6 h`, asi que el asiento del pago se fecha con el INICIO del dia en CR
+   * (`inicioDelDiaCREnUtc`, 06:00Z); la migracion `20260926120500` movio los previos.
    */
   fechaMovimiento?: Date;
   /**

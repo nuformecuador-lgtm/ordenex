@@ -11,7 +11,14 @@ import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 import { DetalleMiMovimientoCierre } from "./DetalleMiMovimientoCierre";
 import { DETALLE_MI_MOVIMIENTO_NOMBRE } from "./detalle-mi-movimiento-labels";
 import { COLUMNAS_DESCARGA_MI_WALLET } from "./mi-wallet-descarga-columnas";
-import { CATEGORIA_TIENDA_LABEL, TIPO_TIENDA_LABEL, money, origenLabel } from "./mi-wallet-labels";
+// Ficha 461 (R44, P4): la tienda lee su libro con la lectura DESDE LA TIENDA («Ordenex te cobró»),
+// no con el nombre desde Ordenex que ve la oficina en `/wallet/tiendas`.
+import {
+  CATEGORIA_MI_WALLET_LABEL,
+  TIPO_TIENDA_LABEL,
+  money,
+  origenLabel,
+} from "./mi-wallet-labels";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Feature 43 (T15, R18/R21) — DESGLOSE del ledger por cierre/concepto (tabla, mas reciente
@@ -48,7 +55,7 @@ const COLUMNS: Column<WalletTiendaMovimientoDTO>[] = [
   {
     id: "concepto",
     value: "Concepto",
-    render: (m) => CATEGORIA_TIENDA_LABEL[m.categoria],
+    render: (m) => CATEGORIA_MI_WALLET_LABEL[m.categoria],
   },
   {
     id: "monto",
@@ -119,7 +126,7 @@ export function DesgloseTiendaLedger({
           naceDeUnCierre(m) ? (
             <DetalleMiMovimientoCierre
               movimientoId={m.id}
-              concepto={CATEGORIA_TIENDA_LABEL[m.categoria]}
+              concepto={CATEGORIA_MI_WALLET_LABEL[m.categoria]}
               fecha={fechaDiaMovimientoCR(m.fechaMovimiento)}
             />
           ) : null
@@ -128,7 +135,7 @@ export function DesgloseTiendaLedger({
         // repetido en cada renglón.
         expandAriaLabel={(m) =>
           DETALLE_MI_MOVIMIENTO_NOMBRE.abrir(
-            CATEGORIA_TIENDA_LABEL[m.categoria],
+            CATEGORIA_MI_WALLET_LABEL[m.categoria],
             fechaDiaMovimientoCR(m.fechaMovimiento),
           )
         }

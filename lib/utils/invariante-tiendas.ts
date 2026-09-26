@@ -3,7 +3,7 @@ import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda"
 
 /**
  * Ficha 459 (design §2.3/§12.3, R9/R90) — la tabla que hace que «De las tiendas» (la caja) y la
- * suma de los saldos de las tiendas (su libro) sean la MISMA cifra, salvo una excepcion declarada.
+ * suma de los saldos de las tiendas (su libro) sean la MISMA cifra.
  *
  * Cada concepto del libro de las tiendas declara su CONTRAPARTIDA en la caja: el concepto de la
  * caja que, en la misma transaccion, mueve «De las tiendas» en el mismo sentido y por el mismo
@@ -12,16 +12,19 @@ import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda"
  *
  *     T − S = Σ conceptos de la tienda SIN contrapartida
  *
- * y la unica excepcion viva es el cobro de un costo (`cobro_manual`): baja el saldo de la tienda
- * sin pasar por la caja (HF6 de la 459). `ajuste_debito` no tiene productor en el arbol.
+ * Ficha 461 (design §2.3, HD2, R23/R25/R26): la excepcion del cobro DESAPARECE. El cobro de Ordenex a
+ * una tienda (`cobro_manual`) tiene desde esta ficha su contrapartida —el CARGO `ingreso_cobro_tienda`,
+ * que baja «De las tiendas» igual que un flete— y su anulacion (`cobro_tienda_anulado`) tiene el
+ * REVERSO de ese cargo (`egreso_reverso_cobro_tienda`, que la sube). Queda SOLO `ajuste_debito` sin
+ * pareja, y no tiene productor en el arbol: R8 vale sin excepcion.
  *
  * Los dos `Record` son TOTALES: una categoria nueva del libro de la tienda no compila hasta que
  * alguien decide su tipo y su contrapartida. La guardia
  * `tests/unit/guards/caja-clasificacion-459.guardia.test.ts` comprueba, contra
  * `NATURALEZA_POR_CATEGORIA` y `LIQUIDEZ_POR_CATEGORIA`, que cada pareja mueve las dos cifras en el
  * mismo sentido, que todo concepto de la caja que mueve «De las tiendas» es pareja de EXACTAMENTE
- * uno de la tienda y que el conjunto sin pareja es EXACTAMENTE `{cobro_manual, ajuste_debito}`
- * (anadir otro es abrir una excepcion nueva a R8, y eso se decide, no se cuela).
+ * uno de la tienda y que el conjunto sin pareja es EXACTAMENTE `{ajuste_debito}` (anadir otro es
+ * abrir una excepcion nueva a R8, y eso se decide, no se cuela).
  */
 
 /** El tipo de cada concepto del libro de la tienda. Espejo del CHECK de la base. */
@@ -42,6 +45,7 @@ export const TIPO_POR_CATEGORIA_TIENDA: Record<
   cobro_manual: "debito",
   pago_por_cuenta: "debito",
   pago_por_cuenta_anulado: "credito",
+  cobro_tienda_anulado: "credito", // ficha 461: la anulacion devuelve el monto a la tienda
 };
 
 /** Marca de los conceptos de la tienda que NO tienen asiento en la caja. */
@@ -65,12 +69,18 @@ export const CONTRAPARTIDA_EN_CAJA: Record<
   iva_comision_cod: "ingreso_iva_comision_cod",
   // El pago de Ordenex a la tienda sale de la caja.
   pago_tienda: "egreso_pago_tienda",
-  // HF6: cobrar un costo a una tienda NO mueve la caja. Es la excepcion declarada de R8.
-  cobro_manual: SIN_CONTRAPARTIDA,
+  // Ficha 461 (HD1/HD2, R1/R23): el cobro de Ordenex a una tienda escribe su CARGO en la caja en la
+  // MISMA transaccion (`CobroTiendaService` → `CajaCobroTiendaFeedService`); los cobros previos sin
+  // linea la reciben por la migracion `20260926120200_cobro_tienda_461_completar_caja`. La excepcion
+  // HF6 de la 459 queda cerrada.
+  cobro_manual: "ingreso_cobro_tienda",
   // Sin productor en el arbol (solo lo nombran tipos, etiquetas y metricas).
   ajuste_debito: SIN_CONTRAPARTIDA,
   // Ficha 459 (R29/R46): el pago por cuenta sale de la caja en la MISMA transaccion en que se
   // debita a la tienda, y su anulacion vuelve a los dos libros a la vez.
   pago_por_cuenta: "egreso_pago_por_cuenta_tienda",
   pago_por_cuenta_anulado: "ingreso_reverso_pago_por_cuenta_tienda",
+  // Ficha 461 (R10/R12): la anulacion del cobro acredita a la tienda y escribe el REVERSO del cargo
+  // en la caja, en la misma transaccion; las dos mueven «De las tiendas» y el saldo hacia arriba.
+  cobro_tienda_anulado: "egreso_reverso_cobro_tienda",
 };

@@ -192,7 +192,7 @@ describe("listar (R20/R24)", () => {
     expect(arg.where).toEqual({
       tipo: "ingreso",
       categoria: "ingreso_flete",
-      fechaMovimiento: { gte: desde, lte: hasta },
+      fechaMovimiento: { gte: desde, lt: hasta }, // ficha 461 (R72): `hasta` EXCLUSIVO
     });
     // Ficha 334 (R26, design §4): el orden es TOTAL. Este literal ES el contrato del libro —se
     // reescribe entero con el array nuevo, NO se relaja a `expect.anything()` ni se deriva de
@@ -305,7 +305,7 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     expect(arg.where).toEqual({
       tipo: "ingreso",
       categoria: "ingreso_flete",
-      fechaMovimiento: { gte: desde, lte: hasta },
+      fechaMovimiento: { gte: desde, lt: hasta }, // ficha 461 (R72): `hasta` EXCLUSIVO
     });
     expect(arg._sum).toEqual({ monto: true });
     expect(r).toEqual([
@@ -355,7 +355,7 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     expect(prisma.walletMovimiento.groupBy.mock.calls[0][0].where).toEqual({});
   });
 
-  it("R47: la superficie del repositorio son OCHO metodos — ni update, ni delete, ni el viejo", () => {
+  it("R47: la superficie del repositorio son NUEVE metodos — ni update, ni delete, ni el viejo", () => {
     const metodos = Object.getOwnPropertyNames(WalletMovimientoRepository.prototype)
       .filter((m) => m !== "constructor")
       .sort();
@@ -377,6 +377,8 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
       "crearMovimientoRegistrado",
       "crearMovimientos",
       "listar",
+      // Ficha 461 (R68): LECTURA por la clave de idempotencia (columna UNIQUE). No es una mutacion.
+      "obtenerPorClave",
       "obtenerPorId",
       "obtenerPorOrigen",
       // Ficha 459 (R15/R71): LECTURA del dia del primer movimiento. No es una mutacion.

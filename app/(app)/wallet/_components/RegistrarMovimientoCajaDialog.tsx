@@ -28,13 +28,12 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 import { SALDO_SIGNO_LABEL } from "../tiendas/_components/saldo-tienda-signo-label";
 import {
-  CABECERA_POR_LIBRO,
   CONCEPTO_MANUAL_OPTIONS,
   CONCEPTOS_MANUALES,
   FRASE_DEL_EFECTO,
+  cabeceraDelConcepto,
   conceptoPorId,
   fraseDelLibro,
-  libroDelConcepto,
   type ConceptoManual,
 } from "./wallet-conceptos-manuales";
 import { montoValido } from "./wallet-labels";
@@ -47,23 +46,27 @@ import { montoValido } from "./wallet-labels";
 // Action va el registro, porque cada concepto escribe `origen_tipo` distinto y de ese campo
 // cuelga qué movimiento se puede reversar.
 //
-// FICHA 381 (T H.2, design §8) — «Cobrar un costo a una tienda» no escribe en la caja, sino en
-// el libro de esa tienda, y por eso pide UN campo más. El campo de la tienda es CONDICIONAL
-// (R2/R3), el payload del cobro lleva SOLO lo que el usuario decide y no hay rama de «saldo
-// insuficiente» (R27 de la 381).
+// FICHA 381 (T H.2, design §8) — el cobro a una tienda escribe en el libro de esa tienda, y por
+// eso pide UN campo más. El campo de la tienda es CONDICIONAL (R2/R3), el payload del cobro lleva
+// SOLO lo que el usuario decide y no hay rama de «saldo insuficiente» (R27 de la 381).
 //
-// FICHA 459 (T B.15, design §9) — DOS conceptos más, y el selector agrupado por lo que le pasa a
-// la caja (R59). Bajo el selector, una frase dice qué le pasa a la caja, al saldo de la tienda y a
-// la ganancia con el concepto elegido (R60): el pago por cuenta dice que SALE dinero de la caja y
-// el cobro de un costo dice que NO. Tres propiedades que son requisito:
+// FICHA 459 (T B.15, design §9) — DOS conceptos más, y el selector agrupado por lo que le pasa al
+// dinero (R59). Bajo el selector, una frase dice qué le pasa a la caja, al saldo de la tienda y a
+// la ganancia con el concepto elegido (R60). Tres propiedades que son requisito:
 //
-//  - **Cada concepto manda SOLO sus claves** (R61): el `FormData` del pago por cuenta y el del
-//    saldo inicial o aporte se arman campo a campo; el payload del cobro no gana ni una (R64).
-//  - **El monto del saldo inicial arranca VACÍO y así se queda hasta que una persona lo teclea**
+//  - **Cada concepto manda SOLO sus claves** (R61): el `FormData` del pago de un gasto y el del
+//    aporte se arman campo a campo; el payload del cobro no gana ni una (R64 / 461-R53).
+//  - **El monto del aporte arranca VACÍO y así se queda hasta que una persona lo teclea**
 //    (R27, HF4): la app no propone, no calcula, no sugiere ni rellena ningún importe.
-//  - **El saldo que devuelve el servidor se pinta tal cual**, con su signo (R63): un pago por
-//    cuenta que deja a la tienda en contra se anuncia en contra, y se dice que la tienda le debe
-//    ese dinero a Ordenex.
+//  - **El saldo que devuelve el servidor se pinta tal cual**, con su signo (R63): un pago que deja a
+//    la tienda en contra se anuncia en contra, y se dice que la tienda le debe ese dinero a Ordenex.
+//
+// FICHA 461 (T C.4, design §7/§8, HD1/HD3) — los siete conceptos se nombran desde Ordenex y
+// diciendo quién le paga a quién; el cobro pasa a escribir también su línea en la caja (un cargo:
+// sube la ganancia y baja «De las tiendas» sin tocar «Entró»), así que su cabecera y su frase de
+// efecto dicen eso y su aviso de éxito dice en palabras cuando la tienda queda debiendo (R54). Los
+// tres registros que van a la caja viajan con la clave de idempotencia y tratan `ya_registrado`
+// como éxito (R66/R68): un doble clic no puede producir ni una fila ni un segundo aviso.
 //
 // Money-safe (R15 de la 334 / R28 de la 459): el monto viaja como STRING de punta a punta y NUNCA
 // se convierte a punto flotante en este archivo; el borde lo re-valida con aritmetica decimal.
@@ -81,7 +84,8 @@ const SWR_KEY_TIENDAS_COBRO = "wallet:registrar-movimiento:tiendas";
  */
 const TEXTO_COBRO_TIENDA = {
   label: "Tienda a la que se le cobra",
-  hint: "El cobro se descuenta de lo que Ordenex le debe a esa tienda. Si no le debe nada, su saldo queda en negativo y se cobra cuando la gestión le vuelva a generar dinero a favor.",
+  // Ficha 461 (design §8, HD1): el cobro es ganancia de Ordenex y se descuenta del saldo a favor.
+  hint: "El cobro se descuenta del saldo a favor de la tienda y pasa a ser ganancia de Ordenex. Si la tienda no tiene saldo, queda en contra y se cobra cuando la gestión le vuelva a generar dinero a favor.",
   placeholder: "Elegí la tienda",
   cargando: "Cargando las tiendas…",
   vacio: "No hay tiendas activas",
@@ -93,19 +97,22 @@ const TEXTO_COBRO_TIENDA = {
   /** Lo mismo, en el hueco del desplegable, donde no cabe la frase entera. */
   catalogoCaidoBreve: "No se pudieron cargar las tiendas",
   /**
-   * R9/R27 — el aviso de éxito lleva el saldo que devolvió el SERVIDOR: el STRING con su signo
-   * y la marca legible que el propio servidor derivó.
+   * R9/R27 de la 381 y R54 de la 461 — el aviso de éxito lleva el saldo que devolvió el SERVIDOR:
+   * el STRING con su signo y la marca legible que el propio servidor derivó; y si quedó en contra,
+   * lo dice en palabras, como el pago de un gasto. El «en contra» lo dice el `signo` del servidor:
+   * aquí no se compara ningún importe.
    */
   registrado: (tienda: string, saldo: SaldoTiendaDTO) =>
-    `Cobro registrado. El saldo de ${tienda} queda en ${money(saldo.saldo)} · ${SALDO_SIGNO_LABEL[saldo.signo]}.`,
+    `Cobro registrado. El saldo de ${tienda} queda en ${money(saldo.saldo)} · ${SALDO_SIGNO_LABEL[saldo.signo]}.` +
+    (saldo.signo === "negativo" ? " La tienda le debe ese dinero a Ordenex." : ""),
 } as const;
 
-/** FICHA 459 (design §9.3) — los textos del pago por cuenta de una tienda. */
+/** FICHA 459 (design §9.3) — los textos del pago de un gasto de una tienda. */
 const TEXTO_PAGO_POR_CUENTA = {
   tienda: "Tienda por la que se paga",
   sinTienda: "Elegí la tienda por la que se paga.",
   catalogoCaido:
-    "No se pudo cargar la lista de tiendas, así que no se puede registrar un pago por cuenta ahora mismo. Cerrá y volvé a abrir para reintentarlo; los otros conceptos siguen funcionando.",
+    "No se pudo cargar la lista de tiendas, así que no se puede registrar el pago de un gasto de una tienda ahora mismo. Cerrá y volvé a abrir para reintentarlo; los otros conceptos siguen funcionando.",
   /** R62 — antes de confirmar, sin comparar nada: es una frase fija. */
   pistaSaldo:
     "Si la tienda no tiene saldo suficiente, su saldo queda en contra: ella le deberá ese dinero a Ordenex.",
@@ -422,6 +429,8 @@ export function RegistrarMovimientoCajaDialog({
 
     const elegida = fechaAEnviar();
     const comun = {
+      // Ficha 461 (R66): la misma clave por apertura, como el pago de un gasto y el aporte.
+      claveIdempotencia: clave,
       monto: monto.trim(),
       descripcion: descripcion.trim(),
       ...(elegida === undefined ? {} : { fecha: elegida }),
@@ -429,7 +438,8 @@ export function RegistrarMovimientoCajaDialog({
 
     if (destino.clase === "cobro_tienda") {
       const res = await registrarCobroTiendaAction({ tiendaId, ...comun });
-      return res.status === "ok"
+      // Ficha 461 (R68): `ya_registrado` = el doble envio devolvio el cobro original; es un exito.
+      return res.status === "ok" || res.status === "ya_registrado"
         ? {
             status: "ok",
             mensajeExito: TEXTO_COBRO_TIENDA.registrado(nombreTiendaElegida(), res.saldo),
@@ -442,7 +452,9 @@ export function RegistrarMovimientoCajaDialog({
         tipoEgreso: destino.tipoEgreso,
         ...comun,
       });
-      return res.status === "ok" ? { status: "ok", mensajeExito: MENSAJE_EXITO_CAJA } : res;
+      return res.status === "ok" || res.status === "ya_registrado"
+        ? { status: "ok", mensajeExito: MENSAJE_EXITO_CAJA }
+        : res;
     }
 
     const res = await registrarMovimientoManualAction({
@@ -450,7 +462,9 @@ export function RegistrarMovimientoCajaDialog({
       categoria: destino.categoria,
       ...comun,
     });
-    return res.status === "ok" ? { status: "ok", mensajeExito: MENSAJE_EXITO_CAJA } : res;
+    return res.status === "ok" || res.status === "ya_registrado"
+      ? { status: "ok", mensajeExito: MENSAJE_EXITO_CAJA }
+      : res;
   }
 
   async function confirmar() {
@@ -500,7 +514,8 @@ export function RegistrarMovimientoCajaDialog({
     toast.error("Tu sesión expiró. Iniciá sesión de nuevo.");
   }
 
-  const cabecera = CABECERA_POR_LIBRO[libroDelConcepto(concepto)];
+  // R4/381 y R46/461 — la cabecera nombra el concepto y el libro al que va lo elegido.
+  const cabecera = cabeceraDelConcepto(concepto);
 
   return (
     <>
@@ -513,7 +528,6 @@ export function RegistrarMovimientoCajaDialog({
         onOpenChange={(next) => {
           if (!next) setOpen(false);
         }}
-        // R4/381 — la cabecera nombra el LIBRO al que va el concepto elegido.
         title={cabecera.titulo}
         description={cabecera.descripcion}
         confirmLabel="Registrar"

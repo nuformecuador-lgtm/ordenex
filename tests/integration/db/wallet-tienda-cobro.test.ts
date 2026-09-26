@@ -2,8 +2,11 @@ import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import { UserRepository } from "@/lib/repositories/UserRepository";
+import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { CajaCobroTiendaFeedService } from "@/lib/services/CajaCobroTiendaFeedService";
 import { CobroTiendaService } from "@/lib/services/CobroTiendaService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
@@ -32,7 +35,10 @@ import {
 //   (d) un cobro mayor que el saldo lo deja NEGATIVO y NO se rechaza (R27);
 //   (e) si la escritura del historial falla, NO queda el asiento (R25/R42);
 //   (f) el cobro NO aparece en el libro de otra tienda (R38);
-//   (g) NO aparece ninguna fila nueva en `wallet_movimiento` — la caja de Ordenex (R24/D1).
+//   (g) REESCRITO por la ficha 461 (HD1/R1/R2/R3): aparece EXACTAMENTE UNA fila nueva en
+//       `wallet_movimiento` —el cargo `ingreso/ingreso_cobro_tienda`, origen `cobro_tienda` → id del
+//       debito, mismo monto y mismo instante—. La 381 afirmaba aqui «ninguna» (su R24/D1), y esa
+//       ausencia es el fallo mudo que motiva la 461.
 //
 // TODO corre dentro de una transaccion que SIEMPRE se revierte: si el test pasa, si falla o si el
 // proceso muere, no queda ni una fila. Y `serializarEscriturasReales` va PRIMERO en cada una: son
@@ -128,9 +134,12 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
   /** El servicio REAL, cableado contra la transaccion del test (con savepoints de verdad). */
   function servicioReal(tx: TxDeTest, romperRegistro = false) {
     const cliente = clienteConSavepoint(tx, romperRegistro);
+    // Ficha 461 (T B.7): con su puerto de caja REAL y su repositorio de anulaciones.
     return new CobroTiendaService(
       new WalletTiendaMovimientoRepository(cliente),
       new UserRepository(cliente),
+      new CajaCobroTiendaFeedService(new WalletMovimientoRepository(cliente)),
+      new CobroTiendaAnulacionRepository(cliente),
       (fn) => cliente.$transaction((t) => fn(t as never)),
     );
   }
@@ -146,7 +155,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
   // (a)(c)(g) El camino feliz, medido por lo que queda en las tablas.
   // -------------------------------------------------------------------------------------------
 
-  it("⭑ (a)(c)(g) el cobro se escribe, baja el saldo exactamente y NO toca la caja", async () => {
+  it("⭑ (a)(c)(g) el cobro se escribe, baja el saldo exactamente y deja UNA linea de cargo en la caja (461)", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const tiendaId = await sembrarCuenta(tx, "feliz");
@@ -157,7 +166,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       expect(saldoAntes).toBe("10000.00"); // anti-vacuidad: la semilla existe
 
       const r = await servicioReal(tx).registrarCobro(
-        { tiendaId, monto: "1500.00", descripcion: "Reposicion de etiquetas" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "1500.00", descripcion: "Reposicion de etiquetas" },
         MAESTRO,
       );
       expect(r.status).toBe("ok");
@@ -189,8 +198,17 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       expect(r.saldo.saldo).toBe("8500.00");
       expect(r.saldo.signo).toBe("positivo");
 
-      // (g) R24/D1: CERO filas nuevas en la caja de Ordenex.
-      expect(await tx.walletMovimiento.count()).toBe(cajaAntes);
+      // (g) FICHA 461 (HD1/R1/R2/R3): EXACTAMENTE UNA fila nueva en la caja: el CARGO del cobro,
+      // vinculado al debito, con el MISMO monto y el MISMO instante. (La 381 exigia cero aqui.)
+      expect(await tx.walletMovimiento.count()).toBe(cajaAntes + 1);
+      const cargos = await tx.walletMovimiento.findMany({ where: { origenId: r.cobro.id } });
+      expect(cargos.map((c) => [c.tipo, c.categoria, c.origenTipo, c.monto.toFixed(2)])).toEqual([
+        ["ingreso", "ingreso_cobro_tienda", "cobro_tienda", "1500.00"],
+      ]);
+      expect(cargos[0].fechaMovimiento.toISOString()).toBe(filas[0].fechaMovimiento.toISOString());
+      expect(cargos[0].registradoPor).toBe(MAESTRO.usuarioId);
+      expect(cargos[0].descripcion).toContain("Reposicion de etiquetas");
+      expect(cargos[0].descripcion).not.toContain(r.cobro.id);
 
       // R40: y SI queda la fila del historial, con el importe y la tienda.
       const rastro = await tx.historialAccion.findMany({
@@ -258,7 +276,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       await sembrarSaldoAFavor(tx, tiendaId, "5000.00");
 
       const r = await servicioReal(tx).registrarCobro(
-        { tiendaId, monto: "20000.00", descripcion: "Equipo de rotulacion" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "20000.00", descripcion: "Equipo de rotulacion" },
         MAESTRO,
       );
 
@@ -283,9 +301,9 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       const tiendaId = await sembrarCuenta(tx, "doble");
       const servicio = servicioReal(tx);
 
-      await servicio.registrarCobro({ tiendaId, monto: "100.00", descripcion: "uno" }, MAESTRO);
+      await servicio.registrarCobro({ claveIdempotencia: randomUUID(), tiendaId, monto: "100.00", descripcion: "uno" }, MAESTRO);
       const segundo = await servicio.registrarCobro(
-        { tiendaId, monto: "50.00", descripcion: "dos" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "50.00", descripcion: "dos" },
         MAESTRO,
       );
 
@@ -317,7 +335,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       // LANZA. Nada mas se toca: el asiento, el `where` y el congelado del actor son los reales.
       await expect(
         servicioReal(tx, true).registrarCobro(
-          { tiendaId, monto: "1500.00", descripcion: "no debe quedar" },
+          { claveIdempotencia: randomUUID(), tiendaId, monto: "1500.00", descripcion: "no debe quedar" },
           MAESTRO,
         ),
       ).rejects.toThrow(RegistroCaido);
@@ -327,6 +345,8 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       expect(
         await tx.walletTiendaMovimiento.count({ where: { tiendaId, categoria: "cobro_manual" } }),
       ).toBe(0);
+      // Ficha 461 (R1): y tampoco queda la linea de caja (se escribe DESPUES del historial, que fallo).
+      expect(await tx.walletMovimiento.count({ where: { registradoPor: MAESTRO.usuarioId, categoria: "ingreso_cobro_tienda", descripcion: { contains: "no debe quedar" } } })).toBe(0);
       // Y el saldo no se movio ni un centimo.
       expect(await saldoDerivado(tx, tiendaId)).toBe("10000.00");
       // R42: tampoco queda fila de historial.
@@ -344,7 +364,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       await sembrarSaldoAFavor(tx, tiendaId, "10000.00");
 
       const r = await servicioReal(tx).registrarCobro(
-        { tiendaId, monto: "1500.00", descripcion: "si debe quedar" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "1500.00", descripcion: "si debe quedar" },
         MAESTRO,
       );
 
@@ -369,7 +389,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       await sembrarSaldoAFavor(tx, ajena, "10000.00");
 
       await servicioReal(tx).registrarCobro(
-        { tiendaId: cobrada, monto: "1500.00", descripcion: "solo de esta" },
+        { claveIdempotencia: randomUUID(), tiendaId: cobrada, monto: "1500.00", descripcion: "solo de esta" },
         MAESTRO,
       );
 
@@ -407,7 +427,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       const cobrosAntes = await tx.walletTiendaMovimiento.count({ where: { categoria: "cobro_manual" } });
 
       const porRol = await servicio.registrarCobro(
-        { tiendaId: mensajero, monto: "100.00", descripcion: "x" },
+        { claveIdempotencia: randomUUID(), tiendaId: mensajero, monto: "100.00", descripcion: "x" },
         MAESTRO,
       );
       expect(porRol).toEqual({
@@ -416,7 +436,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       });
 
       const porEstado = await servicio.registrarCobro(
-        { tiendaId: inactiva, monto: "100.00", descripcion: "x" },
+        { claveIdempotencia: randomUUID(), tiendaId: inactiva, monto: "100.00", descripcion: "x" },
         MAESTRO,
       );
       expect(porEstado).toEqual({
@@ -425,7 +445,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       });
 
       const inexistente = await servicio.registrarCobro(
-        { tiendaId: randomUUID(), monto: "100.00", descripcion: "x" },
+        { claveIdempotencia: randomUUID(), tiendaId: randomUUID(), monto: "100.00", descripcion: "x" },
         MAESTRO,
       );
       expect(inexistente).toEqual({
@@ -453,7 +473,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       const tiendaId = await sembrarCuenta(tx, "monto");
 
       const r = await servicioReal(tx).registrarCobro(
-        { tiendaId, monto: dado, descripcion: "importe" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: dado, descripcion: "importe" },
         MAESTRO,
       );
       expect(r.status).toBe("ok");
@@ -485,7 +505,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       const antesDeTodo = new Date(Date.now() - 60_000);
 
       const sinFecha = await servicio.registrarCobro(
-        { tiendaId, monto: "10.00", descripcion: "hoy" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "10.00", descripcion: "hoy" },
         MAESTRO,
       );
       expect(sinFecha.status).toBe("ok");
@@ -497,7 +517,7 @@ describeSiHayBase("381/G.1 — cobrarle un costo a una tienda (Postgres real)", 
       expect(filaHoy.fechaMovimiento.getTime()).toBeGreaterThan(antesDeTodo.getTime());
 
       const conFecha = await servicio.registrarCobro(
-        { tiendaId, monto: "10.00", descripcion: "ayer", fecha: "2026-09-01" },
+        { claveIdempotencia: randomUUID(), tiendaId, monto: "10.00", descripcion: "ayer", fecha: "2026-09-01" },
         MAESTRO,
       );
       expect(conFecha.status).toBe("ok");

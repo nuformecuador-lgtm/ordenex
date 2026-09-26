@@ -23,11 +23,34 @@ export type WalletTiendaTxClient = Pick<PrismaClient, "walletTiendaMovimiento">;
  * `appendAccion` y `resolverActorCongelado` aceptan, y —lo que importa— NO expone `$transaction`.
  * Quien reciba esto no puede abrir la suya, asi que la atomicidad de R25/R42 es del TIPO, no de la
  * disciplina de quien escriba el proximo metodo.
+ *
+ * FICHA 461 (design §5.1/§6): gana `walletMovimiento` —la CAJA, donde el cobro escribe su cargo y su
+ * anulacion el reverso (HD1)— y `cobroTiendaAnulacion` —la constancia de la anulacion—. Las tres
+ * escrituras del cobro (debito, historial, cargo) y las cuatro de la anulacion (constancia, historial,
+ * credito, reverso) viajan por ESTE cliente, en una sola transaccion.
  */
 export type CobroTiendaTxClient = Pick<
   Prisma.TransactionClient,
-  "walletTiendaMovimiento" | "historialAccion" | "usuario"
+  "walletTiendaMovimiento" | "historialAccion" | "usuario" | "walletMovimiento" | "cobroTiendaAnulacion"
 >;
+
+/**
+ * FICHA 461 (design §5.1/§5.3) — lo que el servicio necesita de un COBRO para anularlo: la tienda
+ * (para el credito y el saldo), su nombre (para la descripcion en la caja), el monto (R13: el de los
+ * contra-asientos se lee DEL COBRO, nunca de la peticion) y la descripcion original.
+ *
+ * Solo lo devuelve `obtenerCobroPorId` para filas `debito/cobro_manual`: cualquier otra fila del
+ * libro —un flete, un pago, una anulacion— responde `null` (R16).
+ */
+export interface CobroTiendaRegistro {
+  id: string;
+  tiendaId: string;
+  /** Nombre y primer apellido de la tienda (`etiquetaDePersona`), como lo compone la caja. */
+  tiendaNombre: string;
+  monto: string; // STRING escala 2
+  descripcion: string | null;
+  fechaMovimiento: string; // ISO
+}
 
 /**
  * FICHA 381 — lo que `registrarCobroEnHistorial` necesita, y ni un delegado mas: la tabla del
@@ -82,10 +105,19 @@ export interface CrearMovimientoTiendaInput {
    * La prueba de que es opcional de verdad es que los tests de los dos feeds del cierre
    * siguen verdes sin editarlos.
    *
-   * Convencion de la 172: MEDIANOCHE UTC del dia de `fecha_pago` (`medianocheUtcDelDia`),
-   * no 06:00Z, para que el pago entre por los dos bordes del filtro por rango del desglose.
+   * Convencion HASTA la ficha 461: medianoche UTC del dia de `fecha_pago` (`medianocheUtcDelDia`),
+   * para que el pago entrara por los dos bordes de un filtro que comparaba contra `z.coerce.date()`.
+   * Ficha 461 (R73, auditoria T2): los filtros son dias de Costa Rica (R72) y el rollup agrupa por
+   * `fecha_movimiento − 6 h`, asi que el asiento del pago se fecha con el INICIO del dia en CR
+   * (`inicioDelDiaCREnUtc`, 06:00Z); la migracion `20260926120500` movio los previos.
    */
   fechaMovimiento?: Date;
+  /**
+   * Ficha 461 (R66/R67/R68, auditoria D2) — la clave de idempotencia del CLIENTE, SOLO en el cobro
+   * de Ordenex a la tienda (`cobro_manual`). Columna UNIQUE; con `skipDuplicates` un choque deja
+   * `count = 0` y el servicio relee por la clave (`obtenerCobroPorClave`). Opcional: ausente ⇒ NULL.
+   */
+  claveIdempotencia?: string;
 }
 
 // Filtros del listado del ledger de UNA tienda (R19/R22). `cierreId` filtra por el origen
@@ -246,4 +278,28 @@ export interface IWalletTiendaMovimientoRepository {
     tx: WalletTiendaHistorialTxClient,
     input: RegistrarCobroEnHistorialInput,
   ): Promise<void>;
+  /**
+   * FICHA 461 (R7) — el nombre de una tienda tal como lo compone la caja (nombre y primer apellido,
+   * `etiquetaDePersona`), leido DENTRO de la transaccion del cobro para describir su linea de caja
+   * («{Tienda} · {descripcion}») sin ningun id en el texto. Misma composicion que la migracion de datos
+   * (`concat_ws(' ', nombre, primer_apellido)`), asi que una linea completada y una del servicio se
+   * leen igual. Sin nombre resoluble devuelve `""` (la descripcion queda sola).
+   */
+  nombreDeTienda(tx: WalletTiendaHistorialTxClient, tiendaId: string): Promise<string>;
+  /**
+   * FICHA 461 (design §5.3, R13/R16) — UN cobro de Ordenex a una tienda por su id: SOLO filas
+   * `debito`/`cobro_manual`, con el `WHERE` en la base (no se lee la fila para descartarla despues).
+   * Cualquier otra fila del libro responde `null`, igual que un id inexistente: para el servicio las
+   * dos cosas son «no se encontro un cobro».
+   *
+   * SIN acotar por tienda A PROPOSITO, al reves que `obtenerPorIdDeTienda`: quien anula es el acceso
+   * total, que ve todas las tiendas, y la tienda del cobro es justo lo que hay que averiguar.
+   */
+  obtenerCobroPorId(id: string): Promise<CobroTiendaRegistro | null>;
+  /**
+   * Ficha 461 (R68) — el cobro (`debito/cobro_manual`) que lleva ESA clave de idempotencia, como
+   * DTO del libro, o `null`. Es la relectura del segundo envio: `crearMovimientos` devolvio 0 porque
+   * la clave ya estaba, y el servicio responde `ya_registrado` con el cobro original.
+   */
+  obtenerCobroPorClave(claveIdempotencia: string): Promise<WalletTiendaMovimientoDTO | null>;
 }

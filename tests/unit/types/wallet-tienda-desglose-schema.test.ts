@@ -44,8 +44,9 @@ describe("listarMovimientosDeTiendaSchema (R22/R25)", () => {
       pageSize: 50,
       cierreId: "c1",
       categoria: "iva_comision_cod",
-      desde: "2026-07-01T00:00:00.000Z",
-      hasta: "2026-07-31T00:00:00.000Z",
+      // Ficha 461 (R72): el borde recibe DIAS (`YYYY-MM-DD`) y los traduce a dias de Costa Rica.
+      desde: "2026-07-01",
+      hasta: "2026-07-31",
     });
     expect(r).toMatchObject({
       tiendaId: "t1",
@@ -54,8 +55,8 @@ describe("listarMovimientosDeTiendaSchema (R22/R25)", () => {
       cierreId: "c1",
       categoria: "iva_comision_cod",
     });
-    expect(r.desde).toBeInstanceOf(Date);
-    expect(r.hasta).toBeInstanceOf(Date);
+    expect(r.desde).toEqual(new Date("2026-07-01T06:00:00.000Z")); // inicio del 1 de julio en CR
+    expect(r.hasta).toEqual(new Date("2026-08-01T06:00:00.000Z")); // inicio del dia SIGUIENTE al 31 (exclusivo)
   });
 
   it("R44: `pago_tienda` es un valor ACEPTADO del filtro por concepto (lo necesita la 172)", () => {
@@ -108,8 +109,8 @@ describe("listarMovimientosDeTiendaCompletoSchema (R24/R25/R37)", () => {
       tiendaId: "t1",
       cierreId: "c1",
       categoria: "comision_cod" as const,
-      desde: "2026-07-01T00:00:00.000Z",
-      hasta: "2026-07-31T00:00:00.000Z",
+      desde: "2026-07-01", // ficha 461 (R72): dias, no instantes
+      hasta: "2026-07-31",
     };
     const paginado = listarMovimientosDeTiendaSchema.parse(entrada);
     const completo = listarMovimientosDeTiendaCompletoSchema.parse(entrada);

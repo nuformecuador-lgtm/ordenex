@@ -51,7 +51,8 @@ describe("columnas de descarga del ledger de la tienda", () => {
   it("emite tipo y concepto como ETIQUETA LEGIBLE, no como valor interno (R8)", () => {
     const fila = filaDescargaMiWallet(MOV);
     expect(fila.tipo).toBe("Crédito");
-    expect(fila.concepto).toBe("COD recaudado");
+    // Ficha 461 (R44): la lectura DESDE LA TIENDA, la misma que su tabla.
+    expect(fila.concepto).toBe("Cobrado a tus clientes en contra-entrega");
     expect(fila.concepto).not.toBe("cod_recaudado");
   });
 
@@ -88,12 +89,15 @@ describe("columnas de descarga del ledger de la tienda", () => {
 
 // ⭑ FICHA 381 (T I.2, R39) — EL COBRO EN LA DESCARGA DEL LIBRO DE LA TIENDA.
 //
-// R39 pide que el nombre del archivo sea el MISMO que el de pantalla, en las dos vistas. No se
-// prueba comparando el archivo contra el diccionario del que sale —eso sería una aserción
-// contra su propia fuente, siempre verde—: se prueba con el LITERAL que la tienda lee en la
-// tabla, y se afirma además que la descarga del ADMINISTRADOR emite exactamente ese mismo
-// texto para el mismo movimiento. Si alguien desviara una de las dos, la igualdad cruzada cae.
-describe("⭑ FICHA 381 (R39) — el cobro sale en el archivo con el nombre de pantalla", () => {
+// R39 pide que el nombre del archivo sea el MISMO que el de pantalla. No se prueba comparando el
+// archivo contra el diccionario del que sale —eso sería una aserción contra su propia fuente,
+// siempre verde—: se prueba con el LITERAL que la tienda lee en la tabla.
+//
+// ⭑ FICHA 461 (R44, P4) — la igualdad cruzada con el archivo del ADMINISTRADOR se INVIERTE a
+// propósito: el mismo libro se lee desde dos lados, así que la tienda descarga «Ordenex te cobró»
+// y la oficina «Ordenex le cobra a la tienda». Lo que sigue siendo igual es el resto de la fila
+// (fecha, tipo, monto, origen), y eso sí se afirma cruzado.
+describe("⭑ FICHA 381/461 (R39/R44) — el cobro sale en el archivo con el nombre de SU pantalla", () => {
   const COBRO: WalletTiendaMovimientoDTO = {
     id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     tiendaId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
@@ -106,9 +110,9 @@ describe("⭑ FICHA 381 (R39) — el cobro sale en el archivo con el nombre de p
     fechaMovimiento: "2026-09-08T14:30:00.000Z",
   };
 
-  it("la columna «Concepto» dice «Cobro de Ordenex», no el valor del enum", () => {
+  it("la columna «Concepto» dice «Ordenex te cobró», no el valor del enum", () => {
     const fila = filaDescargaMiWallet(COBRO);
-    expect(fila.concepto).toBe("Cobro de Ordenex");
+    expect(fila.concepto).toBe("Ordenex te cobró");
     expect(fila.concepto).not.toBe("cobro_manual");
     expect(fila.tipo).toBe("Débito");
   });
@@ -117,22 +121,27 @@ describe("⭑ FICHA 381 (R39) — el cobro sale en el archivo con el nombre de p
     const fila = filaDescargaMiWallet(COBRO);
     expect(fila.monto).toBe("15000.00");
     expect(typeof fila.monto).toBe("string");
-    expect(fila.origen).toBe("Manual · Material de despacho entregado en bodega");
+    expect(fila.origen).toBe("Registrado a mano · Material de despacho entregado en bodega");
     expect(fila.fecha).toBe("2026-09-08");
   });
 
-  it("las DOS descargas —la de la tienda y la del admin— emiten el mismo nombre", () => {
-    // El archivo del administrador sale del MISMO diccionario reexportado. Si un día se
-    // duplicara el mapa, esta igualdad sería lo primero en caer.
-    expect(filaDescargaMiWallet(COBRO).concepto).toBe(
-      filaDescargaDesgloseTienda(COBRO).concepto,
-    );
-    expect(filaDescargaMiWallet(COBRO).concepto).toBe("Cobro de Ordenex");
+  it("⭑ 461 R44: la tienda y la oficina descargan el MISMO movimiento con DOS lecturas del concepto", () => {
+    const tienda = filaDescargaMiWallet(COBRO);
+    const oficina = filaDescargaDesgloseTienda(COBRO);
+    // Literales, uno por lado (design §7.4/§7.5): la mutación 12 los igualaría.
+    expect(tienda.concepto).toBe("Ordenex te cobró");
+    expect(oficina.concepto).toBe("Ordenex le cobra a la tienda");
+    expect(tienda.concepto).not.toBe(oficina.concepto);
+    // Y TODO lo demás de la fila es idéntico: es el mismo dinero, la misma fecha y el mismo origen.
+    expect(tienda.fecha).toBe(oficina.fecha);
+    expect(tienda.tipo).toBe(oficina.tipo);
+    expect(tienda.monto).toBe(oficina.monto);
+    expect(tienda.origen).toBe(oficina.origen);
   });
 
-  it("un cobro y un ajuste NO se confunden en el archivo (R33/D2)", () => {
+  it("un cobro y una corrección NO se confunden en el archivo (R33/D2)", () => {
     const ajuste = { ...COBRO, categoria: "ajuste_debito" as const };
-    expect(filaDescargaMiWallet(ajuste).concepto).toBe("Ajuste (débito)");
+    expect(filaDescargaMiWallet(ajuste).concepto).toBe("Corrección en tu contra");
     expect(filaDescargaMiWallet(COBRO).concepto).not.toBe(
       filaDescargaMiWallet(ajuste).concepto,
     );

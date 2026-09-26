@@ -8,6 +8,7 @@ import type {
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { composicionDetalleConfig } from "@/lib/config/composicion-detalle";
 import { walletMovimientoConfig } from "@/lib/config/wallet-movimiento";
+import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 import {
   esFechaCalendarioValida,
   fechaCalendarioCR,
@@ -61,6 +62,11 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   "ingreso_reverso_pago_por_cuenta_tienda",
   "ingreso_aporte_capital",
   "egreso_reverso_aporte_capital",
+  // Ficha 461 (design §2.1, HD1): el cobro de Ordenex a una tienda es un CARGO como los fletes
+  // (propio, liquidez «cargo»: sube la ganancia, baja «De las tiendas», no toca «Entro») y su
+  // anulacion es el REVERSO de ese cargo (egreso propio «cargo», que no suma a «Salio»).
+  "ingreso_cobro_tienda",
+  "egreso_reverso_cobro_tienda",
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -98,6 +104,12 @@ export const WALLET_ORIGEN_TIPO_SEED = [
   "pago_por_cuenta_tienda",
   "aporte_capital",
   "cobro_manual_reclasificado",
+  // Ficha 461 (design §3.1, P2): `cobro_tienda` = lo que escribe el SERVICIO al cobrar y al anular
+  // (origen_id = id del debito del cobro); `cobro_tienda_completado` = las lineas de caja que la
+  // migracion de datos añade a los cobros previos sin linea. Dos origenes para que el `down` de esa
+  // migracion borre EXACTAMENTE lo suyo.
+  "cobro_tienda",
+  "cobro_tienda_completado",
 ] as const satisfies readonly PrismaWalletOrigenTipo[];
 
 export type WalletOrigenTipo = (typeof WALLET_ORIGEN_TIPO_SEED)[number];
@@ -130,9 +142,15 @@ export type WalletIngresoConcepto = (typeof WALLET_INGRESO_CONCEPTO_SEED)[number
 // declara `propio` con tipo ingreso— la comprueba en RUNTIME
 // `tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts` (R23/R32): un `satisfies`
 // no puede afirmarlo, porque la naturaleza es un VALOR y no un tipo.
+//
+// Ficha 461 (design §4, R27): + `ingreso_cobro_tienda`, el OCTAVO ingreso propio. La guardia de
+// composicion exige que este seed sea EXACTAMENTE los ingresos propios, y el cobro lo es (HD1).
+// `WALLET_INGRESO_CONCEPTO_SEED` NO cambia: son los seis del feed del cierre y
+// `MAPEO_CONCEPTO_TIENDA` depende de el.
 export const WALLET_INGRESO_PROPIO_SEED = [
   ...WALLET_INGRESO_CONCEPTO_SEED,
   "ingreso_ajuste",
+  "ingreso_cobro_tienda",
 ] as const satisfies readonly WalletMovimientoCategoria[];
 
 export type WalletIngresoPropio = (typeof WALLET_INGRESO_PROPIO_SEED)[number];
@@ -161,9 +179,13 @@ export type WalletEgresoDesglosado = (typeof WALLET_EGRESO_DESGLOSADO_SEED)[numb
  * movimiento» le PROMETE al usuario que ese gasto se llamara «Ajuste (egreso)»: sin fila
  * propia, la tarjeta rompe esa promesa.
  */
+//
+// Ficha 461 (design §4, R27): + `egreso_reverso_cobro_tienda`, el TERCER egreso nombrado. La
+// anulacion de un cobro baja la ganancia y tiene que verse con su nombre, no dentro de «Otros».
 export const WALLET_EGRESO_NOMBRADO_SEED = [
   "egreso_pago_mensajero",
   "egreso_ajuste",
+  "egreso_reverso_cobro_tienda",
 ] as const satisfies readonly WalletMovimientoCategoria[];
 
 export type WalletEgresoNombrado = (typeof WALLET_EGRESO_NOMBRADO_SEED)[number];
@@ -257,9 +279,17 @@ export type WalletMovimientoDTO = {
   documento: DocumentoCajaDTO | null;
 };
 
-/** Ficha 459 (design §7.3) — el estado del documento de una fila original del libro de la caja. */
+/**
+ * Ficha 459 (design §7.3) — el estado del documento de una fila original del libro de la caja.
+ *
+ * Ficha 461 (design §5.4, R20/R37): + `cobro_tienda`, la linea de caja de un cobro de Ordenex a una
+ * tienda, sea propia (origen `cobro_tienda`) o completada por la migracion de datos
+ * (`cobro_tienda_completado`). Su `tieneComprobante` es siempre `false` (un cobro no lleva
+ * comprobante). El reverso del cobro y las salidas reclasificadas siguen con `documento: null`.
+ */
 export type DocumentoCajaDTO = {
-  tipo: "pago_por_cuenta_tienda" | "aporte_capital";
+  /** Ficha 461 (R71): + `ajuste_caja`, la correccion de caja original (su contra-asiento lleva `null`). */
+  tipo: "pago_por_cuenta_tienda" | "aporte_capital" | "cobro_tienda" | "ajuste_caja";
   anulado: boolean;
   tieneComprobante: boolean;
 };
@@ -438,6 +468,19 @@ export const montoPositivoSchema = z
     }
   }, "El monto debe ser mayor que 0.");
 
+/**
+ * FICHA 461 (R66, auditoria de la wallet D2) — la CLAVE DE IDEMPOTENCIA de los tres registros
+ * manuales de dinero (correccion de caja, sueldo o gasto de Ordenex, cobro de Ordenex a una tienda).
+ * La genera el dialogo al abrirse (`crypto.randomUUID()`, como en el pago de un gasto de una tienda y
+ * el aporte) y se guarda en la propia fila del libro bajo un indice UNIQUE (R67): un doble clic o un
+ * reintento tras un error tardio con la misma clave NO crea una segunda fila (R68). Medido por la
+ * auditoria: dos cobros identicos en 10 s quedaron como dos filas. OBLIGATORIA: sin ella, el borde
+ * responde `validation_error` y no se escribe nada.
+ */
+export const claveIdempotenciaSchema = z
+  .string({ message: "Falta la clave de idempotencia del registro." })
+  .uuid("La clave de idempotencia debe ser un uuid.");
+
 // ── Ficha 334 — la FECHA del movimiento manual (R19/R20/R21) ──
 
 /** La forma `YYYY-MM-DD`. Se declara una vez: la usan el regex del schema y su superRefine. */
@@ -501,6 +544,7 @@ export const registrarMovimientoManualSchema = z
     monto: montoPositivoSchema,
     descripcion: z.string().trim().min(1, "La descripcion es obligatoria."),
     fecha: fechaMovimientoSchema.optional(),
+    claveIdempotencia: claveIdempotenciaSchema, // ficha 461 (R66)
   })
   .refine(
     (v) =>
@@ -511,14 +555,48 @@ export const registrarMovimientoManualSchema = z
 
 export type RegistrarMovimientoManualInput = z.infer<typeof registrarMovimientoManualSchema>;
 
+// ── FICHA 461 (R69–R71, auditoria D3) — ANULAR una correccion de caja ──
+
+/**
+ * El BORDE de la anulacion de una correccion: la fila y un motivo. SIN monto, y `.strict()` lo hace
+ * cumplir (R70): el monto del contra-asiento se lee DE LA CORRECCION en el servidor, y una peticion
+ * que traiga `monto` —o cualquier otra clave no prevista— muere aqui con `validation_error` sin
+ * escribir nada. El motivo se recorta y no puede quedar vacio. Molde: `anularCobroTiendaSchema`.
+ */
+export const anularAjusteCajaSchema = z
+  .object({
+    movimientoId: z.string().uuid(),
+    motivo: z.string().trim().min(1, "El motivo de la anulacion es obligatorio."),
+  })
+  .strict();
+
+export type AnularAjusteCajaInput = z.infer<typeof anularAjusteCajaSchema>;
+
+/**
+ * El contrato COMPLETO que ve la pantalla. `unauthenticated` y `validation_error` los decide el
+ * borde; el resto, el dominio. `no_encontrado` cubre tambien «esa fila no es una correccion
+ * original» (su contra-asiento, el reverso de un egreso, un asiento automatico): sobre ellas no hay
+ * nada que anular por esta via. Ninguna rama viaja con importes.
+ */
+export type AnularAjusteCajaResult =
+  | { status: "ok" }
+  | { status: "ya_anulado" }
+  | { status: "no_encontrado" }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
 // Listado (R20): paginado acotado + filtros opcionales tipo/categoria/rango de fechas.
 export const listarMovimientosSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   tipo: z.enum(WALLET_MOVIMIENTO_TIPO_SEED).optional(),
   categoria: z.enum(WALLET_MOVIMIENTO_CATEGORIA_SEED).optional(),
-  desde: z.coerce.date().optional(),
-  hasta: z.coerce.date().optional(),
+  // Ficha 461 (R72, auditoria T1): dias de COSTA RICA. `desde` = inicio de ese dia (06:00Z); `hasta`
+  // = inicio del dia siguiente, cota EXCLUSIVA en el repositorio. Antes: `z.coerce.date()`, que es
+  // la medianoche UTC (18:00 CR del dia anterior) y dejaba «hoy» con 2 de 7 movimientos.
+  desde: desdeDiaCRSchema.optional(),
+  hasta: hastaDiaCRSchema.optional(),
 });
 
 export type ListarMovimientosInput = z.infer<typeof listarMovimientosSchema>;
@@ -595,6 +673,7 @@ export const registrarEgresoAdministrativoSchema = z.object({
   monto: montoPositivoSchema,
   descripcion: z.string().trim().min(1, "La descripcion es obligatoria."),
   fecha: fechaMovimientoSchema.optional(),
+  claveIdempotencia: claveIdempotenciaSchema, // ficha 461 (R66)
 });
 
 export type RegistrarEgresoAdministrativoInput = z.infer<

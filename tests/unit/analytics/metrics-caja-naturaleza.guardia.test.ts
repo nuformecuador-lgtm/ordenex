@@ -154,8 +154,10 @@ describe("egresos: gana el pago a tienda por diseno, y nada mas", () => {
   it("gana `ingreso_ajuste` y NADA mas: el reverso del pago a tienda sigue fuera", () => {
     const categorias = getMetrica("egresos")?.definicion.categorias ?? [];
 
-    // Ficha 459 (P13): DIEZ, con `egreso_pago_por_cuenta_tienda` al final.
+    // Ficha 459 (P13): DIEZ, con `egreso_pago_por_cuenta_tienda` al final. Ficha 461 (R29, P14):
+    // SIGUEN siendo diez — el reverso del cobro a una tienda NO entra: no es dinero que salga.
     expect(categorias).toHaveLength(10);
+    expect(categorias).not.toContain("egreso_reverso_cobro_tienda");
     // Las OCHO historicas, sin que falte ninguna: sustituir una por `ingreso_ajuste` en vez de
     // anadirla —la mutacion que R5 nombra— deja aqui una lista corta.
     expect(categorias.filter((c) => c.startsWith("egreso_"))).toEqual([
@@ -442,7 +444,9 @@ describe("las listas de las dos metricas nuevas se comprueban contra el Record",
     const declaradas = [...(getMetrica("dinero_en_caja")?.definicion.categorias ?? [])].sort();
     expect(declaradas).toEqual(Object.keys(NATURALEZA_POR_CATEGORIA).sort());
     expect(declaradas).toEqual([...WALLET_MOVIMIENTO_CATEGORIA_SEED].sort());
-    expect(declaradas).toHaveLength(21); // ficha 459: 17 + 4
+    expect(declaradas).toHaveLength(23); // ficha 459: 17 + 4; ficha 461 (R29): + 2
+    expect(declaradas).toContain("ingreso_cobro_tienda");
+    expect(declaradas).toContain("egreso_reverso_cobro_tienda");
   });
 
   it("`ganancia_ordenex` declara EXACTAMENTE las de naturaleza propio, y ni una de terceros", () => {
@@ -453,7 +457,9 @@ describe("las listas de las dos metricas nuevas se comprueban contra el Record",
     const declaradas = [...(getMetrica("ganancia_ordenex")?.definicion.categorias ?? [])].sort();
 
     expect(declaradas).toEqual(propiasDelRecord);
-    expect(declaradas).toHaveLength(14);
+    expect(declaradas).toHaveLength(16); // ficha 461 (R29): 14 + el cobro a una tienda y su reverso
+    expect(declaradas).toContain("ingreso_cobro_tienda");
+    expect(declaradas).toContain("egreso_reverso_cobro_tienda");
     // Dicho por el otro lado, que es el que rompe la cifra: el contra-entrega y su reverso no
     // pueden entrar en la ganancia. Si entraran, anular un pago a una tienda subiria la ganancia
     // de Ordenex — el fallo exacto que `design.md §10-C` descarto.

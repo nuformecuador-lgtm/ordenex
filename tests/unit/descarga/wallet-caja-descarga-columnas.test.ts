@@ -85,16 +85,16 @@ describe("columnas de descarga del libro de caja", () => {
   it("emite tipo y categoria como ETIQUETA LEGIBLE, no como valor interno (R8)", () => {
     const fila = filaDescargaMovimientoCaja(MOV);
     expect(fila.tipo).toBe("Egreso");
-    expect(fila.categoria).toBe("Gasto fijo");
+    expect(fila.categoria).toBe("Gasto fijo de Ordenex");
     expect(fila.tipo).not.toBe("egreso");
     expect(fila.categoria).not.toBe("egreso_gasto_fijo");
   });
 
   it("compone el origen igual que la tabla: etiqueta y descripcion (R8/R24)", () => {
-    expect(filaDescargaMovimientoCaja(MOV).origen).toBe("Gasto · Alquiler de bodega");
+    expect(filaDescargaMovimientoCaja(MOV).origen).toBe("Gasto o sueldo registrado a mano · Alquiler de bodega");
 
     const sinDescripcion = { ...MOV, descripcion: null };
-    expect(filaDescargaMovimientoCaja(sinDescripcion).origen).toBe("Gasto");
+    expect(filaDescargaMovimientoCaja(sinDescripcion).origen).toBe("Gasto o sueldo registrado a mano");
   });
 
   it("emite la fecha como dia calendario, igual que la tabla (R11/R24)", () => {

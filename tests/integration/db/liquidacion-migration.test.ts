@@ -225,7 +225,13 @@ describe("UP — CHECK tipo <-> categoria de los dos libros (condicion heredada 
     // lista pone el caso rojo. Que la restriccion de HOY siga cubriendo el enum de HOY se afirma en
     // `tests/integration/db/wallet-tienda-cobro-migration.test.ts`, que es donde ese CHECK vive
     // ahora.
-    const AGREGADAS_DESPUES_TIENDA = ["cobro_manual", "pago_por_cuenta", "pago_por_cuenta_anulado"];
+    //   - `cobro_tienda_anulado` (461): lo anade `20260926120100_cobro_tienda_461_anulacion_y_checks`.
+    const AGREGADAS_DESPUES_TIENDA = [
+      "cobro_manual",
+      "pago_por_cuenta",
+      "pago_por_cuenta_anulado",
+      "cobro_tienda_anulado",
+    ];
     const clasificadas = [...ramasTienda.values()].flat();
     expect([...clasificadas].sort()).toEqual(
       valoresDelEnum("WalletTiendaMovimientoCategoria")

@@ -25,8 +25,25 @@
 --   · `SUM(retenidas)` es el total del sistema; la fila de un cierre es lo que la marca de
 --     `/cierres-admin` debe enseñar; la suma de `destino_tipo = 'bodega_central'` es la cifra que ven
 --     maestro y admin (R6/R7). Compararlo con las pantallas es parte del recorrido (T5.3).
+-- ⚠️ `hoy_cr` (corregido el 2026-09-25 en el cierre de la 461, medido en Postgres). La forma anterior,
+-- `((now() AT TIME ZONE 'UTC') AT TIME ZONE 'America/Costa_Rica')::date`, NO da el dia de Costa Rica
+-- porque `now()` es `timestamptz`: `timestamptz AT TIME ZONE 'UTC'` devuelve un `timestamp` SIN zona,
+-- y `timestamp AT TIME ZONE 'America/Costa_Rica'` lo REINTERPRETA como hora de CR (devuelve un
+-- `timestamptz` 6 h DESPUES del instante real); el `::date` final se evalua en la zona de la SESION.
+-- Resultado: con sesion UTC (Supabase) decia MAÑANA de 18:00 a 06:00 UTC —de las 12:00 CR a la
+-- medianoche CR—, y con la sesion local (UTC-5) de 23:00 a 06:00 UTC. Lo que se veia: el test
+-- `reprogramadas-retenidas-sql-real` (R55) en rojo solo por la tarde (`expected 16 to be 13`: contaba
+-- las siembras con fecha de MAÑANA) y verde por la mañana. `timestamptz AT TIME ZONE 'zona'` a secas
+-- da el reloj local de esa zona y no depende de la sesion.
+--
+-- OJO: el patron doble SI es el correcto para las COLUMNAS, porque Prisma las guarda como `timestamp`
+-- SIN zona con el valor en UTC: `(col AT TIME ZONE 'UTC') AT TIME ZONE 'America/Costa_Rica'` primero
+-- las fija como UTC y luego las pasa al reloj de CR (asi va `solicitado_cr` mas abajo, y asi lo
+-- documenta `scripts/contraste-454.sql`). Lo que cambia es el PUNTO DE PARTIDA: `now()` ya lleva zona.
+-- Lo vigila `tests/integration/db/462/medir-462-hoy-cr.test.ts` (evalua ESTA expresion, leida del
+-- archivo, cada 30 min durante 48 h y bajo tres zonas de sesion, contra el dia CR calculado en JS).
 WITH params AS (
-  SELECT ((now() AT TIME ZONE 'UTC') AT TIME ZONE 'America/Costa_Rica')::date AS hoy_cr
+  SELECT (now() AT TIME ZONE 'America/Costa_Rica')::date AS hoy_cr
 ),
 -- Forma A: orden en `reprogramado`, gestion reprogramada VIGENTE (la mas reciente NO anulada, como
 -- `GESTION_REPROGRAMADA_VIGENTE`), nacida de visita real, con cierre no aprobado (= `!puedeLiberarse`).

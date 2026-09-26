@@ -72,6 +72,7 @@ function buildWalletDeps() {
     agregarPorCategoria: vi.fn(),
     obtenerPorOrigen: vi.fn(),
     primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: este camino no lo usa
+    obtenerPorClave: vi.fn(async () => null), // ficha 461 (R68): la relectura por clave; este camino no la usa
     crearMovimientoRegistrado: vi.fn().mockResolvedValue(1), // ficha 362: solo lo decidido por un humano // ficha 333: lectura por la clave del libro; este camino no la usa
   };
   const walletFeedService: IWalletFeedService = {
@@ -89,6 +90,8 @@ function buildWalletDeps() {
     // Ficha 344: la lectura por id acotada a la tienda. Este doble no la ejercita.
     obtenerPorIdDeTienda: vi.fn(async () => null),
     registrarCobroEnHistorial: vi.fn(async () => undefined), // exigido por IWalletTiendaMovimientoRepository (ficha 381); no ejercitado aqui
+    obtenerCobroPorId: vi.fn(async () => null), // ficha 461; no ejercitado aqui
+    nombreDeTienda: vi.fn(async () => ""), obtenerCobroPorClave: vi.fn(async () => null), // ficha 461; no ejercitado aqui
   };
   const walletTiendaFeedService: IWalletTiendaFeedService = {
     construirMovimientosPorTienda: vi.fn().mockResolvedValue([]),

@@ -69,6 +69,8 @@ export type ListarMovimientosDeFilaServiceResult =
 
 export type RegistrarMovimientoManualServiceResult =
   | { status: "ok"; movimiento: WalletMovimientoDTO }
+  /** Ficha 461 (R68): la MISMA clave ya tenia su fila; se devuelve esa y no se escribio nada. */
+  | { status: "ya_registrado"; movimiento: WalletMovimientoDTO }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -96,6 +98,18 @@ export interface EstadoDocumentoCaja {
 export interface LectoresDocumentosCaja {
   pagosPorCuenta: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
   aportes: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 461 (design §5.4, R20/R37) — el estado de los cobros de Ordenex a una tienda cuya linea de
+   * caja esta en la pagina (propia o completada). Lo implementa `CobroTiendaAnulacionRepository`.
+   * Tambien SIN valor por defecto: sin el, ninguna linea de cobro ofreceria «Anular…».
+   */
+  cobros: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 461 (R71, auditoria D3) — el estado de las CORRECCIONES de caja de la pagina (el id del
+   * «documento» es el de la propia fila). Lo implementa `AjusteCajaAnulacionRepository`. Sin valor
+   * por defecto: sin el, ninguna correccion ofreceria «Anular…».
+   */
+  ajustes: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
 }
 
 export interface IWalletService {

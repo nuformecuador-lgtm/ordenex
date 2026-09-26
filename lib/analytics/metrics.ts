@@ -669,7 +669,7 @@ const CATALOGO = [
     id: "dinero_en_caja",
     etiqueta: "Dinero en caja",
     descripcion:
-      "TESORERIA: el flujo de dinero registrado de la caja principal — el dinero que entro de verdad menos todo lo que salio, sin distinguir de quien es: incluye el contra-entrega cobrado a nombre de las tiendas, los reversos y los ajustes. NO suma aparte el flete, la comision ni sus impuestos: son la parte de Ordenex que se descuenta del contra-entrega de la tienda (o una deuda de la tienda), no dinero que entre a la caja. Es la misma cifra principal de la tarjeta de la caja; solo es el saldo real si hay un saldo inicial registrado. NO es lo que Ordenex gano (eso es ganancia_ordenex). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "TESORERIA: el flujo de dinero registrado de la caja principal — el dinero que entro de verdad menos todo lo que salio, sin distinguir de quien es: incluye el contra-entrega cobrado a nombre de las tiendas, los reversos y los ajustes. NO suma aparte el flete, la comision ni sus impuestos: son la parte de Ordenex que se descuenta del contra-entrega de la tienda (o una deuda de la tienda), no dinero que entre a la caja; ni el cobro de Ordenex a una tienda ni su anulacion, que tampoco son dinero que entre o salga (se toman del saldo de la tienda y se le devuelven). Es la misma cifra principal de la tarjeta de la caja; solo es el saldo real si hay un saldo inicial registrado. NO es lo que Ordenex gano (eso es ganancia_ordenex). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -704,6 +704,11 @@ const CATALOGO = [
         "ingreso_reverso_pago_por_cuenta_tienda",
         "ingreso_aporte_capital",
         "egreso_reverso_aporte_capital",
+        // FICHA 461 (R29): el cobro de Ordenex a una tienda y su anulacion. La caja entera, ahora 23.
+        // La cifra NO cambia con ellos (son cargos: no entran ni salen), pero la lista es «la caja
+        // entera» y la guardia la compara con el seed.
+        "ingreso_cobro_tienda",
+        "egreso_reverso_cobro_tienda",
       ],
     },
   },
@@ -711,7 +716,7 @@ const CATALOGO = [
     id: "ganancia_ordenex",
     etiqueta: "Ganancia de Ordenex",
     descripcion:
-      "RESULTADO: ingresos propios de Ordenex menos sus egresos propios, dejando fuera el dinero de terceros que solo pasa por la caja (el contra-entrega y su devolucion a la tienda). Es, numero por numero, lo que `derivarBalance` devolvia sobre el libro entero antes de la 173: no cambia de valor, cambia de nombre. Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "RESULTADO: ingresos propios de Ordenex menos sus egresos propios, dejando fuera el dinero de terceros que solo pasa por la caja (el contra-entrega y su devolucion a la tienda). Incluye lo que Ordenex les cobra a las tiendas (el cobro de Ordenex a una tienda es ganancia: se toma del saldo que le guardaba) y descuenta sus anulaciones. Es, numero por numero, lo que `derivarBalance` devolvia sobre el libro entero antes de la 173: no cambia de valor, cambia de nombre. Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -738,6 +743,10 @@ const CATALOGO = [
         "egreso_gasto_fijo",
         "egreso_gasto_variable",
         "egreso_indemnizacion",
+        // FICHA 461 (R29): DIECISEIS. El cobro de Ordenex a una tienda ES ganancia (HD1) y su
+        // anulacion la devuelve; los dos son propios en `NATURALEZA_POR_CATEGORIA`.
+        "ingreso_cobro_tienda",
+        "egreso_reverso_cobro_tienda",
       ],
     },
   },
@@ -774,6 +783,8 @@ const CATALOGO = [
         // FICHA 459: el pago por cuenta de la tienda y su anulacion (mismo motivo: `string[]`).
         "pago_por_cuenta",
         "pago_por_cuenta_anulado",
+        // FICHA 461 (R29): el credito de la anulacion de un cobro de Ordenex (mismo motivo).
+        "cobro_tienda_anulado",
       ],
     },
   },

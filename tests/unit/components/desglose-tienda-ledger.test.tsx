@@ -80,7 +80,7 @@ describe("DesgloseTiendaLedger — el cobro aparece en el libro de la tienda (38
   it("pinta la fila con su fecha, su tipo, su nombre, su importe y su origen", () => {
     envolver(<DesgloseTiendaLedger movimientos={[COBRO, FLETE]} />);
 
-    const fila = filaCon("Cobro de Ordenex");
+    const fila = filaCon("Ordenex te cobró");
     expect(within(fila).getByText("2026-09-08")).toBeInTheDocument();
     // Un cobro BAJA el disponible de la tienda: es un débito, como un flete.
     expect(within(fila).getByText("Débito")).toBeInTheDocument();
@@ -88,15 +88,15 @@ describe("DesgloseTiendaLedger — el cobro aparece en el libro de la tienda (38
     expect(within(fila).getByText("₡15.000")).toBeInTheDocument();
     // El origen dice que lo registró una persona, y arrastra el motivo que tecleó.
     expect(
-      within(fila).getByText("Manual · Material de despacho entregado en bodega"),
+      within(fila).getByText("Registrado a mano · Material de despacho entregado en bodega"),
     ).toBeInTheDocument();
   });
 
   it("y no se come las otras filas del libro: el flete sigue estando", () => {
     // Anti-vacuidad de la anterior: si la tabla pintara UNA sola fila, o ninguna, se vería.
     envolver(<DesgloseTiendaLedger movimientos={[COBRO, FLETE]} />);
-    expect(screen.getByText("Cobro de Ordenex")).toBeInTheDocument();
-    expect(screen.getByText("Flete")).toBeInTheDocument();
+    expect(screen.getByText("Ordenex te cobró")).toBeInTheDocument();
+    expect(screen.getByText("Ordenex te cobró el flete")).toBeInTheDocument();
     expect(screen.getAllByRole("row")).toHaveLength(3); // cabecera + dos movimientos
   });
 
@@ -108,8 +108,8 @@ describe("DesgloseTiendaLedger — el cobro aparece en el libro de la tienda (38
         movimientos={[COBRO, { ...FLETE, id: "aj", categoria: "ajuste_debito" }]}
       />,
     );
-    expect(screen.getByText("Cobro de Ordenex")).toBeInTheDocument();
-    expect(screen.getByText("Ajuste (débito)")).toBeInTheDocument();
+    expect(screen.getByText("Ordenex te cobró")).toBeInTheDocument();
+    expect(screen.getByText("Corrección en tu contra")).toBeInTheDocument();
   });
 
   it("no se pinta el valor CRUDO del enum: la tienda lee palabras, no `cobro_manual`", () => {
@@ -127,7 +127,7 @@ describe("DesgloseTiendaLedger — el cobro aparece en el libro de la tienda (38
 });
 
 describe("MiWalletFiltros — la tienda puede filtrar por el concepto del cobro (381/R35)", () => {
-  it("el selector de concepto ofrece «Cobro de Ordenex»", async () => {
+  it("el selector de concepto ofrece «Ordenex te cobró»", async () => {
     const user = userEvent.setup();
     render(
       <MiWalletFiltros
@@ -145,10 +145,10 @@ describe("MiWalletFiltros — la tienda puede filtrar por el concepto del cobro 
 
     // La opción sale SOLA del SEED del enum: no hay ninguna lista de filtro escrita a mano, y
     // por eso el concepto nuevo es filtrable sin tocar una línea de esta pantalla.
-    expect(opciones).toContain("Cobro de Ordenex");
+    expect(opciones).toContain("Ordenex te cobró");
     // Y sigue ofreciendo los de siempre, en la primera posición el «todos».
     expect(opciones[0]).toBe("Todos los conceptos");
-    expect(opciones).toContain("COD recaudado");
-    expect(opciones).toContain("Ajuste (débito)");
+    expect(opciones).toContain("Cobrado a tus clientes en contra-entrega");
+    expect(opciones).toContain("Corrección en tu contra");
   }, 15000);
 });

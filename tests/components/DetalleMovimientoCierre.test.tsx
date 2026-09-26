@@ -139,10 +139,10 @@ function pintar(movimientos: WalletMovimientoDTO[] = [movimiento()]) {
 }
 
 /** Nombres accesibles compuestos con el concepto y la fecha de SU fila (R5). */
-const ABRIR_FLETE = `Ver las órdenes que componen Flete del ${FECHA_FILA}`;
-const ABRIR_COMISION = `Ver las órdenes que componen Comisión COD del ${FECHA_FILA}`;
-const PANEL_FLETE = `Órdenes que componen Flete del ${FECHA_FILA}`;
-const PANEL_COMISION = `Órdenes que componen Comisión COD del ${FECHA_FILA}`;
+const ABRIR_FLETE = `Ver las órdenes que componen Flete cobrado a la tienda del ${FECHA_FILA}`;
+const ABRIR_COMISION = `Ver las órdenes que componen Comisión de contra-entrega cobrada a la tienda del ${FECHA_FILA}`;
+const PANEL_FLETE = `Órdenes que componen Flete cobrado a la tienda del ${FECHA_FILA}`;
+const PANEL_COMISION = `Órdenes que componen Comisión de contra-entrega cobrada a la tienda del ${FECHA_FILA}`;
 
 function abrir(nombre: string) {
   return userEvent.click(screen.getByRole("button", { name: nombre }));
@@ -412,10 +412,10 @@ describe("Ficha 344 — el concepto que no se reparte (R48)", () => {
     });
     pintar([movimiento({ categoria: "egreso_pago_mensajero", tipo: "egreso" })]);
 
-    await abrir(`Ver las órdenes que componen Pago a mensajero del ${FECHA_FILA}`);
+    await abrir(`Ver las órdenes que componen Ordenex le paga a un mensajero del ${FECHA_FILA}`);
 
     const region = await screen.findByRole("region", {
-      name: `Órdenes que componen Pago a mensajero del ${FECHA_FILA}`,
+      name: `Órdenes que componen Ordenex le paga a un mensajero del ${FECHA_FILA}`,
     });
 
     // MUTACIÓN QUE ESTE CASO MATA: que la rama `sin_reparto` se quede MUDA (un panel vacío, o

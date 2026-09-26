@@ -63,7 +63,9 @@ const INSTANTE_ANULACION = "2026-08-05T14:30:00.000Z";
  * 2026-07-30, seis dias antes. R77 se mide con esa distancia.
  */
 const AHORA = new Date("2026-08-05T20:30:00.000Z");
-const DIA_DE_LA_ANULACION = "2026-08-05T00:00:00.000Z";
+// Ficha 461 (R73, auditoria T2): el contra-asiento se fecha al INICIO del dia CR de la anulacion
+// (06:00Z), no a la medianoche UTC: a las 00:00Z el rollup diario lo contaba el dia anterior.
+const DIA_DE_LA_ANULACION = "2026-08-05T06:00:00.000Z";
 const DIA_DEL_PAGO = "2026-07-30";
 
 /** El pago a una TIENDA que se va a anular, vigente y con todos sus datos. */
@@ -882,18 +884,20 @@ describe("R77 — la fecha del contraasiento es la de HOY, no la del pago", () =
     await d.service.anularPago(anular(), ACTOR_ADMIN);
 
     expect(contraasientoDeTienda(d.tiendaRepo).fechaMovimiento?.toISOString()).toBe(
-      "2026-08-05T00:00:00.000Z",
+      "2026-08-05T06:00:00.000Z",
     );
   });
 
-  it("se fecha a MEDIANOCHE UTC del dia, la convencion de las columnas `@db.Date` (§2.4)", async () => {
-    // Con 06:00Z el movimiento quedaria FUERA de su propio dia al filtrar por `hasta`.
+  it("se fecha a las 06:00Z, el INICIO del dia en Costa Rica (ficha 461/R73), no a la medianoche UTC", async () => {
+    // La 172 elegia 00:00Z para que el asiento entrara por los dos bordes de un filtro que comparaba
+    // contra `z.coerce.date()`. Con los filtros en dias CR (461/R72) esa razon desaparece, y a las
+    // 00:00Z el rollup diario (`fecha_movimiento − 6 h`) contaba el asiento el dia ANTERIOR.
     const d = buildDobles({ creditos: "100000.00", debitos: "15000.00" });
 
     await d.service.anularPago(anular(), ACTOR_ADMIN);
 
     const iso = contraasientoDeTienda(d.tiendaRepo).fechaMovimiento?.toISOString() ?? "";
-    expect(iso.endsWith("T00:00:00.000Z")).toBe(true);
+    expect(iso.endsWith("T06:00:00.000Z")).toBe(true);
   });
 
   it("R78: la fecha REAL del pago anulado no cambia (el documento es inmutable)", async () => {
@@ -922,10 +926,10 @@ describe("R77 — la fecha del contraasiento es la de HOY, no la del pago", () =
     await segunda.service.anularPago(anular(), ACTOR_ADMIN);
 
     expect(contraasientoDeTienda(primera.tiendaRepo).fechaMovimiento?.toISOString()).toBe(
-      "2026-08-05T00:00:00.000Z",
+      "2026-08-05T06:00:00.000Z",
     );
     expect(contraasientoDeTienda(segunda.tiendaRepo).fechaMovimiento?.toISOString()).toBe(
-      "2026-09-01T00:00:00.000Z",
+      "2026-09-01T06:00:00.000Z",
     );
   });
 });

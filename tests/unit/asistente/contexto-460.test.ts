@@ -45,10 +45,17 @@ const OFICINA: RolValue[] = ["maestro", "admin"];
 const FUERA_DE_OFICINA: RolValue[] = ["mensajero", "adminTienda", "adminSatelite"];
 const PERSONAS: RolValue[] = [...OFICINA, ...FUERA_DE_OFICINA];
 
+// FICHA 461 (T D.1, design §11) — REESCRITO donde citaba nombres retirados (design §7.9): «Pago por
+// cuenta de una tienda, o cobrar un costo…» → «Ordenex paga un gasto de una tienda, u Ordenex le cobra a
+// una tienda…»; «**Pago por cuenta de la tienda**» → «**Ordenex paga un gasto de la tienda**»;
+// «**Cobro de Ordenex**» → «**Ordenex le cobra a la tienda**»; «**Pago por cuenta anulado**» → «**Ordenex
+// anuló un pago hecho por ti**»; «## Un pago que Ordenex hizo por tu cuenta» → «## Un pago que Ordenex
+// hizo por ti». Lo que la 459/460 protegía —que la explicación LLEGA al rol que la necesita y no al
+// que no— se afirma igual, con los nombres nuevos. Listado en `progress/impl_461_frontend.md`.
 describe("459 — la oficina puede preguntar por la caja nueva", () => {
-  it.each(OFICINA)("%s: la diferencia entre pago por cuenta y cobrar un costo, con su ejemplo", (rol) => {
+  it.each(OFICINA)("%s: la diferencia entre pagar un gasto de una tienda y cobrarle, con su ejemplo", (rol) => {
     const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
-    expect(caja).toContain("Pago por cuenta de una tienda, o cobrar un costo: no son lo mismo");
+    expect(caja).toContain("Ordenex paga un gasto de una tienda, u Ordenex le cobra a una tienda: no son lo mismo");
     expect(caja).toContain("¿salió dinero de Ordenex hacia otra persona?");
     expect(caja).toContain("Elegir el equivocado descuadra la caja.");
     // El ejemplo: el mismo pago, bien y mal registrado.
@@ -82,26 +89,26 @@ describe("459 — la oficina puede preguntar por la caja nueva", () => {
 
   it.each(OFICINA)("%s: Wallet · Tiendas distingue los dos conceptos en el desglose", (rol) => {
     const tiendas = cuerpoEnContexto(rol, "oficina/wallet-tiendas");
-    expect(tiendas).toContain("**Pago por cuenta de la tienda**");
-    expect(tiendas).toContain("**Cobro de Ordenex**");
-    expect(tiendas).toContain("**Un pago por cuenta no cuenta como un pago a la tienda**");
+    expect(tiendas).toContain("**Ordenex paga un gasto de la tienda**");
+    expect(tiendas).toContain("**Ordenex le cobra a la tienda**");
+    expect(tiendas).toContain("**Un pago de un gasto no cuenta como un pago a la tienda**");
   });
 
   it.each(FUERA_DE_OFICINA)("%s NO recibe la ayuda de la caja (acotamiento por rol)", (rol) => {
     const todo = textoDelContexto(rol);
     expect(contextoPara(docs, rol).map((d) => d.slug)).not.toContain("oficina/wallet-caja");
-    expect(todo).not.toContain("Pago por cuenta de una tienda, o cobrar un costo: no son lo mismo");
+    expect(todo).not.toContain("Ordenex paga un gasto de una tienda, u Ordenex le cobra a una tienda: no son lo mismo");
     expect(todo).not.toContain("**La app nunca propone una cifra.**");
   });
 });
 
-describe("459 — la tienda entiende un pago hecho por su cuenta en Mi wallet", () => {
-  it("adminTienda: Mi wallet explica el pago por cuenta, su anulación y que no es un Cobro de Ordenex", () => {
+describe("459 — la tienda entiende un pago hecho por ella en Mi wallet", () => {
+  it("adminTienda: Mi wallet explica el pago de un gasto, su anulación y que no es un cobro de Ordenex", () => {
     const wallet = cuerpoEnContexto("adminTienda", "tienda/mi-wallet");
-    expect(wallet).toContain("## Un pago que Ordenex hizo por tu cuenta");
+    expect(wallet).toContain("## Un pago que Ordenex hizo por ti");
     expect(wallet).toContain("**a quién se le pagó, el motivo, el método**");
-    expect(wallet).toContain("**Pago por cuenta anulado**");
-    expect(wallet).toContain("Un **Cobro de Ordenex** es otra cosa");
+    expect(wallet).toContain("**Ordenex anuló un pago hecho por ti**");
+    expect(wallet).toContain("No es lo mismo que **Ordenex pagó un gasto por ti**: en el cobro no le pagó nada a nadie.");
     expect(wallet).toContain("**tu saldo queda en contra**");
   });
 });

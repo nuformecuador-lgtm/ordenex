@@ -210,6 +210,11 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
   },
   "PagoPorCuentaTienda.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "PagoPorCuentaTiendaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // Ficha 461 (R10): quien anulo un cobro de Ordenex a una tienda. Solo el acceso total anula; la
+  // cuenta dedicada de una API key no llega a esa accion.
+  "CobroTiendaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // Ficha 461 (R69): quien anulo una correccion de caja. Solo el acceso total anula.
+  "AjusteCajaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "AporteCapital.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "AporteCapitalAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "GastoFijoCobro.decisor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },

@@ -21,6 +21,7 @@ import type {
   PagoMensajeroMovimientoDTO,
 } from "@/lib/types/wallet-mensajero";
 
+import { esClaveCuentasPorPagar } from "./cuentas-por-pagar-clave";
 import {
   COLUMNAS_DESCARGA_DESGLOSE_MENSAJERO,
   filaDescargaDesgloseMensajero,
@@ -298,11 +299,19 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
         El refresco es DIRIGIDO y lo hace el dueño de la clave: el bloque de pago refresca sus
         previsualizaciones y avisa acá, y acá se relee el desglose de ESTE mensajero —en la
         página y con los filtros que tenga puestos— y ninguno más.
+
+        Ficha 461 (auditoría P1): y la TABLA DE CUENTAS POR PAGAR, que es la fila de la que cuelga
+        este desglose. El pago mueve «Pagado» y «Cuenta por pagar» del mensajero, y esas cifras
+        viven en la fila de arriba: sin releerla, la tabla decía 5.100 y la cabecera 5.000 hasta
+        recargar. Es UNA lectura más (la página visible), no una por mensajero.
       */}
       <PagoMensajeroAcciones
         resumen={resumen}
         onRegistrado={async () => {
-          await mutate(esClaveDesgloseDe(mensajeroId));
+          await Promise.all([
+            mutate(esClaveDesgloseDe(mensajeroId)),
+            mutate(esClaveCuentasPorPagar),
+          ]);
         }}
       />
 

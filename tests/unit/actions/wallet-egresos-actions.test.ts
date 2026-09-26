@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   registrarEgresoAdministrativoAction,
@@ -54,7 +55,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R18: sin sesion -> unauthenticated, sin tocar el service", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "x" },
       { service, getActor: async () => null },
     );
     expect(r).toEqual({ status: "unauthenticated" });
@@ -64,7 +65,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R17: rol no autorizado -> forbidden (lo decide el service)", async () => {
     const service = fakeService({ registrarEgreso: vi.fn(async () => ({ status: "forbidden" as const })) });
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "sueldo", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "sueldo", monto: "100.00", descripcion: "x" },
       { service, getActor: async () => OTRO },
     );
     expect(r).toEqual({ status: "forbidden" });
@@ -73,7 +74,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R19: tipoEgreso 'gasto_fijo' (lo emite el cron) -> validation_error, sin tocar el service", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_fijo", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_fijo", monto: "100.00", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -83,7 +84,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R19: tipoEgreso desconocido -> validation_error", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "otro", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "otro", monto: "100.00", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -92,7 +93,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R4: monto no positivo -> validation_error", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_variable", monto: "0", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "0", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -102,7 +103,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R4: monto vacio -> validation_error", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_variable", monto: "", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -111,7 +112,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R5: descripcion vacia -> validation_error", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "   " },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "   " },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -120,7 +121,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("maestro con egreso valido -> ok, movimiento con monto STRING", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
@@ -201,7 +202,13 @@ describe("registrarEgresoAdministrativoAction — la fecha del egreso (R20/R21)"
   }
 
   function gasto(fecha: string) {
-    return { tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria", fecha };
+    return {
+      claveIdempotencia: randomUUID(), // ficha 461 (R66)
+      tipoEgreso: "gasto_variable",
+      monto: "1500.00",
+      descripcion: "Papeleria",
+      fecha,
+    };
   }
 
   it("R20: fecha FUTURA -> validation_error con la clave `fecha`, sin tocar el service", async () => {
@@ -260,7 +267,7 @@ describe("registrarEgresoAdministrativoAction — la fecha del egreso (R20/R21)"
     conRelojEnAhora();
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_fijo", monto: "100.00", descripcion: "x", fecha: "2026-08-28" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_fijo", monto: "100.00", descripcion: "x", fecha: "2026-08-28" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -271,7 +278,7 @@ describe("registrarEgresoAdministrativoAction — la fecha del egreso (R20/R21)"
     conRelojEnAhora();
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "sueldo", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "sueldo", monto: "100.00", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");

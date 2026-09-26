@@ -163,6 +163,8 @@ function casaWhere(fila: Record<string, unknown>, where: Record<string, unknown>
             return (valor as Date).getTime() >= (arg as Date).getTime();
           case "lte":
             return (valor as Date).getTime() <= (arg as Date).getTime();
+          case "lt": // ficha 461 (R72): la cota superior del rango es EXCLUSIVA
+            return (valor as Date).getTime() < (arg as Date).getTime();
           default:
             throw new Error(`el doble no implementa el operador "${op}" (mutacion?)`);
         }
@@ -308,10 +310,11 @@ describe("R52 — filtrar por un cierre incluye sus pagos y sus anulaciones", ()
     const prisma = buildPrisma();
 
     // Hasta el 31 de julio: entra el pago (fechado el 31) y no su contraasiento (2 de agosto,
-    // el dia de la anulacion, R77).
+    // el dia de la anulacion, R77). Ficha 461 (R72): `hasta` es EXCLUSIVO y el borde manda el
+    // inicio del dia SIGUIENTE, asi que «hasta el 31» llega aqui como el instante del 1 de agosto.
     const ids = await idsFiltrandoPor(prisma, {
       cierreId: C1,
-      hasta: new Date("2026-07-31T00:00:00.000Z"),
+      hasta: new Date("2026-08-01T00:00:00.000Z"),
     });
 
     expect(ids).toContain("liquidacion-c1");

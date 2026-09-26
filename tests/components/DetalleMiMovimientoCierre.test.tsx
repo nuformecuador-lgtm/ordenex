@@ -121,10 +121,10 @@ function pintar(movimientos: WalletTiendaMovimientoDTO[] = [movimiento()]) {
   return envolver(<DesgloseTiendaLedger movimientos={movimientos} />);
 }
 
-const ABRIR_FLETE = `Ver las órdenes que componen Flete del ${FECHA_FILA}`;
-const ABRIR_COMISION = `Ver las órdenes que componen Comisión COD del ${FECHA_FILA}`;
-const PANEL_FLETE = `Órdenes que componen Flete del ${FECHA_FILA}`;
-const PANEL_COMISION = `Órdenes que componen Comisión COD del ${FECHA_FILA}`;
+const ABRIR_FLETE = `Ver las órdenes que componen Ordenex te cobró el flete del ${FECHA_FILA}`;
+const ABRIR_COMISION = `Ver las órdenes que componen Ordenex te cobró la comisión de contra-entrega del ${FECHA_FILA}`;
+const PANEL_FLETE = `Órdenes que componen Ordenex te cobró el flete del ${FECHA_FILA}`;
+const PANEL_COMISION = `Órdenes que componen Ordenex te cobró la comisión de contra-entrega del ${FECHA_FILA}`;
 
 function abrir(nombre: string) {
   return userEvent.click(screen.getByRole("button", { name: nombre }));

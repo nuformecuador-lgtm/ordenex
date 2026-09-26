@@ -57,11 +57,13 @@ const COMPOSICION: ComposicionGananciaDTO = {
     ingreso_iva_flete_devolucion: "520.00",
     ingreso_iva_comision_cod: "30.25",
     ingreso_ajuste: "90.00",
+    ingreso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
   },
   totalIngresos: "5709.75",
   egresos: {
     egreso_pago_mensajero: "700.00",
     egreso_ajuste: "45.75",
+    egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
   },
   otrosEgresos: "194.25",
   hayOtrosEgresos: true,
@@ -92,14 +94,14 @@ const RESUMEN: CajaResumenDTO = {
 };
 
 /** Nombres accesibles de los controles que abren cada fila (R24). */
-const ABRIR_MENSAJEROS = "Ver los movimientos de Pagos a mensajeros";
-const ABRIR_AJUSTES = "Ver los movimientos de Ajustes (egreso)";
+const ABRIR_MENSAJEROS = "Ver los movimientos de Pagos de Ordenex a mensajeros";
+const ABRIR_AJUSTES = "Ver los movimientos de Correcciones de caja (resta)";
 const ABRIR_OTROS = "Ver los movimientos de Otros gastos de Ordenex";
-const ABRIR_FLETE = "Ver los movimientos de Flete";
+const ABRIR_FLETE = "Ver los movimientos de Flete cobrado a la tienda";
 
 /** Nombres accesibles de los paneles desplegados. */
-const PANEL_MENSAJEROS = "Movimientos de Pagos a mensajeros";
-const PANEL_AJUSTES = "Movimientos de Ajustes (egreso)";
+const PANEL_MENSAJEROS = "Movimientos de Pagos de Ordenex a mensajeros";
+const PANEL_AJUSTES = "Movimientos de Correcciones de caja (resta)";
 const PANEL_OTROS = "Movimientos de Otros gastos de Ordenex";
 
 function movimiento(over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO {
@@ -288,7 +290,7 @@ describe("Ficha 339 — lo que enseña cada movimiento (R16/R17/R36)", () => {
 
     expect(await dentro.findByText("2026-08-14")).toBeInTheDocument();
     // R5 también aquí: la etiqueta legible del catálogo, nunca el valor del enum.
-    expect(dentro.getByText("Ajuste (egreso)")).toBeInTheDocument();
+    expect(dentro.getByText("Corrección de caja (resta)")).toBeInTheDocument();
     expect(dentro.getByText(/Faltante al cuadrar la caja/)).toBeInTheDocument();
     expect(dentro.getByText("₡45,75")).toBeInTheDocument();
     expect(dentro.queryByText("egreso_ajuste")).toBeNull();
@@ -309,7 +311,7 @@ describe("Ficha 339 — lo que enseña cada movimiento (R16/R17/R36)", () => {
     const celdas = await dentro.findAllByRole("cell");
     const textos = celdas.map((c) => (c.textContent ?? "").trim());
     // Ninguna celda muda, y la del detalle dice de dónde viene el movimiento.
-    expect(textos).toContain("Pago a mensajero");
+    expect(textos).toContain("Pago de Ordenex a un mensajero");
     expect(textos.filter((t) => t === "")).toEqual([]);
   });
 
@@ -346,11 +348,12 @@ describe("Ficha 339 — el nombre de cada control y sus estados (R24/R25/R26)", 
     pintar();
 
     const controles = screen.getAllByRole("button", { name: /^Ver los movimientos de / });
-    // Las catorce filas del catálogo: 7 de ingreso + 6 de egreso + «Otros», que aquí se pinta.
-    expect(controles).toHaveLength(14);
+    // Las dieciséis filas del catálogo: 8 de ingreso + 7 de egreso + «Otros», que aquí se pinta.
+    // (Ficha 461, R27: + «Ordenex le cobra a una tienda» y + «Cobros a una tienda anulados».)
+    expect(controles).toHaveLength(16);
 
     const nombres = controles.map((b) => b.getAttribute("aria-label") ?? "");
-    expect(new Set(nombres).size).toBe(14);
+    expect(new Set(nombres).size).toBe(16);
     // Y cada nombre CONTIENE el rótulo visible de su fila («Label in Name»).
     expect(nombres).toContain(ABRIR_MENSAJEROS);
     expect(nombres).toContain(ABRIR_AJUSTES);
@@ -662,7 +665,7 @@ describe("Ficha 339 — el detalle en un teléfono (arreglo móvil)", () => {
     // Fecha, concepto y detalle siguen en pantalla: viajan juntos, no desaparecen.
     expect(await dentro.findByText("2026-08-14")).toBeInTheDocument();
     // R5: la etiqueta legible del catálogo, nunca el valor del enum.
-    expect(dentro.getByText("Ajuste (egreso)")).toBeInTheDocument();
+    expect(dentro.getByText("Corrección de caja (resta)")).toBeInTheDocument();
     expect(dentro.queryByText("egreso_ajuste")).toBeNull();
     // R17: el origen legible y su descripción.
     expect(dentro.getByText(/Faltante al cuadrar la caja/)).toBeInTheDocument();
