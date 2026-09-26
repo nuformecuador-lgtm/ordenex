@@ -1,0 +1,28 @@
+{
+  "pasos": [
+    {
+      "id": "asistente_maestro",
+      "ruta": "/wallet",
+      "pregunta": "¿cómo registro que Nuform me pagó?",
+      "respuesta": "¿cómo registro que Nuform me pagó?\n\nPara registrar que una tienda como Nuform te pagó (cuando tenía saldo en contra), tenés dos caminos, y hacen lo mismo:\n\nDesde Wallet · Caja\n1. Entrá a Wallet · Caja y tocá Registrar movimiento.\n2. Elegís el concepto Una tienda le paga a Ordenex (está en el grupo «Llega dinero a la caja»).\n3. Completás: la tienda (Nuform), el monto —solo se admite hasta lo que debe—, la fecha real del pago, el motivo, el método de pago (Efectivo, SINPE o Transferencia; con SINPE o transferencia la referencia es obligatoria) y, si tenés, el comprobante.\n4. Al registrarlo te va a decir en cuánto quedó el saldo de Nuform.\n\nDesde Wallet · Tiendas\n1. Entrá a Wallet · Tiendas, abrí el desglose de Nuform.\n2. Si Nuform está en contra, vas a ver la acción Registrar pago de la tienda a Ordenex — es el mismo formulario, con la tienda ya elegida.\n\nOjo: esta opción solo aparece si Nuform tiene saldo en contra. Si está en cero o a favor, no hay nada que registrar por ese lado.\nWallet · Caja\nWallet · Tiendas"
+    },
+    {
+      "id": "asistente_maestro",
+      "ruta": "/wallet",
+      "pregunta": "¿sube la ganancia si una tienda me paga?",
+      "respuesta": "¿sube la ganancia si una tienda me paga?\n\nNo, la ganancia no sube. Cuando una tienda te paga porque tenía saldo en contra, en Wallet · Caja eso entra como «Una tienda le paga a Ordenex»: sube lo que entró y la cifra grande, y sube lo que Ordenex les debe a las tiendas (porque la deuda de esa tienda baja), pero la ganancia de Ordenex no cambia — lo que la tienda debía ya se había contado como ganancia cuando se aprobó cada cierre correspondiente.\n\nLo ves en el libro de la caja con ese nombre, y también en el desglose de la tienda dentro de Wallet · Tiendas.\nWallet · Caja"
+    },
+    {
+      "id": "asistente_maestro",
+      "ruta": "/wallet",
+      "pregunta": "¿cómo anulo un pago de una tienda?",
+      "respuesta": "¿cómo anulo un pago de una tienda?\n\nDepende de cuál de los dos pagos querés anular, porque se hacen desde pantallas distintas:\n\nSi es un pago que Ordenex le hizo a la tienda (le pagaste su saldo a favor):\nSe anula desde Wallet · Tiendas, abriendo el desglose de esa tienda. Ahí el pago tiene su opción de anular. Si te dice «Este pago ya estaba anulado», es que alguien se te adelantó — recargá para ver cómo quedó.\n\nSi es un pago que la tienda te hizo a Ordenex (porque estaba en contra y te pagó su deuda):\nSe anula desde Wallet · Caja, buscando la línea «Una tienda le paga a Ordenex» en el libro de movimientos, con el botón Anular…. Ahí el motivo es obligatorio, y se registra un movimiento contrario por el mismo monto: el saldo de la tienda vuelve a bajar (vuelve a deber), y lo que Ordenex les debe a las tiendas también baja en el monto. El registro original no se borra.\n\nSi me decís cuál de los dos es, te confirmo el camino exacto.\nWallet · Tiendas\nWallet · Caja"
+    },
+    {
+      "id": "asistente_tienda",
+      "ruta": "/mi-wallet",
+      "pregunta": "¿qué es Le pagaste a Ordenex?",
+      "respuesta": "¿qué es Le pagaste a Ordenex?\n\n«Le pagaste a Ordenex» es un movimiento que ves en Mi wallet, dentro del desglose de tu saldo.\n\nAparece cuando tu saldo con Ordenex quedó en contra (le debés a Ordenex) y le hacés un pago para cubrir eso. Ese movimiento sube tu saldo en el monto pagado, y muestra el motivo, el método y la referencia del pago.\n\nUn par de detalles:\n- Si la oficina anula ese pago por error, vas a ver una línea «Ordenex anuló el pago que le hiciste», que hace que tu saldo vuelva a bajar.\n- El comprobante de ese pago lo guarda la oficina, no se abre desde tu wallet.\n- El pago en sí se coordina con la oficina; desde tu pantalla solo lo ves reflejado, no lo registrás vos.\nMi wallet"
+    }
+  ]
+}

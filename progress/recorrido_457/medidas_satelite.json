@@ -1,0 +1,45 @@
+{
+  "pasos": [
+    {
+      "id": "login_satelite",
+      "email": "satelite.qa@ordenex.test",
+      "via": "directo"
+    },
+    {
+      "id": "satelite_/wallet",
+      "http": 404,
+      "h1": "No encontramos esta página",
+      "url": "http://localhost:3457/wallet"
+    },
+    {
+      "id": "satelite_/wallet/tiendas",
+      "http": 404,
+      "h1": "No encontramos esta página",
+      "url": "http://localhost:3457/wallet/tiendas"
+    },
+    {
+      "id": "satelite_/mi-wallet",
+      "http": 404,
+      "h1": "No encontramos esta página",
+      "url": "http://localhost:3457/mi-wallet"
+    },
+    {
+      "id": "satelite_actions",
+      "registrar": {
+        "http": 200,
+        "status": "forbidden",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"forbidden\"}\n"
+      },
+      "anular": {
+        "http": 200,
+        "status": "forbidden",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"forbidden\"}\n"
+      },
+      "comprobante": {
+        "http": 200,
+        "status": "forbidden",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"forbidden\"}\n"
+      }
+    }
+  ]
+}

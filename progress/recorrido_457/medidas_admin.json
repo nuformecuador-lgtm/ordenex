@@ -1,0 +1,496 @@
+{
+  "pasos": [
+    {
+      "id": "login_admin",
+      "email": "admin.qa@ordenex.test",
+      "via": "directo"
+    },
+    {
+      "id": "contexto",
+      "rol": "admin",
+      "marca": "R457-admin-muhxysg1",
+      "tienda": "Bruno Tienda R457",
+      "hoyCR": "2026-09-25",
+      "ayerCR": "2026-09-24",
+      "utcAhora": "2026-09-26T05:20:55.681Z"
+    },
+    {
+      "id": "prep_cobro",
+      "saldoAntesDb": "0.00",
+      "cobro": "10000.00",
+      "aviso": "Cobro registrado. El saldo de Bruno Tienda R457 Tienda queda en -₡10.000 · En contra. La tienda le debe ese dinero a Ordenex.\n×",
+      "saldoDespuesDb": "-10000.00"
+    },
+    {
+      "id": "paso1_dialogo",
+      "grupos": [
+        "Sale dinero de Ordenex",
+        "Gasto de Ordenex",
+        "Sueldo",
+        "Ordenex paga un gasto de una tienda",
+        "Corrección de caja (resta)",
+        "Llega dinero a la caja",
+        "Aporte de dinero a la caja",
+        "Una tienda le paga a Ordenex",
+        "Corrección de caja (suma)",
+        "Se descuenta del saldo de una tienda",
+        "Ordenex le cobra a una tienda"
+      ],
+      "opciones": [
+        "Gasto de Ordenex",
+        "Sueldo",
+        "Ordenex paga un gasto de una tienda",
+        "Corrección de caja (resta)",
+        "Aporte de dinero a la caja",
+        "Una tienda le paga a Ordenex",
+        "Corrección de caja (suma)",
+        "Ordenex le cobra a una tienda"
+      ],
+      "nOpciones": 8,
+      "efecto": "Llega dinero de la tienda a la caja: paga lo que debe y su saldo sube; la ganancia de Ordenex no cambia.",
+      "libro": "Se registra en la caja como «Una tienda le paga a Ordenex» y en el libro de la tienda como «La tienda le paga a Ordenex».",
+      "cabecera": "Una tienda le paga a Ordenex",
+      "descripcionDialogo": "Una tienda le paga a Ordenex |  | Elegí la tienda, el monto, la fecha real y el método. Solo se admite si la tienda tiene saldo en contra y hasta lo que debe. El pago no se edita: si hay un error, se anula desde el libro de la caja con un motivo. | ",
+      "labels": [
+        "Concepto",
+        "Tienda que paga",
+        "Monto",
+        "Fecha",
+        "Motivo del pago",
+        "Método de pago*",
+        "Comprobante (opcional)"
+      ],
+      "antesSinpe": {
+        "referencia": 0,
+        "comprobante": 1,
+        "metodo": 1,
+        "tienda": 1
+      },
+      "trasSinpe": {
+        "referencia": 1
+      },
+      "pistaTienda": "Solo se admite si la tienda tiene saldo en contra, y hasta lo que debe."
+    },
+    {
+      "id": "paso2a_con_pdf",
+      "aviso": "No se pudo guardar el comprobante, así que no se registró nada. Probá de nuevo.",
+      "toast": null,
+      "abonosEnDb": 0,
+      "saldoDb": "-10000.00"
+    },
+    {
+      "id": "paso2b_sin_pdf",
+      "aviso": "Pago registrado. El saldo de Bruno Tienda R457 Tienda queda en -₡6.000 · En contra. La tienda todavía le debe ese dinero a Ordenex.\n×",
+      "toasts": [
+        "Pago registrado. El saldo de Bruno Tienda R457 Tienda queda en -₡6.000 · En contra. La tienda todavía le debe ese dinero a Ordenex.\n×"
+      ],
+      "saldoDb": "-6000.00"
+    },
+    {
+      "id": "paso3_cifras",
+      "delta": {
+        "principal": {
+          "antes": "₡13.507.932,72",
+          "despues": "₡13.511.932,72",
+          "delta": 4000
+        },
+        "entro": {
+          "antes": "₡13.556.733,22",
+          "despues": "₡13.560.733,22",
+          "delta": 4000
+        },
+        "salio": {
+          "antes": "₡48.800,50",
+          "despues": "₡48.800,50",
+          "delta": 0
+        },
+        "deTiendas": {
+          "antes": "-₡10.000",
+          "despues": "-₡6.000",
+          "delta": 4000
+        },
+        "ganancia": {
+          "antes": "₡13.517.932,72",
+          "despues": "₡13.517.932,72",
+          "delta": 0
+        },
+        "capital": {
+          "antes": "₡0",
+          "despues": "₡0",
+          "delta": 0
+        }
+      },
+      "saldoDb": "-6000.00"
+    },
+    {
+      "id": "paso3_libro",
+      "filas": [
+        "\t2026-09-24\tIngreso\tUna tienda le paga a Ordenex\t₡4.000\tPago de una tienda a Ordenex · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456 | Tienda | Anular…"
+      ],
+      "botones": [
+        "Anular… [Anular Una tienda le paga a Ordenex del 2026-09-24 por ₡4.000]"
+      ],
+      "db": [
+        {
+          "id": "8ffa8cac-875e-47f8-aaa1-7eafb9ede185",
+          "monto": "4000.00",
+          "fecha_pago": "2026-09-24",
+          "metodo": "SINPE",
+          "referencia": "123456",
+          "caja": [
+            {
+              "tipo": "ingreso",
+              "cat": "ingreso_abono_tienda",
+              "monto": "4000.00",
+              "fecha": "2026-09-24T06:00:00",
+              "desc": "Bruno Tienda R457 Tienda · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456"
+            }
+          ],
+          "tienda": [
+            {
+              "tipo": "credito",
+              "cat": "abono_tienda",
+              "monto": "4000.00",
+              "fecha": "2026-09-24T06:00:00",
+              "desc": "R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "doble_clic",
+      "aviso": "Pago registrado. El saldo de Bruno Tienda R457 Tienda queda en -₡5.000 · En contra. La tienda todavía le debe ese dinero a Ordenex.\n×",
+      "toastsPagoVisibles": 0,
+      "filasEnPantalla": 1,
+      "filas": [
+        "\t2026-09-25\tIngreso\tUna tienda le paga a Ordenex\t₡1.000\tPago de una tienda a Ordenex · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 doble clic · Efectivo | Tienda | Anular…"
+      ],
+      "db": [
+        {
+          "documentos": 1,
+          "filas_caja": 1,
+          "filas_tienda": 1,
+          "historial": 1
+        }
+      ],
+      "delta": {
+        "principal": {
+          "antes": "₡36.000",
+          "despues": "₡13.512.932,72",
+          "delta": 13476932.72
+        },
+        "entro": {
+          "antes": "₡36.000",
+          "despues": "₡13.561.733,22",
+          "delta": 13525733.22
+        },
+        "salio": {
+          "antes": "₡0",
+          "despues": "₡48.800,50",
+          "delta": 48800.5
+        },
+        "deTiendas": {
+          "antes": "₡36.000",
+          "despues": "-₡5.000",
+          "delta": -41000
+        },
+        "ganancia": {
+          "antes": "₡0",
+          "despues": "₡13.517.932,72",
+          "delta": 13517932.72
+        },
+        "capital": {
+          "antes": "₡0",
+          "despues": "₡0",
+          "delta": 0
+        }
+      },
+      "saldoDb": "-5000.00"
+    },
+    {
+      "id": "excede",
+      "deudaDb": "5000.00",
+      "montoIntentado": 7000,
+      "bajoMonto": "La tienda debe ₡5.000: el pago no puede superar ese importe.",
+      "bajoTienda": "Solo se admite si la tienda tiene saldo en contra, y hasta lo que debe.",
+      "dialogoAbierto": true,
+      "montoConservado": "7000"
+    },
+    {
+      "id": "salda",
+      "monto": 5000,
+      "aviso": "Pago registrado. El saldo de Bruno Tienda R457 Tienda queda en ₡0 · En cero.\n×",
+      "saldoDb": "0.00"
+    },
+    {
+      "id": "sin_deuda",
+      "bajoTienda": "Solo se admite si la tienda tiene saldo en contra, y hasta lo que debe. / Esta tienda no tiene saldo en contra: no hay nada que pagar.",
+      "bajoMonto": "",
+      "abonosEnDb": 0
+    },
+    {
+      "id": "libro_filtros",
+      "opcionOfrecida": true,
+      "anuladoOfrecido": true,
+      "nOpciones": 26,
+      "enAyer": [
+        "\t2026-09-24\tIngreso\tUna tienda le paga a Ordenex\t₡4.000\tPago de una tienda a Ordenex · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456 | Tienda | Anular…"
+      ],
+      "enHoy": [
+        "\t2026-09-25\tIngreso\tUna tienda le paga a Ordenex\t₡5.000\tPago de una tienda a Ordenex · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 salda la deuda · Efectivo | Tienda | Anular…",
+        "\t2026-09-25\tIngreso\tUna tienda le paga a Ordenex\t₡1.000\tPago de una tienda a Ordenex · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 doble clic · Efectivo | Tienda | Anular…"
+      ]
+    },
+    {
+      "id": "paso7_anular",
+      "textoDialogo": "Anular el pago de una tienda a Ordenex | Se registrará hoy un movimiento contrario por ₡4.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada. | Una tienda le paga a Ordenex · 2026-09-24 · ₡4.000 | Motivo de la anulación* | Obligatorio. Queda guardado junto a la anulación. | Cancelar | Anular",
+      "botonDeshabilitadoSinMotivo": true,
+      "aviso": "Anulado. Se registró el movimiento contrario.\n×",
+      "delta": {
+        "principal": {
+          "antes": "₡13.517.932,72",
+          "despues": "₡13.513.932,72",
+          "delta": -4000
+        },
+        "entro": {
+          "antes": "₡13.566.733,22",
+          "despues": "₡13.566.733,22",
+          "delta": 0
+        },
+        "salio": {
+          "antes": "₡48.800,50",
+          "despues": "₡52.800,50",
+          "delta": 4000
+        },
+        "deTiendas": {
+          "antes": "₡0",
+          "despues": "-₡4.000",
+          "delta": -4000
+        },
+        "ganancia": {
+          "antes": "₡13.517.932,72",
+          "despues": "₡13.517.932,72",
+          "delta": 0
+        },
+        "capital": {
+          "antes": "₡0",
+          "despues": "₡0",
+          "delta": 0
+        }
+      },
+      "filas": {
+        "filasOriginal": [
+          "\t2026-09-24\tIngreso\tUna tienda le paga a Ordenex\t₡4.000\tPago de una tienda a Ordenex · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456 | Tienda | Anulado"
+        ],
+        "filasReverso": [
+          "\t2026-09-25\tEgreso\tPago de una tienda a Ordenex anulado\t₡4.000\tPago de una tienda a Ordenex · Anulación · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456 | Tienda\t"
+        ],
+        "botonesReverso": [
+          []
+        ]
+      },
+      "botonesOriginal": [
+        []
+      ],
+      "segundoIntento": {
+        "http": 200,
+        "status": "ya_anulado",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"ya_anulado\"}\n"
+      },
+      "db": [
+        {
+          "anulaciones": 1,
+          "caja": [
+            {
+              "cat": "ingreso_abono_tienda",
+              "tipo": "ingreso",
+              "monto": "4000.00",
+              "fecha": "2026-09-24T06:00:00",
+              "desc": "Bruno Tienda R457 Tienda · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456"
+            },
+            {
+              "cat": "egreso_reverso_abono_tienda",
+              "tipo": "egreso",
+              "monto": "4000.00",
+              "fecha": "2026-09-25T06:00:00",
+              "desc": "Anulación · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456"
+            }
+          ]
+        }
+      ],
+      "saldoDb": "-4000.00"
+    },
+    {
+      "id": "ver_comprobante",
+      "botones": [
+        "Anular… [Anular Una tienda le paga a Ordenex del 2026-09-25 por ₡1.000]",
+        "Ver comprobante [Ver comprobante de Una tienda le paga a Ordenex del 2026-09-25]"
+      ],
+      "resultado": {
+        "toast": "No se pudo abrir el comprobante ahora. Probá de nuevo.\n×",
+        "toasts": [
+          "No se pudo abrir el comprobante ahora. Probá de nuevo.\n×"
+        ],
+        "popupUrl": "about:blank"
+      },
+      "respuesta": {
+        "http": 500,
+        "status": null,
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:E{\"digest\":\"1556021281\",\"name\":\"Error\",\"message\":\"abono-tienda: AppErrorCode inesperado INTERNAL\",\"stack\":[[\"toActionError\",\"R:\\\\job\\\\singularis\\\\projects\\\\ordenex\\\\.claude\\\\worktrees\\\\agent-aecf541b63dc98cab\\\\.next\\\\dev\\\\server\\\\chunk"
+      }
+    },
+    {
+      "id": "tiendas_desglose",
+      "filaTabla": "\tBruno Tienda R457\t-₡4.000\tEn contra",
+      "cabecera": [
+        "A favor de la tienda",
+        "₡10.000",
+        "Contra-entrega cobrado, correcciones a favor, pagos de la tienda a Ordenex y devoluciones por anulaciones",
+        "Cargos de Ordenex",
+        "₡14.000",
+        "Fletes, comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados",
+        "Pagado a la tienda",
+        "₡0",
+        "Lo que Ordenex le pagó a la tienda o pagó por ella",
+        "Saldo a favor",
+        "En contra",
+        "-₡4.000",
+        "Lo que queda tras los cargos y los pagos",
+        "",
+        "«Pagado a la tienda» sigue contando los pagos que se anularon, y «A favor de la tienda» suma la devolución de cada uno, así que esos dos importes quedan más altos de lo que se movió de verdad. «Saldo a favor» ya tiene todo eso descontado: ese es el número correcto.",
+        "",
+        "Registrar pago",
+        "Esta tienda no tiene saldo a favor: no hay nada que pagar."
+      ],
+      "filas": [
+        "2026-09-25\tDébito\tOrdenex le cobra a la tienda\t₡10.000\tRegistrado a mano · R457-admin-muhxysg1 preparación: deja la tienda en contra",
+        "2026-09-25\tCrédito\tLa tienda le paga a Ordenex\t₡1.000\tPago de una tienda a Ordenex · R457-admin-muhxysg1 doble clic · Efectivo",
+        "2026-09-25\tDébito\tPago de la tienda a Ordenex anulado\t₡4.000\tPago de una tienda a Ordenex · Anulación · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456",
+        "2026-09-25\tCrédito\tLa tienda le paga a Ordenex\t₡5.000\tPago de una tienda a Ordenex · R457-admin-muhxysg1 salda la deuda · Efectivo",
+        "2026-09-24\tCrédito\tLa tienda le paga a Ordenex\t₡4.000\tPago de una tienda a Ordenex · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456"
+      ],
+      "botonAbono": 1,
+      "descarga": {
+        "archivo": "desglose-de-bruno-tienda-r457-2026-09-25.xlsx",
+        "cabecera": [
+          "Fecha",
+          "Tipo",
+          "Concepto",
+          "Monto",
+          "Origen"
+        ],
+        "marcadas": [
+          "2026-09-25 | Débito | Ordenex le cobra a la tienda | 10000.00 | Registrado a mano · R457-admin-muhxysg1 preparación: deja la tienda en contra",
+          "2026-09-25 | Crédito | La tienda le paga a Ordenex | 1000.00 | Pago de una tienda a Ordenex · R457-admin-muhxysg1 doble clic · Efectivo",
+          "2026-09-25 | Débito | Pago de la tienda a Ordenex anulado | 4000.00 | Pago de una tienda a Ordenex · Anulación · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456",
+          "2026-09-25 | Crédito | La tienda le paga a Ordenex | 5000.00 | Pago de una tienda a Ordenex · R457-admin-muhxysg1 salda la deuda · Efectivo",
+          "2026-09-24 | Crédito | La tienda le paga a Ordenex | 4000.00 | Pago de una tienda a Ordenex · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456"
+        ]
+      },
+      "barridoPantalla": {
+        "codigos": null,
+        "uuid": null
+      },
+      "barridoDescarga": {
+        "codigos": null,
+        "uuid": null
+      },
+      "saldoDb": "-4000.00"
+    },
+    {
+      "id": "tiendas_pago_desde_desglose",
+      "conceptoDeshabilitado": true,
+      "tiendaDeshabilitada": true,
+      "tiendaTexto": "Bruno Tienda R457",
+      "cabecera": "Una tienda le paga a Ordenex",
+      "aviso": "Pago registrado. El saldo de Bruno Tienda R457 Tienda queda en ₡0 · En cero.\n×",
+      "saldoFilaAntes": "-₡4.000",
+      "saldoFilaDespues": "₡0",
+      "sinRecarga": true,
+      "botonConSaldoCero": 0,
+      "saldoDb": "0.00"
+    },
+    {
+      "id": "historial",
+      "lineas": [],
+      "registro": 0,
+      "anulacion": 0,
+      "motivoVisible": false,
+      "barrido": {
+        "codigos": null,
+        "uuid": null
+      }
+    },
+    {
+      "id": "descarga_libro",
+      "archivo": "libro-de-movimientos-2026-09-25.xlsx",
+      "hoja": "Libro de movimientos",
+      "cabecera": [
+        "Fecha",
+        "Tipo",
+        "Categoría",
+        "Monto",
+        "Origen",
+        "Dueño"
+      ],
+      "marcadas": [
+        "2026-09-25 | Ingreso | Ordenex le cobra a una tienda | 10000.00 | Cobro de Ordenex a una tienda · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 preparación: deja la tienda en contra | Ordenex",
+        "2026-09-25 | Ingreso | Una tienda le paga a Ordenex | 4000.00 | Pago de una tienda a Ordenex · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 desde el desglose · Efectivo | Tienda",
+        "2026-09-25 | Egreso | Pago de una tienda a Ordenex anulado | 4000.00 | Pago de una tienda a Ordenex · Anulación · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456 | Tienda",
+        "2026-09-25 | Ingreso | Una tienda le paga a Ordenex | 5000.00 | Pago de una tienda a Ordenex · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 salda la deuda · Efectivo | Tienda",
+        "2026-09-25 | Ingreso | Una tienda le paga a Ordenex | 1000.00 | Pago de una tienda a Ordenex · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 doble clic · Efectivo | Tienda",
+        "2026-09-24 | Ingreso | Una tienda le paga a Ordenex | 4000.00 | Pago de una tienda a Ordenex · Bruno Tienda R457 Tienda · R457-admin-muhxysg1 Pago de lo que debía por los fletes de septiembre · SINPE · 123456 | Tienda"
+      ],
+      "barridoDescarga": {
+        "codigos": null,
+        "uuid": null
+      },
+      "barridoPantalla": {
+        "codigos": null,
+        "uuid": null
+      }
+    },
+    {
+      "id": "final",
+      "caja": {
+        "texto": "Registrar movimiento\nFlujo de dinero registrado\nPositivo\n₡13.517.932,72\nLo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex.\nEntró\n₡13.570.733,22\nSalió\n₡52.800,50\nMovimientos\n57\nRegistros del periodo que estás viendo\nDe las tiendas\n₡0\nLo que Ordenex les debe a las tiendas\n\nEs la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas.\n\nVer la deuda de cada tienda\nDe Ordenex\nPositivo\n₡13.517.932,72\nGanancia de Ordenex\nLo que Ordenex gana menos lo que gasta\nIngresos de Ordenex\n₡13.558.733,22\nGastos de Ordenex\n₡40.800,50\nSaldo inicial y aportes\nEn cero\n₡0\nDinero de Ordenex que no es ganancia.\n\n«Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes.",
+        "principal": "₡13.517.932,72",
+        "entro": "₡13.570.733,22",
+        "salio": "₡52.800,50",
+        "deTiendas": "₡0",
+        "ganancia": "₡13.517.932,72",
+        "capital": "₡0"
+      },
+      "saldoDb": "0.00",
+      "cuadre": {
+        "adaptado457": {
+          "entro": "13570733.22",
+          "salio": "52800.50",
+          "cifra": "13517932.72",
+          "ganancia": "13517932.72",
+          "de_tiendas": "0.00",
+          "capital": "0",
+          "suma_saldos": "0.00",
+          "diferencia_r8": "0.00",
+          "diferencia_r7": "0.00"
+        },
+        "literal461": {
+          "entro": "13570733.22",
+          "salio": "52800.50",
+          "cifra": "13517932.72",
+          "ganancia": "13551932.72",
+          "de_tiendas": "-34000.00",
+          "capital": "0",
+          "suma_saldos": "0.00",
+          "diferencia_r8": "-34000.00",
+          "diferencia_r7": "0.00"
+        }
+      }
+    },
+    {
+      "id": "sinpeCerrado",
+      "veces": 1
+    }
+  ]
+}
