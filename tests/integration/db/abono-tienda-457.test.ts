@@ -8,7 +8,12 @@ import {
   registrarAbonoTiendaAction,
 } from "@/lib/actions/abono-tienda";
 import { listarMovimientosAction } from "@/lib/actions/wallet";
+import type { CajaBackfillClient } from "@/lib/interfaces/services/ICajaBackfillTesoreriaService";
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
+import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { CajaBackfillTesoreriaService } from "@/lib/services/CajaBackfillTesoreriaService";
+import { CajaCodFeedService } from "@/lib/services/CajaCodFeedService";
+import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import type { AgregadoCajaRow, WalletMovimientoCategoria } from "@/lib/types/wallet";
 import { NATURALEZA_POR_CATEGORIA, derivarCaja } from "@/lib/utils/caja-tesoreria";
 import { fechaCalendarioCR, inicioDelDiaCREnUtc } from "@/lib/utils/fecha-cr";
@@ -441,11 +446,35 @@ describeSiHayBase("457/T5.1 — pago de una tienda a Ordenex por la action (Post
       const repo = new LiquidacionPagoRepository(prisma);
       expect(await repo.listarPorTienda(p.tiendaId)).toEqual([]);
       expect(await repo.sumarVigentesPorTienda(p.tiendaId)).toBe("0.00");
-      // El backfill de la 173 lee `liquidacion_pago` con `tienda_id`: el pago de una tienda no es un pago a una tienda.
-      expect(await prisma.liquidacionPago.count({ where: { tiendaId: p.tiendaId } })).toBe(0);
-      // Las migraciones de datos de la 459/461 recorren los `cobro_manual` del libro: el credito del pago no es uno.
-      const cobros = await prisma.walletTiendaMovimiento.findMany({ where: { tiendaId: p.tiendaId, categoria: "cobro_manual" }, select: { origenId: true } });
-      expect(cobros.map((c) => c.origenId)).not.toContain(r.abono.id);
+
+      // m5 de la revision: lo que protege R74 NO es que el servicio no escriba `liquidacion_pago` (eso
+      // siempre era verde), sino que los LECTORES no tomen el pago. Se ejecutan los lectores REALES:
+      //
+      // (1) El registro retroactivo de la 173, EN SECO («simular»: no escribe), sobre la base entera.
+      //     Lee `cierre_dia`, `liquidacion_pago` y `liquidacion_anulacion`, no la tabla del pago
+      //     (`CajaBackfillTesoreriaService.dePagosATienda`). Si alguna vez leyera `abono_tienda` —su
+      //     forma es la de un pago a tienda: monto, metodo, referencia, fecha, tienda—, el pago saldria
+      //     como un «pago a tienda» pendiente de su EGRESO en la caja: la mutacion m5 lo pone rojo aqui.
+      const backfill = new CajaBackfillTesoreriaService({
+        cliente: prisma as unknown as CajaBackfillClient,
+        codFeed: new CajaCodFeedService(),
+        crearPuertoDePago: (r2) => new CajaPagoTiendaFeedService(r2),
+        cajaRepo: new WalletMovimientoRepository(prisma),
+        ahora: () => new Date(),
+      });
+      const informe = await backfill.ejecutar("simular");
+      expect(informe.insertadas).toBe(0);
+      expect(informe.pendientes.filter((f) => f.documentoId === r.abono.id)).toEqual([]);
+      expect(informe.pendientes.filter((f) => f.movimiento.origenId === r.abono.id)).toEqual([]);
+
+      // (2) Las migraciones de datos de la 459/461 toman los `cobro_manual` DEBITO del libro de la
+      //     tienda. El pago dejo UNA fila en ese libro (no se afirma sobre el vacio) y no cumple ese filtro.
+      const delPago = await prisma.walletTiendaMovimiento.findMany({
+        where: { origenId: r.abono.id },
+        select: { tipo: true, categoria: true },
+      });
+      expect(delPago).toEqual([{ tipo: "credito", categoria: "abono_tienda" }]);
+      expect(delPago.filter((f) => f.categoria === "cobro_manual" && f.tipo === "debito")).toEqual([]);
       expect(await prisma.walletMovimiento.count({ where: { origenId: r.abono.id, origenTipo: { in: ["cobro_manual_reclasificado", "cobro_tienda_completado"] } } })).toBe(0);
     });
   }, 120_000);
