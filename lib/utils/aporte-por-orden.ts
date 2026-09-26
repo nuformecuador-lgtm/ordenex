@@ -4,6 +4,7 @@ import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigente
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import type { WalletIngresoConcepto, WalletMovimientoCategoria } from "@/lib/types/wallet";
 import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
+import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
 import type { MotivoSinReparto } from "@/lib/types/detalle-movimiento";
 
 /**
@@ -130,6 +131,29 @@ export const FUENTE_TIENDA: Record<WalletTiendaMovimientoCategoria, FuenteDeApor
   // FICHA 458-B (design §2.3): los creditos espejo de la anulacion de un cobro por rechazo.
   flete_devolucion_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   iva_flete_devolucion_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+};
+
+/**
+ * FICHA 458-D (servidor, R19) — el catalogo del LIBRO DEL MENSAJERO. `Record` TOTAL, mismo motivo.
+ *
+ * NINGUN concepto del mensajero se reparte por orden, y es un hecho medido, no una omision:
+ *
+ *  - `pago_devengado` es `cierre_dia.total_pago_mensajero` y `pago_efectivo` es `min(P, E)` del cierre
+ *    (`WalletMensajeroFeedService`): los dos son SNAPSHOT del cierre entero, y `cierre_detail` no
+ *    congela ningun pago por orden (no hay columna de la que sacarlo). Mismo motivo que
+ *    `egreso_pago_mensajero` en la caja.
+ *  - el resto (liquidacion, ajustes, premio del ranking) no nace de un cierre.
+ *
+ * La fila de cierre se abre igual y dice de donde sale su importe; el enlace a SU cierre lo da el
+ * origen de la fila (R7).
+ */
+export const FUENTE_MENSAJERO: Record<PagoMensajeroMovimientoCategoria, FuenteDeAporte> = {
+  pago_devengado: { tipo: "sin_reparto", motivo: "snapshot_del_cierre" },
+  pago_efectivo: { tipo: "sin_reparto", motivo: "snapshot_del_cierre" },
+  liquidacion: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  ajuste_devengo: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  ajuste_pago: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  premio_ranking: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
 };
 
 /**

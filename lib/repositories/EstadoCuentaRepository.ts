@@ -4,10 +4,13 @@ import type {
   AnulacionLeida,
   FilaDeLibroRow,
   IEstadoCuentaRepository,
+  MovimientoDeMensajeroRow,
   MovimientoDelPeriodoRow,
+  PagoDeDocumento,
   PaginaDeLibro,
   ParDeChip,
   TipoDeDocumentoDeLibro,
+  TipoDeDocumentoDePago,
   VentanaDeLibro,
 } from "@/lib/interfaces/repositories/IEstadoCuentaRepository";
 import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
@@ -29,6 +32,7 @@ type Cliente = Pick<
   | "pagoPorCuentaTienda"
   | "abonoTienda"
   | "cierreDia"
+  | "liquidacionPago"
 > & {
   /**
    * FICHA 458-B (revision M2) — OPCIONAL por el mismo motivo que en el repositorio de ingresos de la analitica (feature 187):
@@ -85,6 +89,17 @@ function filtroDeChip(pares: ParDeChip[] | null, conPremio: boolean): Prisma.Sql
 }
 
 const desdeSql = (desde?: Date) => (desde === undefined ? Prisma.empty : Prisma.sql` AND l.fecha_movimiento >= ${desde}`);
+
+/**
+ * FICHA 458-D (servidor, R10/R12) — el filtro de CIERRE: las filas que nacen de ese cierre. Se aplica
+ * sobre `libro`, que YA esta acotado a la cuenta (`tienda_id` / `mensajero_id` dentro de la ventana):
+ * un cierre de otra cuenta no casa ninguna fila. Mutacion M-D1 (quitar la condicion del cierre) →
+ * roja en `estado-cuenta-servidor-458d`.
+ */
+const cierreSql = (cierreId?: string) =>
+  cierreId === undefined
+    ? Prisma.empty
+    : Prisma.sql` AND l.origen_tipo = 'cierre_dia' AND l.origen_id = ${cierreId}`;
 
 /**
  * FICHA 458-B (design §3.2, R16–R25) — las lecturas del estado de cuenta. SOLO queries.
@@ -207,7 +222,7 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
   }
 
   private async paginar(libro: Prisma.Sql, v: VentanaDeLibro, conPremio: boolean): Promise<PaginaDeLibro> {
-    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, conPremio)}`;
+    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, conPremio)}${cierreSql(v.cierreId)}`;
     const filas = await this.prisma.$queryRaw<FilaCruda[]>`
       ${libro}
       SELECT l.id, l.tipo, l.categoria, l.origen_tipo, l.origen_id, l.descripcion, l.registrado_por,
@@ -377,6 +392,27 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
           ).map((p) => p.id),
         );
     }
+  }
+
+  async pagosDe(tipo: TipoDeDocumentoDePago, ids: readonly string[]): Promise<PagoDeDocumento[]> {
+    if (ids.length === 0) return [];
+    const where = { id: { in: [...ids] } };
+    const select = { id: true, metodo: true, referencia: true } as const;
+    const filas =
+      tipo === "liquidacion_pago"
+        ? await this.prisma.liquidacionPago.findMany({ where, select })
+        : tipo === "pago_por_cuenta_tienda"
+          ? await this.prisma.pagoPorCuentaTienda.findMany({ where, select })
+          : await this.prisma.abonoTienda.findMany({ where, select });
+    return filas.map((f) => ({ documentoId: f.id, metodo: f.metodo, referencia: f.referencia }));
+  }
+
+  async movimientoDeMensajero(movimientoId: string, mensajeroId: string): Promise<MovimientoDeMensajeroRow | null> {
+    const fila = await this.prisma.pagoMensajeroMovimiento.findFirst({
+      where: { id: movimientoId, mensajeroId }, // `mensajeroId` en el WHERE: la de otro = inexistente
+      select: { monto: true, categoria: true, origenTipo: true, origenId: true },
+    });
+    return fila === null ? null : { ...fila, monto: fila.monto.toFixed(2) };
   }
 
   async reversosDePremio(mensajeroId: string, dias: readonly Date[]): Promise<AnulacionLeida[]> {

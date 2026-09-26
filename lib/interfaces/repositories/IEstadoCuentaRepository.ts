@@ -1,3 +1,7 @@
+import type { MetodoPagoValue } from "@prisma/client";
+
+import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
+
 /**
  * FICHA 458-B (design §3.2, R16–R25) — las LECTURAS del estado de cuenta de una tienda, un mensajero
  * o una bodega satelite. SOLO queries. Montos STRING escala 2 (`numeric → text` en la base).
@@ -23,6 +27,12 @@ export interface VentanaDeLibro {
   hastaUtc?: Date;
   /** `null` = «Todo». */
   pares: ParDeChip[] | null;
+  /**
+   * FICHA 458-D (servidor, R10/R12) — solo las filas que nacen de ESE cierre (`origen_tipo =
+   * 'cierre_dia' AND origen_id = cierreId`), DENTRO de la cuenta: se aplica fuera de la ventana, como
+   * el chip, asi que el corrido sigue siendo el de la cuenta entera. Sin efecto en la bodega.
+   */
+  cierreId?: string;
   skip: number;
   take: number;
 }
@@ -71,6 +81,24 @@ export interface AnulacionLeida {
 
 export type TipoDeDocumentoDeLibro = "liquidacion_pago" | "cobro_tienda" | "pago_por_cuenta_tienda" | "abono_tienda";
 
+/** FICHA 458-D (servidor) — los documentos de PAGO: los unicos con metodo y referencia. */
+export type TipoDeDocumentoDePago = Exclude<TipoDeDocumentoDeLibro, "cobro_tienda">;
+
+/** El metodo y la referencia de un documento de pago, por su id. */
+export interface PagoDeDocumento {
+  documentoId: string;
+  metodo: MetodoPagoValue;
+  referencia: string | null;
+}
+
+/** FICHA 458-D (servidor, R19) — lo minimo de una fila del libro del mensajero para abrir su detalle. */
+export interface MovimientoDeMensajeroRow {
+  monto: string;
+  categoria: PagoMensajeroMovimientoCategoria;
+  origenTipo: string;
+  origenId: string | null;
+}
+
 export interface IEstadoCuentaRepository {
   /**
    * FICHA 458-B (revision M2) — ejecuta `fn` con un repositorio ligado a UNA transaccion
@@ -107,6 +135,13 @@ export interface IEstadoCuentaRepository {
   conComprobante(tipo: TipoDeDocumentoDeLibro, ids: readonly string[]): Promise<Set<string>>;
   /** Los reversos de premio (`ajuste_pago` con `premio_dia`) de ese mensajero en esos dias. */
   reversosDePremio(mensajeroId: string, dias: readonly Date[]): Promise<AnulacionLeida[]>;
+  /** FICHA 458-D (servidor) — metodo y referencia de estos documentos de pago, UNA consulta por tipo. */
+  pagosDe(tipo: TipoDeDocumentoDePago, ids: readonly string[]): Promise<PagoDeDocumento[]>;
+  /**
+   * FICHA 458-D (servidor, R19) — una fila del libro del mensajero, con `mensajero_id` en el `WHERE`:
+   * la de otro mensajero responde `null`, igual que una que no existe.
+   */
+  movimientoDeMensajero(movimientoId: string, mensajeroId: string): Promise<MovimientoDeMensajeroRow | null>;
   /** R57 — quien aprobo cada cierre (`cierre_dia.resuelto_por`), por id de cierre. */
   quienAproboLosCierres(cierreIds: readonly string[]): Promise<Map<string, string | null>>;
 }

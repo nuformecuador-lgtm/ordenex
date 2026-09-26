@@ -16,6 +16,8 @@ export function fila(parcial: Partial<FilaEstadoCuentaDTO> & { n?: number; libro
     fecha: "2026-09-12",
     categoria: "cod_recaudado",
     origenTipo: "cierre_dia",
+    origen: { texto: "Cierre del día", enlace: null },
+    pago: null,
     descripcion: null,
     registro: { nombre: null, automatico: { accion: "aprobacion_cierre", por: "Ana Admin" } },
     cargo: null,

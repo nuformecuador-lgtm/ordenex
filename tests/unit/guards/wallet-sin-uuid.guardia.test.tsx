@@ -146,6 +146,8 @@ function filaEC(n: number, parcial: Partial<FilaEstadoCuentaDTO> = {}): FilaEsta
     fecha: "2026-09-12",
     categoria: "cobro_manual",
     origenTipo: "manual",
+    origen: { texto: "Registrado a mano", enlace: null },
+    pago: null,
     descripcion: "Cobro de etiquetas",
     registro: { nombre: "Ana Admin", automatico: null },
     cargo: "500.00",
