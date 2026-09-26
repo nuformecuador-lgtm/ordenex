@@ -231,8 +231,9 @@ describe("FICHA 459 (m3) → 458-A R62 · la cifra de la caja del panel mensual 
 
     // Literal escrito a mano (design §3.3), no leido de `CAJA_RESUMEN_LABEL`.
     expect(etiquetaDe(paneles, "dinero_en_caja")).toBe("Movimiento neto del periodo");
-    // El estado se pide SIN filtros: es el de la caja hoy, como en la tarjeta.
-    expect(resumenCaja).toHaveBeenCalledWith({});
+    // Revision 458-A (m5): con periodo el nombre no depende del estado de la caja, y el resumen
+    // entero de la caja ya NO se pide en cada carga (antes: `toHaveBeenCalledWith({})`).
+    expect(resumenCaja).not.toHaveBeenCalled();
     // Las demas metricas conservan la etiqueta de su catalogo.
     expect(etiquetaDe(paneles, "ganancia_ordenex")).toBe("Etiqueta de ganancia_ordenex");
   });

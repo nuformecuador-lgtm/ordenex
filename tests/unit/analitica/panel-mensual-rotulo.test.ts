@@ -69,4 +69,12 @@ describe("458-A R62 — el panel mensual dice «Movimiento neto del periodo»", 
     resumenCaja.mockRejectedValue(new Error("caida"));
     expect(await rotuloDelPanel()).toBe("Movimiento neto del periodo");
   });
+
+  // Revision 458-A (m5): con periodo el estado de la caja no decide el nombre, así que la carga del
+  // panel no pide el resumen de la caja (antes lo pedía en cada carga y descartaba lo que decía).
+  it("m5: cargar el panel NO pide el resumen de la caja", async () => {
+    resumenCaja.mockResolvedValue({ status: "ok", resumen: { estado: "saldo", periodoFiltrado: false } });
+    await rotuloDelPanel();
+    expect(resumenCaja).not.toHaveBeenCalled();
+  });
 });

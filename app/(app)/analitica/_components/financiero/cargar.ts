@@ -29,9 +29,7 @@
 // correspondencia de la 127 compara contra el catalogo.
 
 import { consultarMetricaFinanciera } from "@/lib/actions/analitica-financiera";
-import { verResumenCajaAction } from "@/lib/actions/wallet";
 import { rotuloCifraPrincipal } from "@/app/(app)/wallet/_components/wallet-labels";
-import type { CajaResumenDTO } from "@/lib/types/wallet";
 import {
   IDS_FINANCIERAS_SERVIDAS,
   type RespuestaFinanciera,
@@ -100,10 +98,10 @@ export async function cargarTableroFinanciero(): Promise<readonly PanelFinancier
     ),
   );
 
-  const [paneles, rotuloCaja] = await Promise.all([Promise.all(pendientes), rotuloDeLaCaja()]);
+  const paneles = await Promise.all(pendientes);
   // Diccionario por CLAVE de metrica (censo (f) de `tablero-financiero.guardia`: buscar un texto
   // por clave no ramifica QUE se pinta). Solo cambia el NOMBRE; ni una cifra.
-  const rotulos: Readonly<Record<string, string>> = { dinero_en_caja: rotuloCaja };
+  const rotulos: Readonly<Record<string, string>> = { dinero_en_caja: ROTULO_CAJA_DEL_PERIODO };
   return paneles.map((panel) => conRotulo(panel, rotulos));
 }
 
@@ -114,21 +112,14 @@ export async function cargarTableroFinanciero(): Promise<readonly PanelFinancier
  * ventana de `FILTRO_FINANCIERO_POR_DEFECTO`), no la caja de hoy. Por eso se nombra con la MISMA
  * funcion que la tarjeta de `/wallet` (`rotuloCifraPrincipal`) diciendole que HAY periodo:
  * «Movimiento neto del periodo», nunca «Dinero en caja» ni «Flujo de dinero registrado» sobre una
- * cifra recortada (la 459 le pasaba el resumen SIN filtros y el panel tomaba el nombre de la caja
- * entera). El estado sigue saliendo del servidor (`verResumenCajaAction`); si esa lectura no
- * responde `ok` (o se cae) se toma el de «flujo». No se silencia ningun dato: la cifra del panel
- * sigue llegando entera de su metrica.
+ * cifra recortada. No se silencia ningun dato: la cifra del panel sigue llegando entera de su metrica.
+ *
+ * Revision 458-A (m5): con periodo, `rotuloCifraPrincipal` NO mira el estado de la caja («saldo» o
+ * «flujo» dan el mismo nombre), asi que ya no se pide `verResumenCajaAction` en cada carga: era una
+ * lectura del resumen entero de la caja cuyo resultado no cambiaba nada. El `estado` de abajo es el
+ * que la firma exige, no una decision.
  */
-async function rotuloDeLaCaja(): Promise<string> {
-  const delPeriodo = (estado: CajaResumenDTO["estado"]) =>
-    rotuloCifraPrincipal({ periodoFiltrado: true, estado });
-  try {
-    const respuesta = await verResumenCajaAction({});
-    return delPeriodo(respuesta.status === "ok" ? respuesta.resumen.estado : "flujo");
-  } catch {
-    return delPeriodo("flujo");
-  }
-}
+const ROTULO_CAJA_DEL_PERIODO = rotuloCifraPrincipal({ periodoFiltrado: true, estado: "flujo" });
 
 /** El panel con su nombre de pantalla, si el diccionario tiene uno para su metrica. */
 function conRotulo(
