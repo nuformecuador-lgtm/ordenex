@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { listarMisMovimientosAction } from "@/lib/actions/wallet-tienda";
+import { listarMisMovimientosAction, listarMovimientosDeTiendaAction } from "@/lib/actions/wallet-tienda";
 import type { IWalletTiendaService } from "@/lib/interfaces/services/IWalletTiendaService";
 import {
   listarMovimientosDeTiendaSchema,
@@ -43,5 +43,19 @@ describe("458-A R36 — el listado de /mi-wallet no admite una clave que nombre 
     );
     expect(r.status).toBe("validation_error");
     expect(listarMisMovimientos).not.toHaveBeenCalled();
+  });
+
+  // Revision 458-A (m3): el comentario de `WalletTiendaService.listarMovimientosDeTienda` decia que
+  // este borde «NO es `.strict()`» y descartaba la clave en silencio. Lo es por herencia (`.extend`
+  // de un `.strict()`); esto fija lo que el comentario afirma ahora, por la action.
+  it("por la action del desglose: una clave colada → validation_error y el servicio NO se llama", async () => {
+    const listarMovimientosDeTienda = vi.fn();
+    const service = { listarMovimientosDeTienda } as unknown as IWalletTiendaService;
+    const r = await listarMovimientosDeTiendaAction(
+      { tiendaId: TIENDA_AJENA, page: 1, pageSize: 20, todasLasTiendas: true },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => ({ usuarioId: "m", rol: "maestro" }) },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(listarMovimientosDeTienda).not.toHaveBeenCalled();
   });
 });

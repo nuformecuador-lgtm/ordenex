@@ -320,11 +320,11 @@ describe("WalletTiendaService.listarMovimientosDeTienda — contrato (R22/R24)",
 
   it("R24: el repositorio recibe EXACTAMENTE el tiendaId de la entrada, tambien con claves extra coladas", async () => {
     const { repo, listarPorTienda, agregarDesglosePorTienda } = repoEnMemoria(dosTiendas());
-    // El borde de este camino PAGINADO no es `.strict()`: descarta las claves desconocidas en
-    // vez de rechazarlas (el `.strict()` esta en el modo completo). Por eso lo que se prueba
-    // aqui es la SEGUNDA barrera: `construirFiltros` lee claves EXPLICITAS, asi que nada
-    // desconocido llega al repositorio, y el `tiendaId` se escribe AL FINAL, donde nada lo
-    // puede pisar.
+    // Desde la 458-A (TA.6) el borde de este camino PAGINADO tambien es `.strict()` y rechaza la
+    // clave colada (`tests/unit/types/wallet-tienda-schemas.test.ts`). Aqui se prueba la SEGUNDA
+    // barrera, la del servicio llamado sin borde: `construirFiltros` lee claves EXPLICITAS, asi
+    // que nada desconocido llega al repositorio, y el `tiendaId` se escribe AL FINAL, donde nada
+    // lo puede pisar.
     const inyectado = {
       ...input({ tiendaId: "tienda-A" }),
       todasLasTiendas: true,

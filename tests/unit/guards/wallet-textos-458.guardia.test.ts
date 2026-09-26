@@ -73,6 +73,14 @@ export const AFIRMACIONES: readonly Afirmacion[] = [
     patron: /copi[aá] su direcci[oó]n|copiar la DIRECCI[OÓ]N|Peg[aá] el identificador|se pega, no se teclea/i,
     conComentarios: true,
   },
+  // Revision de la 458-A (m3): el comentario del desglose decia que su borde «NO es `.strict()`» y
+  // descartaba claves en silencio; lo es desde TA.6, por herencia del `.extend`.
+  {
+    id: "m3",
+    archivo: "lib/services/WalletTiendaService.ts",
+    patron: /NO\s+es\s+(?:\*\s+)?`\.strict\(\)`|DESCARTA las claves desconocidas/,
+    conComentarios: true,
+  },
 ];
 
 function afirmaciones(texto: string, a: Afirmacion): boolean {
@@ -80,8 +88,8 @@ function afirmaciones(texto: string, a: Afirmacion): boolean {
 }
 
 describe("458-A R101/R4 — las afirmaciones desactualizadas de la wallet no vuelven", () => {
-  it("no-vacuidad: las ocho afirmaciones y sus archivos existen y se leen", () => {
-    expect(AFIRMACIONES.map((a) => a.id)).toEqual(["T1", "T2", "T9", "R4", "T5-caja", "T5-tienda", "T5-mi-wallet", "T6"]);
+  it("no-vacuidad: las nueve afirmaciones y sus archivos existen y se leen", () => {
+    expect(AFIRMACIONES.map((a) => a.id)).toEqual(["T1", "T2", "T9", "R4", "T5-caja", "T5-tienda", "T5-mi-wallet", "T6", "m3"]);
     for (const a of AFIRMACIONES) expect(fuente(a.archivo).length).toBeGreaterThan(200);
   });
 
@@ -90,7 +98,7 @@ describe("458-A R101/R4 — las afirmaciones desactualizadas de la wallet no vue
     expect(afirmaciones(texto, a)).toBe(false);
   });
 
-  it("CONTRAPRUEBA: la fuente de antes de la 458-A la pone roja en las ocho", () => {
+  it("CONTRAPRUEBA: la fuente de antes de la 458-A la pone roja en las nueve", () => {
     const antes: Record<string, string> = {
       T1: " * «Pagado a la tienda» hoy sale siempre en `0.00` porque ningún flujo emite `pago_tienda`\n * (lo emitirá la 172). Se muestra IGUAL",
       T2: "  pagado: string; // Σ debitos == pago_tienda (hoy siempre \"0.00\", ver R43)",
@@ -101,6 +109,8 @@ describe("458-A R101/R4 — las afirmaciones desactualizadas de la wallet no vue
       "T5-tienda": "          R44 — las opciones se pueblan del SEED del enum, no de una lista escrita a mano:",
       "T5-mi-wallet": "// Feature 43 (T15, R22) — filtros del desglose: cierre, concepto (poblado desde el SEED) y",
       T6: '  cierrePlaceholder: "Pegá el identificador",\n    "El identificador del cierre sale del enlace «Ver el cierre» de la tabla: copiá su dirección y pegala en «Cierre».",',
+      // `WalletTiendaService.ts:313-315` en cd91bcf4, tal cual.
+      m3: "   * Precision sobre el borde de ESTE camino: `listarMovimientosDeTiendaSchema` NO es\n   * `.strict()`. Zod DESCARTA las claves desconocidas en vez de rechazarlas, asi que una",
     };
     for (const a of AFIRMACIONES) expect({ id: a.id, rojo: afirmaciones(antes[a.id], a) }).toEqual({ id: a.id, rojo: true });
   });
