@@ -1,12 +1,16 @@
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import type {
+  AnulacionDeDocumento,
   CuentaNombrada,
   ILibroCajaAutoriaRepository,
   MovimientoDeCajaParaAutoria,
 } from "@/lib/interfaces/repositories/ILibroCajaAutoriaRepository";
+import { tipoDeDocumentoOriginal } from "@/lib/services/WalletService";
+import type { AnulacionDeFilaDTO } from "@/lib/types/estado-cuenta";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RegistroDTO } from "@/lib/types/estado-cuenta";
-import type { AQuienDTO, AutoriaDeFilaDTO, AutoriaLibroCajaInput } from "@/lib/types/libro-caja-autoria";
+import type { AQuienDTO, AutoriaDeFilaDTO, AutoriaLibroCajaInput, ComoDTO } from "@/lib/types/libro-caja-autoria";
 import type {
   AutoriaLibroCajaServiceResult,
   ILibroCajaAutoriaService,
@@ -116,10 +120,96 @@ export class LibroCajaAutoriaService implements ILibroCajaAutoriaService {
       }
     };
 
+    // ── Ficha 458-C (revision M1, R58): «Como» y la anulacion de la fila ORIGINAL ──────────────
+    // Que fila es la original de que documento lo decide la MISMA funcion que da el `documento` del
+    // libro (`tipoDeDocumentoOriginal`): el panel no puede decir «anulado por X» de una fila que el
+    // libro no da por original (un contra-asiento, una salida reclasificada, lo del cierre).
+    const documentoDe = new Map(movs.map((m) => [m.id, tipoDeDocumentoOriginal(m)]));
+    const origenesDe = (...tipos: string[]) => [
+      ...new Set(movs.flatMap((m) => (tipos.includes(documentoDe.get(m.id) ?? "") && m.origenId !== null ? [m.origenId] : []))),
+    ];
+    const anotables = movs.filter((m) => m.origenTipo === "gasto" || m.origenTipo === "manual").map((m) => m.id);
+    const comos = await this.repo.comos({
+      // El «como» de un pago de la 172 vale para el pago a una tienda Y para el de un mensajero.
+      pagos: deTipos("pago_tienda", "pago_mensajero"),
+      pagosPorCuenta: ids("pago_por_cuenta_tienda"),
+      abonos: ids("abono_tienda"),
+      movimientos: anotables,
+    });
+    const anulaciones = await this.repo.anulaciones({
+      pagos: origenesDe("pago_tienda"),
+      pagosPorCuenta: origenesDe("pago_por_cuenta_tienda"),
+      aportes: origenesDe("aporte_capital"),
+      abonos: origenesDe("abono_tienda"),
+      cobros: origenesDe("cobro_tienda"),
+      rechazos: origenesDe("rechazo_tienda_cobro"),
+      premios: origenesDe("premio_del_ranking"),
+      movimientos: movs
+        .filter((m) => ["egreso_caja", "ajuste_caja", "indemnizacion"].includes(documentoDe.get(m.id) ?? ""))
+        .map((m) => m.id),
+    });
+
+    const como = (m: MovimientoDeCajaParaAutoria): ComoDTO | null => {
+      const o = m.origenId;
+      switch (m.origenTipo) {
+        case "pago_tienda":
+        case "pago_mensajero":
+          return (o === null ? undefined : comos.pagos.get(o)) ?? null;
+        case "pago_por_cuenta_tienda":
+          return (o === null ? undefined : comos.pagosPorCuenta.get(o)) ?? null;
+        case "abono_tienda":
+          return (o === null ? undefined : comos.abonos.get(o)) ?? null;
+        case "gasto":
+        case "manual":
+          return comos.movimientos.get(m.id) ?? null;
+        default:
+          return null;
+      }
+    };
+
+    const anulacion = (m: MovimientoDeCajaParaAutoria): AnulacionDeFilaDTO | null => {
+      const tipo = documentoDe.get(m.id) ?? null;
+      const o = m.origenId;
+      let a: AnulacionDeDocumento | undefined;
+      switch (tipo) {
+        case null:
+          return null;
+        case "egreso_caja":
+        case "ajuste_caja":
+        case "indemnizacion":
+          a = anulaciones.movimientos.get(m.id);
+          break;
+        case "pago_tienda":
+          a = o === null ? undefined : anulaciones.pagos.get(o);
+          break;
+        case "pago_por_cuenta_tienda":
+          a = o === null ? undefined : anulaciones.pagosPorCuenta.get(o);
+          break;
+        case "aporte_capital":
+          a = o === null ? undefined : anulaciones.aportes.get(o);
+          break;
+        case "abono_tienda":
+          a = o === null ? undefined : anulaciones.abonos.get(o);
+          break;
+        case "cobro_tienda":
+          a = o === null ? undefined : anulaciones.cobros.get(o);
+          break;
+        case "rechazo_tienda_cobro":
+          a = o === null ? undefined : anulaciones.rechazos.get(o);
+          break;
+        case "premio_del_ranking":
+          a = o === null ? undefined : anulaciones.premios.get(o);
+          break;
+      }
+      return a === undefined ? null : { motivo: a.motivo, por: a.por, fecha: fechaCalendarioCR(a.fecha) };
+    };
+
     const porId = new Map(movs.map((m) => [m.id, m]));
     const filas: AutoriaDeFilaDTO[] = input.movimientoIds.flatMap((id) => {
       const m = porId.get(id);
-      return m === undefined ? [] : [{ movimientoId: id, aQuien: aQuien(m), registro: registro(m) }];
+      return m === undefined
+        ? []
+        : [{ movimientoId: id, aQuien: aQuien(m), registro: registro(m), como: como(m), anulacion: anulacion(m) }];
     });
     return { status: "ok", filas };
   }

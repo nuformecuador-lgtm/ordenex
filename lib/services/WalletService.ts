@@ -67,7 +67,9 @@ function hayFiltros(filtros: BalanceFiltros): boolean {
  * (`egreso_reverso_cobro_tienda`, mismo origen) NO es original. Mutacion 14 de design §14.2: sin el
  * origen `cobro_tienda_completado` aqui, las lineas completadas perderian su «Anular…».
  */
-function tipoDeDocumentoOriginal(m: WalletMovimientoDTO): DocumentoCajaDTO["tipo"] | null {
+export function tipoDeDocumentoOriginal(
+  m: Pick<WalletMovimientoDTO, "tipo" | "categoria" | "origenTipo" | "origenId">,
+): DocumentoCajaDTO["tipo"] | null {
   if (m.categoria === "egreso_pago_por_cuenta_tienda" && m.origenTipo === "pago_por_cuenta_tienda") {
     return "pago_por_cuenta_tienda";
   }
@@ -108,6 +110,14 @@ function tipoDeDocumentoOriginal(m: WalletMovimientoDTO): DocumentoCajaDTO["tipo
     m.origenTipo === "gestion_orden"
   ) {
     return "rechazo_tienda_cobro";
+  }
+  // Ficha 458-C (revision B3, R71): los dos egresos que la caja ya sabia anular
+  // (`WalletAnulacionService.rutaDeCaja`) y que no traian documento: el pago de Ordenex a una tienda
+  // (172) y el premio del ranking (293). Mismas condiciones que el enrutado; sus reversos
+  // (`ingreso_ajuste`, otra categoria) quedan en `null`.
+  if (m.categoria === "egreso_pago_tienda" && m.origenTipo === "pago_tienda") return "pago_tienda";
+  if (m.categoria === "egreso_pago_mensajero" && m.origenTipo === "ranking_snapshot_fila") {
+    return "premio_del_ranking";
   }
   return null;
 }
@@ -179,8 +189,10 @@ export class WalletService implements IWalletService {
     const idsIndemnizaciones = idsDe("indemnizacion");
     // Las dos lineas de un cobro por rechazo comparten documento: se pide UNA vez por gestion.
     const idsRechazos = [...new Set(idsDe("rechazo_tienda_cobro"))];
+    const idsPagosATienda = idsDe("pago_tienda");
+    const idsPremios = idsDe("premio_del_ranking");
 
-    const [pagos, aportes, cobros, ajustes, abonos, egresos, indemnizaciones, rechazos] = await Promise.all([
+    const [pagos, aportes, cobros, ajustes, abonos, egresos, indemnizaciones, rechazos, pagosATienda, premios] = await Promise.all([
       idsPagos.length > 0 ? this.documentos.pagosPorCuenta.estadoDeDocumentos(idsPagos) : [],
       idsAportes.length > 0 ? this.documentos.aportes.estadoDeDocumentos(idsAportes) : [],
       idsCobros.length > 0 ? this.documentos.cobros.estadoDeDocumentos(idsCobros) : [],
@@ -191,6 +203,8 @@ export class WalletService implements IWalletService {
         ? this.documentos.indemnizaciones.estadoDeDocumentos(idsIndemnizaciones)
         : [],
       idsRechazos.length > 0 ? this.documentos.rechazos.estadoDeDocumentos(idsRechazos) : [],
+      idsPagosATienda.length > 0 ? this.documentos.pagosATienda.estadoDeDocumentos(idsPagosATienda) : [],
+      idsPremios.length > 0 ? this.documentos.premios.estadoDeDocumentos(idsPremios) : [],
     ]);
     const estado = {
       pago_por_cuenta_tienda: new Map(pagos.map((e) => [e.id, e])),
@@ -201,6 +215,8 @@ export class WalletService implements IWalletService {
       egreso_caja: new Map(egresos.map((e) => [e.id, e])),
       indemnizacion: new Map(indemnizaciones.map((e) => [e.id, e])),
       rechazo_tienda_cobro: new Map(rechazos.map((e) => [e.id, e])),
+      pago_tienda: new Map(pagosATienda.map((e) => [e.id, e])),
+      premio_del_ranking: new Map(premios.map((e) => [e.id, e])),
     };
 
     return movimientos.map((m) => {

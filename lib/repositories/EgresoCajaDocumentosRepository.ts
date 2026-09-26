@@ -69,3 +69,52 @@ export class IndemnizacionDocumentosRepository {
     return ids.map((id) => ({ id, anulado: anulados.has(id), tieneComprobante: false }));
   }
 }
+
+/**
+ * FICHA 458-C (revision B3, R71) — el estado de los PAGOS DE ORDENEX A UNA TIENDA (172) cuyo egreso
+ * (`egreso_pago_tienda`, origen `pago_tienda`) esta en la pagina. id = el `liquidacion_pago`.
+ * «Anulado» = existe su `liquidacion_anulacion` (el documento de la 172, UNIQUE por pago); el
+ * comprobante, el de la 458-B (`wallet_comprobante.liquidacion_pago_id`). DOS consultas, ninguna si
+ * la lista viene vacia. SOLO queries.
+ */
+export class PagoTiendaCajaDocumentosRepository {
+  constructor(private readonly prisma: Pick<PrismaClient, "liquidacionAnulacion" | "walletComprobante">) {}
+
+  async estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> {
+    if (ids.length === 0) return [];
+    const lista = [...ids];
+    const anulaciones = await this.prisma.liquidacionAnulacion.findMany({
+      where: { pagoId: { in: lista } },
+      select: { pagoId: true },
+    });
+    const comprobantes = await this.prisma.walletComprobante.findMany({
+      where: { liquidacionPagoId: { in: lista } },
+      select: { liquidacionPagoId: true },
+    });
+    const anulados = new Set(anulaciones.map((a) => a.pagoId));
+    const conComprobante = new Set(comprobantes.map((c) => c.liquidacionPagoId));
+    return lista.map((id) => ({ id, anulado: anulados.has(id), tieneComprobante: conComprobante.has(id) }));
+  }
+}
+
+/**
+ * FICHA 458-C (revision B3, R71) — el estado de los PREMIOS DEL RANKING (293) cuyo egreso de caja
+ * (`egreso_pago_mensajero`, origen `ranking_snapshot_fila`) esta en la pagina. id = la fila del podio.
+ * «Anulado» = existe su reverso de caja (`ingreso_ajuste` con la MISMA clave de origen), que
+ * `PremioRankingDevengoService.anularPremio` escribe en la misma transaccion que la compensacion del
+ * libro del mensajero. Un premio no lleva comprobante. UNA consulta, ninguna si la lista viene vacia.
+ */
+export class PremioCajaDocumentosRepository {
+  constructor(private readonly prisma: Pick<PrismaClient, "walletMovimiento">) {}
+
+  async estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> {
+    if (ids.length === 0) return [];
+    const lista = [...ids];
+    const reversos = await this.prisma.walletMovimiento.findMany({
+      where: { categoria: "ingreso_ajuste", origenTipo: "ranking_snapshot_fila", origenId: { in: lista } },
+      select: { origenId: true },
+    });
+    const anulados = new Set(reversos.map((r) => r.origenId));
+    return lista.map((id) => ({ id, anulado: anulados.has(id), tieneComprobante: false }));
+  }
+}

@@ -9,6 +9,7 @@ import {
   type DescargaFilasResult,
 } from "@/components/shared/DataTable";
 import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
+import { PANEL_TEXTO } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
 import type { NaturalezaMovimiento, WalletMovimientoDTO } from "@/lib/types/wallet";
 import { cn } from "@/lib/utils";
 
@@ -137,6 +138,21 @@ function claseDeFila(m: WalletMovimientoDTO): string | undefined {
   return m.documento?.anulado ? "text-muted-foreground line-through" : undefined;
 }
 
+/**
+ * B2 (revisión 458-C; 457 R41, 459 R66, 461 R20/R71) — la fila anulada DICE «Anulado», con la palabra y
+ * no solo con el tachado (que un lector de pantalla no anuncia). Sale del `documento` del servidor, como
+ * el tachado. Va en la celda de «Ver», donde vivían las acciones: el orden de las columnas no se toca.
+ * Es una insignia (caja en línea atómica), así que el tachado de la fila no la cruza.
+ */
+function CeldaVer({ m, onCambio }: { m: WalletMovimientoDTO; onCambio?: () => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      {m.documento?.anulado ? <Badge variant="secondary">{PANEL_TEXTO.anulado}</Badge> : null}
+      <VerMovimientoCaja movimiento={m} onCambio={onCambio} />
+    </div>
+  );
+}
+
 export interface WalletLedgerProps {
   movimientos: WalletMovimientoDTO[];
   isLoading?: boolean;
@@ -245,7 +261,7 @@ export function WalletLedger({
         id: "ver",
         value: "Ver",
         minWidth: "5rem",
-        render: (m) => <VerMovimientoCaja movimiento={m} onCambio={onCambio} />,
+        render: (m) => <CeldaVer m={m} onCambio={onCambio} />,
       },
     ],
     [onCambio],
