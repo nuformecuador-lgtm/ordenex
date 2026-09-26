@@ -405,7 +405,7 @@ export async function listarSaldosTiendasCompletoAction(
  * validar y antes de llamar al servicio (R29), y un `tiendaId` ausente o vacio se corta en
  * `schema.parse` (R25) — en ninguno de los dos casos se llega a consultar la base.
  *
- * @sin-superficie FICHA 458-D (T D.8, D14): el desglose de una tienda. Su superficie era `DesgloseMovimientosTienda`, el desplegable de `/wallet/tiendas`, retirado; lo sustituye el estado de cuenta (`verEstadoCuentaAction`). Retirar la accion es cambio de servidor, anotado como pendiente en `progress/impl_458-D.md`.
+ * @sin-superficie FICHA 458-D (T D.8, D14): el desglose de una tienda. Su superficie era `DesgloseMovimientosTienda`, el desplegable de `/wallet/tiendas`, retirado; lo sustituye el estado de cuenta (`verEstadoCuentaAction`). NO se retira (458-D servidor, 2026-09-26): sin llamadores en API publica, asistente, scripts ni crons, pero la usan `tests/integration/db/wallet-cierres-selector.test.ts` y `wallet-origen-legible.test.ts` (redes de la 458-A contra Postgres), `tests/integration/wallet-tiendas-page.test.tsx`, `BajoRiesgoPaginacion.test.tsx`, `saldos-tiendas-table.negativo.test.tsx`, `wallet-tienda-schemas.test.ts` y `wallet-tienda-desglose-action.test.ts`; retirarla exige mover antes esas redes al estado de cuenta.
  */
 export async function listarMovimientosDeTiendaAction(
   input: unknown,
@@ -428,7 +428,7 @@ export async function listarMovimientosDeTiendaAction(
  * rechaza `page`/`pageSize` porque este modo no pagina. Ninguna rama devuelve filas junto a un
  * error.
  *
- * @sin-superficie FICHA 458-D (T D.8, D14): la descarga del desglose de una tienda. Su superficie era la descarga de `DesgloseMovimientosTienda`, retirado; lo sustituye el estado de cuenta (`verEstadoCuentaAction`). Retirar la accion es cambio de servidor, anotado como pendiente en `progress/impl_458-D.md`.
+ * @sin-superficie FICHA 458-D (T D.8, D14): la descarga del desglose de una tienda. Su superficie era la descarga de `DesgloseMovimientosTienda`, retirado; lo sustituye el estado de cuenta (`verEstadoCuentaAction`). NO se retira (458-D servidor, 2026-09-26): sin llamadores en API publica, asistente, scripts ni crons, pero la usan `tests/integration/db/wallet-cierres-selector.test.ts` y `wallet-origen-legible.test.ts` (redes de la 458-A contra Postgres), `tests/integration/wallet-tiendas-page.test.tsx`, `BajoRiesgoPaginacion.test.tsx`, `saldos-tiendas-table.negativo.test.tsx`, `wallet-tienda-schemas.test.ts` y `wallet-tienda-desglose-action.test.ts`; retirarla exige mover antes esas redes al estado de cuenta.
  */
 export async function listarMovimientosDeTiendaCompletoAction(
   input: unknown,

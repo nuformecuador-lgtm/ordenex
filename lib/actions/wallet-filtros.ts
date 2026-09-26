@@ -53,6 +53,12 @@ function toError(
  * `mi_tienda` (`/mi-wallet`: la tienda sale de la sesion y NO se admite ningun id).
  * La consumen `WalletFiltros` y `MiWalletFiltros` (`useConceptosConMovimientos`); el desglose de una
  * tienda que tambien la usaba se retiro en la 458-D (el estado de cuenta filtra por chip).
+ *
+ * FICHA 458-D (servidor, 2026-09-26) — la rama `libro: "tienda"` se queda SIN pantalla y NO se retira:
+ * sin llamadores en API publica, asistente, scripts ni crons, pero la usan
+ * `tests/integration/db/wallet-conceptos-con-movimientos.test.ts` (R13 de la 458-A contra Postgres,
+ * incluida la tienda ajena) y `tests/unit/services/filtros-wallet-service.test.ts`; retirarla exige
+ * mover antes esa red a la rama `mi_tienda`, que lee el MISMO repositorio.
  */
 export async function conceptosConMovimientosAction(
   input: unknown,
@@ -73,7 +79,7 @@ export async function conceptosConMovimientosAction(
  * La consumia el `SelectorBuscable` de `DesgloseMovimientosTienda` y `DesglosePagosMensajero`
  * (`useCierresDeLaCuenta`).
  *
- * @sin-superficie FICHA 458-D (T D.8, D14): los dos desgloses se retiraron y el estado de cuenta que los sustituye no filtra por cierre porque `estadoCuentaSchema` no acepta un cierre (R10: pendiente de servidor, anotado en `progress/impl_458-D.md`). Esta anotacion CADUCA cuando el estado de cuenta filtre por cierre.
+ * @sin-superficie FICHA 458-D (T D.8, D14): los dos desgloses se retiraron; desde la 458-D servidor el estado de cuenta YA filtra por cierre (`cierreId` en `estadoCuentaSchema`, R10/R12) y esta es la lectura de SUS opciones, pero la pantalla todavia no monta el selector (frontend). Esta anotacion CADUCA al montarlo.
  */
 export async function cierresDeLaCuentaAction(
   input: unknown,

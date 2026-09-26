@@ -140,7 +140,7 @@ export async function anularAbonoTiendaAction(
 /**
  * R42–R44 — el enlace temporal del comprobante (acceso total, o la tienda dueña: DH3).
  *
- * @sin-superficie FICHA 458-C/458-D (decision, no deuda): el panel «Ver» del libro (458-C) y «Ver comprobante» de `/mi-wallet` (458-D, TD.5) piden TODO comprobante por `verComprobanteAction({ destino })`, que tambien lee el de este documento (458-B, R77): un solo camino para la oficina y para la tienda. Retirar esta accion es un cambio de servidor, anotado como pendiente en `progress/impl_458-D.md`.
+ * @sin-superficie FICHA 458-C/458-D (decision, no deuda): el panel «Ver» del libro (458-C) y «Ver comprobante» de `/mi-wallet` (458-D, TD.5) piden TODO comprobante por `verComprobanteAction({ destino })`, que tambien lee el de este documento (458-B, R77): un solo camino para la oficina y para la tienda. NO se retira (458-D servidor, 2026-09-26): sin llamadores en API publica, asistente, scripts ni crons, pero la usan `tests/integration/db/abono-tienda-457.test.ts` (el alcance del comprobante de la 457 contra Postgres: la propia, la de otra tienda y el mensajero), `tests/unit/actions/abono-tienda-action.test.ts` y el doble de `WalletLedgerAcciones457.test.tsx`; retirarla exige mover antes esas redes a `verComprobanteAction`.
  */
 export async function obtenerComprobanteAbonoAction(
   input: unknown,
