@@ -90,6 +90,11 @@ describe("R4 — la petición va SIN herramientas y SIN pensamiento extendido", 
     expect(typeof capturas[0].cuerpo.max_tokens).toBe("number");
   });
 
+  it("el techo por defecto es 2048: con 1024 se cortaba a media frase una respuesta de tres casos (457)", async () => {
+    const { capturas } = await pedir();
+    expect(capturas[0].cuerpo.max_tokens).toBe(2048);
+  });
+
   it("CONTROL: el cuerpo tiene lo que SÍ debe tener (si no, «no está tools» sería vacuo)", async () => {
     const { capturas } = await pedir();
     // Sin este caso, un adaptador que mandara `{}` pasaría los dos de arriba en verde.
