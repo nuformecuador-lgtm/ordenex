@@ -71,6 +71,8 @@ interface Medida {
   lecturas: Record<"tiendaA" | "tiendaB" | "mensajero" | "cartonera" | "solano" | "ajena", Lectura>;
   /** Con los demas filtros: lo que devolvio el libro y lo esperado (conjunto y orden). */
   combinados: { nombre: string; obtenido: string[]; esperado: string[]; dtoIgual: boolean }[];
+  /** La fila de las 06:00Z del 2026-09-11 filtrada por el dia 10 y por el dia 11. */
+  bordeDelDia: { dia10: string[]; dia11: string[]; id: string };
   /** El detalle de una fila de la composicion con «A quién». */
   deFila: { obtenido: string[]; esperado: string[] };
   opcionesTodo: { clase: string; nombre: string; valor: AQuienFiltro; movimientos: number }[];
@@ -186,6 +188,21 @@ describeSiHayBase("458-E/TE.2 — filtro «A quién» del libro de la caja (Post
           select: { id: true },
         });
         await tx.walletAnotacion.create({ data: { movimientoId: solano.id, contraparteNombre: "Transportes Solano" } });
+        // Una fila EXACTAMENTE en el borde: el inicio (06:00Z) del dia CR 2026-09-11. Es del 11, no del 10.
+        const borde = await tx.walletMovimiento.create({
+          data: {
+            tipo: "egreso",
+            categoria: "egreso_ajuste",
+            monto: new Prisma.Decimal("1.00"),
+            origenTipo: "manual",
+            origenId: null,
+            descripcion: "458-E: correccion en el borde del dia",
+            registradoPor: actor.usuarioId,
+            fechaMovimiento: inicioDelDiaCREnUtc("2026-09-11"),
+          },
+          select: { id: true },
+        });
+        await tx.walletAnotacion.create({ data: { movimientoId: borde.id, contraparteNombre: "Borde Exacto" } });
 
         // ── El oraculo: la columna «A quién» de cada fila nueva ───────────────────────────────
         const nuevas = (await tx.walletMovimiento.findMany({ select: { id: true } })).filter((x) => !previos.has(x.id)).map((x) => x.id);
@@ -332,6 +349,14 @@ describeSiHayBase("458-E/TE.2 — filtro «A quién» del libro de la caja (Post
           });
         }
 
+        // ── `desde` inclusivo, `hasta` EXCLUSIVO (461/R72) tambien en el camino con «A quién» ────
+        const bordeDe = async (d: string) => {
+          const r = await listarMovimientosAction({ aQuien: { nombre: "Borde Exacto" }, desde: d, hasta: d }, deps);
+          if (r.status !== "ok") throw new Error(`borde ${d}: ${JSON.stringify(r)}`);
+          return r.data.movimientos.map((x) => x.id);
+        };
+        const bordeDelDia = { dia10: await bordeDe("2026-09-10"), dia11: await bordeDe("2026-09-11"), id: borde.id };
+
         // ── El detalle de una fila de la composicion con «A quién» (flete del rechazo de la tienda A) ─
         const filaFlete = "ingreso_flete_devolucion" as const;
         const deFila = await listarMovimientosDeFilaAction({ aQuien: tiendaA, fila: filaFlete, page: 1 }, deps);
@@ -374,6 +399,7 @@ describeSiHayBase("458-E/TE.2 — filtro «A quién» del libro de la caja (Post
           esperado,
           lecturas,
           combinados,
+          bordeDelDia,
           deFila: {
             obtenido: deFila.data.movimientos.map((x) => x.id),
             esperado: filasA.filter((x) => categoriasFila.has(x.categoria)).map((x) => x.id),
@@ -471,6 +497,11 @@ describeSiHayBase("458-E/TE.2 — filtro «A quién» del libro de la caja (Post
     // Anti-vacuidad: los recortes no son todos vacios ni todos el conjunto entero.
     expect(vistos.find((c) => c.nombre === "Sale")?.obtenido.length).toBeGreaterThan(0);
     expect(vistos.find((c) => c.nombre === "Entra")?.obtenido.length).toBeGreaterThan(0);
+  });
+
+  it("R59 + 461/R72: con «A quién», la fila del instante 06:00Z es del dia que EMPIEZA, no del anterior", () => {
+    expect(m().bordeDelDia.dia10).toEqual([]);
+    expect(m().bordeDelDia.dia11).toEqual([m().bordeDelDia.id]);
   });
 
   it("R59: el detalle de una fila de la composicion respeta «A quién»", () => {
