@@ -400,3 +400,56 @@ de la tienda deja de ser «cierre_dia | pago_tienda | manual». **Añadido, mism
 afirmación:** `liquidacion` del libro del mensajero tampoco es ya «RESERVADO» (lo emiten la 172 y la
 205). Los tests de la 43/44 que nombran «RESERVADO» en sus `describe` (describen el estado de su
 migración) no se tocan; verdes.
+
+## TB.15 — Cierre
+
+### Fase 0 repetida
+Anexo en `progress/fase0_458-B.md`: las 12 mutaciones de §8.2 sobre el árbol final (`9708560b`). 1, 2,
+2b, 4, 5, 6, 7, 7b y 12 rojas en las fotografías; 8/8b, 9, 10 y 11 ciegas para las fotografías por
+construcción (carrera, previsualización, estado de fila) y rojas en su test dedicado; la 3 no aplica
+(`cierresDeLaCuenta` es de la 458-A). Fotografías sin mutar: 45/45 verdes.
+
+### Mapa R → test (458-B)
+
+| R | Test |
+| --- | --- |
+| R16 (servidor), R81 | `tests/integration/db/estado-cuenta-saldo-corrido.test.ts` (R81 por la action), `libro-caja-a-quien.test.ts` (R82) |
+| R20–R22 | `wallet-caracterizacion-458.test.ts` (bloque TB.6), `estado-cuenta-saldo-corrido.test.ts`, `tests/unit/utils/saldos-corridos.test.ts` |
+| R23 | `tests/integration/db/wallet-orden-estable-458.test.ts` + pares c1/c2, c3/c4 de la fotografía |
+| R24, R98 (chips) | `tests/unit/guards/estado-cuenta-chips-total.guardia.test.ts` |
+| R25, R71, R72 | `tests/integration/db/wallet-anulacion-458.test.ts` (estado derivado por fila, «motivo no registrado») |
+| R44, R45, R47 | `tests/unit/utils/efecto-movimiento.test.ts`, `tests/integration/db/efecto-movimiento-predice.test.ts` |
+| R46 | parte servidor: `tests/unit/actions/previsualizar-movimiento-action.test.ts` (respuestas de error); pantalla en 458-C |
+| R50 | `efecto-movimiento-predice.test.ts` (lo previsto == lo registrado por el camino real) + `wallet-registro-comprobante-458.test.ts` (sin campos nuevos, ninguna fila lateral) |
+| R51 | `wallet-registro-comprobante-458.test.ts` (reenvío de la clave) + idempotencia existente 172/459/461/457 |
+| R42, R43 (servidor) | `wallet-registro-comprobante-458.test.ts`, `tests/unit/services/registro-con-comprobante.test.ts` |
+| R56, R57 | `tests/integration/db/libro-caja-a-quien.test.ts` |
+| R58 (servidor) | `tests/integration/db/como-quedo.test.ts` |
+| R63–R69, R73 | `tests/unit/services/wallet-anulacion-service.test.ts`, `tests/unit/services/rechazo-tienda-cobro-anulacion.test.ts`, `wallet-anulacion-458.test.ts`, `wallet-anulacion-concurrencia.test.ts` (R67), `caja-invariante-tiendas.test.ts` pasos 14–16 (R68) |
+| R74–R80 | `tests/unit/services/wallet-comprobante-service.test.ts`, `tests/integration/db/wallet-comprobante-alcance.test.ts`, `wallet-registro-comprobante-458.test.ts` |
+| R82 | action tests de anulación, comprobante, previsualizar, cómo quedó, autoría (rol antes de leer) |
+| R83, R86, R87 | tests existentes de 172/205/333/337/461 sin modificar (verdes en el gate) + `liquidacion-pago-tienda-458-concurrencia.test.ts` |
+| R84, R85, R88, R91 | fase 0: `caja-caracterizacion-459.test.ts` (bloque «a propósito»), `wallet-caracterizacion-458.test.ts`, `caja-invariante-tiendas.test.ts` |
+| R89 | `wallet-458-migration.test.ts` (sin UPDATE/DELETE), `reclasificacion-459-*` y `cobro-tienda-461-completar-migration` sin tocar |
+| R90 | todos los DTO nuevos en STRING (tipos) + `efecto-movimiento`/`como-quedo` devuelven texto |
+| R92 | `tests/integration/db/wallet-458-migration.test.ts` (catálogos, CHECK, RLS, down con y sin filas) |
+
+### Salidas reales (gate completo, `progress/gate_458B.log`, árbol `a393d30e`)
+
+- `pnpm run typecheck`: `✓ typecheck paso`.
+- `pnpm run lint`: `✖ 218 problems (0 errors, 218 warnings)` — la misma línea base que al empezar.
+- `pnpm test`: `Test Files 2278 passed (2278)` · `Tests 31965 passed | 26 skipped (31991)`; los 26
+  saltados son de `tests/components/Analitica*.test.tsx` (ajenos); **0 saltados en integration/db**.
+- `✓ tests: sin rojos nuevos` · `INIT_EXIT=0` (escrito dentro del log).
+- En la corrida entera de integration/db de TB.11 cayeron 4 archivos por `40P01`/FK de siembra; aislados
+  y en serie, 3/3 verdes. En el gate completo, ninguno.
+
+### Nota de release
+
+**Migrar preview y prod** (`20260928120000_wallet_458_enums`, `20260928120100_wallet_458_tablas`);
+**correr Q458-1 antes y Q458-3 después** (design §14). Sin backfill. El bucket `wallet-comprobantes` ya
+existe (459). `origin/dev` avanzó a `27c6dce7` (solo docs) desde la base de esta rama.
+
+### Veredicto
+458-B implementada entera (TB.0–TB.15), gate completo verde con `INIT_EXIT=0` y 0 saltados en
+integration/db; lista para revisión.
