@@ -10,8 +10,12 @@ fuentes:
   - app/(app)/wallet/_components/BarraComposicionCaja.tsx
   - app/(app)/wallet/_components/ComposicionGananciaCard.tsx
   - app/(app)/wallet/_components/WalletLedger.tsx
-  - app/(app)/wallet/_components/DocumentoCajaAcciones.tsx
-  - app/(app)/wallet/_components/RegistrarMovimientoCajaDialog.tsx
+  - app/(app)/wallet/_components/VerMovimientoCaja.tsx
+  - components/shared/wallet/RegistrarMovimientoDialog.tsx
+  - components/shared/wallet/AsiQueda.tsx
+  - components/shared/wallet/DetalleMovimientoPanel.tsx
+  - components/shared/wallet/AnularMovimientoDialog.tsx
+  - components/shared/wallet/registrar-movimiento-labels.ts
   - app/(app)/wallet/_components/wallet-conceptos-manuales.ts
   - app/(app)/wallet/_components/wallet-labels.ts
   - app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx
@@ -50,7 +54,8 @@ fletes, comisiones, IVA, lo que Ordenex les cobra a las tiendas— y no solo el 
 **El desglose de egresos**, del otro lado.
 
 **El libro**: la lista de movimientos, uno por línea, con su concepto, de quién es el dinero
-(**Ordenex**, **Tienda** u **Ordenex (capital)**) y de dónde viene.
+(**Ordenex**, **Tienda** u **Ordenex (capital)**) y de dónde viene. Cada fila tiene un botón **Ver**
+que abre su detalle. Una fila anulada se ve **tachada**.
 
 ## Los nombres: siempre desde Ordenex, y diciendo quién le paga a quién
 
@@ -125,15 +130,54 @@ cierre se apruebe.
 
 ## Lo que sí se registra a mano
 
-**Registrar movimiento** abre un diálogo con **ocho conceptos en tres grupos**. Al elegir uno, el
-diálogo dice con una frase qué le pasa al dinero de Ordenex, al saldo de la tienda (si la toca) y a la
-ganancia, y con qué nombre va a salir en cada libro.
+**Registrar un movimiento** abre un diálogo con **diez conceptos en tres grupos**, a la izquierda; a la
+derecha, los campos del concepto que elegiste. Al elegir uno, el diálogo dice con una frase qué le pasa
+al dinero de Ordenex, al saldo de la cuenta (si la toca) y a la ganancia, y con qué nombre va a salir en
+cada libro.
 
 | Grupo | Conceptos |
 | --- | --- |
-| **Sale dinero de Ordenex** | Gasto de Ordenex · Sueldo · Ordenex paga un gasto de una tienda · Corrección de caja (resta) |
+| **Sale dinero de Ordenex** | Gasto de Ordenex · Sueldo · Ordenex paga un gasto de una tienda · Corrección de caja (resta) · Ordenex le paga a una tienda · Ordenex le paga a un mensajero |
 | **Llega dinero a la caja** | Aporte de dinero a la caja · Una tienda le paga a Ordenex · Corrección de caja (suma) |
 | **Se descuenta del saldo de una tienda** | Ordenex le cobra a una tienda |
+
+Los gastos fijos no están en la lista: se cobran solos desde sus plantillas, y el diálogo tiene un
+enlace a ellas.
+
+**Lo que se pide.** En **todos** los conceptos, **el monto**, **la fecha** y **el motivo**, y un
+**comprobante opcional**. Además, cada concepto pide lo suyo:
+
+- **Sueldo** y **Gasto de Ordenex**: **a quién se le pagó** —la persona o el proveedor, con su nombre
+  libre—. **Es obligatorio.** La referencia es opcional.
+- **Corrección de caja**: **a quién**, si lo sabés (opcional), y la referencia, también opcional.
+- **Los conceptos de una tienda o de un mensajero**: la cuenta, que se elige **buscando por su nombre**
+  (solo cuentas activas).
+- **Los pagos** (a una tienda, a un mensajero, de una tienda a Ordenex, y el pago de un gasto de una
+  tienda): **el método** —Efectivo, SINPE o Transferencia—; **en SINPE y transferencia la referencia es
+  obligatoria**.
+
+**Ordenex le paga a una tienda** le entrega a la tienda lo que tiene a su favor: sale dinero de la caja
+y baja **lo que Ordenex les debe a las tiendas**; la ganancia no cambia. Solo se admite **hasta lo que
+Ordenex le debe** a esa tienda. **Ordenex le paga a un mensajero** reparte el importe entre sus cierres
+pendientes y baja lo que Ordenex le debe; la caja no cambia con él.
+
+### «Así queda»: el antes y el después, antes de registrar
+
+Debajo del formulario, en cuanto escribís el monto (y elegís la cuenta, si el concepto la lleva), el
+recuadro **Así queda** te dice cómo van a quedar, **antes y después**: el saldo de la cuenta, la cifra
+grande de la caja, la **ganancia de Ordenex**, **lo que Ordenex les debe a las tiendas** y el **saldo
+inicial y aportes**. Lo que el concepto no mueve dice **«no cambia»**. Las cifras las calcula el
+servidor con la misma cuenta que la tarjeta de arriba.
+
+- Si la tienda **queda con el saldo en contra**, el recuadro lo avisa en palabras, con el saldo y su
+  signo, antes de que confirmes.
+- Si el monto **supera lo que se puede pagar**, lo dice.
+- Si no se pudo calcular, lo dice y **no enseña cifras**: podés registrar igual, el servidor revisa el
+  movimiento antes de guardarlo.
+
+Al registrar, el diálogo se cierra, el aviso te dice cómo quedó (el saldo que devolvió el servidor) y el
+libro, las tarjetas y la composición se actualizan solos. Si algo no está bien, lo dice **bajo el campo**
+y lo que escribiste se queda.
 
 **Gastos fijos.** En vez de teclear el mismo gasto cada mes, se define una plantilla con **cada cuánto
 se cobra**, y se puede **activar o desactivar** sin borrarla. Los que quedan pendientes de cobrar
@@ -257,12 +301,24 @@ Se piden **qué es** (saldo inicial o aporte), **el monto**, **la fecha**, **el 
 Al registrar un saldo inicial, la cifra grande pasa a llamarse **Dinero en caja** y aparece la barra de
 reparto. Si se anula, vuelve a **Flujo de dinero registrado**. La ganancia no cambia en ningún caso.
 
+## Ver un movimiento
+
+**Ver**, en cada fila del libro, abre su detalle a un costado: **a quién** (la tienda, el mensajero, la
+persona o el proveedor), **por qué** (el motivo), **de dónde sale**, el **comprobante**, **quién lo
+registró** —o **Automático** y qué lo produjo, como «Aprobación del cierre»—, su **estado** (vigente o
+**Anulado**) y **Cómo quedó**: la cifra grande, la ganancia, lo que Ordenex les debe a las tiendas y el
+saldo inicial y aportes **justo después** de ese movimiento, y el saldo de la cuenta que tocó.
+
+Un **cobro por rechazo** dice además en palabras que es un cargo a la tienda: la ganancia sube y el saldo
+de la tienda baja, sin dinero nuevo en la caja.
+
 ## Anular: con motivo, y sin borrar nada
 
-Un **pago de un gasto de una tienda**, un **aporte de dinero a la caja**, un **cobro de Ordenex a una
-tienda**, un **pago de una tienda a Ordenex** o una **corrección de caja** no se editan. Tampoco un
-**cobro por rechazo a una tienda** ni una **indemnización por un incidente**. Si hubo un error, se anulan desde su fila en el
-libro de la caja con **Anular…**:
+Un **sueldo**, un **gasto de Ordenex**, un **gasto fijo cobrado**, un **pago de un gasto de una tienda**,
+un **aporte de dinero a la caja**, un **cobro de Ordenex a una tienda**, un **pago de una tienda a
+Ordenex** o una **corrección de caja** no se editan. Tampoco un **cobro por rechazo a una tienda** ni una
+**indemnización por un incidente**. Si hubo un error, se anulan desde el detalle de su fila: **Ver** y
+luego **Anular…**. Es la misma forma para todos:
 
 - **El motivo es obligatorio.** Queda guardado junto a la anulación.
 - Se registra **hoy** un **movimiento contrario** por el mismo monto. El registro original, su
@@ -293,15 +349,23 @@ Si te dice **«Ya estaba anulado; no se registró nada más»**, alguien se te a
 cobro **no se puede anular desde aquí**, es uno de los cobros antiguos que ya se corrigieron como pago
 de un gasto de la tienda, o uno sin su línea en la caja: se explica en el propio aviso.
 
-Un **gasto de Ordenex** o un **sueldo** registrado a mano se **reversa** desde su fila con **Reversar**:
-se registra una corrección que suma por el mismo monto, y la fila pasa a decir **Reversado**.
+Al anular un **gasto de Ordenex**, un **sueldo** o un **gasto fijo cobrado**, se registra una **Corrección
+de caja (suma)** por el mismo monto: la caja y la ganancia vuelven a subir. Los que se revirtieron antes,
+sin motivo, se ven **Anulado · motivo no registrado**.
+
+Lo que nace de un cierre, una anulación y las salidas de los cobros reclasificados **no ofrecen
+Anular…**: el detalle no tiene el botón.
 
 ## El comprobante
 
 - **Opcional.** Imagen JPEG, PNG o WebP, o un PDF, de hasta 4 MB. Un cobro a una tienda no lleva
   comprobante. El pago de una tienda a Ordenex sí puede llevarlo.
-- Se guarda **privado**: no tiene un enlace público. **Ver comprobante**, en la fila del libro, lo abre
-  con un enlace que dura poco.
+- Se puede adjuntar **en todos los conceptos** al registrarlos.
+- Se guarda **privado**: no tiene un enlace público. **Ver comprobante**, en el detalle de la fila
+  (**Ver**), lo abre con un enlace que dura poco. Se nombra por lo que es —«Comprobante de «Sueldo» del
+  2026-09-12»—, nunca por el nombre del archivo.
+- Si un movimiento no tiene comprobante, en su detalle aparece **Adjuntar comprobante**, **una sola
+  vez**: no se reemplaza ni se borra. Un movimiento anulado ya no admite uno.
 - Si el comprobante no se pudo guardar, **no se registra nada**: probá de nuevo.
 
 ## Las fechas, en hora de Costa Rica
@@ -330,8 +394,8 @@ cuadrar fuera, con los mismos nombres que la tabla.
 - **No muestra lo que le debés a cada tienda.** Eso es **Wallet · Tiendas**.
 - **No muestra lo que le debés a cada mensajero.** Eso es **Wallet · Mensajeros**.
 - **No es el saldo del banco**, salvo que alguien haya registrado el saldo inicial real.
-- **No se editan movimientos.** Un pago de un gasto, un aporte, un cobro a una tienda, un pago de una
-  tienda a Ordenex, una corrección, un cobro por rechazo o una indemnización se anulan con motivo; un
-  gasto o sueldo se reversa; los demás son inmutables.
+- **No se editan movimientos.** Un sueldo, un gasto, un pago de un gasto, un aporte, un cobro a una
+  tienda, un pago de una tienda a Ordenex, una corrección, un cobro por rechazo o una indemnización se
+  anulan con motivo; los demás son inmutables.
 - **No se corrigen cifras de entregas.** Un movimiento que nació de un cierre se arregla en el cierre,
   no acá.

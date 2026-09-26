@@ -138,9 +138,73 @@ describe("458-B (bloque B) — la oficina puede preguntar por la anulacion del c
       "lib/services/RechazoTiendaCobroService.ts",
       "lib/services/EgresoCajaAnulacionService.ts",
       "lib/actions/wallet-anulacion.ts",
-      "app/(app)/wallet/_components/DocumentoCajaAcciones.tsx",
+      // 458-C (TC.5): `DocumentoCajaAcciones` se retiró; la anulación vive en el panel «Ver».
+      "components/shared/wallet/DetalleMovimientoPanel.tsx",
     ]) {
       expect(declaradas, `wallet-caja sin ${fuente}`).toContain(fuente);
     }
+  });
+});
+
+// ── Bloque C — 458-C «Registrar un movimiento y panel Ver» ─────────────────────────────────────────
+//
+// La oficina puede preguntar cómo se registra con el diálogo único (diez conceptos, «a quién»,
+// «Así queda», comprobante) y cómo se ve y se anula un movimiento (panel «Ver», «Anular…» uniforme,
+// adjuntar el comprobante). Nada de eso llega a la tienda, al mensajero ni a la bodega (R103).
+
+describe("458-C (bloque C) — la oficina puede preguntar cómo registrar, ver y anular un movimiento", () => {
+  it.each(OFICINA)("%s: el diálogo único, sus diez conceptos y lo que pide cada uno", (rol) => {
+    const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
+    expect(caja).toContain("**Registrar un movimiento** abre un diálogo con **diez conceptos en tres grupos**");
+    expect(caja).toContain(
+      "**Sale dinero de Ordenex** | Gasto de Ordenex · Sueldo · Ordenex paga un gasto de una tienda · Corrección de caja (resta) · Ordenex le paga a una tienda · Ordenex le paga a un mensajero",
+    );
+    expect(caja).toContain("**a quién se le pagó** —la persona o el proveedor, con su nombre libre—. **Es obligatorio.**");
+    expect(caja).toContain("la cuenta, que se elige **buscando por su nombre**");
+    expect(caja).toContain("Solo se admite **hasta lo que Ordenex le debe** a esa tienda.");
+  });
+
+  it.each(OFICINA)("%s: «Así queda» con el antes y el después, «no cambia» y el aviso de saldo en contra", (rol) => {
+    const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
+    expect(caja).toContain("### «Así queda»: el antes y el después, antes de registrar");
+    expect(caja).toContain("Lo que el concepto no mueve dice **«no cambia»**.");
+    expect(caja).toContain("Si la tienda **queda con el saldo en contra**, el recuadro lo avisa en palabras");
+    expect(caja).toContain("Si no se pudo calcular, lo dice y **no enseña cifras**");
+  });
+
+  it.each(OFICINA)("%s: «Ver», «Anular…» uniforme (también sueldo y gasto) y el comprobante que se adjunta una vez", (rol) => {
+    const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
+    expect(caja).toContain("## Ver un movimiento");
+    expect(caja).toContain("**Ver**, en cada fila del libro, abre su detalle a un costado");
+    expect(caja).toContain("se anulan desde el detalle de su fila: **Ver** y luego **Anular…**");
+    expect(caja).toContain("Al anular un **gasto de Ordenex**, un **sueldo** o un **gasto fijo cobrado**");
+    expect(caja).toContain("aparece **Adjuntar comprobante**, **una sola vez**");
+    // D11: «Reversar» ya no existe en la ayuda de la caja.
+    expect(caja).not.toMatch(/Reversar|Reversado/);
+    expect(caja).not.toContain("**ocho conceptos en tres grupos**");
+  });
+
+  it("la caja y su diálogo NO llegan a la tienda, al mensajero ni a la bodega", () => {
+    for (const rol of FUERA_DE_OFICINA) {
+      const todo = todoElContexto(rol);
+      expect(todo).not.toContain("### «Así queda»: el antes y el después, antes de registrar");
+      expect(todo).not.toContain("## Ver un movimiento");
+    }
+  });
+
+  it("oficina/wallet-caja declara como fuentes las piezas nuevas y ya no las retiradas", () => {
+    const crudo = readFileSync(path.join(DIR_AYUDA, "oficina/wallet-caja.md"), "utf8");
+    const declaradas = partirFrontmatter(crudo).datos.fuentes ?? [];
+    for (const fuente of [
+      "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+      "components/shared/wallet/AsiQueda.tsx",
+      "components/shared/wallet/DetalleMovimientoPanel.tsx",
+      "components/shared/wallet/AnularMovimientoDialog.tsx",
+      "app/(app)/wallet/_components/VerMovimientoCaja.tsx",
+    ]) {
+      expect(declaradas, `wallet-caja sin ${fuente}`).toContain(fuente);
+    }
+    expect(declaradas).not.toContain("app/(app)/wallet/_components/RegistrarMovimientoCajaDialog.tsx");
+    expect(declaradas).not.toContain("app/(app)/wallet/_components/DocumentoCajaAcciones.tsx");
   });
 });

@@ -77,7 +77,8 @@ describe("461 R56/R57 — la oficina puede preguntar por el cobro de Ordenex a u
   // fijaba aquí —los nombres y los tres grupos— se conserva literal.
   it.each(OFICINA)("%s: los ocho conceptos del diálogo con sus nombres y sus tres grupos", (rol) => {
     const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
-    expect(caja).toContain("**Sale dinero de Ordenex** | Gasto de Ordenex · Sueldo · Ordenex paga un gasto de una tienda · Corrección de caja (resta)");
+    // FICHA 458-C (TC.6, R37) — REESCRITO: «Sale dinero de Ordenex» gana los dos pagos de Ordenex (impl_458-C.md).
+    expect(caja).toContain("**Sale dinero de Ordenex** | Gasto de Ordenex · Sueldo · Ordenex paga un gasto de una tienda · Corrección de caja (resta) · Ordenex le paga a una tienda · Ordenex le paga a un mensajero");
     expect(caja).toContain("**Llega dinero a la caja** | Aporte de dinero a la caja · Una tienda le paga a Ordenex · Corrección de caja (suma)");
     expect(caja).toContain("**Se descuenta del saldo de una tienda** | Ordenex le cobra a una tienda");
   });
