@@ -72,6 +72,13 @@ export interface AnulacionLeida {
 export type TipoDeDocumentoDeLibro = "liquidacion_pago" | "cobro_tienda" | "pago_por_cuenta_tienda" | "abono_tienda";
 
 export interface IEstadoCuentaRepository {
+  /**
+   * FICHA 458-B (revision M2) — ejecuta `fn` con un repositorio ligado a UNA transaccion
+   * REPEATABLE READ: todas sus lecturas ven la MISMA foto de los libros. Sin esto, un cierre
+   * aprobado entre dos lecturas (los totales y el periodo) hace que R22 no cuadre y la pantalla
+   * responda con un error de servidor.
+   */
+  enLecturaConsistente<T>(fn: (repo: IEstadoCuentaRepository) => Promise<T>): Promise<T>;
   /** El nombre de la cuenta si existe con ese papel (tienda = adminTienda, mensajero = mensajero, bodega = zona satelite); `null` si no. */
   nombreDeCuenta(tipo: "tienda" | "mensajero" | "bodega", id: string): Promise<string | null>;
 

@@ -20,12 +20,21 @@ export interface EstadoCuentaConfig {
   PAGE_SIZE: number;
   /** Cota maxima del tamano de pagina: por encima, `validation_error`. */
   MAX_PAGE_SIZE: number;
+  /**
+   * FICHA 458-B (revision M2) — tiempo maximo de la transaccion REPEATABLE READ que agrupa las
+   * lecturas del extracto, y espera maxima por una conexion del pool (ms). Mismos valores que la
+   * lectura consistente de la analitica financiera (`lib/config/analitica-financiera.ts`).
+   */
+  TIMEOUT_LECTURA_MS: number;
+  MAX_WAIT_LECTURA_MS: number;
 }
 
 export function loadEstadoCuentaConfig(): EstadoCuentaConfig {
   return {
     PAGE_SIZE: readPositiveInt("ESTADO_CUENTA_PAGE_SIZE", 20),
     MAX_PAGE_SIZE: readPositiveInt("ESTADO_CUENTA_MAX_PAGE_SIZE", 100),
+    TIMEOUT_LECTURA_MS: readPositiveInt("ESTADO_CUENTA_TIMEOUT_LECTURA_MS", 15_000),
+    MAX_WAIT_LECTURA_MS: readPositiveInt("ESTADO_CUENTA_MAX_WAIT_LECTURA_MS", 5_000),
   };
 }
 

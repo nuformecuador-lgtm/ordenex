@@ -132,12 +132,17 @@ export class EstadoCuentaService implements IEstadoCuentaService {
       take: input.pageSize,
     };
 
-    const lectura =
+    // FICHA 458-B (revision M2) — TODAS las lecturas del extracto en UNA transaccion REPEATABLE READ:
+    // la pagina, el saldo actual, el inicial y el periodo ven la MISMA foto de los libros. Sin ella,
+    // un cierre aprobado entre `totales…` y `periodo…` hacia que R22 no cuadrara (error de servidor
+    // intermitente en la pantalla), aunque el dinero estuviera bien.
+    const lectura = await this.repo.enLecturaConsistente((repo) =>
       tipo === "tienda"
-        ? await this.leerTienda(id, ventana)
+        ? this.leerTienda(repo, id, ventana)
         : tipo === "mensajero"
-          ? await this.leerMensajero(id, ventana)
-          : await this.leerBodega(id, ventana);
+          ? this.leerMensajero(repo, id, ventana)
+          : this.leerBodega(repo, id, ventana),
+    );
 
     // R22 — lo que se enseña TIENE que cuadrar. Sin `hasta` el periodo termina hoy y el final es el
     // saldo actual de la cuenta, el mismo que el listado y la tarjeta.
@@ -188,15 +193,15 @@ export class EstadoCuentaService implements IEstadoCuentaService {
 
   // ── Tienda ──────────────────────────────────────────────────────────────────────────────────
 
-  private async leerTienda(tiendaId: string, v: Ventana): Promise<Lectura> {
-    const pagina = await this.repo.paginaDeTienda(tiendaId, v);
-    const actual = await this.repo.totalesDeTienda(tiendaId);
-    const antes = v.desdeUtc === undefined ? null : await this.repo.totalesDeTienda(tiendaId, v.desdeUtc);
-    const periodo = await this.repo.periodoDeTienda(tiendaId, v.desdeUtc, v.hastaUtc);
+  private async leerTienda(repo: IEstadoCuentaRepository, tiendaId: string, v: Ventana): Promise<Lectura> {
+    const pagina = await repo.paginaDeTienda(tiendaId, v);
+    const actual = await repo.totalesDeTienda(tiendaId);
+    const antes = v.desdeUtc === undefined ? null : await repo.totalesDeTienda(tiendaId, v.desdeUtc);
+    const periodo = await repo.periodoDeTienda(tiendaId, v.desdeUtc, v.hastaUtc);
     const totales = totalesNetos(periodo, claveDeParTienda, (m: MovimientoDelPeriodoRow) => m.tipo === "credito");
     const documentos = pagina.filas.map(documentoDeTienda);
-    const estados = await this.estadosDeDocumentos(documentos, null);
-    const aprobadores = await this.repo.quienAproboLosCierres(cierresDe(pagina.filas));
+    const estados = await this.estadosDeDocumentos(repo, documentos, null);
+    const aprobadores = await repo.quienAproboLosCierres(cierresDe(pagina.filas));
     return {
       saldoActual: derivarSaldoTienda(actual.creditos, actual.debitos).saldo,
       saldoInicial: antes === null ? "0.00" : derivarSaldoTienda(antes.creditos, antes.debitos).saldo,
@@ -218,15 +223,15 @@ export class EstadoCuentaService implements IEstadoCuentaService {
 
   // ── Mensajero ───────────────────────────────────────────────────────────────────────────────
 
-  private async leerMensajero(mensajeroId: string, v: Ventana): Promise<Lectura> {
-    const pagina = await this.repo.paginaDeMensajero(mensajeroId, v);
-    const actual = await this.repo.totalesDeMensajero(mensajeroId);
-    const antes = v.desdeUtc === undefined ? null : await this.repo.totalesDeMensajero(mensajeroId, v.desdeUtc);
-    const periodo = await this.repo.periodoDeMensajero(mensajeroId, v.desdeUtc, v.hastaUtc);
+  private async leerMensajero(repo: IEstadoCuentaRepository, mensajeroId: string, v: Ventana): Promise<Lectura> {
+    const pagina = await repo.paginaDeMensajero(mensajeroId, v);
+    const actual = await repo.totalesDeMensajero(mensajeroId);
+    const antes = v.desdeUtc === undefined ? null : await repo.totalesDeMensajero(mensajeroId, v.desdeUtc);
+    const periodo = await repo.periodoDeMensajero(mensajeroId, v.desdeUtc, v.hastaUtc);
     const totales = totalesNetos(periodo, claveDeParMensajero, (m: MovimientoDelPeriodoRow) => m.tipo === "devengo");
     const documentos = pagina.filas.map(documentoDeMensajero);
-    const estados = await this.estadosDeDocumentos(documentos, mensajeroId);
-    const aprobadores = await this.repo.quienAproboLosCierres(cierresDe(pagina.filas));
+    const estados = await this.estadosDeDocumentos(repo, documentos, mensajeroId);
+    const aprobadores = await repo.quienAproboLosCierres(cierresDe(pagina.filas));
     return {
       saldoActual: derivarCuentaPorPagar(actual.devengado, actual.pagado).cuentaPorPagar,
       saldoInicial: antes === null ? "0.00" : derivarCuentaPorPagar(antes.devengado, antes.pagado).cuentaPorPagar,
@@ -252,11 +257,11 @@ export class EstadoCuentaService implements IEstadoCuentaService {
 
   // ── Bodega ──────────────────────────────────────────────────────────────────────────────────
 
-  private async leerBodega(zonaId: string, v: Ventana): Promise<Lectura> {
-    const pagina = await this.repo.paginaDeBodega(zonaId, v);
-    const actual = await this.repo.totalesDeBodega(zonaId);
-    const antes = v.desdeUtc === undefined ? null : await this.repo.totalesDeBodega(zonaId, v.desdeUtc);
-    const periodo = await this.repo.periodoDeBodega(zonaId, v.desdeUtc, v.hastaUtc);
+  private async leerBodega(repo: IEstadoCuentaRepository, zonaId: string, v: Ventana): Promise<Lectura> {
+    const pagina = await repo.paginaDeBodega(zonaId, v);
+    const actual = await repo.totalesDeBodega(zonaId);
+    const antes = v.desdeUtc === undefined ? null : await repo.totalesDeBodega(zonaId, v.desdeUtc);
+    const periodo = await repo.periodoDeBodega(zonaId, v.desdeUtc, v.hastaUtc);
     // En la bodega el «abono» es lo RECIBIDO (baja lo que tiene por entregar); no hay pares anulados.
     const totales = totalesNetos(periodo, () => null, (m) => m.tipo === "recibido");
     const cero = new Prisma.Decimal(0);
@@ -295,6 +300,7 @@ export class EstadoCuentaService implements IEstadoCuentaService {
    * consulta por tipo de documento presente. Clave: `claveDeDocumento`.
    */
   private async estadosDeDocumentos(
+    repo: IEstadoCuentaRepository,
     documentos: (DocumentoDeFila | null)[],
     mensajeroId: string | null,
   ): Promise<Map<string, { anulacion: AnulacionDeFilaDTO | null; tieneComprobante: boolean }>> {
@@ -307,8 +313,8 @@ export class EstadoCuentaService implements IEstadoCuentaService {
         ),
       ];
       if (ids.length === 0) continue;
-      const anulaciones = new Map((await this.repo.anulacionesDe(tipo, ids)).map((a) => [a.documentoId, a]));
-      const comprobantes = await this.repo.conComprobante(tipo, ids);
+      const anulaciones = new Map((await repo.anulacionesDe(tipo, ids)).map((a) => [a.documentoId, a]));
+      const comprobantes = await repo.conComprobante(tipo, ids);
       for (const id of ids) {
         const a = anulaciones.get(id);
         estados.set(`${tipo}:${id}`, {
@@ -333,7 +339,7 @@ export class EstadoCuentaService implements IEstadoCuentaService {
     }
     const dias = documentos.flatMap((d) => (d !== null && d.tipo === "premio" ? [d.dia] : []));
     if (mensajeroId !== null && dias.length > 0) {
-      const reversos = new Map((await this.repo.reversosDePremio(mensajeroId, dias)).map((r) => [r.documentoId, r]));
+      const reversos = new Map((await repo.reversosDePremio(mensajeroId, dias)).map((r) => [r.documentoId, r]));
       for (const dia of dias) {
         const r = reversos.get(dia.toISOString());
         estados.set(`premio:${dia.toISOString()}`, { anulacion: r === undefined ? null : aAnulacion(r), tieneComprobante: false });

@@ -10,6 +10,7 @@ import type {
   TipoDeDocumentoDeLibro,
   VentanaDeLibro,
 } from "@/lib/interfaces/repositories/IEstadoCuentaRepository";
+import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 type Cliente = Pick<
@@ -28,7 +29,14 @@ type Cliente = Pick<
   | "pagoPorCuentaTienda"
   | "abonoTienda"
   | "cierreDia"
->;
+> & {
+  /**
+   * FICHA 458-B (revision M2) — OPCIONAL por el mismo motivo que en `IngresosAnaliticaRepository`:
+   * dentro de la lectura consistente la instancia se construye con el cliente TRANSACCIONAL, que no
+   * tiene `$transaction` (las transacciones no se anidan).
+   */
+  readonly $transaction?: PrismaClient["$transaction"];
+};
 
 /** Lo que devuelve la ventana, tal como sale de la base (montos ya en texto). */
 interface FilaCruda {
@@ -91,6 +99,24 @@ const desdeSql = (desde?: Date) => (desde === undefined ? Prisma.empty : Prisma.
  */
 export class EstadoCuentaRepository implements IEstadoCuentaRepository {
   constructor(private readonly prisma: Cliente) {}
+
+  /**
+   * FICHA 458-B (revision M2) — UNA transaccion `repeatable read` para todas las lecturas del
+   * extracto: Postgres fija el snapshot en la primera sentencia y lo mantiene hasta el final, asi que
+   * la pagina, los totales (actual y anterior) y el periodo ven la misma foto aunque un cierre se
+   * apruebe en medio. Molde: `IngresosAnaliticaRepository.enLecturaConsistente` (feature 187).
+   * Sin `try`/`catch`: un fallo sube tal cual. Anidar falla ruidoso en vez de reusar el snapshot.
+   */
+  async enLecturaConsistente<T>(fn: (repo: IEstadoCuentaRepository) => Promise<T>): Promise<T> {
+    if (this.prisma.$transaction === undefined) {
+      throw new Error("estado de cuenta: este repositorio ya esta ligado a una lectura consistente; no se anida");
+    }
+    return this.prisma.$transaction(async (tx) => fn(new EstadoCuentaRepository(tx)), {
+      isolationLevel: "RepeatableRead",
+      timeout: estadoCuentaConfig.TIMEOUT_LECTURA_MS,
+      maxWait: estadoCuentaConfig.MAX_WAIT_LECTURA_MS,
+    });
+  }
 
   async nombreDeCuenta(tipo: "tienda" | "mensajero" | "bodega", id: string): Promise<string | null> {
     if (tipo === "bodega") {
