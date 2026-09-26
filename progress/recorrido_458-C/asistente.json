@@ -1,0 +1,26 @@
+[
+  {
+    "rol": "maestro",
+    "ruta": "/wallet",
+    "pregunta": "¿Cómo registro un sueldo y qué me pide? ¿Tengo que poner a quién se le pagó?",
+    "respuesta": "¿Cómo registro un sueldo y qué me pide? ¿Tengo que poner a quién se le pagó? Para registrar un sueldo, entrás a Wallet · Caja y usás Registrar un movimiento. Ahí elegís el concepto Sueldo, que está en el grupo \"Sale dinero de Ordenex\". Te pide: - El monto - La fecha - El motivo - A quién se le pagó — la persona, con su nombre libre. Esto es obligatorio en el caso de Sueldo. - La referencia — esta sí es opcional. - Un comprobante — opcional también. Antes de confirmar, el recuadro «Así queda» te muestra el antes y el después: cómo queda la caja y la ganancia con ese movimiento aplicado. Wallet · Caja"
+  },
+  {
+    "rol": "maestro",
+    "ruta": "/wallet",
+    "pregunta": "¿Qué es el recuadro «Así queda» y qué significa «no cambia»?",
+    "respuesta": "¿Qué es el recuadro «Así queda» y qué significa «no cambia»? \"Así queda\" es el recuadro que aparece en Wallet · Caja, dentro del formulario para registrar un movimiento a mano. En cuanto escribís el monto (y elegís la cuenta, si el concepto la lleva), te muestra antes y después cómo van a quedar: - El saldo de la cuenta (tienda o mensajero, si aplica) - La cifra grande de la caja - La ganancia de Ordenex - Lo que Ordenex les debe a las tiendas - El saldo inicial y aportes Es una vista previa: te deja ver el impacto antes de confirmar, no después. Cuando dice «no cambia» al lado de alguna de esas cifras, significa que el concepto que elegiste no la mueve. Por ejemplo, un pago a una tienda no toca la ganancia de Ordenex, así que ahí vas a ver «no cambia» en esa fila. También tené en cuenta: - Si la tienda queda con el saldo en contra, el recuadro te lo avisa en palabras antes de confirmar. - Si el monto supera lo que se puede pagar, también lo dice. - Si no se pudo calcular, te avisa y no muestra cifras, pero igual podés registrar: el servidor revisa el movimiento antes de guardarlo. Wallet · Caja"
+  },
+  {
+    "rol": "admin",
+    "ruta": "/wallet",
+    "pregunta": "Registré un gasto de Ordenex por error, ¿cómo lo anulo? ¿Se borra?",
+    "respuesta": "Registré un gasto de Ordenex por error, ¿cómo lo anulo? ¿Se borra? Para anular un gasto de Ordenex, andá al libro de Wallet · Caja, buscá la fila de ese gasto y tocá Ver. Ahí vas a encontrar el botón Anular…. Tené en cuenta: - El motivo es obligatorio — tenés que escribirlo, y queda guardado junto con la anulación. - No se borra nada. El registro original, con su comprobante e historial, queda intacto pero la fila pasa a decir Anulado. - Se registra automáticamente un movimiento contrario, hoy, por el mismo monto: en este caso una Corrección de caja (suma), que hace que la caja y la ganancia vuelvan a subir por ese importe. - Una anulación no se puede deshacer. Si al intentarlo te dice que ya estaba anulado, es que alguien más lo anuló antes que vos. Wallet · Caja"
+  },
+  {
+    "rol": "admin",
+    "ruta": "/wallet",
+    "pregunta": "¿Cómo le adjunto un comprobante a un movimiento que registré sin él?",
+    "respuesta": "¿Cómo le adjunto un comprobante a un movimiento que registré sin él? Entrás al detalle de ese movimiento con Ver desde el libro en Wallet · Caja. Si el movimiento no tiene comprobante todavía, ahí te va a aparecer la opción Adjuntar comprobante. Un par de cosas a tener en cuenta: - Solo podés hacerlo una vez: una vez que subís el comprobante, no se reemplaza ni se borra después. - Si el movimiento ya está anulado, no admite que le adjuntes uno. - El archivo puede ser JPEG, PNG, WebP o PDF, hasta 4 MB. Wallet · Caja"
+  }
+]
