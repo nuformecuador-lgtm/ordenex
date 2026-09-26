@@ -69,7 +69,8 @@ import {
   COLUMNAS_DESCARGA_WALLET_CAJA,
   filaDescargaMovimientoCaja,
 } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
-import { CATEGORIA_OPTIONS } from "@/app/(app)/wallet/_components/wallet-labels";
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
+import { CATEGORIA_LABEL as CATEGORIA_LABEL_458, CATEGORIA_TODAS_OPTION } from "@/app/(app)/wallet/_components/wallet-labels";
 
 /** Los DOCUMENTOS (el `origenId` de cada fila): uuids que NUNCA se pintan. */
 const ABONO_ID = "5b7d9f1a-3c5e-4a7b-9d1f-3a5c7e9b1d2f";
@@ -294,7 +295,14 @@ describe("457/R45 — concepto, tipo, origen y dueño en la tabla, el filtro y l
   });
 
   it("el filtro por concepto del libro ofrece los dos conceptos con su nombre desde Ordenex", () => {
-    const opciones = new Map(CATEGORIA_OPTIONS.map((o) => [o.value, o.label]));
+    // 458-A (TA.3): las opciones son los conceptos CON movimientos (aquí, uno de cada uno).
+    const lista = opcionesDeConceptos(
+      ["ingreso_abono_tienda","egreso_reverso_abono_tienda"].map((categoria) => ({ categoria, movimientos: 1 })),
+      CATEGORIA_LABEL_458,
+      "",
+      CATEGORIA_TODAS_OPTION,
+    );
+    const opciones = new Map(lista.map((o) => [o.value, o.label.replace(/ \(1\)$/, "")]));
     expect(opciones.get("ingreso_abono_tienda")).toBe("Una tienda le paga a Ordenex");
     expect(opciones.get("egreso_reverso_abono_tienda")).toBe("Pago de una tienda a Ordenex anulado");
   });

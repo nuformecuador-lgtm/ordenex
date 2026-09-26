@@ -18,6 +18,7 @@ import type { MiWalletModuleProps } from "@/app/(app)/mi-wallet/_components/MiWa
 // Ficha 335 (D5): la lista de roles DENEGADOS se deriva de esta constante, la misma que lee el
 // item de menu. Asi el dia que alguien la amplie, este archivo no se queda comprobando de mas.
 import { ROLES_MI_WALLET } from "@/lib/auth/menu-visibility";
+import { ORIGEN_TIENDA_LABEL } from "@/app/(app)/mi-wallet/_components/mi-wallet-labels";
 
 // Feature 43 (T14, R18/R19/R21) — la pagina `/mi-wallet` resuelve el rol SOLO server-side;
 // rol != adminTienda (o sin sesion) → `notFound` (R19). El backend acota SIEMPRE a
@@ -332,8 +333,9 @@ function sembrarTienda(movs: WalletTiendaMovimientoDTO[], debitos: string) {
   listarMock.mockResolvedValue({
     status: "ok",
     data: {
-      // Ficha 458-A (TA.2): el borde adjunta el origen legible (aqui, el rotulo solo).
-      movimientos: movs.map((m) => ({ ...m, origen: { texto: "Registrado a mano", enlace: null } })),
+      // Ficha 458-A (TA.2): el borde adjunta el origen legible; aqui, el rotulo de SU origen desde la
+      // tienda (sin entidad). Antes era «Registrado a mano» para toda fila, y la pantalla ya lo pinta.
+      movimientos: movs.map((m) => ({ ...m, origen: { texto: ORIGEN_TIENDA_LABEL[m.origenTipo], enlace: null } })),
       total: movs.length,
       page: 1,
       pageSize: 20,

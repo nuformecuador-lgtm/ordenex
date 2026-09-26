@@ -27,6 +27,12 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
   verDetalleDeMiMovimientoCompletoAction: (...a: unknown[]) => detalleCompletoMock(...a),
 }));
 
+// Ficha 458-A (TA.3): el filtro de concepto lee del servidor los conceptos CON movimientos.
+const conceptosMock = vi.fn();
+vi.mock("@/lib/actions/wallet-filtros", () => ({
+  conceptosConMovimientosAction: (...a: unknown[]) => conceptosMock(...a),
+}));
+
 import { DesgloseTiendaLedger } from "@/app/(app)/mi-wallet/_components/DesgloseTiendaLedger";
 import { MiWalletFiltros } from "@/app/(app)/mi-wallet/_components/MiWalletFiltros";
 
@@ -129,26 +135,39 @@ describe("DesgloseTiendaLedger — el cobro aparece en el libro de la tienda (38
 describe("MiWalletFiltros — la tienda puede filtrar por el concepto del cobro (381/R35)", () => {
   it("el selector de concepto ofrece «Ordenex te cobró»", async () => {
     const user = userEvent.setup();
+    conceptosMock.mockResolvedValue({
+      status: "ok",
+      conceptos: [
+        { categoria: "cod_recaudado", movimientos: 5 },
+        { categoria: "cobro_manual", movimientos: 1 },
+      ],
+    });
     render(
-      <MiWalletFiltros
-        onAplicar={vi.fn()}
-        onLimpiar={vi.fn()}
-        cierres={{ opciones: [], hayMas: false, disponible: true }}
-      />,
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <MiWalletFiltros
+          onAplicar={vi.fn()}
+          onLimpiar={vi.fn()}
+          cierres={{ opciones: [], hayMas: false, disponible: true }}
+        />
+      </SWRConfig>,
     );
 
     await user.click(screen.getByRole("combobox", { name: "Filtrar por concepto" }));
     const lista = await screen.findByRole("listbox");
+    await within(lista).findByRole("option", { name: "Ordenex te cobró (1)" });
     const opciones = within(lista)
       .getAllByRole("option")
       .map((o) => o.textContent?.trim());
 
-    // La opción sale SOLA del SEED del enum: no hay ninguna lista de filtro escrita a mano, y
-    // por eso el concepto nuevo es filtrable sin tocar una línea de esta pantalla.
-    expect(opciones).toContain("Ordenex te cobró");
-    // Y sigue ofreciendo los de siempre, en la primera posición el «todos».
-    expect(opciones[0]).toBe("Todos los conceptos");
-    expect(opciones).toContain("Cobrado a tus clientes en contra-entrega");
-    expect(opciones).toContain("Corrección en tu contra");
+    // 458-A (TA.3, R13/R14): la lista es la de los conceptos CON movimientos de la tienda de la
+    // sesión (`libro: "mi_tienda"`, sin id), con su número y la lectura desde la tienda.
+    expect(opciones).toEqual([
+      "Todos los conceptos",
+      "Cobrado a tus clientes en contra-entrega (5)",
+      "Ordenex te cobró (1)",
+    ]);
+    // «Corrección en tu contra» no tiene movimientos: ya no se ofrece (antes salía del SEED).
+    expect(opciones).not.toContain("Corrección en tu contra");
+    expect(conceptosMock).toHaveBeenCalledWith({ libro: "mi_tienda" });
   }, 15000);
 });

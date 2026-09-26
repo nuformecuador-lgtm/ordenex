@@ -51,8 +51,8 @@ function toError(
  * R13–R15 — los conceptos con movimientos del periodo y la cuenta que se miran, con su numero.
  * `libro`: `caja` (`/wallet`), `tienda` (desglose/estado de cuenta de UNA tienda, con `tiendaId`) o
  * `mi_tienda` (`/mi-wallet`: la tienda sale de la sesion y NO se admite ningun id).
- *
- * @sin-superficie 458-A: el backend llega antes que su pantalla; la consumen WalletFiltros, MiWalletFiltros y DesgloseMovimientosTienda en la parte frontend de la misma hija (TA.3), que debe borrar esta anotacion al cablearla.
+ * La consumen `WalletFiltros`, `MiWalletFiltros` y `DesgloseMovimientosTienda`
+ * (`useConceptosConMovimientos`).
  */
 export async function conceptosConMovimientosAction(
   input: unknown,
@@ -70,8 +70,8 @@ export async function conceptosConMovimientosAction(
 /**
  * R10–R12 — los cierres con movimientos en el libro de UNA tienda o de UN mensajero, para el
  * selector con busqueda (por dia `YYYY-MM-DD` o por nombre del mensajero). Solo acceso total.
- *
- * @sin-superficie 458-A: el backend llega antes que su pantalla; la consume el SelectorBuscable de DesgloseMovimientosTienda y DesglosePagosMensajero en la parte frontend de la misma hija (TA.4), que debe borrar esta anotacion al cablearla.
+ * La consume el `SelectorBuscable` de `DesgloseMovimientosTienda` y `DesglosePagosMensajero`
+ * (`useCierresDeLaCuenta`).
  */
 export async function cierresDeLaCuentaAction(
   input: unknown,

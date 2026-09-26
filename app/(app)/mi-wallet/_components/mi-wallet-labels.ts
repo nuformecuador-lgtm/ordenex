@@ -3,7 +3,6 @@ import type {
   WalletTiendaMovimientoCategoria,
   WalletTiendaMovimientoTipo,
 } from "@/lib/types/wallet-tienda";
-import { WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet-tienda";
 
 // Feature 43 (T15) — etiquetas i18n-ready y helper de moneda del ledger POR TIENDA,
 // separados de la logica (docs/conventions: textos de UI fuera del componente).
@@ -163,13 +162,8 @@ export function origenLabel(origenTipo: WalletOrigenTipo): string {
 }
 
 /**
- * Opciones del `Select` de concepto de `/mi-wallet`, pobladas desde el SEED (con opcion "todos") y
- * rotuladas con la lectura desde la tienda (R44).
+ * La opcion «todos» del `Select` de concepto de `/mi-wallet`. El resto ya NO sale del catalogo
+ * completo (458-A, R13/R14): son los conceptos con movimientos de la tienda en el periodo, con su
+ * numero, rotulados desde la tienda con `CATEGORIA_MI_WALLET_LABEL` (R44 de la 461).
  */
-export const CATEGORIA_MI_WALLET_OPTIONS = [
-  { value: "", label: "Todos los conceptos" },
-  ...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({
-    value: categoria,
-    label: CATEGORIA_MI_WALLET_LABEL[categoria],
-  })),
-];
+export const CONCEPTO_MI_WALLET_TODOS_OPTION = { value: "", label: "Todos los conceptos" } as const;

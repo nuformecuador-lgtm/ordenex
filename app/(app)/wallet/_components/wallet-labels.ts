@@ -10,11 +10,7 @@ import type {
   WalletMovimientoTipo,
   WalletOrigenTipo,
 } from "@/lib/types/wallet";
-import {
-  TIPO_EGRESO_MANUAL_SEED,
-  WALLET_MOVIMIENTO_CATEGORIA_SEED,
-  WALLET_MOVIMIENTO_TIPO_SEED,
-} from "@/lib/types/wallet";
+import { TIPO_EGRESO_MANUAL_SEED, WALLET_MOVIMIENTO_TIPO_SEED } from "@/lib/types/wallet";
 import type { MotivoNoAnulable } from "@/lib/types/wallet-tienda";
 import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
 import { proximoCobro, type PeriodicidadUnidad } from "@/lib/utils/periodicidad";
@@ -449,14 +445,12 @@ export const TIPO_OPTIONS = [
   })),
 ];
 
-/** Opciones del `Select` de categoría, pobladas desde el SEED (con opción "todas"). */
-export const CATEGORIA_OPTIONS = [
-  { value: "", label: "Todas las categorías" },
-  ...WALLET_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({
-    value: categoria,
-    label: CATEGORIA_LABEL[categoria],
-  })),
-];
+/**
+ * La opción «todas» del `Select` de categoría del libro. El resto de opciones ya NO sale del
+ * catálogo completo (458-A, R13/R14): son los conceptos con movimientos del periodo, que lee
+ * `WalletFiltros` del servidor y rotula con `CATEGORIA_LABEL` (`opcionesDeConceptos`).
+ */
+export const CATEGORIA_TODAS_OPTION = { value: "", label: "Todas las categorías" } as const;
 
 // ── Feature 45 — egresos administrativos (manual) ──
 

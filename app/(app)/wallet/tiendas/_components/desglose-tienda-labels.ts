@@ -24,7 +24,6 @@
  * servicios), así que «Total devengado / Total pagado / Cuenta por pagar» no aplica.
  */
 import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
-import { WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet-tienda";
 
 export {
   ORIGEN_TIENDA_LABEL,
@@ -64,17 +63,11 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
 };
 
 /**
- * Opciones del `Select` de concepto del desglose, pobladas desde el SEED (con opción "todos") y
- * rotuladas desde Ordenex (R43). Por eso una categoría nueva del libro aparece aquí sin que nadie
- * se acuerde de añadirla (R44 de la 171).
+ * La opción «todos» del `Select` de concepto del desglose. El resto ya NO sale del catálogo
+ * completo (458-A, R13/R14): son los conceptos con movimientos de ESTA tienda en el periodo, con su
+ * número, rotulados desde Ordenex con `CATEGORIA_TIENDA_LABEL` (`opcionesDeConceptos`).
  */
-export const CATEGORIA_TIENDA_OPTIONS = [
-  { value: "", label: "Todos los conceptos" },
-  ...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({
-    value: categoria,
-    label: CATEGORIA_TIENDA_LABEL[categoria],
-  })),
-];
+export const CONCEPTO_TIENDA_TODOS_OPTION = { value: "", label: "Todos los conceptos" } as const;
 
 /**
  * Los CUATRO importes de la cabecera, en el orden de R7 — que es la fórmula leída de
@@ -118,7 +111,6 @@ export const DESGLOSE_TIENDA_COLUMNAS = {
  */
 export const DESGLOSE_TIENDA_FILTRO_LABEL = {
   cierre: "Cierre",
-  cierrePlaceholder: "ID del cierre",
   concepto: "Concepto",
   conceptoPlaceholder: "Todos los conceptos",
   desde: "Desde",

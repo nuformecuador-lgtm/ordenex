@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   CATEGORIA_MI_WALLET_LABEL,
-  CATEGORIA_MI_WALLET_OPTIONS,
+  CONCEPTO_MI_WALLET_TODOS_OPTION,
   DESGLOSE_MI_WALLET_AVISO,
   DESGLOSE_MI_WALLET_LABEL,
   ORIGEN_TIENDA_LABEL,
@@ -12,6 +12,7 @@ import {
   CATEGORIA_TIENDA_LABEL,
   DESGLOSE_TIENDA_LABEL,
 } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-labels";
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import { WALLET_ORIGEN_TIPO_SEED, type WalletOrigenTipo } from "@/lib/types/wallet";
 import {
   WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED,
@@ -133,14 +134,18 @@ describe("461 — CATEGORIA_MI_WALLET_LABEL: la lectura desde la tienda (R44, de
     }
   });
 
-  it("las opciones del filtro salen del SEED con la lectura desde la tienda, tras «Todos los conceptos»", () => {
-    expect(CATEGORIA_MI_WALLET_OPTIONS[0]).toEqual({ value: "", label: "Todos los conceptos" });
-    expect(CATEGORIA_MI_WALLET_OPTIONS.slice(1).map((o) => o.value)).toEqual([
-      ...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED,
-    ]);
-    const opciones = new Map(CATEGORIA_MI_WALLET_OPTIONS.slice(1).map((o) => [o.value, o.label]));
+  it("458-A (R13): las opciones son los conceptos con movimientos, con la lectura desde la tienda, tras «Todos los conceptos»", () => {
+    const lista = opcionesDeConceptos(
+      WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({ categoria, movimientos: 1 })),
+      CATEGORIA_MI_WALLET_LABEL,
+      "",
+      CONCEPTO_MI_WALLET_TODOS_OPTION,
+    );
+    expect(lista[0]).toEqual({ value: "", label: "Todos los conceptos" });
+    expect(lista.slice(1).map((o) => o.value)).toEqual([...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED]);
+    const opciones = new Map(lista.slice(1).map((o) => [o.value, o.label]));
     for (const [clave, texto] of Object.entries(LECTURA_DESDE_LA_TIENDA)) {
-      expect(opciones.get(clave), clave).toBe(texto);
+      expect(opciones.get(clave), clave).toBe(`${texto} (1)`);
     }
   });
 });

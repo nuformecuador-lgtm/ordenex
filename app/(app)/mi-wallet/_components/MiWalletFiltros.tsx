@@ -7,14 +7,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 
+import { CONCEPTOS_FILTRO_AVISO, opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
+import { useConceptosConMovimientos } from "@/components/shared/wallet/use-conceptos-con-movimientos";
+
 // Ficha 461 (R44): las opciones del filtro llevan la lectura DESDE LA TIENDA, la misma de la tabla.
-import { CATEGORIA_MI_WALLET_OPTIONS } from "./mi-wallet-labels";
+import { CATEGORIA_MI_WALLET_LABEL, CONCEPTO_MI_WALLET_TODOS_OPTION } from "./mi-wallet-labels";
 import { opcionesDeCierre, type CierresDeLaTienda } from "./mi-wallet-cierres";
 
-// Feature 43 (T15, R22) — filtros del desglose: cierre, concepto (poblado desde el SEED) y
-// rango de fechas (desde/hasta). Mantiene un BORRADOR local; al pulsar "Aplicar" emite los
-// filtros al modulo, que recarga desglose + saldo por Server Action (el saldo mostrado
-// refleja el conjunto filtrado, R22). "Limpiar" resetea a sin filtros.
+// Feature 43 (T15, R22) — filtros del desglose: cierre, concepto y rango de fechas
+// (desde/hasta). Mantiene un BORRADOR local; al pulsar "Aplicar" emite los filtros al modulo,
+// que recarga desglose + saldo por Server Action (el saldo mostrado refleja el conjunto
+// filtrado, R22). "Limpiar" resetea a sin filtros.
+//
+// Ficha 458-A (TA.3, R13–R15): el concepto ofrece SOLO los conceptos con movimientos de la tienda
+// de la SESION en el periodo y el cierre del borrador, con su numero (`libro: "mi_tienda"`: no
+// viaja ningun id de tienda). El elegido se conserva con 0 si se queda sin movimientos.
 //
 // Ficha 335 (B3/C2) — dos cambios, y ninguno toca el contrato del componente
 // (`onAplicar`/`onLimpiar`/`disabled`), ni el borrador local, ni los cuatro campos:
@@ -71,6 +78,18 @@ export function MiWalletFiltros({
   }
 
   const opcionesCierre = opcionesDeCierre(cierres.opciones);
+  const conceptos = useConceptosConMovimientos({
+    libro: "mi_tienda",
+    cierreId: draft.cierreId || undefined,
+    desde: draft.desde || undefined,
+    hasta: draft.hasta || undefined,
+  });
+  const opcionesConcepto = opcionesDeConceptos(
+    conceptos.conceptos,
+    CATEGORIA_MI_WALLET_LABEL,
+    draft.categoria,
+    CONCEPTO_MI_WALLET_TODOS_OPTION,
+  );
   const sinCierres = cierres.opciones.length === 0;
 
   /**
@@ -134,11 +153,14 @@ export function MiWalletFiltros({
         aria-label="Filtrar por concepto"
         value={draft.categoria}
         onValueChange={(v) => set("categoria", v)}
-        options={CATEGORIA_MI_WALLET_OPTIONS}
-        placeholder="Todos los conceptos"
+        options={opcionesConcepto}
+        placeholder={CONCEPTO_MI_WALLET_TODOS_OPTION.label}
         disabled={disabled}
         className="h-9 w-full sm:w-56"
       />
+      {conceptos.error ? (
+        <span className="text-xs text-destructive">{CONCEPTOS_FILTRO_AVISO.error}</span>
+      ) : null}
 
       {/* Las dos fechas NO tienen placeholder que las nombre (`input[type=date]` pinta su
           propio `dd/mm/aaaa`), asi que conservan un rotulo CORTO y visible pegado al campo. Ese

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   CATEGORIA_TIENDA_LABEL,
-  CATEGORIA_TIENDA_OPTIONS,
+  CONCEPTO_TIENDA_TODOS_OPTION,
   DESGLOSE_TIENDA_COLUMNAS,
   DESGLOSE_TIENDA_ERROR,
   DESGLOSE_TIENDA_FILTRO_LABEL,
@@ -15,6 +15,7 @@ import {
   money,
   origenLabel,
 } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-labels";
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import * as miWalletLabels from "@/app/(app)/mi-wallet/_components/mi-wallet-labels";
 import { CATEGORIA_LABEL } from "@/app/(app)/wallet/_components/wallet-labels";
 import { SALDO_SIGNO_LABEL as SALDO_SIGNO_LABEL_TABLA } from "@/app/(app)/wallet/tiendas/_components/saldo-tienda-signo-label";
@@ -116,15 +117,21 @@ describe("⭑ FICHA 461 — CATEGORIA_TIENDA_LABEL: el libro de la tienda, desde
     }
   });
 
-  it("las opciones del filtro salen del SEED del enum, con el nombre desde Ordenex (R43)", () => {
-    const valores = CATEGORIA_TIENDA_OPTIONS.map((o) => o.value);
-    expect(valores[0]).toBe(""); // "todos los conceptos"
+  it("458-A (R13): las opciones son los conceptos con movimientos, con su número y el nombre desde Ordenex (R43)", () => {
+    // Reescrito en la 458-A (TA.3): ya no salen del SEED (R95). Se le pasan todos los conceptos del
+    // catálogo como «con movimientos» y cada uno sale con su nombre desde Ordenex y su cuenta.
+    const lista = opcionesDeConceptos(
+      WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({ categoria, movimientos: 3 })),
+      CATEGORIA_TIENDA_LABEL,
+      "",
+      CONCEPTO_TIENDA_TODOS_OPTION,
+    );
+    const valores = lista.map((o) => o.value);
+    expect(lista[0]).toEqual({ value: "", label: "Todos los conceptos" });
     expect(valores.slice(1)).toEqual([...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED]);
-    expect(valores).toContain("pago_tienda");
-    expect(valores).toContain("cobro_manual");
-    const opciones = new Map(CATEGORIA_TIENDA_OPTIONS.slice(1).map((o) => [o.value, o.label]));
+    const opciones = new Map(lista.slice(1).map((o) => [o.value, o.label]));
     for (const [clave, texto] of Object.entries(DESDE_ORDENEX)) {
-      expect(opciones.get(clave), clave).toBe(texto);
+      expect(opciones.get(clave), clave).toBe(`${texto} (3)`);
     }
   });
 });

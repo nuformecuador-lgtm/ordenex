@@ -28,6 +28,13 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
     listarDesgloseCompletoMock(...a),
 }));
 
+// Ficha 458-A (TA.3): el filtro de concepto lee del servidor los conceptos CON movimientos.
+const conceptosMock = vi.fn();
+vi.mock("@/lib/actions/wallet-filtros", () => ({
+  conceptosConMovimientosAction: (...a: unknown[]) => conceptosMock(...a),
+  cierresDeLaCuentaAction: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
@@ -94,6 +101,10 @@ afterEach(() => {
   cleanup();
 });
 
+beforeEach(() => {
+  conceptosMock.mockResolvedValue({ status: "ok", conceptos: [{ categoria: "cobro_manual", movimientos: 1 }] });
+});
+
 describe("DesgloseMovimientosTienda — el admin ve el cobro con el MISMO nombre (381/R34)", () => {
   it("la tabla pinta «Cobro de Ordenex», su importe y su origen manual", async () => {
     montar();
@@ -138,13 +149,14 @@ describe("DesgloseMovimientosTienda — se puede filtrar por el cobro (381/R35)"
       }),
     );
     const lista = await screen.findByRole("listbox");
+    await within(lista).findByRole("option", { name: "Ordenex le cobra a la tienda (1)" });
     const opciones = within(lista)
       .getAllByRole("option")
       .map((o) => o.textContent?.trim());
 
-    // Es la MISMA lista que ve la tienda en `/mi-wallet`: sale del SEED del enum, no de una
-    // segunda lista escrita a mano que habría que acordarse de ampliar.
-    expect(opciones).toContain("Ordenex le cobra a la tienda");
+    // 458-A (TA.3): la lista es la de los conceptos CON movimientos de esta tienda (el servidor
+    // dice que hay un cobro), con su número y el nombre desde Ordenex.
+    expect(opciones).toContain("Ordenex le cobra a la tienda (1)");
     expect(opciones[0]).toBe("Todos los conceptos");
   }, 20000);
 
@@ -160,7 +172,7 @@ describe("DesgloseMovimientosTienda — se puede filtrar por el cobro (381/R35)"
       }),
     );
     const lista = await screen.findByRole("listbox");
-    await user.click(within(lista).getByRole("option", { name: "Ordenex le cobra a la tienda" }));
+    await user.click(await within(lista).findByRole("option", { name: "Ordenex le cobra a la tienda (1)" }));
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
 
     // El filtro llega al borde con el VALOR del enum, que es lo que la base entiende: la

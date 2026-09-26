@@ -15,6 +15,7 @@
  * Lo que NO sale: `id` y `origenId` (uuid internos, R23) y `registradoPor` (uuid de un
  * usuario, que además la tabla no muestra — R23/R24).
  */
+import { textoDeOrigen } from "@/components/shared/wallet/origen-movimiento";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
@@ -44,8 +45,8 @@ export const COLUMNAS_DESCARGA_WALLET_CAJA: DescargaColumna[] = [
  * origen más la descripción cuando la hay. Sin descripción, solo la etiqueta.
  */
 function origen(movimiento: WalletMovimientoDTO): string {
-  const base = ORIGEN_LABEL[movimiento.origenTipo];
-  return movimiento.descripcion ? `${base} · ${movimiento.descripcion}` : base;
+  // 458-A (R5/R6, R3): el origen con su entidad que adjunta el servidor, el MISMO texto de la celda.
+  return textoDeOrigen(movimiento, ORIGEN_LABEL);
 }
 
 /**

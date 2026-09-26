@@ -16,9 +16,9 @@ import { codigo, fuente } from "./_wallet-458-archivos";
 //  - R4 `WalletEgresoService.ts`: «Reverso de: <descripcion o, si falta, EL ID>».
 //
 // Fuera de esta guardia, anotado en `progress/impl_458-A.md`: T3/T4 viven en `db/schema.prisma`
-// (los cierra la 458-B, TB.14) y T5/T6 son comentarios que describen el campo de texto y el filtro
-// poblado del SEED que el FRONTEND de la 458-A retira: la parte frontend los añade a `AFIRMACIONES`
-// en el mismo commit que retira el codigo que describen.
+// (los cierra la 458-B, TB.14). T5 (los tres filtros «poblados del SEED») y T6 (la ayuda que mandaba
+// a pegar el identificador del cierre) los añadió la parte FRONTEND de la 458-A a `AFIRMACIONES` en
+// el mismo commit que retiró el código que describían.
 
 type Afirmacion = { id: string; archivo: string; patron: RegExp; conComentarios: boolean };
 
@@ -47,6 +47,32 @@ export const AFIRMACIONES: readonly Afirmacion[] = [
     patron: /\?\?\s*original\.id\b/,
     conComentarios: false,
   },
+  // Parte frontend de la 458-A (TA.3/TA.4): T5 defendía poblar el filtro de concepto del SEED y T6
+  // justificaba pegar el identificador del cierre. Se retiran en el mismo commit que el código.
+  {
+    id: "T5-caja",
+    archivo: "app/(app)/wallet/_components/WalletFiltros.tsx",
+    patron: /pobla\w*\s+(?:desde\s+el|del)\s+SEED|se\s+puebla\w*\s+del\s+SEED|la lista sigue siendo el SEED/i,
+    conComentarios: true,
+  },
+  {
+    id: "T5-tienda",
+    archivo: "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
+    patron: /se\s+pueblan?\s+del\s+SEED|pobla\w*\s+(?:desde\s+el|del)\s+SEED/i,
+    conComentarios: true,
+  },
+  {
+    id: "T5-mi-wallet",
+    archivo: "app/(app)/mi-wallet/_components/MiWalletFiltros.tsx",
+    patron: /pobla\w*\s+(?:desde\s+el|del)\s+SEED|se\s+pueblan?\s+del\s+SEED/i,
+    conComentarios: true,
+  },
+  {
+    id: "T6",
+    archivo: "app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels.ts",
+    patron: /copi[aá] su direcci[oó]n|copiar la DIRECCI[OÓ]N|Peg[aá] el identificador|se pega, no se teclea/i,
+    conComentarios: true,
+  },
 ];
 
 function afirmaciones(texto: string, a: Afirmacion): boolean {
@@ -54,8 +80,8 @@ function afirmaciones(texto: string, a: Afirmacion): boolean {
 }
 
 describe("458-A R101/R4 — las afirmaciones desactualizadas de la wallet no vuelven", () => {
-  it("no-vacuidad: las cuatro afirmaciones y sus archivos existen y se leen", () => {
-    expect(AFIRMACIONES.map((a) => a.id)).toEqual(["T1", "T2", "T9", "R4"]);
+  it("no-vacuidad: las ocho afirmaciones y sus archivos existen y se leen", () => {
+    expect(AFIRMACIONES.map((a) => a.id)).toEqual(["T1", "T2", "T9", "R4", "T5-caja", "T5-tienda", "T5-mi-wallet", "T6"]);
     for (const a of AFIRMACIONES) expect(fuente(a.archivo).length).toBeGreaterThan(200);
   });
 
@@ -64,12 +90,17 @@ describe("458-A R101/R4 — las afirmaciones desactualizadas de la wallet no vue
     expect(afirmaciones(texto, a)).toBe(false);
   });
 
-  it("CONTRAPRUEBA: la fuente de antes de la 458-A la pone roja en las cuatro", () => {
+  it("CONTRAPRUEBA: la fuente de antes de la 458-A la pone roja en las ocho", () => {
     const antes: Record<string, string> = {
       T1: " * «Pagado a la tienda» hoy sale siempre en `0.00` porque ningún flujo emite `pago_tienda`\n * (lo emitirá la 172). Se muestra IGUAL",
       T2: "  pagado: string; // Σ debitos == pago_tienda (hoy siempre \"0.00\", ver R43)",
       T9: '      description="Caja principal de Ordenex: libro de movimientos, dinero en caja y ganancia de Ordenex"',
       R4: "        descripcion: `Reverso de: ${original.descripcion ?? original.id}`,",
+      "T5-caja":
+        "// Feature 42 (T12, R20) — filtros del libro: tipo, categoría (poblada desde el SEED) y\n// —y no debe haberla—: lo que hay es un test que afirma que la lista sigue siendo el SEED.",
+      "T5-tienda": "          R44 — las opciones se pueblan del SEED del enum, no de una lista escrita a mano:",
+      "T5-mi-wallet": "// Feature 43 (T15, R22) — filtros del desglose: cierre, concepto (poblado desde el SEED) y",
+      T6: '  cierrePlaceholder: "Pegá el identificador",\n    "El identificador del cierre sale del enlace «Ver el cierre» de la tabla: copiá su dirección y pegala en «Cierre».",',
     };
     for (const a of AFIRMACIONES) expect({ id: a.id, rojo: afirmaciones(antes[a.id], a) }).toEqual({ id: a.id, rojo: true });
   });

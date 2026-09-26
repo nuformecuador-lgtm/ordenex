@@ -5,7 +5,8 @@ import {
   WALLET_MOVIMIENTO_CATEGORIA_SEED,
   type WalletMovimientoCategoria,
 } from "@/lib/types/wallet";
-import { CATEGORIA_LABEL, CATEGORIA_OPTIONS } from "@/app/(app)/wallet/_components/wallet-labels";
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
+import { CATEGORIA_LABEL, CATEGORIA_TODAS_OPTION } from "@/app/(app)/wallet/_components/wallet-labels";
 import type { GestionResultado } from "@prisma/client";
 
 // Feature 158 (R5/R31) — LA RED DE EXHAUSTIVIDAD, verificada en runtime.
@@ -87,11 +88,17 @@ describe("R5/R31 — la categoria nueva esta clasificada en la wallet", () => {
     expect(Object.keys(CATEGORIA_LABEL)).toHaveLength(WALLET_MOVIMIENTO_CATEGORIA_SEED.length);
   });
 
-  it("R31: la categoria aparece como opcion del filtro (se puebla desde el SEED)", () => {
-    const opciones = CATEGORIA_OPTIONS.map((o) => o.value);
+  it("R31: la categoria aparece como opcion del filtro cuando tiene movimientos (458-A, R13)", () => {
+    const lista = opcionesDeConceptos(
+      [{ categoria: "egreso_indemnizacion", movimientos: 1 }],
+      CATEGORIA_LABEL,
+      "",
+      CATEGORIA_TODAS_OPTION,
+    );
+    const opciones = lista.map((o) => o.value);
     expect(opciones).toContain("egreso_indemnizacion");
-    const opcion = CATEGORIA_OPTIONS.find((o) => o.value === "egreso_indemnizacion");
-    expect(opcion?.label).toBe("Indemnización que Ordenex paga por un incidente");
+    const opcion = lista.find((o) => o.value === "egreso_indemnizacion");
+    expect(opcion?.label).toBe("Indemnización que Ordenex paga por un incidente (1)");
   });
 
   it("R5: las etiquetas de resultado de los dos detalles clasifican `incidente`", () => {

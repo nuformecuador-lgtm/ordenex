@@ -2,12 +2,12 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import {
   CATEGORIA_LABEL,
-  CATEGORIA_OPTIONS,
   esEgresoAdministrativo,
 } from "@/app/(app)/wallet/_components/wallet-labels";
 
@@ -17,6 +17,11 @@ import {
 
 vi.mock("@/lib/actions/wallet-egresos", () => ({
   reversarEgresoAdministrativoAction: vi.fn(),
+}));
+// 458-A (TA.3): el filtro de categoría lee del servidor los conceptos CON movimientos.
+const conceptosMock = vi.fn();
+vi.mock("@/lib/actions/wallet-filtros", () => ({
+  conceptosConMovimientosAction: (...a: unknown[]) => conceptosMock(...a),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -99,47 +104,60 @@ describe("R31 — el concepto tiene etiqueta legible en el libro", () => {
   });
 });
 
+/** Caché de SWR propia por render: cada caso ve SUS llamadas a la action. */
+function renderFiltros(ui: React.ReactElement) {
+  conceptosMock.mockResolvedValue({
+    status: "ok",
+    conceptos: [
+      { categoria: "egreso_sueldo", movimientos: 1 },
+      { categoria: "egreso_indemnizacion", movimientos: 2 },
+    ],
+  });
+  return render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>{ui}</SWRConfig>);
+}
+
 describe("R31 — el concepto es una opción del filtro por categoría", () => {
   it("al abrir el filtro de categoría, la indemnización está entre las opciones", async () => {
     const user = userEvent.setup();
-    render(<WalletFiltros onAplicar={() => {}} onLimpiar={() => {}} />);
+    renderFiltros(<WalletFiltros onAplicar={() => {}} onLimpiar={() => {}} />);
 
     await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
 
     expect(await screen.findByRole("listbox")).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: "Indemnización que Ordenex paga por un incidente" }),
+      await screen.findByRole("option", { name: "Indemnización que Ordenex paga por un incidente (2)" }),
     ).toBeInTheDocument();
   });
 
-  it("las opciones salen del SEED, así que ninguna categoría queda sin ofrecer", async () => {
+  it("458-A (R13/R14): las opciones son los conceptos CON movimientos, con su número; ninguno sin movimientos", async () => {
     const user = userEvent.setup();
-    render(<WalletFiltros onAplicar={() => {}} onLimpiar={() => {}} />);
+    renderFiltros(<WalletFiltros onAplicar={() => {}} onLimpiar={() => {}} />);
 
     await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
     const lista = await screen.findByRole("listbox");
 
-    // Una opción por entrada del SEED + la de "Todas las categorías".
-    expect(within(lista).getAllByRole("option")).toHaveLength(CATEGORIA_OPTIONS.length);
-    for (const { value, label } of CATEGORIA_OPTIONS) {
-      expect(
-        within(lista).getByRole("option", { name: label }),
-        `sin opción para "${value}"`,
-      ).toBeInTheDocument();
-      // Nunca el slug crudo como texto visible.
-      expect(label).not.toBe(value);
-    }
+    // Reescrito en la 458-A (antes: «una opción por entrada del SEED»): «todas» + los dos que el
+    // servidor dice que tienen movimientos, cada uno con su número. «Otro gasto de Ordenex»
+    // (`egreso_gasto`, sin productor) NO aparece (R14).
+    await within(lista).findByRole("option", { name: "Sueldo (1)" });
+    expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todas las categorías",
+      "Sueldo (1)",
+      "Indemnización que Ordenex paga por un incidente (2)",
+    ]);
+    expect(within(lista).queryByRole("option", { name: /Otro gasto de Ordenex/ })).toBeNull();
+    expect(conceptosMock).toHaveBeenCalledWith({ libro: "caja" });
     expect(CATEGORIA_LABEL.egreso_indemnizacion).toBe("Indemnización que Ordenex paga por un incidente");
   });
 
   it("elegir la indemnización y aplicar emite ese filtro tal cual", async () => {
     const user = userEvent.setup();
     const onAplicar = vi.fn();
-    render(<WalletFiltros onAplicar={onAplicar} onLimpiar={() => {}} />);
+    renderFiltros(<WalletFiltros onAplicar={onAplicar} onLimpiar={() => {}} />);
 
     await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
     await user.click(
-      await screen.findByRole("option", { name: "Indemnización que Ordenex paga por un incidente" }),
+      await screen.findByRole("option", { name: "Indemnización que Ordenex paga por un incidente (2)" }),
     );
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
 

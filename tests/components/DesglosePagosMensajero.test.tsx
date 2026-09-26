@@ -192,11 +192,14 @@ describe("R43 — el enlace al cierre, por fila y solo donde hay cierre", () => 
     for (const enlace of enlaces) {
       expect(enlace).toHaveAttribute("href", `/cierres-admin?cierre=${CIERRE}`);
     }
-    expect(
-      within(tabla()).getAllByRole("link", {
-        name: new RegExp(`^Ver el cierre\\s*\\(${CIERRE}\\)$`),
-      }),
-    ).toHaveLength(2);
+    // Ficha 458-A (TA.5, R1): el nombre accesible distingue cada enlace con datos LEGIBLES (el
+    // mensajero, el concepto y el día de la fila) y ya NO lleva el identificador del cierre, que
+    // antes iba en el `sr-only` («Ver el cierre (<uuid>)»). El id queda SOLO en `href`.
+    expect(enlaces.map((e) => e.textContent)).toEqual([
+      "Ver el cierre de Ana Mensajera: Pago devengado del 2026-07-28",
+      "Ver el cierre de Ana Mensajera: Liquidación del 2026-07-29",
+    ]);
+    for (const enlace of enlaces) expect(enlace.textContent).not.toContain(CIERRE);
   });
 
   it("la fila SIN cierre no lleva enlace: ni roto ni deshabilitado", async () => {

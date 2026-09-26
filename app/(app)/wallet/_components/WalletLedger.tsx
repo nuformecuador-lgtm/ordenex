@@ -11,6 +11,7 @@ import {
   type DescargaFilasResult,
 } from "@/components/shared/DataTable";
 import { Modal } from "@/components/shared/Modal";
+import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
 import { useToast } from "@/hooks/useToast";
 import { reversarEgresoAdministrativoAction } from "@/lib/actions/wallet-egresos";
 import type { NaturalezaMovimiento, WalletMovimientoDTO } from "@/lib/types/wallet";
@@ -82,11 +83,6 @@ function TipoBadge({ tipo }: { tipo: WalletMovimientoDTO["tipo"] }) {
   );
 }
 
-/** Origen legible: tipo de origen + descripción si la hay. */
-function origenTexto(m: WalletMovimientoDTO): string {
-  const base = ORIGEN_LABEL[m.origenTipo];
-  return m.descripcion ? `${base} · ${m.descripcion}` : base;
-}
 
 /**
  * Importe de una fila. El STRING se pinta TAL CUAL con `money(...)`: money-safe (R21/R25),
@@ -307,7 +303,8 @@ export function WalletLedger({
         value: "Origen",
         // La más ancha: lleva el origen Y la descripción libre del movimiento.
         minWidth: "18rem",
-        render: (m) => origenTexto(m),
+        // 458-A (R5–R8): el origen con su entidad y, si el rol accede, el enlace a ella.
+        render: (m) => <OrigenMovimiento fila={m} rotulos={ORIGEN_LABEL} />,
       },
       {
         // Feature 231 (T5.2, R35): la ULTIMA de las columnas de datos, justo antes de

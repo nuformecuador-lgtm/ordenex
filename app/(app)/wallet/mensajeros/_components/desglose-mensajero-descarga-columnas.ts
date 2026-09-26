@@ -14,6 +14,7 @@
  * `registradoPor`. El NOMBRE del mensajero tampoco es columna: identifica al archivo entero,
  * no a la fila, y su sitio es el título de la descarga (R12/R13), que cablea el frontend.
  */
+import { textoDeOrigen } from "@/components/shared/wallet/origen-movimiento";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
@@ -35,8 +36,8 @@ export const COLUMNAS_DESCARGA_DESGLOSE_MENSAJERO: DescargaColumna[] = [
 
 /** Origen legible: la MISMA composición que pinta la tabla (etiqueta · descripción). */
 function origen(movimiento: PagoMensajeroMovimientoDTO): string {
-  const base = ORIGEN_PAGO_LABEL[movimiento.origenTipo];
-  return movimiento.descripcion ? `${base} · ${movimiento.descripcion}` : base;
+  // 458-A (R5/R6, R3): el origen con su entidad que adjunta el servidor, el MISMO texto de la celda.
+  return textoDeOrigen(movimiento, ORIGEN_PAGO_LABEL);
 }
 
 /**

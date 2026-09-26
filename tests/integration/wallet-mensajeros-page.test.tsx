@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { ReactElement } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { CIERRES_C1, elegirCierreC1 } from "@/tests/fixtures/selector-buscable";
 
 // Feature 57: el PageHeader del topbar monta el LogoutButton (client:
 // useRouter/useToast). Se stubbea para aislar el pre-fetch/props de la página.
@@ -67,6 +68,15 @@ class NotFoundError extends Error {
     this.name = "NotFoundError";
   }
 }
+
+// Ficha 458-A (TA.3/TA.4): los filtros leen del servidor los conceptos con movimientos y los cierres
+// de la cuenta. Aqui, un cierre (`c1`) y los conceptos que el caso necesita.
+const conceptosFiltroMock = vi.fn();
+const cierresFiltroMock = vi.fn();
+vi.mock("@/lib/actions/wallet-filtros", () => ({
+  conceptosConMovimientosAction: (...a: unknown[]) => conceptosFiltroMock(...a),
+  cierresDeLaCuentaAction: (...a: unknown[]) => cierresFiltroMock(...a),
+}));
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new NotFoundError();
@@ -241,6 +251,20 @@ async function renderPagina(pagina: ReactElement) {
 
 afterEach(() => {
   cleanup();
+});
+
+
+beforeEach(() => {
+  conceptosFiltroMock.mockResolvedValue({
+    status: "ok",
+    conceptos: [
+      { categoria: "cod_recaudado", movimientos: 4 },
+      { categoria: "iva_comision_cod", movimientos: 2 },
+      { categoria: "cobro_manual", movimientos: 1 },
+      { categoria: "pago_tienda", movimientos: 1 },
+    ],
+  });
+  cierresFiltroMock.mockResolvedValue(CIERRES_C1);
 });
 
 describe("WalletMensajerosPage — control de acceso por rol (R19)", () => {
@@ -549,9 +573,7 @@ describe("DesglosePagosMensajero — filtros server-side fecha/cierre (R22)", ()
     await screen.findByText("2026-07-12");
     expect(desgloseMock).toHaveBeenCalledTimes(1);
 
-    fireEvent.change(screen.getByLabelText("Cierre"), {
-      target: { value: "c1" },
-    });
+    await elegirCierreC1(screen.getByRole("button", { name: /^Cierre:/ }));
     fireEvent.change(screen.getByLabelText("Desde"), {
       target: { value: "2026-07-01" },
     });
@@ -588,9 +610,7 @@ describe("DesglosePagosMensajero — filtros server-side fecha/cierre (R22)", ()
     // La siguiente carga (al filtrar) devuelve el saldo del conjunto filtrado.
     desgloseMock.mockResolvedValueOnce({ status: "ok", data: DESGLOSE_FILTRADO });
 
-    fireEvent.change(screen.getByLabelText("Cierre"), {
-      target: { value: "c1" },
-    });
+    await elegirCierreC1(screen.getByRole("button", { name: /^Cierre:/ }));
     fireEvent.submit(
       screen.getByRole("form", { name: "Filtros del desglose de Ana Mensajera" }),
     );

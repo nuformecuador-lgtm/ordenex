@@ -57,7 +57,8 @@ import {
   COLUMNAS_DESCARGA_WALLET_CAJA,
   filaDescargaMovimientoCaja,
 } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
-import { CATEGORIA_OPTIONS } from "@/app/(app)/wallet/_components/wallet-labels";
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
+import { CATEGORIA_LABEL as CATEGORIA_LABEL_458, CATEGORIA_TODAS_OPTION } from "@/app/(app)/wallet/_components/wallet-labels";
 
 const PAGO_ID = "0b6c1f7e-7a44-4b43-9c1a-5e0f2d9a1c11";
 const APORTE_ID = "9f2e3d4c-1b2a-4c3d-8e9f-0a1b2c3d4e5f";
@@ -394,7 +395,14 @@ describe("FICHA 459 — concepto, origen y dueño del capital y del pago por cue
   });
 
   it("el filtro por concepto del libro ofrece los cuatro conceptos nuevos con su nombre", () => {
-    const opciones = new Map(CATEGORIA_OPTIONS.map((o) => [o.value, o.label]));
+    // 458-A (TA.3): las opciones son los conceptos CON movimientos (aquí, uno de cada uno).
+    const lista = opcionesDeConceptos(
+      ["egreso_pago_por_cuenta_tienda","ingreso_reverso_pago_por_cuenta_tienda","ingreso_aporte_capital","egreso_reverso_aporte_capital"].map((categoria) => ({ categoria, movimientos: 1 })),
+      CATEGORIA_LABEL_458,
+      "",
+      CATEGORIA_TODAS_OPTION,
+    );
+    const opciones = new Map(lista.map((o) => [o.value, o.label.replace(/ \(1\)$/, "")]));
     expect(opciones.get("egreso_pago_por_cuenta_tienda")).toBe("Ordenex paga un gasto de una tienda");
     expect(opciones.get("ingreso_reverso_pago_por_cuenta_tienda")).toBe("Pago de un gasto de una tienda anulado");
     expect(opciones.get("ingreso_aporte_capital")).toBe("Aporte de dinero a la caja");
