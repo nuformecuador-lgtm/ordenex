@@ -61,7 +61,7 @@ function mov(over: Partial<FilaFake> & { id: string; tiendaId: string }): FilaFa
     categoria: "cod_recaudado",
     monto: "1000.00",
     origenTipo: "cierre_dia",
-    origenId: "c1",
+    origenId: "c0c0c0c0-0000-4000-8000-0000000000c1",
     descripcion: null,
     fechaMovimiento: "2026-07-12T10:00:00.000Z",
     ...over,
@@ -452,7 +452,7 @@ describe("WalletTiendaService.listarMovimientosDeTienda — importes (R11/R12)",
     const { repo, listarPorTienda, agregarDesglosePorTienda } = repoEnMemoria(LEDGER);
     // Ficha 461 (R72): el borde recibe el DIA y lo traduce; lo que se compara es lo que sale de el.
     await servicio(repo).listarMovimientosDeTienda(
-      input({ cierreId: "c1", categoria: "flete", desde: "2026-07-11" }),
+      input({ cierreId: "c0c0c0c0-0000-4000-8000-0000000000c1", categoria: "flete", desde: "2026-07-11" }),
       MAESTRO,
     );
 
