@@ -16,6 +16,8 @@ import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
 // (la carpeta tiene las piezas de la 458-C) y CONTRAPRUEBA (una fuente sintética que convierte cae).
 
 const CARPETA = "components/shared/wallet";
+/** FICHA 458-D (T D.1, R90): el estado de cuenta compartido entra en el mismo barrido. */
+const CARPETA_ESTADO_CUENTA = "components/shared/estado-cuenta";
 
 /** La conversión a número, en cualquiera de sus formas habituales. */
 const CONVIERTE = /\bNumber\s*\(|\bparseFloat\s*\(|\bparseInt\s*\(|\bNumber\.parse(?:Float|Int)\b|[=(,:]\s*\+\s*(?:monto|importe|saldo)\b/;
@@ -25,12 +27,19 @@ function infractores(fuentes: ReadonlyArray<[string, string]>): string[] {
 }
 
 describe("458-C R90 — ninguna pieza compartida de la wallet convierte un importe a número", () => {
-  const archivos = archivosBajo([CARPETA]);
+  const archivos = archivosBajo([CARPETA, CARPETA_ESTADO_CUENTA]);
   const censo = archivos.map((r): [string, string] => [r, codigo(r)]);
 
   it("control de NO-VACUIDAD: la carpeta tiene las piezas del registro, «Así queda» y el panel", () => {
     expect(archivos.length).toBeGreaterThanOrEqual(8);
-    for (const pieza of ["RegistrarMovimientoDialog.tsx", "AsiQueda.tsx", "ComprobanteCampo.tsx"]) {
+    for (const pieza of [
+      "RegistrarMovimientoDialog.tsx",
+      "AsiQueda.tsx",
+      "ComprobanteCampo.tsx",
+      // 458-D: tarjetas, extracto y módulo del estado de cuenta.
+      "EstadoCuenta.tsx",
+      "TarjetasEstadoCuenta.tsx",
+    ]) {
       expect(archivos.some((r) => r.endsWith(`/${pieza}`)), pieza).toBe(true);
     }
   });
