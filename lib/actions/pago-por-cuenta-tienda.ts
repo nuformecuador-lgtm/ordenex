@@ -140,6 +140,8 @@ export async function anularPagoPorCuentaTiendaAction(
 
 /**
  * R57 — el enlace temporal del comprobante (acceso total, o la tienda duena).
+ *
+ * @sin-superficie FICHA 458-C (TC.3/TC.5, decision, no deuda): el panel «Ver» del libro pide TODO comprobante por `verComprobanteAction({ destino })`, que tambien lee el de este documento (458-B, R77). Se conserva para la 458-D, que decide si `/mi-wallet` la usa (TD.5).
  */
 export async function obtenerComprobantePagoPorCuentaAction(
   input: unknown,

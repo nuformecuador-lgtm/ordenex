@@ -108,7 +108,11 @@ export async function registrarEgresoAdministrativoAction(
   return isAppErrorShape(r) ? toEgresoActionError(r) : r;
 }
 
-/** R13/R15/R16/R17/R18/R32: reversa un egreso administrativo (manual o del cron) por su id. */
+/**
+ * R13/R15/R16/R17/R18/R32: reversa un egreso administrativo (manual o del cron) por su id.
+ *
+ * @sin-superficie FICHA 458-C (D11, decision firmada, no deuda): «Reversar» salio de la pantalla; el egreso se anula con motivo por `anularMovimientoAction` (panel «Ver»). La accion se conserva por sus tests de la 45 y para no tocar el servidor en esta hija.
+ */
 export async function reversarEgresoAdministrativoAction(
   input: unknown,
   deps: WalletEgresoDeps = {},

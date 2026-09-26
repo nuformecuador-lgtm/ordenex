@@ -86,7 +86,7 @@ export interface WalletAnulacionDeps {
  * cobrado o una indemnizacion por incidente. Contra-asiento por el monto del original, constancia
  * y historial en UNA transaccion; el segundo intento responde `ya_anulado`.
  *
- * @sin-superficie FICHA 458-B: ninguna pantalla la importa directamente; la llama `anularMovimientoAction` (este mismo archivo), que SI tiene superficie. «Reversar» del libro sigue llamando a `reversarEgresoAdministrativoAction` hasta que la 458-C lo sustituya (D11). Esta anotacion CADUCA con la 458-C.
+ * @sin-superficie FICHA 458-B: ninguna pantalla la importa directamente; la llama `anularMovimientoAction` (este mismo archivo), que SI tiene superficie. Desde la 458-C (D11) «Reversar» ya no existe en pantalla: la anulacion del egreso sale del panel «Ver» por `anularMovimientoAction`.
  */
 export async function anularEgresoCajaAction(
   input: unknown,
@@ -178,9 +178,8 @@ function normalizar(camino: CaminoAnulacion, r: ResultadoDeCamino): AnularMovimi
  * `.strict()`, sin monto. Sesion → forma → `enrutar` (rol ANTES de leer ninguna fila) → la action del
  * camino con el MISMO actor → respuesta normalizada.
  *
- * Superficie HOY: `DocumentoCajaAcciones` la usa para anular la indemnizacion y el cobro por
- * rechazo desde el libro de la caja. La 458-C la lleva al panel «Ver» y la 458-D a los estados de
- * cuenta.
+ * Superficie (458-C): «Anular…» del panel «Ver» (`components/shared/wallet/AnularMovimientoDialog.tsx`)
+ * para TODA fila anulable del libro de la caja; la 458-D la lleva a los estados de cuenta.
  */
 export async function anularMovimientoAction(
   input: unknown,

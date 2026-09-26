@@ -546,8 +546,8 @@ export async function registrarCobroTiendaAction(
  * cualquier clave colada (R13/R14: el monto de los contra-asientos se lee del cobro en el servidor);
  * el ROL, el cobro, su estado y los contra-asientos los decide el SERVICIO.
  *
- * SUPERFICIE: la dispara «Anular…» en la linea original de cada cobro vigente del libro de la caja
- * (`DocumentoCajaAcciones`, rama `cobro_tienda`; R20).
+ * SUPERFICIE: la dispara «Anular…» del panel «Ver» sobre la linea original de cada cobro vigente del
+ * libro de la caja, a traves de `anularMovimientoAction` (458-C; antes `DocumentoCajaAcciones`, R20).
  */
 export async function anularCobroTiendaAction(
   input: unknown,

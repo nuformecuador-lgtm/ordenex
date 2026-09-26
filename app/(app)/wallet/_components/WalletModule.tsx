@@ -375,9 +375,8 @@ export function WalletModule({
             <WalletLedger
               movimientos={movimientos}
               isLoading={loading}
-              onReversado={() => void recargar(filtros, page)}
-              // Ficha 459 (R65): anular un documento relee libro, tarjeta y composición.
-              onDocumentoAnulado={() => void recargar(filtros, page)}
+              // Ficha 459 (R65) / 458-C (R60): anular o adjuntar desde el panel «Ver» relee libro, tarjetas, composición y desglose.
+              onCambio={() => void recargar(filtros, page)}
               obtenerFilasDescarga={() =>
                 filasDesdeResultado(
                   listarMovimientosCompletoAction(inputDeFiltros(filtros)),

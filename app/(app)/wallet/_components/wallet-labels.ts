@@ -343,15 +343,6 @@ export const ANULAR_DOCUMENTO_CAJA_RESPUESTA = {
     `Este cobro no se puede anular desde aquí: ${MOTIVO_NO_ANULABLE_LABEL[motivo]}.`,
 } as const;
 
-/**
- * Feature 45 (R22c) y auditoria de la wallet P3 (ficha 461) — las acciones de la reversa de un gasto o
- * sueldo registrado a mano. «Reversado» es lo que se lee en la fila cuyo egreso YA tiene su reverso,
- * en vez de un boton que solo puede responder «ya tenia su reversa».
- */
-export const REVERSA_EGRESO_ACCION = {
-  reversar: "Reversar",
-  reversado: "Reversado",
-} as const;
 
 export const VER_COMPROBANTE_RESPUESTA = {
   sinComprobante: "Este registro no tiene comprobante.",

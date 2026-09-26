@@ -1,33 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   DataTable,
   type Column,
   type DescargaFilasResult,
 } from "@/components/shared/DataTable";
-import { Modal } from "@/components/shared/Modal";
 import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
-import { useToast } from "@/hooks/useToast";
-import { reversarEgresoAdministrativoAction } from "@/lib/actions/wallet-egresos";
 import type { NaturalezaMovimiento, WalletMovimientoDTO } from "@/lib/types/wallet";
 import { cn } from "@/lib/utils";
 
 import { DetalleMovimientoCierre } from "./DetalleMovimientoCierre";
-import { DocumentoCajaAcciones } from "./DocumentoCajaAcciones";
 import { DETALLE_MOVIMIENTO_NOMBRE } from "./detalle-movimiento-labels";
+import { VerMovimientoCaja } from "./VerMovimientoCaja";
 import { COLUMNAS_DESCARGA_WALLET_CAJA } from "./wallet-ledger-descarga-columnas";
 import {
   CATEGORIA_LABEL,
   DUENO_LABEL,
   ORIGEN_LABEL,
-  REVERSA_EGRESO_ACCION,
   TIPO_LABEL,
-  esEgresoAdministrativo,
   money,
 } from "./wallet-labels";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
@@ -42,29 +35,14 @@ import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 // `reversarEgresoAdministrativoAction`; el backend crea el `ingreso_ajuste` compensatorio
 // (append-only, idempotente) — la UI solo dispara y refresca. No hay editar/borrar (R14).
 //
-// Ficha 461 — auditoría de la wallet P3 (`progress/auditoria_wallet.md`): «Reversar» seguía
-// ofreciéndose sobre un egreso YA reversado, y el segundo clic solo podía responder «ya tenía su
-// reversa». Desde esta ficha la fila dice «Reversado» —como «Anulado» en los documentos— cuando el
-// libro sabe que el egreso tiene su reverso. Cómo lo sabe, y su LÍMITE declarado:
-//
-//  - por el propio libro: el reverso de un egreso es el único INGRESO de origen `gasto`, y su
-//    `origenId` es el egreso (lo escribe solo `WalletEgresoService.reversarEgreso`; medido en el
-//    árbol el 2026-09-25: los otros tres escritores con origen `gasto` son egresos; y el índice
-//    único de la base garantiza uno por egreso). Si ese reverso está en la página que se está
-//    viendo, el original se marca. No se mira la categoría a propósito: el libro no deduce nada
-//    de ella en el cliente (R36 de la 231), y tipo + origen ya lo identifican;
-//  - por esta sesión: el egreso que se acaba de reversar (respuesta `ok` o `already_reversed`) se
-//    marca aunque el libro se relea con otros filtros.
-//
-// `WalletMovimientoDTO` NO trae hoy un campo que diga «este egreso ya tiene reverso», así que un
-// egreso cuyo reverso vive en OTRA página sigue ofreciendo el botón (es el comportamiento anterior,
-// y el servidor lo guarda: no hay doble asiento). Cerrar ese resto exige que el servidor lo
-// resuelva en lote, como hace con `documento`; queda anotado en `progress/impl_461_frontend.md`.
-
-/** El reverso de un egreso administrativo, tal como lo escribe el servicio de la 45 (R13/R16). */
-function esReversoDeUnEgreso(m: WalletMovimientoDTO): m is WalletMovimientoDTO & { origenId: string } {
-  return m.tipo === "ingreso" && m.origenTipo === "gasto" && m.origenId !== null;
-}
+// FICHA 458-C (T C.5, design §5.2, D11; R58, R63, R65, R71) — la columna de acciones pasa a «Ver»:
+// cada fila abre el panel compartido (`VerMovimientoCaja` → `DetalleMovimientoPanel`), que es donde
+// viven «Anular…» (uniforme, con motivo, por `anularMovimientoAction`), el comprobante y «Cómo quedó».
+// «Reversar» y su `Modal` se RETIRAN (D11: dos palabras para lo mismo era la falencia), igual que
+// `DocumentoCajaAcciones`. Y con ellos se va la deducción que la 461 hacía EN EL CLIENTE de «ya
+// reversado» mirando las filas de la página: desde la 458-B el estado viaja en la fila (`documento`,
+// decidido en el servidor, R71), y este libro no mira ninguna otra fila para decidirlo (guardia R98).
+// Este archivo vuelve a no importar ninguna Server Action.
 
 /**
  * Badge de color por tipo: ingreso (entra) vs egreso (sale).
@@ -154,16 +132,19 @@ function naceDeUnCierre(m: WalletMovimientoDTO): boolean {
   return m.origenTipo === "cierre_dia";
 }
 
+/** La fila, con el estado de anulación que decidió el SERVIDOR (R71): anulada = tachada y apagada. */
+function claseDeFila(m: WalletMovimientoDTO): string | undefined {
+  return m.documento?.anulado ? "text-muted-foreground line-through" : undefined;
+}
+
 export interface WalletLedgerProps {
   movimientos: WalletMovimientoDTO[];
   isLoading?: boolean;
-  /** Callback tras reversar con éxito (para que el módulo recargue libro + cifras + desglose). */
-  onReversado?: () => void;
   /**
-   * Ficha 459 (R65) — tras anular un pago por cuenta o un saldo inicial o aporte: el módulo relee
-   * libro, tarjeta y composición sin recargar la página.
+   * Ficha 459 (R65) / 458-C (R60) — tras anular o adjuntar un comprobante desde el panel «Ver»: el
+   * módulo relee libro, tarjetas, composición y desglose sin recargar la página.
    */
-  onDocumentoAnulado?: () => void;
+  onCambio?: () => void;
   /**
    * Feature 170 (T C.4, design §5) — obtiene las filas del libro COMPLETO para la descarga.
    *
@@ -181,65 +162,9 @@ export interface WalletLedgerProps {
 export function WalletLedger({
   movimientos,
   isLoading = false,
-  onReversado,
-  onDocumentoAnulado,
+  onCambio,
   obtenerFilasDescarga,
 }: WalletLedgerProps) {
-  const router = useRouter();
-  const toast = useToast();
-
-  // Egreso administrativo elegido para reversar (abre el modal de confirmación).
-  const [objetivo, setObjetivo] = useState<WalletMovimientoDTO | null>(null);
-  // P3 (461): los egresos que ESTA sesión reversó (o encontró ya reversados).
-  const [reversadosEnSesion, setReversadosEnSesion] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-  // P3 (461): los egresos cuyo reverso está en la página que se está viendo.
-  const reversadosEnPagina = useMemo(
-    () => new Set(movimientos.filter(esReversoDeUnEgreso).map((m) => m.origenId)),
-    [movimientos],
-  );
-
-  function marcarReversado(id: string) {
-    setReversadosEnSesion((previos) => new Set([...previos, id]));
-  }
-
-  async function confirmarReversa() {
-    if (!objetivo) return;
-    const result = await reversarEgresoAdministrativoAction({ movimientoId: objetivo.id });
-
-    if (result.status === "ok") {
-      toast.success("Egreso reversado. Se registró el ajuste compensatorio.");
-      marcarReversado(objetivo.id);
-      setObjetivo(null);
-      onReversado?.();
-      router.refresh();
-      return;
-    }
-    if (result.status === "already_reversed") {
-      toast.info("Este egreso ya tenía su reversa.");
-      marcarReversado(objetivo.id);
-      setObjetivo(null);
-      onReversado?.();
-      return;
-    }
-    if (result.status === "not_found") {
-      toast.error("El egreso ya no existe o no es reversable.");
-      setObjetivo(null);
-      return;
-    }
-    if (result.status === "validation_error") {
-      toast.error("No se pudo reversar el egreso.");
-      return;
-    }
-    if (result.status === "forbidden") {
-      toast.error("No tenés permiso para reversar egresos.");
-      return;
-    }
-    // unauthenticated
-    toast.error("Tu sesión expiró. Iniciá sesión de nuevo.");
-  }
-
   // Feature 200 (tanda 3) — LOS `minWidth` Y LA ALINEACIÓN DEL DINERO.
   //
   // Cada columna declara su ancho MÍNIMO para que, cuando la pantalla no dé, aparezca el
@@ -315,42 +240,15 @@ export function WalletLedger({
         render: (m) => <DuenoCelda dueno={m.dueno} />,
       },
       {
-        id: "acciones",
-        value: "Acciones",
-        minWidth: "7rem",
-        // R22c/R32: la reversa se ofrece SOLO en egresos administrativos (incluye los del cron).
-        //
-        // Ficha 459 (R66/R67): «Anular…», «Anulado» y «Ver comprobante» SOLO en la fila original
-        // de un documento. Lo decide el SERVIDOR con `documento`: los contra-asientos y las
-        // salidas de los cobros reclasificados llegan con `null` y aqui no se pinta nada.
-        render: (m) => {
-          if (esEgresoAdministrativo(m)) {
-            // P3 (461): el egreso que ya tiene su reverso dice «Reversado», no ofrece el botón.
-            if (reversadosEnSesion.has(m.id) || reversadosEnPagina.has(m.id)) {
-              return <Badge variant="secondary">{REVERSA_EGRESO_ACCION.reversado}</Badge>;
-            }
-            return (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setObjetivo(m)}
-              >
-                {REVERSA_EGRESO_ACCION.reversar}
-              </Button>
-            );
-          }
-          const documento = m.documento;
-          return documento === null ? null : (
-            <DocumentoCajaAcciones
-              movimiento={{ ...m, documento }}
-              onAnulado={onDocumentoAnulado}
-            />
-          );
-        },
+        // FICHA 458-C (T C.5): la columna de acciones pasa a «Ver». TODA fila se puede ver (R58);
+        // lo que se puede hacer con ella lo decide el panel con lo que trae la fila del servidor.
+        id: "ver",
+        value: "Ver",
+        minWidth: "5rem",
+        render: (m) => <VerMovimientoCaja movimiento={m} onCambio={onCambio} />,
       },
     ],
-    [onDocumentoAnulado, reversadosEnSesion, reversadosEnPagina],
+    [onCambio],
   );
 
   return (
@@ -362,6 +260,8 @@ export function WalletLedger({
         ariaLabel={TITULO_DESCARGA}
         isLoading={isLoading}
         emptyMessage="No hay movimientos que coincidan con los filtros."
+        // R71/R72 (458-C): anulado = tachado y apagado, decidido por el servidor.
+        rowClassName={claseDeFila}
         // Ficha 344 (T6.4, R1–R6): cada fila de CIERRE despliega las órdenes que componen su
         // importe. `renderExpanded` se INVOCA en cada render, pero el `DataTable` solo MONTA el
         // elemento cuando la fila está abierta; como la LECTURA del detalle vive dentro de
@@ -408,22 +308,6 @@ export function WalletLedger({
         }
       />
 
-      <Modal
-        open={objetivo !== null}
-        onOpenChange={(next) => {
-          if (!next) setObjetivo(null);
-        }}
-        title="Reversar egreso"
-        description={
-          objetivo
-            ? `Se creará un ajuste compensatorio por ${money(objetivo.monto)}. El egreso original queda intacto.`
-            : undefined
-        }
-        confirmLabel="Reversar"
-        confirmVariant="destructive"
-        onConfirm={confirmarReversa}
-        closeOnConfirm={false}
-      />
     </div>
   );
 }
