@@ -5461,11 +5461,11 @@
       "title": "la tienda le paga a Ordenex",
       "description": "Registrar un pago recibido de una tienda con saldo en contra: sube su saldo, entra a la caja y queda asociado a la tienda y a su motivo.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "media",
       "depends_on": null,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-24. Caso real: Nuform con saldo -6.170.666,55 en prod quiere pagar a Ordenex. || DECIDIDO: entra a la caja como dinero de TERCEROS (no ganancia: los fletes ya se contaron al aprobar cada cierre), con la condicion del humano de que quede ASOCIADO: debe ser muy facil ver que fue un pago de esa tienda y por que motivo. Espejo de registrarPagoTienda (documento, idempotencia, bloqueo, tope = lo que debe, anulacion con motivo). Reabre a conciencia la D3 de la 381 (test que prohibe abono_tienda_registrado). || Su UI final sale del rediseño de la 458; la forma de pantalla se acuerda en la maqueta. || Comprobante opcional y visible para la tienda (decision del 2026-09-24). || 2026-09-24: esta ficha actualiza su parte de docs/ayuda (y con ello el asistente) dentro de su propio alcance."
+      "status_note": "HECHA EN DEV (sin desplegar) el 2026-09-26, PR #827 (1bde4e43). Gate post-merge verde: 31.791 passed, 26 skipped solo Analitica (progress/gate_dev_tras_827.log). Revision sin bloqueantes de dinero (progress/review_457.md), recorrido 47 OK (progress/recorrido_457.md), 14/14 mutaciones rojas. RELEASE: correr la C457-1 (NO la C461-1) antes/despues y tras el primer pago de Nuform (progress/contraste_457.md); bucket wallet-comprobantes. Riesgo anotado: LiquidacionService.registrarPagoTienda lee el saldo por otra conexion bajo el candado (impl_457 §12.4) -> lo arregla la 458-B."
     },
     {
       "id": 458,
