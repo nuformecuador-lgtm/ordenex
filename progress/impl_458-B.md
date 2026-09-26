@@ -188,3 +188,35 @@ indemnización, indemnización anulada; R7/R8 a 0,00), bloque «lo que la 458 a�
 | 8b | constancia del rechazo sin `skipDuplicates` | 2 | 1 |
 | 10 | `tipoDeDocumentoOriginal` sin `rechazo_tienda_cobro` | 10 | 1 |
 | 11 | el lector de egresos no mira la base | 10 | 2 |
+
+## TB.6 — Estado de cuenta (tienda, mensajero, bodega)
+
+| Pieza | Qué hace |
+| --- | --- |
+| `lib/types/estado-cuenta.ts` | `estadoCuentaSchema` (`.strict()`; `cuenta {tipo, id uuid}`, `desde`/`hasta` `YYYY-MM-DD` CR con `diaCalendarioSchema` de la 461, `chip?`, `page`, `pageSize` con tope en `lib/config/estado-cuenta.ts`), `EstadoCuentaDTO`, `FilaEstadoCuentaDTO`, `RegistroDTO`, `SentidoDelSaldo`. |
+| `lib/utils/estado-cuenta-chips.ts` | `CHIP_POR_CATEGORIA_TIENDA` / `_MENSAJERO`: `Record` TOTAL por libro sobre (categoría, origen[, premio]). Un contra-asiento va al chip de su original. |
+| `lib/utils/estado-cuenta.ts` | Puro: el filtro de cada chip como lista cerrada de pares (derivada del mismo diccionario), la clave que une original y contra-asiento (D3), `totalesNetos` (excluye el par solo si está ENTERO en el periodo) y `saldoAlFinal`. |
+| `EstadoCuentaRepository` | Ventana `SUM(± monto) OVER (ORDER BY fecha, created_at, id)` sobre la cuenta ENTERA hasta `hasta`; periodo y chip FUERA; paginación y conteo en SQL; `numeric → text`. Bodega: UNION «Declarado»/«Recibido» sobre `cierre_bodega` sin rechazadas. Totales por tipo (la resta la hace el servicio), anulaciones y comprobantes en lote, aprobador de los cierres. |
+| `EstadoCuentaService.leer` | Rol antes de leer (R81); cuenta con su papel o `no_encontrado`; chip de otro tipo de cuenta → `validation_error`; saldo actual e inicial con `derivarSaldoTienda` / `derivarCuentaPorPagar` / `saldoDe`; totales netos; **afirma R22 y lanza si no cuadra**; filas con saldo corrido, chip, anulación (motivo, quién, día CR), contra-asiento, comprobante, anulable, nace de un cierre, registro (persona o «aprobación del cierre por …»). |
+| `verEstadoCuentaAction` (`lib/actions/estado-cuenta.ts`) | Borde, `@sin-superficie` hasta 458-D. |
+
+**Contrato para 458-D (y desviaciones anotadas):** la fila lleva `categoria` y `origenTipo` —NO un
+`concepto` ni un `origen` ya rotulados— porque los textos viven en los diccionarios de la 461 (`app/`)
+y `lib/` no los importa; la frase «quién le debe a quién» la compone la pantalla con `sentido` y
+`cuenta.nombre`. `referencia` no viaja (queda para 458-C/D si la necesitan: está en el documento).
+En la bodega el saldo es lo que TIENE POR ENTREGAR: cargo = «Declarado», abono = «Recibido», y
+`saldoFinal = inicial + cargos − abonos` (la misma cuenta leída desde la bodega).
+
+**Tests:** bloque TB.6 de `wallet-caracterizacion-458.test.ts` (7 casos: la tienda C entera fila a
+fila con su corrido, la constancia del pago anulado, desde el 12 sep —saldo inicial 6 200,00 y el par
+fuera de los totales—, hasta el 11 sep —bordes 23:30/00:30 CR—, el chip «Cobros» con el corrido de la
+cuenta entera, el mensajero M y la bodega Z; R22 contra `listarSaldosTiendas`, la cuenta por pagar y
+el pendiente de `/wallet/satelites`), `tests/integration/db/estado-cuenta-saldo-corrido.test.ts` (par
+a caballo de dos periodos, páginas de 3, R81 por la action, H6), `tests/unit/utils/saldos-corridos
+.test.ts` (10, puros), `tests/unit/guards/estado-cuenta-chips-total.guardia.test.ts` (totalidad +
+contraprueba + no-vacuidad).
+
+**Mutaciones TB.6** (todas `aplicado=true`, `restaurado=true`, sobre `wallet-caracterizacion-458`):
+M1 signo del corrido al revés → 4/13 rojos; M2 sin `created_at` en la ventana (tienda) → 3/13; M2b
+(mensajero) → 1/13; M12 totales sin excluir el par → 4/13; bodega con rechazadas → 1/13; borde de
+periodo en UTC en vez de día CR → 1/13.

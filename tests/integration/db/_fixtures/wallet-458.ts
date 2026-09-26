@@ -2,8 +2,12 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { EstadoCuentaRepository } from "@/lib/repositories/EstadoCuentaRepository";
+import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/RechazoTiendaCobroAnulacionRepository";
 import { SaldosSatelitesRepository } from "@/lib/repositories/SaldosSatelitesRepository";
 import { ConciliacionSatelitesService } from "@/lib/services/ConciliacionSatelitesService";
+import { EstadoCuentaService } from "@/lib/services/EstadoCuentaService";
+import type { EstadoCuentaDTO, EstadoCuentaInput, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 
 import type { TxDeTest } from "../_postgres-real";
 import { montarServicios459, type Catalogo459, type Servicios459 } from "./caja-459";
@@ -43,6 +47,8 @@ const mas = (d: Date, segundos: number) => new Date(d.getTime() + segundos * 100
 
 export interface Escenario458 {
   maestro: Actor;
+  /** El nombre completo del maestro sembrado (no tiene apellidos). */
+  maestroNombre: string;
   tiendaC: string;
   mensajeroM: string;
   zonaZ: string;
@@ -185,6 +191,23 @@ export async function sembrarEscenario458(tx: TxDeTest, cat: Catalogo459): Promi
     });
   }
 
+  // TB.6 — el pago c5 y su anulacion c6 tienen su DOCUMENTO (172): el pago y su constancia, a mano,
+  // para que el estado de cuenta lea «anulado» de donde lo lee en produccion (`liquidacion_anulacion`).
+  await tx.liquidacionPago.create({
+    data: {
+      id: pagoC,
+      claveIdempotencia: randomUUID(),
+      tiendaId: tiendaC,
+      monto: "3000.00",
+      metodo: "efectivo",
+      fechaPago: new Date("2026-09-12T00:00:00.000Z"),
+      registradoPor: maestroId,
+    },
+  });
+  await tx.liquidacionAnulacion.create({
+    data: { pagoId: pagoC, motivo: "Pago a la cuenta equivocada 458", anuladoPor: maestroId },
+  });
+
   // El pago de un gasto de la tienda C, por el SERVICIO REAL (control positivo de la fase 0).
   const pago = await s.pagoPorCuenta.registrar(
     {
@@ -295,6 +318,7 @@ export async function sembrarEscenario458(tx: TxDeTest, cat: Catalogo459): Promi
 
   return {
     maestro,
+    maestroNombre: `Maestro 458 ${sufijo}-1`,
     tiendaC,
     mensajeroM,
     zonaZ: zona.id,
@@ -325,6 +349,30 @@ export async function leerBodega(tx: TxDeTest, s: Servicios459, actor: Actor, zo
     totalEfectivo: fila.totalEfectivo,
     totalRecibido: fila.totalRecibido,
   };
+}
+
+/** TB.6 — el servicio del estado de cuenta, cableado como su `buildService()`, sobre la tx del test. */
+export function montarEstadoCuenta(s: Servicios459): EstadoCuentaService {
+  return new EstadoCuentaService(
+    new EstadoCuentaRepository(s.cliente),
+    new RechazoTiendaCobroAnulacionRepository(s.cliente),
+  );
+}
+
+/** Lee el estado de cuenta y falla ruidosamente si no responde `ok`. */
+export async function leerEstadoCuenta(
+  servicio: EstadoCuentaService,
+  actor: Actor,
+  input: Partial<EstadoCuentaInput> & Pick<EstadoCuentaInput, "cuenta">,
+): Promise<EstadoCuentaDTO> {
+  const r = await servicio.leer({ page: 1, pageSize: 50, ...input }, actor);
+  if (r.status !== "ok") throw new Error(`estado de cuenta: ${JSON.stringify(r)}`);
+  return r.estado;
+}
+
+/** Las columnas de dinero de una fila, en una linea: fecha|cargo|abono|corrido|chip. */
+export function lineaDe(f: FilaEstadoCuentaDTO): string {
+  return `${f.fecha}|${f.cargo ?? "-"}|${f.abono ?? "-"}|${f.saldoCorrido}|${f.chip}`;
 }
 
 /** Suma de importes STRING con `Prisma.Decimal`, escala 2. */

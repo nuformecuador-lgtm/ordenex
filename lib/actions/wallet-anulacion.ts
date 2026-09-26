@@ -86,9 +86,7 @@ export interface WalletAnulacionDeps {
  * cobrado o una indemnizacion por incidente. Contra-asiento por el monto del original, constancia
  * y historial en UNA transaccion; el segundo intento responde `ya_anulado`.
  *
- * Superficie: la alcanza `anularMovimientoAction` (la indemnizacion desde el libro de la caja; la
- * 458-C la lleva al panel «Ver»). «Reversar» del libro sigue llamando a
- * `reversarEgresoAdministrativoAction` hasta la 458-C (D11).
+ * @sin-superficie FICHA 458-B: ninguna pantalla la importa directamente; la llama `anularMovimientoAction` (este mismo archivo), que SI tiene superficie. «Reversar» del libro sigue llamando a `reversarEgresoAdministrativoAction` hasta que la 458-C lo sustituya (D11). Esta anotacion CADUCA con la 458-C.
  */
 export async function anularEgresoCajaAction(
   input: unknown,
