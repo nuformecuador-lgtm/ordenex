@@ -216,6 +216,18 @@ a caballo de dos periodos, páginas de 3, R81 por la action, H6), `tests/unit/ut
 .test.ts` (10, puros), `tests/unit/guards/estado-cuenta-chips-total.guardia.test.ts` (totalidad +
 contraprueba + no-vacuidad).
 
+## TB.7 — «A quién» y «Registró» (R56/R57)
+
+`LibroCajaAutoriaService.resolver({ movimientoIds })` + `LibroCajaAutoriaRepository` (una consulta por
+tipo de origen presente) + `autoriaDelLibroCajaAction` (`lib/actions/libro-caja-autoria.ts`,
+`@sin-superficie` hasta 458-E). Devuelve por fila `aQuien {nombre, beneficiario, cuenta, esOrdenex}` y
+`registro {nombre, automatico {accion, por}}` — datos, no frases: la 458-E compone «Automático ·
+Aprobación del cierre por Ana» con sus rótulos. Tabla de design §3.4 completa. **Desviación anotada:**
+es una acción aparte que la 458-E llama con los ids de la página, no un campo más de
+`WalletMovimientoDTO` (evita tocar el `WalletService`, construido en decenas de sitios y compartido con
+la 458-A). Test: `tests/integration/db/libro-caja-a-quien.test.ts` (7: una fila por origen con el
+nombre leído de `usuario`, enlaces, «—» sin anotación, automático con quien decidió, H6, R82).
+
 **Mutaciones TB.6** (todas `aplicado=true`, `restaurado=true`, sobre `wallet-caracterizacion-458`):
 M1 signo del corrido al revés → 4/13 rojos; M2 sin `created_at` en la ventana (tienda) → 3/13; M2b
 (mensajero) → 1/13; M12 totales sin excluir el par → 4/13; bodega con rechazadas → 1/13; borde de
