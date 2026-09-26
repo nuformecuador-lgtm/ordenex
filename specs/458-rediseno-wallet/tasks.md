@@ -123,7 +123,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   *Hecho:* typecheck verde; `caja-clasificacion-459`, `caja-composicion-exhaustiva`,
   `metrics-caja-naturaleza`, `caja-derivaciones` (cuatro llamadas) verdes; mutaciones 4 y 5 → rojo
   (R85, R91). Depende de TB.2.
-  *Evidencia:* `5418adb9`; literales reescritos listados en `progress/impl_458-B.md` §TB.4; mutaciones 4 (7/48) y 5 rojas.
+  *Evidencia:* `5418adb9`; literales reescritos listados en `progress/impl_458-B.md` §TB.4; mutaciones 4 (7/48) y 5 rojas. **Cierre (B2, `eac03a6f`):** `ingreso_flete`/`ingreso_iva` netean los reversos del cobro por rechazo (`analitica-anulacion-rechazo-458.test.ts`; mutaciones rojas).
 - [x] **TB.5** [P] Orden estable: `listarPorTienda` y `listarPorMensajero` con `orderBy [fecha,
   createdAt, id]`. *Hecho:* test de paginación con 14 filas del mismo instante / páginas de 4 (0
   duplicadas, 0 faltantes) (R23).
@@ -135,7 +135,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   (bordes 23:30/00:30 CR; R21 con chip; R22 con y sin anulaciones, igual a `derivarSaldoTienda`, a la
   cuenta por pagar y a `saldoDe`); guardia `estado-cuenta-chips-total` + contraprueba; mutaciones 1,
   2, 9, 12 → rojo (R16, R20–R25, R98). Depende de TB.5.
-  *Evidencia:* `fbf58014`; `wallet-caracterizacion-458.test.ts` (bloque TB.6), `estado-cuenta-saldo-corrido.test.ts`, `saldos-corridos.test.ts`, guardia `estado-cuenta-chips-total`; mutaciones M1, M2, M2b, M12, bodega, borde CR rojas.
+  *Evidencia:* `fbf58014`; `wallet-caracterizacion-458.test.ts` (bloque TB.6), `estado-cuenta-saldo-corrido.test.ts`, `saldos-corridos.test.ts`, guardia `estado-cuenta-chips-total`; mutaciones M1, M2, M2b, M12, bodega, borde CR rojas. **Cierre (M2, `f13f01ad`):** lecturas en UNA transacción REPEATABLE READ (`estado-cuenta-concurrencia-458.test.ts`; mutación roja).
 - [x] **TB.7** [P] Resolutores «A quién» y «Registró» (`design.md` §3.4) en lote. *Hecho:*
   `tests/integration/db/libro-caja-a-quien.test.ts` (una fila por origen; nombres, nunca ids; «—» sin
   anotación; «Automático · …») (R56, R57).
@@ -146,7 +146,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   reversos sin constancia. *Hecho:* `libro-caja-documentos-459.test.ts` ampliado (reverso en otra
   página → «anulado»; ninguna comparación en cliente); mutaciones 10 y 11 → rojo (R71, R72).
   Depende de TB.3.
-  *Evidencia:* `fc00427b`; el estado derivado se prueba en `wallet-anulacion-458.test.ts` (R71 «anulado» con el contra-asiento fuera de la página, R72) en lugar de ampliar `libro-caja-documentos-459.test.ts`; mutaciones 10 y 11 rojas. Desviación anotada: el `documento` de las filas de tienda/mensajero viaja en `FilaEstadoCuentaDTO` (TB.6), no en sus DTO de hoy.
+  *Evidencia:* `fc00427b`; el estado derivado se prueba en `wallet-anulacion-458.test.ts` (R71 «anulado» con el contra-asiento fuera de la página, R72) en lugar de ampliar `libro-caja-documentos-459.test.ts`; mutaciones 10 y 11 rojas. Desviación anotada: el `documento` de las filas de tienda/mensajero viaja en `FilaEstadoCuentaDTO` (TB.6), no en sus DTO de hoy. **Cierre (M1, `dabba7d4`):** `tieneComprobante` de corrección y cobro lee `wallet_comprobante` (`wallet-documento-comprobante-458.test.ts`; mutaciones rojas).
 - [x] **TB.9** Anulación uniforme (`design.md` §4.2): `reversarEgreso` gana motivo y constancia (misma
   transacción, mismo instante inyectado) y deja de caer al uuid; anulación de la indemnización;
   `RechazoTiendaCobroService.anular` + `RechazoTiendaCobroAnulacionRepository` + puerto de caja con
@@ -159,7 +159,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   `wallet-anulacion-concurrencia.test.ts`; `caja-invariante-tiendas` con los pasos «anulación del cobro
   por rechazo» e «indemnización anulada» a 0,00; mutaciones 6, 7, 8 → rojo (R63–R69, R73, R91).
   Depende de TB.3, TB.4, TB.8.
-  *Evidencia:* `fc00427b`; `wallet-anulacion-service.test.ts` (19), `rechazo-tienda-cobro-anulacion.test.ts` (11), `wallet-anulacion-458.test.ts` (10), `wallet-anulacion-concurrencia.test.ts` (2), `caja-invariante-tiendas` pasos 14–16; mutaciones 6, 7, 7b, 8, 8b rojas. Desviación anotada: servicio propio `EgresoCajaAnulacionService`.
+  *Evidencia:* `fc00427b`; `wallet-anulacion-service.test.ts` (19), `rechazo-tienda-cobro-anulacion.test.ts` (11), `wallet-anulacion-458.test.ts` (10), `wallet-anulacion-concurrencia.test.ts` (2), `caja-invariante-tiendas` pasos 14–16; mutaciones 6, 7, 7b, 8, 8b rojas. Desviación anotada: servicio propio `EgresoCajaAnulacionService`. **Cierre (m4, `f746c9bd`):** se exige el `count` de los créditos espejo; (m3, `baca1b30`) test de componente del «Anular…» en `/wallet` + ayuda.
 - [x] **TB.10** [P] Comprobante lateral (`design.md` §4.1): `PREFIJO_COMPROBANTE` +3;
   `WalletComprobanteService` (registrar en la misma transacción, adjuntar después, ver con URL firmada
   tras comprobar alcance; limpieza del objeto si falla) y `adjuntarComprobanteAction`,
@@ -167,7 +167,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   distinguir ajeno de inexistente). *Hecho:* `wallet-comprobante-service.test.ts` (tipo, tamaño,
   fallo de subida no registra, fallo de registro borra, UNIQUE impide el segundo) y
   `tests/integration/db/wallet-comprobante-alcance.test.ts` (R74–R80). Depende de TB.3.
-  *Evidencia:* `6d682817`; `wallet-comprobante-service.test.ts` (21), `wallet-comprobante-alcance.test.ts` (8); mutaciones TB.10 rojas.
+  *Evidencia:* `6d682817`; `wallet-comprobante-service.test.ts` (21), `wallet-comprobante-alcance.test.ts` (8); mutaciones TB.10 rojas. **Cierre (m6, `4fe5d93e`):** `adjuntar` responde `no_admite: anulado` sobre un movimiento anulado.
 - [x] **TB.11** Bordes de sueldo, gasto de Ordenex y corrección: `contraparteNombre` (obligatorio en
   los dos primeros, D5), `referencia?`, `comprobante?` (`FormData`), anotación en la misma
   transacción; pago a tienda/mensajero y cobro ganan `comprobante?`; los `.strict()` se conservan.
@@ -183,7 +183,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
 - [x] **TB.13** [P] «Cómo quedó» (`design.md` §3.7) en `EstadoCuentaService`/`WalletService`.
   *Hecho:* test contra la base: tras el último movimiento coincide con el resumen sin filtros (R58,
   parte servidor).
-  *Evidencia:* `acb0e12b`; `tests/integration/db/como-quedo.test.ts`; mutaciones TB.13 rojas. Desviación anotada: servicio propio `ComoQuedoService`.
+  *Evidencia:* `acb0e12b`; `tests/integration/db/como-quedo.test.ts`; mutaciones TB.13 rojas. Desviación anotada: servicio propio `ComoQuedoService`. **Cierre (m2, `a69b453b`):** desempate por la posición máxima (flete e IVA del rechazo).
 - [x] **TB.14** Comentarios T2–T4 de `design.md` §1.4 en `schema.prisma` y `lib/types/`. *Hecho:* diff
   solo de comentarios en esos archivos (R101).
   *Evidencia:* `9708560b`; diff solo de comentarios (`git diff -U0`), `prisma validate` verde.
@@ -191,7 +191,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   verdes salvo el bloque «a propósito»); gate COMPLETO; revisión backend. *Hecho:* `INIT_EXIT=0`;
   anexo en `progress/fase0_458-B.md`; `progress/impl_458-B.md` con la tabla R→test; nota de release
   «migrar preview y prod; correr Q458-1 antes y Q458-3 después» (R84–R92).
-  *Evidencia:* `a393d30e` + `fa481a6d` (`progress/gate_458B.log`, `INIT_EXIT=0`); revisión RECHAZADA (`progress/review_458-B.md`).
+  *Evidencia:* `a393d30e` + `fa481a6d` (`progress/gate_458B.log`, `INIT_EXIT=0`); revisión RECHAZADA (`progress/review_458-B.md`). **Cierre:** `progress/impl_458-B.md` §«Cierre tras la revisión» y `progress/gate_458B_cierre.log`.
 
 ## 458-C — Registrar un movimiento y panel «Ver» (fullstack) · depende de 458-A, 458-B y 457 en `dev`
 
