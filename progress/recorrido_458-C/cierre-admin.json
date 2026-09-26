@@ -1,0 +1,113 @@
+{
+  "pasos": [
+    {
+      "medida": {
+        "momento": "antes de todo",
+        "entro": "13524733.22",
+        "salio": "43050.50",
+        "cifra": "13481682.72",
+        "ganancia": "13336262.62",
+        "de_tiendas": "145420.10",
+        "capital": "0",
+        "suma_saldos": "145420.10",
+        "diferencia_r8": "0.00",
+        "diferencia_r7": "0.00"
+      }
+    },
+    {
+      "pagoTienda.asiQueda": "Así queda Antes Después Saldo de Tania Tienda Antes: ₡145.420,10 Después: ₡144.120,10 Flujo de dinero registrado Antes: ₡13.481.682,72 Después: ₡13.480.382,72 Ganancia de Ordenex ₡13.336.262,62 · no cambia Lo que Ordenex les debe a las tiendas Antes: ₡145.420,10 Después: ₡144.120,10 Saldo inicial y aportes ₡0 · no cambia"
+    },
+    {
+      "pagoTienda.aviso": "Pago de ₡1.300 a Tania Tienda registrado. Ordenex le sigue debiendo ₡144.120,10."
+    },
+    {
+      "medida": {
+        "momento": "tras pagar ₡1.300 a Tania",
+        "entro": "13524733.22",
+        "salio": "44350.50",
+        "cifra": "13480382.72",
+        "ganancia": "13336262.62",
+        "de_tiendas": "144120.10",
+        "capital": "0",
+        "suma_saldos": "144120.10",
+        "diferencia_r8": "0.00",
+        "diferencia_r7": "0.00"
+      }
+    },
+    {
+      "pagoTienda.base": [
+        {
+          "id": "211ba52b-6402-4789-a6cc-27653f9663e6",
+          "lineas_caja": "1"
+        }
+      ]
+    },
+    {
+      "pagoTienda.ver.antes": "Ver Ordenex le paga a una tienda del 2026-09-26 por ₡1.300"
+    },
+    {
+      "pagoTienda.panel.vigente": "Ordenex le paga a una tienda 2026-09-26 · Sale ₡1.300 A quién Cargando… Por qué Efectivo De dónde sale Pago de Ordenex a una tienda · Tania Tienda · 2026-09-26 · Efectivo · Efectivo Cómo Cargando… Comprobante Sin comprobante. Registró Cargando… Estado Vigente Cómo quedó Calculando cómo quedó… Anular… Close"
+    },
+    {
+      "pagoTienda.anular.aviso": "Anulado. Se registró el movimiento contrario."
+    },
+    {
+      "medida": {
+        "momento": "tras anular el pago a Tania",
+        "entro": "13526033.22",
+        "salio": "44350.50",
+        "cifra": "13481682.72",
+        "ganancia": "13336262.62",
+        "de_tiendas": "145420.10",
+        "capital": "0",
+        "suma_saldos": "145420.10",
+        "diferencia_r8": "0.00",
+        "diferencia_r7": "0.00"
+      }
+    },
+    {
+      "pagoTienda.fila.anulada": {
+        "ariaLabel": "Ver Ordenex le paga a una tienda del 2026-09-26 por ₡1.300 · Anulado",
+        "texto": " 2026-09-26 Egreso Ordenex le paga a una tienda ₡1.300 Pago de Ordenex a una tienda · Tania Tienda · 2026-09-26 · Efectivo · Efectivo Tienda Anulado Ver",
+        "clase": "border-b text-muted-foreground line-through"
+      }
+    },
+    {
+      "pagoTienda.panel.anulado": "Ordenex le paga a una tienda 2026-09-26 · Sale ₡1.300 A quién Tania Tienda Por qué Efectivo De dónde sale Pago de Ordenex a una tienda · Tania Tienda · 2026-09-26 · Efectivo · Efectivo Cómo Efectivo Comprobante Sin comprobante. Registró Ana Admin Estado Anulado el 2026-09-26 por Ana Admin · Recorrido 458-C: pago a la cuenta equivocada Cómo quedó Flujo de dinero registrado ₡13.480.382,72 Ganancia de Ordenex ₡13.336.262,62 Lo que Ordenex les debe a las tiendas ₡144.120,10 Saldo inicial y aportes ₡0 Saldo de la tienda ₡144.120,10 Close"
+    },
+    {
+      "pagoTienda.panel.anular": 0
+    },
+    {
+      "pagoMensajero.asiQueda": "Así queda Antes Después Lo que Ordenex le debe a Marco Mensajero Antes: ₡5.100 Después: ₡4.100 Flujo de dinero registrado ₡13.481.682,72 · no cambia Ganancia de Ordenex ₡13.336.262,62 · no cambia Lo que Ordenex les debe a las tiendas ₡145.420,10 · no cambia Saldo inicial y aportes ₡0 · no cambia"
+    },
+    {
+      "pagoMensajero.aviso": "Pago de ₡1.000 a Marco Mensajero registrado. Ordenex le sigue debiendo ₡4.100 por sus cierres."
+    },
+    {
+      "medida": {
+        "momento": "tras pagar ₡1.000 a Marco",
+        "entro": "13526033.22",
+        "salio": "44350.50",
+        "cifra": "13481682.72",
+        "ganancia": "13336262.62",
+        "de_tiendas": "145420.10",
+        "capital": "0",
+        "suma_saldos": "145420.10",
+        "diferencia_r8": "0.00",
+        "diferencia_r7": "0.00"
+      }
+    },
+    {
+      "pagoMensajero.base": [
+        {
+          "id": "e046d9b5-119b-4e18-936c-3199aec9997f",
+          "monto": "1000.00",
+          "metodo": "efectivo",
+          "lineas_caja": "0"
+        }
+      ]
+    }
+  ],
+  "respuestas": 29
+}

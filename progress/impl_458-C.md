@@ -292,3 +292,62 @@ Los 26 `skipped` son `AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (
 «Anular…» uniforme en el libro actual, D5 en el servidor; recorrido OK con R7/R8 = 0,00; 19 mutaciones
 rojas; gate completo `INIT_EXIT=0` con 0 saltados en integration/db. Bloqueada para desplegar por el
 build roto que dejó la 458-B (pendiente 1).
+
+## Cierre tras la revisión (`progress/review_458-C.md`, RECHAZADA) · 2026-09-26
+
+**Rama:** `wt/458-C-fix` = `origin/feature/458-C` (`03122992`) + `origin/review/458-C` (`24affec8`), empujada
+a `feature/458-C` tras cada paso. **Base:** clon propio `ordenex_458cx` (`CREATE DATABASE … TEMPLATE
+ordenex`, 0 conexiones a la plantilla medidas antes; `prisma migrate deploy`: «No pending migrations»;
+`migrate status` → `ordenex_458cx` en `localhost:5432`), `.env` del checkout principal con la base
+cambiada y sin `DATABASE_URL_PREVIEW`, `pnpm install --frozen-lockfile` propio sin junction; borrado al
+terminar. **Búsqueda:** el MCP `codebase-memory` no estaba en mi conjunto de herramientas en esta sesión;
+usé `grep`/lectura de los archivos reales (regla 7, declarado).
+
+### Qué se arregló, con su test y su mutación
+
+| Punto | Arreglo | Test | Mutación (roja) |
+| --- | --- | --- | --- |
+| **B1** 461 R68 | `ya_registrado` = éxito sin toast de error, en los OCHO caminos (gasto/sueldo, corrección, cobro, pago de un gasto, aporte, abono, pago a tienda, pago a mensajero), con su aviso LITERAL | `wallet-registrar-movimiento-dialog.test.tsx` «458-C B1 — 461 R68…» (8 casos) | MB1-a (gasto/sueldo → error) 2/57; MB1-b (abono → error) 1/57 |
+| **B1** 457 R57/R58 | aviso de éxito del abono con el saldo del servidor y «todavía debe» (y sin «debe» en cero); `sin_deuda` bajo la tienda; `excede` bajo el monto con la deuda del servidor | bloques «…avisos de éxito…» y «…rechazos del servidor…» | MB1-c 1/57; MB1-d 1/57 |
+| **B1** 459 R63/R68/R70 | aviso del pago de un gasto (en contra y a favor), del saldo inicial («Registrado. Saldo inicial de ₡2.500.000,50.») y del aporte; `ya_hay_saldo_inicial` bajo la clase | ídem | MB1-e 1/57; MB1-f 2/57; MB1-h 1/57 |
+| **B1** pago a un mensajero | `sin_saldo` bajo el mensajero, `excede` bajo el monto con el tope del servidor | ídem | MB1-g 1/57 |
+| **B2** 457 R41, 459 R66, 461 R20/R71 | la fila anulada lleva la palabra «Anulado» (insignia en la celda de «Ver», donde vivían las acciones: el orden de las columnas no se toca) y el nombre accesible de su «Ver» termina en «· Anulado»; sale del `documento` del servidor | `WalletLedgerVer458C.test.tsx` «458-C revisión B2 — …» | B2-a 1/47; B2-b 1/47 |
+| **B3** R71 | el panel no afirma «Vigente» sin documento («—»); el pago de Ordenex a una tienda (172) y el premio (293) llegan con documento: anulados dicen «Anulado» y salen tachados, vigentes ofrecen «Anular…» por la acción única | `DetalleMovimientoPanel.test.tsx` (estado `null` → «—»), `WalletLedgerVer458C.test.tsx` «…revisión B3…»; **Postgres:** `tests/integration/db/libro-caja-revision-458c.test.ts` (el libro REAL de `/wallet`) | B3-a (panel) 1/47; B3-b/c/d (servidor) 2/8, 1/8, 1/8 |
+| **M1** R58 | el panel dice quién anuló, el día y el motivo (de la constancia de CADA documento; el premio, de su reverso de caja) y «Cómo» (método y referencia; la referencia anotada a mano) | `WalletLedgerVer458C.test.tsx` «…revisión M1…»; Postgres: `libro-caja-revision-458c.test.ts` (pago anulado/vigente, premio, gasto por la vía uniforme, contra-asientos sin «anulado por») | M1-a/b (panel) 1/47, 3/47; M1-c/d/e (servidor) 1/8 cada una |
+| **M3** | un fallo de red o un estado desconocido deja un aviso a la vista (`role="alert"`), el diálogo abierto con lo escrito y la MISMA clave (repetir no duplica); cambiar de concepto genera una clave NUEVA | «458-C M3 — …» (3 casos) | M3-a 3/57; M3-b 1/57 |
+| **M2** | recorrido en la app de «Ordenex le paga a una tienda» (registrar, Ver, Anular…, fila «Anulado», panel con quién/cuándo/motivo/cómo) y «Ordenex le paga a un mensajero», R7/R8 = 0,00 en las cuatro medidas | `progress/recorrido_458-C/recorrido.md` §«Cierre tras la revisión» | — |
+
+**Mutaciones:** 21, una a una, con el arnés que se autocomprueba (el archivo cambia, se ejecutan > 0 tests
+con 0 saltados, se restaura byte a byte, `git status` limpio al terminar): **21/21 rojas**.
+`progress/mutaciones_458-C_cierre.json`.
+
+### Servidor tocado (mínimo, solo LECTURA; autorizado por el leader para B3 y M1)
+
+- `DocumentoCajaDTO["tipo"]` gana `pago_tienda` y `premio_del_ranking`; `tipoDeDocumentoOriginal` (ahora
+  exportada) los reconoce con las MISMAS condiciones que `WalletAnulacionService.rutaDeCaja`.
+  `LectoresDocumentosCaja` gana `pagosATienda` (`PagoTiendaCajaDocumentosRepository`: `liquidacion_anulacion`
+  + `wallet_comprobante.liquidacion_pago_id`) y `premios` (`PremioCajaDocumentosRepository`: el reverso
+  `ingreso_ajuste` con la misma clave de origen), SIN valor por defecto; inyectados en `lib/actions/wallet.ts`
+  y en los fixtures de test que construyen `WalletService`. `DOCUMENTO_CAJA_NOMBRE` gana sus dos nombres.
+- `AutoriaDeFilaDTO` gana `como` y `anulacion` (`LibroCajaAutoriaRepository.comos`/`anulaciones`, una
+  consulta por tipo presente); qué fila es ORIGINAL lo decide `tipoDeDocumentoOriginal`, la misma función
+  del libro, así que un contra-asiento nunca dice «anulado por».
+- Sin cambios de escritura, de dinero, de esquema ni de migraciones.
+
+### Bitácora corregida
+
+La tabla «Tests retirados o reescritos» de TC.1 y la de TC.3–TC.6 decían sustitutos que no medían lo que
+decían (B1, B2). Las filas afectadas llevan ahora «**Corregido en el cierre**» con el test que SÍ lo mide.
+La nota de TC.4 («el panel no puede decir quién anuló…») y el «Pendiente 3» quedan superados por M1;
+el «Pendiente 1» (el build roto de la 458-B) lo cerró `fix/458-B-async` (#830), ya en esta rama.
+
+### Menores de la revisión
+
+- m1: TC.0–TC.8 con `[x]` en `specs/458-rediseno-wallet/tasks.md`; entrada en `progress/history.md`.
+- m2: gate completo sobre el HEAD del cierre (abajo).
+- m3, m7 y el INSTANTE de registro (R58): anotados en TC.8 para TE.3 (458-E). m4: rotulado como deuda de
+  TD.5 (458-D). m6: la ayuda cita el aviso real («Este movimiento no se puede anular: …»).
+- m5 (adminSatelite): no se sondeó en este cierre; queda como estaba en la revisión.
+- Observación nueva (recorrido): en el pago a una tienda, «Por qué» dice el método, porque la 172 guarda
+  `descripcionDePago(metodo, referencia)` en la línea de caja; la nota del pago no llega al libro. Para la
+  458-E.

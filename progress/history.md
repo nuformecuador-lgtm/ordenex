@@ -5624,3 +5624,18 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
 - Deuda: contar en producción las tiendas con `segundo_apellido` antes de desplegar; m7–m9 de la
   revisión (cobertura contra Postgres de 6 lectores del origen, ayuda de mensajeros, nombre de
   `conciliadoPorNombre`); el panel de `/analitica` sigue oculto (región `financiero` comentada).
+
+
+## 2026-09-26 — 458-C: registrar un movimiento y panel «Ver» (hija C de la 458)
+- Diálogo único «Registrar un movimiento» (diez conceptos en tres grupos, «Así queda» del servidor,
+  comprobante opcional, D5 en el servidor) y panel «Ver» + «Anular…» uniforme en el libro de la caja.
+- Requisitos cubiertos: R37–R52, R58, R60, R63–R67, R71, R72, R74–R76, R79, R80, R90, R100, R102–R104;
+  mapa R→test en `progress/impl_458-C.md`.
+- Revisión RECHAZADA (`progress/review_458-C.md`) y cerrada: B1 tests literales de `ya_registrado`,
+  `sin_deuda`/`excede`, `ya_hay_saldo_inicial` y avisos de éxito; B2 la fila anulada dice «Anulado»; B3 el
+  pago a una tienda y el premio con documento y sin «Vigente» sin documento; M1 quién anuló, cuándo, motivo
+  y cómo (servidor de lectura ampliado, test contra Postgres); M3 aviso de fallo de red y clave nueva por
+  concepto; M2 recorrido de los dos pagos nuevos con R7/R8 = 0,00. 21 mutaciones rojas.
+- Deuda (TC.8 → TE.3 de la 458-E): instante de registro en el panel; `reversarEgresoAdministrativoAction`
+  sin superficie ni motivo; m7 (pagar a una cuenta inactiva con saldo desde el diálogo); la nota del pago
+  a una tienda no llega al libro de la caja («Por qué» dice el método).
