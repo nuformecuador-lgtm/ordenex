@@ -4,11 +4,21 @@ import type {
   BusquedaDeCierre,
   CierreDeCuentaRow,
   ConteoPorCategoria,
+  CuentaConMovimientosRow,
   FiltrosConteoCaja,
   FiltrosConteoTienda,
+  FiltrosQuienesCaja,
   IFiltrosWalletRepository,
+  NombreConMovimientosRow,
 } from "@/lib/interfaces/repositories/IFiltrosWalletRepository";
+import {
+  cuentasConMovimientosSql,
+  nombresConMovimientosSql,
+  whereLibroCajaSql,
+} from "@/lib/repositories/libro-caja-a-quien-sql";
+import type { AQuienCuentaTipo } from "@/lib/types/libro-caja-a-quien";
 import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
+import { nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 type FiltrosPrismaClient = Pick<
   PrismaClient,
@@ -58,6 +68,14 @@ export class FiltrosWalletRepository implements IFiltrosWalletRepository {
   constructor(private readonly prisma: FiltrosPrismaClient) {}
 
   async contarConceptosCaja(f: FiltrosConteoCaja): Promise<ConteoPorCategoria[]> {
+    if (f.aQuien !== undefined) {
+      // Ficha 458-E (R59): con «A quién», el conteo sale del MISMO WHERE que el libro.
+      return this.prisma.$queryRaw<ConteoPorCategoria[]>(Prisma.sql`
+        SELECT w."categoria"::text AS "categoria", COUNT(*)::int AS "movimientos"
+        FROM "wallet_movimiento" w
+        WHERE ${whereLibroCajaSql({ tipo: f.tipo, desde: f.desde, hasta: f.hasta, aQuien: f.aQuien })}
+        GROUP BY w."categoria"`);
+    }
     const fecha = rangoFecha(f.desde, f.hasta);
     const grupos = await this.prisma.walletMovimiento.groupBy({
       by: ["categoria"],
@@ -124,6 +142,33 @@ export class FiltrosWalletRepository implements IFiltrosWalletRepository {
       LIMIT ${limite}
     `);
     return this.conMensajero(grupos);
+  }
+
+  async quienesDelLibroCaja(
+    f: FiltrosQuienesCaja,
+  ): Promise<{ cuentas: CuentaConMovimientosRow[]; nombres: NombreConMovimientosRow[] }> {
+    const filtros = { tipo: f.tipo, desde: f.desde, hasta: f.hasta };
+    const cuentas = await this.prisma.$queryRaw<
+      {
+        tipo: AQuienCuentaTipo;
+        cuentaId: string;
+        nombre: string;
+        primerApellido: string | null;
+        segundoApellido: string | null;
+        movimientos: number;
+      }[]
+    >(cuentasConMovimientosSql(filtros));
+    const nombres = await this.prisma.$queryRaw<NombreConMovimientosRow[]>(nombresConMovimientosSql(filtros));
+    return {
+      // El nombre con la MISMA funcion que la columna «A quién» (`LibroCajaAutoriaRepository`).
+      cuentas: cuentas.map((c) => ({
+        tipo: c.tipo,
+        cuentaId: c.cuentaId,
+        nombre: nombreCompletoUsuario(c),
+        movimientos: c.movimientos,
+      })),
+      nombres,
+    };
   }
 
   /**

@@ -1,4 +1,5 @@
 import type { HistorialAccionTipo } from "@/lib/types/historial-accion";
+import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 import type { PrismaClient } from "@prisma/client";
 import type {
   AgregadoCajaRow,
@@ -91,6 +92,14 @@ export interface ListarMovimientosFiltros {
    * `categoria` (no en su lugar), asi que el filtro del usuario y el de la fila conviven.
    */
   categorias?: readonly WalletMovimientoCategoria[];
+  /**
+   * Ficha 458-E (TE.2, R59) — «A quién»: una tienda, un mensajero o el nombre libre anotado. Lo
+   * resuelve el REPOSITORIO en el WHERE (cruce por origen, design §3.4), en la MISMA consulta que
+   * pagina, cuenta y agrega: nunca una lista de ids que viaje en un `IN`.
+   *
+   * OPCIONAL: ausente ⇒ la consulta es la de siempre (el `where` de Prisma, byte a byte).
+   */
+  aQuien?: AQuienFiltro;
 }
 
 export interface ListarMovimientosPage {
@@ -113,6 +122,14 @@ export interface BalanceFiltros {
    * (`tests/integration/db/composicion-detalle-postgres.test.ts`).
    */
   categorias?: readonly WalletMovimientoCategoria[];
+  /**
+   * Ficha 458-E (TE.2, R59) — «A quién»: una tienda, un mensajero o el nombre libre anotado. Lo
+   * resuelve el REPOSITORIO en el WHERE (cruce por origen, design §3.4), en la MISMA consulta que
+   * pagina, cuenta y agrega: nunca una lista de ids que viaje en un `IN`.
+   *
+   * OPCIONAL: ausente ⇒ la consulta es la de siempre (el `where` de Prisma, byte a byte).
+   */
+  aQuien?: AQuienFiltro;
 }
 
 // Feature 45 (R11) — desglose de egresos por tipo, ya como STRING (money-safe). Deriva de un

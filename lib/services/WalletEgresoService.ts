@@ -178,6 +178,8 @@ export class WalletEgresoService implements IWalletEgresoService {
         categoria: input.categoria,
         desde: input.desde,
         hasta: input.hasta,
+        // Ficha 458-E (TE.2, R59): el desglose del MISMO conjunto que el libro con «A quién».
+        ...(input.aQuien !== undefined ? { aQuien: input.aQuien } : {}),
       });
     // Feature 158/R32: la indemnizacion entra en el total. Suma con Prisma.Decimal (nunca
     // number/parseFloat) y sale como STRING escala 2, igual que los otros tres conceptos.

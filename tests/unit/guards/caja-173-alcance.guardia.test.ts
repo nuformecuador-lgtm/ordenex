@@ -148,6 +148,13 @@ describe("R33 — el repositorio que sirve las dos cifras NO puede leer los otro
       $transaction: {} as PrismaClient["$transaction"],
       historialAccion: {} as PrismaClient["historialAccion"],
       usuario: {} as PrismaClient["usuario"],
+      // ⚠️ FICHA 458-E (R59): `$queryRaw`, para el filtro «A quién». El cruce por origen (a que
+      // tienda o mensajero pertenece el documento de una fila) es un `EXISTS` que el `where` de
+      // Prisma no expresa. Con el, el repositorio SI puede nombrar otras tablas en SQL —la de los
+      // debitos de la tienda entre ellas, para saber DE QUE TIENDA es un cobro—, pero solo como
+      // CRITERIO de pertenencia: lo que se suma sigue siendo `wallet_movimiento.monto` y nada mas.
+      // Eso lo afirma el caso «el filtro «A quién» solo SUMA la caja» de abajo.
+      $queryRaw: {} as PrismaClient["$queryRaw"],
     };
     const repo = new WalletMovimientoRepository(clienteDeUnaSolaTabla);
 
@@ -171,6 +178,17 @@ describe("R33 — el repositorio que sirve las dos cifras NO puede leer los otro
     for (const ajena of ["walletTiendaMovimiento", "pagoMensajeroMovimiento", "gestionOrden", "cierreDia"]) {
       expect(codigo, `WalletMovimientoRepository nombra ${ajena}`).not.toContain(ajena);
     }
+  });
+
+  it("el filtro «A quién» (458-E) solo SUMA la caja: otras tablas, solo como criterio de pertenencia", () => {
+    // El repositorio suma UNA columna en SQL: el monto de la fila de la caja (`w`).
+    const repo = codigoSinComentarios("lib/repositories/WalletMovimientoRepository.ts");
+    const sumas = [...repo.matchAll(/SUM\(([^)]*)\)/g)].map((m) => m[1]);
+    expect(sumas.length).toBeGreaterThan(0);
+    for (const suma of sumas) expect(suma).toBe('w."monto"');
+    // Y el modulo del cruce no suma nada ni lee un monto: solo dice QUE filas son de quien.
+    const cruce = codigoSinComentarios("lib/repositories/libro-caja-a-quien-sql.ts");
+    expect(cruce).not.toContain("monto");
   });
 
   it("la derivacion de las dos cifras es PURA: no conoce ningun cliente ni ningun repositorio", () => {

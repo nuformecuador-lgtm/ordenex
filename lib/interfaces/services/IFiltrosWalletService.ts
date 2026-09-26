@@ -4,10 +4,16 @@ import type {
   CierresDeLaCuentaInput,
   ConceptoConMovimientosDTO,
   ConceptosConMovimientosInput,
+  QuienDelLibroCajaOpcionDTO,
+  QuienesDelLibroCajaInput,
 } from "@/lib/types/wallet-filtros";
 
 export type ConceptosConMovimientosServiceResult =
   | { status: "ok"; conceptos: ConceptoConMovimientosDTO[] }
+  | { status: "forbidden" };
+
+export type QuienesDelLibroCajaServiceResult =
+  | { status: "ok"; opciones: QuienDelLibroCajaOpcionDTO[]; hayMas: boolean }
   | { status: "forbidden" };
 
 export type CierresDeLaCuentaServiceResult =
@@ -21,4 +27,6 @@ export interface IFiltrosWalletService {
     actor: Actor,
   ): Promise<ConceptosConMovimientosServiceResult>;
   cierresDeLaCuenta(input: CierresDeLaCuentaInput, actor: Actor): Promise<CierresDeLaCuentaServiceResult>;
+  /** Ficha 458-E (TE.2, R59) — las opciones del selector «A quién» del libro de la caja. */
+  quienesDelLibroCaja(input: QuienesDelLibroCajaInput, actor: Actor): Promise<QuienesDelLibroCajaServiceResult>;
 }

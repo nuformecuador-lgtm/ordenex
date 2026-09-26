@@ -10,6 +10,7 @@ import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { composicionDetalleConfig } from "@/lib/config/composicion-detalle";
 import { walletMovimientoConfig } from "@/lib/config/wallet-movimiento";
 import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
+import { aQuienFiltroSchema } from "@/lib/types/libro-caja-a-quien";
 import {
   esFechaCalendarioValida,
   fechaCalendarioCR,
@@ -644,7 +645,14 @@ export const listarMovimientosSchema = z.object({
   // la medianoche UTC (18:00 CR del dia anterior) y dejaba «hoy» con 2 de 7 movimientos.
   desde: desdeDiaCRSchema.optional(),
   hasta: hastaDiaCRSchema.optional(),
-});
+  // Ficha 458-E (TE.2, R59): «A quién» — una tienda, un mensajero o el nombre libre anotado. Lo
+  // resuelve el REPOSITORIO en el WHERE, igual para libro, tarjetas, composicion, desglose y descarga
+  // (todos derivan de este schema). Las opciones las da `quienesDelLibroCajaAction`.
+  aQuien: aQuienFiltroSchema.optional(),
+})
+  // Ficha 458-E: `.strict()` — una clave desconocida es `validation_error` sin leer nada. Los
+  // derivados (`…CompletoSchema`, `…DeFilaSchema`) lo heredan por `omit`/`extend`.
+  .strict();
 
 export type ListarMovimientosInput = z.infer<typeof listarMovimientosSchema>;
 

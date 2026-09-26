@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 import { WALLET_MOVIMIENTO_TIPO_SEED } from "@/lib/types/wallet";
+import { aQuienFiltroSchema, type AQuienCuentaTipo, type AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 
 // =================================================================================================
 // Ficha 458-A (TA.3/TA.4, design §3.5, R10–R15) — los bordes de los FILTROS de la wallet.
@@ -29,6 +30,8 @@ export const conceptosConMovimientosSchema = z.discriminatedUnion("libro", [
       tipo: z.enum(WALLET_MOVIMIENTO_TIPO_SEED).optional(),
       desde: desdeDiaCRSchema.optional(),
       hasta: hastaDiaCRSchema.optional(),
+      // Ficha 458-E (TE.2, R59): los conceptos del conjunto filtrado tambien por «A quién».
+      aQuien: aQuienFiltroSchema.optional(),
     })
     .strict(),
   z
@@ -101,6 +104,43 @@ export type ConceptosConMovimientosResult =
 
 export type CierresDeLaCuentaResult =
   | { status: "ok"; opciones: CierreDeCuentaOpcionDTO[]; hayMas: boolean }
+  | { status: "forbidden" }
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+// ── Ficha 458-E (TE.2, R59; design §6) — las opciones del selector «A quién» del libro de la caja ──
+
+/**
+ * Entrada del selector: los MISMOS filtros de periodo y direccion que el libro (sin concepto: como el
+ * de conceptos, las opciones no dependen del concepto elegido) y un texto de busqueda sobre el nombre.
+ */
+export const quienesDelLibroCajaSchema = z
+  .object({
+    tipo: z.enum(WALLET_MOVIMIENTO_TIPO_SEED).optional(),
+    desde: desdeDiaCRSchema.optional(),
+    hasta: hastaDiaCRSchema.optional(),
+    busqueda: busquedaSchema.optional(),
+  })
+  .strict();
+
+export type QuienesDelLibroCajaInput = z.infer<typeof quienesDelLibroCajaSchema>;
+
+/**
+ * UNA opcion del selector «A quién». `valor` es EXACTAMENTE lo que se manda de vuelta como `aQuien`
+ * en el filtro del libro (viaja, nunca se pinta: H6). El rotulo se compone con `nombre` y `clase`.
+ * `movimientos` es un CARDINAL (cuantas filas de la caja en el periodo), nunca un importe.
+ */
+export type QuienDelLibroCajaOpcionDTO = {
+  valor: AQuienFiltro;
+  /** Que es: una tienda, un mensajero o un nombre libre anotado a mano. */
+  clase: AQuienCuentaTipo | "nombre";
+  /** El nombre, con la misma funcion que la columna «A quién» (`nombreCompletoUsuario`). */
+  nombre: string;
+  movimientos: number;
+};
+
+export type QuienesDelLibroCajaResult =
+  | { status: "ok"; opciones: QuienDelLibroCajaOpcionDTO[]; hayMas: boolean }
   | { status: "forbidden" }
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };

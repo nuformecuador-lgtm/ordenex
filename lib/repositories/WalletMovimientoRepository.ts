@@ -21,6 +21,8 @@ import type {
 import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { whereLibroCajaSql } from "@/lib/repositories/libro-caja-a-quien-sql";
+import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 
 /** Ficha 459 — las categorias de capital, DERIVADAS de la clasificacion (nunca una lista a mano). */
 const CATEGORIAS_DE_CAPITAL: readonly WalletMovimientoCategoria[] =
@@ -32,7 +34,7 @@ const CATEGORIAS_DE_CAPITAL: readonly WalletMovimientoCategoria[] =
 // el `Pick` gana `$transaction`, `historialAccion` y `usuario`.
 type WalletPrismaClient = Pick<
   PrismaClient,
-  "walletMovimiento" | "$transaction" | "historialAccion" | "usuario"
+  "walletMovimiento" | "$transaction" | "historialAccion" | "usuario" | "$queryRaw"
 >;
 
 // Money-safe: Decimal -> STRING escala 2 (nunca number/parseFloat).
@@ -98,6 +100,19 @@ function buildWhere(f: BalanceFiltros): Prisma.WalletMovimientoWhereInput {
   }
   return where;
 }
+
+/**
+ * Ficha 458-E (TE.2, R59) — ¿lleva el filtro «A quién»? Entonces el conjunto lo decide
+ * `whereLibroCajaSql` (el cruce por origen es un `EXISTS` que el `where` de Prisma no expresa) y los
+ * TRES caminos —paginar, contar y agregar— usan ese mismo WHERE: por construccion, las tarjetas y el
+ * desglose suman exactamente las filas del libro filtrado.
+ */
+function conAQuien<F extends BalanceFiltros>(f: F): (F & { aQuien: AQuienFiltro }) | null {
+  return f.aQuien === undefined ? null : (f as F & { aQuien: AQuienFiltro });
+}
+
+/** Una suma por grupo, leida en SQL: `numeric` llega como `Prisma.Decimal` (nunca `number`). */
+type GrupoSql = { categoria: WalletMovimientoCategoria; tipo: MovimientoRow["tipo"]; total: Prisma.Decimal | null };
 
 /**
  * Feature 42 — repositorio del LIBRO de movimientos de la wallet. SOLO queries Prisma.
@@ -217,8 +232,27 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
    * identico, y `@@index([fechaMovimiento])` sigue sirviendo al filtro de rango.
    */
   async listar(filtros: ListarMovimientosFiltros): Promise<ListarMovimientosPage> {
-    const where = buildWhere(filtros);
     const skip = (filtros.page - 1) * filtros.pageSize;
+    const f = conAQuien(filtros);
+    if (f !== null) {
+      // Ficha 458-E (R59): el MISMO orden total de abajo, en SQL, sobre el WHERE con «A quién».
+      const where = whereLibroCajaSql(f);
+      const [rows, cuenta] = await Promise.all([
+        this.prisma.$queryRaw<MovimientoRow[]>(Prisma.sql`
+          SELECT w."id", w."tipo"::text AS "tipo", w."categoria"::text AS "categoria", w."monto",
+                 w."origen_tipo"::text AS "origenTipo", w."origen_id" AS "origenId", w."descripcion",
+                 w."registrado_por" AS "registradoPor", w."fecha_movimiento" AS "fechaMovimiento",
+                 w."created_at" AS "createdAt", w."clave_idempotencia" AS "claveIdempotencia"
+          FROM "wallet_movimiento" w
+          WHERE ${where}
+          ORDER BY w."fecha_movimiento" DESC, w."created_at" DESC, w."id" DESC
+          OFFSET ${skip} LIMIT ${filtros.pageSize}`),
+        this.prisma.$queryRaw<{ total: number }[]>(Prisma.sql`
+          SELECT COUNT(*)::int AS "total" FROM "wallet_movimiento" w WHERE ${where}`),
+      ]);
+      return { movimientos: rows.map(toDTO), total: cuenta[0]?.total ?? 0 };
+    }
+    const where = buildWhere(filtros);
     const [rows, total] = await Promise.all([
       this.prisma.walletMovimiento.findMany({
         where,
@@ -239,6 +273,16 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
    * Solo agrega. Ni particiona por naturaleza ni resta: eso es de `derivarCaja`, que es pura.
    */
   async agregarPorCategoriaYTipo(filtros: BalanceFiltros): Promise<readonly AgregadoCajaRow[]> {
+    const f = conAQuien(filtros);
+    if (f !== null) {
+      // Ficha 458-E (R59): la misma agrupacion sobre el MISMO WHERE que `listar` con «A quién».
+      const grupos = await this.gruposConAQuien(f);
+      return grupos.map((g) => ({
+        categoria: g.categoria,
+        tipo: g.tipo,
+        total: (g.total ?? new Prisma.Decimal(0)).toFixed(2),
+      }));
+    }
     const where = buildWhere(filtros);
     const grupos = await this.prisma.walletMovimiento.groupBy({
       by: ["categoria", "tipo"],
@@ -308,6 +352,23 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
 
   /** Feature 45 (R11): SUM(monto) por categoria administrativa, con los mismos filtros. STRING. */
   async agregarPorCategoria(filtros: BalanceFiltros): Promise<DesgloseEgresosAgregado> {
+    const f = conAQuien(filtros);
+    if (f !== null) {
+      // Ficha 458-E (R59): con «A quién», la suma por categoria sale de los grupos (categoria, tipo)
+      // del MISMO WHERE que el libro. Se suman TODOS los grupos de la categoria (con `Decimal`).
+      const grupos = await this.gruposConAQuien(f);
+      const sumaConAQuien = (categoria: string): string =>
+        grupos
+          .filter((g) => g.categoria === categoria)
+          .reduce((acc, g) => acc.add(g.total ?? new Prisma.Decimal(0)), new Prisma.Decimal(0))
+          .toFixed(2);
+      return {
+        gastoFijo: sumaConAQuien("egreso_gasto_fijo"),
+        gastoVariable: sumaConAQuien("egreso_gasto_variable"),
+        sueldo: sumaConAQuien("egreso_sueldo"),
+        indemnizacion: sumaConAQuien("egreso_indemnizacion"),
+      };
+    }
     const where = buildWhere(filtros);
     const grupos = await this.prisma.walletMovimiento.groupBy({
       by: ["categoria"],
@@ -324,5 +385,14 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       sueldo: sumaDe("egreso_sueldo"),
       indemnizacion: sumaDe("egreso_indemnizacion"), // feature 158/R32
     };
+  }
+
+  /** Ficha 458-E (R59): `SUM(monto)` por (categoria, tipo) con el WHERE de «A quién». */
+  private async gruposConAQuien(f: BalanceFiltros & { aQuien: AQuienFiltro }): Promise<GrupoSql[]> {
+    return this.prisma.$queryRaw<GrupoSql[]>(Prisma.sql`
+      SELECT w."categoria"::text AS "categoria", w."tipo"::text AS "tipo", SUM(w."monto") AS "total"
+      FROM "wallet_movimiento" w
+      WHERE ${whereLibroCajaSql(f)}
+      GROUP BY w."categoria", w."tipo"`);
   }
 }
