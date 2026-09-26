@@ -102,7 +102,7 @@ const MODULOS_IMPORTADOS_DECLARADOS = [
 
 /** El codigo sin las lineas de `import … from "…"` (su `from` no es SQL). */
 function sinImports(codigo: string): string {
-  return codigo.replace(/\bimport\s[^;]*?\bfrom\s+"[^"]+";/gs, "");
+  return codigo.replace(/\bimport\s[^;]*?\bfrom\s+"[^"]+";/g, "");
 }
 
 /** Lo que va dentro de cada `sum(…)` del codigo, SIN distinguir mayusculas y con o sin espacio. */
