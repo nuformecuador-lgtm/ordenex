@@ -66,7 +66,8 @@ export interface DetalleMovimiento {
   estado: {
     anulado: boolean;
     motivoNoRegistrado?: boolean;
-    detalle?: { motivo: string | null; por: string | null; fecha: string | null } | null;
+    /** 458 (revisión n3): `hora` («HH:mm» CR) como en `/mi-wallet`; opcional para las superficies sin ella. */
+    detalle?: { motivo: string | null; por: string | null; fecha: string | null; hora?: string | null } | null;
   } | null;
   /** R63/R65 — el servidor dice si se ofrece «Anular…». */
   anulable: boolean;
@@ -286,7 +287,12 @@ export function DetalleMovimientoPanel({
     ) : m.estado.anulado ? (
       <Badge variant="secondary">
         {m.estado.detalle
-          ? PANEL_TEXTO.anuladoDetalle(m.estado.detalle.fecha, m.estado.detalle.por, m.estado.detalle.motivo)
+          ? PANEL_TEXTO.anuladoDetalle(
+              m.estado.detalle.fecha,
+              m.estado.detalle.por,
+              m.estado.detalle.motivo,
+              m.estado.detalle.hora ?? null,
+            )
           : m.estado.motivoNoRegistrado
             ? PANEL_TEXTO.motivoNoRegistrado
             : PANEL_TEXTO.anulado}

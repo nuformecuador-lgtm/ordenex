@@ -28,8 +28,16 @@ export const PANEL_TEXTO = {
   anulado: "Anulado",
   /** R72 — anulado antes de la 458 sin constancia. */
   motivoNoRegistrado: "Anulado · motivo no registrado",
-  anuladoDetalle: (fecha: string | null, por: string | null, motivo: string | null) =>
-    ["Anulado", fecha === null ? null : `el ${fecha}`, por === null ? null : `por ${por}`]
+  /**
+   * 458 (revisión final, n3) — con la HORA de Costa Rica cuando la hay, igual que `/mi-wallet`
+   * («Anulado el 2026-09-26 a las 20:14 por Ana Maestra · motivo»): la oficina no ve menos que la tienda.
+   */
+  anuladoDetalle: (fecha: string | null, por: string | null, motivo: string | null, hora: string | null = null) =>
+    [
+      "Anulado",
+      fecha === null ? null : hora === null || hora === "" ? `el ${fecha}` : `el ${fecha} a las ${hora}`,
+      por === null ? null : `por ${por}`,
+    ]
       .filter((x): x is string => x !== null)
       .join(" ") + (motivo === null ? "" : ` · ${motivo}`),
   /** M1 (revisión 458-C, R58) — «Cómo»: el método y la referencia, en palabras. */

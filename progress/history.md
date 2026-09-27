@@ -5639,3 +5639,34 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
 - Deuda (TC.8 → TE.3 de la 458-E): instante de registro en el panel; `reversarEgresoAdministrativoAction`
   sin superficie ni motivo; m7 (pagar a una cuenta inactiva con saldo desde el diálogo); la nota del pago
   a una tienda no llega al libro de la caja («Por qué» dice el método).
+
+## 2026-09-26 — 458-D: estados de cuenta y Mi wallet (hija D de la 458)
+- Tres estados de cuenta nuevos (`/wallet/tiendas/[tiendaId]`, `/wallet/mensajeros/[mensajeroId]`,
+  `/wallet/satelites/[zonaId]`) sobre `components/shared/estado-cuenta/`: saldo inicial arriba, saldo
+  corrido por fila, chips, filtro por cierre, «Ver»/«Anular…», registrar con la cuenta fija y descarga;
+  `/mi-wallet` pasa a ser el estado de cuenta de la tienda (resumen de tres cifras, «Anulado por Ordenex»
+  con día y hora, sin nombres del personal, comprobante propio). Se retiraron los desgloses (D14).
+- Requisitos cubiertos (tasks.md, hija D): R3, R6–R8, R10–R12, R17–R32, R34–R36, R40, R48, R55, R70, R72,
+  R78, R81, R102, R103; mapa R→test en
+  `progress/impl_458-D.md` (pantalla y §Servidor: pendientes de servidor hechos por backend_dev, sin migraciones).
+- Revisión RECHAZADA (`progress/review_458-D.md`) y cerrada: B1 el filtro por cierre del mensajero perdía
+  sus pagos al retirar el desglose (172 R52), arreglado en `EstadoCuentaRepository` con test contra Postgres
+  que escribe pagos reales; m1 el resumen sigue a la lectura vigente; m3 «Anulado por Ordenex» ratificado
+  por el leader. Gate completo `progress/gate_458D_final.log`: `INIT_EXIT=0`, 32233 verdes, 26 saltados.
+- Deuda: F1 del recorrido final (los tres estados de cuenta sin «?» ni asistente) y el contraste de sus
+  enlaces (F3), cerrados en `fix/458-final`.
+
+## 2026-09-26 — 458-E: libro de la caja (hija E de la 458)
+- El libro de la caja con «A quién» y «Registró» por fila, filtro «A quién» (tienda, mensajero o nombre)
+  con un único `WHERE` para libro, tarjetas, composición, desglose, conceptos y descarga; enlaces de «A
+  quién» a los estados de cuenta de la 458-D; el panel dice cuándo se registró la fila (día y hora CR).
+- Requisitos cubiertos (tasks.md, hija E): R3, R7, R8, R34, R41, R53–R61, R73, R83, R87, R101–R104 (R104
+  cerrado con el recorrido completo por rol,
+  `progress/recorrido_458-final.md`); mapa R→test en `progress/impl_458-E.md`.
+- Revisión RECHAZADA (`progress/review_458-E.md`) y cerrada: B1 el instante de registro (R58) en el panel
+  y contra Postgres; M1 guardia de alcance de la 173 endurecida; M2 un anulado por nombre arrastra su
+  contra-asiento; M3 los enlaces de «A quién» apuntan a rutas que existen; M4
+  `reversarEgresoAdministrativoAction` retirada. Segunda revisión de C/D/E en `dev`: APROBADA
+  (`progress/review_458-final.md`). Gate `progress/gate_458E_merge.log`: `INIT_EXIT=0`, 32329 verdes.
+- Recorrido completo por rol en `dev`: 93 OK, 3 FALLO (F1–F3), 13 N/A; R7/R8 = 0,00 en las 46 medidas.
+  Los tres fallos y las observaciones baratas se arreglan en `fix/458-final`.
