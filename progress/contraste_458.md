@@ -12,6 +12,22 @@ Solo lectura, por el MCP de Supabase. Producción todavía sin la 458.
 
 Aviso: design §13 dice que el bucket `wallet-comprobantes` «ya existe desde la 459». **Es falso**: no existe ni en preview ni en prod (M5 de `contraste_457.md`). Se crea el día de la release (docs/release.md).
 
+## ANTES (día de la release, 2026-09-26 22:46 CR; paso A9 de `docs/release.md`)
+
+MCP de Supabase, solo `SELECT`. Producción sin la 458.
+
+| Consulta | Resultado | Esperado |
+|---|---|---|
+| Q458-1 | **35** aprobados, flete + IVA **95.824,00**; con línea de caja 35, con débito en la tienda 35 | 35 / 95.824,00 ✓ (ninguno caería en `no_anulable`) |
+| Q458-2 | **0** | informativo |
+| Q458-3 | entro 31.206.946,00 · salio 12.733.110,00 · cifra 18.473.836,00 · ganancia −3.967.871,78 · de_tiendas 22.441.707,78 · capital 0,00 · cobros/pagos 0 · suma_saldos −3.327.326,72 · **diferencia_r8 = 25.769.034,50** · **diferencia_r7 = 0,00** | idéntica a la C457-1 ✓; R8 = 0,00 ✗ |
+| Q458-4 | **0 filas** | 0 ✓ |
+
+**⚠️ Q458-3 `diferencia_r8` ≠ 0,00: por la letra del recuadro A9, DETIENE.** Da exactamente lo mismo que la
+C457-1 (como se esperaba: no hay filas de los dos reversos), y la diferencia son los 203 cobros de un costo
+aún sin reclasificar (25.769.034,50 = C4 de la 459). Explicación en `progress/contraste_457.md`, ANTES del
+día de la release.
+
 ## DESPUÉS DEL DESPLIEGUE — pendiente
 Q458-3 = la C457-1 (`progress/contraste_457.md`) con `es_cargo` ampliado a `egreso_reverso_flete_devolucion` y `egreso_reverso_iva_flete_devolucion`. Se espera R7 = R8 = 0,00 y la cifra principal igual a la de antes.
 

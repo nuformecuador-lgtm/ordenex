@@ -13,6 +13,25 @@ release salen de `dev`, no de aquí).
 | M7 `abono_tienda` | no existe · pagos a tienda en `liquidacion_pago`: 0 |
 | M6 (conteo) | caja 1.347 filas · libro de tiendas 1.666 filas |
 
+## ANTES (día de la release, 2026-09-26 22:46 CR; paso A9 de `docs/release.md`)
+
+MCP de Supabase, solo `SELECT`. Producción sin la 459/461/457.
+
+| Medida | Valor |
+|---|---|
+| **C457-1 (SQL M8, literal)** | entro 31.206.946,00 · salio 12.733.110,00 · cifra 18.473.836,00 · ganancia −3.967.871,78 · de_tiendas 22.441.707,78 · capital 0,00 · cobros/pagos de tiendas 0 · suma_saldos −3.327.326,72 · **diferencia_r8 = 25.769.034,50** · **diferencia_r7 = 0,00** |
+| M1 tiendas en contra | solo **Nuform**: −5.097.732,74 (1.378 movimientos) |
+| M2 Nuform por concepto | cod_recaudado +28.837.021,00 · cobro_manual −25.769.034,50 (203) · flete −4.367.000,00 · flete_devolucion −1.850.000,00 · comision_cod −1.009.296,95 · iva_flete −567.710,00 · iva_flete_devolucion −240.500,00 · iva_comision_cod −131.212,29 → suma −5.097.732,74 = M1 |
+| M6 caja | 1.395 filas: ingreso_cod_recaudado 165 / 31.206.946,00 · ingreso_flete 166 / 4.695.400,00 · ingreso_flete_devolucion 174 / 1.969.200,00 · ingreso_comision_cod 165 / 1.092.244,35 · ingreso_iva_flete 166 / 610.402,00 · ingreso_iva_flete_devolucion 174 / 255.996,00 · ingreso_iva_comision_cod 165 / 141.995,87 · egreso_pago_mensajero 166 / 3.696.400,00 · egreso_sueldo 32 / 8.871.709,00 · egreso_gasto_variable 21 / 165.000,00 · egreso_indemnizacion 1 / 1,00 |
+| M6 libro de tiendas | 1.741 filas: cobro_manual 203 / 25.769.034,50 · cod_recaudado 226 / 31.206.946,00 · comision_cod 226 / 1.092.244,35 · flete 227 / 4.695.400,00 · flete_devolucion 203 / 1.969.200,00 · iva_comision_cod 226 / 141.995,87 · iva_flete 227 / 610.402,00 · iva_flete_devolucion 203 / 255.996,00 |
+
+**⚠️ `diferencia_r8` ≠ 0,00: por la letra del recuadro A9, DETIENE.** La diferencia es **exactamente** los 203
+cobros de un costo que la 459 reclasifica (C4 = 25.769.034,50): la C457-1 no tiene el término
+`cobros_costo − cobros_reclasificados` que sí tiene la C1 de la 459 (que da 0,00 hoy). Es la «excepción de la
+459 hasta aplicar» que la 461 declara en su R38 (`de_tiendas = suma_saldos + Σ candidatos` antes). Tras la
+reclasificación, `de_tiendas` baja 25.769.034,50 y la C457-1 debería dar 0,00. El «0,00 ANTES» del recuadro
+parece un error del recuadro, no un descuadre de datos; lo decide el humano.
+
 ## DESPUÉS DEL DESPLIEGUE — pendiente
 Esperado: M6 idéntico; M8 (C461-1) con R7 y R8 en 0,00; M3 25/16/14/63/24; RLS `t,t` en las dos tablas.
 

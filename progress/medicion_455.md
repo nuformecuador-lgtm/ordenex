@@ -68,3 +68,14 @@ barridos secuenciales. Produccion se vacio el 2026-08-25, el volumen es pequeño
 Lectura: el renombre de códigos rompe como mucho a **1 suscripción de webhook** y a quien lea por las 4 keys
 activas; ninguna cargó órdenes en 30 días. Las rutas de evidencia y los textos ya emitidos (notificaciones,
 chat, errores de jobs) llevan códigos viejos como texto histórico: fuera de alcance, no se reescriben.
+
+## ANTES (día de la release, 2026-09-26 22:46 CR; paso A9 de `docs/release.md`)
+
+MCP de Supabase, solo `SELECT`, el SQL de arriba sin cambios. Producción sin la 454 ni la 455.
+
+| Bloque | Producción |
+|---|---|
+| (a) órdenes (vivas / total) | `entregada` 1914 / 1914 · `reprogramada` 78 / 78 · `por_devolver` 86 / 86 · `devuelta` 45 / 45 · `rechazada` 28 / 28 · `sin_gestionar` 2 / 2 · `por_recoger` 0 / 4 |
+| (b) FK a `order_status` | las mismas 5 columnas (`analytics_daily.estatus_id`, `cierre_sin_gestion.estatus_origen_id`, `orden.estatus_id`, `orden_historial_estado.estatus_destino_id` y `.estatus_origen_id`); **0 filas** apuntan a `en_fulfillment` o `pendiente` en todas → **su M3 BORRA los dos huérfanos** (igual que el 2026-09-24) |
+| (b') catálogo | 24 filas: 20 vigentes + `ayuda_tienda`, `devolucion_por_confirmar`, `en_fulfillment`, `pendiente` |
+| (d) audiencia | webhooks: **1 activa** (de 1) · API keys: **4 activas** (ninguna en otro estado) · cargas por API key en 30 días: **0** → sin cambio respecto al 2026-09-24 |

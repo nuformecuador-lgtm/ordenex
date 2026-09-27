@@ -19,6 +19,30 @@ diferencia distinta de 0,00, o C2 con filas, detiene el despliegue del bloque si
 | **diferencia R7** | **0,00** |
 | C2, contrapartidas cierre a cierre | **0 filas** |
 
+## ANTES (día de la release, 2026-09-26 22:46 CR; paso A9 de `docs/release.md`)
+
+MCP de Supabase, solo `SELECT`, SQL de design §11 sin cambios. Producción todavía sin la 459.
+
+| Medida | Valor |
+|---|---|
+| C0 conceptos sin clasificar | **0 filas** |
+| C1 entro_hoy · entro_nueva · salio | 39.972.184,22 · 31.206.946,00 · 12.733.110,00 |
+| C1 cifra_hoy · cifra_nueva | 27.239.074,22 · 18.473.836,00 |
+| C1 ganancia · capital | −3.967.871,78 · 0,00 |
+| C1 de_tiendas_hoy · de_tiendas_nueva | 31.206.946,00 · 22.441.707,78 |
+| C1 cargos_a_tiendas | 8.765.238,22 |
+| C1 suma_saldos | −3.327.326,72 |
+| C1 cobros_costo (n) · reclasificados (n) | 25.769.034,50 (203) · 0,00 (0) |
+| **C1 diferencia_r8 · diferencia_r7** | **0,00 · 0,00** |
+| C2 contrapartidas cierre a cierre | **0 filas** |
+| C4 sumas de control | **203 / 25.769.034,50** (solo Nuform); 200 «pago» / 24.904.801,30; del 2026-08-28 al 2026-09-22 |
+| C5 mensajeros (se compara después: debe ser idéntico) | `pago_devengado`/`devengo` 166 filas 3.696.400,00 · `pago_efectivo`/`pago` 162 filas 3.687.000,00 |
+| C7 primer día de la caja | 2026-08-28, 1.395 movimientos |
+
+Criterios del recuadro A9: R7 = R8 = 0,00 ✓ · C2 0 filas ✓ · C4 = 203 / 25.769.034,50 ✓.
+Con los números de hoy, «después de C» ya no es −9.186.220,50 sino **18.473.836,00 − 25.769.034,50 =
+−7.295.198,50** y `de_tiendas_nueva` pasará a −3.327.326,72 = `suma_saldos` (vale la igualdad).
+
 ## DESPUÉS DE A (fórmula nueva desplegada) — pendiente del despliegue
 Esperado: diferencias R7 y R8 en 0,00; C2 sin filas; la ganancia igual a la de antes.
 
