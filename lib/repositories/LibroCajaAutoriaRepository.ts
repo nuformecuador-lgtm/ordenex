@@ -54,7 +54,7 @@ export class LibroCajaAutoriaRepository implements ILibroCajaAutoriaRepository {
     if (ids.length === 0) return [];
     return this.prisma.walletMovimiento.findMany({
       where: { id: { in: [...ids] } },
-      select: { id: true, tipo: true, categoria: true, origenTipo: true, origenId: true, registradoPor: true },
+      select: { id: true, tipo: true, categoria: true, origenTipo: true, origenId: true, registradoPor: true, createdAt: true },
     });
   }
 

@@ -356,3 +356,72 @@ describe("458-D (bloque D) — la tienda puede preguntar cómo ve el comprobante
     expect(todoElContexto(rol)).not.toContain("## Ver el comprobante");
   });
 });
+
+// ── Bloque E — 458-E «Libro de caja»: las columnas, los filtros (con «A quién»), «Ver» y el anulado ──
+//
+// La oficina puede preguntar qué dice cada columna del libro nuevo, cómo filtrar por la tienda, el
+// mensajero o la persona a la que se le pagó (y que las tarjetas cuentan solo lo filtrado), qué abre
+// «Ver» y cómo se ve un movimiento anulado. Nada de eso llega a la tienda, al mensajero ni a la bodega.
+
+describe("458-E (bloque E) — la oficina puede preguntar por el libro de la caja y sus filtros", () => {
+  it.each(OFICINA)("%s: las columnas del libro, con «A quién» y «Registró»", (rol) => {
+    const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
+    expect(caja).toContain("## Las columnas del libro");
+    expect(caja).toContain(
+      "| **A quién** | La tienda, el mensajero, la persona o el proveedor del movimiento. Si es una tienda o un mensajero, el nombre lleva a su estado de cuenta.",
+    );
+    expect(caja).toContain("| **Monto** | **Entra** o **Sale**, el importe y de quién es el dinero");
+    expect(caja).toContain(
+      "| **Registró** | Quién lo registró o, si no lo tecleó nadie, **Automático** y qué lo produjo: «Automático · Aprobación del cierre por Ana»",
+    );
+    expect(caja).toContain("si no se pudieron leer, dicen **«No se pudo leer»**");
+  });
+
+  it.each(OFICINA)("%s: los filtros, con «A quién» por tienda, mensajero o nombre anotado", (rol) => {
+    const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
+    expect(caja).toContain("## Buscar en el libro: los filtros");
+    expect(caja).toContain("**Todo / Entra / Sale**: lo que entró a la caja, lo que salió, o todo. Se aplica **al pulsarlo**.");
+    expect(caja).toContain(
+      "**A quién**: se elige de una lista de **las tiendas, los mensajeros y los nombres anotados a mano**",
+    );
+    expect(caja).toContain("Podés **buscar por el nombre de la tienda, del mensajero o de la persona**, sin mayúsculas ni tildes.");
+    expect(caja).toContain(
+      "**Las tarjetas de arriba, la composición de la ganancia y el desglose de egresos cuentan solo lo filtrado**",
+    );
+    // La ayuda vieja («Filtros por concepto y tipo») no vuelve.
+    expect(caja).not.toContain("Filtros por **concepto** y **tipo**");
+  });
+
+  it.each(OFICINA)("%s: «Ver» y la fila anulada, que dice «Anulado»", (rol) => {
+    const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
+    expect(caja).toContain("Una fila anulada dice **Anulado** y se ve **tachada**.");
+    expect(caja).toContain("| **Ver** | Abre el detalle del movimiento. En una fila anulada, al lado dice **Anulado** |");
+    expect(caja).toContain("**Anulado** con el día, quién lo anuló, el motivo y cómo se anuló");
+    // Revisión de la 458-E: B1 (R58, cuándo se registró) y M2 («A quién» por nombre con anulados).
+    expect(caja).toContain("y **cuándo**: el día y la hora de Costa Rica en que se tecleó");
+    expect(caja).toContain("dos filas —el anulado y su anulación, que también dice ese nombre en **A quién**— y se compensan");
+    expect(caja).toContain("su **A quién** es el **mensajero**, no la tienda");
+  });
+
+  it("el libro de la caja y su filtro «A quién» NO llegan a la tienda, al mensajero ni a la bodega", () => {
+    for (const rol of FUERA_DE_OFICINA) {
+      const todo = todoElContexto(rol);
+      expect(todo).not.toContain("## Las columnas del libro");
+      expect(todo).not.toContain("## Buscar en el libro: los filtros");
+    }
+  });
+
+  it("oficina/wallet-caja declara como fuentes las piezas del libro y del filtro «A quién»", () => {
+    const crudo = readFileSync(path.join(DIR_AYUDA, "oficina/wallet-caja.md"), "utf8");
+    const declaradas = partirFrontmatter(crudo).datos.fuentes ?? [];
+    for (const fuente of [
+      "app/(app)/wallet/_components/WalletLedger.tsx",
+      "app/(app)/wallet/_components/WalletFiltros.tsx",
+      "app/(app)/wallet/_components/a-quien-selector.ts",
+      "lib/actions/wallet-filtros.ts",
+      "lib/actions/libro-caja-autoria.ts",
+    ]) {
+      expect(declaradas, `wallet-caja sin ${fuente}`).toContain(fuente);
+    }
+  });
+});

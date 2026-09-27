@@ -26,11 +26,20 @@ export interface WalletMovimientoConfig {
    * dia SI entra. Fuera de la ventana el borde responde `validation_error` (R21).
    */
   DIAS_HACIA_ATRAS: number;
+  /**
+   * Ficha 458-E (TE.2, R59) — tope de opciones del selector «A quién» del libro de la caja
+   * (`quienesDelLibroCajaAction`). NO es un tamano de pagina: el selector no pagina, se recorta y
+   * dice `hayMas` para que la persona afine la busqueda. Mismo valor por defecto que el selector de
+   * cierres (`WALLET_TIENDA_MAX_CIERRES_FILTRO`, 200): una COTA DE SEGURIDAD, no una medida
+   * (produccion vacia desde el arranque comercial del 2026-08-25).
+   */
+  MAX_QUIENES_FILTRO: number;
 }
 
 export function loadWalletMovimientoConfig(): WalletMovimientoConfig {
   return {
     DIAS_HACIA_ATRAS: readPositiveInt("WALLET_MOVIMIENTO_DIAS_HACIA_ATRAS", 30),
+    MAX_QUIENES_FILTRO: readPositiveInt("WALLET_MAX_QUIENES_FILTRO", 200),
   };
 }
 

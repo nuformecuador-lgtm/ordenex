@@ -1,0 +1,127 @@
+[
+  {
+    "id": "M1",
+    "desc": "inputDeFiltros no pasa `aQuien` a los bordes",
+    "corridos": 65,
+    "rojos": 6,
+    "suitesRotas": 5,
+    "ejemplo": [
+      "Ficha 339 — el cliente manda un TOKEN, nunca categorías (design §10-A1) 458-E R59: «A quién» también baja al detalle de la fila, tal cual",
+      "458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el desglose, los conceptos y la descarga por TIENDA: el `valor` del servidor viaja tal cual a las tres lecturas, y las tarjetas y el libro filtrados coinciden",
+      "458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el desglose, los conceptos y la descarga por MENSAJERO, sumado a la dirección elegida"
+    ]
+  },
+  {
+    "id": "M2",
+    "desc": "elegir «A quién» no se aplica (queda en el borrador)",
+    "corridos": 65,
+    "rojos": 4,
+    "suitesRotas": 2,
+    "ejemplo": [
+      "458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el desglose, los conceptos y la descarga por TIENDA: el `valor` del servidor viaja tal cual a las tres lecturas, y las tarjetas y el libro filtrados coinciden",
+      "458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el desglose, los conceptos y la descarga por MENSAJERO, sumado a la dirección elegida",
+      "458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el desglose, los conceptos y la descarga por NOMBRE LIBRE; «Todos» quita el filtro y «Limpiar» también"
+    ]
+  },
+  {
+    "id": "M3",
+    "desc": "«Todos» no quita el filtro (se queda el anterior)",
+    "corridos": 65,
+    "rojos": 1,
+    "suitesRotas": 2,
+    "ejemplo": [
+      "458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el desglose, los conceptos y la descarga por NOMBRE LIBRE; «Todos» quita el filtro y «Limpiar» también"
+    ]
+  },
+  {
+    "id": "M4",
+    "desc": "los conceptos no se cuentan para «A quién»",
+    "corridos": 65,
+    "rojos": 1,
+    "suitesRotas": 2,
+    "ejemplo": [
+      "458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el desglose, los conceptos y la descarga por TIENDA: el `valor` del servidor viaja tal cual a las tres lecturas, y las tarjetas y el libro filtrados coinciden"
+    ]
+  },
+  {
+    "id": "M5",
+    "desc": "el selector ignora la dirección y el periodo del borrador",
+    "corridos": 65,
+    "rojos": 1,
+    "suitesRotas": 2,
+    "ejemplo": [
+      "458-E R59 — el selector «A quién» las opciones son las de la dirección y el periodo del borrador, y la búsqueda va al servidor"
+    ]
+  },
+  {
+    "id": "M6",
+    "desc": "el selector no manda la búsqueda al servidor",
+    "corridos": 65,
+    "rojos": 1,
+    "suitesRotas": 2,
+    "ejemplo": [
+      "458-E R59 — el selector «A quién» las opciones son las de la dirección y el periodo del borrador, y la búsqueda va al servidor"
+    ]
+  },
+  {
+    "id": "M7",
+    "desc": "el valor de la opción pierde el tipo de cuenta (tienda ↔ mensajero)",
+    "corridos": 65,
+    "rojos": 2,
+    "suitesRotas": 3,
+    "ejemplo": [
+      "458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el desglose, los conceptos y la descarga por MENSAJERO, sumado a la dirección elegida",
+      "458-E R59 — la traducción opción ↔ filtro el valor de cada opción vuelve a ser EXACTAMENTE su `aQuien`; lo que no es un `aQuien` no filtra"
+    ]
+  },
+  {
+    "id": "M8",
+    "desc": "el rótulo de la opción no dice qué es (Tienda/Mensajero/Nombre anotado)",
+    "corridos": 65,
+    "rojos": 5,
+    "suitesRotas": 3,
+    "ejemplo": [
+      "458-E R59 — el selector «A quién» no lee nada hasta que se abre; al abrirlo pide las opciones y las rotula con nombre, clase y cardinal",
+      "458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el desglose, los conceptos y la descarga por TIENDA: el `valor` del servidor viaja tal cual a las tres lecturas, y las tarjetas y el libro filtrados coinciden",
+      "458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el desglose, los conceptos y la descarga por MENSAJERO, sumado a la dirección elegida"
+    ]
+  },
+  {
+    "id": "M9",
+    "desc": "el panel «Ver» vuelve a leer la autoría aunque el libro la tenga",
+    "corridos": 65,
+    "rojos": 2,
+    "suitesRotas": 2,
+    "ejemplo": [
+      "458-E — el panel «Ver» usa la autoría del libro y se cierra con «Cerrar» abrir «Ver» NO vuelve a leer la autoría: el panel dice lo que el libro ya leyó",
+      "458-E — el panel «Ver» usa la autoría del libro y se cierra con «Cerrar» tras anular, el libro relee la autoría UNA vez (quién anuló) y el panel no hace su propia lectura"
+    ]
+  },
+  {
+    "id": "M10",
+    "desc": "tras anular, el libro no relee la autoría (caché de antes)",
+    "corridos": 65,
+    "rojos": 1,
+    "suitesRotas": 2,
+    "ejemplo": [
+      "458-E — el panel «Ver» usa la autoría del libro y se cierra con «Cerrar» tras anular, el libro relee la autoría UNA vez (quién anuló) y el panel no hace su propia lectura"
+    ]
+  },
+  {
+    "id": "M11",
+    "desc": "el cierre del panel vuelve a anunciarse «Close»",
+    "corridos": 65,
+    "rojos": 2,
+    "suitesRotas": 2,
+    "ejemplo": [
+      "458-E — el panel «Ver» usa la autoría del libro y se cierra con «Cerrar» el botón que cierra el panel se anuncia «Cerrar» (nunca «Close»)",
+      "458-E — el panel «Ver» usa la autoría del libro y se cierra con «Cerrar» las primitivas Sheet y Dialog que usa la wallet dicen «Cerrar»"
+    ]
+  },
+  {
+    "arbolIgual": true
+  },
+  {
+    "gitStatusDeLosMutados": ""
+  }
+]

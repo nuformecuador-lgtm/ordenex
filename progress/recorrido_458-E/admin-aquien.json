@@ -1,0 +1,219 @@
+{
+  "rol": "admin",
+  "pasos": [
+    {
+      "nombre": "login",
+      "url": "http://localhost:3487/dashboard",
+      "otp": false
+    },
+    {
+      "nombre": "GET /wallet",
+      "status": 200
+    },
+    {
+      "nombre": "R7/R8 antes",
+      "entro": "13524733.22",
+      "salio": "58701.57",
+      "cifra": "13466031.65",
+      "ganancia": "13322207.22",
+      "de_tiendas": "143824.43",
+      "capital": "0",
+      "suma_saldos": "143824.43",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "nombre": "registrado un sueldo con nombre libre",
+      "quien": "Transportes Solano Recorrido"
+    },
+    {
+      "nombre": "R7/R8 tras registrar el sueldo con nombre libre",
+      "entro": "13524733.22",
+      "salio": "63022.66",
+      "cifra": "13461710.56",
+      "ganancia": "13317886.13",
+      "de_tiendas": "143824.43",
+      "capital": "0",
+      "suma_saldos": "143824.43",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "nombre": "registrados un cobro y un pago de un gasto de una tienda",
+      "tienda": "Tania Tienda"
+    },
+    {
+      "nombre": "R7/R8 tras registrar lo de la tienda",
+      "entro": "13524733.22",
+      "salio": "64133.77",
+      "cifra": "13460599.45",
+      "ganancia": "13318786.63",
+      "de_tiendas": "141812.82",
+      "capital": "0",
+      "suma_saldos": "141812.82",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "nombre": "sin filtro",
+      "tarjetas": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.460.599,45 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex. Entró ₡13.524.733,22 Salió ₡64.133,77 Movimientos 43 Registros del periodo que estás viendo De las tiendas ₡141.812,82 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡13.318.786,63 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡13.379.463,62 Gastos de Ordenex ₡60.676,99 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes.",
+      "filas": 43,
+      "uuid": false,
+      "disparador": "A quién: Todos"
+    },
+    {
+      "nombre": "R59 opciones",
+      "n": 7,
+      "primeras": [
+        "Todos",
+        "Marco Mensajero · Mensajero · 19 movimientos",
+        "Proveedora Ñandú Recorrido · Nombre anotado · 2 movimientos",
+        "Quino QUEPOS · Mensajero · 7 movimientos",
+        "Rita Recorrido · Mensajero · 7 movimientos",
+        "Tania Tienda · Tienda · 4 movimientos",
+        "Transportes Solano Recorrido · Nombre anotado · 1 movimiento"
+      ],
+      "uuidEnOpciones": false
+    },
+    {
+      "nombre": "R59 opciones elegidas",
+      "opTienda": "Tania Tienda · Tienda · 4 movimientos",
+      "opMensajero": "Marco Mensajero · Mensajero · 19 movimientos",
+      "opNombre": "Transportes Solano Recorrido · Nombre anotado · 1 movimiento"
+    },
+    {
+      "nombre": "R59 búsqueda por tienda",
+      "trozo": "tania",
+      "opciones": [
+        "Todos",
+        "Tania Tienda · Tienda · 4 movimientos"
+      ]
+    },
+    {
+      "nombre": "R59 «A quién» tienda",
+      "disparador": "A quién: Tania Tienda · Tienda · 4 movimientos",
+      "paginacion": "1-4 de 4 ‹ ›",
+      "tarjetas": "Registrar un movimiento Movimiento neto del periodo Negativo -₡3.456,78 Entró ₡0 Salió ₡3.456,78 Movimientos 4 Registros del periodo que estás viendo De las tiendas -₡5.857,28 Lo que Ordenex les debe a las tiendas Las tiendas le deben a Ordenex ₡5.857,28. Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡2.400,50 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡2.400,50 Gastos de Ordenex ₡0 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Movimiento neto del periodo» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes. Con filtros puestos esta cifra no es el dinero que hay hoy en la caja: es lo que entró menos lo que salió en el periodo que elegiste.",
+      "columnaAQuienPagina": [
+        ""
+      ],
+      "libroFiltrado": {
+        "filas": 4,
+        "entra": "2.400,50",
+        "sale": "3.456,78",
+        "entraEfectivo": "0,00",
+        "saleEfectivo": "3.456,78",
+        "uuid": false
+      },
+      "oraculoSinFiltro": {
+        "filas": 4,
+        "entra": "2.400,50",
+        "sale": "3.456,78"
+      },
+      "tarjetaEntro": "0,00",
+      "tarjetaSalio": "3.456,78",
+      "tarjetaMovimientos": 4,
+      "coinciden": {
+        "conteo": true,
+        "entro": true,
+        "salio": true,
+        "oraculoFilas": true,
+        "oraculoSumas": true
+      }
+    },
+    {
+      "nombre": "R59 «A quién» mensajero",
+      "disparador": "A quién: Marco Mensajero · Mensajero · 19 movimientos",
+      "paginacion": "1-19 de 19 ‹ ›",
+      "tarjetas": "Registrar un movimiento Movimiento neto del periodo Positivo ₡125.100 Entró ₡152.900 Salió ₡27.800 Movimientos 19 Registros del periodo que estás viendo De las tiendas ₡126.512,79 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Negativo -₡1.412,79 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡26.387,21 Gastos de Ordenex ₡27.800 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Movimiento neto del periodo» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes. Con filtros puestos esta cifra no es el dinero que hay hoy en la caja: es lo que entró menos lo que salió en el periodo que elegiste.",
+      "columnaAQuienPagina": [
+        ""
+      ],
+      "libroFiltrado": {
+        "filas": 19,
+        "entra": "179.287,21",
+        "sale": "27.800,00",
+        "entraEfectivo": "152.900,00",
+        "saleEfectivo": "27.800,00",
+        "uuid": false
+      },
+      "oraculoSinFiltro": {
+        "filas": 19,
+        "entra": "179.287,21",
+        "sale": "27.800,00"
+      },
+      "tarjetaEntro": "152.900,00",
+      "tarjetaSalio": "27.800,00",
+      "tarjetaMovimientos": 19,
+      "coinciden": {
+        "conteo": true,
+        "entro": true,
+        "salio": true,
+        "oraculoFilas": true,
+        "oraculoSumas": true
+      }
+    },
+    {
+      "nombre": "R59 «A quién» nombre",
+      "disparador": "A quién: Transportes Solano Recorrido · Nombre anotado · 1 movimiento",
+      "paginacion": "1-1 de 1 ‹ ›",
+      "tarjetas": "Registrar un movimiento Movimiento neto del periodo Negativo -₡4.321,09 Entró ₡0 Salió ₡4.321,09 Movimientos 1 Registros del periodo que estás viendo De las tiendas ₡0 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Negativo -₡4.321,09 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡0 Gastos de Ordenex ₡4.321,09 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Movimiento neto del periodo» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes. Con filtros puestos esta cifra no es el dinero que hay hoy en la caja: es lo que entró menos lo que salió en el periodo que elegiste.",
+      "columnaAQuienPagina": [
+        ""
+      ],
+      "libroFiltrado": {
+        "filas": 1,
+        "entra": "0,00",
+        "sale": "4.321,09",
+        "entraEfectivo": "0,00",
+        "saleEfectivo": "4.321,09",
+        "uuid": false
+      },
+      "oraculoSinFiltro": {
+        "filas": 1,
+        "entra": "0,00",
+        "sale": "4.321,09"
+      },
+      "tarjetaEntro": "0,00",
+      "tarjetaSalio": "4.321,09",
+      "tarjetaMovimientos": 1,
+      "coinciden": {
+        "conteo": true,
+        "entro": true,
+        "salio": true,
+        "oraculoFilas": true,
+        "oraculoSumas": true
+      }
+    },
+    {
+      "nombre": "R59 «Todos» quita el filtro",
+      "tarjetas": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.460.599,45 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex. Entró ₡13.524.733,22 Salió ₡64.133,77 Movimientos 43 Registros del periodo que estás viendo De las tiendas ₡141.812,82 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡13.318.786,63 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡13.379.463,62 Gastos de Ordenex ₡60.676,99 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes.",
+      "igualQueAlEntrar": true
+    },
+    {
+      "nombre": "panel: botón de cerrar",
+      "botones": [
+        "Anular…",
+        "Cerrar"
+      ],
+      "cerrar": true,
+      "close": false
+    },
+    {
+      "nombre": "panel cerrado",
+      "dialogos": 0
+    },
+    {
+      "nombre": "R7/R8 después",
+      "entro": "13524733.22",
+      "salio": "64133.77",
+      "cifra": "13460599.45",
+      "ganancia": "13318786.63",
+      "de_tiendas": "141812.82",
+      "capital": "0",
+      "suma_saldos": "141812.82",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    }
+  ]
+}

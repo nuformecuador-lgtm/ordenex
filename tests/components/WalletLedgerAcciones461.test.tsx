@@ -183,7 +183,7 @@ const ESPERADO: ReadonlyArray<{
     caso: "la línea del cobro (propia)",
     movimiento: COBRO_VIGENTE,
     concepto: "Ordenex le cobra a una tienda",
-    tipo: "Ingreso",
+    tipo: "Entra", // 458-E (R55): la dirección se dice Entra / Sale (antes «Ingreso»)
     origen: "Cobro de Ordenex a una tienda · Tienda Norte · Material de despacho",
     dueno: "Ordenex",
   },
@@ -191,7 +191,7 @@ const ESPERADO: ReadonlyArray<{
     caso: "la línea completada por la migración de datos",
     movimiento: COBRO_COMPLETADO,
     concepto: "Ordenex le cobra a una tienda",
-    tipo: "Ingreso",
+    tipo: "Entra", // 458-E (R55): la dirección se dice Entra / Sale (antes «Ingreso»)
     origen: "Cobro de Ordenex a una tienda (línea de caja completada al corregir) · Tienda Sur · Bolsas",
     dueno: "Ordenex",
   },
@@ -199,7 +199,7 @@ const ESPERADO: ReadonlyArray<{
     caso: "el reverso de un cobro anulado",
     movimiento: REVERSO,
     concepto: "Cobro a una tienda anulado",
-    tipo: "Egreso",
+    tipo: "Sale", // 458-E (R55): antes «Egreso»
     origen: "Cobro de Ordenex a una tienda · Anulación · Tienda Este · Etiquetas",
     dueno: "Ordenex",
   },
@@ -207,7 +207,7 @@ const ESPERADO: ReadonlyArray<{
     caso: "la salida de un cobro reclasificado por la 459",
     movimiento: RECLASIFICADO,
     concepto: "Ordenex paga un gasto de una tienda",
-    tipo: "Egreso",
+    tipo: "Sale", // 458-E (R55): antes «Egreso»
     origen: "Cobro reclasificado como pago de un gasto de la tienda · Nuform · pago FACEBOOK",
     dueno: "Tienda",
   },

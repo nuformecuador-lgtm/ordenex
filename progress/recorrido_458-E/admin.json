@@ -1,0 +1,348 @@
+{
+  "rol": "admin",
+  "pasos": [
+    {
+      "nombre": "login",
+      "url": "http://localhost:3471/dashboard",
+      "otp": false
+    },
+    {
+      "nombre": "GET /wallet",
+      "status": 200
+    },
+    {
+      "nombre": "E.1 columnas y primeras filas",
+      "encabezados": [
+        "Desglose",
+        "Fecha",
+        "Movimiento y motivo",
+        "A quién",
+        "Monto",
+        "Registró",
+        "Ver"
+      ],
+      "filas": [
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-26",
+          "Movimiento y motivo": "Corrección de caja (suma) Gasto o sueldo registrado a mano · Anulación de: Sueldo recorrido 458-E (maestro)",
+          "A quién": "—",
+          "Monto": "Entra ₡12.345 Ordenex",
+          "Registró": "Maestro QA",
+          "Ver": "Ver",
+          "tachada": false
+        },
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-26",
+          "Movimiento y motivo": "Sueldo Sueldo · Sueldo recorrido 458-E (maestro)",
+          "A quién": "Pedro Recorrido maestro",
+          "Monto": "Sale ₡12.345 Ordenex",
+          "Registró": "Maestro QA",
+          "Ver": "Anulado Ver",
+          "tachada": true
+        },
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-24",
+          "Movimiento y motivo": "Contra-entrega cobrado a los clientes de la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver",
+          "A quién": "Quino QUEPOS",
+          "Monto": "Entra ₡6.000 Tienda",
+          "Registró": "Automático · Aprobación del cierre por Sat QUEPOS",
+          "Ver": "Ver",
+          "tachada": false
+        },
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-24",
+          "Movimiento y motivo": "IVA del flete cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver",
+          "A quién": "Quino QUEPOS",
+          "Monto": "Entra ₡390 Ordenex",
+          "Registró": "Automático · Aprobación del cierre por Sat QUEPOS",
+          "Ver": "Ver",
+          "tachada": false
+        },
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-24",
+          "Movimiento y motivo": "IVA del flete por rechazo cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver",
+          "A quién": "Quino QUEPOS",
+          "Monto": "Entra ₡130 Ordenex",
+          "Registró": "Automático · Aprobación del cierre por Sat QUEPOS",
+          "Ver": "Ver",
+          "tachada": false
+        },
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-24",
+          "Movimiento y motivo": "IVA de la comisión cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver",
+          "A quién": "Quino QUEPOS",
+          "Monto": "Entra ₡27,30 Ordenex",
+          "Registró": "Automático · Aprobación del cierre por Sat QUEPOS",
+          "Ver": "Ver",
+          "tachada": false
+        },
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-24",
+          "Movimiento y motivo": "Flete por rechazo cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver",
+          "A quién": "Quino QUEPOS",
+          "Monto": "Entra ₡1.000 Ordenex",
+          "Registró": "Automático · Aprobación del cierre por Sat QUEPOS",
+          "Ver": "Ver",
+          "tachada": false
+        },
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-24",
+          "Movimiento y motivo": "Flete cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver",
+          "A quién": "Quino QUEPOS",
+          "Monto": "Entra ₡3.000 Ordenex",
+          "Registró": "Automático · Aprobación del cierre por Sat QUEPOS",
+          "Ver": "Ver",
+          "tachada": false
+        }
+      ],
+      "total": 20
+    },
+    {
+      "nombre": "E.1 sin uuid",
+      "enTexto": false,
+      "enAriaLabel": false,
+      "enlacesEstadoCuenta": [
+        "Quino QUEPOS · estado de cuenta del mensajero",
+        "Quino QUEPOS · estado de cuenta del mensajero",
+        "Quino QUEPOS · estado de cuenta del mensajero",
+        "Quino QUEPOS · estado de cuenta del mensajero"
+      ],
+      "hrefs": [
+        "/wallet/mensajeros/<uuid>",
+        "/wallet/mensajeros/<uuid>",
+        "/wallet/mensajeros/<uuid>",
+        "/wallet/mensajeros/<uuid>"
+      ]
+    },
+    {
+      "nombre": "E.2 tarjetas sin filtro",
+      "tarjetas": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.483.932,72 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex. Entró ₡13.537.078,22 Salió ₡53.145,50 Movimientos 38 Registros del periodo que estás viendo De las tiendas ₡147.670,10 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡13.336.262,62 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡13.389.408,12 Gastos de Ordenex ₡53.145,50 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes."
+    },
+    {
+      "nombre": "R7/R8 antes",
+      "entro": "13537078.22",
+      "salio": "53145.50",
+      "cifra": "13483932.72",
+      "ganancia": "13336262.62",
+      "de_tiendas": "147670.10",
+      "capital": "0",
+      "suma_saldos": "147670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "nombre": "E.2 filtro Entra",
+      "pulsado": "true",
+      "filasPintadas": 20,
+      "direcciones": [
+        "Entra"
+      ],
+      "paginacion": "1-20 de 30 ‹ ›",
+      "tarjetas": "Registrar un movimiento Movimiento neto del periodo Positivo ₡13.537.078,22 Entró ₡13.537.078,22 Salió ₡0 Movimientos 30 Registros del periodo que estás viendo De las tiendas ₡147.670,10 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡13.389.408,12 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡13.389.408,12 Gastos de Ordenex ₡0 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Movimiento neto del periodo» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes. Con filtros puestos esta cifra no es el dinero que hay hoy en la caja: es lo que entró menos lo que salió en el periodo que elegiste."
+    },
+    {
+      "nombre": "E.2 filtro Sale",
+      "pulsado": "true",
+      "filasPintadas": 8,
+      "direcciones": [
+        "Sale"
+      ],
+      "paginacion": "1-8 de 8 ‹ ›",
+      "tarjetas": "Registrar un movimiento Movimiento neto del periodo Negativo -₡53.145,50 Entró ₡0 Salió ₡53.145,50 Movimientos 8 Registros del periodo que estás viendo De las tiendas ₡0 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Negativo -₡53.145,50 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡0 Gastos de Ordenex ₡53.145,50 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Movimiento neto del periodo» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes. Con filtros puestos esta cifra no es el dinero que hay hoy en la caja: es lo que entró menos lo que salió en el periodo que elegiste."
+    },
+    {
+      "nombre": "E.2 filtro Todo",
+      "pulsado": "true",
+      "filasPintadas": 20,
+      "direcciones": [
+        "Entra",
+        "Sale"
+      ],
+      "paginacion": "1-20 de 38 ‹ ›",
+      "tarjetas": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.483.932,72 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex. Entró ₡13.537.078,22 Salió ₡53.145,50 Movimientos 38 Registros del periodo que estás viendo De las tiendas ₡147.670,10 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡13.336.262,62 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡13.389.408,12 Gastos de Ordenex ₡53.145,50 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes."
+    },
+    {
+      "nombre": "E.2 concepto con cuenta (Todo)",
+      "opciones": [
+        "10",
+        "25",
+        "50",
+        "Todas las categorías",
+        "Flete cobrado a la tienda (5)",
+        "Flete por rechazo cobrado a la tienda (1)",
+        "Comisión de contra-entrega cobrada a la tienda (5)",
+        "IVA del flete cobrado a la tienda (5)",
+        "IVA del flete por rechazo cobrado a la tienda (1)",
+        "IVA de la comisión cobrado a la tienda (5)",
+        "Corrección de caja (suma) (3)",
+        "Ordenex le paga a un mensajero (4)",
+        "Sueldo (1)",
+        "Corrección de caja (resta) (1)",
+        "Indemnización que Ordenex paga por un incidente (2)",
+        "Contra-entrega cobrado a los clientes de la tienda (5)"
+      ],
+      "otroGasto": false
+    },
+    {
+      "nombre": "E.2 concepto con cuenta (Entra)",
+      "opciones": [
+        "10",
+        "25",
+        "50",
+        "Todas las categorías",
+        "Flete cobrado a la tienda (5)",
+        "Flete por rechazo cobrado a la tienda (1)",
+        "Comisión de contra-entrega cobrada a la tienda (5)",
+        "IVA del flete cobrado a la tienda (5)",
+        "IVA del flete por rechazo cobrado a la tienda (1)",
+        "IVA de la comisión cobrado a la tienda (5)",
+        "Corrección de caja (suma) (3)",
+        "Contra-entrega cobrado a los clientes de la tienda (5)"
+      ]
+    },
+    {
+      "nombre": "E.2 periodo hoy",
+      "hoy": "2026-09-26",
+      "filasPintadas": 2,
+      "tarjetas": "Registrar un movimiento Movimiento neto del periodo En cero ₡0 Entró ₡12.345 Salió ₡12.345 Movimientos 2 Registros del periodo que estás viendo De las tiendas ₡0 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex En cero ₡0 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡12.345 Gastos de Ordenex ₡12.345 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Movimiento neto del periodo» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes. Con filtros puestos esta cifra no es el dinero que hay hoy en la caja: es lo que entró menos lo que salió en el periodo que elegiste."
+    },
+    {
+      "nombre": "E.3 fila nueva tras registrar (sin recargar)",
+      "primera": {
+        "Desglose": "",
+        "Fecha": "2026-09-26",
+        "Movimiento y motivo": "Sueldo Sueldo · Sueldo recorrido 458-E (admin)",
+        "A quién": "Pedro Recorrido admin",
+        "Monto": "Sale ₡11.111 Ordenex",
+        "Registró": "Ana Admin",
+        "Ver": "Ver",
+        "tachada": false
+      },
+      "tarjetas": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.472.821,72 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex. Entró ₡13.537.078,22 Salió ₡64.256,50 Movimientos 39 Registros del periodo que estás viendo De las tiendas ₡147.670,10 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡13.325.151,62 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡13.389.408,12 Gastos de Ordenex ₡64.256,50 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes."
+    },
+    {
+      "nombre": "R7/R8 tras registrar el sueldo",
+      "entro": "13537078.22",
+      "salio": "64256.50",
+      "cifra": "13472821.72",
+      "ganancia": "13325151.62",
+      "de_tiendas": "147670.10",
+      "capital": "0",
+      "suma_saldos": "147670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "nombre": "E.3 panel Ver (vigente)",
+      "texto": "Sueldo 2026-09-26 · Sale ₡11.111 A quién Pedro Recorrido admin Por qué Sueldo recorrido 458-E (admin) De dónde sale Sueldo · Sueldo recorrido 458-E (admin) Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Ana Admin Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.472.821,72 Ganancia de Ordenex ₡13.325.151,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Close"
+    },
+    {
+      "nombre": "E.3 tras anular (sin recargar): contra-asiento + original «Anulado» y tachado",
+      "filas": [
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-26",
+          "Movimiento y motivo": "Corrección de caja (suma) Gasto o sueldo registrado a mano · Anulación de: Sueldo recorrido 458-E (admin)",
+          "A quién": "—",
+          "Monto": "Entra ₡11.111 Ordenex",
+          "Registró": "Ana Admin",
+          "Ver": "Ver",
+          "tachada": false
+        },
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-26",
+          "Movimiento y motivo": "Sueldo Sueldo · Sueldo recorrido 458-E (admin)",
+          "A quién": "Pedro Recorrido admin",
+          "Monto": "Sale ₡11.111 Ordenex",
+          "Registró": "Ana Admin",
+          "Ver": "Anulado Ver",
+          "tachada": true
+        },
+        {
+          "Desglose": "",
+          "Fecha": "2026-09-26",
+          "Movimiento y motivo": "Corrección de caja (suma) Gasto o sueldo registrado a mano · Anulación de: Sueldo recorrido 458-E (maestro)",
+          "A quién": "—",
+          "Monto": "Entra ₡12.345 Ordenex",
+          "Registró": "Maestro QA",
+          "Ver": "Ver",
+          "tachada": false
+        }
+      ],
+      "tarjetas": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.483.932,72 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex. Entró ₡13.548.189,22 Salió ₡64.256,50 Movimientos 40 Registros del periodo que estás viendo De las tiendas ₡147.670,10 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de todas las tiendas, ya descontados el flete, la comisión, el impuesto y lo que Ordenex les cobró. El detalle de cada tienda está en Wallet → Tiendas. Ver la deuda de cada tienda De Ordenex Positivo ₡13.336.262,62 Ganancia de Ordenex Lo que Ordenex gana menos lo que gasta Ingresos de Ordenex ₡13.400.519,12 Gastos de Ordenex ₡64.256,50 Saldo inicial y aportes En cero ₡0 Dinero de Ordenex que no es ganancia. «Flujo de dinero registrado» cuenta todo el dinero, también el que es de las tiendas. «Ganancia de Ordenex» es solo lo que Ordenex gana menos lo que gasta: no incluye el dinero de las tiendas ni el saldo inicial o los aportes."
+    },
+    {
+      "nombre": "R7/R8 tras anular el sueldo",
+      "entro": "13548189.22",
+      "salio": "64256.50",
+      "cifra": "13483932.72",
+      "ganancia": "13336262.62",
+      "de_tiendas": "147670.10",
+      "capital": "0",
+      "suma_saldos": "147670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "nombre": "E.3 panel del anulado",
+      "texto": "Sueldo 2026-09-26 · Sale ₡11.111 A quién Pedro Recorrido admin Por qué Sueldo recorrido 458-E (admin) De dónde sale Sueldo · Sueldo recorrido 458-E (admin) Cómo — Comprobante Sin comprobante. Registró Ana Admin Estado Anulado el 2026-09-26 por Ana Admin · Recorrido 458-E (admin): registrado para probar Cómo quedó Flujo de dinero registrado ₡13.472.821,72 Ganancia de Ordenex ₡13.325.151,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Close",
+      "ofreceAnular": 0
+    },
+    {
+      "nombre": "libro-de-movimientos-2026-09-26.xlsx",
+      "filasTotales": 41,
+      "cabecera": [
+        "Fecha",
+        "Movimiento",
+        "Motivo y origen",
+        "A quién",
+        "Entra o sale",
+        "Monto",
+        "Dueño",
+        "Registró"
+      ],
+      "primeras": [
+        [
+          "2026-09-26",
+          "Corrección de caja (suma)",
+          "Gasto o sueldo registrado a mano · Anulación de: Sueldo recorrido 458-E (admin)",
+          "—",
+          "Entra",
+          "11111.00",
+          "Ordenex",
+          "Ana Admin"
+        ],
+        [
+          "2026-09-26",
+          "Sueldo",
+          "Sueldo · Sueldo recorrido 458-E (admin)",
+          "Pedro Recorrido admin",
+          "Sale",
+          "11111.00",
+          "Ordenex",
+          "Ana Admin"
+        ],
+        [
+          "2026-09-26",
+          "Corrección de caja (suma)",
+          "Gasto o sueldo registrado a mano · Anulación de: Sueldo recorrido 458-E (maestro)",
+          "—",
+          "Entra",
+          "12345.00",
+          "Ordenex",
+          "Maestro QA"
+        ]
+      ],
+      "uuid": false
+    }
+  ]
+}

@@ -21,6 +21,8 @@ export interface MovimientoDeCajaParaAutoria {
   origenTipo: WalletOrigenTipo;
   origenId: string | null;
   registradoPor: string | null;
+  /** Ficha 458-E (revision B1, R58) — el instante en que se registro la fila. */
+  createdAt: Date;
 }
 
 /** Ficha 458-C (M1, R58) — una anulacion leida de su constancia. */

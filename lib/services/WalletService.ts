@@ -40,6 +40,7 @@ import type {
   LectoresDocumentosCaja,
 } from "@/lib/interfaces/services/IWalletService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 
 // Roles autorizados (R19/R65): acceso total (maestro/admin, dueños de la caja central).
 // Cualquier otro rol -> forbidden SIN exponer movimientos ni cifras.
@@ -254,12 +255,17 @@ export class WalletService implements IWalletService {
     categoria?: WalletMovimientoCategoria;
     desde?: Date;
     hasta?: Date;
+    aQuien?: AQuienFiltro;
   }): BalanceFiltros {
     return {
       tipo: input.tipo,
       categoria: input.categoria,
       desde: input.desde,
       hasta: input.hasta,
+      // Ficha 458-E (TE.2, R59): «A quién» viaja al repositorio, que lo resuelve en el WHERE. Por
+      // este metodo lo ganan a la vez el libro, la descarga, las tarjetas + composicion y el detalle
+      // de una fila de la composicion. Solo si viene: sin el, los filtros son los de siempre.
+      ...(input.aQuien !== undefined ? { aQuien: input.aQuien } : {}),
     };
   }
 

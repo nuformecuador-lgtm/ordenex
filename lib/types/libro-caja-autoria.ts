@@ -40,10 +40,24 @@ export interface ComoDTO {
   referencia: string | null;
 }
 
+/**
+ * Ficha 458-E (revision B1, R58 «quien lo registro y CUANDO») — el instante en que se REGISTRO la fila
+ * (`created_at`), en dia y hora de pared de Costa Rica. No es la fecha del movimiento (`fechaMovimiento`,
+ * la que se elige al registrar): un sueldo con fecha del 1 tecleado el 26 dice «el 26».
+ */
+export interface RegistradoElDTO {
+  /** «YYYY-MM-DD», dia calendario de Costa Rica. */
+  fecha: string;
+  /** «HH:mm», hora de pared de Costa Rica. */
+  hora: string;
+}
+
 export interface AutoriaDeFilaDTO {
   movimientoId: string;
   aQuien: AQuienDTO;
   registro: RegistroDTO;
+  /** Ficha 458-E (revision B1, R58) — cuando se registro la fila (`created_at`, CR). */
+  registradoEl: RegistradoElDTO;
   /** Ficha 458-C (M1, R58) — como se pago; `null` = la fila no lo registra. */
   como: ComoDTO | null;
   /**

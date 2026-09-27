@@ -8,10 +8,9 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IWalletEgresoService,
   RegistrarEgresoServiceResult,
-  ReversarEgresoServiceResult,
   VerDesgloseEgresosServiceResult,
 } from "@/lib/interfaces/services/IWalletEgresoService";
-import { listarMovimientosSchema, reversarEgresoSchema } from "@/lib/types/wallet";
+import { listarMovimientosSchema } from "@/lib/types/wallet";
 import { registrarEgresoConLateralesSchema, separarComprobante } from "@/lib/types/wallet-laterales";
 import { buildComprobantes, leerComprobanteOpcional } from "@/lib/actions/_shared/comprobante-lateral";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
@@ -36,11 +35,6 @@ export type RegistrarEgresoActionResult =
 export type RegistrarEgresoConComprobanteActionResult =
   | RegistrarEgresoActionResult
   | { status: "comprobante_no_guardado" };
-
-export type ReversarEgresoActionResult =
-  | ReversarEgresoServiceResult
-  | { status: "unauthenticated" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
 export type VerDesgloseEgresosActionResult =
   | VerDesgloseEgresosServiceResult
@@ -108,24 +102,14 @@ export async function registrarEgresoAdministrativoAction(
   return isAppErrorShape(r) ? toEgresoActionError(r) : r;
 }
 
-/**
- * R13/R15/R16/R17/R18/R32: reversa un egreso administrativo (manual o del cron) por su id.
- *
- * @sin-superficie FICHA 458-C (D11, decision firmada, no deuda): «Reversar» salio de la pantalla; el egreso se anula con motivo por `anularMovimientoAction` (panel «Ver»). La accion se conserva por sus tests de la 45 y para no tocar el servidor en esta hija.
- */
-export async function reversarEgresoAdministrativoAction(
-  input: unknown,
-  deps: WalletEgresoDeps = {},
-): Promise<ReversarEgresoActionResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    const data = reversarEgresoSchema.parse(input); // ZodError -> VALIDATION_ERROR (R13)
-    const service = deps.service ?? buildService();
-    return service.reversarEgreso(data, actor);
-  });
-  return isAppErrorShape(r) ? toEgresoActionError(r) : r;
-}
+// FICHA 458-E (revision M4, deuda m3 de la 458-C) — `reversarEgresoAdministrativoAction` RETIRADA.
+// Era una puerta de dinero invocable (acceso total) sin pantalla desde la 458-C (D11) que escribia el
+// contra-asiento de un egreso SIN motivo ni constancia, al margen de la anulacion uniforme. Nada la
+// llamaba (ni `app/`, ni API, ni scripts, ni crons; solo sus tests de la 45). Un egreso se anula con
+// motivo por `anularMovimientoAction` → `anularEgresoCajaAction` (458-B, D13). El metodo del servicio
+// (`WalletEgresoService.reversarEgreso`) se queda: no es una Server Action (nadie lo alcanza desde el
+// navegador) y los escenarios de prueba lo usan para sembrar un «reverso de antes de la 458» (R72).
+// Guardia: `tests/unit/actions/wallet-egresos-actions.test.ts` («M4»).
 
 /** R11/R17/R18: desglose de egresos administrativos por tipo del conjunto filtrado (solo maestro). */
 export async function verDesgloseEgresosAction(

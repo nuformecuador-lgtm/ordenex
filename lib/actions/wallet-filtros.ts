@@ -11,8 +11,10 @@ import { FiltrosWalletService } from "@/lib/services/FiltrosWalletService";
 import {
   cierresDeLaCuentaSchema,
   conceptosConMovimientosSchema,
+  quienesDelLibroCajaSchema,
   type CierresDeLaCuentaResult,
   type ConceptosConMovimientosResult,
+  type QuienesDelLibroCajaResult,
 } from "@/lib/types/wallet-filtros";
 
 // Ficha 458-A (TA.3/TA.4, design §3.5, R10–R15) — Server Actions de los FILTROS de la wallet.
@@ -92,6 +94,26 @@ export async function cierresDeLaCuentaAction(
     if (!actor) throw new UnauthenticatedError();
     const data = cierresDeLaCuentaSchema.parse(input);
     return (deps.service ?? buildService()).cierresDeLaCuenta(data, actor);
+  });
+  return isAppErrorShape(r) ? toError(r) : r;
+}
+
+/**
+ * Ficha 458-E (TE.2, R59; design §6) — las opciones del selector «A quién» de `/wallet`: las tiendas,
+ * los mensajeros y los nombres libres con movimientos en la caja en el periodo (y la direccion)
+ * pedidos, buscables por nombre, con tope de configuracion y `hayMas`. Cada opcion trae en `valor` el
+ * `aQuien` que se manda de vuelta al libro (`listarMovimientosAction`, `verResumenCajaAction`,
+ * `verDesgloseEgresosAction`, la descarga y el detalle de la composicion). Solo acceso total.
+ */
+export async function quienesDelLibroCajaAction(
+  input: unknown,
+  deps: FiltrosWalletDeps = {},
+): Promise<QuienesDelLibroCajaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = quienesDelLibroCajaSchema.parse(input ?? {});
+    return (deps.service ?? buildService()).quienesDelLibroCaja(data, actor);
   });
   return isAppErrorShape(r) ? toError(r) : r;
 }

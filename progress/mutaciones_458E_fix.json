@@ -1,0 +1,175 @@
+[
+  {
+    "id": "B1-a",
+    "mutacion": "el dia del registro en UTC",
+    "archivo": "lib/services/LibroCajaAutoriaService.ts",
+    "tests": [
+      "tests/integration/db/libro-caja-revision-458e.test.ts"
+    ],
+    "rojos": 1,
+    "total": 6,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "B1-b",
+    "mutacion": "la hora del registro en UTC",
+    "archivo": "lib/services/LibroCajaAutoriaService.ts",
+    "tests": [
+      "tests/integration/db/libro-caja-revision-458e.test.ts"
+    ],
+    "rojos": 1,
+    "total": 6,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "B1-c",
+    "mutacion": "el panel no pinta el instante",
+    "archivo": "components/shared/wallet/DetalleMovimientoPanel.tsx",
+    "tests": [
+      "tests/components/DetalleMovimientoPanel.test.tsx",
+      "tests/components/WalletLibroCaja458E.test.tsx"
+    ],
+    "rojos": 2,
+    "total": 34,
+    "suitesRojas": 4,
+    "restaurado": true
+  },
+  {
+    "id": "M2-a",
+    "mutacion": "el filtro por nombre no mira la original del contra-asiento",
+    "archivo": "lib/repositories/libro-caja-a-quien-sql.ts",
+    "tests": [
+      "tests/integration/db/libro-caja-revision-458e.test.ts",
+      "tests/integration/db/libro-caja-filtro-a-quien.test.ts"
+    ],
+    "rojos": 2,
+    "total": 22,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "M2-b",
+    "mutacion": "el selector no cuenta el contra-asiento",
+    "archivo": "lib/repositories/libro-caja-a-quien-sql.ts",
+    "tests": [
+      "tests/integration/db/libro-caja-revision-458e.test.ts",
+      "tests/integration/db/libro-caja-filtro-a-quien.test.ts"
+    ],
+    "rojos": 1,
+    "total": 22,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "M2-c",
+    "mutacion": "la columna «A quién» del contra-asiento vuelve a «—»",
+    "archivo": "lib/services/LibroCajaAutoriaService.ts",
+    "tests": [
+      "tests/integration/db/libro-caja-revision-458e.test.ts",
+      "tests/integration/db/libro-caja-filtro-a-quien.test.ts"
+    ],
+    "rojos": 1,
+    "total": 22,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "M2-d",
+    "mutacion": "la regla olvida el contra-asiento que suma (ingreso_ajuste)",
+    "archivo": "lib/utils/anotacion-de-fila.ts",
+    "tests": [
+      "tests/integration/db/libro-caja-revision-458e.test.ts",
+      "tests/integration/db/libro-caja-filtro-a-quien.test.ts"
+    ],
+    "rojos": 4,
+    "total": 22,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "M1-a",
+    "mutacion": "sum( en minusculas de otra tabla",
+    "archivo": "lib/repositories/WalletMovimientoRepository.ts",
+    "tests": [
+      "tests/unit/guards/caja-173-alcance.guardia.test.ts"
+    ],
+    "rojos": 1,
+    "total": 37,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "M1-b",
+    "mutacion": "otra tabla con alias w",
+    "archivo": "lib/repositories/WalletMovimientoRepository.ts",
+    "tests": [
+      "tests/unit/guards/caja-173-alcance.guardia.test.ts"
+    ],
+    "rojos": 1,
+    "total": 37,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "M1-c",
+    "mutacion": "suma de importes en JS (.reduce)",
+    "archivo": "lib/repositories/WalletMovimientoRepository.ts",
+    "tests": [
+      "tests/unit/guards/caja-173-alcance.guardia.test.ts"
+    ],
+    "rojos": 1,
+    "total": 37,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "M1-d",
+    "mutacion": "escritura por SQL crudo en el repositorio",
+    "archivo": "lib/repositories/WalletMovimientoRepository.ts",
+    "tests": [
+      "tests/unit/guards/caja-173-alcance.guardia.test.ts"
+    ],
+    "rojos": 1,
+    "total": 37,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "M1-e",
+    "mutacion": "escritura por SQL crudo en el cruce",
+    "archivo": "lib/repositories/libro-caja-a-quien-sql.ts",
+    "tests": [
+      "tests/unit/guards/caja-173-alcance.guardia.test.ts"
+    ],
+    "rojos": 2,
+    "total": 37,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "M4-a",
+    "mutacion": "la accion sin motivo vuelve a exportarse",
+    "archivo": "lib/actions/wallet-egresos.ts",
+    "tests": [
+      "tests/unit/actions/wallet-egresos-actions.test.ts"
+    ],
+    "rojos": 2,
+    "total": 26,
+    "suitesRojas": 2,
+    "restaurado": true
+  },
+  {
+    "id": "m5-a",
+    "mutacion": "la descarga mete el id DENTRO del texto de «A quién»",
+    "archivo": "app/(app)/wallet/_components/wallet-ledger-descarga-columnas.ts",
+    "tests": [
+      "tests/components/descarga/WalletDescarga.test.tsx"
+    ],
+    "rojos": 1,
+    "total": 12,
+    "suitesRojas": 2,
+    "restaurado": true
+  }
+]

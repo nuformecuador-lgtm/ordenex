@@ -149,6 +149,22 @@ describe("458-C R58 — lo que dice el panel", () => {
     expect(within(p).getByText("Automático · Cobro por rechazo aprobado por Ana")).toBeTruthy();
   });
 
+  it("458-E B1 (R58): «Registró» dice quién Y cuándo (día y hora de Costa Rica), no la fecha del movimiento", async () => {
+    pintar(movimiento(), { ...AUTORIA, registradoEl: { fecha: "2026-09-26", hora: "21:30" } });
+    const p = await panel();
+    expect(within(p).getByText("Ana Maestra · el 2026-09-26 a las 21:30")).toBeTruthy();
+    // La fecha del movimiento (el 12) sigue en su sitio.
+    expect(within(p).getByText("Comprobante de «Sueldo» del 2026-09-12")).toBeTruthy();
+    cleanup();
+    // Lo automático también lleva el instante.
+    pintar(movimiento(), {
+      ...AUTORIA,
+      registro: { nombre: null, automatico: { accion: "aprobacion_cierre", por: "Ana" } },
+      registradoEl: { fecha: "2026-09-12", hora: "07:05" },
+    });
+    expect(within(await panel()).getByText("Automático · Aprobación del cierre por Ana · el 2026-09-12 a las 07:05")).toBeTruthy();
+  });
+
   it("mientras la autoría carga lo dice; si falla, no inventa un nombre", async () => {
     pintar(movimiento(), "cargando");
     expect(within(await panel()).getAllByText("Cargando…")).toHaveLength(2);

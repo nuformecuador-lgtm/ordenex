@@ -97,20 +97,43 @@ export function detalleDeFilaCaja(m: WalletMovimientoDTO, autoria?: AutoriaDeFil
   };
 }
 
+/**
+ * FICHA 458-E (cierre) — la autoría de ESTA fila tal como la tiene el libro (la lectura en lote del
+ * módulo). `cargando` = el libro la está leyendo (el panel espera, no lee otra vez); `ok` con `fila` =
+ * el libro ya la tiene. `ok` sin `fila` o `error`: el libro no la tiene, y el panel la lee él.
+ */
+export type AutoriaDeLaFilaEnElLibro =
+  | { estado: "cargando" }
+  | { estado: "error" }
+  | { estado: "ok"; fila: AutoriaDeFilaDTO | undefined };
+
 export interface VerMovimientoCajaProps {
   movimiento: WalletMovimientoDTO;
   /** Tras anular o adjuntar: el módulo relee libro, tarjetas, composición y desglose (R60). */
   onCambio?: () => void;
+  /**
+   * FICHA 458-E (cierre) — lo que el libro ya leyó de esta fila. Ausente = el panel lee su autoría al
+   * abrir (como en la 458-C). Si el libro ya la tiene, el panel NO vuelve a pedirla: es la MISMA
+   * lectura (`autoriaDelLibroCajaAction`) que pintó «A quién» y «Registró» en la fila.
+   */
+  autoriaDelLibro?: AutoriaDeLaFilaEnElLibro;
 }
 
-export function VerMovimientoCaja({ movimiento, onCambio }: VerMovimientoCajaProps) {
+export function VerMovimientoCaja({ movimiento, onCambio, autoriaDelLibro }: VerMovimientoCajaProps) {
   const [abierto, setAbierto] = useState(false);
+  const delLibro =
+    autoriaDelLibro?.estado === "ok" && autoriaDelLibro.fila !== undefined ? autoriaDelLibro.fila : undefined;
+  const libroLeyendo = autoriaDelLibro?.estado === "cargando";
+  // Solo se lee si el libro no la tiene ni la está leyendo.
+  const leePropia = abierto && delLibro === undefined && !libroLeyendo;
   const { data, error } = useSWR(
-    abierto ? (["wallet:autoria-caja", movimiento.id] as const) : null,
+    leePropia ? (["wallet:autoria-caja", movimiento.id] as const) : null,
     () => leerAutoria(movimiento.id),
     { shouldRetryOnError: false, revalidateOnFocus: false },
   );
-  const detalle = detalleDeFilaCaja(movimiento, error !== undefined ? null : data);
+  const autoria: AutoriaDeFilaDTO | null | undefined =
+    delLibro ?? (libroLeyendo ? undefined : error !== undefined ? null : data);
+  const detalle = detalleDeFilaCaja(movimiento, autoria);
   const nombreVer = movimiento.documento?.anulado ? PANEL_TEXTO.verNombreAnulado : PANEL_TEXTO.verNombre;
 
   return (
@@ -129,7 +152,7 @@ export function VerMovimientoCaja({ movimiento, onCambio }: VerMovimientoCajaPro
           abierto={abierto}
           onAbiertoChange={setAbierto}
           movimiento={detalle}
-          autoria={error !== undefined ? null : data}
+          autoria={autoria}
           onCambio={onCambio}
         />
       ) : null}

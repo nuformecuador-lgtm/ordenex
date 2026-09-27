@@ -143,7 +143,7 @@ const ESPERADO = [
     caso: "el pago",
     movimiento: ABONO_VIGENTE,
     concepto: "Una tienda le paga a Ordenex",
-    tipo: "Ingreso",
+    tipo: "Entra", // 458-E (R55): la dirección se dice Entra / Sale (antes «Ingreso»)
     origen: "Pago de una tienda a Ordenex · Tienda Norte · Pago de los fletes · SINPE · 123456",
     dueno: "Tienda",
   },
@@ -151,7 +151,7 @@ const ESPERADO = [
     caso: "su anulación",
     movimiento: REVERSO,
     concepto: "Pago de una tienda a Ordenex anulado",
-    tipo: "Egreso",
+    tipo: "Sale", // 458-E (R55): antes «Egreso»
     origen: "Pago de una tienda a Ordenex · Anulación · Tienda Este · Pago equivocado · Efectivo",
     dueno: "Tienda",
   },

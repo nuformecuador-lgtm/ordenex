@@ -7,16 +7,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 
+import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
+import { SelectorBuscable } from "@/components/shared/SelectorBuscable";
 import { CONCEPTOS_FILTRO_AVISO, opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import { useConceptosConMovimientos } from "@/components/shared/wallet/use-conceptos-con-movimientos";
+import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 import type { WalletMovimientoTipo } from "@/lib/types/wallet";
 
-import { CATEGORIA_LABEL, CATEGORIA_TODAS_OPTION, TIPO_OPTIONS } from "./wallet-labels";
+import {
+  A_QUIEN_FILTRO,
+  A_QUIEN_SELECTOR_TEXTOS,
+  aQuienDeValor,
+  valorDeAQuien,
+} from "./a-quien-selector";
+import { useQuienesDelLibroCaja } from "./use-quienes-del-libro-caja";
+
+import { FILTRO_DIRECCION, type DireccionFiltro } from "./libro-caja-labels";
+import { CATEGORIA_LABEL, CATEGORIA_TODAS_OPTION } from "./wallet-labels";
 
 // Feature 42 (T12, R20) — filtros del libro: tipo, categoría y rango de fechas (desde/hasta).
 // Mantiene un BORRADOR local; al pulsar "Aplicar" emite los filtros al módulo, que recarga
 // libro + cifras de la caja por Server Action (la cabecera refleja el conjunto filtrado, R20).
 // "Limpiar" resetea a sin filtros.
+//
+// FICHA 458-E (TE.2, design §5.2, R54): el `Select` de tipo pasa a un filtro SEGMENTADO Todo / Entra
+// / Sale (`SegmentedToggle`). Es un conmutador, así que se APLICA al pulsarlo —con el resto del
+// borrador— y no espera a «Aplicar»; el valor sigue siendo el mismo `tipo` del borde (`ingreso` /
+// `egreso`, vacío = todo), así que el servidor, las tarjetas y la descarga no cambian (R54: «como hoy»).
 //
 // Ficha 458-A (TA.3, R13–R15): la categoría ofrece SOLO los conceptos con movimientos en el
 // periodo y el tipo del borrador, cada uno con su número, leídos del servidor
@@ -36,6 +53,11 @@ export interface WalletFiltrosValue {
   categoria: string;
   desde: string;
   hasta: string;
+  /**
+   * FICHA 458-E (R59) — «A quién»: la tienda, el mensajero o el nombre anotado elegido en el selector.
+   * Ausente = todos. Es el `valor` que dio el servidor, tal cual (viaja, no se pinta: H6).
+   */
+  aQuien?: AQuienFiltro;
 }
 
 export const FILTROS_VACIOS: WalletFiltrosValue = {
@@ -62,6 +84,9 @@ export function inputDeFiltros(filtros: WalletFiltrosValue): Record<string, unkn
   if (filtros.categoria) input.categoria = filtros.categoria;
   if (filtros.desde) input.desde = filtros.desde;
   if (filtros.hasta) input.hasta = filtros.hasta;
+  // FICHA 458-E (R59): la MISMA clave en los seis bordes del libro (libro, tarjetas + composición,
+  // desglose, descarga, detalle de una fila de la composición) y en los conceptos.
+  if (filtros.aQuien) input.aQuien = filtros.aQuien;
   return input;
 }
 
@@ -74,6 +99,11 @@ export interface WalletFiltrosProps {
   disabled?: boolean;
 }
 
+/** El `tipo` del borrador ↔ la opción del filtro segmentado («» = todo). */
+function direccionDe(tipo: string): DireccionFiltro {
+  return tipo === "ingreso" || tipo === "egreso" ? tipo : "todo";
+}
+
 export function WalletFiltros({ onAplicar, onLimpiar, disabled = false }: WalletFiltrosProps) {
   const [draft, setDraft] = useState<WalletFiltrosValue>(FILTROS_VACIOS);
 
@@ -81,12 +111,44 @@ export function WalletFiltros({ onAplicar, onLimpiar, disabled = false }: Wallet
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
-  // R13: los conceptos del periodo y del tipo que se están eligiendo (el borrador), no del SEED.
-  const conceptos = useConceptosConMovimientos({
-    libro: "caja",
-    tipo: (draft.tipo || undefined) as WalletMovimientoTipo | undefined,
+  /** R54 — Todo / Entra / Sale se aplica al pulsarlo (con el resto del borrador). */
+  function elegirDireccion(direccion: DireccionFiltro) {
+    if (disabled) return;
+    const siguiente = { ...draft, tipo: direccion === "todo" ? "" : direccion };
+    setDraft(siguiente);
+    onAplicar(siguiente);
+  }
+
+  /**
+   * FICHA 458-E (R59) — «A quién» se aplica al elegirlo, como la dirección: es una elección de una
+   * lista, no algo que se teclea y se confirma. Viaja con el resto del borrador.
+   */
+  function elegirAQuien(valor: string | null) {
+    if (disabled) return;
+    const aQuien = aQuienDeValor(valor);
+    const siguiente: WalletFiltrosValue = { ...draft, aQuien };
+    if (aQuien === undefined) delete siguiente.aQuien;
+    setDraft(siguiente);
+    onAplicar(siguiente);
+  }
+
+  const tipoBorrador = (draft.tipo || undefined) as WalletMovimientoTipo | undefined;
+
+  // R59: las opciones de «A quién» son las del periodo y la dirección que se están eligiendo.
+  const quienes = useQuienesDelLibroCaja({
+    tipo: tipoBorrador,
     desde: draft.desde || undefined,
     hasta: draft.hasta || undefined,
+  });
+
+  // R13: los conceptos del periodo y del tipo que se están eligiendo (el borrador), no del SEED.
+  // 458-E (R59): y de «A quién», si hay uno elegido.
+  const conceptos = useConceptosConMovimientos({
+    libro: "caja",
+    tipo: tipoBorrador,
+    desde: draft.desde || undefined,
+    hasta: draft.hasta || undefined,
+    aQuien: draft.aQuien,
   });
   const opcionesCategoria = opcionesDeConceptos(
     conceptos.conceptos,
@@ -104,29 +166,43 @@ export function WalletFiltros({ onAplicar, onLimpiar, disabled = false }: Wallet
         onAplicar(draft);
       }}
     >
-      {/* Los dos `Select` ya dicen su nombre en el PLACEHOLDER («Todos los tipos», «Todas las
-          categorías»), que además informa mejor que el rótulo: dice qué se está viendo ahora,
-          no cómo se llama el campo. Por eso el rótulo pasa a `sr-only` en vez de desaparecer.
-
-          El `id` es NUEVO y arregla un defecto real: estos dos `htmlFor` apuntaban a
-          `wallet-filtro-tipo` / `wallet-filtro-categoria`, ids que NO existían en el
-          documento —la primitiva `Select` acepta `id` pero nadie se lo pasaba—, así que las
-          dos etiquetas colgaban de la nada. El nombre accesible del control lo sigue dando su
-          `aria-label`, que tiene precedencia sobre la etiqueta nativa: no se mueve. */}
-      <Label htmlFor="wallet-filtro-tipo" className="sr-only">
-        Tipo
-      </Label>
-      <Select
-        id="wallet-filtro-tipo"
-        aria-label="Filtrar por tipo"
-        value={draft.tipo}
-        onValueChange={(v) => set("tipo", v)}
-        options={TIPO_OPTIONS}
-        placeholder="Todos los tipos"
-        disabled={disabled}
-        className="h-9 w-full sm:w-44"
+      {/* FICHA 458-E (R54): Todo / Entra / Sale. El grupo se nombra por su `aria-label` y cada
+          opción anuncia si está elegida con `aria-pressed` (primitiva `SegmentedToggle`). */}
+      <SegmentedToggle
+        options={FILTRO_DIRECCION.opciones}
+        valor={direccionDe(draft.tipo)}
+        onChange={elegirDireccion}
+        ariaLabel={FILTRO_DIRECCION.nombre}
       />
 
+      {/* FICHA 458-E (R59): «A quién», con búsqueda en el servidor por nombre de tienda, de mensajero
+          o por el nombre anotado. El rótulo corto es visible y el nombre accesible del disparador
+          dice además qué está elegido («A quién: Todos»). */}
+      <div className="flex w-full items-center gap-2 sm:w-auto">
+        <Label
+          htmlFor="wallet-filtro-a-quien"
+          className="shrink-0 text-xs font-normal text-muted-foreground"
+        >
+          {A_QUIEN_FILTRO.rotulo}
+        </Label>
+        <SelectorBuscable
+          id="wallet-filtro-a-quien"
+          etiqueta={A_QUIEN_FILTRO.etiqueta}
+          opciones={quienes.opciones}
+          valor={draft.aQuien ? valorDeAQuien(draft.aQuien) : null}
+          onCambiar={elegirAQuien}
+          onBuscar={quienes.buscar}
+          estado={quienes.estado}
+          hayMas={quienes.hayMas}
+          textos={A_QUIEN_SELECTOR_TEXTOS}
+          disabled={disabled}
+          className="w-full sm:w-56"
+        />
+      </div>
+
+      {/* El `Select` de categoría dice su nombre en el PLACEHOLDER («Todas las categorías»), que
+          informa mejor que el rótulo: dice qué se está viendo ahora. Por eso el rótulo pasa a
+          `sr-only` en vez de desaparecer; el nombre accesible lo da su `aria-label`. */}
       <Label htmlFor="wallet-filtro-categoria" className="sr-only">
         Categoría
       </Label>

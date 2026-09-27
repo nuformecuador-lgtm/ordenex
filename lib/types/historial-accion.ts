@@ -66,7 +66,7 @@ export const HISTORIAL_ACCION_TIPOS = [
   "reparto_anulado", // liquidacion.anularRepartoAction
   "wallet_movimiento_manual_registrado", // wallet.registrarMovimientoManualAction
   "egreso_administrativo_registrado", // wallet-egresos.registrarEgresoAdministrativoAction
-  "egreso_administrativo_reversado", // wallet-egresos.reversarEgresoAdministrativoAction
+  "egreso_administrativo_reversado", // WalletEgresoService.reversarEgreso (su Server Action se retiro en la 458-E, M4; quedan las filas historicas)
   "tarifa_creada", // tarifas.crearTarifa
   "tarifa_actualizada", // tarifas.actualizarTarifa
   "incidente_aprobado", // incidentes.aprobarIncidente

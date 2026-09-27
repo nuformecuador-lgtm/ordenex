@@ -43,6 +43,8 @@ export const PANEL_TEXTO = {
   aTercero: (beneficiario: string) => `a ${beneficiario}`,
   cargando: "Cargando…",
   errorAutoria: "No se pudo leer quién lo registró.",
+  /** Ficha 458-E (revisión B1, R58) — CUÁNDO se registró (día y hora de Costa Rica), tras el quién. */
+  registradoEl: (fecha: string, hora: string) => `el ${fecha} a las ${hora}`,
   anular: "Anular…",
   cerrar: "Cerrar",
 } as const;

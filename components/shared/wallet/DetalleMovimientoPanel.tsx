@@ -12,7 +12,7 @@ import { adjuntarComprobanteAction, verComprobanteAction } from "@/lib/actions/w
 import { money } from "@/lib/config/moneda";
 import type { ComoQuedoDTO } from "@/lib/types/como-quedo";
 import type { RegistroDTO } from "@/lib/types/estado-cuenta";
-import type { AQuienDTO } from "@/lib/types/libro-caja-autoria";
+import type { AQuienDTO, RegistradoElDTO } from "@/lib/types/libro-caja-autoria";
 import type { AdjuntarComprobanteResult, VerComprobanteResult } from "@/lib/types/wallet-comprobante-lateral";
 import { cn } from "@/lib/utils";
 
@@ -83,10 +83,19 @@ export interface DetalleMovimientoPanelProps {
   abierto: boolean;
   onAbiertoChange: (abierto: boolean) => void;
   movimiento: DetalleMovimiento;
-  /** R56/R57 — quién y quién lo registró; `undefined` = cargando; `null` = no se pudo leer. */
-  autoria?: { aQuien: AQuienDTO; registro: RegistroDTO } | null;
+  /**
+   * R56/R57/R58 — quién, quién lo registró y cuándo; `undefined` = cargando; `null` = no se pudo leer.
+   * `registradoEl` (458-E, revisión B1): el instante del registro; quien no lo trae no lo pinta.
+   */
+  autoria?: { aQuien: AQuienDTO; registro: RegistroDTO; registradoEl?: RegistradoElDTO | null } | null;
   /** Tras anular o adjuntar: quien monta relee lo suyo (R60). */
   onCambio?: () => void;
+}
+
+/** R58 — «Registró»: quién y, si el servidor lo trae, cuándo (día y hora de Costa Rica). */
+function textoRegistroConInstante(registro: RegistroDTO, registradoEl: RegistradoElDTO | null | undefined): string {
+  const quien = textoRegistro(registro);
+  return registradoEl == null ? quien : `${quien} · ${PANEL_TEXTO.registradoEl(registradoEl.fecha, registradoEl.hora)}`;
 }
 
 function textoAQuien(a: AQuienDTO): string {
@@ -372,7 +381,9 @@ export function DetalleMovimientoPanel({
                 </div>
               </Fila>
               <Fila nombre={PANEL_TEXTO.registro}>
-                {autoria === undefined ? PANEL_TEXTO.cargando : autoria === null ? PANEL_TEXTO.errorAutoria : textoRegistro(autoria.registro)}
+                {autoria === undefined ? PANEL_TEXTO.cargando : autoria === null
+                    ? PANEL_TEXTO.errorAutoria
+                    : textoRegistroConInstante(autoria.registro, autoria.registradoEl)}
               </Fila>
               <Fila nombre={PANEL_TEXTO.estado}>{estado}</Fila>
             </dl>

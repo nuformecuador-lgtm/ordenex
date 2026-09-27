@@ -10,6 +10,11 @@ fuentes:
   - app/(app)/wallet/_components/BarraComposicionCaja.tsx
   - app/(app)/wallet/_components/ComposicionGananciaCard.tsx
   - app/(app)/wallet/_components/WalletLedger.tsx
+  - app/(app)/wallet/_components/WalletFiltros.tsx
+  - app/(app)/wallet/_components/a-quien-selector.ts
+  - app/(app)/wallet/_components/libro-caja-labels.ts
+  - lib/actions/wallet-filtros.ts
+  - lib/actions/libro-caja-autoria.ts
   - app/(app)/wallet/_components/VerMovimientoCaja.tsx
   - components/shared/wallet/RegistrarMovimientoDialog.tsx
   - components/shared/wallet/AsiQueda.tsx
@@ -53,9 +58,22 @@ fletes, comisiones, IVA, lo que Ordenex les cobra a las tiendas— y no solo el 
 
 **El desglose de egresos**, del otro lado.
 
-**El libro**: la lista de movimientos, uno por línea, con su concepto, de quién es el dinero
-(**Ordenex**, **Tienda** u **Ordenex (capital)**) y de dónde viene. Cada fila tiene un botón **Ver**
-que abre su detalle. Una fila anulada se ve **tachada**.
+**El libro**: la lista de movimientos, uno por línea (ver «Las columnas del libro», más abajo). Cada
+fila tiene un botón **Ver** que abre su detalle. Una fila anulada dice **Anulado** y se ve **tachada**.
+
+## Las columnas del libro
+
+| Columna | Qué dice |
+| --- | --- |
+| **Fecha** | El día del movimiento, en hora de Costa Rica |
+| **Movimiento y motivo** | El concepto, dicho desde Ordenex; debajo, de dónde nace (con la tienda, el mensajero o el cierre) y el motivo que se escribió |
+| **A quién** | La tienda, el mensajero, la persona o el proveedor del movimiento. Si es una tienda o un mensajero, el nombre lleva a su estado de cuenta. **Ordenex** en un aporte, y **—** en un movimiento viejo que no lo anotaba |
+| **Monto** | **Entra** o **Sale**, el importe y de quién es el dinero: **Ordenex**, **Tienda** u **Ordenex (capital)** |
+| **Registró** | Quién lo registró o, si no lo tecleó nadie, **Automático** y qué lo produjo: «Automático · Aprobación del cierre por Ana», «Automático · Plantilla de gasto fijo» |
+| **Ver** | Abre el detalle del movimiento. En una fila anulada, al lado dice **Anulado** |
+
+Mientras se lee, **A quién** y **Registró** dicen «Cargando…»; si no se pudieron leer, dicen **«No se
+pudo leer»** (no «—», que significaría que no hay dato).
 
 ## Los nombres: siempre desde Ordenex, y diciendo quién le paga a quién
 
@@ -77,7 +95,7 @@ Cada concepto del libro se lee desde Ordenex y dice quién le paga a quién. Los
 | **Flete por rechazo cobrado a la tienda** / **Flete por rechazo cobrado a la tienda anulado** | El flete que Ordenex le cobra a una tienda cuando su cliente rechaza el pedido, y su anulación. El IVA va en su propia línea, con su propia anulación |
 | **Indemnización que Ordenex paga por un incidente** | Lo que Ordenex paga cuando un envío sufre un incidente. Si se anula, aparece una **Corrección de caja (suma)** por el mismo monto |
 
-La columna **Origen** dice de dónde nace cada línea con el mismo criterio: **Cierre del día**,
+Debajo del concepto, en **Movimiento y motivo**, se dice de dónde nace cada línea con el mismo criterio: **Cierre del día**,
 **Registrado a mano**, **Gasto o sueldo registrado a mano**, **Pago de Ordenex a una tienda**, **Pago de
 un gasto de una tienda**, **Cobro de Ordenex a una tienda**, **Pago de una tienda a Ordenex**…
 
@@ -199,7 +217,7 @@ dueño. Por eso:
   se cobra cuando la gestión le vuelva a generar dinero a favor. El cobro no se compara contra ningún
   saldo disponible.
 
-En el libro de la caja sale como **Ordenex le cobra a una tienda**, con tipo **Ingreso**, dueño
+En el libro de la caja sale como **Ordenex le cobra a una tienda**, con **Entra**, dueño
 **Ordenex** y origen **Cobro de Ordenex a una tienda · la tienda · el motivo**. En **Wallet · Tiendas**
 sale como **Ordenex le cobra a la tienda**, y la tienda lo lee en su **Mi wallet** como **Ordenex te
 cobró**.
@@ -231,7 +249,7 @@ Transferencia; **en SINPE y transferencia la referencia es obligatoria**— y, s
 comprobante** (opcional). Al registrarlo, el aviso te dice en cuánto quedó el saldo de la tienda y, si
 sigue en contra, que la tienda todavía le debe ese dinero a Ordenex.
 
-En el libro de la caja sale como **Una tienda le paga a Ordenex**, con tipo **Ingreso**, dueño
+En el libro de la caja sale como **Una tienda le paga a Ordenex**, con **Entra**, dueño
 **Tienda** y origen **Pago de una tienda a Ordenex · la tienda · el motivo · el método**. En **Wallet ·
 Tiendas** sale como «La tienda le paga a Ordenex», y la tienda lo lee en su **Mi wallet** como «Le
 pagaste a Ordenex».
@@ -306,8 +324,9 @@ reparto. Si se anula, vuelve a **Flujo de dinero registrado**. La ganancia no ca
 **Ver**, en cada fila del libro, abre su detalle a un costado: **a quién** (la tienda, el mensajero, la
 persona o el proveedor), **por qué** (el motivo), **de dónde sale**, **cómo** se pagó (el método y la
 referencia, si los tiene), el **comprobante**, **quién lo registró** —o **Automático** y qué lo produjo,
-como «Aprobación del cierre»—, su **estado** (**Vigente**, o **Anulado** con el día, quién lo anuló y el
-motivo) y **Cómo quedó**: la cifra grande, la ganancia, lo que Ordenex les debe a las tiendas y el
+como «Aprobación del cierre»— y **cuándo**: el día y la hora de Costa Rica en que se tecleó («Ana · el
+2026-09-26 a las 21:30»), que puede no ser la fecha del movimiento (un sueldo del 1 registrado el 26), su **estado** (**Vigente**, o **Anulado** con el día, quién lo anuló, el
+motivo y cómo se anuló) y **Cómo quedó**: la cifra grande, la ganancia, lo que Ordenex les debe a las tiendas y el
 saldo inicial y aportes **justo después** de ese movimiento, y el saldo de la cuenta que tocó.
 
 Un **cobro por rechazo** dice además en palabras que es un cargo a la tienda: la ganancia sube y el saldo
@@ -385,10 +404,31 @@ una tienda. Se corrigieron añadiendo su salida en la caja: en el libro aparecen
 gasto de una tienda** con el origen **Cobro reclasificado como pago de un gasto de la tienda**. Esas
 salidas no se anulan desde acá, y la tienda los sigue viendo igual que antes en su libro.
 
-## Buscar
+## Buscar en el libro: los filtros
 
-Filtros por **concepto** y **tipo**, más el rango de fechas. Y se puede **descargar** el libro para
-cuadrar fuera, con los mismos nombres que la tabla.
+Arriba del libro hay una barra de filtros:
+
+- **Todo / Entra / Sale**: lo que entró a la caja, lo que salió, o todo. Se aplica **al pulsarlo**.
+- **A quién**: se elige de una lista de **las tiendas, los mensajeros y los nombres anotados a mano**
+  (el de un sueldo, un gasto o una corrección) que tienen movimientos en el periodo, cada uno con qué es
+  y cuántos movimientos tiene: «Tania Tienda · Tienda · 2 movimientos». Podés **buscar por el nombre de
+  la tienda, del mensajero o de la persona**, sin mayúsculas ni tildes. Se aplica **al elegirlo**;
+  **Todos** lo quita. Si la lista es muy larga, te pide que escribas parte del nombre.
+- **Concepto**: solo los conceptos con movimientos en lo que estás mirando, cada uno con su número.
+- **Desde** y **Hasta**: el periodo, en días de Costa Rica. Se aplican con **Aplicar**.
+
+**Limpiar** quita todos los filtros. **Las tarjetas de arriba, la composición de la ganancia y el
+desglose de egresos cuentan solo lo filtrado**: si elegís una tienda en **A quién**, lo que entró y lo
+que salió son los movimientos cuyo **A quién** es esa tienda y la cifra grande pasa a llamarse
+**Movimiento neto del periodo**. Ojo: el contra-entrega que cobró el mensajero a los clientes de esa
+tienda nace del cierre y su **A quién** es el **mensajero**, no la tienda; para verlo, elegí al mensajero.
+
+Si elegís un **nombre anotado** y alguno de sus sueldos, gastos o correcciones se **anuló**, aparecen las
+dos filas —el anulado y su anulación, que también dice ese nombre en **A quién**— y se compensan: un
+sueldo anulado no cuenta como dinero que salió.
+
+Y se puede **descargar** el libro, con los mismos filtros y las mismas columnas que la tabla (**A
+quién** y **Registró** incluidas), para cuadrar fuera.
 
 ## Lo que esta pantalla NO hace
 
