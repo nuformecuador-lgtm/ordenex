@@ -1,0 +1,150 @@
+[
+  {
+    "id": "maestro /wallet sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "maestro /wallet/tiendas sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "maestro /wallet/tiendas/<cuenta> sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "maestro /wallet/mensajeros sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "maestro /wallet/mensajeros/<cuenta> sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "maestro /wallet/satelites sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "maestro /wallet/satelites/<cuenta> sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "admin /wallet sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "admin /wallet/tiendas sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "admin /wallet/tiendas/<cuenta> sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "admin /wallet/mensajeros sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "admin /wallet/mensajeros/<cuenta> sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "admin /wallet/satelites sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  },
+  {
+    "id": "admin /wallet/satelites/<cuenta> sin uuid ni códigos",
+    "estado": "OK",
+    "pantalla": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    },
+    "panelVer": null
+  }
+]

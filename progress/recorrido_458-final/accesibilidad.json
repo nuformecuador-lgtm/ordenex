@@ -1,0 +1,207 @@
+[
+  {
+    "id": "maestro /wallet axe WCAG A/AA",
+    "estado": "FALLO",
+    "violaciones": [
+      {
+        "id": "color-contrast",
+        "impacto": "serious",
+        "ayuda": "Elements must meet minimum color contrast ratio thresholds",
+        "nodos": 30,
+        "ejemplo": [
+          ".font-semibold.whitespace-nowrap.text-xs :: Fix any of the following: Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio ",
+          ".sm\\:justify-end > .hover\\:bg-primary\\/80.bg-primary.text-primary-foreground :: Fix any of the following: Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio"
+        ]
+      },
+      {
+        "id": "dlitem",
+        "impacto": "serious",
+        "ayuda": "<dt> and <dd> elements must be contained by a <dl>",
+        "nodos": 38,
+        "ejemplo": [
+          "dl[aria-label=\"Desglose de ingresos\"] > .mx-2.grid-cols-\\[1fr_auto\\].gap-x-4:nth-child(1) > dt :: Fix any of the following: Description list item does not have a <dl> parent element",
+          "dl[aria-label=\"Desglose de ingresos\"] > .mx-2.grid-cols-\\[1fr_auto\\].gap-x-4:nth-child(1) > dd :: Fix any of the following: Description list item does not have a <dl> parent element"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "maestro /wallet botón «Ayuda de esta pantalla» (puerta del asistente)",
+    "estado": "OK",
+    "botones": 1
+  },
+  {
+    "id": "maestro /wallet/tiendas axe WCAG A/AA",
+    "estado": "FALLO",
+    "violaciones": [
+      {
+        "id": "color-contrast",
+        "impacto": "serious",
+        "ayuda": "Elements must meet minimum color contrast ratio thresholds",
+        "nodos": 4,
+        "ejemplo": [
+          ".font-semibold.whitespace-nowrap.text-xs :: Fix any of the following: Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio ",
+          ".border-brand :: Fix any of the following: Element has insufficient color contrast of 2.99 (foreground color: #f26419, background color: #f7f8fc, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "maestro /wallet/tiendas botón «Ayuda de esta pantalla» (puerta del asistente)",
+    "estado": "OK",
+    "botones": 1
+  },
+  {
+    "id": "maestro /wallet/tiendas/<cuenta> axe WCAG A/AA",
+    "estado": "FALLO",
+    "violaciones": [
+      {
+        "id": "color-contrast",
+        "impacto": "serious",
+        "ayuda": "Elements must meet minimum color contrast ratio thresholds",
+        "nodos": 27,
+        "ejemplo": [
+          ".font-semibold.whitespace-nowrap.text-xs :: Fix any of the following: Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio ",
+          "a[href$=\"tiendas\"] :: Fix any of the following: Element has insufficient color contrast of 2.99 (foreground color: #f26419, background color: #f7f8fc, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "maestro /wallet/tiendas/<cuenta> botón «Ayuda de esta pantalla» (puerta del asistente)",
+    "estado": "FALLO",
+    "botones": 0
+  },
+  {
+    "id": "maestro /wallet/mensajeros axe WCAG A/AA",
+    "estado": "FALLO",
+    "violaciones": [
+      {
+        "id": "color-contrast",
+        "impacto": "serious",
+        "ayuda": "Elements must meet minimum color contrast ratio thresholds",
+        "nodos": 5,
+        "ejemplo": [
+          ".font-semibold.whitespace-nowrap.text-xs :: Fix any of the following: Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio ",
+          ".border-brand :: Fix any of the following: Element has insufficient color contrast of 2.99 (foreground color: #f26419, background color: #f7f8fc, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "maestro /wallet/mensajeros botón «Ayuda de esta pantalla» (puerta del asistente)",
+    "estado": "OK",
+    "botones": 1
+  },
+  {
+    "id": "maestro /wallet/mensajeros/<cuenta> axe WCAG A/AA",
+    "estado": "FALLO",
+    "violaciones": [
+      {
+        "id": "color-contrast",
+        "impacto": "serious",
+        "ayuda": "Elements must meet minimum color contrast ratio thresholds",
+        "nodos": 9,
+        "ejemplo": [
+          ".font-semibold.whitespace-nowrap.text-xs :: Fix any of the following: Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio ",
+          "a[href$=\"mensajeros\"] :: Fix any of the following: Element has insufficient color contrast of 2.99 (foreground color: #f26419, background color: #f7f8fc, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "maestro /wallet/mensajeros/<cuenta> botón «Ayuda de esta pantalla» (puerta del asistente)",
+    "estado": "FALLO",
+    "botones": 0
+  },
+  {
+    "id": "maestro /wallet/satelites axe WCAG A/AA",
+    "estado": "FALLO",
+    "violaciones": [
+      {
+        "id": "color-contrast",
+        "impacto": "serious",
+        "ayuda": "Elements must meet minimum color contrast ratio thresholds",
+        "nodos": 5,
+        "ejemplo": [
+          ".font-semibold.whitespace-nowrap.text-xs :: Fix any of the following: Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio ",
+          ".hover\\:bg-primary\\/80 :: Fix any of the following: Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "maestro /wallet/satelites botón «Ayuda de esta pantalla» (puerta del asistente)",
+    "estado": "OK",
+    "botones": 1
+  },
+  {
+    "id": "maestro /wallet/satelites/<cuenta> axe WCAG A/AA",
+    "estado": "FALLO",
+    "violaciones": [
+      {
+        "id": "color-contrast",
+        "impacto": "serious",
+        "ayuda": "Elements must meet minimum color contrast ratio thresholds",
+        "nodos": 6,
+        "ejemplo": [
+          ".font-semibold.whitespace-nowrap.text-xs :: Fix any of the following: Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio ",
+          ".rounded-sm :: Fix any of the following: Element has insufficient color contrast of 2.99 (foreground color: #f26419, background color: #f7f8fc, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "maestro /wallet/satelites/<cuenta> botón «Ayuda de esta pantalla» (puerta del asistente)",
+    "estado": "FALLO",
+    "botones": 0
+  },
+  {
+    "id": "teclado: «Registrar un movimiento» abre con Enter, el foco entra y Escape lo devuelve",
+    "estado": "OK",
+    "focoDentro": true,
+    "focoTrasEscape": "Registrar un movimiento"
+  },
+  {
+    "id": "axe del diálogo de registrar (Sueldo)",
+    "estado": "FALLO",
+    "violaciones": [
+      {
+        "id": "color-contrast",
+        "impacto": "serious",
+        "ayuda": "Elements must meet minimum color contrast ratio thresholds",
+        "nodos": 1,
+        "ejemplo": [
+          ".justify-end.flex-wrap > .hover\\:bg-primary\\/80.bg-primary.text-primary-foreground :: Fix any of the following: Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ERROR",
+    "estado": "FALLO",
+    "rol": "maestro",
+    "error": "locator.focus: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('table', { name: 'Libro de movimientos' }).getByRole('button', { name: /^Ver Sueldo/ }).first()\u001b[22m\n"
+  },
+  {
+    "id": "tienda /mi-wallet axe WCAG A/AA",
+    "estado": "FALLO",
+    "violaciones": [
+      {
+        "id": "color-contrast",
+        "impacto": "serious",
+        "ayuda": "Elements must meet minimum color contrast ratio thresholds",
+        "nodos": 3,
+        "ejemplo": [
+          ".group\\/badge :: Fix any of the following: Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio ",
+          ".hover\\:bg-primary\\/80 :: Fix any of the following: Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "tienda /mi-wallet botón «Ayuda de esta pantalla» (puerta del asistente)",
+    "estado": "OK",
+    "botones": 1
+  }
+]

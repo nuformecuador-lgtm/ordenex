@@ -1,0 +1,243 @@
+[
+  {
+    "id": "filtro libro «Entra»",
+    "estado": "OK",
+    "direcciones": [
+      "Entra"
+    ],
+    "filasPagina": 20,
+    "paginacion": "1-20 de 38 ‹ ›",
+    "tarjetas": {
+      "cifra": "₡13.585.733,22",
+      "entro": "₡13.585.733,22",
+      "salio": "₡0",
+      "movimientos": "38",
+      "deTiendas": "₡140.636,10",
+      "ganancia": "₡13.445.097,12",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "filtro libro «Sale»",
+    "estado": "OK",
+    "direcciones": [
+      "Sale"
+    ],
+    "filasPagina": 16,
+    "paginacion": "1-16 de 16 ‹ ›",
+    "tarjetas": {
+      "cifra": "-₡101.800,50",
+      "entro": "₡0",
+      "salio": "₡101.800,50",
+      "movimientos": "16",
+      "deTiendas": "₡7.034",
+      "ganancia": "-₡108.834,50",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "filtro libro «Todo»",
+    "estado": "OK",
+    "direcciones": [
+      "Entra",
+      "Sale"
+    ],
+    "filasPagina": 20,
+    "paginacion": "1-20 de 54 ‹ ›",
+    "tarjetas": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "filtro libro categoría «Sueldo»",
+    "estado": "FALLO",
+    "elegido": "Sueldo (2)",
+    "filas": 20,
+    "tarjetas": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "filtro libro periodo 2026-09-24",
+    "estado": "OK",
+    "filasPagina": 14,
+    "sqlDelDia": 14,
+    "tarjetas": {
+      "cifra": "₡27.000",
+      "entro": "₡38.500",
+      "salio": "₡11.500",
+      "movimientos": "14",
+      "deTiendas": "₡21.157,31",
+      "ganancia": "₡5.842,69",
+      "capital": "₡0"
+    },
+    "paginacion": "1-14 de 14 ‹ ›"
+  },
+  {
+    "id": "filtro libro «A quién» Tania",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "25",
+      "50",
+      "Todos",
+      "Cajero R458F-maestro · Nombre anotado · 2 movimientos",
+      "Librería R458F-maestro · Nombre anotado · 4 movimientos",
+      "Marco Mensajero · Mensajero · 19 movimientos",
+      "Pedro R458F-maestro · Nombre anotado · 4 movimientos",
+      "Quino QUEPOS · Mensajero · 7 movimientos",
+      "Rita Recorrido · Mensajero · 7 movimientos",
+      "Tania Tienda · Tienda · 8 movimientos"
+    ],
+    "elegido": "Tania Tienda · Tienda · 8 movimientos",
+    "filasPagina": 8,
+    "tarjetas": {
+      "cifra": "₡0",
+      "entro": "₡4.000",
+      "salio": "₡4.000",
+      "movimientos": "8",
+      "deTiendas": "₡0",
+      "ganancia": "₡0",
+      "capital": "₡0"
+    },
+    "uuidEnOpciones": false
+  },
+  {
+    "id": "filtro libro «A quién» Marco",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "25",
+      "50",
+      "Todos",
+      "Cajero R458F-maestro · Nombre anotado · 2 movimientos",
+      "Librería R458F-maestro · Nombre anotado · 4 movimientos",
+      "Marco Mensajero · Mensajero · 19 movimientos",
+      "Pedro R458F-maestro · Nombre anotado · 4 movimientos",
+      "Quino QUEPOS · Mensajero · 7 movimientos",
+      "Rita Recorrido · Mensajero · 7 movimientos",
+      "Tania Tienda · Tienda · 8 movimientos"
+    ],
+    "elegido": "Marco Mensajero · Mensajero · 19 movimientos",
+    "filasPagina": 19,
+    "tarjetas": {
+      "cifra": "₡125.100",
+      "entro": "₡152.900",
+      "salio": "₡27.800",
+      "movimientos": "19",
+      "deTiendas": "₡126.512,79",
+      "ganancia": "-₡1.412,79",
+      "capital": "₡0"
+    },
+    "uuidEnOpciones": false
+  },
+  {
+    "id": "filtros: «Limpiar» devuelve las tarjetas",
+    "estado": "OK",
+    "base": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "tras": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "descarga del libro sin ids",
+    "estado": "OK",
+    "nombreArchivo": "libro-de-movimientos-2026-09-26.xlsx",
+    "uuidEnNombre": false,
+    "hojas": [
+      "Libro de movimientos"
+    ],
+    "filas": 55,
+    "cabecera": [
+      "Fecha",
+      "Movimiento",
+      "Motivo y origen",
+      "A quién",
+      "Entra o sale",
+      "Monto",
+      "Dueño",
+      "Registró"
+    ],
+    "primeras": [
+      [
+        "Fecha",
+        "Movimiento",
+        "Motivo y origen",
+        "A quién",
+        "Entra o sale",
+        "Monto",
+        "Dueño",
+        "Registró"
+      ],
+      [
+        "2026-09-26",
+        "Corrección de caja (suma)",
+        "Incidente de orden · guía 75067153 · Anulación de: Indemnización que Ordenex paga por un incidente",
+        "Tania Tienda",
+        "Entra",
+        "4000.00",
+        "Ordenex",
+        "Maestro QA"
+      ],
+      [
+        "2026-09-26",
+        "Indemnización que Ordenex paga por un incidente",
+        "Incidente de orden · guía 75067153",
+        "Tania Tienda",
+        "Sale",
+        "4000.00",
+        "Ordenex",
+        "Automático · Incidente resuelto por Maestro QA"
+      ],
+      [
+        "2026-09-26",
+        "Flete por rechazo cobrado a la tienda anulado",
+        "Gestión de orden · cobro por rechazo · guía 57202592",
+        "Tania Tienda",
+        "Sale",
+        "1800.00",
+        "Ordenex",
+        "Maestro QA"
+      ]
+    ],
+    "ultima": [
+      "2026-08-11",
+      "Corrección de caja (suma)",
+      "Registrado a mano · Cobro consolidado ruta norte",
+      "—",
+      "Entra",
+      "12345678.90",
+      "Ordenex",
+      "Ana Admin"
+    ],
+    "uuid": false,
+    "crudo": false,
+    "muestraCrudo": []
+  }
+]

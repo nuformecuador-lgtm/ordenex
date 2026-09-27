@@ -1,0 +1,25 @@
+[
+  {
+    "id": "gastos fijos: el admin ve la cola y NO la decide",
+    "estado": "OK",
+    "nota": "transcrito de la consola de la primera corrida (su .json lo sobrescribió la segunda, que solo anuló: gasto-fijo-anular.json)",
+    "texto": "Cobros de gasto fijo por aprobar Nadie los cobró todavía: el dinero sigue en la caja y esperan tu decisión. 1 por aprobar Concepto Período Monto Generado el R458F- Alquiler de bodega septiembre de 2026 ₡7.000 26 de septiembre de 2026",
+    "botones": []
+  },
+  {
+    "id": "R7/R8 antes de aprobar el gasto fijo",
+    "estado": "OK",
+    "entro": "13617233.22", "salio": "133300.50", "cifra": "13483932.72", "ganancia": "13336262.62", "de_tiendas": "147670.10", "capital": "0", "suma_saldos": "147670.10", "diferencia_r8": "0.00", "diferencia_r7": "0.00"
+  },
+  {
+    "id": "gastos fijos: el maestro aprueba",
+    "estado": "INFO",
+    "cola": "Cobros de gasto fijo por aprobar … R458F- Alquiler de bodega septiembre de 2026 ₡7.000 26 de septiembre de 2026 Aprobar Rechazar",
+    "botones": ["Aprobar", "Rechazar"]
+  },
+  {
+    "id": "R7/R8 tras aprobar el gasto fijo",
+    "estado": "OK",
+    "entro": "13617233.22", "salio": "140300.50", "cifra": "13476932.72", "ganancia": "13329262.62", "de_tiendas": "147670.10", "capital": "0", "suma_saldos": "147670.10", "diferencia_r8": "0.00", "diferencia_r7": "0.00"
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "rol": "maestro",
+    "ruta": "/wallet/tiendas",
+    "pregunta": "En el estado de cuenta de una tienda, ¿qué es el saldo corrido de cada fila y por qué la primera fila dice «Saldo inicial»?",
+    "respuesta": "En el estado de cuenta de una tienda, la tabla es el extracto, ordenado del movimiento más antiguo al más reciente. Cada fila trae, además del concepto y el motivo, el saldo de la tienda justo después de ese movimiento: es un saldo corrido, no un total aparte — vas viendo cómo se mueve la cuenta paso a paso. La primera fila dice «Saldo inicial» porque no es un movimiento en sí: es el saldo que la tienda tenía al terminar el día anterior al periodo que estás mirando. Sirve de punto de partida para que el resto de la tabla tenga sentido — si filtrás por un periodo más corto, esa primera fila cambia y pasa a mostrar el saldo con el que la tienda arrancó ese periodo en concreto. Por eso siempre se cumple: saldo inicial más abonos del periodo menos cargos del periodo da el saldo final — y ese saldo final es el mismo número que aparece en la última fila y en la tarjeta de arriba. Un detalle importante: si filtrás por chips (Cierres, Pagos, Cobros, Correcciones) o por un cierre concreto, el saldo de cada fila sigue siendo el de la cuenta entera, no el del filtro — por eso no lo vas a ver bajar de a poco como si los movimientos fuera del filtro no existieran. Wallet · Tiendas",
+    "uuid": false,
+    "crudo": false
+  }
+]

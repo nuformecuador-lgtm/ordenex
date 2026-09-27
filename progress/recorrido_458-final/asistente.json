@@ -1,0 +1,31 @@
+[
+  {
+    "rol": "maestro",
+    "ruta": "/wallet",
+    "pregunta": "Registré un sueldo por error. ¿Cómo lo anulo y qué pasa con la ganancia de Ordenex?",
+    "respuesta": "Para anular un sueldo registrado por error: 1. Andá al libro de movimientos en Wallet · Caja. 2. Buscá la fila del sueldo y tocá Ver. 3. Tocá Anular… y escribí el motivo (es obligatorio). Qué pasa después: - Se registra automáticamente una Corrección de caja (suma) por el mismo monto, con fecha de hoy. - La caja y la ganancia de Ordenex vuelven a subir en ese monto. - La fila original del sueldo queda marcada como Anulado y se ve tachada, pero no se borra: el registro, su comprobante y su historial quedan intactos. - Una anulación no se deshace. Si al intentarlo te dice «Ya estaba anulado; no se registró nada más», es que alguien se te adelantó. Wallet · Caja",
+    "uuid": false,
+    "crudo": false
+  },
+  {
+    "rol": "maestro",
+    "pregunta": "¿Qué es el saldo corrido de cada fila y por qué la primera fila dice «Saldo inicial»?",
+    "error": "locator.click: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Ayuda de esta pantalla' })\u001b[22m\n"
+  },
+  {
+    "rol": "admin",
+    "ruta": "/wallet",
+    "pregunta": "Veo «Cobros de gasto fijo por aprobar». ¿Los puedo aprobar yo?",
+    "respuesta": "No lo sé con certeza qué acción específica tenés disponible ahí. Lo que dice la documentación es que los gastos fijos se cobran solos desde sus plantillas, y que \"los que quedan pendientes de cobrar aparecen en su propio panel\" dentro de Wallet · Caja. No tengo el detalle de si ese panel pide una aprobación manual o si el cobro se dispara automáticamente. Te recomiendo entrar a ese panel y revisar qué opciones te muestra la propia pantalla, o preguntarle a alguien de la oficina que ya haya gestionado gastos fijos antes. Wallet · Caja",
+    "uuid": false,
+    "crudo": false
+  },
+  {
+    "rol": "tienda",
+    "ruta": "/mi-wallet",
+    "pregunta": "¿Por qué una fila dice «Anulado por Ordenex» y cómo cambia eso mi saldo?",
+    "respuesta": "Te lo explico con lo que ves en Mi wallet. Un movimiento anulado no desaparece de tu extracto: se queda en su lugar, pero tachado, con la leyenda «Anulado por Ordenex», el día y la hora (de Costa Rica) en que se anuló y el motivo. Cómo afecta a tu saldo: - El movimiento original no se borra ni cambia su efecto pasado. - La anulación aparece como otra fila aparte, marcada como Anulación, que revierte el monto: - Si Ordenex anuló un pago que te había hecho a vos, ves una línea «Ordenex anuló un pago hecho por ti» que suma a tu favor. - Si Ordenex anuló un cobro que te había hecho, ves «Ordenex anuló un cobro y te lo devolvió», también sumando a tu favor. - Si Ordenex anuló por error un pago que vos le hiciste, ves «Ordenex anuló el pago que le hiciste», y ahí tu saldo vuelve a bajar. Un detalle importante: si Ordenex te pagó y después anuló ese pago, el pago original sigue contando en «Ya pagado» y la devolución sigue sumando en «A tu favor» del resumen de arriba. Esas dos cifras quedan más altas de lo que en realidad se movió. El número que ya tiene todo esto descontado y es el correcto es tu Saldo a favor. Si un cobro o pago no te cuadra, la anulación la hace la oficina — desde tu wallet solo la ves reflejada, no se anula nada desde ahí. Mi wallet",
+    "uuid": false,
+    "crudo": false
+  }
+]
