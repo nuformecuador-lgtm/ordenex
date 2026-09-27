@@ -141,8 +141,12 @@ function efectosReales(): EfectosDelPaso {
         // El motivo NUNCA lleva el valor: este texto acaba en el log de un build.
         throw new Error(`no se pudo leer la semilla del SINPE: ${semilla.motivo}`);
       }
-      const { PrismaClient } = await import("@prisma/client");
-      const prisma = new PrismaClient();
+      // Hotfix: Prisma 7 no admite construir el cliente sin opciones ni adaptador —murio asi en el build de
+      // produccion—. Se usa la MISMA fabrica que la app (PrismaPg con la DATABASE_URL que se acaba
+      // de caer a DIRECT_URL arriba). Es un singleton: tras desconectarlo se suelta, para que
+      // `sembrar` (corre despues, misma fabrica) construya uno nuevo y no herede un pool cerrado.
+      const { getPrismaClient } = await import("@/lib/db/prisma-client");
+      const prisma = getPrismaClient();
       try {
         const { rellenadas, intactas } = await sembrarSinpeInicial(prisma, semilla);
         console.log(
@@ -150,6 +154,7 @@ function efectosReales(): EfectosDelPaso {
         );
       } finally {
         await prisma.$disconnect();
+        globalThis.__prisma__ = undefined;
       }
     },
     sembrar: () => {
