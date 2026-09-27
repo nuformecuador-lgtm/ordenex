@@ -24,6 +24,7 @@ fuentes:
   - components/shared/wallet/DetalleMovimientoPanel.tsx
   - lib/actions/wallet-anulacion.ts
   - lib/services/EstadoCuentaService.ts
+  - lib/repositories/EstadoCuentaRepository.ts
   - lib/utils/estado-cuenta-chips.ts
 ---
 
@@ -51,8 +52,9 @@ movimiento con su fecha, su concepto, el motivo, **de dónde viene** con nombre 
 referencia), **quién lo registró** y el **saldo** del mensajero justo después. Se filtra con los chips
 **Todo · Cierres · Pagos · Premios · Correcciones**, con **Desde** / **Hasta** (días de Costa Rica) y
 por **cierre**: un selector con búsqueda que solo ofrece los cierres con movimientos de este mensajero,
-cada uno con su día; se busca por un día o por el nombre. El saldo de cada fila es siempre el de la
-cuenta entera.
+cada uno con su día; se busca por un día o por el nombre. Al elegir un cierre se ven sus filas **y los
+pagos registrados contra ese cierre, con sus anulaciones**; el número de movimientos del selector ya
+los cuenta. El saldo de cada fila es siempre el de la cuenta entera.
 
 Las filas que vienen de un cierre tienen una flecha al principio. Al abrirla, el pago de un cierre **no
 se reparte orden por orden**: es el total que ese cierre dejó anotado para pagarle al mensajero, y el

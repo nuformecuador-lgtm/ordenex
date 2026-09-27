@@ -31,7 +31,9 @@ export interface VentanaDeLibro {
   /**
    * FICHA 458-D (servidor, R10/R12) — solo las filas que nacen de ESE cierre (`origen_tipo =
    * 'cierre_dia' AND origen_id = cierreId`), DENTRO de la cuenta: se aplica fuera de la ventana, como
-   * el chip, asi que el corrido sigue siendo el de la cuenta entera. Sin efecto en la bodega.
+   * el chip, asi que el corrido sigue siendo el de la cuenta entera. En el MENSAJERO trae ademas los
+   * pagos registrados contra ese cierre y sus anulaciones (172 R52: `pago_mensajero` cuyo
+   * `liquidacion_pago.cierre_id` es este cierre, del mismo mensajero). Sin efecto en la bodega.
    */
   cierreId?: string;
   skip: number;

@@ -92,15 +92,42 @@ function filtroDeChip(pares: ParDeChip[] | null, conPremio: boolean): Prisma.Sql
 const desdeSql = (desde?: Date) => (desde === undefined ? Prisma.empty : Prisma.sql` AND l.fecha_movimiento >= ${desde}`);
 
 /**
- * FICHA 458-D (servidor, R10/R12) — el filtro de CIERRE: las filas que nacen de ese cierre. Se aplica
- * sobre `libro`, que YA esta acotado a la cuenta (`tienda_id` / `mensajero_id` dentro de la ventana):
+ * FICHA 458-D (servidor, R10/R12) — el filtro de CIERRE de la TIENDA: las filas que nacen de ese
+ * cierre. Se aplica sobre `libro`, que YA esta acotado a la cuenta (`tienda_id` dentro de la ventana):
  * un cierre de otra cuenta no casa ninguna fila. Mutacion M-D1 (quitar la condicion del cierre) →
  * roja en `estado-cuenta-servidor-458d`.
+ *
+ * En la tienda no hay rama de pagos: ningun documento de pago a una tienda se ata a un cierre
+ * (`liquidacion_pago_cierre_check`: `cierre_id` NOT NULL sii el beneficiario es un mensajero; y
+ * `abono_tienda`, `pago_por_cuenta_tienda` y `cobro_tienda` no tienen columna de cierre). El desglose
+ * retirado de la tienda tambien filtraba solo por `cierre_dia`.
  */
-const cierreSql = (cierreId?: string) =>
+const cierreDeTiendaSql = (cierreId?: string) =>
   cierreId === undefined
     ? Prisma.empty
     : Prisma.sql` AND l.origen_tipo = 'cierre_dia' AND l.origen_id = ${cierreId}`;
+
+/**
+ * FICHA 458-D (revision B1, 172 R52) — el filtro de CIERRE del MENSAJERO: lo que nacio del cierre
+ * (`cierre_dia`) Y los pagos registrados contra ese cierre con sus anulaciones (`pago_mensajero` cuyo
+ * documento `liquidacion_pago` lleva `cierre_id = <cierre>`; el contra-asiento comparte `origen_id`
+ * con su pago, asi que la rama lo trae por el documento y no por la categoria). Es la semantica del
+ * desglose retirado (`PagoMensajeroMovimientoRepository.buildFiltrosWhere`).
+ *
+ * La cuenta va SIEMPRE en el WHERE: el `libro` ya esta acotado por `mensajero_id`, y la subconsulta
+ * del documento vuelve a exigir el MISMO mensajero, asi que un cierre de otro mensajero no casa nada.
+ * Mutacion «sin la rama del pago» → roja en `estado-cuenta-cierre-pagos-172r52`.
+ */
+const cierreDeMensajeroSql = (mensajeroId: string, cierreId?: string) =>
+  cierreId === undefined
+    ? Prisma.empty
+    : Prisma.sql` AND (
+        (l.origen_tipo = 'cierre_dia' AND l.origen_id = ${cierreId})
+        OR (l.origen_tipo = 'pago_mensajero' AND l.origen_id IN (
+          SELECT lp.id FROM liquidacion_pago lp
+          WHERE lp.cierre_id = ${cierreId} AND lp.mensajero_id = ${mensajeroId}
+        ))
+      )`;
 
 /**
  * FICHA 458-B (design §3.2, R16–R25) — las lecturas del estado de cuenta. SOLO queries.
@@ -160,7 +187,7 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
         FROM wallet_tienda_movimiento m
         WHERE m.tienda_id = ${tiendaId}${hasta}
       )`;
-    return this.paginar(libro, v, false);
+    return this.paginar(libro, v, false, cierreDeTiendaSql(v.cierreId));
   }
 
   async paginaDeMensajero(mensajeroId: string, v: VentanaDeLibro): Promise<PaginaDeLibro> {
@@ -175,7 +202,7 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
         FROM pago_mensajero_movimiento m
         WHERE m.mensajero_id = ${mensajeroId}${hasta}
       )`;
-    return this.paginar(libro, v, true);
+    return this.paginar(libro, v, true, cierreDeMensajeroSql(mensajeroId, v.cierreId));
   }
 
   /**
@@ -222,8 +249,13 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
     return { filas: filas.map(aFila), total };
   }
 
-  private async paginar(libro: Prisma.Sql, v: VentanaDeLibro, conPremio: boolean): Promise<PaginaDeLibro> {
-    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, conPremio)}${cierreSql(v.cierreId)}`;
+  private async paginar(
+    libro: Prisma.Sql,
+    v: VentanaDeLibro,
+    conPremio: boolean,
+    filtroDeCierre: Prisma.Sql,
+  ): Promise<PaginaDeLibro> {
+    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, conPremio)}${filtroDeCierre}`;
     const filas = await this.prisma.$queryRaw<FilaCruda[]>`
       ${libro}
       SELECT l.id, l.tipo, l.categoria, l.origen_tipo, l.origen_id, l.descripcion, l.registrado_por,
