@@ -1,7 +1,7 @@
 ---
 titulo: Wallet · Satélites
 modulo: wallet
-pantalla: /wallet/satelites
+pantalla: /wallet/satelites, /wallet/satelites/[zonaId]
 roles: [maestro, admin]
 actualizado: 2026-09-26
 fuentes:

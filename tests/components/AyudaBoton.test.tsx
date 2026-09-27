@@ -41,7 +41,7 @@ vi.mock("next/navigation", () => ({
 const resumenes = await leerResumenesAyuda();
 
 /** Monta el botón como lo monta la aplicación: con el mapa YA acotado al rol. */
-type RolDePrueba = "mensajero" | "maestro" | "adminTienda" | "adminSatelite";
+type RolDePrueba = "mensajero" | "maestro" | "admin" | "adminTienda" | "adminSatelite";
 
 function montar(ruta: string, rol: RolDePrueba) {
   rutaActual = ruta;
@@ -259,5 +259,75 @@ describe("R13 — sin proveedor no se pinta nada (y no revienta)", () => {
     rutaActual = "/wallet";
     render(<AyudaBoton />);
     expect(boton()).toBeNull();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 458 — F1 DEL RECORRIDO FINAL: LAS TRES RUTAS DINÁMICAS DEL PORTAL.
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// El recorrido midió 0 botones «Ayuda de esta pantalla» en los tres estados de cuenta de la
+// 458-D: la URL real (`/wallet/tiendas/<id>`) nunca era igual al `pantalla:` del documento. Los
+// ids de abajo son inventados a propósito: el «?» no depende de que la cuenta exista.
+describe("458/F1 — los estados de cuenta tienen «?», con el documento de su listado", () => {
+  it.each([
+    ["/wallet/tiendas/5b1c2d3e-0000-4000-8000-000000000001", "oficina/wallet-tiendas"],
+    ["/wallet/mensajeros/7a8b9c0d-0000-4000-8000-000000000002", "oficina/wallet-mensajeros"],
+    ["/wallet/satelites/zona-quepos-3", "oficina/wallet-satelites"],
+  ] as Array<[string, string]>)("en %s, para el maestro y para el admin", (ruta, slug) => {
+    const { unmount } = montar(ruta, "maestro");
+    expect(boton()).toHaveAttribute("data-ayuda-slug", slug);
+    unmount();
+
+    montar(ruta, "admin");
+    expect(boton()).toHaveAttribute("data-ayuda-slug", slug);
+  });
+
+  it("los listados siguen con su documento de siempre (la coincidencia exacta no se pierde)", () => {
+    for (const [ruta, slug] of [
+      ["/wallet", "oficina/wallet-caja"],
+      ["/wallet/tiendas", "oficina/wallet-tiendas"],
+      ["/wallet/mensajeros", "oficina/wallet-mensajeros"],
+      ["/wallet/satelites", "oficina/wallet-satelites"],
+    ]) {
+      const { unmount } = montar(ruta, "maestro");
+      expect(boton()).toHaveAttribute("data-ayuda-slug", slug);
+      unmount();
+    }
+  });
+
+  it("un segmento de más o uno vacío NO heredan la ayuda (no hay caída al padre)", () => {
+    for (const ruta of ["/wallet/tiendas/5b1c/extra", "/wallet/tiendas/", "/wallet/cajas/5b1c"]) {
+      const { unmount } = montar(ruta, "maestro");
+      expect(boton()).toBeNull();
+      unmount();
+    }
+  });
+
+  it("y siguen siendo de la oficina: ni la tienda ni el mensajero reciben «?» ahí", () => {
+    const { unmount } = montar("/wallet/tiendas/5b1c", "adminTienda");
+    expect(boton()).toBeNull();
+    unmount();
+
+    montar("/wallet/mensajeros/7a8b", "mensajero");
+    expect(boton()).toBeNull();
+  });
+
+  it("⭑ y el «?» abre el asistente con la ayuda de esa pantalla", async () => {
+    const usuario = userEvent.setup();
+    rutaActual = "/wallet/tiendas/5b1c2d3e-0000-4000-8000-000000000001";
+    render(
+      <AsistenteProvider fetchImpl={() => Promise.reject(new Error("la suite no toca la red"))}>
+        <AyudaProvider mapa={mapaRutaDocumento(resumenes, "maestro")}>
+          <AyudaBoton />
+        </AyudaProvider>
+        <AsistentePanel />
+      </AsistenteProvider>,
+    );
+    await usuario.click(boton()!);
+
+    const panel = await screen.findByRole("dialog");
+    expect(
+      within(panel).getByRole("link", { name: /Leer la ayuda de esta pantalla/ }),
+    ).toHaveAttribute("href", "/ayuda/oficina/wallet-tiendas");
   });
 });

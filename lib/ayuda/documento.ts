@@ -260,6 +260,49 @@ export function candidatosRutaDocumento(
   return porRuta;
 }
 
+/**
+ * ⭑ FICHA 458 (F1 del recorrido final) — ¿LA RUTA DEL NAVEGADOR ES LA PANTALLA QUE DECLARA EL
+ * DOCUMENTO?
+ *
+ * `pantalla:` se escribe con la forma en la que la ruta existe en el repositorio —
+ * `/wallet/tiendas/[tiendaId]`, igual que `/paquete/[numGuia]`—, pero el navegador trae la URL
+ * real (`/wallet/tiendas/5b1c…`). Comparar las dos con `===` dejaba sin «?» (y sin asistente) a
+ * las tres rutas dinámicas del portal, que es justo lo que midió el recorrido final de la 458.
+ *
+ * La regla es estrecha a propósito, para no caer nunca al PADRE de la ruta (ver `AyudaBoton`):
+ * mismo número de segmentos, los literales iguales, y un `[x]` casa con UN segmento no vacío.
+ * El comodín `[...x]` no se admite: ninguna pantalla con documento lo usa (el único es
+ * `/ayuda/[...slug]`, que no lleva «?» porque ya estás dentro de la ayuda).
+ */
+export function rutaCasaConPantalla(pantalla: string, ruta: string): boolean {
+  if (pantalla === ruta) return true;
+  if (!pantalla.includes("[")) return false;
+  const esperados = pantalla.split("/");
+  const reales = ruta.split("/");
+  if (esperados.length !== reales.length) return false;
+  return esperados.every((segmento, i) => {
+    const real = reales[i];
+    if (/^\[[^.[\]][^[\]]*\]$/.test(segmento)) return real !== "";
+    return segmento === real;
+  });
+}
+
+/**
+ * El slug que el mapa del «?» ofrece para `ruta`: primero la coincidencia EXACTA y, si no la hay,
+ * la pantalla dinámica que case. Si casaran dos patrones, gana el que tenga MENOS segmentos
+ * dinámicos (el más específico), y a igualdad el primero por orden alfabético del patrón: un
+ * desempate escrito, no el orden de inserción del objeto.
+ */
+export function slugParaRuta(mapa: Readonly<Record<string, string>>, ruta: string): string | undefined {
+  const exacto = mapa[ruta];
+  if (exacto !== undefined) return exacto;
+  const dinamicos = (patron: string) => (patron.match(/\[/g) ?? []).length;
+  const candidato = Object.keys(mapa)
+    .filter((patron) => patron.includes("[") && rutaCasaConPantalla(patron, ruta))
+    .sort((a, b) => dinamicos(a) - dinamicos(b) || a.localeCompare(b, "es"))[0];
+  return candidato === undefined ? undefined : mapa[candidato];
+}
+
 /** Un grupo del índice, con su etiqueta ya resuelta. */
 export interface GrupoAyuda {
   clave: string;

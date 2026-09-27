@@ -1,7 +1,7 @@
 ---
 titulo: Wallet · Tiendas
 modulo: wallet
-pantalla: /wallet/tiendas
+pantalla: /wallet/tiendas, /wallet/tiendas/[tiendaId]
 roles: [maestro, admin]
 actualizado: 2026-09-26
 fuentes:

@@ -1,7 +1,7 @@
 import type { RolValue } from "@prisma/client";
 
 import type { DocumentoAyuda } from "@/lib/ayuda/documento";
-import { documentosQuePuedeLeer } from "@/lib/ayuda/documento";
+import { documentosQuePuedeLeer, rutaCasaConPantalla } from "@/lib/ayuda/documento";
 import type { DocumentoContexto } from "@/lib/interfaces/external/IAsistenteProvider";
 
 /**
@@ -61,7 +61,13 @@ export function documentoDePartida(
   if (rutaActual === undefined || rutaActual === "") return null;
   const entregados = new Set(contexto.map((doc) => doc.slug));
   const candidatos = docs
-    .filter((doc) => entregados.has(doc.slug) && doc.rutas.includes(rutaActual))
+    // ⭑ FICHA 458 (F1) — la misma regla que el «?» (`rutaCasaConPantalla`): el estado de cuenta
+    // llega como `/wallet/tiendas/<id>` y el documento declara `/wallet/tiendas/[tiendaId]`.
+    .filter(
+      (doc) =>
+        entregados.has(doc.slug) &&
+        doc.rutas.some((pantalla) => rutaCasaConPantalla(pantalla, rutaActual)),
+    )
     .map((doc) => doc.slug)
     .sort((a, b) => a.localeCompare(b, "es"));
   return candidatos[0] ?? null;

@@ -1,7 +1,7 @@
 ---
 titulo: Wallet · Mensajeros
 modulo: wallet
-pantalla: /wallet/mensajeros
+pantalla: /wallet/mensajeros, /wallet/mensajeros/[mensajeroId]
 roles: [maestro, admin]
 actualizado: 2026-09-26
 fuentes:

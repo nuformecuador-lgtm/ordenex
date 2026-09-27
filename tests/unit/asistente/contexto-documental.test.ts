@@ -93,4 +93,21 @@ describe("R27 (la mitad de servidor) — el documento de PARTIDA sale del contex
     const suyo = contextoPara(docs, "maestro");
     expect(documentoDePartida(docs, suyo, "/wallet")).toBe("oficina/wallet-caja");
   });
+
+  // ⭑ FICHA 458 (F1 del recorrido final) — los estados de cuenta llegan con la URL REAL.
+  it("⭑ desde un estado de cuenta (ruta dinámica) el de partida es el de su listado", () => {
+    const suyo = contextoPara(docs, "admin");
+    expect(documentoDePartida(docs, suyo, "/wallet/tiendas/5b1c2d3e-0000-4000-8000-000000000001")).toBe(
+      "oficina/wallet-tiendas",
+    );
+    expect(documentoDePartida(docs, suyo, "/wallet/mensajeros/7a8b")).toBe("oficina/wallet-mensajeros");
+    expect(documentoDePartida(docs, suyo, "/wallet/satelites/zona-quepos")).toBe("oficina/wallet-satelites");
+    // Un segmento de más no hereda nada.
+    expect(documentoDePartida(docs, suyo, "/wallet/tiendas/5b1c/extra")).toBeNull();
+  });
+
+  it("⭑ y la ruta dinámica tampoco abre puertas a quien no lee la oficina", () => {
+    const suyo = contextoPara(docs, "adminTienda");
+    expect(documentoDePartida(docs, suyo, "/wallet/tiendas/5b1c")).toBeNull();
+  });
 });
