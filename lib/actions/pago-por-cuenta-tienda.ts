@@ -141,7 +141,7 @@ export async function anularPagoPorCuentaTiendaAction(
 /**
  * R57 — el enlace temporal del comprobante (acceso total, o la tienda duena).
  *
- * @sin-superficie FICHA 458-C (TC.3/TC.5, decision, no deuda): el panel «Ver» del libro pide TODO comprobante por `verComprobanteAction({ destino })`, que tambien lee el de este documento (458-B, R77). Se conserva para la 458-D, que decide si `/mi-wallet` la usa (TD.5).
+ * @sin-superficie FICHA 458-C/458-D (decision, no deuda): el panel «Ver» del libro (458-C) y «Ver comprobante» de `/mi-wallet` (458-D, TD.5) piden TODO comprobante por `verComprobanteAction({ destino })`, que tambien lee el de este documento (458-B, R77): un solo camino para la oficina y para la tienda. NO se retira (458-D servidor, 2026-09-26): sin llamadores en API publica, asistente, scripts ni crons, pero la usan `tests/unit/actions/pago-por-cuenta-y-capital-actions.test.ts` (el borde de la 459) y los dobles de `WalletLedgerAcciones457/459/461.test.tsx` y `WalletFechaCostaRica459.test.tsx`; retirarla exige mover antes esas redes a `verComprobanteAction`.
  */
 export async function obtenerComprobantePagoPorCuentaAction(
   input: unknown,

@@ -91,6 +91,7 @@ function montar(opciones: {
     { obtenerPorId },
     { obtenerPorIdDeTienda },
     { listarOrdenesQueAportan, contarOrdenesDelCierre, obtenerCabeceraDeCierre },
+    { movimientoDeMensajero: vi.fn(async () => null) }, // 458-D: este archivo no abre filas del mensajero
   );
   return {
     service,

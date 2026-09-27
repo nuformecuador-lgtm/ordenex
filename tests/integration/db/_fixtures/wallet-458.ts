@@ -7,6 +7,8 @@ import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/Rechaz
 import { SaldosSatelitesRepository } from "@/lib/repositories/SaldosSatelitesRepository";
 import { ConciliacionSatelitesService } from "@/lib/services/ConciliacionSatelitesService";
 import { EstadoCuentaService } from "@/lib/services/EstadoCuentaService";
+import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleRepository";
+import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
 import type { EstadoCuentaDTO, EstadoCuentaInput, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 
 import type { TxDeTest } from "../_postgres-real";
@@ -356,6 +358,7 @@ export function montarEstadoCuenta(s: Servicios459): EstadoCuentaService {
   return new EstadoCuentaService(
     new EstadoCuentaRepository(s.cliente),
     new RechazoTiendaCobroAnulacionRepository(s.cliente),
+    new OrigenLegibleService(new OrigenLegibleRepository(s.cliente)),
   );
 }
 

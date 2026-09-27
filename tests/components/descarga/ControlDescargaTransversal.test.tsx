@@ -660,7 +660,12 @@ describe("Control de descarga · consistencia transversal", () => {
     // —el censo quiere saber exactamente quién delega el callback—, así que se baja a mano y
     // con el motivo, que es justo lo que la igualdad obliga a hacer: nadie puede retirar un
     // proveedor sin pasar por aquí y explicarlo.
-    expect(MODULOS_PROVEEDORES.length).toBe(3);
+    //
+    // Y DOS desde el cierre de pantalla de la 458-D (T D.5): `MiWalletModule` bajaba el callback a
+    // `DesgloseTiendaLedger` y los dos se retiraron con el libro de `/mi-wallet`; su sustituto, el
+    // estado de cuenta de la tienda, arma el archivo con la lectura COMPLETA del servidor (tope allí,
+    // `limite_excedido`), lo que cubre `tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts`.
+    expect(MODULOS_PROVEEDORES.length).toBe(2);
     for (const modulo of MODULOS_PROVEEDORES) {
       expect(modulo.fuente, `${modulo.ruta} pasa filas sin adaptador`).toMatch(
         /obtenerFilasDescarga=\{[^}]*?(filasDesdeResultado|filasLocales)\(/,

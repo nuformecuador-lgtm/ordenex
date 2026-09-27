@@ -128,16 +128,35 @@ export class FiltrosWalletRepository implements IFiltrosWalletRepository {
     limite: number,
   ): Promise<CierreDeCuentaRow[]> {
     // R11/R12: SOLO los cierres con movimientos en ESTE mensajero; la cuenta, primera en el WHERE.
+    // FICHA 458-D (revision B1, 172 R52): «N movimientos» cuenta lo MISMO que trae el filtro del
+    // estado de cuenta (`EstadoCuentaRepository`): las filas del cierre MAS los pagos registrados
+    // contra el y sus anulaciones (`pago_mensajero` cuyo documento lleva ese `cierre_id`, del MISMO
+    // mensajero). El ORDEN sigue saliendo de las filas del cierre (un pago posterior no lo sube); todo
+    // cierre con un pago tiene filas propias (pagarle exige pendiente > 0, es decir un devengo o un
+    // premio, que cuelgan de `cierre_dia`), asi que la lista de cierres no cambia.
     const grupos = await this.prisma.$queryRaw<GrupoDeCierre[]>(Prisma.sql`
-      SELECT w."origen_id" AS "origenId", COUNT(*)::int AS "movimientos"
-      FROM "pago_mensajero_movimiento" w
-      JOIN "cierre_dia" c ON c."id" = w."origen_id"
+      WITH filas AS (
+        SELECT w."origen_id" AS "cierre_id", w."fecha_movimiento", TRUE AS "del_cierre"
+        FROM "pago_mensajero_movimiento" w
+        WHERE w."mensajero_id" = ${mensajeroId}
+          AND w."origen_tipo"::text = 'cierre_dia'
+        UNION ALL
+        SELECT lp."cierre_id", w."fecha_movimiento", FALSE AS "del_cierre"
+        FROM "pago_mensajero_movimiento" w
+        JOIN "liquidacion_pago" lp ON lp."id" = w."origen_id"
+        WHERE w."mensajero_id" = ${mensajeroId}
+          AND w."origen_tipo"::text = 'pago_mensajero'
+          AND lp."mensajero_id" = ${mensajeroId}
+          AND lp."cierre_id" IS NOT NULL
+      )
+      SELECT f."cierre_id" AS "origenId", COUNT(*)::int AS "movimientos"
+      FROM filas f
+      JOIN "cierre_dia" c ON c."id" = f."cierre_id"
       JOIN "usuario" u ON u."id" = c."mensajero_id"
-      WHERE w."mensajero_id" = ${mensajeroId}
-        AND w."origen_tipo"::text = 'cierre_dia'
+      WHERE TRUE
         ${condicionDeBusqueda(busqueda)}
-      GROUP BY w."origen_id"
-      ORDER BY MAX(w."fecha_movimiento") DESC, w."origen_id" DESC
+      GROUP BY f."cierre_id"
+      ORDER BY MAX(f."fecha_movimiento") FILTER (WHERE f."del_cierre") DESC NULLS LAST, f."cierre_id" DESC
       LIMIT ${limite}
     `);
     return this.conMensajero(grupos);

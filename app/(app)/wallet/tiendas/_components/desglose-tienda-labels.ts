@@ -65,12 +65,6 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
   ajuste_debito: "Corrección en contra de la tienda",
 };
 
-/**
- * La opción «todos» del `Select` de concepto del desglose. El resto ya NO sale del catálogo
- * completo (458-A, R13/R14): son los conceptos con movimientos de ESTA tienda en el periodo, con su
- * número, rotulados desde Ordenex con `CATEGORIA_TIENDA_LABEL` (`opcionesDeConceptos`).
- */
-export const CONCEPTO_TIENDA_TODOS_OPTION = { value: "", label: "Todos los conceptos" } as const;
 
 /**
  * Los CUATRO importes de la cabecera, en el orden de R7 — que es la fórmula leída de
@@ -98,53 +92,9 @@ export const DESGLOSE_TIENDA_LABEL = {
   saldoHint: "Lo que queda tras los cargos y los pagos",
 } as const;
 
-/** Cabeceras de la tabla de movimientos del desglose (mas reciente primero). */
-export const DESGLOSE_TIENDA_COLUMNAS = {
-  fecha: "Fecha",
-  tipo: "Tipo",
-  concepto: "Concepto",
-  monto: "Monto",
-  origen: "Origen",
-} as const;
-
-/**
- * Etiquetas de los filtros server-side del desglose (R18). Son cuatro y no tres: el ledger
- * de una tienda tiene siete categorías vivas —no las dos del mensajero— y «¿cuánto le cobré
- * de IVA de la comisión este mes?» no se responde sin filtrar por concepto.
- */
-export const DESGLOSE_TIENDA_FILTRO_LABEL = {
-  cierre: "Cierre",
-  concepto: "Concepto",
-  conceptoPlaceholder: "Todos los conceptos",
-  desde: "Desde",
-  hasta: "Hasta",
-  aplicar: "Aplicar",
-  limpiar: "Limpiar",
-} as const;
-
-/**
- * R4/R38 — nombres accesibles del desglose y de cada uno de sus controles, TODOS con el
- * nombre de la tienda dentro.
- *
- * No es adorno: la tabla admite varias filas abiertas a la vez, y tres formularios llamados
- * «Filtros del desglose» o tres botones llamados «Descargar» no identificarían nada para
- * quien navega con lector de pantalla. Son funciones (y no literales) para que el día que
- * haya i18n el nombre de la tienda siga siendo un parámetro y no una concatenación suelta
- * dentro del JSX.
- */
-export const DESGLOSE_TIENDA_NOMBRE = {
-  /** Nombre de la región desplegada y base del archivo de la descarga. */
-  region: (tienda: string) => `Desglose de ${tienda}`,
-  filtros: (tienda: string) => `Filtros del desglose de ${tienda}`,
-  concepto: (tienda: string) => `Filtrar por concepto del desglose de ${tienda}`,
-  tabla: (tienda: string) => `Movimientos del desglose de ${tienda}`,
-  paginacion: (tienda: string) => `Paginación del desglose de ${tienda}`,
-  /** Nombre del botón que despliega la fila, en la tabla de saldos. */
-  expandir: (tienda: string) => `Ver desglose de ${tienda}`,
-} as const;
-
-/** R21: el conjunto filtrado sin movimientos se explica, no se deja una tabla muda. */
-export const DESGLOSE_TIENDA_VACIO = "No hay movimientos que coincidan con los filtros.";
-
-/** R5: el fallo se cuenta DENTRO de la fila, sin tumbar la tabla de saldos. */
-export const DESGLOSE_TIENDA_ERROR = "No se pudo cargar el desglose de la tienda.";
+// FICHA 458-D (T D.8): aquí vivían las cabeceras, los filtros, los nombres accesibles, el vacío, el
+// error y la opción «todos» del DESGLOSE de una tienda (`DesgloseMovimientosTienda`), retirado con él
+// (D14). El estado de cuenta que lo sustituye tiene sus textos en
+// `components/shared/estado-cuenta/estado-cuenta-labels.ts` y los de esta pantalla en
+// `estado-cuenta-tienda-labels.ts`. Aquí quedan el diccionario desde Ordenex y los cuatro importes,
+// que `/mi-wallet` sigue leyendo.

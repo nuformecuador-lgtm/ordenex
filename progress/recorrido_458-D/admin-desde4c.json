@@ -1,0 +1,50 @@
+{
+  "rol": "admin",
+  "pasos": [
+    {
+      "paso": "4d anular el cobro desde el panel del estado de cuenta",
+      "ok": true,
+      "panel": "Ordenex le cobra a la tienda 2026-09-26 · Sale ₡200.000 A quién Tania Tienda Por qué Recorrido 458-D: dejar la tienda en contra (admin) De dónde sale Registrado a mano Comprobante Sin comprobante. Adjuntar comprobante Registró Ana Admin Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.473.932,72 Ganancia de Ordenex ₡13.541.262,62 Lo que Ordenex les debe a las tiendas -₡67.329,90 Saldo inicial y aportes ₡0 Saldo de la tienda -₡67.329,90 Anular… Close",
+      "tarjetas": "Saldo actual ₡132.670,10 Ordenex le debe ₡132.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡58.729,90 Saldo al final del periodo ₡132.670,10",
+      "extractoContieneAnulado": true,
+      "extractoContieneAnulacion": true
+    },
+    {
+      "paso": "9 descarga del estado de cuenta",
+      "ok": true,
+      "archivo": "admin-09-estado-de-cuenta-de-tania-tienda-2026-09-26.xlsx"
+    },
+    {
+      "paso": "10 estado de cuenta de Marco",
+      "ok": true,
+      "tarjetas": "Saldo actual ₡5.100 Ordenex le debe ₡5.100 a Marco Mensajero Saldo inicial ₡0 Abonos del periodo ₡15.300 Cargos del periodo ₡10.200 Saldo al final del periodo ₡5.100",
+      "acciones": "Se puede pagar ahora ₡5.100 La suma de los cierres aprobados que un solo pago puede saldar. Sale del servidor. Ordenex le paga al mensajero Para anular un pago, abrí su fila con «Ver»: es la misma anulación que la de Cierres; el pago vuelve a quedar por pagar.",
+      "sinUuid": true
+    },
+    {
+      "paso": "10 reparto de 1.000 al mensajero",
+      "ok": true,
+      "previsualizacion": "Registrar pago a Marco Mensajero El pago queda anotado como documento y no se puede editar: si algo sale mal, se anula y se registra de nuevo. Disponible: ₡5.100 Monto* Puedes registrar un pago parcial: escribe un monto menor. Cómo se reparte este pago Cierre del 2026-08-13 Pago parcial Ver el cierre del 2026-08-13 de Marco Mensajero Se aplica ₡1.000 Pendiente hoy: ₡3.400 · Queda pendiente: ₡2.400 Estos cierres no pueden recibir pago porque no están aprobados: 1 solicitados. Método* Efectivo Referencia Opcional en efectivo: número de recibo, si lo hay. Fecha del pago* El día en que se entregó el dinero. No puede ser posterior a hoy. Nota Opcional. Queda guardada junto al comprobante. Cancela",
+      "tarjetasTras": "Saldo actual ₡4.100 Ordenex le debe ₡4.100 a Marco Mensajero Saldo inicial ₡0 Abonos del periodo ₡15.300 Cargos del periodo ₡11.200 Saldo al final del periodo ₡4.100"
+    },
+    {
+      "paso": "10 anular el pago desde el estado de cuenta (R70)",
+      "ok": true,
+      "tarjetasTras": "Saldo actual ₡5.100 Ordenex le debe ₡5.100 a Marco Mensajero Saldo inicial ₡0 Abonos del periodo ₡15.300 Cargos del periodo ₡10.200 Saldo al final del periodo ₡5.100",
+      "extractoAnulado": true
+    },
+    {
+      "paso": "10 /cierres-admin sigue en pie",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "paso": "11 marcar recibido en la bodega",
+      "ok": true,
+      "listadoAntes": "Quepos ₡25.000 ayer — Ver estado de cuenta",
+      "tarjetasAntes": "Por entregar hoy ₡25.000 Quepos tiene ₡25.000 por entregar Por entregar al inicio ₡0 Recibido en el periodo ₡0 Declarado en el periodo ₡25.000 Por entregar al final del periodo ₡25.000",
+      "tarjetasTras": "Por entregar hoy ₡1.000 Quepos tiene ₡1.000 por entregar Por entregar al inicio ₡0 Recibido en el periodo ₡24.000 Declarado en el periodo ₡25.000 Por entregar al final del periodo ₡1.000",
+      "listadoTras": "Quepos Recibido incompleto ₡1.000 al día 26 sept · ₡24.000 de ₡25.000 Ver estado de cuenta"
+    }
+  ]
+}

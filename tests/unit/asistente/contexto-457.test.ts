@@ -93,11 +93,14 @@ describe("457 R68/R69 — la oficina puede preguntar por el pago de una tienda a
     expect(tiendas).toContain(
       "**Pago de la tienda a Ordenex anulado** | La anulación de ese pago: el saldo vuelve a bajar | Vuelve a salir",
     );
-    expect(tiendas).toContain("## Registrar un pago de la tienda a Ordenex");
+    // FICHA 458-D (T D.2/T D.9): el pago de la tienda a Ordenex se registra desde el ESTADO DE CUENTA
+    // de la tienda (antes, las acciones del desglose retirado) y se anula desde el panel «Ver» de su
+    // fila, en la misma pantalla. El contrato de la 457 —cuándo se ofrece y qué pide— no cambia.
+    expect(tiendas).toContain("## Registrar desde el estado de cuenta");
     expect(tiendas).toContain(
-      "Cuando una tienda está **en contra**, desde las acciones de su desglose registrás el pago que ella le hizo a Ordenex: **Registrar pago de la tienda a Ordenex**. Se pide el monto —hasta lo que debe—, la fecha real, el motivo, el método (con referencia en SINPE y transferencia) y un comprobante opcional. Su saldo sube en el monto y la fila se actualiza sola. Se anula desde **Wallet · Caja**, en el libro, con motivo.",
+      "**La tienda le paga a Ordenex** — solo cuando la tienda está **en contra**: registra el pago que ella le hizo a Ordenex (hasta lo que debe, con fecha, motivo, método y comprobante opcional). Su saldo sube.",
     );
-    expect(tiendas).toContain("ni se anulan pagos de la tienda a Ordenex");
+    expect(tiendas).toContain("Desde ahí se **anula** con **Anular…** y un motivo");
   });
 
   it.each(FUERA_DE_OFICINA)("%s NO recibe la ayuda de la caja ni la de las tiendas (R69)", (rol) => {
@@ -106,7 +109,7 @@ describe("457 R68/R69 — la oficina puede preguntar por el pago de una tienda a
     expect(slugs).not.toContain("oficina/wallet-tiendas");
     const todo = textoDelContexto(rol);
     expect(todo).not.toContain("## Una tienda le paga a Ordenex: llega dinero de la tienda y su saldo sube");
-    expect(todo).not.toContain("## Registrar un pago de la tienda a Ordenex");
+    expect(todo).not.toContain("## Registrar desde el estado de cuenta");
   });
 });
 
@@ -121,7 +124,9 @@ describe("457 R68/R69 — la tienda entiende su pago a Ordenex en Mi wallet, des
     );
     expect(wallet).toContain("## Un pago que le hiciste a Ordenex");
     expect(wallet).toContain(
-      "Si tu saldo quedó en contra y le pagaste a Ordenex, lo ves como **Le pagaste a Ordenex**, con el motivo, el método y la referencia. **Sube tu saldo** en el monto. Si la oficina lo anula por error, aparece **Ordenex anuló el pago que le hiciste** y tu saldo vuelve a bajar. El comprobante de tu pago lo guarda la oficina.",
+      // FICHA 458-D (T D.5, R78): la frase «El comprobante de tu pago lo guarda la oficina» se retira:
+      // desde la 458-D la tienda lo VE en su fila («## Ver el comprobante», contexto-458 bloque D).
+      "Si tu saldo quedó en contra y le pagaste a Ordenex, lo ves como **Le pagaste a Ordenex**, con el motivo, el método y la referencia. **Sube tu saldo** en el monto. Si la oficina lo anula por error, aparece **Ordenex anuló el pago que le hiciste** y tu saldo vuelve a bajar.",
     );
     // La tienda NO lee los nombres desde Ordenex (R47).
     expect(wallet).not.toContain("La tienda le paga a Ordenex");

@@ -212,7 +212,9 @@ export class LibroCajaAutoriaService implements ILibroCajaAutoriaService {
           a = o === null ? undefined : anulaciones.premios.get(o);
           break;
       }
-      return a === undefined ? null : { motivo: a.motivo, por: a.por, fecha: fechaCalendarioCR(a.fecha) };
+      return a === undefined
+        ? null
+        : { motivo: a.motivo, por: a.por, fecha: fechaCalendarioCR(a.fecha), hora: horaCostaRica(a.fecha.toISOString()) };
     };
 
     // Ficha 458-E (revision B1, R58): CUANDO se registro — el `created_at` de la fila en dia y hora de

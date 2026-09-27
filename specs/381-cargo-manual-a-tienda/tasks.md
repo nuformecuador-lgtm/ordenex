@@ -269,10 +269,10 @@ marcadas igual dentro de la misma tanda.
 | R28 | `/wallet/tiendas` pinta `-15.000,00` entero y sin recortar | `tests/unit/components/saldos-tiendas-table.negativo.test.tsx` |
 | R29 | `/mi-wallet` idem | `tests/unit/components/saldo-tienda-card.negativo.test.tsx` |
 | R30 | marca legible distinta para negativo / positivo / cero, en las dos | los dos anteriores (los tres casos, no solo el negativo) |
-| R31 | saldo no positivo ⇒ no se ofrece pagar y se dice por qué; positivo ⇒ sí | `tests/unit/components/pago-tienda-acciones.test.tsx` |
+| R31 | saldo no positivo ⇒ no se ofrece pagar y se dice por qué; positivo ⇒ sí | `tests/components/EstadoCuentaAcciones.test.tsx` (458-D: la acción vive en el estado de cuenta) |
 | R32 | el cobro aparece en el libro de `/mi-wallet` de esa tienda | `tests/unit/components/desglose-tienda-ledger.test.tsx` |
 | R33 | su nombre es distinto del de `ajuste_debito`, que no cambia | `tests/unit/components/desglose-tienda-labels.test.ts` |
-| R34 | el admin lo presenta con el MISMO nombre | `tests/unit/components/desglose-movimientos-tienda.test.tsx` |
+| R34 | el admin lo presenta con el MISMO nombre | `tests/components/EstadoCuenta.test.tsx` (458-D: el extracto del estado de cuenta sustituye al desglose) |
 | R35 | el concepto se puede filtrar en las dos pantallas | `desglose-tienda-labels.test.ts` (opciones desde el SEED) + un test por selector |
 | R36 | el cobro cae en `cargos`, no en `aFavor` ni en `pagado` | `tests/unit/utils/desglose-tienda.test.ts` |
 | R37 | la aclaración de cargos nombra los cobros | `tests/unit/components/mi-wallet-labels.test.ts` |

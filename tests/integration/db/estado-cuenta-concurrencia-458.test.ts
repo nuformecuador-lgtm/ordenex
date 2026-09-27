@@ -6,6 +6,8 @@ import type { IEstadoCuentaRepository } from "@/lib/interfaces/repositories/IEst
 import { EstadoCuentaRepository } from "@/lib/repositories/EstadoCuentaRepository";
 import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/RechazoTiendaCobroAnulacionRepository";
 import { EstadoCuentaService } from "@/lib/services/EstadoCuentaService";
+import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleRepository";
+import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
 
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
 import { acreditar459, conCandado459, limpiar459, sembrarPersonas459, type Personas459 } from "./_fixtures/escrituras-459";
@@ -111,6 +113,7 @@ describeSiHayBase("458-B/M2 — un cierre aprobado en medio de la lectura del es
         const servicio = new EstadoCuentaService(
           repoConCierreEnMedio(p, disparos),
           new RechazoTiendaCobroAnulacionRepository(prisma),
+          new OrigenLegibleService(new OrigenLegibleRepository(prisma)),
         );
         const input = { cuenta: { tipo: "tienda" as const, id: p.tiendaId }, page: 1, pageSize: 20 };
 

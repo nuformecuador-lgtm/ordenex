@@ -11,6 +11,8 @@
 //     está en la página 3 no lo encontraría, y la pantalla no diría que ha mirado 25 filas de
 //     60: diría «no hay resultados», que es una frase distinta y falsa.
 //  2. R50 — **el punto delicado**. Cada fila DESPLIEGA el desglose por cierre de su mensajero.
+//     (FICHA 458-D, D14: la fila ya no despliega; ENLAZA al estado de cuenta de su mensajero. El
+//     riesgo es el mismo —que el enlace de la página 3 lleve a la cuenta de OTRO— y se mide igual.)
 //     Con el conjunto entero a la vista, «la fila que se expande» y «la fila que estaba ahí al
 //     cargar» eran la misma; con páginas, no. Un desglose que se resolviera contra las filas
 //     que llegaron por props abriría, en la página 3, la cuenta de OTRA persona —con sus
@@ -43,20 +45,16 @@ import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 
 // --- Dobles ---------------------------------------------------------------
 
-const { paginadoMock, conjuntoMock, desgloseMock } = vi.hoisted(() => ({
+const { paginadoMock, conjuntoMock } = vi.hoisted(() => ({
   /** La página que la tabla pinta (T L.1): filtra y recorta como el servidor. */
   paginadoMock: vi.fn(),
   /** El CONJUNTO sin recorte, con la búsqueda ya aplicada, de donde sale el archivo (R52). */
   conjuntoMock: vi.fn(),
-  /** El desglose por cierre de UN mensajero, que se pide al expandir su fila (R50). */
-  desgloseMock: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
   listarCuentasPorPagarCompletoAction: (...a: unknown[]) => conjuntoMock(...a),
   listarCuentasPorPagarPaginadoAction: (...a: unknown[]) => paginadoMock(...a),
-  listarPagosDeMensajeroAction: (...a: unknown[]) => desgloseMock(...a),
-  listarPagosDeMensajeroCompletoAction: vi.fn(),
 }));
 
 vi.mock("@/components/shared/descargar-blob", () => ({ descargarBlob: vi.fn() }));
@@ -190,51 +188,11 @@ function servirConjunto() {
   });
 }
 
-/**
- * Doble del desglose por cierre: devuelve el movimiento y el saldo DE ESE mensajero, tomados
- * del conjunto. Si la pantalla pidiera el desglose de otra fila, aquí se vería su dinero.
- */
-function servirDesglose() {
-  desgloseMock.mockImplementation(async (input: { mensajeroId: string }) => {
-    const m = CONJUNTO.find((c) => c.mensajeroId === input.mensajeroId);
-    if (!m) return { status: "not_found" as const };
-    return {
-      status: "ok" as const,
-      data: {
-        mensajeroId: m.mensajeroId,
-        mensajeroNombre: m.mensajeroNombre,
-        movimientos: [
-          {
-            id: `mov-${m.mensajeroId}`,
-            mensajeroId: m.mensajeroId,
-            tipo: "devengo" as const,
-            categoria: "pago_devengado" as const,
-            monto: m.devengado,
-            origenTipo: "cierre_dia",
-            origenId: "c1",
-            descripcion: null,
-            fechaMovimiento: "2026-07-12T10:00:00.000Z",
-          },
-        ],
-        total: 1,
-        page: 1,
-        pageSize: 20,
-        cuenta: {
-          devengado: m.devengado,
-          pagado: m.pagado,
-          cuentaPorPagar: m.cuentaPorPagar,
-          signo: m.signo,
-        },
-      },
-    };
-  });
-}
 
 /** Monta la pantalla con la página 1 pre-cargada por el Server Component. */
 function montar() {
   servirPaginas();
   servirConjunto();
-  servirDesglose();
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <CuentasPorPagarTable
@@ -269,11 +227,19 @@ function contador(): HTMLElement {
   return encontrado;
 }
 
-/** Los mensajeros que la tabla está pintando, en orden, por el nombre de su botón de desglose. */
+/**
+ * Los mensajeros que la tabla está pintando, en orden, por el nombre de su enlace al estado de cuenta
+ * (FICHA 458-D; antes, el botón de desglose).
+ */
 function nombresVisibles(): string[] {
   return within(tabla())
-    .queryAllByRole("button", { name: /^Ver desglose de / })
-    .map((b) => (b.getAttribute("aria-label") ?? "").replace("Ver desglose de ", ""));
+    .queryAllByRole("link", { name: /^Ver estado de cuenta de / })
+    .map((b) => (b.getAttribute("aria-label") ?? "").replace("Ver estado de cuenta de ", ""));
+}
+
+/** El enlace de la fila de UN mensajero. */
+function enlaceDe(nombreMensajero: string): HTMLElement {
+  return within(tabla()).getByRole("link", { name: `Ver estado de cuenta de ${nombreMensajero}` });
 }
 
 async function irAPagina(user: ReturnType<typeof userEvent.setup>, numero: number) {
@@ -346,7 +312,7 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     expect(nombresVisibles()).toHaveLength(PAGE_SIZE);
     // Y las de la página anterior YA NO están: navegar cambia las filas de verdad.
     expect(
-      within(tabla()).queryByRole("button", { name: `Ver desglose de ${nombre(1)}` }),
+      within(tabla()).queryByRole("link", { name: `Ver estado de cuenta de ${nombre(1)}` }),
     ).toBeNull();
 
     // Última página: 10 filas de un conjunto de 60.
@@ -363,79 +329,45 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     await waitFor(() => expect(nombresVisibles()[0]).toBe(nombre(1)));
   });
 
-  it("expandir el desglose funciona en cualquier página (R50)", async () => {
+  it("el enlace al estado de cuenta funciona en cualquier página (R50; 458-D, antes «expandir el desglose»)", async () => {
     const user = userEvent.setup();
     montar();
 
-    // Se hace en la PÁGINA 3, no en la 1: es donde un desglose resuelto contra las filas que
-    // llegaron por props abriría la cuenta de otra persona sin fallar en ninguna parte.
+    // Se hace en la PÁGINA 3, no en la 1: es donde un enlace resuelto contra las filas que
+    // llegaron por props llevaría a la cuenta de otra persona sin fallar en ninguna parte.
     await irAPagina(user, 3);
     const elegido = CONJUNTO[50]; // el 51: debe ₡500
     expect(nombresVisibles()).toContain(elegido.mensajeroNombre);
 
-    await user.click(
-      screen.getByRole("button", { name: `Ver desglose de ${elegido.mensajeroNombre}` }),
+    // El enlace de ESA fila lleva a la cuenta de ESE mensajero (su id, solo en la dirección)…
+    expect(enlaceDe(elegido.mensajeroNombre).getAttribute("href")).toBe(
+      `/wallet/mensajeros/${elegido.mensajeroId}`,
     );
-
-    // El panel que se abre es el de ESA fila: lo dice su nombre accesible…
-    const desglose = await screen.findByRole("region", {
-      name: `Desglose de ${elegido.mensajeroNombre}`,
-    });
-    // …y el desglose se pidió al servidor para ESE mensajero, no para el que ocupaba esa
-    // posición en la página 1.
-    await waitFor(() => expect(desgloseMock).toHaveBeenCalledTimes(1));
-    expect(desgloseMock).toHaveBeenCalledWith({
-      mensajeroId: elegido.mensajeroId,
-      page: 1,
-      pageSize: 20,
-    });
-    expect(desgloseMock).not.toHaveBeenCalledWith(
-      expect.objectContaining({ mensajeroId: CONJUNTO[0].mensajeroId }),
-    );
-
-    // Y el dinero que enseña es el del LIBRO ENTERO de ese mensajero (₡500 pendientes),
-    // el mismo que su fila: cambiar de página no lo recalcula (R49/R50).
-    expect(within(desglose).getByText("₡500")).toBeInTheDocument();
-    // `pagado` solo aparece en el saldo del panel (el movimiento del doble es un devengo),
-    // así que este es el monto que distingue a un mensajero de otro sin ambigüedad.
-    expect(within(desglose).getByText(money(elegido.pagado))).toBeInTheDocument();
-
-    // Ninguna otra fila quedó desplegada de paso.
-    expect(screen.getAllByRole("region", { name: /^Desglose de / })).toHaveLength(1);
-
-    // El control de paginación del desglose tiene nombre PROPIO: dos `<nav>` llamados
-    // «Paginación» a secas no distinguirían el listado de la fila abierta.
-    expect(
-      screen.getByRole("navigation", {
-        name: `Paginación del desglose de ${elegido.mensajeroNombre}`,
-      }),
-    ).toBeInTheDocument();
+    // …y no a la del que ocupaba esa posición en la página 1.
+    expect(enlaceDe(elegido.mensajeroNombre).getAttribute("href")).not.toContain(CONJUNTO[0].mensajeroId);
+    // Y el dinero que enseña SU fila es el del LIBRO ENTERO de ese mensajero (₡500 pendientes).
+    const fila = enlaceDe(elegido.mensajeroNombre).closest("tr") as HTMLElement;
+    expect(within(fila).getByText("₡500")).toBeInTheDocument();
+    expect(within(fila).getByText(money(elegido.pagado))).toBeInTheDocument();
     expect(nav()).toBeInTheDocument();
   });
 
-  it("expandir en la página 1 no arrastra el desglose a las demás (R50)", async () => {
+  it("en otra página, cada enlace sigue siendo el de SU fila (R50)", async () => {
     const user = userEvent.setup();
     montar();
 
     const primero = CONJUNTO[0];
-    await user.click(
-      screen.getByRole("button", { name: `Ver desglose de ${primero.mensajeroNombre}` }),
-    );
-    await screen.findByRole("region", { name: `Desglose de ${primero.mensajeroNombre}` });
+    expect(enlaceDe(primero.mensajeroNombre).getAttribute("href")).toBe(`/wallet/mensajeros/${primero.mensajeroId}`);
 
-    // En la página 2, esa fila no está: su desglose tampoco puede estarlo.
+    // En la página 2, esa fila no está: su enlace tampoco puede estarlo.
     await irAPagina(user, 2);
-    expect(screen.queryAllByRole("region", { name: /^Desglose de / })).toHaveLength(0);
+    expect(within(tabla()).queryByRole("link", { name: `Ver estado de cuenta de ${primero.mensajeroNombre}` })).toBeNull();
 
-    // Y el de una fila de ESTA página se abre igual de bien.
+    // Y el de una fila de ESTA página es el suyo.
     const otro = CONJUNTO[25]; // el 26
-    await user.click(
-      screen.getByRole("button", { name: `Ver desglose de ${otro.mensajeroNombre}` }),
-    );
-    const abierto = await screen.findByRole("region", {
-      name: `Desglose de ${otro.mensajeroNombre}`,
-    });
-    expect(within(abierto).getByText(money(otro.cuentaPorPagar))).toBeInTheDocument();
+    const fila = enlaceDe(otro.mensajeroNombre).closest("tr") as HTMLElement;
+    expect(enlaceDe(otro.mensajeroNombre).getAttribute("href")).toBe(`/wallet/mensajeros/${otro.mensajeroId}`);
+    expect(within(fila).getByText(money(otro.cuentaPorPagar))).toBeInTheDocument();
   });
 
   it("cambiar de página no toca lo escrito en el buscador ni los importes de la fila (R50)", async () => {

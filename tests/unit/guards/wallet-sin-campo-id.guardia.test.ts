@@ -52,8 +52,11 @@ describe("458-A R93 — ninguna superficie de la wallet pide un identificador", 
     expect(archivos.length).toBeGreaterThan(40);
     expect(archivos).toEqual(
       expect.arrayContaining([
-        "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
-        "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
+        // FICHA 458-D (T D.8): los dos desgloses se retiraron; los sustituye el estado de cuenta, que es
+        // donde se filtra la cuenta (periodo y chips) y el que tiene que seguir sin pedir un id.
+        "components/shared/estado-cuenta/EstadoCuenta.tsx",
+        "app/(app)/wallet/tiendas/_components/EstadoCuentaTienda.tsx",
+        "app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero.tsx",
         "app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels.ts",
       ]),
     );

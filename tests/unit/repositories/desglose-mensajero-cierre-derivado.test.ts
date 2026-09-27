@@ -175,13 +175,15 @@ describe("205 / R43 — el cierre de cada fila del desglose se DERIVA", () => {
     expect(modelo).not.toMatch(/cierre_id/);
   });
 
-  it("la DESCARGA del desglose no gana el campo: el archivo sigue sin emitir identificadores", async () => {
+  it("la DESCARGA del mensajero no gana el campo: el archivo sigue sin emitir identificadores", async () => {
     // T2.4 lo exige explicitamente. Se mide sobre las columnas declaradas, no sobre una fila
     // proyectada: asi tambien cae si alguien anade la columna y la deja vacia.
+    // FICHA 458-D (T D.8): la descarga del desglose del mensajero se retiro con el; la que la
+    // sustituye es la del ESTADO DE CUENTA (la misma para tienda, mensajero y bodega).
     const columnas = await import(
-      "@/app/(app)/wallet/mensajeros/_components/desglose-mensajero-descarga-columnas"
+      "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas"
     );
-    const claves = columnas.COLUMNAS_DESCARGA_DESGLOSE_MENSAJERO.map(
+    const claves = columnas.COLUMNAS_DESCARGA_ESTADO_CUENTA.map(
       (c: { clave: string }) => c.clave,
     );
     expect(claves).not.toContain("cierreId");

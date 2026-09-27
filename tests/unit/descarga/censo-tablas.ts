@@ -343,12 +343,9 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ruta: "app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx",
     tablas: [{ nombre: "Incidentes — histórico", estado: "con_descarga" }],
   },
-  {
-    ruta: "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",
-    tablas: [
-      { nombre: "Desglose de movimientos de la tienda", estado: "con_descarga" },
-    ],
-  },
+  // FICHA 458-D (T D.5, cierre de pantalla): «Desglose de movimientos de la tienda»
+  // (`mi-wallet/_components/DesgloseTiendaLedger.tsx`) se retiró: `/mi-wallet` es ahora el estado de
+  // cuenta compartido (`components/shared/estado-cuenta/EstadoCuenta.tsx`), que gana su cuarto montaje.
   {
     // FICHA 344 (B7/B8) — el desplegable de UNA fila del libro de la TIENDA: las órdenes de esa
     // tienda que componen el importe de ese movimiento. Va justo después de
@@ -534,20 +531,6 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     tablas: [{ nombre: "Cuentas por pagar a mensajeros", estado: "con_descarga" }],
   },
   {
-    ruta: "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
-    tablas: [
-      { nombre: "Desglose de pagos por cierre de un mensajero", estado: "con_descarga" },
-    ],
-  },
-  {
-    // Feature 171 (T2.6): el desplegable del dinero de UNA tienda. Va antes que
-    // `SaldosTiendasTable` porque la guardia recorre el árbol en orden alfabético.
-    ruta: "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
-    tablas: [
-      { nombre: "Desglose de movimientos de una tienda", estado: "con_descarga" },
-    ],
-  },
-  {
     ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
     tablas: [{ nombre: "Saldos de tiendas", estado: "con_descarga" }],
   },
@@ -555,6 +538,23 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
   // ⭑ FICHA 431 (T23, R29) — las DOS tablas de `/wallet/satelites`, la tercera hoja de saldos
   // del módulo Wallet. Nacen las dos `con_descarga`, que es lo que la guardia obliga a decidir.
   // ───────────────────────────────────────────────────────────────────────────────────────
+  {
+    // FICHA 458-D (T D.4/T D.8) — era `DesgloseConsolidacionesSatelite.tsx`, el desplegable de la
+    // fila de «Saldos de bodegas satélite». Se retira el desplegable y la MISMA tabla (con su
+    // descarga) pasa a la página del estado de cuenta de la bodega. Ni nace ni muere: cambia de archivo.
+    // Va antes que `SaldosSatelitesTable` por el orden alfabético del recorrido.
+    ruta: "app/(app)/wallet/satelites/_components/ConciliacionSatelite.tsx",
+    tablas: [
+      {
+        // Pagina en el servidor y descarga el CONJUNTO FILTRADO de SU bodega, no la página visible.
+        //
+        // ⚠️ La NOTA de la conciliación (texto libre) se ve en pantalla y NO baja al archivo: es
+        // el mismo criterio con el que la ficha 362 la dejó fuera del registro de acciones.
+        nombre: "Consolidaciones de una bodega satélite",
+        estado: "con_descarga",
+      },
+    ],
+  },
   {
     ruta: "app/(app)/wallet/satelites/_components/SaldosSatelitesTable.tsx",
     tablas: [
@@ -564,21 +564,6 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
         // literal: su gemela `SaldosTiendasTable`, justo aquí arriba. Declararla `fuera` habría
         // exigido un motivo que no existe.
         nombre: "Saldos de bodegas satélite",
-        estado: "con_descarga",
-      },
-    ],
-  },
-  {
-    ruta: "app/(app)/wallet/satelites/_components/DesgloseConsolidacionesSatelite.tsx",
-    tablas: [
-      {
-        // Mismo caso que `DesgloseMovimientosTienda` (feature 171): se despliega desde cada fila
-        // de la tabla de arriba, pagina en el servidor y descarga el CONJUNTO FILTRADO de SU
-        // bodega, no la página visible.
-        //
-        // ⚠️ La NOTA de la conciliación (texto libre) se ve en pantalla y NO baja al archivo: es
-        // el mismo criterio con el que la ficha 362 la dejó fuera del registro de acciones.
-        nombre: "Consolidaciones de una bodega satélite",
         estado: "con_descarga",
       },
     ],
@@ -621,6 +606,26 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ],
   },
   {
+    // FICHA 458-D (T D.1/T D.6, R32) — el EXTRACTO del estado de cuenta, compartido por las TRES
+    // cuentas de la wallet (tienda, mensajero, bodega): UNA instancia de `<DataTable>` y TRES tablas
+    // para quien las usa. Nace `con_descarga`: el periodo filtrado ENTERO con el saldo corrido y el saldo
+    // inicial arriba (R32). SUSTITUYE, en la cuenta, a los dos desplegables retirados («Desglose de pagos
+    // por cierre de un mensajero» y «Desglose de movimientos de una tienda»).
+    ruta: "components/shared/estado-cuenta/EstadoCuenta.tsx",
+    tablas: [
+      {
+        nombre: "Estado de cuenta de una tienda, un mensajero o una bodega",
+        estado: "con_descarga",
+        montajes: [
+          "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+          "app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero.tsx",
+          "app/(app)/wallet/satelites/_components/EstadoCuentaSatelite.tsx",
+          "app/(app)/wallet/tiendas/_components/EstadoCuentaTienda.tsx",
+        ],
+      },
+    ],
+  },
+  {
     // Feature 172 (T D.2/T H.1, R57) — la lista de COMPROBANTES de un beneficiario. Vive en
     // `components/shared/` porque la montan DOS pantallas con el mismo contenido; por eso es
     // UNA instancia de `<DataTable>` en el código y DOS tablas para quien las usa. Nace
@@ -630,9 +635,11 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
       {
         nombre: "Pagos registrados (comprobantes de liquidación)",
         estado: "con_descarga",
+        // FICHA 458-D: la segunda pantalla ya no es el desglose de `/wallet/tiendas` (retirado) sino
+        // el estado de cuenta de la tienda (`PagosTiendaEstadoCuenta`). Siguen siendo DOS.
         montajes: [
           "app/(app)/cierres-admin/_components/PagoMensajeroSeccion.tsx",
-          "app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx",
+          "app/(app)/wallet/tiendas/_components/PagosTiendaEstadoCuenta.tsx",
         ],
       },
     ],

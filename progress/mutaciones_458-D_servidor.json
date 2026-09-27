@@ -1,0 +1,216 @@
+[
+  {
+    "id": "M-D1",
+    "descripcion": "R10/R12: el filtro de cierre sin el id del cierre (solo origen_tipo)",
+    "archivo": "lib/repositories/EstadoCuentaRepository.ts",
+    "tests": [
+      "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 13,
+    "rojos": 4,
+    "nombresRojos": [
+      "R10/R12: el cierre compartido por dos tiendas trae SOLO las filas de ESTA tienda que nacen de ese cierre",
+      "R12: un cierre de otra cuenta no devuelve ninguna fila; en el mensajero, su cierre trae sus dos filas",
+      "R36: lo ajeno responde igual que lo inexistente — la tienda D no ve una sola fila de la C, ni por el cierre compartido",
+      "TD.6/R32: por encima del tope, limite_excedido con SOLO los conteos; por debajo, el periodo ENTERO"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D2",
+    "descripcion": "R10: el filtro de cierre no se aplica en la pagina",
+    "archivo": "lib/repositories/EstadoCuentaRepository.ts",
+    "tests": [
+      "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 13,
+    "rojos": 4,
+    "nombresRojos": [
+      "R10/R12: el cierre compartido por dos tiendas trae SOLO las filas de ESTA tienda que nacen de ese cierre",
+      "R12: un cierre de otra cuenta no devuelve ninguna fila; en el mensajero, su cierre trae sus dos filas",
+      "R36: lo ajeno responde igual que lo inexistente — la tienda D no ve una sola fila de la C, ni por el cierre compartido",
+      "TD.6/R32: por encima del tope, limite_excedido con SOLO los conteos; por debajo, el periodo ENTERO"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D3",
+    "descripcion": "R34/R36: /mi-wallet sin comprobar el rol antes de leer",
+    "archivo": "lib/services/EstadoCuentaService.ts",
+    "tests": [
+      "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 13,
+    "rojos": 1,
+    "nombresRojos": [
+      "R36: ninguna clave de cuenta pasa el borde; solo adminTienda lee; sin sesion unauthenticated"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D4",
+    "descripcion": "R35/D2: la vista de la tienda no se aplica (nombres de Ordenex y Anular visibles)",
+    "archivo": "lib/services/EstadoCuentaService.ts",
+    "tests": [
+      "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 13,
+    "rojos": 1,
+    "nombresRojos": [
+      "R35/D2: la tienda no ve nombres de la gente de Ordenex ni «Anular…»; conserva el motivo y el dia de la anulacion"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D5",
+    "descripcion": "R6-R8: la fila no lleva el origen resuelto",
+    "archivo": "lib/services/EstadoCuentaService.ts",
+    "tests": [
+      "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 13,
+    "rojos": 3,
+    "nombresRojos": [
+      "R6/R7: en la oficina, la fila del cierre real nombra al mensajero y enlaza al cierre con el id SOLO en la direccion",
+      "R8: la tienda ve el mismo origen SIN el mensajero y SIN enlace al cierre (no accede a esa pantalla)",
+      "metodo y referencia del documento de pago en su fila; `null` en el contra-asiento y en el cierre"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D6",
+    "descripcion": "metodo/referencia: la referencia no viaja",
+    "archivo": "lib/repositories/EstadoCuentaRepository.ts",
+    "tests": [
+      "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 13,
+    "rojos": 1,
+    "nombresRojos": [
+      "metodo y referencia del documento de pago en su fila; `null` en el contra-asiento y en el cierre"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D7",
+    "descripcion": "TD.6/R32: el tope del completo no se mira",
+    "archivo": "lib/services/EstadoCuentaService.ts",
+    "tests": [
+      "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 13,
+    "rojos": 1,
+    "nombresRojos": [
+      "TD.6/R32: por encima del tope, limite_excedido con SOLO los conteos; por debajo, el periodo ENTERO"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D8",
+    "descripcion": "R10: cierre en una bodega aceptado",
+    "archivo": "lib/services/EstadoCuentaService.ts",
+    "tests": [
+      "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 13,
+    "rojos": 1,
+    "nombresRojos": [
+      "R10/R12: cierre en una bodega o sin forma de id → validation_error sin filas"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D9",
+    "descripcion": "R36: el borde de /mi-wallet sin .strict() (una clave de cuenta pasaria)",
+    "archivo": "lib/types/estado-cuenta.ts",
+    "tests": [
+      "tests/unit/actions/estado-cuenta-458d-action.test.ts",
+      "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 20,
+    "rojos": 2,
+    "nombresRojos": [
+      "R36: ninguna clave de cuenta pasa el borde; solo adminTienda lee; sin sesion unauthenticated",
+      "una clave que nombre una cuenta es validation_error y el servicio NO se llama"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D10",
+    "descripcion": "R19: la fila del mensajero se lee sin su cuenta en el WHERE",
+    "archivo": "lib/repositories/EstadoCuentaRepository.ts",
+    "tests": [
+      "tests/integration/db/detalle-movimiento-cierre-postgres.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 14,
+    "rojos": 1,
+    "nombresRojos": [
+      "458-D R19: la fila de cierre del mensajero se abre y dice que su importe es el total del cierre; la de otro mensajero, no encontrada"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D11",
+    "descripcion": "R19: las ordenes de la fila de una tienda sin acotar a esa tienda",
+    "archivo": "lib/services/DetalleMovimientoService.ts",
+    "tests": [
+      "tests/integration/db/detalle-movimiento-cierre-postgres.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 14,
+    "rojos": 1,
+    "nombresRojos": [
+      "458-D R19: la oficina abre la fila de flete de la tienda A y ve SOLO las ordenes de A, con el mensajero"
+    ],
+    "veredicto": "MUERTA"
+  },
+  {
+    "id": "M-D12",
+    "descripcion": "R19: las ordenes de una fila sin comprobar el rol",
+    "archivo": "lib/services/DetalleMovimientoService.ts",
+    "tests": [
+      "tests/integration/db/detalle-movimiento-cierre-postgres.test.ts"
+    ],
+    "archivoCambio": true,
+    "restaurado": true,
+    "diffIgual": true,
+    "corridos": 14,
+    "rojos": 1,
+    "nombresRojos": [
+      "458-D R19: el movimiento de la tienda A pedido como fila de la B responde no encontrado; la tienda no entra"
+    ],
+    "veredicto": "MUERTA"
+  }
+]

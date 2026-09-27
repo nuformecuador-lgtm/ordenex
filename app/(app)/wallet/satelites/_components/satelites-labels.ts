@@ -104,6 +104,8 @@ export const SALDOS_SATELITES_COLUMNAS = {
   pendiente: "Pendiente",
   masAntigua: "Más antigua sin conciliar",
   ultimaRecibida: "Última recibida",
+  /** FICHA 458-D (R17): la columna del enlace al estado de cuenta. */
+  estadoCuenta: "Estado de cuenta",
 } as const;
 
 /** El conmutador «Con pendiente (N) / Todas (N)». */
@@ -151,8 +153,9 @@ export const ULTIMA_RECIBIDA = {
 export const SALDOS_SATELITES_NOMBRE = {
   tabla: "Saldos de bodegas satélite",
   paginacion: "Paginación de los saldos de bodegas satélite",
-  /** Nombre del botón que despliega la fila. Es la columna «Ver» del diseño. */
-  expandir: (bodega: string) => `Ver desglose de ${bodega}`,
+  /** FICHA 458-D (R17) — el enlace de la fila al estado de cuenta de la bodega. */
+  estadoCuentaVisible: "Ver estado de cuenta",
+  estadoCuenta: (bodega: string) => `Ver estado de cuenta de ${bodega}`,
 } as const;
 
 export const SALDOS_SATELITES_VACIO_CON_PENDIENTE =
@@ -190,10 +193,10 @@ export const DESGLOSE_SATELITE_COLUMNAS = {
   conciliadoPor: "Conciliado por",
 } as const;
 
-/** Nombres accesibles del desglose, TODOS con el nombre de la bodega dentro: puede haber varias
- *  filas abiertas a la vez y tres tablas llamadas «Consolidaciones» no identificarían ninguna. */
+/** Nombres accesibles de la conciliación de UNA bodega, con su nombre dentro. FICHA 458-D (R31): la
+ *  sección vive en el estado de cuenta de la bodega; deja de llamarse «Desglose». */
 export const DESGLOSE_SATELITE_NOMBRE = {
-  region: (bodega: string) => `Desglose de ${bodega}`,
+  region: (bodega: string) => `Conciliación de ${bodega}`,
   tabla: (bodega: string) => `Consolidaciones de ${bodega}`,
   paginacion: (bodega: string) => `Paginación de las consolidaciones de ${bodega}`,
   filtro: (bodega: string) => `Consolidaciones de ${bodega} por estado`,
@@ -216,3 +219,13 @@ export const SIN_DATO = "—";
 function plural(n: number, singular: string, plural_: string): string {
   return n === 1 ? singular : plural_;
 }
+
+/** FICHA 458-D (T D.4, R17, R31) — la página del estado de cuenta de UNA bodega satélite. */
+export const ESTADO_CUENTA_BODEGA_PAGINA = {
+  titulo: (bodega: string) => `Estado de cuenta de ${bodega}`,
+  descripcion:
+    "Lo que la bodega declaró al consolidar y lo que llegó a la central, con lo que tiene por entregar tras cada movimiento",
+  volver: "Volver a las bodegas satélite",
+  declarado: "Consolidación declarada",
+  recibido: "Recibido en la central",
+} as const;

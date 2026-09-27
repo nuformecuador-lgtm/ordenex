@@ -414,3 +414,28 @@ comprobada por hash) — `progress/mutaciones_458E_fix.json`, **14/14 en rojo**:
 **Sigue fuera (no es de esta tarea):** M3 de la revisión (enlaces de «A quién» a las rutas de la 458-D):
 la 458-D y la 458-E se mergean juntas. TE.7 (recorrido completo y revisión final de la 458) abierta en
 `tasks.md`.
+
+## Merge con `dev` (458-D dentro, `a51af9b4`)
+
+**Rama:** `wt/458-E-merge` = `origin/feature/458-E` en `5c41a515` + `git merge origin/dev`. Base propia
+`ordenex_458em` (`CREATE DATABASE … TEMPLATE ordenex`, 0 conexiones a la plantilla; `migrate deploy`: «No pending
+migrations»), `.env` copiado sin imprimirlo y sin `DATABASE_URL_PREVIEW`, `pnpm install --frozen-lockfile` propio.
+Ni la base `ordenex` ni `feature_list.json` se tocaron. **Búsqueda:** no usé el MCP `codebase-memory` (la 458-D ya
+midió que el índice no tiene las piezas de la 458); todo con `grep`/lectura del archivo real.
+
+Conflictos (se conservan las dos cosas; ningún literal de dinero cambia):
+- `lib/services/LibroCajaAutoriaService.ts`: solo el import. Queda `movimientoDeLaAnotacion` (anotación heredada
+  por la anulación, 458-E M2) junto a `registradoEl` (B1) y la `hora` CR de la anulación (458-D).
+- `tests/components/descarga/WalletDescarga.test.tsx`: el doble de `autoriaDelLibroCajaAction` (458-E) + los dobles
+  de `estado-cuenta` de `/mi-wallet` (458-D); fuera `listarMisMovimientos*Mock`, que la 458-D retiró con su libro.
+- `tests/unit/asistente/contexto-458.test.ts`: bloques A, B, C, D (oficina y tienda) y E, en ese orden.
+
+M3 (enlaces de «A quién»): `hrefEstadoCuenta` ya producía `/wallet/tiendas/<id>` y `/wallet/mensajeros/<id>`, que
+son las rutas de la 458-D, y el id es el del usuario (el mismo que busca el estado de cuenta). Test nuevo
+`tests/unit/wallet-libro-caja-enlaces-458e.test.ts`: resuelve el `href` contra el árbol del App Router y exige que
+la página pida el estado de cuenta del MISMO tipo con el id del segmento. Mutación (tienda↔mensajero): 3/3 rojos.
+
+Verificación: typecheck y lint 0 errores; guardias de wallet + fotografías 459/458 + los tres archivos del conflicto
++ el test nuevo: 19 archivos, 247 verdes. `pnpm run build`: `BUILD_EXIT=0` (`progress/build_458E_merge.log`). Gate
+completo `./init.sh`: `INIT_EXIT=0` (`progress/gate_458E_merge.log`), 2326 archivos, 32329 verdes, 26 saltados (todos
+de componentes de analítica), 0 saltados en `integration/db`.

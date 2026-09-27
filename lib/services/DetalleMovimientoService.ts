@@ -4,6 +4,7 @@ import type {
   CabeceraDeCierre,
   ICierreAporteRepository,
 } from "@/lib/interfaces/repositories/ICierreAporteRepository";
+import type { IEstadoCuentaRepository } from "@/lib/interfaces/repositories/IEstadoCuentaRepository";
 import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
@@ -17,10 +18,12 @@ import type {
   VerDetalleDeMovimientoCompletoInput,
   VerDetalleDeMovimientoInput,
 } from "@/lib/types/detalle-movimiento";
+import type { OrdenesDeFilaInput } from "@/lib/types/estado-cuenta";
 import { descargaConfig } from "@/lib/config/descarga";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import {
   FUENTE_CAJA,
+  FUENTE_MENSAJERO,
   FUENTE_TIENDA,
   aporteDeOrden,
   criterioDeFuente,
@@ -88,7 +91,45 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
       "obtenerPorIdDeTienda"
     >,
     private readonly aportes: ICierreAporteRepository,
+    // FICHA 458-D (servidor, R19) — la fila del libro del MENSAJERO, con su cuenta en el WHERE.
+    private readonly movimientosDeMensajero: Pick<IEstadoCuentaRepository, "movimientoDeMensajero">,
   ) {}
+
+  /**
+   * FICHA 458-D (servidor, R19, 344) — las ordenes de una fila del ESTADO DE CUENTA de una tienda o de
+   * un mensajero, desde la oficina (acceso total, ANTES de la base). El movimiento se lee con la CUENTA
+   * en el `WHERE`: uno de otra cuenta responde `not_found`, igual que uno inexistente. En la tienda las
+   * ordenes se acotan tambien a ESA tienda (el cierre mezcla tiendas; mismo `tiendaId` que `/mi-wallet`)
+   * y la cabecera lleva el mensajero (la oficina lo ve). En el mensajero ningun concepto se reparte por
+   * orden (`FUENTE_MENSAJERO`): la fila se abre igual y dice de donde sale su importe (R48 de la 344).
+   */
+  async verDetalleDeFilaDeCuenta(input: OrdenesDeFilaInput, actor: Actor): Promise<VerDetalleMovimientoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // antes de la base
+
+    const pagina = { page: input.page, pageSize: input.pageSize };
+    if (input.cuenta.tipo === "tienda") {
+      const tiendaId = input.cuenta.id;
+      const movimiento = await this.movimientosDeTienda.obtenerPorIdDeTienda(input.movimientoId, tiendaId);
+      if (movimiento === null) return { status: "not_found" };
+      const resuelto = await this.resolverConjunto(
+        movimiento,
+        FUENTE_TIENDA[movimiento.categoria],
+        tiendaId, // las ordenes de ESTA tienda en ese cierre, no las de todo el cierre
+        rangoDePagina(pagina),
+      );
+      return this.comoPagina(resuelto, pagina, true);
+    }
+
+    const movimiento = await this.movimientosDeMensajero.movimientoDeMensajero(input.movimientoId, input.cuenta.id);
+    if (movimiento === null) return { status: "not_found" };
+    const resuelto = await this.resolverConjunto(
+      movimiento,
+      FUENTE_MENSAJERO[movimiento.categoria],
+      undefined,
+      rangoDePagina(pagina),
+    );
+    return this.comoPagina(resuelto, pagina, true);
+  }
 
   async verDetalleDeMovimiento(
     input: VerDetalleDeMovimientoInput,
@@ -240,8 +281,9 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
   /** Da forma de PAGINA al conjunto. `conMensajero` es la unica diferencia visible entre libros. */
   private comoPagina(
     resuelto: ConjuntoResuelto,
-    input: VerDetalleDeMovimientoInput,
+    input: Pick<VerDetalleDeMovimientoInput, "page" | "pageSize">,
     conMensajero: boolean,
+
   ): VerDetalleMovimientoServiceResult {
     if (resuelto.estado === "sin_reparto") {
       return { status: "sin_reparto", motivo: resuelto.motivo };

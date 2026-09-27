@@ -56,14 +56,18 @@ export const AFIRMACIONES: readonly Afirmacion[] = [
     conComentarios: true,
   },
   {
+    // FICHA 458-D (T D.8): el desglose de la tienda se retiró; la afirmación se vigila en el archivo que
+    // lo sustituye en la oficina, el estado de cuenta compartido (tienda, mensajero y bodega).
     id: "T5-tienda",
-    archivo: "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
+    archivo: "components/shared/estado-cuenta/EstadoCuenta.tsx",
     patron: /se\s+pueblan?\s+del\s+SEED|pobla\w*\s+(?:desde\s+el|del)\s+SEED/i,
     conComentarios: true,
   },
   {
     id: "T5-mi-wallet",
-    archivo: "app/(app)/mi-wallet/_components/MiWalletFiltros.tsx",
+    // FICHA 458-D (T D.5): `MiWalletFiltros` se retiró con el libro de `/mi-wallet`; la afirmación se
+    // vigila en el archivo que lo sustituye, el estado de cuenta de la tienda.
+    archivo: "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
     patron: /pobla\w*\s+(?:desde\s+el|del)\s+SEED|se\s+pueblan?\s+del\s+SEED/i,
     conComentarios: true,
   },

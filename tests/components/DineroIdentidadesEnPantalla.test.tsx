@@ -1152,8 +1152,10 @@ const CENSO: readonly { ruta: string; identidad: string }[] = [
   },
   { ruta: "app/(app)/wallet/_components/CajaResumenCard.tsx", identidad: "siete importes, tres identidades" },
   {
-    ruta: "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
-    identidad: "las líneas suman el total",
+    // FICHA 458-D (T D.8): el desglose por tienda se retiró; la superficie de dinero que lo sustituye
+    // es el estado de cuenta (tienda, mensajero y bodega), cuyas cifras de arriba enseñan su identidad.
+    ruta: "components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx",
+    identidad: "saldo inicial + abonos − cargos = saldo final, afirmado por el servidor",
   },
   {
     ruta: "app/(app)/mis-asignaciones/_components/AsignacionDetalle.tsx",

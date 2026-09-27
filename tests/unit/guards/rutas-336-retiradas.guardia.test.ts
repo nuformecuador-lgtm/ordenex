@@ -182,7 +182,9 @@ describe("336 · 2 — ningún módulo de producción referencia las rutas ni lo
     // La lista de arriba está vacía. Vacía porque no queda nada, o vacía porque el detector no
     // mira: la diferencia la marca este caso. Los tres símbolos que SÍ sobreviven tienen que
     // aparecer, y con el mismo recorrido y el mismo quitador.
-    expect(quienNombra(/\bDesglosePagosMensajero\b/).length).toBeGreaterThan(0);
+    // FICHA 458-D (T D.8): `DesglosePagosMensajero` se retiró (D14); lo que sobrevive del maestro es el
+    // ESTADO DE CUENTA del mensajero.
+    expect(quienNombra(/\bEstadoCuentaMensajero\b/).length).toBeGreaterThan(0);
     expect(quienNombra(/\blistarPagosDeMensajeroAction\b/).length).toBeGreaterThan(0);
     expect(quienNombra(/\bQrScanner\b/).length).toBeGreaterThan(0);
   });
@@ -302,15 +304,23 @@ describe("336 · 4 — el módulo de acciones del pago por mensajero no exporta 
     //
     // Se lee el fuente CRUDO a propósito: la anotación vive dentro de un comentario, así que el
     // quitador se la llevaría y este caso pasaría siempre.
+    //
+    // FICHA 458-D (T D.8, D14): se admiten, NOMBRADAS, dos más —las del desglose por cierre del
+    // maestro (`listarPagosDeMensajeroAction` y su modo completo)—, que se quedaron sin superficie al
+    // retirarse el desplegable. No son las de `/mis-pagos`: retirarlas es cambio de servidor y la 458-D
+    // no lo tenía autorizado; quedan como PENDIENTE en `progress/impl_458-D.md` y estas dos entradas
+    // CADUCAN con esa retirada.
     const crudo = readFileSync(path.join(RAIZ, MODULO), "utf8");
     const anotaciones = [...crudo.matchAll(/@sin-superficie/g)];
     expect(
       anotaciones.length,
-      "el módulo del pago por mensajero ganó (o perdió) anotaciones `@sin-superficie`. La única " +
-        "admitida es la que ya vivía sobre `listarCuentasPorPagarAction` desde el 2026-08-01, y " +
-        "es EXACTAMENTE una: las tres lecturas de `/mis-pagos` se retiraron, no se taparon.",
-    ).toBe(1);
+      "el módulo del pago por mensajero ganó (o perdió) anotaciones `@sin-superficie`. Las admitidas " +
+        "son la que ya vivía sobre `listarCuentasPorPagarAction` desde el 2026-08-01 y las DOS del " +
+        "desglose retirado en la 458-D: las tres lecturas de `/mis-pagos` se retiraron, no se taparon.",
+    ).toBe(3);
     expect(crudo).toMatch(/@sin-superficie[^\n]*listarCuentasPorPagarPaginadoAction/);
+    expect(crudo).toMatch(/@sin-superficie FICHA 458-D[^\n]*: el desglose por cierre de un mensajero/);
+    expect(crudo).toMatch(/@sin-superficie FICHA 458-D[^\n]*: la descarga del desglose por cierre de un mensajero/);
   });
 
   it("el servicio y su interfaz tampoco declaran ya los tres métodos", () => {
@@ -403,7 +413,9 @@ const COBERTURA_AJENA = [
   "tests/unit/services/wallet-mensajero-service.test.ts",
   "tests/unit/services/wallet-cuentas-paginado.test.ts",
   "tests/unit/services/wallet-desglose-mensajero-descarga.test.ts",
-  "tests/unit/descarga/wallet-mensajero-descarga-columnas.test.ts",
+  // FICHA 458-D (T D.8): la descarga del desglose del mensajero se retiró con él; su sucesora (la del
+  // estado de cuenta) y su test ocupan su lugar en la cobertura que no puede desaparecer.
+  "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts",
   "tests/components/descarga/WalletDescarga.test.tsx",
   "tests/components/PremioRankingRotulo.test.tsx",
   "tests/components/QrScanner.test.tsx",
@@ -466,22 +478,26 @@ describe("336 · 6 — la cobertura ajena sobrevivió al borrado", () => {
 
     // R22 — la aserción de orden que NOMBRA la constante que sobrevive. Es lo que la mantiene
     // fuera del censo de «constante sin aserción de orden» de `columnas-asercion-de-orden`.
+    // FICHA 458-D: la constante que sobrevive es la del estado de cuenta (la del desglose se retiró).
     const columnas = codigoSinComentarios(
-      "tests/unit/descarga/wallet-mensajero-descarga-columnas.test.ts",
+      "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts",
     );
-    expect(columnas).toMatch(/expect\(COLUMNAS_DESCARGA_DESGLOSE_MENSAJERO\b/);
+    expect(columnas).toMatch(/expect\(COLUMNAS_DESCARGA_ESTADO_CUENTA\b/);
     expect(columnas).not.toMatch(/COLUMNAS_DESCARGA_MIS_PAGOS/);
 
     // R15 — `WalletDescarga` conserva ≥ 3 ledgers en su tabla de casos. Y su lista de módulos
     // de presentación se lee con `readFileSync`: una ruta borrada ahí no falla con un
     // diagnóstico, revienta con ENOENT y tumba el archivo entero.
     const walletDescarga = codigoSinComentarios("tests/components/descarga/WalletDescarga.test.tsx");
-    expect([...walletDescarga.matchAll(/montar:\s*render\w+/g)].length).toBeGreaterThanOrEqual(3);
+    // FICHA 458-D (T D.8): eran 3; el ledger del desglose del mensajero se retiró con él y su descarga
+    // la cubre `estado-cuenta-descarga-columnas.test.ts`. Quedan 2.
+    expect([...walletDescarga.matchAll(/montar:\s*render\w+/g)].length).toBeGreaterThanOrEqual(2);
     expect(walletDescarga).not.toMatch(/mis-pagos/);
 
     // R20 — la cobertura de la 293 sigue afirmándose sobre lo que sobrevive.
     const premio = codigoSinComentarios("tests/components/PremioRankingRotulo.test.tsx");
-    expect(premio).toMatch(/filaDescargaDesgloseMensajero/);
+    // FICHA 458-D: la descarga que sobrevive es la del estado de cuenta (`lineaDeFila`).
+    expect(premio).toMatch(/lineaDeFila/);
     expect(premio).not.toMatch(/mis-pagos/);
 
     // R16 — el censo de tablas descargables no cita el archivo borrado.

@@ -81,7 +81,8 @@ import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 // desde el Server Component padre (que ya valido rol adminTienda y pre-fetch pagina 1, R18):
 // componente PRIVADO (datos sensibles de la tienda por props, arquitectura §private). Al
 // cambiar de pagina re-fetch por Server Action (lectura interna, NO fetch a /api; el telefono
-// es PII), patron `MiWalletModule` (R22). Lista vacia -> estado vacio legible (R10).
+// es PII), el patron de las lecturas paginadas de `/mi-wallet` (R22). Lista vacia -> estado vacio
+// legible (R10).
 //
 // ⚠️ FEATURE 236 (T4.1/T4.2, design §5) — EL MISMO MODULO SIRVE A DOS PESTAÑAS, y por eso recibe
 // `grupo`. Hasta el 2026-08-19 esta pantalla listaba DOS POBLACIONES bajo UNA sola pestaña, porque
