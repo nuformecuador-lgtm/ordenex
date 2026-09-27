@@ -101,7 +101,7 @@ describe("R32 / TD.6 — el periodo ENTERO en UNA lectura, con el saldo inicial 
         saldoCorrido: "60.00",
         descripcion: "Quincena",
         registro: { nombre: "Ana Admin", automatico: null },
-        anulacion: { motivo: "Duplicado", por: "Ana Admin", fecha: "2026-09-15" },
+        anulacion: { motivo: "Duplicado", por: "Ana Admin", fecha: "2026-09-15", hora: "10:30" },
       }),
     ];
     verEstadoCuentaCompletoMock.mockResolvedValue({

@@ -10,6 +10,8 @@ import { ToastProvider } from "@/providers/ToastProvider";
 import { ROLES_MI_WALLET } from "@/lib/auth/menu-visibility";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import { FORMA_UUID, UUID_TIENDA, estado, fila } from "@/tests/fixtures/estado-cuenta";
+import { lineaDeFila } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
+import { ROTULOS_MI_WALLET } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 
 // =================================================================================================
 // `/mi-wallet` — la pagina de la TIENDA sobre su dinero con Ordenex.
@@ -254,25 +256,37 @@ describe("458-D R34 — el estado de cuenta de la tienda: saldo inicial arriba y
     expect(tabla().textContent ?? "").not.toContain("Registró");
   });
 
-  it("un anulado se ve tachado con el motivo y el día, sin decir quién de Ordenex lo anuló", async () => {
-    sembrar(
-      estadoTienda([
-        COD,
-        filaTienda({
-          n: 4,
-          categoria: "cobro_manual",
-          origenTipo: "manual",
-          chip: "cobros",
-          naceDeUnCierre: false,
-          abono: null,
-          cargo: "500.00",
-          saldoCorrido: "49500.00",
-          anulacion: { motivo: "Cobro duplicado", por: null, fecha: "2026-09-20" },
-        }),
-      ]),
-    );
+  // R25 en `/mi-wallet` (decisión del leader, 2026-09-26, revisión m3): «Anulado por Ordenex», el día y la
+  // hora de Costa Rica y el motivo; NUNCA el nombre de la persona. Literal de contrato.
+  const COBRO_ANULADO = (por: string | null) =>
+    filaTienda({
+      n: 4,
+      categoria: "cobro_manual",
+      origenTipo: "manual",
+      chip: "cobros",
+      naceDeUnCierre: false,
+      abono: null,
+      cargo: "500.00",
+      saldoCorrido: "49500.00",
+      anulacion: { motivo: "Cobro duplicado", por, fecha: "2026-09-20", hora: "10:30" },
+    });
+
+  it("R25: un anulado dice «Anulado por Ordenex» con el día, la hora de Costa Rica y el motivo, sin nombre", async () => {
+    sembrar(estadoTienda([COD, COBRO_ANULADO(null)]));
     await verMiWallet();
-    expect(filaCon("Anulado el 2026-09-20 · Cobro duplicado")).toBeInTheDocument();
+    const fila = filaCon("Anulado por Ordenex el 2026-09-20 a las 10:30 · Cobro duplicado");
+    expect(fila).toBeInTheDocument();
+    expect(within(fila).getByText("Ordenex te cobró")).toHaveClass("line-through");
+  });
+
+  it("R25: aunque la fila trajera un nombre, la tienda no lo ve (ni en pantalla ni en la descarga)", async () => {
+    sembrar(estadoTienda([COD, COBRO_ANULADO("Ana Admin")]));
+    await verMiWallet();
+    expect(filaCon("Anulado por Ordenex el 2026-09-20 a las 10:30 · Cobro duplicado")).toBeInTheDocument();
+    expect(document.body.textContent ?? "").not.toContain("Ana Admin");
+    expect(lineaDeFila(COBRO_ANULADO("Ana Admin"), ROTULOS_MI_WALLET).estado).toBe(
+      "Anulado por Ordenex el 2026-09-20 a las 10:30 · Cobro duplicado",
+    );
   });
 });
 

@@ -49,7 +49,7 @@ const PAGO_ANULADO = fila({
   abono: null,
   cargo: "4000.00",
   saldoCorrido: "-4000.00",
-  anulacion: { motivo: "Se pagó dos veces", por: "Ana Admin", fecha: "2026-09-20" },
+  anulacion: { motivo: "Se pagó dos veces", por: "Ana Admin", fecha: "2026-09-20", hora: "10:30" },
   registro: { nombre: "Ana Admin", automatico: null },
   anulable: false,
   naceDeUnCierre: false,
@@ -103,7 +103,7 @@ describe("R72 — lo revertido antes de la 458, sin constancia", () => {
   it("dice «motivo no registrado»", () => {
     montar(
       estado({
-        filas: [{ ...PAGO_ANULADO, anulacion: { motivo: null, por: null, fecha: "2026-08-01" } }],
+        filas: [{ ...PAGO_ANULADO, anulacion: { motivo: null, por: null, fecha: "2026-08-01", hora: "10:30" } }],
         total: 1,
       }),
     );

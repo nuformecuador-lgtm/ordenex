@@ -126,13 +126,13 @@ describe("R70 — anular un pago desde la wallet, con la misma acción de servid
     const user = userEvent.setup();
     verEstadoCuentaMock.mockResolvedValue({
       status: "ok",
-      estado: { ...INICIAL, filas: [{ ...PAGO, anulable: false, anulacion: { motivo: "x", por: "Ana", fecha: "2026-09-16" } }] },
+      estado: { ...INICIAL, filas: [{ ...PAGO, anulable: false, anulacion: { motivo: "x", por: "Ana", fecha: "2026-09-16", hora: "10:30" } }] },
     });
     render(
       <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
         <ToastProvider>
           <EstadoCuentaMensajero
-            inicial={{ ...INICIAL, filas: [{ ...PAGO, anulable: false, anulacion: { motivo: "x", por: "Ana", fecha: "2026-09-16" } }] }}
+            inicial={{ ...INICIAL, filas: [{ ...PAGO, anulable: false, anulacion: { motivo: "x", por: "Ana", fecha: "2026-09-16", hora: "10:30" } }] }}
             puedeRegistrar
           />
         </ToastProvider>

@@ -143,6 +143,11 @@ export interface EstadoCuentaProps {
   acciones?: (vigente: EstadoCuentaDTO, refrescarCuenta: () => Promise<void>) => ReactNode;
   /** Lo que va debajo del extracto (la conciliación de la bodega, R31). */
   pie?: (vigente: EstadoCuentaDTO, refrescarCuenta: () => Promise<void>) => ReactNode;
+  /**
+   * Lo que va ENCIMA de las tarjetas, hermano de ellas, con el estado VIGENTE (el resumen de tres cifras
+   * de `/mi-wallet`, 172 R55): se relee con cada lectura, así que nunca queda distinto de la tarjeta.
+   */
+  encabezado?: (vigente: EstadoCuentaDTO) => ReactNode;
 }
 
 type Periodo = { desde: string; hasta: string };
@@ -239,6 +244,7 @@ export function EstadoCuenta({
   panel,
   acciones,
   pie,
+  encabezado,
 }: Readonly<EstadoCuentaProps>) {
   const { tipo, id, nombre } = inicial.cuenta;
   const lector = lectorDado ?? lectorDeLaCuenta(inicial.cuenta);
@@ -301,6 +307,7 @@ export function EstadoCuenta({
 
   return (
     <div className="flex flex-col gap-6">
+      {encabezado ? encabezado(vigente) : null}
       <TarjetasEstadoCuenta estado={vigente} vista={vista} />
 
       {acciones ? (
@@ -549,7 +556,7 @@ export function TablaEstadoCuenta({
         }
         const f = l.fila;
         const anulado = f.anulacion !== null;
-        const leyenda = estadoDeFila(f);
+        const leyenda = estadoDeFila(f, rotulos);
         const pago = pagoDeFila(f);
         return (
           <div className="flex min-w-[16rem] flex-col gap-0.5">

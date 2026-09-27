@@ -764,7 +764,7 @@ queda el registro de cierre y lo que cada una desencadenó.
 | R50 | `tests/components/PagosTiendaEstadoCuenta.test.tsx` — la lista aparece en el estado de cuenta de la tienda (458-D; antes, en su desglose) |
 | R51 | idem — el movimiento del pago se distingue por su concepto |
 | R52 | `tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts` — el estado de cuenta de `/wallet/mensajeros/[id]` filtrado por un cierre trae sus pagos REALES y sus anulaciones, no los de otro cierre ni de otro mensajero, y el selector los cuenta (458-D, revision B1; antes, el desglose retirado: `tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts`) |
-| R53 | `tests/components/WalletRefrescoDirigido.test.tsx` — tras registrar, el saldo de la tarjeta es el que devuelve el servidor (458-D: el estado de cuenta ya no enseña «pagado» aparte) |
+| R53 | `tests/integration/db/estado-cuenta-pago-tienda-172r53.test.ts` — con un pago REAL vigente, «Ya pagado» del resumen de `/mi-wallet` lo refleja y el saldo (tarjeta de la tienda y de la oficina) baja en ese mismo monto; anulado, el saldo vuelve (458-D, revisión m2; antes, la cabecera del desglose retirado) |
 | R54 | `tests/integration/mis-pagos-page.test.tsx` — el mensajero ve el pago y su reverso |
 | R55 | `tests/integration/mi-wallet-page.test.tsx` — «pagado» separado de «cargos» `[P5]` |
 | R56 | `tests/unit/descarga/pagos-registrados-descarga-columnas.test.ts` + guardia de columnas sensibles |

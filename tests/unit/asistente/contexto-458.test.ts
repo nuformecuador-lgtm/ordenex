@@ -252,6 +252,8 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
     expect(mensajeros).toContain("el pago de un cierre **no se reparte orden por orden**");
     expect(mensajeros).toContain("Para ver sus órdenes, abrí el cierre con el enlace **Ver** de la fila.");
     expect(mensajeros).not.toContain("No se filtra el estado de cuenta por cierre todavía");
+    // Revisión B1 (172 R52): el filtro por cierre trae también sus pagos y sus anulaciones.
+    expect(mensajeros).toContain("pagos registrados contra ese cierre, con sus anulaciones**; el número de movimientos del selector ya");
   });
 
   it.each(FUERA_DE_OFICINA)("%s NO recibe la ayuda de los estados de cuenta (R103)", (rol) => {
@@ -343,6 +345,11 @@ describe("458-D (bloque D) — la tienda puede preguntar cómo ve el comprobante
     expect(wallet).not.toContain("**Por concepto**");
     // Tampoco se nombra a la gente de Ordenex: la tienda no ve quién registró ni quién anuló.
     expect(wallet).not.toContain("Registró:");
+    // Revisión m3/m4 (R25 en /mi-wallet, decisión del leader): «Anulado por Ordenex» con día y hora; y
+    // la ayuda dice solo lo que hay (las filas no nombran «de qué orden» vienen).
+    expect(wallet).toContain("Ordenex**, el día y la hora (de Costa Rica) en que se anuló y el motivo.");
+    expect(wallet).toContain("se ven desplegando su fila; los pagos, cobros y correcciones no vienen de una orden.");
+    expect(wallet).not.toContain("Cada línea dice de qué orden y de qué cierre viene");
   });
 
   it.each(["mensajero", "adminSatelite"] as RolValue[])("%s NO recibe la explicación del comprobante de la tienda", (rol) => {

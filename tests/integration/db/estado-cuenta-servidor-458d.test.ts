@@ -375,6 +375,8 @@ describeSiHayBase("458-D servidor — el estado de cuenta ampliado contra Postgr
     const c5 = tienda.enteroC.filas.find((f) => idDe(f) === ids.c.c5);
     expect(c5?.anulacion).toMatchObject({ motivo: "Pago a la cuenta equivocada 458", por: null });
     expect(c5?.anulacion?.fecha).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // R25 en /mi-wallet (decision del leader, revision m3): tambien la HORA de Costa Rica, sin el nombre.
+    expect(c5?.anulacion?.hora).toMatch(/^\d{2}:\d{2}$/);
   });
 
   it("R36: lo ajeno responde igual que lo inexistente — la tienda D no ve una sola fila de la C, ni por el cierre compartido", () => {

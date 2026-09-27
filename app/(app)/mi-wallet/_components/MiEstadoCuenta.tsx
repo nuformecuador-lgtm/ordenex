@@ -13,7 +13,7 @@ import { DetalleMiMovimientoCierre } from "./DetalleMiMovimientoCierre";
 import { ResumenMiWallet } from "./ResumenMiWallet";
 import { CATEGORIAS_CON_COMPROBANTE, VerComprobanteMiMovimiento } from "./VerComprobanteMiMovimiento";
 import { DETALLE_MI_MOVIMIENTO_NOMBRE } from "./detalle-mi-movimiento-labels";
-import { MI_ESTADO_CUENTA_TEXTO } from "./mi-estado-cuenta-labels";
+import { MI_ESTADO_CUENTA_TEXTO, textoAnuladoMiWallet } from "./mi-estado-cuenta-labels";
 import { opcionesDeCierre, type CierresDeLaTienda } from "./mi-wallet-cierres";
 // Ficha 461 (R44, P4): la tienda lee su libro DESDE LA TIENDA («Ordenex te cobró»), no con el nombre
 // desde Ordenex que ve la oficina en `/wallet/tiendas`.
@@ -47,6 +47,8 @@ function categoria(f: FilaEstadoCuentaDTO): WalletTiendaMovimientoCategoria {
 export const ROTULOS_MI_WALLET: RotulosEstadoCuenta = {
   concepto: (f) => CATEGORIA_MI_WALLET_LABEL[categoria(f)] ?? f.categoria,
   origen: (f) => ORIGEN_TIENDA_LABEL[f.origenTipo as WalletOrigenTipo] ?? null,
+  // R25 (decisión del leader, revisión m3): «Anulado por Ordenex», día y hora de Costa Rica y motivo.
+  anulado: textoAnuladoMiWallet,
 };
 
 /** R10 (335) — el selector de cierre de la tienda, con las opciones que ya leyó el servidor. */
@@ -98,13 +100,14 @@ export interface MiEstadoCuentaProps {
 
 export function MiEstadoCuenta({ inicial, cierres }: Readonly<MiEstadoCuentaProps>) {
   return (
-    // 172 R55 (cierre de la 458-D) — el resumen de tres cifras ENCIMA del estado de cuenta, hermano de él
-    // (nunca dentro). Es de la cuenta ENTERA: no cambia con el periodo, el chip ni el cierre, así que se
-    // pinta con la primera lectura del servidor. Sin resumen (no debería pasar en la vista de la tienda),
-    // el estado de cuenta sigue en pie.
+    // 172 R55 (cierre de la 458-D) — el resumen de tres cifras ENCIMA de las tarjetas, hermano de ellas
+    // (nunca dentro). Es de la cuenta ENTERA, pero se pinta con la lectura VIGENTE (revisión m1): cada
+    // lectura de la tienda lo trae, así que si el saldo cambió entre dos lecturas (un cierre aprobado con
+    // la pantalla abierta) el resumen y la tarjeta «Saldo actual» cambian juntos. Sin resumen (no debería
+    // pasar en la vista de la tienda), el estado de cuenta sigue en pie.
     <div className="flex flex-col gap-6">
-      {inicial.resumen === null ? null : <ResumenMiWallet resumen={inicial.resumen} />}
       <EstadoCuenta
+        encabezado={(vigente) => (vigente.resumen === null ? null : <ResumenMiWallet resumen={vigente.resumen} />)}
         inicial={inicial}
         rotulos={ROTULOS_MI_WALLET}
         lector={LECTOR_MI_TIENDA}

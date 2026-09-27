@@ -51,8 +51,9 @@ function toError(
  * R13–R15 — los conceptos con movimientos del periodo y la cuenta que se miran, con su numero.
  * `libro`: `caja` (`/wallet`), `tienda` (desglose/estado de cuenta de UNA tienda, con `tiendaId`) o
  * `mi_tienda` (`/mi-wallet`: la tienda sale de la sesion y NO se admite ningun id).
- * La consumen `WalletFiltros` y `MiWalletFiltros` (`useConceptosConMovimientos`); el desglose de una
- * tienda que tambien la usaba se retiro en la 458-D (el estado de cuenta filtra por chip).
+ * La consume `WalletFiltros` (`useConceptosConMovimientos`, libro `caja`). El desglose de una tienda y
+ * `MiWalletFiltros` de `/mi-wallet`, que tambien la usaban, se retiraron en la 458-D (el estado de
+ * cuenta filtra por chip).
  *
  * FICHA 458-D (servidor, 2026-09-26) — la rama `libro: "tienda"` se queda SIN pantalla y NO se retira:
  * sin llamadores en API publica, asistente, scripts ni crons, pero la usan

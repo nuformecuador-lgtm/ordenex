@@ -43,10 +43,10 @@ function contarMovimientos(n: number): string {
 /**
  * El dia del cierre, en el MISMO formato que pinta la columna «Fecha» de la tabla.
  *
- * Ficha 459 (recorrido F1): `fechaDiaMovimientoCR` es la misma funcion que usan la columna
- * «Fecha» de `DesgloseTiendaLedger` y la descarga, y las tres dan el dia de COSTA RICA (antes
- * las tres daban el dia UTC y un cierre de las 22:00 salia fechado al dia siguiente). Usar aqui
- * otra funcion haria que la opcion dijera un dia y las filas de al lado otro.
+ * Ficha 459 (recorrido F1): `fechaDiaMovimientoCR` es la misma funcion con la que el servidor fecha
+ * cada fila del estado de cuenta (`EstadoCuentaService`, la columna «Fecha» y la descarga), y todas
+ * dan el dia de COSTA RICA (antes daban el dia UTC y un cierre de las 22:00 salia fechado al dia
+ * siguiente). Usar aqui otra funcion haria que la opcion dijera un dia y las filas de al lado otro.
  */
 function diaDe(cierre: CierreTiendaOpcionDTO): string {
   return fechaDiaMovimientoCR(cierre.fecha);

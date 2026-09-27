@@ -54,6 +54,8 @@ interface Medida {
   cierreN: EstadoCuentaDTO;
   porLaAction: VerEstadoCuentaResult;
   cierres: { A: string; B: string };
+  /** El instante REAL de la anulacion de A1, leido de su documento. */
+  anuladoA1At: Date;
   selector: CierresDeLaCuentaResult;
 }
 
@@ -213,6 +215,9 @@ describeSiHayBase("458-D B1 — 172 R52: el filtro por cierre del mensajero trae
           cierreNSobreM: await leer({ cuenta: cuentaM, cierreId: cierreN }),
           cierreN: await leer({ cuenta: { tipo: "mensajero", id: N }, cierreId: cierreN }),
           cierres: { A: cierreA, B: cierreB },
+          anuladoA1At: (
+            await tx.liquidacionAnulacion.findUniqueOrThrow({ where: { pagoId: docA1 }, select: { createdAt: true } })
+          ).createdAt,
           selector: await cierresDeLaCuentaAction(
             { cuenta: "mensajero", mensajeroId: M },
             { getActor: async () => maestro, service: new FiltrosWalletService(new FiltrosWalletRepository(tx as never)) },
@@ -250,6 +255,11 @@ describeSiHayBase("458-D B1 — 172 R52: el filtro por cierre del mensajero trae
     const pago = cierreA.filas.find((f) => idDe(f) === ids.pagoA1);
     const contra = cierreA.filas.find((f) => idDe(f) === ids.anulacionA1);
     expect(pago?.anulacion?.motivo).toBe("Monto equivocado 52");
+    // R25 — el dia y la hora de pared de Costa Rica (UTC−6 todo el año, sin horario de verano),
+    // calculados aqui por un camino independiente del servidor.
+    const cr = new Date(m().anuladoA1At.getTime() - 6 * 3600 * 1000).toISOString();
+    expect(pago?.anulacion?.fecha).toBe(cr.slice(0, 10));
+    expect(pago?.anulacion?.hora).toBe(cr.slice(11, 16));
     expect(pago?.cargo).toBe("1000.00");
     expect(contra?.esContraAsiento).toBe(true);
     expect(contra?.abono).toBe("1000.00");

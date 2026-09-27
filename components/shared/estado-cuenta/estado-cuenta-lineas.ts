@@ -1,4 +1,4 @@
-import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
+import type { AnulacionDeFilaDTO, EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 
 import { PANEL_TEXTO, textoRegistro } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
 import { METODO_LABEL } from "@/lib/constants/metodo-pago-label";
@@ -20,6 +20,11 @@ export interface RotulosEstadoCuenta {
   concepto: (fila: FilaEstadoCuentaDTO) => string;
   /** El origen legible de la fila, o `null` si no aplica. Nunca un identificador. */
   origen: (fila: FilaEstadoCuentaDTO) => string | null;
+  /**
+   * R25 — la leyenda de una fila ANULADA en esta superficie. Sin él, la de la oficina (`textoAnulado`:
+   * el día, quién y el motivo). `/mi-wallet` pone la suya: «Anulado por Ordenex», día y hora, motivo.
+   */
+  anulado?: (a: AnulacionDeFilaDTO) => string;
 }
 
 /**
@@ -38,8 +43,8 @@ export function pagoDeFila(fila: FilaEstadoCuentaDTO): string | null {
 }
 
 /** R25 — la leyenda del estado de UNA fila: anulada (con quién, cuándo y por qué), anulación, o nada. */
-export function estadoDeFila(fila: FilaEstadoCuentaDTO): string | null {
-  if (fila.anulacion !== null) return textoAnulado(fila.anulacion);
+export function estadoDeFila(fila: FilaEstadoCuentaDTO, rotulos?: RotulosEstadoCuenta): string | null {
+  if (fila.anulacion !== null) return (rotulos?.anulado ?? textoAnulado)(fila.anulacion);
   if (fila.esContraAsiento) return ESTADO_CUENTA_TEXTO.anulacion;
   return null;
 }
@@ -72,6 +77,6 @@ export function lineaDeFila(fila: FilaEstadoCuentaDTO, rotulos: RotulosEstadoCue
     cargo: fila.cargo,
     abono: fila.abono,
     saldo: fila.saldoCorrido,
-    estado: estadoDeFila(fila),
+    estado: estadoDeFila(fila, rotulos),
   };
 }

@@ -54,7 +54,7 @@ const FILA_ABONO = fila({
   saldoCorrido: "4000.00",
   descripcion: "Pago de los fletes · SINPE · 123456",
   registro: { nombre: "Ana Admin", automatico: null },
-  anulacion: { motivo: "Duplicado", por: "Ana Admin", fecha: "2026-09-25" },
+  anulacion: { motivo: "Duplicado", por: "Ana Admin", fecha: "2026-09-25", hora: "10:30" },
   naceDeUnCierre: false,
 });
 const FILA_ANULADO = fila({

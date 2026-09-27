@@ -145,6 +145,12 @@ export interface AnulacionDeFilaDTO {
   por: string | null;
   /** Dia CR de la anulacion. */
   fecha: string | null;
+  /**
+   * FICHA 458-D (revision m3, R25 en `/mi-wallet`) — la hora de pared de Costa Rica («HH:mm») de la
+   * anulacion; `null` junto con `fecha`. La tienda ve «Anulado por Ordenex» con el dia y la hora, sin
+   * el nombre de la persona (decision del leader, 2026-09-26).
+   */
+  hora: string | null;
 }
 
 export interface FilaEstadoCuentaDTO {

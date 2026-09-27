@@ -373,7 +373,7 @@ const SUPERFICIES: { nombre: string; montar: () => Promise<void> }[] = [
   {
     nombre: "/wallet/tiendas/[tiendaId] · estado de cuenta con el panel «Ver» abierto",
     montar: async () => {
-      conSWR(<EstadoCuentaTienda inicial={estadoEC("tienda", TIENDA, "Tania Tienda", [filaEC(30), filaEC(31, { anulacion: { motivo: "Duplicado", por: "Ana Admin", fecha: "2026-09-13" }, anulable: false })])} puedeRegistrar />);
+      conSWR(<EstadoCuentaTienda inicial={estadoEC("tienda", TIENDA, "Tania Tienda", [filaEC(30), filaEC(31, { anulacion: { motivo: "Duplicado", por: "Ana Admin", fecha: "2026-09-13", hora: "10:30" }, anulable: false })])} puedeRegistrar />);
       fireEvent.click(screen.getAllByRole("button", { name: /^Ver Ordenex le cobra a la tienda/ })[0]);
       await screen.findByRole("dialog");
     },

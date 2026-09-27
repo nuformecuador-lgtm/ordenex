@@ -8,6 +8,7 @@ import type {
 import { tipoDeDocumentoOriginal } from "@/lib/services/WalletService";
 import type { AnulacionDeFilaDTO } from "@/lib/types/estado-cuenta";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { horaCostaRica } from "@/lib/utils/hora-cr";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RegistroDTO } from "@/lib/types/estado-cuenta";
 import type { AQuienDTO, AutoriaDeFilaDTO, AutoriaLibroCajaInput, ComoDTO } from "@/lib/types/libro-caja-autoria";
@@ -201,7 +202,9 @@ export class LibroCajaAutoriaService implements ILibroCajaAutoriaService {
           a = o === null ? undefined : anulaciones.premios.get(o);
           break;
       }
-      return a === undefined ? null : { motivo: a.motivo, por: a.por, fecha: fechaCalendarioCR(a.fecha) };
+      return a === undefined
+        ? null
+        : { motivo: a.motivo, por: a.por, fecha: fechaCalendarioCR(a.fecha), hora: horaCostaRica(a.fecha.toISOString()) };
     };
 
     const porId = new Map(movs.map((m) => [m.id, m]));

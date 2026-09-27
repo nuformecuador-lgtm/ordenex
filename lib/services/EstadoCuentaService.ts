@@ -61,6 +61,7 @@ import { fechaCalendarioCR, inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } 
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 import { derivarDesgloseTienda } from "@/lib/utils/desglose-tienda";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
+import { horaCostaRica } from "@/lib/utils/hora-cr";
 
 /** El documento de una fila ORIGINAL de un libro de cuenta: por donde se anula y se lee su estado. */
 type DocumentoDeFila =
@@ -107,7 +108,7 @@ function signoDe(saldo: string): "positivo" | "negativo" | "cero" {
 }
 
 function aAnulacion(a: AnulacionLeida): AnulacionDeFilaDTO {
-  return { motivo: a.motivo, por: a.anuladoPorNombre, fecha: fechaCalendarioCR(a.fecha) };
+  return { motivo: a.motivo, por: a.anuladoPorNombre, fecha: fechaCalendarioCR(a.fecha), hora: horaCostaRica(a.fecha.toISOString()) };
 }
 
 /**
@@ -452,7 +453,12 @@ export class EstadoCuentaService implements IEstadoCuentaService {
           anulacion:
             e.anulacion === null
               ? null
-              : { motivo: e.anulacion.motivo, por: e.anulacion.anuladoPorNombre, fecha: fechaCalendarioCR(e.anulacion.createdAt) },
+              : {
+                  motivo: e.anulacion.motivo,
+                  por: e.anulacion.anuladoPorNombre,
+                  fecha: fechaCalendarioCR(e.anulacion.createdAt),
+                  hora: horaCostaRica(e.anulacion.createdAt.toISOString()),
+                },
           tieneComprobante: false,
           pago: null,
         });
@@ -516,6 +522,11 @@ type Ventana = {
   desdeUtc?: Date;
   hastaUtc?: Date;
   pares: ParDeChip[] | null;
+  /**
+   * 458-D (R10/R12; en el mensajero, tambien 172 R52) — el cierre del filtro, que llega tal cual a
+   * `VentanaDeLibro.cierreId`. Declarado aqui para que el compilador proteja la propagacion.
+   */
+  cierreId?: string;
   skip: number;
   take: number;
   /** 172 R55 — leer el resumen de tres cifras (solo la vista de la propia tienda). */
@@ -553,8 +564,10 @@ function ventanaDeArchivo(): { page: number; pageSize: number } {
 
 /**
  * R34/R35 — la fila tal como la ve la tienda en `/mi-wallet`: sin «Anular…», y sin los nombres de la
- * gente de Ordenex (quien la registro, quien aprobo el cierre, quien la anulo). Se conservan el motivo
- * y el dia de la anulacion (R25) y el destino (`ref`), que es por donde abre SU comprobante (R78).
+ * gente de Ordenex (quien la registro, quien aprobo el cierre, quien la anulo). Se conservan el motivo,
+ * el dia y la hora de la anulacion (R25) y el destino (`ref`), que es por donde abre SU comprobante
+ * (R78). R25 en la tienda (decision del leader, 2026-09-26, revision m3): la pantalla dice «Anulado
+ * por Ordenex» con el dia y la hora de Costa Rica y el motivo; el NOMBRE de la persona no viaja.
  */
 function paraLaTienda(f: FilaEstadoCuentaDTO): FilaEstadoCuentaDTO {
   return {
