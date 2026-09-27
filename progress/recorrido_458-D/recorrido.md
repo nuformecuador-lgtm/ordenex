@@ -115,3 +115,27 @@ derivación de la 344 no encuentra aporte por orden para esa comisión en los da
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | antes (`cierre-r7r8-antes.json`) | 13.524.733,22 | 40.800,50 | 13.483.932,72 | 13.336.262,62 | 147.670,10 | 147.670,10 | **0,00** | **0,00** |
 | después (`cierre-r7r8-despues.json`; 2 pagos a Tania y sus 2 anulaciones) | 13.526.733,22 | 42.800,50 | 13.483.932,72 | 13.336.262,62 | 147.670,10 | 147.670,10 | **0,00** | **0,00** |
+
+---
+
+# Arreglo de la revisión (B1, R25, m1) — recorrido corto (backend_dev, 2026-09-26)
+
+Playwright ad hoc (`chromium` de `@playwright/test`, script en el scratchpad, fuera del árbol) contra UN dev
+server del worktree (`next dev -p 3497`, `AUTH_RISK_THRESHOLD=999` solo en la línea de comando; apagado al
+terminar) sobre el clon `ordenex_458dx` (0 conexiones a la plantilla al clonar; `migrate deploy`: «No pending
+migrations»). Usuarios `admin.qa` y `tienda.qa` (Tania), contraseña QA rotada SOLO en el clon
+(`seed-usuarios-qa`). Salida cruda: `fix-mensajero.json`, `fix-cobro-anulado.json`, `fix-tienda.json`;
+capturas `fix-*`.
+
+| Rol | Paso | Resultado | Números |
+| --- | --- | --- | --- |
+| admin | **mensajero Marco, filtro por un cierre con pagos REALES (172 R52, B1)** | OK | el selector ofrece «Cierre del 2026-08-13 · Marco Mensajero · **5 movimientos**», «… · 3 movimientos», «Cierre del 2026-08-12 · … · 2 movimientos» (antes contaba solo las filas del cierre); elegido el de 5 → **5 filas** + saldo inicial: los dos pagos (₡1.400 y ₡3.400, documentos `liquidacion_pago` con `cierre_id` = ese cierre) tachados con «Anulado el 2026-08-13 por Ana Admin · <motivo>», sus dos «Anulación» (₡1.400 y ₡3.400) y el «Pago devengado» ₡3.400 del cierre. Antes del arreglo este filtro traía 1 fila. 0 uuid en el texto (`fix-01*`) |
+| admin | cobro a Tania y su anulación (para tener una fila anulada en `/mi-wallet`) | OK | «Ordenex le cobra a la tienda» ₡1.500 «Material de despacho 458D fix» → tarjeta 147.670,10 → **146.170,10**; «Ver» → «Anular…» con «Cobro duplicado 458D fix» → **147.670,10**; en la oficina la fila dice «Anulado el 2026-09-26 por Ana Admin · Cobro duplicado 458D fix» (la oficina no cambia) |
+| adminTienda | **/mi-wallet: resumen visible y fila anulada (R25, m1)** | OK | resumen «A tu favor ₡192.900 · Cargos de Ordenex ₡45.229,90 · Ya pagado ₡0 · Saldo a favor ₡147.670,10» = tarjeta «Saldo actual ₡147.670,10 · Ordenex te debe ₡147.670,10»; tras el chip «Cobros» (lectura nueva) el resumen se relee y sigue igual a la tarjeta; la fila dice **«Anulado por Ordenex el 2026-09-26 a las 18:26 · Cobro duplicado 458D fix»** (la anulación se guardó a las 00:26 UTC del 27: 18:26 en Costa Rica), tachada, y su «Ordenex anuló un cobro y te lo devolvió» ₡1.500; **ningún nombre del personal** («Ana Admin») en la página; 0 uuid (`fix-02`, `fix-03*`) |
+
+## R7 / R8 — `c458c-1.sql` (arreglo de la revisión)
+
+| Momento | entró | salió | cifra | ganancia | De las tiendas | Σ saldos tiendas | R8 | R7 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| antes (`fix-r7r8-antes.json`) | 13.524.733,22 | 40.800,50 | 13.483.932,72 | 13.336.262,62 | 147.670,10 | 147.670,10 | **0,00** | **0,00** |
+| después (`fix-r7r8-despues.json`; un cobro a Tania y su anulación) | 13.524.733,22 | 40.800,50 | 13.483.932,72 | 13.336.262,62 | 147.670,10 | 147.670,10 | **0,00** | **0,00** |

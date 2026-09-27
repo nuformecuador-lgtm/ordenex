@@ -1,0 +1,13 @@
+{
+ "cobro": {
+  "nombre": "Tania Tienda",
+  "tarjetasAntes": "Saldo actual\n₡146.170,10\n\nOrdenex le debe ₡146.170,10 a Tania Tienda\n\nSaldo inicial\n₡0\nAbonos del periodo\n₡191.400\nCargos del periodo\n₡45.229,90\nSaldo al final del periodo\n₡146.170,10",
+  "tarjetasConCobro": "Saldo actual\n₡146.170,10\n\nOrdenex le debe ₡146.170,10 a Tania Tienda\n\nSaldo inicial\n₡0\nAbonos del periodo\n₡191.400\nCargos del periodo\n₡45.229,90\nSaldo al final del periodo\n₡146.170,10",
+  "filaCobro": "\t2026-09-26\t\nOrdenex le cobra a la tienda\nMaterial de despacho 458D fix\nRegistrado a mano\nRegistró: Ana Admin\n\t₡1.500\t\t₡146.170,10\tVer",
+  "tarjetasDespues": "Saldo actual\n₡147.670,10\n\nOrdenex le debe ₡147.670,10 a Tania Tienda\n\nSaldo inicial\n₡0\nAbonos del periodo\n₡191.400\nCargos del periodo\n₡43.729,90\nSaldo al final del periodo\n₡147.670,10",
+  "filaAnuladaOficina": [
+   "\t2026-09-26\t\nOrdenex le cobra a la tienda\nMaterial de despacho 458D fix\nRegistrado a mano\nRegistró: Ana Admin\nAnulado el 2026-09-26 por Ana Admin · Cobro duplicado 458D fix\n\t₡1.500\t\t₡146.170,10\tVer",
+   "\t2026-09-26\t\nCobro de Ordenex a la tienda anulado\nAnulación\nAnulación · Material de despacho 458D fix\nCobro de Ordenex a una tienda · Tania Tienda\nRegistró: Ana Admin\n\t\t₡1.500\t₡147.670,10\tVer"
+  ]
+ }
+}
