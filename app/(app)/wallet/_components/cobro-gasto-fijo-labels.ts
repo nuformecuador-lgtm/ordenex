@@ -28,6 +28,20 @@ export const COBROS_PENDIENTES_TITULO = COBROS_PENDIENTES_SECCION;
 export const COBROS_PENDIENTES_DESCRIPCION =
   "Nadie los cobró todavía: el dinero sigue en la caja y esperan tu decisión.";
 
+/**
+ * ⭑ FICHA 458 (F2 del recorrido final) — LA MISMA LÍNEA PARA QUIEN NO PUEDE DECIDIR. El admin
+ * ve la cola (R40: sin botones) y la frase de arriba le decía «esperan tu decisión», que es
+ * falso para él: decide solo el maestro (`puedeDecidirCobroGastoFijo`). Se le dice quién decide
+ * en vez de pedirle algo que no puede hacer.
+ */
+export const COBROS_PENDIENTES_DESCRIPCION_SOLO_LECTURA =
+  "Nadie los cobró todavía: el dinero sigue en la caja. Solo el maestro puede aprobarlos o rechazarlos.";
+
+/** La descripción de la tarjeta según quién mira: la que pide decidir, o la que dice quién decide. */
+export function cobrosPendientesDescripcion(puedeDecidir: boolean): string {
+  return puedeDecidir ? COBROS_PENDIENTES_DESCRIPCION : COBROS_PENDIENTES_DESCRIPCION_SOLO_LECTURA;
+}
+
 /** Encabezados de las columnas de la cola, en el orden en que se leen. */
 export const COBROS_PENDIENTES_COLUMNA = {
   concepto: "Concepto",

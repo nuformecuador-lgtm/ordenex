@@ -425,3 +425,14 @@ describe("458-E (bloque E) — la oficina puede preguntar por el libro de la caj
     }
   });
 });
+
+// FICHA 458 — F2 del recorrido final: el admin preguntó «¿los puedo aprobar yo?» y el asistente
+// contestó «No lo sé con certeza», porque la ayuda solo decía que los gastos fijos pendientes
+// «aparecen en su propio panel». Ahora dice quién decide.
+describe("458 final (F2) — la oficina sabe que solo el maestro decide los gastos fijos", () => {
+  it.each(OFICINA)("%s: la caja dice que solo el maestro aprueba o rechaza, y que el admin no tiene botones", (rol) => {
+    const cuerpo = cuerpoEnContexto(rol, "oficina/wallet-caja");
+    expect(cuerpo).toContain("**«Cobros de gasto fijo por aprobar»**, y ahí **solo el maestro decide**");
+    expect(cuerpo).toContain("el **admin ve la misma lista, pero sin botones**, y no puede aprobar ni rechazar ningún cobro de gasto fijo");
+  });
+});

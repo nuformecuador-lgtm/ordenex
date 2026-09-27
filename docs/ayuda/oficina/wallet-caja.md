@@ -199,7 +199,10 @@ y lo que escribiste se queda.
 
 **Gastos fijos.** En vez de teclear el mismo gasto cada mes, se define una plantilla con **cada cuánto
 se cobra**, y se puede **activar o desactivar** sin borrarla. Los que quedan pendientes de cobrar
-aparecen en su propio panel.
+aparecen en su propio panel, **«Cobros de gasto fijo por aprobar»**, y ahí **solo el maestro decide**:
+el maestro ve en cada fila **Aprobar** y **Rechazar**; el **admin ve la misma lista, pero sin botones**,
+y no puede aprobar ni rechazar ningún cobro de gasto fijo. Si sos admin y hay uno esperando, avisale
+al maestro. Mientras nadie decida, ese dinero **no sale** de la caja.
 
 **Cobros de rechazos de tienda** tienen también su panel de pendientes.
 
