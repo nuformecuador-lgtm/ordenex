@@ -1,0 +1,955 @@
+[
+  {
+    "id": "R7/R8 inicio del rol",
+    "estado": "OK",
+    "entro": "13585733.22",
+    "salio": "101800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "1 tarjetas = fotografía SQL",
+    "estado": "INFO",
+    "tarjetas": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "sql": {
+      "entro": "13585733.22",
+      "salio": "101800.50",
+      "cifra": "13483932.72",
+      "ganancia": "13336262.62",
+      "de_tiendas": "147670.10",
+      "capital": "0",
+      "suma_saldos": "147670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    }
+  },
+  {
+    "id": "1 filtro de concepto con su cuenta; sin «Otro gasto de Ordenex»",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "25",
+      "50",
+      "Todas las categorías",
+      "Flete cobrado a la tienda (5)",
+      "Flete por rechazo cobrado a la tienda (2)",
+      "Comisión de contra-entrega cobrada a la tienda (5)",
+      "IVA del flete cobrado a la tienda (5)",
+      "IVA del flete por rechazo cobrado a la tienda (2)",
+      "IVA de la comisión cobrado a la tienda (5)",
+      "Corrección de caja (suma) (8)",
+      "Ordenex le paga a un mensajero (4)",
+      "Sueldo (2)",
+      "Corrección de caja (resta) (2)",
+      "Gasto de Ordenex (2)",
+      "Indemnización que Ordenex paga por un incidente (3)",
+      "Contra-entrega cobrado a los clientes de la tienda (5)",
+      "Ordenex le cobra a una tienda (1)",
+      "Cobro a una tienda anulado (1)",
+      "Flete por rechazo cobrado a la tienda anulado (1)",
+      "IVA del flete por rechazo cobrado a la tienda anulado (1)"
+    ],
+    "sumaCuentas": 54,
+    "filasCaja": 54
+  },
+  {
+    "id": "1 barrido /wallet",
+    "estado": "INFO",
+    "uuid": false,
+    "crudo": false,
+    "muestra": []
+  },
+  {
+    "id": "02-sueldo registrar «Sueldo»",
+    "estado": "OK",
+    "asiQueda": "Así queda Antes Después Flujo de dinero registrado Antes: ₡13.483.932,72 Después: ₡13.459.932,72 Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.312.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 · no cambia Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "intentoPdf": {
+      "dialogoSigueAbierto": true,
+      "texto": "No se pudo guardar el comprobante, así que no se registró nada. Probá de nuevo.",
+      "toast": "No se pudo guardar el comprobante, así que no se registró nada. Probá de nuevo."
+    },
+    "aviso": "Movimiento registrado correctamente. ×",
+    "cifrasAntes": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasDespues": {
+      "cifra": "₡13.459.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡125.800,50",
+      "movimientos": "55",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.312.262,62",
+      "capital": "₡0"
+    },
+    "filaNueva": {
+      "texto": "2026-09-26 Sueldo Sueldo · Sueldo R458F-admin septiembre Pedro R458F-admin Sale ₡24.000 Ordenex Ana Admin Ver",
+      "tachada": false
+    },
+    "esperado": "cifra y ganancia bajan lo mismo; De las tiendas y capital no cambian"
+  },
+  {
+    "id": "R7/R8 tras registrar 02-sueldo",
+    "estado": "OK",
+    "entro": "13585733.22",
+    "salio": "125800.50",
+    "cifra": "13459932.72",
+    "ganancia": "13312262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-sueldo Ver: panel",
+    "estado": "OK",
+    "nombreAccesible": "Ver Sueldo del 2026-09-26 por ₡24.000",
+    "panel": "Sueldo 2026-09-26 · Sale ₡24.000 A quién Pedro R458F-admin Por qué Sueldo R458F-admin septiembre De dónde sale Sueldo · Sueldo R458F-admin septiembre Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Ana Admin · el 2026-09-26 a las 20:03 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.459.932,72 Ganancia de Ordenex ₡13.312.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Cerrar",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "02-sueldo Anular…",
+    "estado": "OK",
+    "dialogoAnular": "Anular «Sueldo» Se registrará hoy un movimiento contrario por ₡24.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Sueldo · 2026-09-26 · ₡24.000 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar Anular",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "original": {
+      "texto": "2026-09-26 Sueldo Sueldo · Sueldo R458F-admin septiembre Pedro R458F-admin Sale ₡24.000 Ordenex Ana Admin Anulado Ver",
+      "tachada": true
+    },
+    "contraAsiento": {
+      "texto": "2026-09-26 Corrección de caja (suma) Gasto o sueldo registrado a mano · Anulación de: Sueldo R458F-admin septiembre Pedro R458F-admin Entra ₡24.000 Ordenex Ana Admin Ver",
+      "tachada": false
+    },
+    "cifrasAntesDeRegistrar": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasTrasAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.609.733,22",
+      "salio": "₡125.800,50",
+      "movimientos": "56",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "R7/R8 tras anular 02-sueldo",
+    "estado": "OK",
+    "entro": "13609733.22",
+    "salio": "125800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-sueldo segundo intento de anular",
+    "estado": "OK",
+    "aviso": "Ya estaba anulado; no se registró nada más. ×"
+  },
+  {
+    "id": "02-sueldo filas en la caja con la marca",
+    "estado": "INFO",
+    "n": 2
+  },
+  {
+    "id": "02-gasto registrar «Gasto de Ordenex»",
+    "estado": "OK",
+    "asiQueda": "Así queda Antes Después Flujo de dinero registrado Antes: ₡13.483.932,72 Después: ₡13.480.932,72 Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.333.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 · no cambia Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "intentoPdf": null,
+    "aviso": "Movimiento registrado correctamente. ×",
+    "cifrasAntes": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.609.733,22",
+      "salio": "₡125.800,50",
+      "movimientos": "56",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasDespues": {
+      "cifra": "₡13.480.932,72",
+      "entro": "₡13.609.733,22",
+      "salio": "₡128.800,50",
+      "movimientos": "57",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.333.262,62",
+      "capital": "₡0"
+    },
+    "filaNueva": {
+      "texto": "2026-09-26 Gasto de Ordenex Gasto de Ordenex · Gasto R458F-admin papelería Librería R458F-admin Sale ₡3.000 Ordenex Ana Admin Ver",
+      "tachada": false
+    },
+    "esperado": "cifra y ganancia bajan lo mismo"
+  },
+  {
+    "id": "R7/R8 tras registrar 02-gasto",
+    "estado": "OK",
+    "entro": "13609733.22",
+    "salio": "128800.50",
+    "cifra": "13480932.72",
+    "ganancia": "13333262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-gasto Ver: panel",
+    "estado": "OK",
+    "nombreAccesible": "Ver Gasto de Ordenex del 2026-09-26 por ₡3.000",
+    "panel": "Gasto de Ordenex 2026-09-26 · Sale ₡3.000 A quién Librería R458F-admin Por qué Gasto R458F-admin papelería De dónde sale Gasto de Ordenex · Gasto R458F-admin papelería Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Ana Admin · el 2026-09-26 a las 20:04 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.480.932,72 Ganancia de Ordenex ₡13.333.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Cerrar",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "02-gasto Anular…",
+    "estado": "OK",
+    "dialogoAnular": "Anular «Gasto de Ordenex» Se registrará hoy un movimiento contrario por ₡3.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Gasto de Ordenex · 2026-09-26 · ₡3.000 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar Anular",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "original": {
+      "texto": "2026-09-26 Gasto de Ordenex Gasto de Ordenex · Gasto R458F-admin papelería Librería R458F-admin Sale ₡3.000 Ordenex Ana Admin Anulado Ver",
+      "tachada": true
+    },
+    "contraAsiento": {
+      "texto": "2026-09-26 Corrección de caja (suma) Gasto o sueldo registrado a mano · Anulación de: Gasto R458F-admin papelería Librería R458F-admin Entra ₡3.000 Ordenex Ana Admin Ver",
+      "tachada": false
+    },
+    "cifrasAntesDeRegistrar": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.609.733,22",
+      "salio": "₡125.800,50",
+      "movimientos": "56",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasTrasAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.612.733,22",
+      "salio": "₡128.800,50",
+      "movimientos": "58",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "R7/R8 tras anular 02-gasto",
+    "estado": "OK",
+    "entro": "13612733.22",
+    "salio": "128800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-gasto segundo intento de anular",
+    "estado": "OK",
+    "aviso": "Ya estaba anulado; no se registró nada más. ×"
+  },
+  {
+    "id": "02-gasto filas en la caja con la marca",
+    "estado": "INFO",
+    "n": 2
+  },
+  {
+    "id": "02-correccion-suma registrar «Corrección de caja (suma)»",
+    "estado": "OK",
+    "asiQueda": "Así queda Antes Después Flujo de dinero registrado Antes: ₡13.483.932,72 Después: ₡13.484.932,72 Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.337.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 · no cambia Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "intentoPdf": null,
+    "aviso": "Movimiento registrado correctamente. ×",
+    "cifrasAntes": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.612.733,22",
+      "salio": "₡128.800,50",
+      "movimientos": "58",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasDespues": {
+      "cifra": "₡13.484.932,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡128.800,50",
+      "movimientos": "59",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.337.262,62",
+      "capital": "₡0"
+    },
+    "filaNueva": {
+      "texto": "2026-09-26 Corrección de caja (suma) Registrado a mano · Corrección R458F-admin descuadre Cajero R458F-admin Entra ₡1.000 Ordenex Ana Admin Ver",
+      "tachada": false
+    },
+    "esperado": "cifra y ganancia suben lo mismo"
+  },
+  {
+    "id": "R7/R8 tras registrar 02-correccion-suma",
+    "estado": "OK",
+    "entro": "13613733.22",
+    "salio": "128800.50",
+    "cifra": "13484932.72",
+    "ganancia": "13337262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-correccion-suma Ver: panel",
+    "estado": "OK",
+    "nombreAccesible": "Ver Corrección de caja (suma) del 2026-09-26 por ₡1.000",
+    "panel": "Corrección de caja (suma) 2026-09-26 · Entra ₡1.000 A quién Cajero R458F-admin Por qué Corrección R458F-admin descuadre De dónde sale Registrado a mano · Corrección R458F-admin descuadre Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Ana Admin · el 2026-09-26 a las 20:04 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.484.932,72 Ganancia de Ordenex ₡13.337.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Cerrar",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "02-correccion-suma Anular…",
+    "estado": "OK",
+    "dialogoAnular": "Anular la corrección de caja Se registrará hoy un movimiento contrario por ₡1.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Corrección de caja (suma) · 2026-09-26 · ₡1.000 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar Anular",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "original": {
+      "texto": "2026-09-26 Corrección de caja (suma) Registrado a mano · Corrección R458F-admin descuadre Cajero R458F-admin Entra ₡1.000 Ordenex Ana Admin Anulado Ver",
+      "tachada": true
+    },
+    "contraAsiento": {
+      "texto": "2026-09-26 Corrección de caja (resta) Registrado a mano · Anulación · Corrección R458F-admin descuadre Cajero R458F-admin Sale ₡1.000 Ordenex Ana Admin Ver",
+      "tachada": false
+    },
+    "cifrasAntesDeRegistrar": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.612.733,22",
+      "salio": "₡128.800,50",
+      "movimientos": "58",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasTrasAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡129.800,50",
+      "movimientos": "60",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "R7/R8 tras anular 02-correccion-suma",
+    "estado": "OK",
+    "entro": "13613733.22",
+    "salio": "129800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-correccion-suma segundo intento de anular",
+    "estado": "OK",
+    "aviso": "Ya estaba anulado; no se registró nada más. ×"
+  },
+  {
+    "id": "02-correccion-suma filas en la caja con la marca",
+    "estado": "INFO",
+    "n": 2
+  },
+  {
+    "id": "02-cobro-tienda registrar «Ordenex le cobra a una tienda»",
+    "estado": "OK",
+    "asiQueda": "Así queda Antes Después Saldo de Tania Tienda Antes: ₡147.670,10 Después: ₡142.670,10 Flujo de dinero registrado ₡13.483.932,72 · no cambia Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.341.262,62 Lo que Ordenex les debe a las tiendas Antes: ₡147.670,10 Después: ₡142.670,10 Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "intentoPdf": null,
+    "aviso": "Cobro registrado. El saldo de Tania Tienda queda en ₡142.670,10 · A favor. ×",
+    "cifrasAntes": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡129.800,50",
+      "movimientos": "60",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasDespues": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡129.800,50",
+      "movimientos": "61",
+      "deTiendas": "₡142.670,10",
+      "ganancia": "₡13.341.262,62",
+      "capital": "₡0"
+    },
+    "filaNueva": {
+      "texto": "2026-09-26 Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-admin material Tania Tienda Entra ₡5.000 Ordenex Ana Admin Ver",
+      "tachada": false
+    },
+    "esperado": "cifra no cambia; ganancia +5.000; De las tiendas −5.000"
+  },
+  {
+    "id": "R7/R8 tras registrar 02-cobro-tienda",
+    "estado": "OK",
+    "entro": "13613733.22",
+    "salio": "129800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13341262.62",
+    "de_tiendas": "142670.10",
+    "capital": "0",
+    "suma_saldos": "142670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-cobro-tienda Ver: panel",
+    "estado": "OK",
+    "nombreAccesible": "Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000",
+    "panel": "Ordenex le cobra a una tienda 2026-09-26 · Entra ₡5.000 A quién Tania Tienda Por qué Tania Tienda · Cobro R458F-admin material De dónde sale Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-admin material Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Ana Admin · el 2026-09-26 a las 20:05 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.483.932,72 Ganancia de Ordenex ₡13.341.262,62 Lo que Ordenex les debe a las tiendas ₡142.670,10 Saldo inicial y aportes ₡0 Saldo de la tienda ₡142.670,10 Anular… Cerrar",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "02-cobro-tienda Anular…",
+    "estado": "OK",
+    "dialogoAnular": "Anular el cobro de Ordenex a una tienda Se registrará hoy un movimiento contrario por ₡5.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Ordenex le cobra a una tienda · 2026-09-26 · ₡5.000 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar Anular",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "original": {
+      "texto": "2026-09-26 Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-admin material Tania Tienda Entra ₡5.000 Ordenex Ana Admin Anulado Ver",
+      "tachada": true
+    },
+    "contraAsiento": {
+      "texto": "2026-09-26 Cobro a una tienda anulado Cobro de Ordenex a una tienda · Tania Tienda · Anulación · Tania Tienda · Cobro R458F-admin material Tania Tienda Sale ₡5.000 Ordenex Ana Admin Ver",
+      "tachada": false
+    },
+    "cifrasAntesDeRegistrar": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡129.800,50",
+      "movimientos": "60",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasTrasAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡129.800,50",
+      "movimientos": "62",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "R7/R8 tras anular 02-cobro-tienda",
+    "estado": "OK",
+    "entro": "13613733.22",
+    "salio": "129800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-cobro-tienda segundo intento de anular",
+    "estado": "OK",
+    "aviso": "Ya estaba anulado; no se registró nada más. ×"
+  },
+  {
+    "id": "02-cobro-tienda filas en la caja con la marca",
+    "estado": "INFO",
+    "n": 2
+  },
+  {
+    "id": "7 aprobar el cobro por rechazo sembrado («Cobrar»)",
+    "estado": "INFO",
+    "guia": "32670963",
+    "confirmacion": null,
+    "aviso": "Cobro aprobado: ya está en la caja y en el libro de la tienda. ×",
+    "antes": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡129.800,50",
+      "movimientos": "62",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "tras": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡129.800,50",
+      "movimientos": "64",
+      "deTiendas": "₡145.975,10",
+      "ganancia": "₡13.337.957,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "R7/R8 tras aprobar el cobro por rechazo",
+    "estado": "OK",
+    "entro": "13613733.22",
+    "salio": "129800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13337957.62",
+    "de_tiendas": "145975.10",
+    "capital": "0",
+    "suma_saldos": "145975.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "7 anular el cobro por rechazo",
+    "estado": "OK",
+    "nombreAccesible": "Ver Flete por rechazo cobrado a la tienda del 2026-09-26 por ₡1.500",
+    "panel": "Flete por rechazo cobrado a la tienda 2026-09-26 · Entra ₡1.500 Es un cobro a la tienda por el flete de un rechazo: la ganancia de Ordenex sube y el saldo de la tienda baja, sin dinero nuevo en la caja. A quién Tania Tienda Por qué — De dónde sale Gestión de orden · cobro por rechazo · guía 32670963 Ver Cómo — Comprobante Sin comprobante. Registró Ana Admin · el 2026-09-26 a las 20:05 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.483.932,72 Ganancia de Ordenex ₡13.337.957,62 Lo que Ordenex les debe a las tiendas ₡145.975,10 Saldo inicial y aportes ₡0 Saldo de la tienda ₡147.475,10 Anular… Cerrar",
+    "dialogo": "Anular el cobro por rechazo a una tienda Se registrará hoy un movimiento contrario por ₡1.500. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Flete por rechazo cobrado a la tienda · 2026-09-26 · ₡1.500 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar Anular",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "antesDeAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡129.800,50",
+      "movimientos": "64",
+      "deTiendas": "₡145.975,10",
+      "ganancia": "₡13.337.957,62",
+      "capital": "₡0"
+    },
+    "trasAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡129.800,50",
+      "movimientos": "66",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "reversosEnElLibro": [
+      "2026-09-26 Flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 32670963 Ver Tania Tienda Sale ₡1.500 Ordenex Ana Admin Ver",
+      "2026-09-26 IVA del flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 32670963 Ver Tania Tienda Sale ₡195 Ordenex Ana Admin Ver",
+      "2026-09-26 Flete por rechazo cobrado a la tienda Gestión de orden · cobro por rechazo · guía 32670963 Ver Tania Tienda Entra ₡1.500 Ordenex Ana Admin Anulado Ver",
+      "2026-09-26 IVA del flete por rechazo cobrado a la tienda Gestión de orden · cobro por rechazo · guía 32670963 Ver Tania Tienda Entra ₡195 Ordenex Ana Admin Anulado Ver",
+      "2026-09-26 Cobro a una tienda anulado Cobro de Ordenex a una tienda · Tania Tienda · Anulación · Tania Tienda · Cobro R458F-admin material Tania Tienda Sale ₡5.000 Ordenex Ana Admin Ver",
+      "2026-09-26 Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-admin material Tania Tienda Entra ₡5.000 Ordenex Ana Admin Anulado Ver"
+    ],
+    "colaVuelveAOfrecerlo": 0,
+    "sql": [
+      {
+        "tipo": "credito",
+        "categoria": "flete_devolucion_anulado",
+        "monto": "1500.00"
+      },
+      {
+        "tipo": "credito",
+        "categoria": "iva_flete_devolucion_anulado",
+        "monto": "195.00"
+      },
+      {
+        "tipo": "credito",
+        "categoria": "flete_devolucion_anulado",
+        "monto": "1800.00"
+      },
+      {
+        "tipo": "credito",
+        "categoria": "iva_flete_devolucion_anulado",
+        "monto": "234.00"
+      }
+    ]
+  },
+  {
+    "id": "R7/R8 tras anular el cobro por rechazo",
+    "estado": "OK",
+    "entro": "13613733.22",
+    "salio": "129800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "indemnización: aprobar el incidente sembrado (/incidentes)",
+    "estado": "OK",
+    "guia": "35371107",
+    "monto": "3500",
+    "aviso": "Incidente aprobado; la indemnización salió de la caja principal. ×",
+    "base": [
+      {
+        "estado": "aprobado",
+        "indemnizacion": "3500.00"
+      }
+    ]
+  },
+  {
+    "id": "R7/R8 tras aprobar la indemnización",
+    "estado": "OK",
+    "entro": "13613733.22",
+    "salio": "133300.50",
+    "cifra": "13480432.72",
+    "ganancia": "13332762.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "anular una indemnización",
+    "estado": "OK",
+    "nombreAccesible": "Ver Indemnización que Ordenex paga por un incidente del 2026-09-26 por ₡3.500",
+    "panel": "Indemnización que Ordenex paga por un incidente 2026-09-26 · Sale ₡3.500 A quién Tania Tienda Por qué — De dónde sale Incidente de orden · guía 35371107 Ver Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Automático · Incidente resuelto por Ana Admin · el 2026-09-26 a las 20:06 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.480.432,72 Ganancia de Ordenex ₡13.332.762,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Cerrar",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "error": null,
+    "antes": {
+      "cifra": "₡13.480.432,72",
+      "entro": "₡13.613.733,22",
+      "salio": "₡133.300,50",
+      "movimientos": "67",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.332.762,62",
+      "capital": "₡0"
+    },
+    "tras": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.617.233,22",
+      "salio": "₡133.300,50",
+      "movimientos": "68",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "filas": [
+      {
+        "texto": "2026-09-26 Corrección de caja (suma) Incidente de orden · guía 35371107 · Anulación de: Indemnización que Ordenex paga por un incidente Ver Tania Tienda Entra ₡3.500 Ordenex Ana Admin Ver",
+        "tachada": false
+      },
+      {
+        "texto": "2026-09-26 Indemnización que Ordenex paga por un incidente Incidente de orden · guía 35371107 Ver Tania Tienda Sale ₡3.500 Ordenex Automático · Incidente resuelto por Ana Admin Anulado Ver",
+        "tachada": true
+      },
+      {
+        "texto": "2026-09-26 Flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 32670963 Ver Tania Tienda Sale ₡1.500 Ordenex Ana Admin Ver",
+        "tachada": false
+      },
+      {
+        "texto": "2026-09-26 IVA del flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 32670963 Ver Tania Tienda Sale ₡195 Ordenex Ana Admin Ver",
+        "tachada": false
+      }
+    ]
+  },
+  {
+    "id": "R7/R8 tras anular la indemnización",
+    "estado": "OK",
+    "entro": "13617233.22",
+    "salio": "133300.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "filtro libro «Entra»",
+    "estado": "OK",
+    "direcciones": [
+      "Entra"
+    ],
+    "filasPagina": 20,
+    "paginacion": "1-20 de 45 ‹ ›",
+    "tarjetas": {
+      "cifra": "₡13.617.233,22",
+      "entro": "₡13.617.233,22",
+      "salio": "₡0",
+      "movimientos": "45",
+      "deTiendas": "₡133.941,10",
+      "ganancia": "₡13.483.292,12",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "filtro libro «Sale»",
+    "estado": "OK",
+    "direcciones": [
+      "Sale"
+    ],
+    "filasPagina": 20,
+    "paginacion": "1-20 de 23 ‹ ›",
+    "tarjetas": {
+      "cifra": "-₡133.300,50",
+      "entro": "₡0",
+      "salio": "₡133.300,50",
+      "movimientos": "23",
+      "deTiendas": "₡13.729",
+      "ganancia": "-₡147.029,50",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "filtro libro «Todo»",
+    "estado": "OK",
+    "direcciones": [
+      "Entra",
+      "Sale"
+    ],
+    "filasPagina": 20,
+    "paginacion": "1-20 de 68 ‹ ›",
+    "tarjetas": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.617.233,22",
+      "salio": "₡133.300,50",
+      "movimientos": "68",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "filtro libro categoría «Sueldo»",
+    "estado": "OK",
+    "elegido": "Sueldo (3)",
+    "movimientosAntesDeAplicar": "68",
+    "filas": 3,
+    "tarjetas": {
+      "cifra": "-₡74.000",
+      "entro": "₡0",
+      "salio": "₡74.000",
+      "movimientos": "3",
+      "deTiendas": "₡0",
+      "ganancia": "-₡74.000",
+      "capital": "₡0"
+    },
+    "nota": "la categoría se aplica con «Aplicar» (borrador); Entra/Sale y A quién se aplican al elegir"
+  },
+  {
+    "id": "filtro libro periodo 2026-09-24",
+    "estado": "OK",
+    "filasPagina": 14,
+    "sqlDelDia": 14,
+    "tarjetas": {
+      "cifra": "₡27.000",
+      "entro": "₡38.500",
+      "salio": "₡11.500",
+      "movimientos": "14",
+      "deTiendas": "₡21.157,31",
+      "ganancia": "₡5.842,69",
+      "capital": "₡0"
+    },
+    "paginacion": "1-14 de 14 ‹ ›"
+  },
+  {
+    "id": "filtro libro «A quién» Tania",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "25",
+      "50",
+      "Todos",
+      "Cajero R458F-admin · Nombre anotado · 2 movimientos",
+      "Cajero R458F-maestro · Nombre anotado · 2 movimientos",
+      "Librería R458F-admin · Nombre anotado · 2 movimientos",
+      "Librería R458F-maestro · Nombre anotado · 4 movimientos",
+      "Marco Mensajero · Mensajero · 19 movimientos",
+      "Pedro R458F-admin · Nombre anotado · 2 movimientos",
+      "Pedro R458F-maestro · Nombre anotado · 4 movimientos",
+      "Quino QUEPOS · Mensajero · 7 movimientos",
+      "Rita Recorrido · Mensajero · 7 movimientos",
+      "Tania Tienda · Tienda · 16 movimientos"
+    ],
+    "elegido": "Tania Tienda · Tienda · 16 movimientos",
+    "filasPagina": 16,
+    "tarjetas": {
+      "cifra": "₡0",
+      "entro": "₡7.500",
+      "salio": "₡7.500",
+      "movimientos": "16",
+      "deTiendas": "₡0",
+      "ganancia": "₡0",
+      "capital": "₡0"
+    },
+    "uuidEnOpciones": false
+  },
+  {
+    "id": "filtro libro «A quién» Marco",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "25",
+      "50",
+      "Todos",
+      "Cajero R458F-admin · Nombre anotado · 2 movimientos",
+      "Cajero R458F-maestro · Nombre anotado · 2 movimientos",
+      "Librería R458F-admin · Nombre anotado · 2 movimientos",
+      "Librería R458F-maestro · Nombre anotado · 4 movimientos",
+      "Marco Mensajero · Mensajero · 19 movimientos",
+      "Pedro R458F-admin · Nombre anotado · 2 movimientos",
+      "Pedro R458F-maestro · Nombre anotado · 4 movimientos",
+      "Quino QUEPOS · Mensajero · 7 movimientos",
+      "Rita Recorrido · Mensajero · 7 movimientos",
+      "Tania Tienda · Tienda · 16 movimientos"
+    ],
+    "elegido": "Marco Mensajero · Mensajero · 19 movimientos",
+    "filasPagina": 19,
+    "tarjetas": {
+      "cifra": "₡125.100",
+      "entro": "₡152.900",
+      "salio": "₡27.800",
+      "movimientos": "19",
+      "deTiendas": "₡126.512,79",
+      "ganancia": "-₡1.412,79",
+      "capital": "₡0"
+    },
+    "uuidEnOpciones": false
+  },
+  {
+    "id": "filtros: «Limpiar» devuelve las tarjetas",
+    "estado": "OK",
+    "base": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.617.233,22",
+      "salio": "₡133.300,50",
+      "movimientos": "68",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "tras": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.617.233,22",
+      "salio": "₡133.300,50",
+      "movimientos": "68",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "descarga del libro sin ids",
+    "estado": "OK",
+    "nombreArchivo": "libro-de-movimientos-2026-09-26.xlsx",
+    "uuidEnNombre": false,
+    "hojas": [
+      "Libro de movimientos"
+    ],
+    "filas": 69,
+    "cabecera": [
+      "Fecha",
+      "Movimiento",
+      "Motivo y origen",
+      "A quién",
+      "Entra o sale",
+      "Monto",
+      "Dueño",
+      "Registró"
+    ],
+    "primeras": [
+      [
+        "Fecha",
+        "Movimiento",
+        "Motivo y origen",
+        "A quién",
+        "Entra o sale",
+        "Monto",
+        "Dueño",
+        "Registró"
+      ],
+      [
+        "2026-09-26",
+        "Corrección de caja (suma)",
+        "Incidente de orden · guía 35371107 · Anulación de: Indemnización que Ordenex paga por un incidente",
+        "Tania Tienda",
+        "Entra",
+        "3500.00",
+        "Ordenex",
+        "Ana Admin"
+      ],
+      [
+        "2026-09-26",
+        "Indemnización que Ordenex paga por un incidente",
+        "Incidente de orden · guía 35371107",
+        "Tania Tienda",
+        "Sale",
+        "3500.00",
+        "Ordenex",
+        "Automático · Incidente resuelto por Ana Admin"
+      ],
+      [
+        "2026-09-26",
+        "Flete por rechazo cobrado a la tienda anulado",
+        "Gestión de orden · cobro por rechazo · guía 32670963",
+        "Tania Tienda",
+        "Sale",
+        "1500.00",
+        "Ordenex",
+        "Ana Admin"
+      ]
+    ],
+    "ultima": [
+      "2026-08-11",
+      "Corrección de caja (suma)",
+      "Registrado a mano · Cobro consolidado ruta norte",
+      "—",
+      "Entra",
+      "12345678.90",
+      "Ordenex",
+      "Ana Admin"
+    ],
+    "uuid": false,
+    "crudo": false,
+    "muestraCrudo": []
+  }
+]

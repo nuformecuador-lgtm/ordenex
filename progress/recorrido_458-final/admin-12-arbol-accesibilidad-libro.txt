@@ -1,0 +1,271 @@
+- table "Libro de movimientos":
+  - rowgroup:
+    - row "Desglose Fecha Movimiento y motivo A quién Monto Registró Ver":
+      - columnheader "Desglose"
+      - columnheader "Fecha"
+      - columnheader "Movimiento y motivo"
+      - columnheader "A quién"
+      - columnheader "Monto"
+      - columnheader "Registró"
+      - columnheader "Ver"
+  - rowgroup:
+    - row "2026-09-26 Cobro a una tienda anulado Cobro de Ordenex a una tienda · Tania Tienda · Anulación · Tania Tienda · Cobro R458F-admin para dejarla en contra Tania Tienda · estado de cuenta de la tienda Sale ₡200.000 Ordenex Ana Admin Ver Cobro a una tienda anulado del 2026-09-26 por ₡200.000":
+      - cell
+      - cell "2026-09-26"
+      - cell "Cobro a una tienda anulado Cobro de Ordenex a una tienda · Tania Tienda · Anulación · Tania Tienda · Cobro R458F-admin para dejarla en contra"
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Sale ₡200.000 Ordenex"
+      - cell "Ana Admin"
+      - cell "Ver Cobro a una tienda anulado del 2026-09-26 por ₡200.000":
+        - button "Ver Cobro a una tienda anulado del 2026-09-26 por ₡200.000": Ver
+    - row "2026-09-26 Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-admin para dejarla en contra Tania Tienda · estado de cuenta de la tienda Entra ₡200.000 Ordenex Ana Admin Anulado Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡200.000 · Anulado":
+      - cell
+      - cell "2026-09-26"
+      - cell "Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-admin para dejarla en contra"
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Entra ₡200.000 Ordenex"
+      - cell "Ana Admin"
+      - cell "Anulado Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡200.000 · Anulado":
+        - text: Anulado
+        - button "Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡200.000 · Anulado": Ver
+    - row "2026-09-26 Ordenex paga un gasto de una tienda Pago de un gasto de una tienda · Tania Tienda · a Facebook · Tania Tienda · A Facebook · Pauta R458F-admin · Efectivo Tania Tienda · a Facebook · estado de cuenta de la tienda Sale ₡10.000 Tienda Ana Admin Ver Ordenex paga un gasto de una tienda del 2026-09-26 por ₡10.000":
+      - cell
+      - cell "2026-09-26"
+      - cell "Ordenex paga un gasto de una tienda Pago de un gasto de una tienda · Tania Tienda · a Facebook · Tania Tienda · A Facebook · Pauta R458F-admin · Efectivo"
+      - cell "Tania Tienda · a Facebook · estado de cuenta de la tienda":
+        - link "Tania Tienda · a Facebook · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda · a Facebook
+      - cell "Sale ₡10.000 Tienda"
+      - cell "Ana Admin"
+      - cell "Ver Ordenex paga un gasto de una tienda del 2026-09-26 por ₡10.000":
+        - button "Ver Ordenex paga un gasto de una tienda del 2026-09-26 por ₡10.000": Ver
+    - row "2026-09-26 Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-admin paso 5 Tania Tienda · estado de cuenta de la tienda Entra ₡5.000 Ordenex Ana Admin Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000":
+      - cell
+      - cell "2026-09-26"
+      - cell "Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-admin paso 5"
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Entra ₡5.000 Ordenex"
+      - cell "Ana Admin"
+      - cell "Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000":
+        - button "Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000": Ver
+    - row "2026-09-26 Cobro a una tienda anulado Cobro de Ordenex a una tienda · Tania Tienda · Anulación · Tania Tienda · Cobro R458F-maestro para dejarla en contra Tania Tienda · estado de cuenta de la tienda Sale ₡200.000 Ordenex Maestro QA Ver Cobro a una tienda anulado del 2026-09-26 por ₡200.000":
+      - cell
+      - cell "2026-09-26"
+      - cell "Cobro a una tienda anulado Cobro de Ordenex a una tienda · Tania Tienda · Anulación · Tania Tienda · Cobro R458F-maestro para dejarla en contra"
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Sale ₡200.000 Ordenex"
+      - cell "Maestro QA"
+      - cell "Ver Cobro a una tienda anulado del 2026-09-26 por ₡200.000":
+        - button "Ver Cobro a una tienda anulado del 2026-09-26 por ₡200.000": Ver
+    - row "2026-09-26 Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-maestro para dejarla en contra Tania Tienda · estado de cuenta de la tienda Entra ₡200.000 Ordenex Maestro QA Anulado Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡200.000 · Anulado":
+      - cell
+      - cell "2026-09-26"
+      - cell "Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-maestro para dejarla en contra"
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Entra ₡200.000 Ordenex"
+      - cell "Maestro QA"
+      - cell "Anulado Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡200.000 · Anulado":
+        - text: Anulado
+        - button "Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡200.000 · Anulado": Ver
+    - row "2026-09-26 Ordenex paga un gasto de una tienda Pago de un gasto de una tienda · Tania Tienda · a Facebook · Tania Tienda · A Facebook · Pauta R458F-maestro · Efectivo Tania Tienda · a Facebook · estado de cuenta de la tienda Sale ₡10.000 Tienda Maestro QA Ver Ordenex paga un gasto de una tienda del 2026-09-26 por ₡10.000":
+      - cell
+      - cell "2026-09-26"
+      - cell "Ordenex paga un gasto de una tienda Pago de un gasto de una tienda · Tania Tienda · a Facebook · Tania Tienda · A Facebook · Pauta R458F-maestro · Efectivo"
+      - cell "Tania Tienda · a Facebook · estado de cuenta de la tienda":
+        - link "Tania Tienda · a Facebook · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda · a Facebook
+      - cell "Sale ₡10.000 Tienda"
+      - cell "Maestro QA"
+      - cell "Ver Ordenex paga un gasto de una tienda del 2026-09-26 por ₡10.000":
+        - button "Ver Ordenex paga un gasto de una tienda del 2026-09-26 por ₡10.000": Ver
+    - row "2026-09-26 Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-maestro paso 5 Tania Tienda · estado de cuenta de la tienda Entra ₡5.000 Ordenex Maestro QA Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000":
+      - cell
+      - cell "2026-09-26"
+      - cell "Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-maestro paso 5"
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Entra ₡5.000 Ordenex"
+      - cell "Maestro QA"
+      - cell "Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000":
+        - button "Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000": Ver
+    - 'row "2026-09-26 Corrección de caja (suma) Gasto o sueldo registrado a mano · Anulación de: R458F- Alquiler de bodega — 2026-09 — Entra ₡7.000 Ordenex Maestro QA Ver Corrección de caja (suma) del 2026-09-26 por ₡7.000"':
+      - cell
+      - cell "2026-09-26"
+      - 'cell "Corrección de caja (suma) Gasto o sueldo registrado a mano · Anulación de: R458F- Alquiler de bodega — 2026-09"'
+      - cell "—"
+      - cell "Entra ₡7.000 Ordenex"
+      - cell "Maestro QA"
+      - cell "Ver Corrección de caja (suma) del 2026-09-26 por ₡7.000":
+        - button "Ver Corrección de caja (suma) del 2026-09-26 por ₡7.000": Ver
+    - row "2026-09-26 Gasto fijo de Ordenex Gasto fijo de Ordenex · R458F- Alquiler de bodega — 2026-09 · R458F- Alquiler de bodega — 2026-09 — Sale ₡7.000 Ordenex Maestro QA Anulado Ver Gasto fijo de Ordenex del 2026-09-26 por ₡7.000 · Anulado":
+      - cell
+      - cell "2026-09-26"
+      - cell "Gasto fijo de Ordenex Gasto fijo de Ordenex · R458F- Alquiler de bodega — 2026-09 · R458F- Alquiler de bodega — 2026-09"
+      - cell "—"
+      - cell "Sale ₡7.000 Ordenex"
+      - cell "Maestro QA"
+      - cell "Anulado Ver Gasto fijo de Ordenex del 2026-09-26 por ₡7.000 · Anulado":
+        - text: Anulado
+        - button "Ver Gasto fijo de Ordenex del 2026-09-26 por ₡7.000 · Anulado": Ver
+    - 'row "2026-09-26 Corrección de caja (suma) Incidente de orden · guía 35371107 · Anulación de: Indemnización que Ordenex paga por un incidente Ver en órdenes la guía 35371107 Tania Tienda · estado de cuenta de la tienda Entra ₡3.500 Ordenex Ana Admin Ver Corrección de caja (suma) del 2026-09-26 por ₡3.500"':
+      - cell
+      - cell "2026-09-26"
+      - 'cell "Corrección de caja (suma) Incidente de orden · guía 35371107 · Anulación de: Indemnización que Ordenex paga por un incidente Ver en órdenes la guía 35371107"':
+        - text: "Corrección de caja (suma) Incidente de orden · guía 35371107 · Anulación de: Indemnización que Ordenex paga por un incidente"
+        - link "Ver en órdenes la guía 35371107":
+          - /url: /ordenes?q=35371107
+          - text: Ver
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Entra ₡3.500 Ordenex"
+      - cell "Ana Admin"
+      - cell "Ver Corrección de caja (suma) del 2026-09-26 por ₡3.500":
+        - button "Ver Corrección de caja (suma) del 2026-09-26 por ₡3.500": Ver
+    - row "2026-09-26 Indemnización que Ordenex paga por un incidente Incidente de orden · guía 35371107 Ver en órdenes la guía 35371107 Tania Tienda · estado de cuenta de la tienda Sale ₡3.500 Ordenex Automático · Incidente resuelto por Ana Admin Anulado Ver Indemnización que Ordenex paga por un incidente del 2026-09-26 por ₡3.500 · Anulado":
+      - cell
+      - cell "2026-09-26"
+      - cell "Indemnización que Ordenex paga por un incidente Incidente de orden · guía 35371107 Ver en órdenes la guía 35371107":
+        - text: Indemnización que Ordenex paga por un incidente Incidente de orden · guía 35371107
+        - link "Ver en órdenes la guía 35371107":
+          - /url: /ordenes?q=35371107
+          - text: Ver
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Sale ₡3.500 Ordenex"
+      - cell "Automático · Incidente resuelto por Ana Admin"
+      - cell "Anulado Ver Indemnización que Ordenex paga por un incidente del 2026-09-26 por ₡3.500 · Anulado":
+        - text: Anulado
+        - button "Ver Indemnización que Ordenex paga por un incidente del 2026-09-26 por ₡3.500 · Anulado": Ver
+    - row "2026-09-26 Flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 32670963 Ver en órdenes la guía 32670963 Tania Tienda · estado de cuenta de la tienda Sale ₡1.500 Ordenex Ana Admin Ver Flete por rechazo cobrado a la tienda anulado del 2026-09-26 por ₡1.500":
+      - cell
+      - cell "2026-09-26"
+      - cell "Flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 32670963 Ver en órdenes la guía 32670963":
+        - text: Flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 32670963
+        - link "Ver en órdenes la guía 32670963":
+          - /url: /ordenes?q=32670963
+          - text: Ver
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Sale ₡1.500 Ordenex"
+      - cell "Ana Admin"
+      - cell "Ver Flete por rechazo cobrado a la tienda anulado del 2026-09-26 por ₡1.500":
+        - button "Ver Flete por rechazo cobrado a la tienda anulado del 2026-09-26 por ₡1.500": Ver
+    - row "2026-09-26 IVA del flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 32670963 Ver en órdenes la guía 32670963 Tania Tienda · estado de cuenta de la tienda Sale ₡195 Ordenex Ana Admin Ver IVA del flete por rechazo cobrado a la tienda anulado del 2026-09-26 por ₡195":
+      - cell
+      - cell "2026-09-26"
+      - cell "IVA del flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 32670963 Ver en órdenes la guía 32670963":
+        - text: IVA del flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 32670963
+        - link "Ver en órdenes la guía 32670963":
+          - /url: /ordenes?q=32670963
+          - text: Ver
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Sale ₡195 Ordenex"
+      - cell "Ana Admin"
+      - cell "Ver IVA del flete por rechazo cobrado a la tienda anulado del 2026-09-26 por ₡195":
+        - button "Ver IVA del flete por rechazo cobrado a la tienda anulado del 2026-09-26 por ₡195": Ver
+    - row "2026-09-26 Flete por rechazo cobrado a la tienda Gestión de orden · cobro por rechazo · guía 32670963 Ver en órdenes la guía 32670963 Tania Tienda · estado de cuenta de la tienda Entra ₡1.500 Ordenex Ana Admin Anulado Ver Flete por rechazo cobrado a la tienda del 2026-09-26 por ₡1.500 · Anulado":
+      - cell
+      - cell "2026-09-26"
+      - cell "Flete por rechazo cobrado a la tienda Gestión de orden · cobro por rechazo · guía 32670963 Ver en órdenes la guía 32670963":
+        - text: Flete por rechazo cobrado a la tienda Gestión de orden · cobro por rechazo · guía 32670963
+        - link "Ver en órdenes la guía 32670963":
+          - /url: /ordenes?q=32670963
+          - text: Ver
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Entra ₡1.500 Ordenex"
+      - cell "Ana Admin"
+      - cell "Anulado Ver Flete por rechazo cobrado a la tienda del 2026-09-26 por ₡1.500 · Anulado":
+        - text: Anulado
+        - button "Ver Flete por rechazo cobrado a la tienda del 2026-09-26 por ₡1.500 · Anulado": Ver
+    - row "2026-09-26 IVA del flete por rechazo cobrado a la tienda Gestión de orden · cobro por rechazo · guía 32670963 Ver en órdenes la guía 32670963 Tania Tienda · estado de cuenta de la tienda Entra ₡195 Ordenex Ana Admin Anulado Ver IVA del flete por rechazo cobrado a la tienda del 2026-09-26 por ₡195 · Anulado":
+      - cell
+      - cell "2026-09-26"
+      - cell "IVA del flete por rechazo cobrado a la tienda Gestión de orden · cobro por rechazo · guía 32670963 Ver en órdenes la guía 32670963":
+        - text: IVA del flete por rechazo cobrado a la tienda Gestión de orden · cobro por rechazo · guía 32670963
+        - link "Ver en órdenes la guía 32670963":
+          - /url: /ordenes?q=32670963
+          - text: Ver
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Entra ₡195 Ordenex"
+      - cell "Ana Admin"
+      - cell "Anulado Ver IVA del flete por rechazo cobrado a la tienda del 2026-09-26 por ₡195 · Anulado":
+        - text: Anulado
+        - button "Ver IVA del flete por rechazo cobrado a la tienda del 2026-09-26 por ₡195 · Anulado": Ver
+    - row "2026-09-26 Cobro a una tienda anulado Cobro de Ordenex a una tienda · Tania Tienda · Anulación · Tania Tienda · Cobro R458F-admin material Tania Tienda · estado de cuenta de la tienda Sale ₡5.000 Ordenex Ana Admin Ver Cobro a una tienda anulado del 2026-09-26 por ₡5.000":
+      - cell
+      - cell "2026-09-26"
+      - cell "Cobro a una tienda anulado Cobro de Ordenex a una tienda · Tania Tienda · Anulación · Tania Tienda · Cobro R458F-admin material"
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Sale ₡5.000 Ordenex"
+      - cell "Ana Admin"
+      - cell "Ver Cobro a una tienda anulado del 2026-09-26 por ₡5.000":
+        - button "Ver Cobro a una tienda anulado del 2026-09-26 por ₡5.000": Ver
+    - row "2026-09-26 Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-admin material Tania Tienda · estado de cuenta de la tienda Entra ₡5.000 Ordenex Ana Admin Anulado Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000 · Anulado":
+      - cell
+      - cell "2026-09-26"
+      - cell "Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-admin material"
+      - cell "Tania Tienda · estado de cuenta de la tienda":
+        - link "Tania Tienda · estado de cuenta de la tienda":
+          - /url: /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0
+          - text: Tania Tienda
+      - cell "Entra ₡5.000 Ordenex"
+      - cell "Ana Admin"
+      - cell "Anulado Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000 · Anulado":
+        - text: Anulado
+        - button "Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000 · Anulado": Ver
+    - row "2026-09-26 Corrección de caja (resta) Registrado a mano · Anulación · Corrección R458F-admin descuadre Cajero R458F-admin Sale ₡1.000 Ordenex Ana Admin Ver Corrección de caja (resta) del 2026-09-26 por ₡1.000":
+      - cell
+      - cell "2026-09-26"
+      - cell "Corrección de caja (resta) Registrado a mano · Anulación · Corrección R458F-admin descuadre"
+      - cell "Cajero R458F-admin"
+      - cell "Sale ₡1.000 Ordenex"
+      - cell "Ana Admin"
+      - cell "Ver Corrección de caja (resta) del 2026-09-26 por ₡1.000":
+        - button "Ver Corrección de caja (resta) del 2026-09-26 por ₡1.000": Ver
+    - row "2026-09-26 Corrección de caja (suma) Registrado a mano · Corrección R458F-admin descuadre Cajero R458F-admin Entra ₡1.000 Ordenex Ana Admin Anulado Ver Corrección de caja (suma) del 2026-09-26 por ₡1.000 · Anulado":
+      - cell
+      - cell "2026-09-26"
+      - cell "Corrección de caja (suma) Registrado a mano · Corrección R458F-admin descuadre"
+      - cell "Cajero R458F-admin"
+      - cell "Entra ₡1.000 Ordenex"
+      - cell "Ana Admin"
+      - cell "Anulado Ver Corrección de caja (suma) del 2026-09-26 por ₡1.000 · Anulado":
+        - text: Anulado
+        - button "Ver Corrección de caja (suma) del 2026-09-26 por ₡1.000 · Anulado": Ver

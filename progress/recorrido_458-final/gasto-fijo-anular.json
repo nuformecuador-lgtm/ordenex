@@ -1,0 +1,28 @@
+[
+  {
+    "id": "anular un gasto fijo",
+    "estado": "OK",
+    "filaLibro": "2026-09-26 Gasto fijo de Ordenex Gasto fijo de Ordenex · R458F- Alquiler de bodega — 2026-09 · R458F- Alquiler de bodega — 2026-09 — Sale ₡7.000 Ordenex Maestro QA Ver",
+    "panel": "Gasto fijo de Ordenex 2026-09-26 · Sale ₡7.000 A quién — Por qué R458F- Alquiler de bodega — 2026-09 De dónde sale Gasto fijo de Ordenex · R458F- Alquiler de bodega — 2026-09 · R458F- Alquiler de bodega — 2026-09 Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Maestro QA · el 2026-09-26 a las 20:08 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.476.932,72 Ganancia de Ordenex ₡13.329.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Cerrar",
+    "dialogo": "Anular «Gasto fijo de Ordenex» Se registrará hoy un movimiento contrario por ₡7.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Gasto fijo de Ordenex · 2026-09-26 · ₡7.000 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar A",
+    "antes": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.476.932,72 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del ban",
+    "tras": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.483.932,72 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del ban",
+    "filas": [
+      " 2026-09-26 Corrección de caja (suma) Gasto o sueldo registrado a mano · Anulación de: R458F- Alquiler de bodega — 2026-09 — Entra ₡7.000 Ordenex Maestro QA Ver",
+      " 2026-09-26 Gasto fijo de Ordenex Gasto fijo de Ordenex · R458F- Alquiler de bodega — 2026-09 · R458F- Alquiler de bodega — 2026-09 — Sale ₡7.000 Ordenex Maestro QA Anulado Ver"
+    ]
+  },
+  {
+    "id": "R7/R8 tras anular el gasto fijo",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "140300.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  }
+]

@@ -1,0 +1,275 @@
+[
+  {
+    "id": "tienda /mi-wallet: resumen de tres cifras = tarjeta = saldo corrido",
+    "estado": "OK",
+    "resumen": "A tu favor ₡605.129 Lo cobrado a tus clientes, las correcciones a tu favor, lo que le pagaste a Ordenex y lo que Ordenex te devolvió al anular Cargos de Ordenex ₡467.458,90 Fletes, comisión, IVA, lo que Ordenex te cobró y los pagos a Ordenex que se anularon Ya pagado ₡20.000 Lo que Ordenex te pagó o pagó por ti Saldo a favor A favor ₡117.670,10 «Ya pagado» sigue contando los pagos que se anularon, y «A tu favor» suma la devolución de cada uno, así que esos dos importes quedan más altos de lo que se movió de verdad. «Saldo a favor» ya tiene todo eso descontado: ese es el número correcto.",
+    "tarjeta": "Saldo actual ₡117.670,10 Ordenex te debe ₡117.670,10 Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡73.729,90 Saldo al final del periodo ₡117.670,10",
+    "aFavor": "₡605.129",
+    "cargos": "₡467.458,90",
+    "yaPagado": "₡20.000",
+    "saldoResumen": "₡117.670,10",
+    "saldoTarjeta": "₡117.670,10",
+    "cuenta": "₡605.129 − ₡467.458,90 − ₡20.000 = ₡117.670,10",
+    "ultimaFila": "2026-09-26 Ordenex anuló un cobro y te lo devolvió Anulación Anulación · Cobro R458F-admin para dejarla en contra Cobro de Ordenex a una tienda · Tania Tienda ₡200.000 ₡117.670,10",
+    "saldoSql": "117670.10"
+  },
+  {
+    "id": "tienda: «Anulado por Ordenex» en la fila anulada, sin nombres del personal",
+    "estado": "OK",
+    "anuladas": [
+      " 2026-09-26 Ordenex te cobró Cobro R458F-maestro para dejarla en contra Registrado a mano Anulado por Ordenex el 2026-09-26 a las 20:14 · R458F-maestro devolver la tienda a favor ₡200.000 -₡67.329,90 Ver comprobante",
+      " 2026-09-26 Ordenex te cobró Cobro R458F-admin para dejarla en contra Registrado a mano Anulado por Ordenex el 2026-09-26 a las 20:20 · R458F-admin devolver la tienda a favor ₡200.000 -₡82.329,90 Ver comprobante",
+      " 2026-09-26 Ordenex te cobró Cobro R458F-maestro material Registrado a mano Anulado por Ordenex el 2026-09-26 a las 19:58 · R458F-maestro anular 02-cobro-tienda: registrado para el recorrido final ₡5.000 ₡142.670,10 Ver comprobante",
+      " 2026-09-26 Ordenex te cobró el IVA del flete por rechazo Gestión de orden · cobro por rechazo · guía 57202592 Ver Anulado por Ordenex el 2026-09-26 a las 20:00 · R458F-maestro anular el cobro por rechazo de la guía 57202592 ₡234 ₡147.436,10 "
+    ],
+    "nombresDelPersonal": false
+  },
+  {
+    "id": "tienda: lecturas desde su lado",
+    "estado": "INFO",
+    "teCobro": [],
+    "gastoPorTi": [
+      " 2026-09-26 Ordenex pagó un gasto por ti A Facebook · Pauta R458F-maestro · Efectivo Pago de un gasto de una tienda · Tania Tienda · a Facebook Cómo se pagó: Efectivo ₡10.000 ₡132.670,10 Ver comprobante",
+      " 2026-09-26 Ordenex pagó un gasto por ti A Facebook · Pauta R458F-admin · Efectivo Pago de un gasto de una tienda · Tania Tienda · a Facebook Cómo se pagó: Efectivo ₡10.000 ₡117.670,10 Ver comprobante"
+    ],
+    "lePagaste": []
+  },
+  {
+    "id": "tienda: sin botones de registrar/anular/adjuntar",
+    "estado": "OK",
+    "escritura": []
+  },
+  {
+    "id": "tienda: abrir el comprobante que subió Ordenex",
+    "estado": "N/A",
+    "botonesVerComprobante": 3,
+    "avisoAlAbrir": "Este registro no tiene comprobante.",
+    "motivo": "en local no se puede subir un comprobante (el almacenamiento del .env es remoto y rechaza la subida: «No se pudo guardar el comprobante, así que no se registró nada»); se probó «Ver comprobante» de una fila sin archivo"
+  },
+  {
+    "id": "tienda: selector de cierre sin ID",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "20",
+      "50",
+      "100"
+    ]
+  },
+  {
+    "id": "tienda: barrido /mi-wallet sin uuid ni códigos",
+    "estado": "INFO",
+    "uuid": false,
+    "crudo": false,
+    "muestra": []
+  },
+  {
+    "id": "tienda: descarga de su estado de cuenta sin ids ni «Registró»",
+    "estado": "OK",
+    "nombreArchivo": "estado-de-cuenta-de-tania-tienda-2026-09-26.xlsx",
+    "uuidEnNombre": false,
+    "hojas": [
+      "Estado de cuenta de Tania Tien…"
+    ],
+    "filas": 29,
+    "cabecera": [
+      "Fecha",
+      "Movimiento",
+      "Motivo",
+      "Origen",
+      "Cómo se pagó",
+      "Cargo",
+      "Abono",
+      "Saldo",
+      "Estado"
+    ],
+    "primeras": [
+      [
+        "Fecha",
+        "Movimiento",
+        "Motivo",
+        "Origen",
+        "Cómo se pagó",
+        "Cargo",
+        "Abono",
+        "Saldo",
+        "Estado"
+      ],
+      [
+        "",
+        "Saldo inicial",
+        null,
+        null,
+        null,
+        null,
+        null,
+        "0.00"
+      ],
+      [
+        "2026-08-12",
+        "Ordenex te cobró la comisión de contra-entrega",
+        null,
+        "Cierre del día · 2026-08-12",
+        null,
+        "4343.50",
+        null,
+        "-4343.50"
+      ],
+      [
+        "2026-08-12",
+        "Ordenex te cobró el IVA del flete",
+        null,
+        "Cierre del día · 2026-08-12",
+        null,
+        "1560.00",
+        null,
+        "-5903.50"
+      ]
+    ],
+    "ultima": [
+      "2026-09-24",
+      "Ordenex te cobró el flete",
+      null,
+      "Cierre del día · 2026-09-24",
+      null,
+      "3000.00",
+      null,
+      "147670.10"
+    ],
+    "uuid": false,
+    "crudo": false,
+    "muestraCrudo": []
+  },
+  {
+    "id": "tienda /wallet → no encontrado",
+    "estado": "OK",
+    "status": 404,
+    "texto": "Ordenex Analítica Órdenes Novedades Mi wallet Ayuda TT Tania Tienda Admin de tie"
+  },
+  {
+    "id": "tienda /wallet/tiendas → no encontrado",
+    "estado": "OK",
+    "status": 404,
+    "texto": "Ordenex Analítica Órdenes Novedades Mi wallet Ayuda TT Tania Tienda Admin de tie"
+  },
+  {
+    "id": "tienda /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0 → no encontrado",
+    "estado": "OK",
+    "status": 404,
+    "texto": "Ordenex Analítica Órdenes Novedades Mi wallet Ayuda TT Tania Tienda Admin de tie"
+  },
+  {
+    "id": "tienda /wallet/mensajeros → no encontrado",
+    "estado": "OK",
+    "status": 404,
+    "texto": "Ordenex Analítica Órdenes Novedades Mi wallet Ayuda TT Tania Tienda Admin de tie"
+  },
+  {
+    "id": "tienda /wallet/mensajeros/9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558 → no encontrado",
+    "estado": "OK",
+    "status": 404,
+    "texto": "Ordenex Analítica Órdenes Novedades Mi wallet Ayuda TT Tania Tienda Admin de tie"
+  },
+  {
+    "id": "tienda /wallet/satelites → no encontrado",
+    "estado": "OK",
+    "status": 404,
+    "texto": "Ordenex Analítica Órdenes Novedades Mi wallet Ayuda TT Tania Tienda Admin de tie"
+  },
+  {
+    "id": "tienda /wallet/satelites/30d1fad3-bdc1-4bbd-86e0-08f1166f95b0 → no encontrado",
+    "estado": "OK",
+    "status": 404,
+    "texto": "Ordenex Analítica Órdenes Novedades Mi wallet Ayuda TT Tania Tienda Admin de tie"
+  },
+  {
+    "id": "mensajero /wallet → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "mensajero /wallet/tiendas → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "mensajero /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0 → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "mensajero /wallet/mensajeros → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "mensajero /wallet/mensajeros/9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558 → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "mensajero /wallet/satelites → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "mensajero /wallet/satelites/30d1fad3-bdc1-4bbd-86e0-08f1166f95b0 → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "mensajero /mi-wallet → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "mensajero: el menú no ofrece Wallet",
+    "estado": "OK",
+    "menu": "Entregas Recolección Ranking Cierre del día Ayuda"
+  },
+  {
+    "id": "satelite /wallet → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "satelite /wallet/tiendas → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "satelite /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0 → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "satelite /wallet/mensajeros → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "satelite /wallet/mensajeros/9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558 → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "satelite /wallet/satelites → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "satelite /wallet/satelites/30d1fad3-bdc1-4bbd-86e0-08f1166f95b0 → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "satelite /mi-wallet → no encontrado",
+    "estado": "OK",
+    "status": 404
+  },
+  {
+    "id": "satelite: el menú no ofrece Wallet",
+    "estado": "OK",
+    "menu": "Analítica Monitoreo Órdenes Cierres del día Incidentes Mi bodega Ayuda"
+  }
+]

@@ -1,0 +1,220 @@
+[
+  {
+    "id": "02-correccion-suma registrar «Corrección de caja (suma)»",
+    "estado": "OK",
+    "asiQueda": "Así queda Antes Después Flujo de dinero registrado Antes: ₡13.483.932,72 Después: ₡13.484.932,72 Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.337.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 · no cambia Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "intentoPdf": null,
+    "aviso": "Movimiento registrado correctamente. ×",
+    "cifrasAntes": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.552.733,22",
+      "salio": "₡68.800,50",
+      "movimientos": "40",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasDespues": {
+      "cifra": "₡13.484.932,72",
+      "entro": "₡13.553.733,22",
+      "salio": "₡68.800,50",
+      "movimientos": "41",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.337.262,62",
+      "capital": "₡0"
+    },
+    "filaNueva": {
+      "texto": "2026-09-26 Corrección de caja (suma) Registrado a mano · Corrección R458F-maestro descuadre Cajero R458F-maestro Entra ₡1.000 Ordenex Maestro QA Ver",
+      "tachada": false
+    },
+    "esperado": "cifra y ganancia suben lo mismo"
+  },
+  {
+    "id": "R7/R8 tras registrar 02-correccion-suma",
+    "estado": "OK",
+    "entro": "13553733.22",
+    "salio": "68800.50",
+    "cifra": "13484932.72",
+    "ganancia": "13337262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-correccion-suma Ver: panel",
+    "estado": "OK",
+    "nombreAccesible": "Ver Corrección de caja (suma) del 2026-09-26 por ₡1.000",
+    "panel": "Corrección de caja (suma) 2026-09-26 · Entra ₡1.000 A quién Cajero R458F-maestro Por qué Corrección R458F-maestro descuadre De dónde sale Registrado a mano · Corrección R458F-maestro descuadre Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Maestro QA · el 2026-09-26 a las 19:57 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.484.932,72 Ganancia de Ordenex ₡13.337.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Cerrar",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "02-correccion-suma Anular…",
+    "estado": "OK",
+    "dialogoAnular": "Anular la corrección de caja Se registrará hoy un movimiento contrario por ₡1.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Corrección de caja (suma) · 2026-09-26 · ₡1.000 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar Anular",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "original": {
+      "texto": "2026-09-26 Corrección de caja (suma) Registrado a mano · Corrección R458F-maestro descuadre Cajero R458F-maestro Entra ₡1.000 Ordenex Maestro QA Anulado Ver",
+      "tachada": true
+    },
+    "contraAsiento": {
+      "texto": "2026-09-26 Corrección de caja (resta) Registrado a mano · Anulación · Corrección R458F-maestro descuadre Cajero R458F-maestro Sale ₡1.000 Ordenex Maestro QA Ver",
+      "tachada": false
+    },
+    "cifrasAntesDeRegistrar": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.552.733,22",
+      "salio": "₡68.800,50",
+      "movimientos": "40",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasTrasAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.553.733,22",
+      "salio": "₡69.800,50",
+      "movimientos": "42",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "R7/R8 tras anular 02-correccion-suma",
+    "estado": "OK",
+    "entro": "13553733.22",
+    "salio": "69800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-correccion-suma segundo intento de anular",
+    "estado": "OK",
+    "aviso": "Ya estaba anulado; no se registró nada más. ×"
+  },
+  {
+    "id": "02-correccion-suma filas en la caja con la marca",
+    "estado": "INFO",
+    "n": 2
+  },
+  {
+    "id": "02-cobro-tienda registrar «Ordenex le cobra a una tienda»",
+    "estado": "OK",
+    "asiQueda": "Así queda Antes Después Saldo de Tania Tienda Antes: ₡147.670,10 Después: ₡142.670,10 Flujo de dinero registrado ₡13.483.932,72 · no cambia Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.341.262,62 Lo que Ordenex les debe a las tiendas Antes: ₡147.670,10 Después: ₡142.670,10 Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "intentoPdf": null,
+    "aviso": "Cobro registrado. El saldo de Tania Tienda queda en ₡142.670,10 · A favor. ×",
+    "cifrasAntes": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.553.733,22",
+      "salio": "₡69.800,50",
+      "movimientos": "42",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasDespues": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.553.733,22",
+      "salio": "₡69.800,50",
+      "movimientos": "43",
+      "deTiendas": "₡142.670,10",
+      "ganancia": "₡13.341.262,62",
+      "capital": "₡0"
+    },
+    "filaNueva": {
+      "texto": "2026-09-26 Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-maestro material Tania Tienda Entra ₡5.000 Ordenex Maestro QA Ver",
+      "tachada": false
+    },
+    "esperado": "cifra no cambia; ganancia +5.000; De las tiendas −5.000"
+  },
+  {
+    "id": "R7/R8 tras registrar 02-cobro-tienda",
+    "estado": "OK",
+    "entro": "13553733.22",
+    "salio": "69800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13341262.62",
+    "de_tiendas": "142670.10",
+    "capital": "0",
+    "suma_saldos": "142670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-cobro-tienda Ver: panel",
+    "estado": "OK",
+    "nombreAccesible": "Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000",
+    "panel": "Ordenex le cobra a una tienda 2026-09-26 · Entra ₡5.000 A quién Tania Tienda Por qué Tania Tienda · Cobro R458F-maestro material De dónde sale Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-maestro material Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Maestro QA · el 2026-09-26 a las 19:58 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.483.932,72 Ganancia de Ordenex ₡13.341.262,62 Lo que Ordenex les debe a las tiendas ₡142.670,10 Saldo inicial y aportes ₡0 Saldo de la tienda ₡142.670,10 Anular… Cerrar",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "02-cobro-tienda Anular…",
+    "estado": "OK",
+    "dialogoAnular": "Anular el cobro de Ordenex a una tienda Se registrará hoy un movimiento contrario por ₡5.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Ordenex le cobra a una tienda · 2026-09-26 · ₡5.000 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar Anular",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "original": {
+      "texto": "2026-09-26 Ordenex le cobra a una tienda Cobro de Ordenex a una tienda · Tania Tienda · Tania Tienda · Cobro R458F-maestro material Tania Tienda Entra ₡5.000 Ordenex Maestro QA Anulado Ver",
+      "tachada": true
+    },
+    "contraAsiento": {
+      "texto": "2026-09-26 Cobro a una tienda anulado Cobro de Ordenex a una tienda · Tania Tienda · Anulación · Tania Tienda · Cobro R458F-maestro material Tania Tienda Sale ₡5.000 Ordenex Maestro QA Ver",
+      "tachada": false
+    },
+    "cifrasAntesDeRegistrar": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.553.733,22",
+      "salio": "₡69.800,50",
+      "movimientos": "42",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasTrasAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.553.733,22",
+      "salio": "₡69.800,50",
+      "movimientos": "44",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "R7/R8 tras anular 02-cobro-tienda",
+    "estado": "OK",
+    "entro": "13553733.22",
+    "salio": "69800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-cobro-tienda segundo intento de anular",
+    "estado": "OK",
+    "aviso": "Ya estaba anulado; no se registró nada más. ×"
+  },
+  {
+    "id": "02-cobro-tienda filas en la caja con la marca",
+    "estado": "INFO",
+    "n": 2
+  }
+]
