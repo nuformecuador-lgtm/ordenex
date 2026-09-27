@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { CircleHelp } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
+import { slugParaRuta } from "@/lib/ayuda/documento";
 import { useMapaAyuda, type MapaAyuda } from "@/providers/AyudaProvider";
 import { useAsistente } from "@/providers/AsistenteProvider";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,14 @@ import { cn } from "@/lib/utils";
  * ruta. Un «?» en `/configuracion/sinpe` que abriera la ayuda de `/configuracion` sería una
  * respuesta a una pregunta que nadie hizo, y el usuario no tendría cómo saber que le
  * contestaron de otra pantalla.
+ *
+ * ⚠️ FICHA 458 (F1 del recorrido final) — LAS RUTAS DINÁMICAS. Este comentario afirmaba que
+ * ninguna ruta se quedaba sin «?», y dejó de ser cierto con los tres estados de cuenta de la
+ * 458-D (`/wallet/tiendas/[tiendaId]`, `/wallet/mensajeros/[mensajeroId]`,
+ * `/wallet/satelites/[zonaId]`): la URL real nunca es igual al patrón. Ahora el documento DECLARA
+ * el patrón en `pantalla:` y `slugParaRuta` lo casa segmento a segmento (un `[x]` = un segmento),
+ * así que sigue sin haber caída al padre. Son las únicas rutas dinámicas de `app/(app)` además
+ * de `/ayuda/[...slug]`, medido el 2026-09-26.
  */
 export function AyudaBoton() {
   const mapa = useMapaAyuda();
@@ -91,7 +100,9 @@ export function AyudaBoton() {
 function AyudaDeLaRuta({ mapa }: Readonly<{ mapa: MapaAyuda }>) {
   const pathname = usePathname();
   const { abrir } = useAsistente();
-  const slug = pathname === null ? undefined : mapa[pathname];
+  // ⭑ FICHA 458 (F1) — exacta primero y, si no, la pantalla DINÁMICA que case
+  // (`/wallet/tiendas/[tiendaId]`). Sin eso, los tres estados de cuenta se quedaban sin «?».
+  const slug = pathname === null ? undefined : slugParaRuta(mapa, pathname);
 
   if (slug === undefined) return null;
 

@@ -189,7 +189,10 @@ function rotulos(lista: HTMLElement): string[] {
  * paralelas no distinguirían— cae igual. El último par es el del total.
  */
 function pares(lista: HTMLElement): { rotulo: string; importe: string }[] {
-  return [...lista.children].map((fila) => ({
+  // 458 (O5): el grupo con nombre ENVUELVE a la `<dl>`; las filas son los hijos de la lista.
+  const dl = lista.querySelector(":scope > dl");
+  if (dl === null) throw new Error("el grupo no envuelve una <dl>");
+  return [...dl.children].map((fila) => ({
     rotulo: (fila.querySelector("dt")?.textContent ?? "").trim(),
     importe: (fila.querySelector("dd")?.textContent ?? "").trim(),
   }));
@@ -791,6 +794,24 @@ describe("ComposicionGananciaCard — money-safe en el navegador (R12)", () => {
       );
       // Tampoco deriva ninguna cifra: eso es del servidor, no de la pantalla.
       expect(fuente).not.toMatch(/derivarCaja|derivarComposicionGanancia/);
+    }
+  });
+});
+
+// 458 — O5 del recorrido final: axe «dlitem» porque la `<dl>` llevaba `role="group"` y sus `<dt>/<dd>`
+// perdían la lista. El nombre del grupo pasa a un envoltorio y la `<dl>` queda como lista de verdad.
+describe("458/O5 — las dos columnas son un grupo con nombre que ENVUELVE una <dl> sin rol", () => {
+  it.each(["Desglose de ingresos", "Desglose de egresos"])("%s", (nombre) => {
+    pintar();
+    const grupo = screen.getByRole("group", { name: nombre });
+    expect(grupo.tagName).toBe("DIV");
+    const dl = grupo.querySelector(":scope > dl");
+    expect(dl).not.toBeNull();
+    expect(dl?.hasAttribute("role")).toBe(false);
+    // Todo `<dt>`/`<dd>` del grupo cuelga de esa lista (directo o dentro de su `<div>` de fila).
+    for (const item of grupo.querySelectorAll("dt, dd")) {
+      const padre = item.parentElement;
+      expect(padre === dl || padre?.parentElement === dl).toBe(true);
     }
   });
 });

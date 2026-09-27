@@ -94,7 +94,8 @@ describe("R25 — el anulado se queda, tachado, con motivo, quién y cuándo", (
     montar(estado({ filas: [PAGO_ANULADO], total: 1 }));
     fireEvent.click(screen.getByRole("button", { name: /^Ver Ordenex le paga a la tienda/ }));
     const panel = await screen.findByRole("dialog");
-    expect(panel.textContent).toContain("Anulado el 2026-09-20 por Ana Admin · Se pagó dos veces");
+    // 458 (revisión final, n3): el panel de la oficina dice también la HORA, como `/mi-wallet`.
+    expect(panel.textContent).toContain("Anulado el 2026-09-20 a las 10:30 por Ana Admin · Se pagó dos veces");
     expect(within(panel).queryByRole("button", { name: "Anular…" })).toBeNull();
   });
 });

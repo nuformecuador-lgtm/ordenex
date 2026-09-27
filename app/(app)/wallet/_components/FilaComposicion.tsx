@@ -21,7 +21,8 @@ import { money } from "./wallet-labels";
 // distingue a una columna de la otra es el `tono` del importe, que entra por prop.
 //
 // LO QUE NO CAMBIA, y es lo que sostiene las aserciones heredadas de las fichas 45, 158 y 231:
-// la fila sigue siendo un `<div>` hijo directo de la `<dl role="group">` de su columna, con su
+// la fila sigue siendo un `<div>` hijo directo de la `<dl>` de su columna (desde la 458, O5, el
+// `role="group"` con su nombre va en un envoltorio de esa `<dl>`, no en ella), con su
 // `<dt>` (el rotulo) y su `<dd>` (el importe) dentro y en ese orden. Convertir la tarjeta en
 // tablas habria roto el `role="group"`, su `aria-label` y la estructura `<dt>`/`<dd>` sobre los
 // que miden tres features anteriores (design 10-A5).

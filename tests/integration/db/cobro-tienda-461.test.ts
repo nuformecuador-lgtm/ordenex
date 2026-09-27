@@ -94,6 +94,29 @@ describeSiHayBase("461/T B.8 — cobrar y anular por las actions (Postgres real)
     });
   }, 120_000);
 
+  // FICHA 458 — O1 del recorrido final: el libro leía «Cobro de Ordenex a una tienda · Tania Tienda ·
+  // Tania Tienda · Cobro …» porque el origen añadía la tienda y la descripción que escribe ESTA action
+  // ya empieza por ella. Se escribe por la action real y se lee por la del libro, con el
+  // `OrigenLegibleService` real sobre la base: el literal es el contrato, escrito a mano.
+  it("458/O1: en el libro, el nombre de la tienda sale UNA vez entre el origen y la descripción", async () => {
+    await conPersonas(async (p) => {
+      await acreditar459(prisma, p.tiendaId, "10000.00");
+      const r = await registrarCobroTiendaAction(
+        { claveIdempotencia: randomUUID(), tiendaId: p.tiendaId, monto: "300.00", descripcion: "Material 458" },
+        deps(p.maestro),
+      );
+      if (r.status !== "ok") throw new Error(`cobro: ${r.status}`);
+      const cargo = await prisma.walletMovimiento.findFirstOrThrow({
+        where: { origenTipo: "cobro_tienda", origenId: r.cobro.id },
+      });
+      const fila = await filaDelLibro(p.maestro, cargo.id);
+      expect(fila?.descripcion).toBe(`${p.tiendaNombre} · Material 458`);
+      expect(fila?.origen?.texto).toBe("Cobro de Ordenex a una tienda");
+      const visible = `${fila?.origen?.texto} · ${fila?.descripcion}`;
+      expect(visible.split(p.tiendaNombre).length - 1).toBe(1);
+    });
+  }, 120_000);
+
   it("R68: el doble envio (misma clave) responde `ya_registrado` con el cobro ORIGINAL y no escribe nada mas", async () => {
     await conPersonas(async (p) => {
       const clave = randomUUID();

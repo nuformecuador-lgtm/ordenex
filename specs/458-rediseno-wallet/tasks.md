@@ -362,7 +362,7 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   rol (R102, R103). **Evidencia:** ayuda y bloque E del cierre de la pantalla; cuatro preguntas reales en
   `progress/recorrido_458-E/recorrido.md`; tras la revisión, la ayuda dice cuándo se registró (B1), que
   un anulado por nombre se compensa (M2) y que el contra-entrega cae bajo el mensajero (m4).
-- [ ] **TE.7** Recorrido COMPLETO por rol (§10, los doce pasos y los cuatro roles) con la tabla
+- [x] **TE.7** Recorrido COMPLETO por rol (§10, los doce pasos y los cuatro roles) con la tabla
   maqueta vs app; fotografías verdes; gate rápido; revisión final de la 458. *Hecho:*
   `progress/recorrido_458-E/` con números; `INIT_EXIT=0`; todas las R de `requirements.md` con su test
   en algún `progress/impl_458-*.md` (R104).
@@ -370,6 +370,14 @@ antes de tocar código, `progress/impl_458-<hija>.md` con la tabla R → test, r
   (libro, filtros por tienda, mensajero y nombre libre = oráculo, tarjetas = Σ, R7/R8 = 0,00 en 14
   medidas; `progress/recorrido_458-E/recorrido.md`). Falta: los pasos 4–6 y 8–11 de §10 (dependen de las
   rutas de la 458-D, que se mergea JUNTO con la 458-E) y la revisión final de la 458.
+  **Cerrada (2026-09-26).** Evidencia: recorrido COMPLETO por rol en `dev` (`fd5eca94`),
+  `progress/recorrido_458-final.md`: pasos 1–12 de §10 con maestro y admin, `/mi-wallet` con adminTienda,
+  mensajero y adminSatelite sin acceso (8/8 rutas 404, 3/3 actions `forbidden`), R7/R8 = 0,00 en las 46
+  medidas; 93 OK, 3 FALLO, 13 N/A. Revisión final de C/D/E en `dev`: APROBADA (`progress/review_458-final.md`).
+  Los tres FALLO (F1–F3) y las observaciones baratas se arreglaron en `fix/458-final` con su test y su
+  mutación en rojo, y se volvieron a ver en el navegador (sección «Arreglos» del mismo informe);
+  `progress/build_458_final.log` `BUILD_EXIT=0`; gate completo `progress/gate_458_final_fix.log`
+  `INIT_EXIT=0` (2327 archivos, 32356 verdes, 26 saltados de Analítica, 0 en `integration/db`).
 
 ## Dependencias
 

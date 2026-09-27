@@ -403,6 +403,30 @@ describe("458-C revisión M1 — R58: quién anuló, cuándo, por qué y cómo, 
     expect(lineaDelPanel(panel, "Cómo")).toBe("SINPE · referencia SINPE-77");
   });
 
+  // 458 — revisión final, n3: desde la 458-D la anulación trae la HORA y `/mi-wallet` la pinta; la
+  // caja decía solo el día. El servidor la manda (`LibroCajaAutoriaService`, hora de pared CR).
+  it("anulado con hora: «Anulado el <día> a las <hora> por <quién> · <motivo>», igual que /mi-wallet", async () => {
+    autoriaMock.mockResolvedValue({
+      status: "ok",
+      filas: [
+        {
+          movimientoId: PAGO_TIENDA_ANULADO.id,
+          aQuien: { nombre: "Tienda Norte", beneficiario: null, cuenta: null, esOrdenex: false },
+          registro: { nombre: "Maestra", automatico: null },
+          como: { metodo: "SINPE", referencia: "SINPE-77" },
+          anulacion: { motivo: "Se pagó a la cuenta equivocada", por: "Carla Ruiz", fecha: "2026-09-25", hora: "20:14" },
+        },
+      ],
+    });
+    filasActuales = [PAGO_TIENDA_ANULADO];
+    const { user } = pintar(filasActuales);
+    const panel = await abrirPanel(user, PAGO_TIENDA_ANULADO);
+    await within(panel).findByText("Tienda Norte");
+    expect(lineaDelPanel(panel, "Estado")).toBe(
+      "Anulado el 2026-09-25 a las 20:14 por Carla Ruiz · Se pagó a la cuenta equivocada",
+    );
+  });
+
   it("la referencia anotada a mano sin método; sin «cómo» del servidor, «—»; mientras carga, «Cargando…»", async () => {
     const m = ANULABLES[0][1];
     let responder: (v: unknown) => void = () => undefined;

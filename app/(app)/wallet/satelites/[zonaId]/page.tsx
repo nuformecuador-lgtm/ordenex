@@ -33,7 +33,7 @@ export default async function EstadoCuentaSatelitePage({ params }: { params: Pro
       <div className="flex flex-col gap-4">
         <Link
           href="/wallet/satelites"
-          className="w-fit rounded-sm text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
+          className="w-fit rounded-sm text-sm text-primary-strong underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
         >
           {ESTADO_CUENTA_BODEGA_PAGINA.volver}
         </Link>

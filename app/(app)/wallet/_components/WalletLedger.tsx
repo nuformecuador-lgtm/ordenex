@@ -220,12 +220,6 @@ function claseDeFila(m: WalletMovimientoDTO): string | undefined {
   return m.documento?.anulado ? "text-muted-foreground line-through" : undefined;
 }
 
-/**
- * B2 (revisión 458-C; 457 R41, 459 R66, 461 R20/R71) — la fila anulada DICE «Anulado», con la palabra y
- * no solo con el tachado (que un lector de pantalla no anuncia). Sale del `documento` del servidor, como
- * el tachado. Va en la celda de «Ver», donde vivían las acciones: el orden de las columnas no se toca.
- * Es una insignia (caja en línea atómica), así que el tachado de la fila no la cruza.
- */
 /** FICHA 458-E (cierre) — lo que el libro tiene de UNA fila, para que su panel no lo lea otra vez. */
 function autoriaParaElPanel(
   autoria: AutoriaDelLibro | undefined,
@@ -237,6 +231,12 @@ function autoriaParaElPanel(
   return { estado: "ok", fila: autoria.porMovimiento.get(movimientoId) };
 }
 
+/**
+ * B2 (revisión 458-C; 457 R41, 459 R66, 461 R20/R71) — la fila anulada DICE «Anulado», con la palabra y
+ * no solo con el tachado (que un lector de pantalla no anuncia). Sale del `documento` del servidor, como
+ * el tachado. Va en la celda de «Ver», donde vivían las acciones: el orden de las columnas no se toca.
+ * Es una insignia (caja en línea atómica), así que el tachado de la fila no la cruza.
+ */
 function CeldaVer({
   m,
   onCambio,

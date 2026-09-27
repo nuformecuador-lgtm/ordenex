@@ -185,3 +185,60 @@ Todo con `R458F-`: por rol, un sueldo, un gasto, una corrección (suma) y un cob
 gasto del maestro por una corrida repetida), un cobro por rechazo aprobado y anulado, una indemnización aprobada y
 anulada, dos cobros de 5.000 y dos pagos de un gasto de 10.000 vigentes, dos cobros de 200.000 anulados, dos pagos al
 mensajero anulados, dos marcas de recibido en Quepos y el gasto fijo aprobado y anulado. El clon se borró al terminar.
+
+---
+
+## Arreglos — rama `fix/458-final` (frontend_dev, 2026-09-26)
+
+**Árbol:** `fix/458-final` desde `origin/dev` en `4c561602` (contiene `fd5eca94`). **Base:** clon propio
+`ordenex_458z` (`CREATE DATABASE … TEMPLATE ordenex` con 0 conexiones a la plantilla; `prisma migrate deploy`: «No
+pending migrations»). `.env` del checkout principal copiado sin imprimirlo, con la base cambiada y sin
+`DATABASE_URL_PREVIEW`; `pnpm install --frozen-lockfile` propio, sin junction. UN `next dev -p 3533`
+(`AUTH_RISK_THRESHOLD=999` en su línea de comando), apagado al terminar. Claves QA y del maestro rotadas SOLO en el
+clon. Siembra SOLO en el clon: una plantilla y un cobro de gasto fijo pendientes (`R458Z- Alquiler de bodega`,
+₡7.000) para ver la cola como admin; el cobro de ₡150 a Tania del paso F4 se escribió por la pantalla.
+**Búsqueda:** el MCP `codebase-memory` no está en mi conjunto de herramientas en esta sesión; todo se localizó con
+`grep` y lectura del archivo real.
+
+### Qué se arregló
+
+| # | Arreglo | Test | Mutación (roja, restaurada por sha256) | En el navegador (`progress/recorrido_458-final/fix-*`) |
+| --- | --- | --- | --- | --- |
+| **F1** | `pantalla:` de `wallet-tiendas/-mensajeros/-satelites.md` declara también la ruta dinámica (`/wallet/tiendas/[tiendaId]`…, como ya hacía `/paquete/[numGuia]`); `slugParaRuta`/`rutaCasaConPantalla` (`lib/ayuda/documento.ts`) casan exacta primero y luego el patrón segmento a segmento (un `[x]` = un segmento no vacío; sin caída al padre); `AyudaBoton` y `documentoDePartida` (asistente) usan la misma regla | `tests/components/AyudaBoton.test.tsx` bloque «458/F1» (las tres rutas × maestro y admin; listados intactos; segmento de más o vacío = sin «?»; tienda/mensajero sin «?»; el «?» abre el asistente con `/ayuda/oficina/wallet-tiendas`); `tests/unit/asistente/contexto-documental.test.ts` (documento de partida desde las tres rutas) | F1-a `AyudaBoton` con `mapa[pathname]`: 4 rojos · F1-b partida con `includes`: 1 rojo · F1-c sin comparar el nº de segmentos: 2 rojos · F1-d sin la ruta dinámica en el `.md`: 1 rojo · F1-e `[x]` casa con segmento vacío: 1 rojo | maestro: **1** botón «Ayuda de esta pantalla» en cada estado de cuenta, `data-ayuda-slug` = `oficina/wallet-tiendas` / `-mensajeros` / `-satelites`; el «?» de la tienda abre el panel con «Leer la ayuda de esta pantalla» → `/ayuda/oficina/wallet-tiendas` |
+| **F1 (otras rutas)** | Las rutas dinámicas de `app/(app)` son esas tres y `/ayuda/[...slug]` (medido con `find`); la última no lleva «?» a propósito (ya estás en la ayuda) | — | — | — |
+| **F2** | `wallet-caja.md`: solo el maestro decide; el admin ve la lista sin botones y le avisa al maestro. Panel: `cobrosPendientesDescripcion(puedeDecidir)` (texto por rol) | `wallet-cobros-pendientes-panel.test.tsx` «458/F2» (literales por rol); `contexto-458.test.ts` «458 final (F2)» (maestro y admin reciben la frase) | F2-a panel siempre con el texto del maestro: 1 rojo · F2-b sin la frase del admin en la ayuda: 2 rojos | admin: «Nadie los cobró todavía: el dinero sigue en la caja. Solo el maestro puede aprobarlos o rechazarlos.», **0** botones; maestro: «… esperan tu decisión.» con «Aprobar · Rechazar» |
+| **F2 — asistente** | Pregunta real como admin en `/wallet`: «Veo «Cobros de gasto fijo por aprobar». ¿Los puedo aprobar yo?» | — | — | «No, esos cobros de gasto fijo por aprobar solo los puede aprobar o rechazar el maestro. Vos, como admin, ves la misma lista pero sin los botones de Aprobar/Rechazar — no podés decidir sobre ellos. Si hay uno esperando, avisale al maestro para que lo revise. Mientras nadie decida, ese dinero no sale de la caja.» (cita «Wallet · Caja»; `fix-recorrido-admin.json`) — **OK** |
+| **F3** | No había token de enlace; `brand-dark` (#d4530d) da 3,93. Alias nuevo `--color-primary-strong: var(--chart-11-strong)` (el naranja más oscuro que ya existía, #9a3412 / oscuro #fdba74) y `text-primary-strong` en los cuatro lugares | `tests/unit/guards/enlace-contraste-458.guardia.test.ts` (control: #f26419 = 2,99; ≥ 4,5 sobre `background` y `card` en los dos temas; los cuatro archivos sin `text-primary` a secas) | F3-a/F3-b un enlace vuelto a `text-primary`: 1 rojo cada una · F3-c alias a `var(--primary)`: 1 rojo | computado `rgb(154, 52, 18)` sobre `rgb(247, 248, 252)` (14 px «Volver…», 12 px «Ver») = **6,89:1**; axe WCAG 2.1 A/AA en las tres páginas: **0** nodos `color-contrast` en esos enlaces (quedan los del sistema que el recorrido ya separó: botón primario 3,17, «Descargar» 2,99, insignia «4 por hacer» 2,46) |
+| **F4 (O1)** | Cambio mínimo de servidor autorizado: `componerOrigen` quita del origen toda parte que la descripción ya trae como segmento (sin distinguir mayúsculas), nunca el rótulo. Cubre la tienda repetida, el gasto fijo y «a Facebook» | `tests/unit/services/wallet-origen-legible.test.ts` (2 casos nuevos; el literal del gasto fijo pasa a «Gasto fijo de Ordenex» porque la plantilla y su periodo ya vienen en la descripción); Postgres: `tests/integration/db/cobro-tienda-461.test.ts` «458/O1» (cobro por la action real, leído por `listarMovimientosAction`) | F4-a sin el filtro: 4 rojos (1 de ellos el de Postgres, aislado: 1/5) · F4-b sin minúsculas: 1 rojo · F4-c quitando también el rótulo: 1 rojo | caja: «Cobro de Ordenex a una tienda · Tania Tienda · R458Z material» — el nombre **una** vez (`fix-F4-caja-fila.png`) |
+| **n3** | La hora de la anulación en el panel «Ver» de la oficina (caja y estado de cuenta): «Anulado el <día> a las <hora> por <quién> · <motivo>», como `/mi-wallet` | `WalletLedgerVer458C.test.tsx` (caso con hora); `EstadoCuentaAnulados.test.tsx` (literal con «a las 10:30») | M5-a sin pasar la hora: 1 rojo | — |
+| **n2** | JSDoc de B2 movido de `autoriaParaElPanel` a `CeldaVer` (`WalletLedger.tsx`) | — | — | — |
+| **n5** | `progress/history.md`: entradas de la 458-D y la 458-E | — | — | — |
+| **O5** | El `role="group"` con su nombre pasa a un envoltorio de la `<dl>` en las dos columnas de «Cómo se compone la ganancia» | `ComposicionGananciaCard.test.tsx` «458/O5» (grupo `DIV` que envuelve una `<dl>` sin rol; todo `dt/dd` cuelga de ella) | O5-a `role` de vuelta en la `<dl>`: 2 rojos | axe en `/wallet`: **0** «dlitem» (antes 1) |
+
+### Build y gate
+
+- `progress/build_458_final.log`: `BUILD_EXIT=0` (migraciones omitidas, build local); rutas dinámicas presentes.
+- Gate completo `./init.sh` contra `ordenex_458z`, sin tail, `INIT_EXIT` dentro del log:
+  - `progress/gate_458_final_fix_1.log` — `INIT_EXIT=1`: 1 rojo, `gasto-fijo-cobro-idempotencia.test.ts:371`
+    (`cobrosPendientesTotales` 1 ≠ 0). **Causa: mi siembra del recorrido** (el cobro de gasto fijo pendiente
+    `R458Z-` que dejé en el clon para ver la cola como admin; el test cuenta la cola global). Borrada la siembra,
+    el archivo aislado da 9/9 tres veces (`progress/rerun_458_final_fix_aislado.log`).
+  - `progress/gate_458_final_fix.log` — **`INIT_EXIT=0`**: 2327/2327 archivos, 32356 verdes, 26 saltados (los 26
+    de Analítica: `AnaliticaPage` 17 + `AnaliticaShell` 9), **0** en `integration/db`.
+
+### Aceptado (no se cambia), y por qué
+
+- **O2 — la categoría espera a «Aplicar».** Es el contrato de la feature 42 (R20, borrador + «Aplicar») y la 458-E
+  solo sacó de él la dirección (R54) y «A quién» (R59). Cambiarlo es una decisión de producto, no un arreglo.
+- **O3 — dos cierres del mismo día se distinguen por la cuenta.** Es la regla escrita (`mi-wallet-cierres.ts`,
+  regla 2): la hora se añade cuando el rótulo entero se repite.
+- **O4 — «Descargar» con «Pagos registrados» vacío.** No se reproduce: medido al instante del clic, sale el aviso del
+  sistema de descargas (R23) «No hay datos que descargar con los filtros aplicados. Ajusta los filtros y vuelve a
+  intentarlo.» y no hay archivo (`fix-O4-descargar-pagos-vacio.json`). La sonda del recorrido miraba tarde el aviso.
+- **O6 — el panel del cobro en el estado de cuenta dice «Sale» donde la caja dice «Entra».** Es el mismo movimiento
+  leído desde cada libro: en el estado de cuenta es un cargo a la tienda; en la caja, un ingreso de Ordenex. La hora
+  de «Registró» en ese panel necesita que `FilaEstadoCuentaDTO` traiga el instante de registro (servidor, fuera del
+  cambio mínimo autorizado): queda como deuda menor.
+- **Contraste del sistema** (botón primario blanco sobre #f26419 3,17; «Descargar» `brand-outline` 2,99; insignia
+  «4 por hacer» 2,46; en `/wallet` axe cuenta 49 nodos `color-contrast`, no clasificados uno a uno): no son de la
+  458 y tocan primitivas compartidas por todo el portal; piden su propia ficha.

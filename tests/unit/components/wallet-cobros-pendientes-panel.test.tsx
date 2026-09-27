@@ -388,3 +388,29 @@ describe("CobrosGastoFijoPendientesPanel — decidir refresca y avisa (R42)", ()
     expect(new Set(FALLOS.map((f) => f.mensaje)).size).toBe(FALLOS.length);
   });
 });
+
+// ⭑ FICHA 458 — F2 del recorrido final. El admin ve la cola SIN botones (R40) y la tarjeta le
+// decía «esperan tu decisión». Los literales van escritos a mano: son el contrato con quien lee,
+// y compararlos contra la constante que los genera estaría siempre verde.
+describe("CobrosGastoFijoPendientesPanel — la descripción según quién mira (458/F2)", () => {
+  it("quien puede decidir (maestro) lee que esperan su decisión", () => {
+    montar([VIEJO], { puedeDecidir: true });
+    expect(
+      within(seccion()).getByText(
+        "Nadie los cobró todavía: el dinero sigue en la caja y esperan tu decisión.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("quien NO puede decidir (admin) lee quién decide, y nunca «esperan tu decisión»", () => {
+    montar([VIEJO], { puedeDecidir: false });
+    const region = seccion();
+    expect(
+      within(region).getByText(
+        "Nadie los cobró todavía: el dinero sigue en la caja. Solo el maestro puede aprobarlos o rechazarlos.",
+      ),
+    ).toBeInTheDocument();
+    expect(region.textContent).not.toContain("esperan tu decisión");
+    expect(within(region).queryByRole("button", { name: "Aprobar" })).toBeNull();
+  });
+});
